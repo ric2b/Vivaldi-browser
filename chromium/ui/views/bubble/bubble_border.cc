@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -18,7 +18,7 @@
 #include "ui/gfx/path.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/shadow_value.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
@@ -510,11 +510,11 @@ void BubbleBorder::DrawArrow(gfx::Canvas* canvas,
   canvas->DrawImageInt(*GetArrowImage(), arrow_bounds.x(), arrow_bounds.y());
   SkPath path;
   GetArrowPathFromArrowBounds(arrow_bounds, &path);
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(background_color_);
+  cc::PaintFlags flags;
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setColor(background_color_);
 
-  canvas->DrawPath(path, paint);
+  canvas->DrawPath(path, flags);
 }
 
 SkRRect BubbleBorder::GetClientRect(const View& view) const {
@@ -530,7 +530,7 @@ void BubbleBorder::PaintMd(const View& view, gfx::Canvas* canvas) {
 
   gfx::ScopedCanvas scoped(canvas);
 
-  SkPaint paint;
+  cc::PaintFlags flags;
   std::vector<gfx::ShadowValue> shadows;
   // gfx::ShadowValue counts blur pixels both inside and outside the shape,
   // whereas these blur values only describe the outside portion, hence they
@@ -539,9 +539,9 @@ void BubbleBorder::PaintMd(const View& view, gfx::Canvas* canvas) {
                        2 * kSmallShadowBlur, kSmallShadowColor);
   shadows.emplace_back(gfx::Vector2d(0, kLargeShadowVerticalOffset),
                        2 * kLargeShadowBlur, kLargeShadowColor);
-  paint.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadows));
-  paint.setColor(SkColorSetA(SK_ColorBLACK, 0x26));
-  paint.setAntiAlias(true);
+  flags.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadows));
+  flags.setColor(SkColorSetA(SK_ColorBLACK, 0x26));
+  flags.setAntiAlias(true);
 
   SkRRect r_rect = GetClientRect(view);
   canvas->sk_canvas()->clipRRect(r_rect, SkClipOp::kDifference,
@@ -551,7 +551,7 @@ void BubbleBorder::PaintMd(const View& view, gfx::Canvas* canvas) {
   const SkScalar one_pixel =
       SkFloatToScalar(kBorderStrokeThicknessPx / canvas->image_scale());
   r_rect.inset(-one_pixel, -one_pixel);
-  canvas->sk_canvas()->drawRRect(r_rect, paint);
+  canvas->sk_canvas()->drawRRect(r_rect, flags);
 }
 
 void BubbleBorder::PaintNoAssets(const View& view, gfx::Canvas* canvas) {
@@ -570,15 +570,15 @@ void BubbleBackground::Paint(gfx::Canvas* canvas, views::View* view) const {
     canvas->DrawColor(border_->background_color());
 
   // Fill the contents with a round-rect region to match the border images.
-  SkPaint paint;
-  paint.setAntiAlias(true);
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(border_->background_color());
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setColor(border_->background_color());
   SkPath path;
   gfx::RectF bounds(view->GetLocalBounds());
   bounds.Inset(gfx::InsetsF(border_->GetInsets()));
 
-  canvas->DrawRoundRect(bounds, border_->GetBorderCornerRadius(), paint);
+  canvas->DrawRoundRect(bounds, border_->GetBorderCornerRadius(), flags);
 }
 
 }  // namespace views

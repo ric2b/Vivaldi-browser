@@ -25,8 +25,8 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
       format.NominalRange = DXVA2_NominalRange_0_255;
       break;
 
-    case gfx::ColorSpace::RangeID::UNSPECIFIED:
     case gfx::ColorSpace::RangeID::DERIVED:
+    case gfx::ColorSpace::RangeID::INVALID:
       // Not handled
       break;
   }
@@ -44,14 +44,12 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
       break;
 
     case gfx::ColorSpace::MatrixID::RGB:
-    case gfx::ColorSpace::MatrixID::UNSPECIFIED:
-    case gfx::ColorSpace::MatrixID::RESERVED:
     case gfx::ColorSpace::MatrixID::FCC:
     case gfx::ColorSpace::MatrixID::YCOCG:
     case gfx::ColorSpace::MatrixID::BT2020_NCL:
     case gfx::ColorSpace::MatrixID::BT2020_CL:
     case gfx::ColorSpace::MatrixID::YDZDX:
-    case gfx::ColorSpace::MatrixID::UNKNOWN:
+    case gfx::ColorSpace::MatrixID::INVALID:
       // Not handled
       break;
   }
@@ -73,17 +71,15 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
       format.VideoPrimaries = DXVA2_VideoPrimaries_SMPTE240M;
       break;
 
-    case gfx::ColorSpace::PrimaryID::RESERVED0:
-    case gfx::ColorSpace::PrimaryID::UNSPECIFIED:
-    case gfx::ColorSpace::PrimaryID::RESERVED:
     case gfx::ColorSpace::PrimaryID::FILM:
     case gfx::ColorSpace::PrimaryID::BT2020:
     case gfx::ColorSpace::PrimaryID::SMPTEST428_1:
     case gfx::ColorSpace::PrimaryID::SMPTEST431_2:
     case gfx::ColorSpace::PrimaryID::SMPTEST432_1:
-    case gfx::ColorSpace::PrimaryID::UNKNOWN:
     case gfx::ColorSpace::PrimaryID::XYZ_D50:
+    case gfx::ColorSpace::PrimaryID::ADOBE_RGB:
     case gfx::ColorSpace::PrimaryID::CUSTOM:
+    case gfx::ColorSpace::PrimaryID::INVALID:
       // Not handled
       break;
   }
@@ -103,15 +99,13 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
       format.VideoTransferFunction = DXVA2_VideoTransFunc_28;
       break;
     case gfx::ColorSpace::TransferID::LINEAR:
+    case gfx::ColorSpace::TransferID::LINEAR_HDR:
       format.VideoTransferFunction = DXVA2_VideoTransFunc_10;
       break;
     case gfx::ColorSpace::TransferID::IEC61966_2_1:
       format.VideoTransferFunction = DXVA2_VideoTransFunc_sRGB;
       break;
 
-    case gfx::ColorSpace::TransferID::RESERVED0:
-    case gfx::ColorSpace::TransferID::UNSPECIFIED:
-    case gfx::ColorSpace::TransferID::RESERVED:
     case gfx::ColorSpace::TransferID::LOG:
     case gfx::ColorSpace::TransferID::LOG_SQRT:
     case gfx::ColorSpace::TransferID::IEC61966_2_4:
@@ -121,15 +115,106 @@ DXVA2_ExtendedFormat ColorSpaceWin::GetExtendedFormat(
     case gfx::ColorSpace::TransferID::SMPTEST2084:
     case gfx::ColorSpace::TransferID::SMPTEST428_1:
     case gfx::ColorSpace::TransferID::ARIB_STD_B67:
-    case gfx::ColorSpace::TransferID::UNKNOWN:
     case gfx::ColorSpace::TransferID::GAMMA24:
     case gfx::ColorSpace::TransferID::SMPTEST2084_NON_HDR:
     case gfx::ColorSpace::TransferID::CUSTOM:
+    case gfx::ColorSpace::TransferID::INVALID:
       // Not handled
       break;
   }
 
   return format;
+}
+
+DXGI_COLOR_SPACE_TYPE ColorSpaceWin::GetDXGIColorSpace(
+    const ColorSpace& color_space) {
+  if (color_space.matrix_ == gfx::ColorSpace::MatrixID::RGB) {
+    // For RGB, we default to FULL
+    if (color_space.range_ == gfx::ColorSpace::RangeID::LIMITED) {
+      if (color_space.primaries_ == gfx::ColorSpace::PrimaryID::BT2020) {
+        if (color_space.transfer_ == gfx::ColorSpace::TransferID::SMPTEST2084) {
+          return DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020;
+        } else {
+          return DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P2020;
+        }
+      } else {
+        return DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709;
+      }
+    } else {
+      if (color_space.primaries_ == gfx::ColorSpace::PrimaryID::BT2020) {
+        if (color_space.transfer_ == gfx::ColorSpace::TransferID::SMPTEST2084) {
+          return DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+        } else {
+          return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020;
+        }
+      } else {
+        if (color_space.transfer_ == gfx::ColorSpace::TransferID::LINEAR) {
+          return DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+        } else {
+          return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+        }
+      }
+    }
+  } else {
+    if (color_space.primaries_ == gfx::ColorSpace::PrimaryID::BT2020) {
+      if (color_space.transfer_ == gfx::ColorSpace::TransferID::SMPTEST2084) {
+        return DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020;
+        // Could also be:
+        // DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020
+      } else {
+        // For YUV, we default to LIMITED
+        if (color_space.range_ == gfx::ColorSpace::RangeID::FULL) {
+          return DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P2020;
+
+        } else {
+          return DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P2020;
+          // Could also be:
+          // DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_TOPLEFT_P2020
+        }
+      }
+    } else if (color_space.primaries_ == gfx::ColorSpace::PrimaryID::BT470BG ||
+               color_space.primaries_ ==
+                   gfx::ColorSpace::PrimaryID::SMPTE170M) {
+      // For YUV, we default to LIMITED
+      if (color_space.range_ == gfx::ColorSpace::RangeID::FULL) {
+        return DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P601;
+      } else {
+        return DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P601;
+      }
+    } else {
+      // For YUV, we default to LIMITED
+      if (color_space.range_ == gfx::ColorSpace::RangeID::FULL) {
+        // TODO(hubbe): Check if this is correct.
+        if (color_space.transfer_ == gfx::ColorSpace::TransferID::SMPTE170M) {
+          return DXGI_COLOR_SPACE_YCBCR_FULL_G22_NONE_P709_X601;
+        } else {
+          return DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P709;
+        }
+      } else {
+        return DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
+      }
+    }
+  }
+}
+
+D3D11_VIDEO_PROCESSOR_COLOR_SPACE ColorSpaceWin::GetD3D11ColorSpace(
+    const ColorSpace& color_space) {
+  D3D11_VIDEO_PROCESSOR_COLOR_SPACE ret = {0};
+  if (color_space.range_ != gfx::ColorSpace::RangeID::FULL) {
+    ret.RGB_Range = 1;
+    ret.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_0_255;
+  } else {
+    ret.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
+  }
+  switch (color_space.transfer_) {
+    case gfx::ColorSpace::TransferID::BT709:
+    case gfx::ColorSpace::TransferID::SMPTE170M:
+      ret.YCbCr_Matrix = 1;
+
+    default:
+      break;
+  }
+  return ret;
 }
 
 }  // namespace gfx

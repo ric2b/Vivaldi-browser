@@ -28,8 +28,8 @@ suite('<history-list>', function() {
 
   setup(function() {
     app = replaceApp();
-    element = app.$['history'].$['infinite-list'];
-    toolbar = app.$['toolbar'];
+    element = app.$.history;
+    toolbar = app.$.toolbar;
     app.queryState_.incremental = true;
   });
 
@@ -96,63 +96,46 @@ suite('<history-list>', function() {
       MockInteractions.tap(items[1].$.checkbox);
       assertDeepEquals([false, true, false, false],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          ['historyData_.1'],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([1], Array.from(element.selectedItems).sort());
 
       // Shift-select to the last item.
       shiftClick(items[3].$.checkbox);
       assertDeepEquals([false, true, true, true],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          ['historyData_.1', 'historyData_.2', 'historyData_.3'],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([1, 2, 3], Array.from(element.selectedItems).sort());
 
       // Shift-select back to the first item.
       shiftClick(items[0].$.checkbox);
       assertDeepEquals([true, true, true, true],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          [
-            'historyData_.0', 'historyData_.1', 'historyData_.2',
-            'historyData_.3'
-          ],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([0, 1, 2, 3], Array.from(element.selectedItems).sort());
 
       // Shift-deselect to the third item.
       shiftClick(items[2].$.checkbox);
       assertDeepEquals([false, false, false, true],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          ['historyData_.3'],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([3], Array.from(element.selectedItems).sort());
 
       // Select the second item.
       MockInteractions.tap(items[1].$.checkbox);
       assertDeepEquals([false, true, false, true],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          ['historyData_.1', 'historyData_.3'],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([1, 3], Array.from(element.selectedItems).sort());
 
       // Shift-deselect to the last item.
       shiftClick(items[3].$.checkbox);
       assertDeepEquals([false, false, false, false],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          [],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([], Array.from(element.selectedItems).sort());
 
       // Shift-select back to the third item.
       shiftClick(items[2].$.checkbox);
       assertDeepEquals([false, false, true, true],
                        element.historyData_.map(i => i.selected));
-      assertDeepEquals(
-          ['historyData_.2', 'historyData_.3'],
-          Array.from(element.selectedPaths).sort());
+      assertDeepEquals([2, 3], Array.from(element.selectedItems).sort());
 
       // Remove selected items.
-      element.removeItemsByPath(Array.from(element.selectedPaths));
+      element.removeItemsByIndex_(Array.from(element.selectedItems));
       assertDeepEquals(
           ['https://www.google.com', 'https://www.example.com'],
           element.historyData_.map(i => i.title));
@@ -196,9 +179,7 @@ suite('<history-list>', function() {
     app.historyResult(createHistoryInfo(), ADDITIONAL_RESULTS);
     return PolymerTest.flushTasks().then(function() {
 
-      element.removeItemsByPath([
-        'historyData_.2', 'historyData_.5', 'historyData_.7'
-      ]);
+      element.removeItemsByIndex_([2, 5, 7]);
 
       return PolymerTest.flushTasks();
     }).then(function() {
@@ -242,6 +223,7 @@ suite('<history-list>', function() {
 
     return PolymerTest.flushTasks().then(function() {
       assertFalse(element.$['no-results'].hidden);
+      assertNotEquals('', element.$['no-results'].textContent.trim());
       assertTrue(element.$['infinite-list'].hidden);
 
       app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
@@ -440,12 +422,17 @@ suite('<history-list>', function() {
     });
   });
 
-  test('delete dialog closed on url change', function() {
+  test('delete dialog closed on back navigation', function(done) {
+    // Ensure that state changes are always mirrored to the URL.
+    app.$$('history-router').$$('iron-location').dwellTime = 0;
     app.queryState_.queryingDisabled = false;
-    var listContainer = app.$.history;
+    // Navigate from chrome://history/ to chrome://history/?q=something else.
+    app.fire('change-query', {search: 'something else'});
     app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
     app.historyResult(createHistoryInfo(), ADDITIONAL_RESULTS);
-    return PolymerTest.flushTasks().then(function() {
+
+    var listContainer = app.$.history;
+    PolymerTest.flushTasks().then(function() {
       items = Polymer.dom(element.root).querySelectorAll('history-item');
 
       MockInteractions.tap(items[2].$.checkbox);
@@ -456,9 +443,15 @@ suite('<history-list>', function() {
     }).then(function() {
       // Confirmation dialog should appear.
       assertTrue(listContainer.$.dialog.getIfExists().open);
+      // Navigate back to chrome://history.
+      window.history.back();
 
-      app.set('queryState_.searchTerm', 'something else');
-      assertFalse(listContainer.$.dialog.getIfExists().open);
+      listenOnce(window, 'popstate', function() {
+        PolymerTest.flushTasks().then(function() {
+          assertFalse(listContainer.$.dialog.getIfExists().open);
+          done();
+        });
+      });
     });
   });
 
@@ -483,6 +476,6 @@ suite('<history-list>', function() {
     registerMessageCallback('removeVisits', this, undefined);
     registerMessageCallback('queryHistory', this, function() {});
     registerMessageCallback('navigateToUrl', this, undefined);
-    app.set('queryState_.searchTerm', '');
+    app.fire('change-query', {search: ''});
   });
 });

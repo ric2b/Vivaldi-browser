@@ -205,15 +205,14 @@ void HoverHighlightView::DoAddIconAndLabelsMd(
   text_label_ = TrayPopupUtils::CreateDefaultLabel();
   text_label_->SetText(text);
   text_label_->SetEnabled(enabled());
-  TrayPopupItemStyle style(GetNativeTheme(), font_style);
+  TrayPopupItemStyle style(font_style);
   style.SetupLabel(text_label_);
 
   tri_view_->AddView(TriView::Container::CENTER, text_label_);
   if (!sub_text.empty()) {
     sub_text_label_ = TrayPopupUtils::CreateDefaultLabel();
     sub_text_label_->SetText(sub_text);
-    TrayPopupItemStyle sub_style(GetNativeTheme(),
-                                 TrayPopupItemStyle::FontStyle::CAPTION);
+    TrayPopupItemStyle sub_style(TrayPopupItemStyle::FontStyle::CAPTION);
     sub_style.set_color_style(TrayPopupItemStyle::ColorStyle::INACTIVE);
     sub_style.SetupLabel(sub_text_label_);
     tri_view_->AddView(TriView::Container::CENTER, sub_text_label_);
@@ -374,12 +373,11 @@ void HoverHighlightView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 gfx::Size HoverHighlightView::GetPreferredSize() const {
   gfx::Size size = ActionableView::GetPreferredSize();
-  const int default_height = GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT);
 
   if (custom_height_)
     size.set_height(custom_height_);
-  else if (!expandable_ || size.height() < default_height)
-    size.set_height(default_height);
+  else if (!expandable_ || size.height() < kTrayPopupItemMinHeight)
+    size.set_height(kTrayPopupItemMinHeight);
 
   return size;
 }

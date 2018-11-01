@@ -7,6 +7,8 @@
 #include <stddef.h>
 
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/debug/benchmark_instrumentation.h"
 #include "cc/output/compositor_frame.h"
@@ -104,9 +106,9 @@ void Display::Initialize(DisplayClient* client,
   }
 }
 
-void Display::SetLocalFrameId(const LocalFrameId& id,
-                              float device_scale_factor) {
-  if (current_surface_id_.local_frame_id() == id &&
+void Display::SetLocalSurfaceId(const LocalSurfaceId& id,
+                                float device_scale_factor) {
+  if (current_surface_id_.local_surface_id() == id &&
       device_scale_factor_ == device_scale_factor) {
     return;
   }
@@ -159,6 +161,8 @@ void Display::Resize(const gfx::Size& size) {
 
 void Display::SetColorSpace(const gfx::ColorSpace& color_space) {
   device_color_space_ = color_space;
+  if (aggregator_)
+    aggregator_->SetOutputColorSpace(device_color_space_);
 }
 
 void Display::SetOutputIsSecure(bool secure) {
@@ -179,7 +183,7 @@ void Display::InitializeRenderer() {
   bool delegated_sync_points_required = false;
   resource_provider_.reset(new ResourceProvider(
       output_surface_->context_provider(), bitmap_manager_,
-      gpu_memory_buffer_manager_, nullptr, settings_.highp_threshold_min,
+      gpu_memory_buffer_manager_, nullptr,
       settings_.texture_id_allocation_chunk_size,
       delegated_sync_points_required, settings_.use_gpu_memory_buffer_resources,
       false, settings_.buffer_to_texture_target_map));
@@ -215,11 +219,12 @@ void Display::InitializeRenderer() {
   aggregator_.reset(new SurfaceAggregator(
       surface_manager_, resource_provider_.get(), output_partial_list));
   aggregator_->set_output_is_secure(output_is_secure_);
+  aggregator_->SetOutputColorSpace(device_color_space_);
 }
 
 void Display::UpdateRootSurfaceResourcesLocked() {
   Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
-  bool root_surface_resources_locked = !surface || !surface->HasFrame();
+  bool root_surface_resources_locked = !surface || !surface->HasActiveFrame();
   if (scheduler_)
     scheduler_->SetRootSurfaceResourcesLocked(root_surface_resources_locked);
 }
@@ -245,7 +250,10 @@ bool Display::DrawAndSwap() {
     return false;
   }
 
+  base::ElapsedTimer aggregate_timer;
   CompositorFrame frame = aggregator_->Aggregate(current_surface_id_);
+  UMA_HISTOGRAM_COUNTS_1M("Compositing.SurfaceAggregator.AggregateUs",
+                          aggregate_timer.Elapsed().InMicroseconds());
 
   if (frame.render_pass_list.empty()) {
     TRACE_EVENT_INSTANT0("cc", "Empty aggregated frame.",
@@ -312,9 +320,17 @@ bool Display::DrawAndSwap() {
       DCHECK(!disable_image_filtering);
     }
 
+    base::ElapsedTimer draw_timer;
     renderer_->DecideRenderPassAllocationsForFrame(frame.render_pass_list);
     renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
-                         device_color_space_, current_surface_size_);
+                         current_surface_size_);
+    if (software_renderer_) {
+      UMA_HISTOGRAM_COUNTS_1M("Compositing.DirectRenderer.Software.DrawFrameUs",
+                              draw_timer.Elapsed().InMicroseconds());
+    } else {
+      UMA_HISTOGRAM_COUNTS_1M("Compositing.DirectRenderer.GL.DrawFrameUs",
+                              draw_timer.Elapsed().InMicroseconds());
+    }
   } else {
     TRACE_EVENT_INSTANT0("cc", "Draw skipped.", TRACE_EVENT_SCOPE_THREAD);
   }
@@ -374,8 +390,8 @@ void Display::OnSurfaceDamaged(const SurfaceId& surface_id, bool* changed) {
       aggregator_->previous_contained_surfaces().count(surface_id)) {
     Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
     if (surface) {
-      if (!surface->HasFrame() ||
-          surface->GetEligibleFrame().resource_list.empty()) {
+      if (!surface->HasActiveFrame() ||
+          surface->GetActiveFrame().resource_list.empty()) {
         aggregator_->ReleaseResources(surface_id);
       }
     }

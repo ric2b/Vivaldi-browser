@@ -29,7 +29,6 @@
 <translation id="1620510694547887537">Câmara</translation>
 <translation id="1627276047960621195">Descritores de ficheiros</translation>
 <translation id="1635033183663317347">Instalada pelo supervisor.</translation>
-<translation id="1652965563555864525">&amp;Sem som</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
 <translation id="1708338024780164500">(Inativa)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
@@ -48,7 +47,6 @@
 <translation id="1979718561647571293">É esta a página inicial de que estava à espera?</translation>
 <translation id="1989112275319619282">Navegar</translation>
 <translation id="1992397118740194946">Não definida</translation>
-<translation id="2011110593081822050">Processo de trabalho na Web: <ph name="WORKER_NAME" /></translation>
 <translation id="2019718679933488176">&amp;Abrir áudio num novo separador</translation>
 <translation id="2076269580855484719">Ocultar este plug-in</translation>
 <translation id="2087822576218954668">Imprimir: <ph name="PRINT_NAME" /></translation>
@@ -78,7 +76,6 @@
 <translation id="2482878487686419369">Notificações</translation>
 <translation id="2501797496290880632">Introduza um atalho</translation>
 <translation id="2509857212037838238">Instalar o <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;Pausa</translation>
 <translation id="2550212893339833758">Memória trocada</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reactivar</translation>
@@ -144,7 +141,6 @@
 <translation id="3927932062596804919">Recusar</translation>
 <translation id="3936390757709632190">&amp;Abrir áudio num novo separador</translation>
 <translation id="3943582379552582368">&amp;Anterior</translation>
-<translation id="3954582159466790312">Com &amp;som</translation>
 <translation id="3978267865113951599">(Falhou)</translation>
 <translation id="3979395879372752341">Nova extensão adicionada (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -180,7 +176,6 @@
 <translation id="4593021220803146968">&amp;Ir para <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apenas o gestor (<ph name="CUSTODIAN_NAME" />) pode modificar as aplicações e as extensões.</translation>
 <translation id="4613271546271159013">Uma extensão alterou a página que é apresentada quando abre um novo separador.</translation>
-<translation id="4623537843784569564">Esta extensão pode ter sido incorretamente atualizada. Experimente reinstalá-la.</translation>
 <translation id="4643612240819915418">&amp;Abrir vídeo num novo separador</translation>
 <translation id="4677772697204437347">Memória de GPU</translation>
 <translation id="4711638718396952945">Restaurar definições</translation>
@@ -189,12 +184,9 @@
 <translation id="4839303808932127586">Guardar &amp;vídeo como...</translation>
 <translation id="4850258771229959924">Ver nas ferramentas de programador</translation>
 <translation id="4851858059374029925">Pretende instalar o <ph name="PLUGIN_NAME" />? Instale apenas plug-ins de confiança.</translation>
-<translation id="4861833787540810454">&amp;Reproduzir</translation>
-<translation id="4883993111890464517">Esta extensão pode estar danificada. Experimente reinstalá-la.</translation>
 <translation id="488785315393301722">Mostrar Detalhes</translation>
 <translation id="4911714727432509308">Não existem extensões com atalhos de teclado atribuídos.</translation>
 <translation id="4912643508233590958">Reativações após inatividade</translation>
-<translation id="4919987486109157213">Extensão danificada. Experimente reinstalá-la.</translation>
 <translation id="4927301649992043040">Comprimir extensão</translation>
 <translation id="4927753642311223124">Continue, não há nada para ver aqui.</translation>
 <translation id="49896407730300355">Rodar para a &amp;esquerda</translation>
@@ -287,7 +279,6 @@
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter alterações</translation>
 <translation id="6841186874966388268">Erros</translation>
-<translation id="6844537474943985871">Esta extensão pode estar danificada. Experimente desinstalar e reinstalar.</translation>
 <translation id="6863910145616405334">Plug-in não encontrado</translation>
 <translation id="6886871292305414135">Abrir link num novo &amp;separador</translation>
 <translation id="6900284862687837908">Aplicação em segundo plano: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -316,7 +307,6 @@
 <translation id="7551643184018910560">Fixar</translation>
 <translation id="7554791636758816595">Novo separador</translation>
 <translation id="7564847347806291057">Concluir processo</translation>
-<translation id="7618337809041914424">&amp;Imprimir moldura...</translation>
 <translation id="7629827748548208700">Separador: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7663719505383602579">Recetor: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -396,7 +386,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="9003647077635673607">Permitir em todos os sites</translation>
 <translation id="9027459031423301635">Abrir ligação num novo &amp;separador</translation>
 <translation id="9088234649737575428">O <ph name="PLUGIN_NAME" /> está bloqueado pela política da empresa</translation>
-<translation id="9101691533782776290">Iniciar aplicação</translation>
 <translation id="9145718805518496796">Compactar extensões...</translation>
 <translation id="9153341767479566106">Outras extensões cujo carregamento falhou:</translation>
 <translation id="9170848237812810038">An&amp;ular</translation>

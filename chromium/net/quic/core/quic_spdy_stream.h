@@ -9,9 +9,9 @@
 #ifndef NET_QUIC_CORE_QUIC_SPDY_STREAM_H_
 #define NET_QUIC_CORE_QUIC_SPDY_STREAM_H_
 
-#include <stddef.h>
 #include <sys/types.h>
 
+#include <cstddef>
 #include <list>
 #include <string>
 
@@ -181,7 +181,10 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream : public QuicStream {
     allow_bidirectional_data_ = value;
   }
 
-  bool allow_bidirectional_data() const { return allow_bidirectional_data_; }
+  bool allow_bidirectional_data() const {
+    return FLAGS_quic_reloadable_flag_quic_always_enable_bidi_streaming ||
+           allow_bidirectional_data_;
+  }
 
   using QuicStream::CloseWriteSide;
 
@@ -221,8 +224,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream : public QuicStream {
   bool headers_decompressed_;
   // The priority of the stream, once parsed.
   SpdyPriority priority_;
-  // Contains a copy of the decompressed header (name, value) std::pairs until
-  // they
+  // Contains a copy of the decompressed header (name, value) pairs until they
   // are consumed via Readv.
   QuicHeaderList header_list_;
 

@@ -48,7 +48,6 @@ constexpr char kGPUDriverVersion[] = "gpu-driver";
 constexpr char kGPUPixelShaderVersion[] = "gpu-psver";
 constexpr char kGPUVertexShaderVersion[] = "gpu-vsver";
 
-constexpr char kHungAudioThreadDetails[] = "hung-audio-thread-details";
 constexpr char kHungRendererOutstandingAckCount[] = "hung-outstanding-acks";
 constexpr char kHungRendererOutstandingEventType[] =
     "hung-outstanding-event-type";
@@ -60,7 +59,7 @@ constexpr char kInputEventFilterSendFailure[] =
 constexpr char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
 constexpr char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
 
-constexpr char kEnrolledToDomain[] = "enrolled-to-domain";
+constexpr char kIsEnterpriseManaged[] = "is-enterprise-managed";
 
 constexpr char kViewCount[] = "view-count";
 constexpr char kZeroEncodeDetails[] = "zero-encode-details";
@@ -94,7 +93,7 @@ size_t RegisterCrashKeysHelper() {
       {kChannel, kSmallSize},
       {kActiveURL, kLargeSize},
       {kNumVariations, kSmallSize},
-      {kVariations, kLargeSize},
+      {kVariations, kHugeSize},
       {kNumExtensionsCount, kSmallSize},
       {kShutdownType, kSmallSize},
       {kBrowserUnpinTrace, kMediumSize},
@@ -107,7 +106,7 @@ size_t RegisterCrashKeysHelper() {
       // browser/:
       {kThirdPartyModulesLoaded, kSmallSize},
       {kThirdPartyModulesNotLoaded, kSmallSize},
-      {kEnrolledToDomain, kSmallSize},
+      {kIsEnterpriseManaged, kSmallSize},
 
       // content/:
       {"bad_message_reason", kSmallSize},
@@ -127,7 +126,6 @@ size_t RegisterCrashKeysHelper() {
       {kInputEventFilterSendFailure, kSmallSize},
 
       // media/:
-      {kHungAudioThreadDetails, kSmallSize},
       {kZeroEncodeDetails, kSmallSize},
 
       // gin/:
@@ -189,9 +187,6 @@ size_t RegisterCrashKeysHelper() {
       {"postmessage_dst_origin", kMediumSize},
       {"postmessage_dst_url", kLargeSize},
       {"postmessage_script_info", kLargeSize},
-
-      // Temporary for https://crbug.com/616149.
-      {"existing_extension_pref_value_type", crash_keys::kSmallSize},
 
       // Temporary for https://crbug.com/668633.
       {"swdh_set_hosted_version_worker_pid", crash_keys::kSmallSize},
@@ -329,16 +324,11 @@ bool ChromeCrashReporterClient::GetDeferredUploadsSupported(
   return false;
 }
 
-// TODO(grt): Remove |exe_path| from crash_reporter::CrashReporterClient.
-bool ChromeCrashReporterClient::GetIsPerUserInstall(
-    const base::string16& exe_path) {
+bool ChromeCrashReporterClient::GetIsPerUserInstall() {
   return !install_static::InstallDetails::Get().system_level();
 }
 
-// TODO(grt): Remove |is_per_user_install| from
-// crash_reporter::CrashReporterClient.
-bool ChromeCrashReporterClient::GetShouldDumpLargerDumps(
-    bool is_per_user_install) {
+bool ChromeCrashReporterClient::GetShouldDumpLargerDumps() {
   // Capture larger dumps for Google Chrome "beta", "dev", and "canary"
   // channels. Stable channel and Chromium builds are on channel "", and use
   // smaller dumps.

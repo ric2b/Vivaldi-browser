@@ -24,10 +24,9 @@ import sys
 # Maps binary image identifiers to binary names (minus the .dSYM portion) found
 # in the archive. These are the only objects that will be looked up.
 SYMBOL_IMAGE_MAP = {
-  'com.vivaldi.Vivaldi': 'Vivaldi.app',
-  'com.vivaldi.Vivaldi.framework': 'Vivaldi Framework.framework',
-  'com.vivaldi.Vivaldi.helper': 'Vivaldi Helper.app'
-  'com.vivaldi.Vivaldi.sparkle': 'Sparkle.framework'
+  'com.google.Chrome': 'Google Chrome.app',
+  'com.google.Chrome.framework': 'Google Chrome Framework.framework',
+  'com.google.Chrome.helper': 'Google Chrome Helper.app'
 }
 
 class CrashReport(object):

@@ -35,7 +35,6 @@
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/origin_trials/OriginTrialContext.h"
-#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/ThreadedWorkletGlobalScope.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
@@ -95,7 +94,7 @@ WorkerThread::~WorkerThread() {
   DCHECK(isMainThread());
   MutexLocker lock(threadSetMutex());
   DCHECK(workerThreads().contains(this));
-  workerThreads().remove(this);
+  workerThreads().erase(this);
 
   DCHECK_NE(ExitCode::NotTerminated, m_exitCode);
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
@@ -105,13 +104,15 @@ WorkerThread::~WorkerThread() {
   exitCodeHistogram.count(static_cast<int>(m_exitCode));
 }
 
-void WorkerThread::start(std::unique_ptr<WorkerThreadStartupData> startupData) {
+void WorkerThread::start(std::unique_ptr<WorkerThreadStartupData> startupData,
+                         ParentFrameTaskRunners* parentFrameTaskRunners) {
   DCHECK(isMainThread());
 
   if (m_requestedToStart)
     return;
 
   m_requestedToStart = true;
+  m_parentFrameTaskRunners = parentFrameTaskRunners;
   workerBackingThread().backingThread().postTask(
       BLINK_FROM_HERE, crossThreadBind(&WorkerThread::initializeOnWorkerThread,
                                        crossThreadUnretained(this),
@@ -190,20 +191,13 @@ bool WorkerThread::isCurrentThread() {
 }
 
 void WorkerThread::postTask(const WebTraceLocation& location,
-                            std::unique_ptr<ExecutionContextTask> task) {
+                            std::unique_ptr<WTF::CrossThreadClosure> task) {
   if (isInShutdown())
     return;
   workerBackingThread().backingThread().postTask(
       location, crossThreadBind(&WorkerThread::performTaskOnWorkerThread,
                                 crossThreadUnretained(this),
                                 WTF::passed(std::move(task))));
-}
-
-void WorkerThread::postTask(const WebTraceLocation& location,
-                            std::unique_ptr<WTF::CrossThreadClosure> task) {
-  std::unique_ptr<ExecutionContextTask> wrappedTask = createCrossThreadTask(
-      &WTF::CrossThreadClosure::operator(), WTF::passed(std::move(task)));
-  postTask(location, std::move(wrappedTask));
 }
 
 void WorkerThread::appendDebuggerTask(
@@ -233,11 +227,8 @@ void WorkerThread::startRunningDebuggerTasksOnPauseOnWorkerThread() {
   ThreadDebugger::idleStarted(isolate());
   std::unique_ptr<CrossThreadClosure> task;
   do {
-    {
-      SafePointScope safePointScope(BlinkGC::HeapPointersOnStack);
-      task =
-          m_inspectorTaskRunner->takeNextTask(InspectorTaskRunner::WaitForTask);
-    }
+    task =
+        m_inspectorTaskRunner->takeNextTask(InspectorTaskRunner::WaitForTask);
     if (task)
       (*task)();
     // Keep waiting until execution is resumed.
@@ -307,7 +298,7 @@ WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
       m_workerThreadLifecycleContext(new WorkerThreadLifecycleContext) {
   DCHECK(isMainThread());
   MutexLocker lock(threadSetMutex());
-  workerThreads().add(this);
+  workerThreads().insert(this);
 }
 
 void WorkerThread::terminateInternal(TerminationMode mode) {
@@ -315,9 +306,6 @@ void WorkerThread::terminateInternal(TerminationMode mode) {
   DCHECK(m_requestedToStart);
 
   {
-    // Prevent the deadlock between GC and an attempt to terminate a thread.
-    SafePointScope safePointScope(BlinkGC::HeapPointersOnStack);
-
     // Protect against this method, initializeOnWorkerThread() or
     // termination via the global scope racing each other.
     MutexLocker lock(m_threadStateMutex);
@@ -353,9 +341,7 @@ void WorkerThread::terminateInternal(TerminationMode mode) {
         case TerminationMode::Graceful:
           DCHECK(!m_forcibleTerminationTaskHandle.isActive());
           m_forcibleTerminationTaskHandle =
-              workerReportingProxy()
-                  .getParentFrameTaskRunners()
-                  ->get(TaskType::UnspecedTimer)
+              m_parentFrameTaskRunners->get(TaskType::UnspecedTimer)
                   ->postDelayedCancellableTask(
                       BLINK_FROM_HERE,
                       WTF::bind(&WorkerThread::mayForciblyTerminateExecution,
@@ -528,7 +514,7 @@ void WorkerThread::prepareForShutdownOnWorkerThread() {
 
   m_inspectorTaskRunner->kill();
   workerReportingProxy().willDestroyWorkerGlobalScope();
-  InspectorInstrumentation::allAsyncTasksCanceled(globalScope());
+  probe::allAsyncTasksCanceled(globalScope());
 
   globalScope()->notifyContextDestroyed();
   if (m_workerInspectorController) {
@@ -565,7 +551,7 @@ void WorkerThread::performShutdownOnWorkerThread() {
 }
 
 void WorkerThread::performTaskOnWorkerThread(
-    std::unique_ptr<ExecutionContextTask> task) {
+    std::unique_ptr<WTF::CrossThreadClosure> task) {
   DCHECK(isCurrentThread());
   if (m_threadState != ThreadState::Running)
     return;
@@ -575,7 +561,7 @@ void WorkerThread::performTaskOnWorkerThread(
         CustomCountHistogram, scopedUsCounter,
         new CustomCountHistogram("WorkerThread.Task.Time", 0, 10000000, 50));
     ScopedUsHistogramTimer timer(scopedUsCounter);
-    task->performTask(globalScope());
+    (*task)();
   }
 }
 

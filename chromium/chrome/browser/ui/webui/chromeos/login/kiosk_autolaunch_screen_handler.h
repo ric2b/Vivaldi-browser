@@ -8,14 +8,14 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager_observer.h"
-#include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen_actor.h"
+#include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen_view.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "content/public/browser/web_ui.h"
 
 namespace chromeos {
 
 // WebUI implementation of KioskAutolaunchScreenActor.
-class KioskAutolaunchScreenHandler : public KioskAutolaunchScreenActor,
+class KioskAutolaunchScreenHandler : public KioskAutolaunchScreenView,
                                      public KioskAppManagerObserver,
                                      public BaseScreenHandler {
  public:
@@ -47,11 +47,11 @@ class KioskAutolaunchScreenHandler : public KioskAutolaunchScreenActor,
   void HandleOnConfirm();
   void HandleOnVisible();
 
-  Delegate* delegate_;
+  Delegate* delegate_ = nullptr;
 
   // Keeps whether screen should be shown right after initialization.
-  bool show_on_init_;
-  bool is_visible_;
+  bool show_on_init_ = false;
+  bool is_visible_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(KioskAutolaunchScreenHandler);
 };

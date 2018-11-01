@@ -1,0 +1,12 @@
+
+post_process_target("//components/sessions:sessions") {
+  sources += [ "//vivaldi/components/sessions/live_tab_context.cc" ]
+}
+
+post_process_target("//content/browser:browser") {
+  sources += [ "//vivaldi/components/loader/resource_controller.cc" ]
+}
+
+post_process_target("//components/bookmarks/browser:browser") {
+  sources += [ "//vivaldi/components/bookmarks/titled_url_node.cc" ]
+}

@@ -17,6 +17,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
+#include "public/platform/WebLayerTreeView.h"
 #include "public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom-blink.h"
 #include "ui/gfx/geometry/size.h"
 #include "wtf/Functional.h"
@@ -55,11 +56,13 @@ class OffscreenCanvasSurfaceReferenceFactory
 }  // namespace
 
 CanvasSurfaceLayerBridge::CanvasSurfaceLayerBridge(
-    CanvasSurfaceLayerBridgeObserver* observer)
+    CanvasSurfaceLayerBridgeObserver* observer,
+    WebLayerTreeView* layerTreeView)
     : m_weakFactory(this),
       m_observer(observer),
       m_binding(this),
-      m_frameSinkId(Platform::current()->generateFrameSinkId()) {
+      m_frameSinkId(Platform::current()->generateFrameSinkId()),
+      m_parentFrameSinkId(layerTreeView->getFrameSinkId()) {
   m_refFactory =
       new OffscreenCanvasSurfaceReferenceFactory(m_weakFactory.GetWeakPtr());
 
@@ -67,8 +70,11 @@ CanvasSurfaceLayerBridge::CanvasSurfaceLayerBridge(
   mojom::blink::OffscreenCanvasSurfaceFactoryPtr serviceFactory;
   Platform::current()->interfaceProvider()->getInterface(
       mojo::MakeRequest(&serviceFactory));
+  // TODO(xlai): Ensure OffscreenCanvas commit() is still functional when a
+  // frame-less HTML canvas's document is reparenting under another frame.
+  // See crbug.com/683172.
   serviceFactory->CreateOffscreenCanvasSurface(
-      m_frameSinkId, m_binding.CreateInterfacePtrAndBind(),
+      m_parentFrameSinkId, m_frameSinkId, m_binding.CreateInterfacePtrAndBind(),
       mojo::MakeRequest(&m_service));
 }
 
@@ -86,7 +92,7 @@ void CanvasSurfaceLayerBridge::createSolidColorLayer() {
 
 void CanvasSurfaceLayerBridge::OnSurfaceCreated(
     const cc::SurfaceInfo& surfaceInfo) {
-  if (!m_currentSurfaceId.is_valid() && surfaceInfo.id().is_valid()) {
+  if (!m_currentSurfaceId.is_valid() && surfaceInfo.is_valid()) {
     // First time a SurfaceId is received
     m_currentSurfaceId = surfaceInfo.id();
     GraphicsLayer::unregisterContentsLayer(m_webLayer.get());
@@ -94,7 +100,7 @@ void CanvasSurfaceLayerBridge::OnSurfaceCreated(
 
     scoped_refptr<cc::SurfaceLayer> surfaceLayer =
         cc::SurfaceLayer::Create(m_refFactory);
-    surfaceLayer->SetSurfaceInfo(surfaceInfo);
+    surfaceLayer->SetPrimarySurfaceInfo(surfaceInfo);
     surfaceLayer->SetStretchContentToFillBounds(true);
     m_CCLayer = surfaceLayer;
 
@@ -108,7 +114,7 @@ void CanvasSurfaceLayerBridge::OnSurfaceCreated(
     m_currentSurfaceId = surfaceInfo.id();
     cc::SurfaceLayer* surfaceLayer =
         static_cast<cc::SurfaceLayer*>(m_CCLayer.get());
-    surfaceLayer->SetSurfaceInfo(surfaceInfo);
+    surfaceLayer->SetPrimarySurfaceInfo(surfaceInfo);
   }
 
   m_observer->OnWebLayerReplaced();

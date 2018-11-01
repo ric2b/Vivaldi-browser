@@ -5,6 +5,8 @@
 #ifndef ASH_COMMON_SYSTEM_TRAY_TRAY_POPUP_UTILS_H_
 #define ASH_COMMON_SYSTEM_TRAY_TRAY_POPUP_UTILS_H_
 
+#include <memory>
+
 #include "ash/common/login_status.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_ink_drop_style.h"
@@ -13,6 +15,7 @@
 
 namespace views {
 class ButtonListener;
+class CustomButton;
 class ImageView;
 class InkDrop;
 class InkDropRipple;
@@ -110,6 +113,9 @@ class TrayPopupUtils {
 
   // Creates a default focus painter used for most things in tray popups.
   static std::unique_ptr<views::Painter> CreateFocusPainter();
+
+  // Common setup for various buttons in the system menu.
+  static void ConfigureTrayPopupButton(views::CustomButton* button);
 
   // Sets up |view| to be a sticky header in a tray detail scroll view.
   static void ConfigureAsStickyHeader(views::View* view);

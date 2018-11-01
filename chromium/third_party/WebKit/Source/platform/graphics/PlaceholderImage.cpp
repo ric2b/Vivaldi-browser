@@ -8,11 +8,9 @@
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageObserver.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
-#include "third_party/skia/include/core/SkCanvas.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkSize.h"
 
@@ -36,7 +34,7 @@ sk_sp<SkImage> PlaceholderImage::imageForCurrentFrame(
 
   const FloatRect destRect(0.0f, 0.0f, static_cast<float>(m_size.width()),
                            static_cast<float>(m_size.height()));
-  SkPictureBuilder builder(destRect);
+  PaintRecordBuilder builder(destRect);
   GraphicsContext& context = builder.context();
   context.beginRecording(destRect);
 
@@ -44,31 +42,29 @@ sk_sp<SkImage> PlaceholderImage::imageForCurrentFrame(
   context.fillRect(destRect);
 
   m_imageForCurrentFrame = SkImage::MakeFromPicture(
-      builder.endRecording(), SkISize::Make(m_size.width(), m_size.height()),
-      nullptr, nullptr);
+      ToSkPicture(builder.endRecording()),
+      SkISize::Make(m_size.width(), m_size.height()), nullptr, nullptr,
+      SkImage::BitDepth::kU8, SkColorSpace::MakeSRGB());
 
   return m_imageForCurrentFrame;
 }
 
-void PlaceholderImage::draw(SkCanvas* canvas,
-                            const SkPaint& basePaint,
+void PlaceholderImage::draw(PaintCanvas* canvas,
+                            const PaintFlags& baseFlags,
                             const FloatRect& destRect,
                             const FloatRect& srcRect,
                             RespectImageOrientationEnum,
-                            ImageClampingMode,
-                            const ColorBehavior& colorBehavior) {
-  // TODO(ccameron): This function should not ignore |colorBehavior|.
-  // https://crbug.com/672306
+                            ImageClampingMode) {
   if (!srcRect.intersects(FloatRect(0.0f, 0.0f,
                                     static_cast<float>(m_size.width()),
                                     static_cast<float>(m_size.height())))) {
     return;
   }
 
-  SkPaint paint(basePaint);
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(kFillColor);
-  canvas->drawRect(destRect, paint);
+  PaintFlags flags(baseFlags);
+  flags.setStyle(PaintFlags::kFill_Style);
+  flags.setColor(kFillColor);
+  canvas->drawRect(destRect, flags);
 }
 
 void PlaceholderImage::destroyDecodedData() {

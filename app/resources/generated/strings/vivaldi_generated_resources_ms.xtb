@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">Sambungan ini tidak memerlukan kebenaran khas.</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Dipasang oleh penjaga anda.</translation>
-<translation id="1652965563555864525">&amp;Redam</translation>
 <translation id="1723824996674794290">&amp;Tetingkap baharu</translation>
 <translation id="1729533290416704613">Sambungan turut mengawal halaman yang ditunjukkan apabila anda membuat carian dari Kotak Omni.</translation>
 <translation id="1789575671122666129">Pop timbul</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">Pilih &amp;semua</translation>
 <translation id="1965328510789761112">Memori peribadi</translation>
 <translation id="1992397118740194946">Tidak ditetapkan</translation>
-<translation id="2011110593081822050">Pekerja Web: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">Sembunyikan pemalam ini</translation>
 <translation id="2087822576218954668">Cetak: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Kemas kini pemalam</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">Pemberitahuan</translation>
 <translation id="2501797496290880632">Taipkan pintasan</translation>
 <translation id="2509857212037838238">Pasang <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;Jeda</translation>
 <translation id="2550212893339833758">Memori ditukar</translation>
 <translation id="2662876636500006917">Kedai Web Vivaldi</translation>
 <translation id="2678063897982469759">Dayakan semula</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">Nafikan</translation>
 <translation id="3936390757709632190">&amp;Buka audio di tab baharu</translation>
 <translation id="3943582379552582368">&amp;Kembali</translation>
-<translation id="3954582159466790312">Nyah&amp;redam</translation>
 <translation id="3979395879372752341">Sambungan baharu ditambah (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">Mencipta sambungan:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968">&amp;Pergi ke <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apl dan sambungan hanya boleh diubah suai oleh pengurus (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Sambungan telah menukar halaman yang ditunjukkan apabila anda membuka halaman baharu.</translation>
-<translation id="4623537843784569564">Sambungan ini mungkin telah dikemas kini dengan tidak betul. Cuba memasang semula.</translation>
 <translation id="4677772697204437347">Memori GPU</translation>
 <translation id="4711638718396952945">Pulihkan tetapan</translation>
 <translation id="4839303808932127586">Si&amp;mpan video sebagai...</translation>
 <translation id="4851858059374029925">Pasang <ph name="PLUGIN_NAME" />? Pasang pemalam yang anda percayai sahaja.</translation>
-<translation id="4861833787540810454">&amp;Mainkan</translation>
-<translation id="4883993111890464517">Sambungan ini mungkin telah rosak. Cuba memasang semula.</translation>
 <translation id="488785315393301722">Tunjukkan Butiran</translation>
 <translation id="4911714727432509308">Tiada sambungan yang telah diberikan pintasan papan kekunci.</translation>
-<translation id="4919987486109157213">Sambungan rosak. Cuba memasang semula.</translation>
 <translation id="4927301649992043040">Sambungan Pek</translation>
 <translation id="49896407730300355">Putar m&amp;elawan arah jam</translation>
 <translation id="4989966318180235467">Halaman periksa &amp;latar belakang</translation>
@@ -196,7 +188,6 @@
 <translation id="6787839852456839824">Pintasan papan kekunci</translation>
 <translation id="6798954102094737107">Pemalam: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Simpan perubahan</translation>
-<translation id="6844537474943985871">Sambungan ini mungkin telah rosak. Sila cuba nyahpasang dan pasang semula.</translation>
 <translation id="6863910145616405334">Pemalam tidak ditemui</translation>
 <translation id="6886871292305414135">Buka pautan dalam &amp;tab baharu</translation>
 <translation id="6900284862687837908">Apl Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -216,7 +207,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Tab Baharu</translation>
 <translation id="7564847347806291057">Proses akhir</translation>
-<translation id="7618337809041914424">&amp;Bingkai cetak...</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Batal</translation>
 <translation id="7663719505383602579">Penerima: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -265,7 +255,6 @@ perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
 <translation id="8916476537757519021">Subbingkai Inkognito: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Sembunyikan Butiran</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> disekat oleh dasar perusahaan</translation>
-<translation id="9101691533782776290">Lancarkan apl</translation>
 <translation id="9170848237812810038">&amp;Buat asal</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ditambah</translation>
 <translation id="9219103736887031265">Imej</translation>

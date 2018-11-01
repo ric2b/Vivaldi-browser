@@ -4,7 +4,6 @@
 
 #include "cc/trees/layer_tree_settings.h"
 
-#include "cc/proto/gfx_conversions.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
 namespace cc {
@@ -33,16 +32,17 @@ bool LayerTreeSettings::operator==(const LayerTreeSettings& other) const {
          enable_latency_recovery == other.enable_latency_recovery &&
          can_use_lcd_text == other.can_use_lcd_text &&
          use_distance_field_text == other.use_distance_field_text &&
-         gpu_rasterization_enabled == other.gpu_rasterization_enabled &&
          gpu_rasterization_forced == other.gpu_rasterization_forced &&
          async_worker_context_enabled == other.async_worker_context_enabled &&
          gpu_rasterization_msaa_sample_count ==
              other.gpu_rasterization_msaa_sample_count &&
          create_low_res_tiling == other.create_low_res_tiling &&
          scrollbar_animator == other.scrollbar_animator &&
-         scrollbar_fade_delay == other.scrollbar_fade_delay &&
-         scrollbar_fade_resize_delay == other.scrollbar_fade_resize_delay &&
-         scrollbar_fade_duration == other.scrollbar_fade_duration &&
+         scrollbar_show_delay == other.scrollbar_show_delay &&
+         scrollbar_fade_out_delay == other.scrollbar_fade_out_delay &&
+         scrollbar_fade_out_resize_delay ==
+             other.scrollbar_fade_out_resize_delay &&
+         scrollbar_fade_out_duration == other.scrollbar_fade_out_duration &&
          solid_color_scrollbar_color == other.solid_color_scrollbar_color &&
          timeout_and_draw_when_animation_checkerboards ==
              other.timeout_and_draw_when_animation_checkerboards &&
@@ -79,9 +79,9 @@ bool LayerTreeSettings::operator==(const LayerTreeSettings& other) const {
              other.max_staging_buffer_usage_in_bytes &&
          gpu_memory_policy == other.gpu_memory_policy &&
          software_memory_policy == other.software_memory_policy &&
+         enable_mask_tiling == other.enable_mask_tiling &&
          LayerTreeDebugState::Equal(initial_debug_state,
-                                    other.initial_debug_state) &&
-         use_cached_picture_raster == other.use_cached_picture_raster;
+                                    other.initial_debug_state);
 }
 
 SchedulerSettings LayerTreeSettings::ToSchedulerSettings() const {
@@ -96,6 +96,13 @@ SchedulerSettings LayerTreeSettings::ToSchedulerSettings() const {
   scheduler_settings.background_frame_interval =
       base::TimeDelta::FromSecondsD(1.0 / background_animation_rate);
   return scheduler_settings;
+}
+
+TileManagerSettings LayerTreeSettings::ToTileManagerSettings() const {
+  TileManagerSettings tile_manager_settings;
+  tile_manager_settings.use_partial_raster = use_partial_raster;
+  tile_manager_settings.enable_checker_imaging = enable_checker_imaging;
+  return tile_manager_settings;
 }
 
 }  // namespace cc

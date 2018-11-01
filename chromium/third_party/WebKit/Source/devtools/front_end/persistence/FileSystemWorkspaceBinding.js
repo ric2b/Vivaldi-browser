@@ -93,7 +93,8 @@ Persistence.FileSystemWorkspaceBinding = class {
       return Common.resourceTypes.Image;
     if (Persistence.FileSystemWorkspaceBinding._scriptExtensions.has(extension))
       return Common.resourceTypes.Script;
-    return Common.resourceTypes.Other;
+    return Persistence.FileSystemWorkspaceBinding._binaryExtensions.has(extension) ? Common.resourceTypes.Other :
+                                                                                     Common.resourceTypes.Document;
   }
 
   /**
@@ -149,12 +150,23 @@ Persistence.FileSystemWorkspaceBinding = class {
    * @param {!Common.Event} event
    */
   _fileSystemFilesChanged(event) {
-    var paths = /** @type {!Array<string>} */ (event.data);
-    for (var path of paths) {
-      for (var key of this._boundFileSystems.keys()) {
-        if (!path.startsWith(key))
-          continue;
-        this._boundFileSystems.get(key)._fileChanged(path);
+    var paths = /** @type {!Workspace.IsolatedFileSystemManager.FilesChangedData} */ (event.data);
+    forEachFile.call(this, paths.changed, (path, fileSystem) => fileSystem._fileChanged(path));
+    forEachFile.call(this, paths.added, (path, fileSystem) => fileSystem._fileChanged(path));
+    forEachFile.call(this, paths.removed, (path, fileSystem) => fileSystem.removeUISourceCode(path));
+
+    /**
+     * @param {!Array<string>} filePaths
+     * @param {function(string, !Persistence.FileSystemWorkspaceBinding.FileSystem)} callback
+     * @this {Persistence.FileSystemWorkspaceBinding}
+     */
+    function forEachFile(filePaths, callback) {
+      for (var filePath of filePaths) {
+        for (var fileSystemPath of this._boundFileSystems.keys()) {
+          if (!filePath.startsWith(fileSystemPath))
+            continue;
+          callback(filePath, this._boundFileSystems.get(fileSystemPath));
+        }
       }
     }
   }
@@ -176,6 +188,17 @@ Persistence.FileSystemWorkspaceBinding._scriptExtensions = new Set([
 ]);
 
 Persistence.FileSystemWorkspaceBinding._imageExtensions = Workspace.IsolatedFileSystem.ImageExtensions;
+
+Persistence.FileSystemWorkspaceBinding._binaryExtensions = new Set([
+  // Executable extensions, roughly taken from https://en.wikipedia.org/wiki/Comparison_of_executable_file_formats
+  'cmd', 'com', 'exe',
+  // Archive extensions, roughly taken from https://en.wikipedia.org/wiki/List_of_archive_formats
+  'a', 'ar', 'iso', 'tar', 'bz2', 'gz', 'lz', 'lzma', 'z', '7z', 'apk', 'arc', 'cab', 'dmg', 'jar', 'pak', 'rar', 'zip',
+  // Audio file extensions, roughly taken from https://en.wikipedia.org/wiki/Audio_file_format#List_of_formats
+  '3gp', 'aac', 'aiff', 'flac', 'm4a', 'mmf', 'mp3', 'ogg', 'oga', 'raw', 'sln', 'wav', 'wma', 'webm',
+  // Video file extensions, roughly taken from https://en.wikipedia.org/wiki/Video_file_format
+  'mkv', 'flv', 'vob', 'ogv', 'gif', 'gifv', 'avi', 'mov', 'qt', 'mp4', 'm4p', 'm4v', 'mpg', 'mpeg'
+]);
 
 
 /**
@@ -216,8 +239,8 @@ Persistence.FileSystemWorkspaceBinding.FileSystem = class extends Workspace.Proj
   /**
    * @return {!Array<string>}
    */
-  gitFolders() {
-    return this._fileSystem.gitFolders().map(folder => this._fileSystemPath + '/' + folder);
+  initialGitFolders() {
+    return this._fileSystem.initialGitFolders().map(folder => this._fileSystemPath + '/' + folder);
   }
 
   /**
@@ -445,7 +468,7 @@ Persistence.FileSystemWorkspaceBinding.FileSystem = class extends Workspace.Proj
 
   populate() {
     var chunkSize = 1000;
-    var filePaths = this._fileSystem.filePaths();
+    var filePaths = this._fileSystem.initialFilePaths();
     reportFileChunk.call(this, 0);
 
     /**
@@ -519,11 +542,12 @@ Persistence.FileSystemWorkspaceBinding.FileSystem = class extends Workspace.Proj
 
   /**
    * @override
-   * @param {string} path
+   * @param {!Workspace.UISourceCode} uiSourceCode
    */
-  deleteFile(path) {
-    this._fileSystem.deleteFile(path);
-    this.removeUISourceCode(path);
+  deleteFile(uiSourceCode) {
+    var relativePath = this._filePathForUISourceCode(uiSourceCode);
+    this._fileSystem.deleteFile(relativePath);
+    this.removeUISourceCode(uiSourceCode.url());
   }
 
   /**

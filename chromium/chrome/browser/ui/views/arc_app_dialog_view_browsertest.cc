@@ -6,7 +6,9 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
@@ -16,7 +18,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_util.h"
 #include "components/arc/common/app.mojom.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "content/public/test/test_utils.h"
@@ -30,23 +32,27 @@ class ArcAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
   // InProcessBrowserTest:
   ~ArcAppUninstallDialogViewBrowserTest() override {}
 
-  void SetUpAppInstance() {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    arc::SetArcAvailableCommandLineForTesting(command_line);
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+    ArcSessionManager::DisableUIForTesting();
+    ArcAuthNotification::DisableForTesting();
+  }
+
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
     profile_ = browser()->profile();
-
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        chromeos::switches::kEnableArc);
-
     arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
     if (!arc_app_list_pref_) {
       ArcAppListPrefsFactory::GetInstance()->RecreateServiceInstanceForTesting(
           profile_);
     }
 
-    ArcSessionManager* session_manager = ArcSessionManager::Get();
-    DCHECK(session_manager);
-    ArcSessionManager::DisableUIForTesting();
-    session_manager->OnPrimaryUserProfilePrepared(profile_);
-    session_manager->EnableArc();
+    arc::SetArcPlayStoreEnabledForProfile(profile_, true);
 
     arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
     DCHECK(arc_app_list_pref_);
@@ -104,13 +110,11 @@ class ArcAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(ArcAppUninstallDialogViewBrowserTest);
 };
 
-// User confirms/cancels Arc app uninstall. Note that the shortcut is removed
+// User confirms/cancels ARC app uninstall. Note that the shortcut is removed
 // when the app and the package are uninstalled since the shortcut and the app
 // share same package.
 IN_PROC_BROWSER_TEST_F(ArcAppUninstallDialogViewBrowserTest,
                        UserConfirmsUninstall) {
-  SetUpAppInstance();
-
   std::vector<std::string> app_ids = arc_app_list_pref()->GetAppIds();
   EXPECT_EQ(app_ids.size(), 2u);
   std::string package_name = base::StringPrintf("fake.package.%d", 0);
@@ -141,12 +145,10 @@ IN_PROC_BROWSER_TEST_F(ArcAppUninstallDialogViewBrowserTest,
   controller->DismissView();
 }
 
-// User confirms/cancels Arc app shortcut removal. Note that the app is not
+// User confirms/cancels ARC app shortcut removal. Note that the app is not
 // uninstalled when the shortcut is removed.
 IN_PROC_BROWSER_TEST_F(ArcAppUninstallDialogViewBrowserTest,
                        UserConfirmsUninstallShortcut) {
-  SetUpAppInstance();
-
   std::vector<std::string> app_ids = arc_app_list_pref()->GetAppIds();
   EXPECT_EQ(app_ids.size(), 2u);
   std::string package_name = base::StringPrintf("fake.package.%d", 0);

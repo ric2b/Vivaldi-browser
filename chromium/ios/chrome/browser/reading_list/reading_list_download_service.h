@@ -18,18 +18,14 @@ namespace base {
 class FilePath;
 }
 
-namespace dom_distiller {
-class DomDistillerService;
-}
-
 namespace reading_list {
 class ReadingListDistillerPageFactory;
 }
 
 // Observes the reading list and downloads offline versions of its articles.
-// Any calls made to DownloadAllEntries/DownloadEntry before the model is
-// loaded will be ignored. When the model is loaded, DownloadAllEntries will be
-// called automatically.
+// Any calls made to DownloadEntry before the model is loaded will be ignored.
+// When the model is loaded, offline directory is automatically synced with the
+// entries in the model.
 class ReadingListDownloadService
     : public KeyedService,
       public ReadingListModelObserver,
@@ -37,16 +33,19 @@ class ReadingListDownloadService
  public:
   ReadingListDownloadService(
       ReadingListModel* reading_list_model,
-      dom_distiller::DomDistillerService* distiller_service,
       PrefService* prefs,
       base::FilePath chrome_profile_path,
       net::URLRequestContextGetter* url_request_context_getter,
+      std::unique_ptr<dom_distiller::DistillerFactory> distiller_factory,
       std::unique_ptr<reading_list::ReadingListDistillerPageFactory>
           distiller_page_factory);
   ~ReadingListDownloadService() override;
 
   // Initializes the reading list download service.
   void Initialize();
+
+  // Clear the current download queue.
+  void Clear();
 
   // The root folder containing all the offline files.
   virtual base::FilePath OfflineRoot() const;
@@ -65,12 +64,21 @@ class ReadingListDownloadService
                                const GURL& url) override;
 
  private:
-  // Tries to save offline versions of all entries in the reading list that are
-  // not yet saved. Must only be called after reading list model is loaded.
-  void DownloadAllEntries();
-  // Processes a new entry and schedule a download if needed.
+  // Checks the model and determines which entries are processed and which
+  // entries need to be processed.
+  // Initiates a cleanup of |OfflineRoot()| directory removing sub_directories
+  // not corresponding to a processed ReadingListEntry.
+  // Schedules unprocessed entries for distillation.
+  void SyncWithModel();
+  // Scans |OfflineRoot()| directory and deletes all subdirectories not listed
+  // in |directories_to_keep|.
+  // Must be called on File thread.
+  void CleanUpFiles(const std::set<std::string>& directories_to_keep);
+  // Schedules all entries in |unprocessed_entries| for distillation.
+  void DownloadUnprocessedEntries(const std::set<GURL>& unprocessed_entries);
+  // Processes a new entry and schedules a download if needed.
   void ProcessNewEntry(const GURL& url);
-  // Schedule a download of an offline version of the reading list entry,
+  // Schedules a download of an offline version of the reading list entry,
   // according to the delay of the entry. Must only be called after reading list
   // model is loaded.
   void ScheduleDownloadEntry(const GURL& url);
@@ -85,6 +93,7 @@ class ReadingListDownloadService
                      const GURL& distilled_url,
                      URLDownloader::SuccessState success,
                      const base::FilePath& distilled_path,
+                     int64_t size,
                      const std::string& title);
 
   // Callback for entry deletion.
@@ -102,6 +111,7 @@ class ReadingListDownloadService
   bool had_connection_;
   std::unique_ptr<reading_list::ReadingListDistillerPageFactory>
       distiller_page_factory_;
+  std::unique_ptr<dom_distiller::DistillerFactory> distiller_factory_;
 
   base::WeakPtrFactory<ReadingListDownloadService> weak_ptr_factory_;
 

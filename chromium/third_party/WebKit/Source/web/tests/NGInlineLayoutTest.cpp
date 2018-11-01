@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/ng_block_layout_algorithm.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_inline_layout_algorithm.h"
 #include "core/layout/ng/ng_inline_node.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -20,13 +20,15 @@ namespace blink {
 
 class NGInlineLayoutTest : public SimTest {
  public:
-  NGConstraintSpace* constraintSpaceForElement(LayoutNGBlockFlow* blockFlow) {
+  RefPtr<NGConstraintSpace> constraintSpaceForElement(
+      LayoutNGBlockFlow* blockFlow) {
     return NGConstraintSpaceBuilder(
                FromPlatformWritingMode(blockFlow->style()->getWritingMode()))
         .SetAvailableSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetPercentageResolutionSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetTextDirection(blockFlow->style()->direction())
-        .ToConstraintSpace();
+        .ToConstraintSpace(
+            FromPlatformWritingMode(blockFlow->style()->getWritingMode()));
   }
 };
 
@@ -44,20 +46,16 @@ TEST_F(NGInlineLayoutTest, BlockWithSingleTextNode) {
 
   Element* target = document().getElementById("target");
   LayoutNGBlockFlow* blockFlow = toLayoutNGBlockFlow(target->layoutObject());
-  NGConstraintSpace* constraintSpace = constraintSpaceForElement(blockFlow);
+  RefPtr<NGConstraintSpace> constraintSpace =
+      constraintSpaceForElement(blockFlow);
+  NGBlockNode* node = new NGBlockNode(blockFlow);
 
-  NGInlineNode* inlineBox =
-      new NGInlineNode(blockFlow->firstChild(), blockFlow->mutableStyle());
-  NGInlineLayoutAlgorithm* layoutAlgorithm = new NGInlineLayoutAlgorithm(
-      blockFlow->style(), inlineBox, constraintSpace);
-
-  NGPhysicalFragment* fragment;
-  while (layoutAlgorithm->Layout(nullptr, &fragment, nullptr) != kNewFragment) {
-    // Repeat until layout completes.
-  }
+  RefPtr<NGLayoutResult> result =
+      NGBlockLayoutAlgorithm(node, constraintSpace.get()).Layout();
+  EXPECT_TRUE(result);
 
   String expectedText("Hello World!");
-  EXPECT_EQ(expectedText, inlineBox->Text(0, 12));
+  EXPECT_EQ(expectedText, toNGInlineNode(node->FirstChild())->Text(0, 12));
 }
 
 TEST_F(NGInlineLayoutTest, BlockWithTextAndAtomicInline) {
@@ -73,22 +71,21 @@ TEST_F(NGInlineLayoutTest, BlockWithTextAndAtomicInline) {
 
   Element* target = document().getElementById("target");
   LayoutNGBlockFlow* blockFlow = toLayoutNGBlockFlow(target->layoutObject());
-  NGConstraintSpace* constraintSpace = constraintSpaceForElement(blockFlow);
+  RefPtr<NGConstraintSpace> constraintSpace =
+      constraintSpaceForElement(blockFlow);
+  NGBlockNode* node = new NGBlockNode(blockFlow);
 
-  NGInlineNode* inlineBox =
-      new NGInlineNode(blockFlow->firstChild(), blockFlow->mutableStyle());
-  NGInlineLayoutAlgorithm* layoutAlgorithm = new NGInlineLayoutAlgorithm(
-      blockFlow->style(), inlineBox, constraintSpace);
-
-  NGPhysicalFragment* fragment;
-  while (layoutAlgorithm->Layout(nullptr, &fragment, nullptr) != kNewFragment) {
-    // Repeat until layout completes.
-  }
+  RefPtr<NGLayoutResult> result =
+      NGBlockLayoutAlgorithm(node, constraintSpace.get()).Layout();
+  EXPECT_TRUE(result);
 
   String expectedText("Hello ");
   expectedText.append(objectReplacementCharacter);
   expectedText.append(".");
-  EXPECT_EQ(expectedText, inlineBox->Text(0, 8));
+  EXPECT_EQ(expectedText, toNGInlineNode(node->FirstChild())->Text(0, 8));
+
+  // Delete the line box tree to avoid leaks in the test.
+  blockFlow->deleteLineBoxTree();
 }
 
 }  // namespace blink

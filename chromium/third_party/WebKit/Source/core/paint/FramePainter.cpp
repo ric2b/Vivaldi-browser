@@ -5,7 +5,6 @@
 #include "core/paint/FramePainter.h"
 
 #include "core/editing/markers/DocumentMarkerController.h"
-#include "core/fetch/MemoryCache.h"
 #include "core/frame/FrameView.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -21,6 +20,7 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/ScopedPaintChunkProperties.h"
+#include "platform/loader/fetch/MemoryCache.h"
 #include "platform/scroll/ScrollbarTheme.h"
 
 namespace blink {
@@ -103,10 +103,6 @@ void FramePainter::paint(GraphicsContext& context,
         properties.propertyTreeState.setClip(
             m_frameView->contentClip()->parent());
         properties.propertyTreeState.setEffect(contentsState->effect());
-        auto* scrollBarScroll = contentsState->scroll();
-        if (m_frameView->scroll())
-          scrollBarScroll = m_frameView->scroll()->parent();
-        properties.propertyTreeState.setScroll(scrollBarScroll);
         scopedPaintChunkProperties.emplace(context.getPaintController(),
                                            *frameView().layoutView(),
                                            properties);
@@ -168,13 +164,13 @@ void FramePainter::paintContents(GraphicsContext& context,
 #if DCHECK_IS_ON()
   layoutView->assertSubtreeIsLaidOut();
   LayoutObject::SetLayoutNeededForbiddenScope forbidSetNeedsLayout(
-      *rootLayer->layoutObject());
+      rootLayer->layoutObject());
 #endif
 
   PaintLayerPainter layerPainter(*rootLayer);
 
   float deviceScaleFactor =
-      blink::deviceScaleFactor(rootLayer->layoutObject()->frame());
+      blink::deviceScaleFactorDeprecated(rootLayer->layoutObject().frame());
   context.setDeviceScaleFactor(deviceScaleFactor);
 
   layerPainter.paint(context, LayoutRect(rect), localPaintFlags);
@@ -195,8 +191,7 @@ void FramePainter::paintContents(GraphicsContext& context,
     s_inPaintContents = false;
   }
 
-  InspectorInstrumentation::didPaint(layoutView->frame(), 0, context,
-                                     LayoutRect(rect));
+  probe::didPaint(layoutView->frame(), 0, context, LayoutRect(rect));
 }
 
 void FramePainter::paintScrollbars(GraphicsContext& context,

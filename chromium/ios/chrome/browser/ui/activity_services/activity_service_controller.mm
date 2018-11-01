@@ -193,14 +193,13 @@
   DCHECK(data.nsurl);
 
   // In order to support find-login-action protocol, the provider object
-  // UIActivityFindLoginActionSource supports both Password Management
-  // App Extensions (e.g. 1Password) and also provide a public.url UTType
-  // for Share Extensions (e.g. Facebook, Twitter).
-  UIActivityFindLoginActionSource* loginActionProvider =
-      [[UIActivityFindLoginActionSource alloc]
-                 initWithURL:data.nsurl
-                     subject:data.title
-          thumbnailGenerator:data.thumbnailGenerator];
+  // UIActivityURLSource supports both Password Management App Extensions
+  // (e.g. 1Password) and also provide a public.url UTType for Share Extensions
+  // (e.g. Facebook, Twitter).
+  UIActivityURLSource* loginActionProvider =
+      [[UIActivityURLSource alloc] initWithURL:data.nsurl
+                                       subject:data.title
+                            thumbnailGenerator:data.thumbnailGenerator];
   [activityItems addObject:loginActionProvider];
 
   UIActivityTextSource* textProvider =
@@ -224,7 +223,8 @@
     [printActivity setResponder:controller];
     [applicationActivities addObject:printActivity];
   }
-  if (reading_list::switches::IsReadingListEnabled()) {
+  if (reading_list::switches::IsReadingListEnabled() &&
+      data.url.SchemeIsHTTPOrHTTPS()) {
     ReadingListActivity* readingListActivity =
         [[ReadingListActivity alloc] initWithURL:data.url
                                            title:data.title

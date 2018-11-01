@@ -18,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/sync/model/attachments/attachment.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -91,7 +92,7 @@ class AttachmentUploaderImpl::UploadState : public net::URLFetcherDelegate,
                          const GoogleServiceAuthError& error) override;
 
  private:
-  typedef std::vector<UploadCallback> UploadCallbackList;
+  using UploadCallbackList = std::vector<UploadCallback>;
 
   void GetToken();
 
@@ -216,7 +217,8 @@ void AttachmentUploaderImpl::UploadState::OnGetTokenSuccess(
   fetcher_ = net::URLFetcher::Create(upload_url_, net::URLFetcher::POST, this);
   ConfigureURLFetcherCommon(fetcher_.get(), access_token_, raw_store_birthday_,
                             model_type_, url_request_context_getter_.get());
-
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher_.get(), data_use_measurement::DataUseUserData::SYNC);
   const uint32_t crc32c = attachment_.GetCrc32c();
   fetcher_->AddExtraRequestHeader(base::StringPrintf(
       "X-Goog-Hash: crc32c=%s", FormatCrc32cHash(crc32c).c_str()));

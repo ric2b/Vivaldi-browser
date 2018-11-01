@@ -35,6 +35,8 @@
 #include "core/editing/Editor.h"
 #include "core/editing/commands/TypingCommand.h"
 #include "core/editing/markers/DocumentMarkerController.h"
+#include "core/editing/state_machines/BackwardCodePointStateMachine.h"
+#include "core/editing/state_machines/ForwardCodePointStateMachine.h"
 #include "core/events/CompositionEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLInputElement.h"
@@ -81,6 +83,21 @@ bool needsIncrementalInsertion(const LocalFrame& frame, const String& newText) {
   return true;
 }
 
+void dispatchBeforeInputFromComposition(EventTarget* target,
+                                        InputEvent::InputType inputType,
+                                        const String& data) {
+  if (!RuntimeEnabledFeatures::inputEventEnabled())
+    return;
+  if (!target)
+    return;
+  // TODO(chongz): Pass appropriate |ranges| after it's defined on spec.
+  // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
+  InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
+      inputType, data, InputEvent::NotCancelable,
+      InputEvent::EventIsComposing::IsComposing, nullptr);
+  target->dispatchEvent(beforeInputEvent);
+}
+
 // Used to insert/replace text during composition update and confirm
 // composition.
 // Procedure:
@@ -110,21 +127,8 @@ void insertTextDuringCompositionWithEvents(
   if (!target)
     return;
 
-  // TODO(chongz): Fire 'beforeinput' for the composed text being
-  // replaced/deleted.
-
-  // Only the last confirmed text is cancelable.
-  InputEvent::EventCancelable beforeInputCancelable =
-      (compositionType ==
-       TypingCommand::TextCompositionType::TextCompositionUpdate)
-          ? InputEvent::EventCancelable::NotCancelable
-          : InputEvent::EventCancelable::IsCancelable;
-  DispatchEventResult result = dispatchBeforeInputFromComposition(
-      target, InputEvent::InputType::InsertText, text, beforeInputCancelable);
-
-  if (beforeInputCancelable == InputEvent::EventCancelable::IsCancelable &&
-      result != DispatchEventResult::NotCanceled)
-    return;
+  dispatchBeforeInputFromComposition(
+      target, InputEvent::InputType::InsertCompositionText, text);
 
   // 'beforeinput' event handler may destroy document.
   if (!frame.document())
@@ -144,6 +148,11 @@ void insertTextDuringCompositionWithEvents(
   switch (compositionType) {
     case TypingCommand::TextCompositionType::TextCompositionUpdate:
     case TypingCommand::TextCompositionType::TextCompositionConfirm:
+      // Calling |TypingCommand::insertText()| with empty text will result in an
+      // incorrect ending selection. We need to delete selection first.
+      // https://crbug.com/693481
+      if (text.isEmpty())
+        TypingCommand::deleteSelection(*frame.document(), 0);
       TypingCommand::insertText(*frame.document(), text, options,
                                 compositionType, isIncrementalInsertion);
       break;
@@ -181,6 +190,75 @@ AtomicString getInputModeAttribute(Element* element) {
   // TODO(dtapuska): We may wish to restrict this to a yet to be proposed
   // <contenteditable> or <richtext> element Mozilla discussed at TPAC 2016.
   return element->fastGetAttribute(HTMLNames::inputmodeAttr).lower();
+}
+
+constexpr int invalidDeletionLength = -1;
+constexpr bool isInvalidDeletionLength(const int length) {
+  return length == invalidDeletionLength;
+}
+
+int calculateBeforeDeletionLengthsInCodePoints(
+    const String& text,
+    const int beforeLengthInCodePoints,
+    const int selectionStart) {
+  DCHECK_GE(beforeLengthInCodePoints, 0);
+  DCHECK_GE(selectionStart, 0);
+  DCHECK_LE(selectionStart, static_cast<int>(text.length()));
+
+  const UChar* uText = text.characters16();
+  BackwardCodePointStateMachine backwardMachine;
+  int counter = beforeLengthInCodePoints;
+  int deletionStart = selectionStart;
+  while (counter > 0 && deletionStart > 0) {
+    const TextSegmentationMachineState state =
+        backwardMachine.feedPrecedingCodeUnit(uText[deletionStart - 1]);
+    // According to Android's InputConnection spec, we should do nothing if
+    // |text| has invalid surrogate pair in the deletion range.
+    if (state == TextSegmentationMachineState::Invalid)
+      return invalidDeletionLength;
+
+    if (backwardMachine.atCodePointBoundary())
+      --counter;
+    --deletionStart;
+  }
+  if (!backwardMachine.atCodePointBoundary())
+    return invalidDeletionLength;
+
+  const int offset = backwardMachine.getBoundaryOffset();
+  DCHECK_EQ(-offset, selectionStart - deletionStart);
+  return -offset;
+}
+
+int calculateAfterDeletionLengthsInCodePoints(const String& text,
+                                              const int afterLengthInCodePoints,
+                                              const int selectionEnd) {
+  DCHECK_GE(afterLengthInCodePoints, 0);
+  DCHECK_GE(selectionEnd, 0);
+  const int length = text.length();
+  DCHECK_LE(selectionEnd, length);
+
+  const UChar* uText = text.characters16();
+  ForwardCodePointStateMachine forwardMachine;
+  int counter = afterLengthInCodePoints;
+  int deletionEnd = selectionEnd;
+  while (counter > 0 && deletionEnd < length) {
+    const TextSegmentationMachineState state =
+        forwardMachine.feedFollowingCodeUnit(uText[deletionEnd]);
+    // According to Android's InputConnection spec, we should do nothing if
+    // |text| has invalid surrogate pair in the deletion range.
+    if (state == TextSegmentationMachineState::Invalid)
+      return invalidDeletionLength;
+
+    if (forwardMachine.atCodePointBoundary())
+      --counter;
+    ++deletionEnd;
+  }
+  if (!forwardMachine.atCodePointBoundary())
+    return invalidDeletionLength;
+
+  const int offset = forwardMachine.getBoundaryOffset();
+  DCHECK_EQ(offset, deletionEnd - selectionEnd);
+  return offset;
 }
 
 }  // anonymous namespace
@@ -250,7 +328,11 @@ bool InputMethodController::finishComposingText(
   const String& composing = composingText();
 
   if (confirmBehavior == KeepSelection) {
-    PlainTextRange oldOffsets = getSelectionOffsets();
+    // Do not dismiss handles even if we are moving selection, because we will
+    // eventually move back to the old selection offsets.
+    const bool isHandleVisible = frame().selection().isHandleVisible();
+
+    const PlainTextRange& oldOffsets = getSelectionOffsets();
     Editor::RevealSelectionScope revealSelectionScope(&editor());
 
     clear();
@@ -259,11 +341,25 @@ bool InputMethodController::finishComposingText(
     // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
     document().updateStyleAndLayoutIgnorePendingStylesheets();
-    setSelectionOffsets(oldOffsets);
+
+    const EphemeralRange& oldSelectionRange =
+        ephemeralRangeForOffsets(oldOffsets);
+    if (oldSelectionRange.isNull())
+      return false;
+    const SelectionInDOMTree& selection =
+        SelectionInDOMTree::Builder()
+            .setBaseAndExtent(oldSelectionRange)
+            .setIsHandleVisible(isHandleVisible)
+            .build();
+    frame().selection().setSelection(selection, FrameSelection::CloseTyping);
     return true;
   }
 
-  Element* rootEditableElement = frame().selection().rootEditableElement();
+  Element* rootEditableElement =
+      frame()
+          .selection()
+          .computeVisibleSelectionInDOMTreeDeprecated()
+          .rootEditableElement();
   if (!rootEditableElement)
     return false;
   PlainTextRange compositionRange =
@@ -306,17 +402,11 @@ bool InputMethodController::replaceComposition(const String& text) {
   // Select the text that will be deleted or replaced.
   selectComposition();
 
-  if (frame().selection().isNone())
+  if (frame().selection().computeVisibleSelectionInDOMTreeDeprecated().isNone())
     return false;
 
   if (!isAvailable())
     return false;
-
-  // If text is empty, then delete the old composition here. If text is
-  // non-empty, InsertTextCommand::input will delete the old composition with
-  // an optimized replace operation.
-  if (text.isEmpty())
-    TypingCommand::deleteSelection(document(), 0);
 
   clear();
 
@@ -342,15 +432,14 @@ static int computeAbsoluteCaretPosition(size_t textStart,
 
 void InputMethodController::addCompositionUnderlines(
     const Vector<CompositionUnderline>& underlines,
-    ContainerNode* rootEditableElement,
-    unsigned offset) {
+    ContainerNode* baseElement,
+    unsigned offsetInPlainChars) {
   for (const auto& underline : underlines) {
-    unsigned underlineStart = offset + underline.startOffset();
-    unsigned underlineEnd = offset + underline.endOffset();
+    unsigned underlineStart = offsetInPlainChars + underline.startOffset();
+    unsigned underlineEnd = offsetInPlainChars + underline.endOffset();
 
     EphemeralRange ephemeralLineRange =
-        PlainTextRange(underlineStart, underlineEnd)
-            .createRange(*rootEditableElement);
+        PlainTextRange(underlineStart, underlineEnd).createRange(*baseElement);
     if (ephemeralLineRange.isNull())
       continue;
 
@@ -364,7 +453,11 @@ bool InputMethodController::replaceCompositionAndMoveCaret(
     const String& text,
     int relativeCaretPosition,
     const Vector<CompositionUnderline>& underlines) {
-  Element* rootEditableElement = frame().selection().rootEditableElement();
+  Element* rootEditableElement =
+      frame()
+          .selection()
+          .computeVisibleSelectionInDOMTreeDeprecated()
+          .rootEditableElement();
   if (!rootEditableElement)
     return false;
   DCHECK(hasComposition());
@@ -409,7 +502,11 @@ bool InputMethodController::insertTextAndMoveCaret(
     if (!insertText(text))
       return false;
 
-    Element* rootEditableElement = frame().selection().rootEditableElement();
+    Element* rootEditableElement =
+        frame()
+            .selection()
+            .computeVisibleSelectionInDOMTreeDeprecated()
+            .rootEditableElement();
     if (rootEditableElement) {
       addCompositionUnderlines(underlines, rootEditableElement, textStart);
     }
@@ -426,19 +523,13 @@ void InputMethodController::cancelComposition() {
 
   Editor::RevealSelectionScope revealSelectionScope(&editor());
 
-  if (frame().selection().isNone())
+  if (frame().selection().computeVisibleSelectionInDOMTreeDeprecated().isNone())
     return;
 
   clear();
 
-  // TODO(chongz): Figure out which InputType should we use here.
-  dispatchBeforeInputFromComposition(
-      document().focusedElement(),
-      InputEvent::InputType::DeleteComposedCharacterBackward, nullAtom,
-      InputEvent::EventCancelable::NotCancelable);
-  dispatchCompositionUpdateEvent(frame(), emptyString());
   insertTextDuringCompositionWithEvents(
-      frame(), emptyString(), 0,
+      frame(), emptyString, 0,
       TypingCommand::TextCompositionType::TextCompositionCancel);
   // Event handler might destroy document.
   if (!isAvailable())
@@ -449,23 +540,7 @@ void InputMethodController::cancelComposition() {
   TypingCommand::closeTyping(m_frame);
 
   // No DOM update after 'compositionend'.
-  dispatchCompositionEndEvent(frame(), emptyString());
-}
-
-void InputMethodController::cancelCompositionIfSelectionIsInvalid() {
-  if (!hasComposition() || editor().preventRevealSelection())
-    return;
-
-  // Check if selection start and selection end are valid.
-  FrameSelection& selection = frame().selection();
-  if (!selection.isNone() && !m_compositionRange->collapsed()) {
-    if (selection.start().compareTo(m_compositionRange->startPosition()) >= 0 &&
-        selection.end().compareTo(m_compositionRange->endPosition()) <= 0)
-      return;
-  }
-
-  cancelComposition();
-  frame().chromeClient().didCancelCompositionOnSelectionChange();
+  dispatchCompositionEndEvent(frame(), emptyString);
 }
 
 // If current position is at grapheme boundary, return 0; otherwise, return the
@@ -508,7 +583,7 @@ void InputMethodController::setComposition(
 
   selectComposition();
 
-  if (frame().selection().isNone())
+  if (frame().selection().computeVisibleSelectionInDOMTreeDeprecated().isNone())
     return;
 
   Element* target = document().focusedElement();
@@ -540,7 +615,7 @@ void InputMethodController::setComposition(
   if (text.isEmpty()) {
     if (hasComposition()) {
       Editor::RevealSelectionScope revealSelectionScope(&editor());
-      replaceComposition(emptyString());
+      replaceComposition(emptyString);
     } else {
       // It's weird to call |setComposition()| with empty text outside
       // composition, however some IME (e.g. Japanese IBus-Anthy) did this, so
@@ -585,12 +660,14 @@ void InputMethodController::setComposition(
   document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   // Find out what node has the composition now.
-  Position base = mostForwardCaretPosition(frame().selection().base());
+  Position base = mostForwardCaretPosition(
+      frame().selection().computeVisibleSelectionInDOMTree().base());
   Node* baseNode = base.anchorNode();
   if (!baseNode || !baseNode->isTextNode())
     return;
 
-  Position extent = frame().selection().extent();
+  Position extent =
+      frame().selection().computeVisibleSelectionInDOMTree().extent();
   Node* extentNode = extent.anchorNode();
 
   unsigned extentOffset = extent.computeOffsetInContainerNode();
@@ -641,7 +718,10 @@ void InputMethodController::setCompositionFromExistingText(
     const Vector<CompositionUnderline>& underlines,
     unsigned compositionStart,
     unsigned compositionEnd) {
-  Element* editable = frame().selection().rootEditableElement();
+  Element* editable = frame()
+                          .selection()
+                          .computeVisibleSelectionInDOMTreeDeprecated()
+                          .rootEditableElement();
   if (!editable)
     return;
 
@@ -684,32 +764,43 @@ Range* InputMethodController::compositionRange() const {
 String InputMethodController::composingText() const {
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
       document().lifecycle());
-  return plainText(compositionEphemeralRange(), TextIteratorEmitsOriginalText);
+  return plainText(
+      compositionEphemeralRange(),
+      TextIteratorBehavior::Builder().setEmitsOriginalText(true).build());
 }
 
 PlainTextRange InputMethodController::getSelectionOffsets() const {
-  EphemeralRange range = firstEphemeralRangeOf(frame().selection().selection());
+  EphemeralRange range = firstEphemeralRangeOf(
+      frame().selection().computeVisibleSelectionInDOMTreeDeprecated());
   if (range.isNull())
     return PlainTextRange();
-  ContainerNode* editable =
-      frame().selection().rootEditableElementOrTreeScopeRootNode();
+  ContainerNode* const editable = rootEditableElementOrTreeScopeRootNodeOf(
+      frame().selection().computeVisibleSelectionInDOMTreeDeprecated());
   DCHECK(editable);
   return PlainTextRange::create(*editable, range);
+}
+
+EphemeralRange InputMethodController::ephemeralRangeForOffsets(
+    const PlainTextRange& offsets) const {
+  if (offsets.isNull())
+    return EphemeralRange();
+  Element* rootEditableElement =
+      frame()
+          .selection()
+          .computeVisibleSelectionInDOMTreeDeprecated()
+          .rootEditableElement();
+  if (!rootEditableElement)
+    return EphemeralRange();
+
+  DCHECK(!document().needsLayoutTreeUpdate());
+
+  return offsets.createRange(*rootEditableElement);
 }
 
 bool InputMethodController::setSelectionOffsets(
     const PlainTextRange& selectionOffsets,
     FrameSelection::SetSelectionOptions options) {
-  if (selectionOffsets.isNull())
-    return false;
-  Element* rootEditableElement = frame().selection().rootEditableElement();
-  if (!rootEditableElement)
-    return false;
-
-  DCHECK(!document().needsLayoutTreeUpdate());
-
-  const EphemeralRange range =
-      selectionOffsets.createRange(*rootEditableElement);
+  const EphemeralRange range = ephemeralRangeForOffsets(selectionOffsets);
   if (range.isNull())
     return false;
 
@@ -734,7 +825,11 @@ PlainTextRange InputMethodController::createRangeForSelection(
   start = std::max(start, 0);
   end = std::max(end, start);
 
-  Element* rootEditableElement = frame().selection().rootEditableElement();
+  Element* rootEditableElement =
+      frame()
+          .selection()
+          .computeVisibleSelectionInDOMTreeDeprecated()
+          .rootEditableElement();
   if (!rootEditableElement)
     return PlainTextRange();
   const EphemeralRange& range =
@@ -742,10 +837,12 @@ PlainTextRange InputMethodController::createRangeForSelection(
   if (range.isNull())
     return PlainTextRange();
 
-  const TextIteratorBehaviorFlags behaviorFlags =
-      TextIteratorEmitsObjectReplacementCharacter |
-      TextIteratorEmitsCharactersBetweenAllVisiblePositions;
-  TextIterator it(range.startPosition(), range.endPosition(), behaviorFlags);
+  const TextIteratorBehavior& behavior =
+      TextIteratorBehavior::Builder()
+          .setEmitsObjectReplacementCharacter(true)
+          .setEmitsCharactersBetweenAllVisiblePositions(true)
+          .build();
+  TextIterator it(range.startPosition(), range.endPosition(), behavior);
 
   int rightBoundary = 0;
   for (; !it.atEnd(); it.advance())
@@ -799,12 +896,21 @@ void InputMethodController::extendSelectionAndDelete(int before, int after) {
     if (before == 0)
       break;
     ++before;
-  } while (frame().selection().start() == frame().selection().end() &&
+  } while (frame().selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .start() ==
+               frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .end() &&
            before <= static_cast<int>(selectionOffsets.start()));
   // TODO(chongz): Find a way to distinguish Forward and Backward.
-  dispatchBeforeInputEditorCommand(
-      document().focusedElement(), InputEvent::InputType::DeleteContentBackward,
-      new RangeVector(1, m_frame->selection().firstRange()));
+  Node* target = document().focusedElement();
+  if (target) {
+    dispatchBeforeInputEditorCommand(
+        target, InputEvent::InputType::DeleteContentBackward,
+        targetRangesForInputEvent(*target));
+  }
   TypingCommand::deleteSelection(document());
 }
 
@@ -816,7 +922,10 @@ void InputMethodController::deleteSurroundingText(int before, int after) {
   if (selectionOffsets.isNull())
     return;
   Element* const rootEditableElement =
-      frame().selection().rootEditableElement();
+      frame()
+          .selection()
+          .computeVisibleSelectionInDOMTreeDeprecated()
+          .rootEditableElement();
   if (!rootEditableElement)
     return;
   int selectionStart = static_cast<int>(selectionOffsets.start());
@@ -871,6 +980,47 @@ void InputMethodController::deleteSurroundingText(int before, int after) {
   setSelectionOffsets(PlainTextRange(selectionStart, selectionEnd));
 }
 
+void InputMethodController::deleteSurroundingTextInCodePoints(int before,
+                                                              int after) {
+  DCHECK_GE(before, 0);
+  DCHECK_GE(after, 0);
+  if (!editor().canEdit())
+    return;
+  const PlainTextRange selectionOffsets(getSelectionOffsets());
+  if (selectionOffsets.isNull())
+    return;
+  Element* const rootEditableElement =
+      frame().selection().rootEditableElementOrDocumentElement();
+  if (!rootEditableElement)
+    return;
+
+  const TextIteratorBehavior& behavior =
+      TextIteratorBehavior::Builder()
+          .setEmitsObjectReplacementCharacter(true)
+          .build();
+  const String& text = plainText(
+      EphemeralRange::rangeOfContents(*rootEditableElement), behavior);
+
+  // 8-bit characters are Latin-1 characters, so the deletion lengths are
+  // trivial.
+  if (text.is8Bit())
+    return deleteSurroundingText(before, after);
+
+  const int selectionStart = static_cast<int>(selectionOffsets.start());
+  const int selectionEnd = static_cast<int>(selectionOffsets.end());
+
+  const int beforeLength =
+      calculateBeforeDeletionLengthsInCodePoints(text, before, selectionStart);
+  if (isInvalidDeletionLength(beforeLength))
+    return;
+  const int afterLength =
+      calculateAfterDeletionLengthsInCodePoints(text, after, selectionEnd);
+  if (isInvalidDeletionLength(afterLength))
+    return;
+
+  return deleteSurroundingText(beforeLength, afterLength);
+}
+
 WebTextInputInfo InputMethodController::textInputInfo() const {
   WebTextInputInfo info;
   if (!isAvailable())
@@ -880,7 +1030,10 @@ WebTextInputInfo InputMethodController::textInputInfo() const {
     // plugins/mouse-capture-inside-shadow.html reaches here.
     return info;
   }
-  Element* element = frame().selection().rootEditableElement();
+  Element* element = frame()
+                         .selection()
+                         .computeVisibleSelectionInDOMTreeDeprecated()
+                         .rootEditableElement();
   if (!element)
     return info;
 
@@ -903,13 +1056,16 @@ WebTextInputInfo InputMethodController::textInputInfo() const {
   // Emits an object replacement character for each replaced element so that
   // it is exposed to IME and thus could be deleted by IME on android.
   info.value = plainText(EphemeralRange::rangeOfContents(*element),
-                         TextIteratorEmitsObjectReplacementCharacter);
+                         TextIteratorBehavior::Builder()
+                             .setEmitsObjectReplacementCharacter(true)
+                             .setEmitsSpaceForNbsp(true)
+                             .build());
 
   if (info.value.isEmpty())
     return info;
 
-  EphemeralRange firstRange =
-      firstEphemeralRangeOf(frame().selection().selection());
+  EphemeralRange firstRange = firstEphemeralRangeOf(
+      frame().selection().computeVisibleSelectionInDOMTreeDeprecated());
   if (firstRange.isNotNull()) {
     PlainTextRange plainTextRange(PlainTextRange::create(*element, firstRange));
     if (plainTextRange.isNotNull()) {
@@ -1026,7 +1182,10 @@ WebTextInputType InputMethodController::textInputType() const {
   // It's important to preserve the equivalence of textInputInfo().type and
   // textInputType(), so perform the same rootEditableElement() existence check
   // here for consistency.
-  if (!frame().selection().selection().rootEditableElement())
+  if (!frame()
+           .selection()
+           .computeVisibleSelectionInDOMTreeDeprecated()
+           .rootEditableElement())
     return WebTextInputTypeNone;
 
   if (!isAvailable())
@@ -1080,9 +1239,7 @@ WebTextInputType InputMethodController::textInputType() const {
 }
 
 void InputMethodController::willChangeFocus() {
-  if (!finishComposingText(KeepSelection))
-    return;
-  frame().chromeClient().resetInputMethod();
+  finishComposingText(KeepSelection);
 }
 
 DEFINE_TRACE(InputMethodController) {

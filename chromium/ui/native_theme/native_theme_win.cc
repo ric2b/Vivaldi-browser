@@ -17,6 +17,8 @@
 #include "base/win/scoped_select_object.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
 #include "skia/ext/platform_canvas.h"
 #include "skia/ext/skia_utils_win.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -251,7 +253,7 @@ gfx::Size NativeThemeWin::GetPartSize(Part part,
       gfx::Size(13, 13) : gfx::Size();
 }
 
-void NativeThemeWin::Paint(SkCanvas* canvas,
+void NativeThemeWin::Paint(cc::PaintCanvas* canvas,
                            Part part,
                            State state,
                            const gfx::Rect& rect,
@@ -264,7 +266,7 @@ void NativeThemeWin::Paint(SkCanvas* canvas,
       PaintMenuGutter(canvas, rect);
       return;
     case kMenuPopupSeparator:
-      PaintMenuSeparator(canvas, rect);
+      PaintMenuSeparator(canvas, *extra.menu_separator.paint_rect);
       return;
     case kMenuPopupBackground:
       PaintMenuBackground(canvas, rect);
@@ -274,20 +276,9 @@ void NativeThemeWin::Paint(SkCanvas* canvas,
                                          extra.menu_item);
       return;
     default:
-      break;
+      PaintIndirect(canvas, part, state, rect, extra);
+      return;
   }
-
-  HDC surface = skia::GetNativeDrawingContext(canvas);
-
-  // When drawing the task manager or the bookmark editor, we draw into an
-  // offscreen buffer, where we can use OS-specific drawing routines for
-  // UI features like scrollbars. However, we need to set up that buffer,
-  // and then read it back when it's done and blit it onto the screen.
-
-  if (surface)
-    PaintDirect(canvas, surface, part, state, rect, extra);
-  else
-    PaintIndirect(canvas, part, state, rect, extra);
 }
 
 NativeThemeWin::NativeThemeWin()
@@ -374,27 +365,27 @@ void NativeThemeWin::UpdateSystemColors() {
     system_colors_[kSystemColor] = color_utils::GetSysSkColor(kSystemColor);
 }
 
-void NativeThemeWin::PaintMenuSeparator(SkCanvas* canvas,
+void NativeThemeWin::PaintMenuSeparator(cc::PaintCanvas* canvas,
                                         const gfx::Rect& rect) const {
-  SkPaint paint;
-  paint.setColor(GetSystemColor(NativeTheme::kColorId_MenuSeparatorColor));
+  cc::PaintFlags flags;
+  flags.setColor(GetSystemColor(NativeTheme::kColorId_MenuSeparatorColor));
   int position_y = rect.y() + rect.height() / 2;
-  canvas->drawLine(rect.x(), position_y, rect.right(), position_y, paint);
+  canvas->drawLine(rect.x(), position_y, rect.right(), position_y, flags);
 }
 
-void NativeThemeWin::PaintMenuGutter(SkCanvas* canvas,
+void NativeThemeWin::PaintMenuGutter(cc::PaintCanvas* canvas,
                                      const gfx::Rect& rect) const {
-  SkPaint paint;
-  paint.setColor(GetSystemColor(NativeTheme::kColorId_MenuSeparatorColor));
+  cc::PaintFlags flags;
+  flags.setColor(GetSystemColor(NativeTheme::kColorId_MenuSeparatorColor));
   int position_x = rect.x() + rect.width() / 2;
-  canvas->drawLine(position_x, rect.y(), position_x, rect.bottom(), paint);
+  canvas->drawLine(position_x, rect.y(), position_x, rect.bottom(), flags);
 }
 
-void NativeThemeWin::PaintMenuBackground(SkCanvas* canvas,
+void NativeThemeWin::PaintMenuBackground(cc::PaintCanvas* canvas,
                                          const gfx::Rect& rect) const {
-  SkPaint paint;
-  paint.setColor(GetSystemColor(NativeTheme::kColorId_MenuBackgroundColor));
-  canvas->drawRect(gfx::RectToSkRect(rect), paint);
+  cc::PaintFlags flags;
+  flags.setColor(GetSystemColor(NativeTheme::kColorId_MenuBackgroundColor));
+  canvas->drawRect(gfx::RectToSkRect(rect), flags);
 }
 
 void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
@@ -429,7 +420,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
       PaintMenuGutter(hdc, rect);
       return;
     case kMenuPopupSeparator:
-      PaintMenuSeparator(hdc, rect);
+      PaintMenuSeparator(hdc, *extra.menu_separator.paint_rect);
       return;
     case kMenuItemBackground:
       PaintMenuItemBackground(hdc, state, rect, extra.menu_item);
@@ -576,8 +567,6 @@ SkColor NativeThemeWin::GetSystemColor(ColorId color_id) const {
     case kColorId_TreeSelectionBackgroundUnfocused:
       return system_colors_[IsUsingHighContrastTheme() ?
                               COLOR_MENUHIGHLIGHT : COLOR_BTNFACE];
-    case kColorId_TreeArrow:
-      return system_colors_[COLOR_WINDOWTEXT];
 
     // Table
     case kColorId_TableBackground:
@@ -671,15 +660,34 @@ SkColor NativeThemeWin::GetSystemColor(ColorId color_id) const {
   return GetAuraColor(color_id, this);
 }
 
-void NativeThemeWin::PaintIndirect(SkCanvas* destination_canvas,
+bool NativeThemeWin::SupportsNinePatch(Part part) const {
+  // The only nine-patch resources currently supported (overlay scrollbar) are
+  // painted by NativeThemeAura on Windows.
+  return false;
+}
+
+gfx::Size NativeThemeWin::GetNinePatchCanvasSize(Part part) const {
+  NOTREACHED() << "NativeThemeWin doesn't support nine-patch resources.";
+  return gfx::Size();
+}
+
+gfx::Rect NativeThemeWin::GetNinePatchAperture(Part part) const {
+  NOTREACHED() << "NativeThemeWin doesn't support nine-patch resources.";
+  return gfx::Rect();
+}
+
+void NativeThemeWin::PaintIndirect(cc::PaintCanvas* destination_canvas,
                                    Part part,
                                    State state,
                                    const gfx::Rect& rect,
                                    const ExtraParams& extra) const {
   // TODO(asvitkine): This path is pretty inefficient - for each paint operation
-  //                  it creates a new offscreen bitmap Skia canvas. This can
-  //                  be sped up by doing it only once per part/state and
-  //                  keeping a cache of the resulting bitmaps.
+  // it creates a new offscreen bitmap Skia canvas. This can be sped up by doing
+  // it only once per part/state and keeping a cache of the resulting bitmaps.
+  //
+  // TODO(enne): This could also potentially be sped up for software raster
+  // by moving these draw ops into PaintRecord itself and then moving the
+  // PaintDirect code to be part of the raster for PaintRecord.
 
   // If this process doesn't have access to GDI, we'd need to use shared memory
   // segment instead but that is not supported right now.
@@ -866,9 +874,8 @@ HRESULT NativeThemeWin::PaintButton(HDC hdc,
   return S_OK;
 }
 
-HRESULT NativeThemeWin::PaintMenuSeparator(
-    HDC hdc,
-    const gfx::Rect& rect) const {
+HRESULT NativeThemeWin::PaintMenuSeparator(HDC hdc,
+                                           const gfx::Rect& rect) const {
   RECT rect_win = rect.ToRECT();
 
   HANDLE handle = GetThemeHandle(MENU);
@@ -1364,13 +1371,12 @@ HRESULT NativeThemeWin::PaintSpinButton(
   return S_OK;
 }
 
-HRESULT NativeThemeWin::PaintTrackbar(
-    SkCanvas* canvas,
-    HDC hdc,
-    Part part,
-    State state,
-    const gfx::Rect& rect,
-    const TrackbarExtraParams& extra) const {
+HRESULT NativeThemeWin::PaintTrackbar(SkCanvas* canvas,
+                                      HDC hdc,
+                                      Part part,
+                                      State state,
+                                      const gfx::Rect& rect,
+                                      const TrackbarExtraParams& extra) const {
   const int part_id = extra.vertical ?
       ((part == kTrackbarTrack) ? TKP_TRACKVERT : TKP_THUMBVERT) :
       ((part == kTrackbarTrack) ? TKP_TRACK : TKP_THUMBBOTTOM);

@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">عرض نسخة محفوظة (أي معروف أنها منتهية) من هذه الصفحة.</translation>
 <translation id="1559528461873125649">لا وجود لمثل هذا الملف أو الدليل</translation>
 <translation id="1710259589646384581">نظام التشغيل</translation>
-<translation id="1838667051080421715">أنت تعرض مصدر صفحة ويب.</translation>
 <translation id="194030505837763158">الانتقال إلى <ph name="LINK" /></translation>
 <translation id="2030481566774242610">هل تقصد <ph name="LINK" />؟</translation>
-<translation id="2089090684895656482">أقل</translation>
 <translation id="2166378884831602661">لا يمكن لموقع الويب هذا توفير اتصال آمن</translation>
 <translation id="2292556288342944218">تم حظر دخولك إلى الإنترنت</translation>
 <translation id="255002559098805027">أرسل <ph name="HOST_NAME" /> استجابة غير صالحة.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">تم رفض الدخول إلى الملف</translation>
 <translation id="2705137772291741111">تعذر قراءة النسخة المحفوظة (المخزنة في ذاكرة التخزين المؤقت) لموقع الويب هذا.</translation>
 <translation id="2784949926578158345">تمت إعادة تعيين الاتصال.</translation>
-<translation id="284702764277384724">يبدو أن شهادة الخادم على <ph name="HOST_NAME" /> مزيفة.</translation>
 <translation id="2909946352844186028">تم اكتشاف حدوث تغيير في الشبكة.</translation>
 <translation id="3005723025932146533">عرض نسخة محفوظة</translation>
 <translation id="3109728660330352905">ليس لديك إذن بعرض هذه الصفحة.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">‏يُعد نظام أسماء النطاقات (DNS) هو خدمة الشبكة التي تترجم اسم موقع ويب إلى عنوانه على شبكة الإنترنت.</translation>
 <translation id="4432688616882109544">لم يقبل <ph name="HOST_NAME" /> شهادة تسجيل الدخول أو من المحتمل ألا يكون قد تم تقديم واحدة.</translation>
 <translation id="4522570452068850558">التفاصيل</translation>
-<translation id="4670097147947922288">أنت تعرض حاليًا صفحة إضافة.</translation>
 <translation id="4708268264240856090">تم قطع اتصالك</translation>
 <translation id="4744603770635761495">المسار التنفيذي</translation>
 <translation id="4764776831041365478">قد تكون صفحة الويب على العنوان <ph name="URL" /> غير متاحة مؤقتًا أو قد يكون تم نقلها نهائيًا إلى عنوان ويب جديد.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">يتعذّر على هذه الصفحة العمل</translation>
 <translation id="5869405914158311789">لا يمكن الوصول إلى موقع الويب هذا</translation>
 <translation id="5990559369517809815">تم حظر الطلبات المقدمة إلى الخادم بواسطة إحدى الإضافات.</translation>
-<translation id="6042308850641462728">المزيد</translation>
 <translation id="6146055958333702838">تحقق من أي كابلات وأعد تشغيل أي أجهزة توجيه أو أجهزة مودم أو أجهزة شبكة
         أخرى ربما تستخدمها.</translation>
 <translation id="6165508094623778733">مزيد من المعلومات</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">تجربة تعطيل التنبؤ بإجراءات الشبكة</translation>
 <translation id="6433595998831338502">رفض <ph name="HOST_NAME" /> الاتصال.</translation>
 <translation id="6711464428925977395">هناك خطأ ما في الخادم الوكيل، أو العنوان غير صحيح.</translation>
-<translation id="6830600606572693159">صفحة الويب على <ph name="URL" /> غير متاحة حاليًا.. ربما تكون هناك زيادة في تحميلها أو أنها معطلة لأسباب تتعلق بالصيانة.</translation>
 <translation id="6897140037006041989">وكيل المستخدم</translation>
 <translation id="7210863904660874423">لا يلتزم <ph name="HOST_NAME" /> بمعايير الأمان.</translation>
-<translation id="7269802741830436641">تحتوي صفحة الويب هذه على حلقة إعادة توجيه</translation>
 <translation id="7353601530677266744">سطر الأوامر</translation>
 <translation id="7419106976560586862">مسار الملف الشخصي</translation>
 <translation id="7518003948725431193">لم يتم العثور على أي صفحة ويب لعنوان الويب:<ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187">يتعذر على <ph name="HOST_NAME" /> معالجة هذا الطلب حاليًا.</translation>
 <translation id="7716424297397655342">لا يمكن تحميل موقع الويب هذا من ذاكرة التخزين المؤقت</translation>
 <translation id="7758069387465995638">ربما حظر الجدار الناري أو برامج مكافحة الفيروسات الاتصال.</translation>
-<translation id="778579833039460630">لم يتم تلقي أي بيانات</translation>
 <translation id="7951415247503192394">(32 بت)</translation>
 <translation id="8134994873729925007">تعذر العثور على <ph name="BEGIN_ABBR" />عنوان نظام أسماء النطاقات<ph name="END_ABBR" /> للخادم <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">‏انتقل إلى &lt;strong&gt;vivaldi://policy&lt;/strong&gt; لمشاهدة قائمة بعناوين URL المضافة إلى القائمة السوداء والسياسات الأخرى التي فرضها مشرف النظام.</translation>

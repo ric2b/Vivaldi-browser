@@ -8,9 +8,11 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/threading/sequenced_worker_pool.h"
+#import "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
@@ -24,7 +26,6 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
-#include "ios/web/public/image_fetcher/image_data_fetcher.h"
 #include "ios/web/public/web_thread.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/gfx/geometry/rect.h"
@@ -50,11 +51,10 @@ OmniboxPopupViewIOS::OmniboxPopupViewIOS(OmniboxViewIOS* edit_view,
   DCHECK(edit_view);
   DCHECK(edit_model);
 
-  std::unique_ptr<web::ImageDataFetcher> imageFetcher =
-      base::MakeUnique<web::ImageDataFetcher>(
+  std::unique_ptr<image_fetcher::IOSImageDataFetcherWrapper> imageFetcher =
+      base::MakeUnique<image_fetcher::IOSImageDataFetcherWrapper>(
+          edit_view->browser_state()->GetRequestContext(),
           web::WebThread::GetBlockingPool());
-  imageFetcher->SetRequestContextGetter(
-      edit_view->browser_state()->GetRequestContext());
 
   popup_controller_.reset([[OmniboxPopupMaterialViewController alloc]
       initWithPopupView:this

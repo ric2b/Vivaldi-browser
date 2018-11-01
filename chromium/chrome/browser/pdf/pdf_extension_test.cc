@@ -565,7 +565,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfZoomWithoutBubble) {
   ASSERT_TRUE(it != preset_zoom_levels.end());
   double new_zoom_level = *it;
 
-  auto zoom_controller = ZoomController::FromWebContents(web_contents);
+  auto* zoom_controller = ZoomController::FromWebContents(web_contents);
   // We expect a ZoomChangedEvent with can_show_bubble == false if the PDF
   // extension behaviour is properly picked up. The test times out otherwise.
   ZoomChangedWatcher watcher(zoom_controller,
@@ -658,6 +658,21 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibility) {
   std::string ax_tree_dump = DumpPdfAccessibilityTree(ax_tree);
   ASSERT_MULTILINE_STREQ(kExpectedPDFAXTree, ax_tree_dump);
 }
+
+#if defined(GOOGLE_CHROME_BUILD)
+// Test a particular PDF encountered in the wild that triggered a crash
+// when accessibility is enabled.  (http://crbug.com/648981)
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibilityCharCountCrash) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  GURL test_pdf_url(embedded_test_server()->GetURL(
+      "/pdf_private/accessibility_crash_1.pdf"));
+
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+
+  WaitForAccessibilityTreeToContainNodeWithName(guest_contents, "Page 1");
+}
+#endif
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibilityEnableLater) {
   // In this test, load the PDF file first, with accessibility off.

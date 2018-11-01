@@ -54,10 +54,10 @@ void CustomElementReactionStack::popInvokingReactions() {
 void CustomElementReactionStack::invokeReactions(ElementQueue& queue) {
   for (size_t i = 0; i < queue.size(); ++i) {
     Element* element = queue[i];
-    if (CustomElementReactionQueue* reactions = m_map.get(element)) {
+    if (CustomElementReactionQueue* reactions = m_map.at(element)) {
       reactions->invokeReactions(element);
       CHECK(reactions->isEmpty());
-      m_map.remove(element);
+      m_map.erase(element);
     }
   }
 }
@@ -75,10 +75,10 @@ void CustomElementReactionStack::enqueue(Member<ElementQueue>& queue,
     queue = new ElementQueue();
   queue->push_back(element);
 
-  CustomElementReactionQueue* reactions = m_map.get(element);
+  CustomElementReactionQueue* reactions = m_map.at(element);
   if (!reactions) {
     reactions = new CustomElementReactionQueue();
-    m_map.add(TraceWrapperMember<Element>(this, element), reactions);
+    m_map.insert(TraceWrapperMember<Element>(this, element), reactions);
   }
 
   reactions->add(reaction);
@@ -104,7 +104,7 @@ void CustomElementReactionStack::enqueueToBackupQueue(
 }
 
 void CustomElementReactionStack::clearQueue(Element* element) {
-  if (CustomElementReactionQueue* reactions = m_map.get(element))
+  if (CustomElementReactionQueue* reactions = m_map.at(element))
     reactions->clear();
 }
 

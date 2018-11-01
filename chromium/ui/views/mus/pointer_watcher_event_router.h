@@ -14,6 +14,10 @@
 
 namespace aura {
 class WindowTreeClient;
+
+namespace client {
+class CaptureClient;
+}
 }
 
 namespace ui {
@@ -49,12 +53,16 @@ class VIEWS_MUS_EXPORT PointerWatcherEventRouter
       aura::WindowTreeClient* window_tree_client);
   ~PointerWatcherEventRouter() override;
 
+  void AddPointerWatcher(PointerWatcher* watcher, bool wants_moves);
+  void RemovePointerWatcher(PointerWatcher* watcher);
+
   // Called by WindowTreeClientDelegate to notify PointerWatchers appropriately.
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               aura::Window* target);
 
-  void AddPointerWatcher(PointerWatcher* watcher, bool wants_moves);
-  void RemovePointerWatcher(PointerWatcher* watcher);
+  // Called when the |capture_client| has been set or will be unset.
+  void AttachToCaptureClient(aura::client::CaptureClient* capture_client);
+  void DetachFromCaptureClient(aura::client::CaptureClient* capture_client);
 
  private:
   friend class PointerWatcherEventRouterTest;
@@ -63,7 +71,7 @@ class VIEWS_MUS_EXPORT PointerWatcherEventRouter
   EventTypes DetermineEventTypes();
 
   // aura::WindowTreeClientObserver:
-  void OnDidDestroyClient(aura::WindowTreeClient* client) override;
+  void OnWillDestroyClient(aura::WindowTreeClient* client) override;
 
   // aura::client::CaptureClientObserver:
   void OnCaptureChanged(aura::Window* lost_capture,

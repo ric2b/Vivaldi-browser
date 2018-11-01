@@ -20,8 +20,6 @@
 #error "Extensions must be enabled"
 #endif
 
-class ChromeContentUtilityClient;
-
 namespace service_manager {
 class InterfaceRegistry;
 }
@@ -40,7 +38,6 @@ class ExtensionsHandler : public UtilityMessageHandler {
   // interface.
   static void ExposeInterfacesToBrowser(
       service_manager::InterfaceRegistry* registry,
-      ChromeContentUtilityClient* utility_client,
       bool running_elevated);
 
   // UtilityMessageHandler:
@@ -48,9 +45,6 @@ class ExtensionsHandler : public UtilityMessageHandler {
 
  private:
   // IPC message handlers.
-  void OnCheckMediaFile(int64_t milliseconds_of_decoding,
-                        const IPC::PlatformFileForTransit& media_file);
-
 #if defined(OS_WIN)
   void OnParseITunesPrefXml(const std::string& itunes_xml_data);
 #endif  // defined(OS_WIN)

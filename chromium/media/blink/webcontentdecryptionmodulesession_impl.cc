@@ -21,13 +21,14 @@
 #include "media/blink/cdm_session_adapter.h"
 #include "media/blink/webmediaplayer_util.h"
 #include "media/cdm/json_web_key.h"
+#include "media/media_features.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebEncryptedMediaKeyInformation.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/cdm/cenc_utils.h"
 #endif
 
@@ -124,7 +125,7 @@ bool SanitizeInitData(EmeInitDataType init_data_type,
       return true;
 
     case EmeInitDataType::CENC:
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
       sanitized_init_data->assign(init_data, init_data + init_data_length);
       if (!ValidatePsshInput(*sanitized_init_data)) {
         error_message->assign("Initialization data for CENC is incorrect.");
@@ -359,7 +360,7 @@ void WebContentDecryptionModuleSessionImpl::initializeNewSession(
   adapter_->InitializeNewSession(
       eme_init_data_type, sanitized_init_data, convertSessionType(session_type),
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
-          result, adapter_->GetKeySystemUMAPrefix() + kGenerateRequestUMAName,
+          result, adapter_->GetKeySystemUMAPrefix(), kGenerateRequestUMAName,
           base::Bind(
               &WebContentDecryptionModuleSessionImpl::OnSessionInitialized,
               weak_ptr_factory_.GetWeakPtr()))));
@@ -393,7 +394,7 @@ void WebContentDecryptionModuleSessionImpl::load(
   adapter_->LoadSession(
       CdmSessionType::PERSISTENT_LICENSE_SESSION, sanitized_session_id,
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
-          result, adapter_->GetKeySystemUMAPrefix() + kLoadSessionUMAName,
+          result, adapter_->GetKeySystemUMAPrefix(), kLoadSessionUMAName,
           base::Bind(
               &WebContentDecryptionModuleSessionImpl::OnSessionInitialized,
               weak_ptr_factory_.GetWeakPtr()))));
@@ -494,7 +495,11 @@ void WebContentDecryptionModuleSessionImpl::OnSessionKeysChange(
 void WebContentDecryptionModuleSessionImpl::OnSessionExpirationUpdate(
     base::Time new_expiry_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  client_->expirationChanged(new_expiry_time.ToJsTime());
+  // The check works around an issue in base::Time that converts null base::Time
+  // to |1601-01-01 00:00:00 UTC| in ToJsTime(). See http://crbug.com/679079
+  client_->expirationChanged(new_expiry_time.is_null()
+                                 ? std::numeric_limits<double>::quiet_NaN()
+                                 : new_expiry_time.ToJsTime());
 }
 
 void WebContentDecryptionModuleSessionImpl::OnSessionClosed() {

@@ -13,6 +13,7 @@
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/selection_controller_delegate.h"
 #include "ui/views/view.h"
+#include "ui/views/word_lookup_client.h"
 
 namespace views {
 class LabelSelectionTest;
@@ -22,6 +23,7 @@ class SelectionController;
 // A view subclass that can display a string.
 class VIEWS_EXPORT Label : public View,
                            public ContextMenuController,
+                           public WordLookupClient,
                            public SelectionControllerDelegate,
                            public ui::SimpleMenuModel::Delegate {
  public:
@@ -59,6 +61,7 @@ class VIEWS_EXPORT Label : public View,
   void SetDisabledColor(SkColor color);
 
   SkColor enabled_color() const { return actual_enabled_color_; }
+  SkColor disabled_color() const { return actual_disabled_color_; }
 
   // Sets the background color. This won't be explicitly drawn, but the label
   // will force the text color to be readable over it.
@@ -185,6 +188,7 @@ class VIEWS_EXPORT Label : public View,
   const char* GetClassName() const override;
   View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
   bool CanProcessEventsWithinSubtree() const override;
+  WordLookupClient* GetWordLookupClient() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
@@ -199,8 +203,6 @@ class VIEWS_EXPORT Label : public View,
       gfx::ElideBehavior elide_behavior) const;
 
   void PaintText(gfx::Canvas* canvas);
-
-  SkColor disabled_color() const { return actual_disabled_color_; }
 
   // View:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
@@ -232,6 +234,11 @@ class VIEWS_EXPORT Label : public View,
   void ShowContextMenuForView(View* source,
                               const gfx::Point& point,
                               ui::MenuSourceType source_type) override;
+
+  // WordLookupClient overrides:
+  bool GetDecoratedWordAtPoint(const gfx::Point& point,
+                               gfx::DecoratedText* decorated_word,
+                               gfx::Point* baseline_point) override;
 
   // SelectionControllerDelegate overrides:
   gfx::RenderText* GetRenderTextForSelectionController() override;

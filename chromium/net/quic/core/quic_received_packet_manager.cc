@@ -7,8 +7,6 @@
 #include <limits>
 #include <utility>
 
-#include "base/stl_util.h"
-#include "net/base/linked_hash_map.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/quic_connection_stats.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
@@ -73,8 +71,8 @@ bool QuicReceivedPacketManager::IsMissing(QuicPacketNumber packet_number) {
 
 bool QuicReceivedPacketManager::IsAwaitingPacket(
     QuicPacketNumber packet_number) {
-  return ::net::IsAwaitingPacket(ack_frame_, packet_number,
-                                 peer_least_packet_awaiting_ack_);
+  return net::IsAwaitingPacket(ack_frame_, packet_number,
+                               peer_least_packet_awaiting_ack_);
 }
 
 const QuicFrame QuicReceivedPacketManager::GetUpdatedAckFrame(
@@ -105,18 +103,13 @@ const QuicFrame QuicReceivedPacketManager::GetUpdatedAckFrame(
   return QuicFrame(&ack_frame_);
 }
 
-bool QuicReceivedPacketManager::DontWaitForPacketsBefore(
+void QuicReceivedPacketManager::DontWaitForPacketsBefore(
     QuicPacketNumber least_unacked) {
-  peer_least_packet_awaiting_ack_ = least_unacked;
-  return ack_frame_.packets.RemoveUpTo(least_unacked);
-}
-
-void QuicReceivedPacketManager::UpdatePacketInformationSentByPeer(
-    const QuicStopWaitingFrame& stop_waiting) {
   // ValidateAck() should fail if peer_least_packet_awaiting_ack shrinks.
-  DCHECK_LE(peer_least_packet_awaiting_ack_, stop_waiting.least_unacked);
-  if (stop_waiting.least_unacked > peer_least_packet_awaiting_ack_) {
-    bool packets_updated = DontWaitForPacketsBefore(stop_waiting.least_unacked);
+  DCHECK_LE(peer_least_packet_awaiting_ack_, least_unacked);
+  if (least_unacked > peer_least_packet_awaiting_ack_) {
+    peer_least_packet_awaiting_ack_ = least_unacked;
+    bool packets_updated = ack_frame_.packets.RemoveUpTo(least_unacked);
     if (packets_updated) {
       // Ack frame gets updated because packets set is updated because of stop
       // waiting frame.

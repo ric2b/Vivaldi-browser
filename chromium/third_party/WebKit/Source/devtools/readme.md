@@ -63,6 +63,11 @@ In addition, you no longer need to pass double dashes (e.g. `--`) before you pas
 #### `npm run format` 
 Formats your code using clang-format
 
+### `npm run format-py`
+Formats your Python code using [yapf](https://github.com/google/yapf)
+
+> Note: Yapf is a command line tool. You will have to install this manually, either from PyPi through `pip install yapf` or if you want to enable multiprocessing in Python 2.7, `pip install futures`
+
 #### `npm test`
 Builds devtools and runs all inspector/devtools layout tests.
 
@@ -95,6 +100,12 @@ npm test -- --time-out-ms=6000000 <test_path>
 npm test -- --fetch-content-shell
 ```
 
+#### `--target=SUB_DIRECTORY_NAME`
+```
+# If you're using a build sub-directory that's not out/Release, 
+# such as out/Default, then use --target=SUB_DIRECTORY_NAME
+npm test -- --target=Default
+```
 ### Development
 * All devtools commits: [View the log], [RSS feed] or [@DevToolsCommits] on Twitter
 * [All open DevTools tickets] on crbug.com

@@ -2,6 +2,12 @@
 
 #include "extensions/api/history/history_private_api.h"
 
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
@@ -15,8 +21,8 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
-#include "extensions/schema/history_private.h"
 #include "db/vivaldi_history_types.h"
+#include "extensions/schema/history_private.h"
 
 namespace extensions {
 
@@ -141,7 +147,7 @@ void HistoryPrivateEventRouter::DispatchEvent(
   }
 }
 
-bool HistoryPrivateDbSearchFunction::RunAsyncImpl() {
+ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
   std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -166,7 +172,8 @@ bool HistoryPrivateDbSearchFunction::RunAsyncImpl() {
                  base::Unretained(this)),
       &task_tracker_);
 
-  return true;
+  AddRef();               // Balanced in SearchComplete().
+  return RespondLater();
 }
 
 void HistoryPrivateDbSearchFunction::SearchComplete(
@@ -181,11 +188,11 @@ void HistoryPrivateDbSearchFunction::SearchComplete(
     }
   }
   // This must be revisited since it is slow!
-  results_ = DBSearch::Results::Create(history_item_vec);
-  SendAsyncResponse();
+  Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
+  Release();
 }
 
-bool HistoryPrivateSearchFunction::RunAsyncImpl() {
+ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
   std::unique_ptr<Search::Params> params(Search::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -223,7 +230,8 @@ bool HistoryPrivateSearchFunction::RunAsyncImpl() {
                               base::Unretained(this)),
                    &task_tracker_);
 
-  return true;
+  AddRef();               // Balanced in SearchComplete().
+  return RespondLater();
 }
 
 HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
@@ -260,18 +268,19 @@ void HistoryPrivateSearchFunction::SearchComplete(
     for (const history::URLResult* item : *results)
       history_item_vec.push_back(GetHistoryAndVisitItem(*item, model));
   }
-  results_ = DBSearch::Results::Create(history_item_vec);
-  SendAsyncResponse();
+  Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
+  Release();
 }
 
-bool HistoryPrivateDeleteVisitsFunction::RunAsyncImpl() {
+ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   std::unique_ptr<vivaldi::history_private::DeleteVisits::Params> params(
       vivaldi::history_private::DeleteVisits::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL url;
-  if (!ValidateUrl(params->details.url, &url))
-    return false;
+  std::string error;
+  if (!ValidateUrl(params->details.url, &url, &error))
+    return RespondNow(Error(error));
 
   base::Time start_time = GetTime(params->details.start_time);
   base::Time end_time = GetTime(params->details.end_time);
@@ -286,15 +295,18 @@ bool HistoryPrivateDeleteVisitsFunction::RunAsyncImpl() {
       base::Bind(&HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete,
                  base::Unretained(this)),
       &task_tracker_);
-  SendResponse(true);
-  return true;
+
+  AddRef();               // Balanced in DeleteVisitComplete().
+  return RespondLater();
 }
 
 void HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete() {
-  SendAsyncResponse();
+  Respond(NoArguments());
+  Release();
 }
 
-bool HistoryPrivateGetTopUrlsPerDayFunction::RunAsyncImpl() {
+ExtensionFunction::ResponseAction
+HistoryPrivateGetTopUrlsPerDayFunction::Run() {
   std::unique_ptr<GetTopUrlsPerDay::Params> params(
       GetTopUrlsPerDay::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -309,7 +321,8 @@ bool HistoryPrivateGetTopUrlsPerDayFunction::RunAsyncImpl() {
       number_of_days,
       base::Bind(&HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete,
                  base::Unretained(this)));
-  return true;
+  AddRef();               // Balanced in TopUrlsComplete().
+  return RespondLater();
 }
 
 std::unique_ptr<TopUrlItem> GetTopUrlPerDay(history::UrlVisitCount visit) {
@@ -329,8 +342,8 @@ void HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete(
   for (auto& item : results) {
     history_item_vec.push_back(std::move(*(GetTopUrlPerDay(item))));
   }
-  results_ = GetTopUrlsPerDay::Results::Create(history_item_vec);
-  SendAsyncResponse();
+  Respond(ArgumentList(GetTopUrlsPerDay::Results::Create(history_item_vec)));
+  Release();
 }
 
 std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
@@ -350,9 +363,8 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   history_item->visit_time.reset(
       new double(MilliSecondsFromTime(visit.visit_time)));
   history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
-  history_item->date_key.reset(new std::string(
-    base::StringPrintf("%04d-%02d-%02d", exploded.year, exploded.month,
-      exploded.day_of_month)));
+  history_item->date_key.reset(new std::string(base::StringPrintf(
+      "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month)));
   history_item->hour.reset(new int(exploded.hour));
   history_item->visit_count.reset(new int(visit.visit_count));
 
@@ -399,25 +411,26 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   return history_item;
 }
 
-bool HistoryPrivateVisitSearchFunction::RunAsyncImpl() {
-    std::unique_ptr<VisitSearch::Params> params(
-    VisitSearch::Params::Create(*args_));
-    EXTENSION_FUNCTION_VALIDATE(params.get());
+ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
+  std::unique_ptr<VisitSearch::Params> params(
+      VisitSearch::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
 
-    history::QueryOptions options;
+  history::QueryOptions options;
 
-    if (params->query.start_time.get())
-        options.begin_time = GetTime(*params->query.start_time);
-    if (params->query.end_time.get())
-        options.end_time = GetTime(*params->query.end_time);
+  if (params->query.start_time.get())
+    options.begin_time = GetTime(*params->query.start_time);
+  if (params->query.end_time.get())
+    options.end_time = GetTime(*params->query.end_time);
 
   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
 
   hs->VisitSearch(options,
             base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
-                        base::Unretained(this)));
-  return true;
+                       base::Unretained(this)));
+  AddRef();               // Balanced in VisitsComplete().
+  return RespondLater();
 }
 
 // Callback for the history service to acknowledge visits search complete.
@@ -430,8 +443,8 @@ void HistoryPrivateVisitSearchFunction::VisitsComplete(
   for (auto& item : visit_list) {
     history_item_vec.push_back(std::move(*(GetVisitsItem(item, model))));
   }
-  results_ = VisitSearch::Results::Create(history_item_vec);
-  SendAsyncResponse();
+  Respond(ArgumentList(VisitSearch::Results::Create(history_item_vec)));
+  Release();
 }
 
 }  // namespace extensions

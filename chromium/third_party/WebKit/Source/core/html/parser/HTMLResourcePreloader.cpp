@@ -26,13 +26,13 @@
 #include "core/html/parser/HTMLResourcePreloader.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/Resource.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/Settings.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
+#include "platform/loader/fetch/Resource.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "public/platform/Platform.h"
 #include <memory>
 
@@ -90,7 +90,7 @@ void HTMLResourcePreloader::preload(
     Settings* settings = m_document->settings();
     if (settings && (settings->getCSSExternalScannerNoPreload() ||
                      settings->getCSSExternalScannerPreload()))
-      m_cssPreloaders.add(new CSSPreloaderResourceClient(resource, this));
+      m_cssPreloaders.insert(new CSSPreloaderResourceClient(resource, this));
   }
 }
 

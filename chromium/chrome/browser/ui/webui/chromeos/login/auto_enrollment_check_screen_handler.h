@@ -7,14 +7,14 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_check_screen_actor.h"
+#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_check_screen_view.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "content/public/browser/web_ui.h"
 
 namespace chromeos {
 
 // WebUI implementation of AutoEnrollmentCheckScreenActor.
-class AutoEnrollmentCheckScreenHandler : public AutoEnrollmentCheckScreenActor,
+class AutoEnrollmentCheckScreenHandler : public AutoEnrollmentCheckScreenView,
                                          public BaseScreenHandler {
  public:
   AutoEnrollmentCheckScreenHandler();
@@ -33,10 +33,10 @@ class AutoEnrollmentCheckScreenHandler : public AutoEnrollmentCheckScreenActor,
   void RegisterMessages() override;
 
  private:
-  Delegate* delegate_;
+  Delegate* delegate_ = nullptr;
 
   // Keeps whether screen should be shown right after initialization.
-  bool show_on_init_;
+  bool show_on_init_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AutoEnrollmentCheckScreenHandler);
 };

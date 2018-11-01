@@ -10,6 +10,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/test_rappor_service.h"
+#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/test/test_utils.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
 
 namespace {
@@ -104,6 +106,9 @@ TEST_F(CorePageLoadMetricsObserverTest, SingleMetricAfterCommit) {
       internal::kHistogramParseBlockedOnScriptExecution,
       parse_script_exec_duration.InMilliseconds(), 1);
   histogram_tester().ExpectTotalCount(internal::kHistogramFirstTextPaint, 0);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramPageTimingForegroundDuration, 1);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, MultipleMetricsAfterCommits) {
@@ -260,6 +265,9 @@ TEST_F(CorePageLoadMetricsObserverTest, OnlyBackgroundLaterEvents) {
 
   histogram_tester().ExpectTotalCount(internal::kHistogramLoad, 0);
   histogram_tester().ExpectTotalCount(internal::kHistogramFirstTextPaint, 0);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramPageTimingForegroundDuration, 1);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, DontBackgroundQuickerLoad) {
@@ -296,6 +304,11 @@ TEST_F(CorePageLoadMetricsObserverTest, DontBackgroundQuickerLoad) {
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, FailedProvisionalLoad) {
+  if (content::IsBrowserSideNavigationEnabled() &&
+      content::AreAllSitesIsolatedForTesting()) {
+    // http://crbug.com/674734 Fix this test with PlzNavigate and Site Isolation
+    return;
+  }
   GURL url(kDefaultTestUrl);
   content::RenderFrameHostTester* rfh_tester =
       content::RenderFrameHostTester::For(main_rfh());
@@ -309,6 +322,11 @@ TEST_F(CorePageLoadMetricsObserverTest, FailedProvisionalLoad) {
   histogram_tester().ExpectTotalCount(internal::kHistogramFirstTextPaint, 0);
   histogram_tester().ExpectTotalCount(internal::kHistogramFailedProvisionalLoad,
                                       1);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramPageTimingForegroundDuration, 0);
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramPageTimingForegroundDurationNoCommit, 1);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, FailedBackgroundProvisionalLoad) {
@@ -482,12 +500,18 @@ TEST_F(CorePageLoadMetricsObserverTest, NewNavigation) {
       timing.parse_start.value().InMilliseconds(), 1);
 }
 
-TEST_F(CorePageLoadMetricsObserverTest, BytesCounted) {
+TEST_F(CorePageLoadMetricsObserverTest, BytesAndResourcesCounted) {
   NavigateAndCommit(GURL(kDefaultTestUrl));
   NavigateAndCommit(GURL(kDefaultTestUrl2));
   histogram_tester().ExpectTotalCount(internal::kHistogramTotalBytes, 1);
   histogram_tester().ExpectTotalCount(internal::kHistogramNetworkBytes, 1);
   histogram_tester().ExpectTotalCount(internal::kHistogramCacheBytes, 1);
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramTotalCompletedResources, 1);
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramNetworkCompletedResources, 1);
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramCacheCompletedResources, 1);
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, FirstMeaningfulPaint) {

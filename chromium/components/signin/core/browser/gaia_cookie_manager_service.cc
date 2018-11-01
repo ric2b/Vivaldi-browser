@@ -15,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
@@ -62,20 +63,12 @@ const int kMaxFetcherRetries = 8;
 // accounts have changed in the content-area.
 const char* kGaiaCookieName = "APISID";
 
-// String format appended to GAIA fetcher source if request context has changed.
-const char* kRequestContextChangedTag = "__changed_%d__";
-
 enum GaiaCookieRequestType {
   ADD_ACCOUNT,
   LOG_OUT_ALL_ACCOUNTS,
   LOG_OUT_ONE_ACCOUNT,
   LIST_ACCOUNTS
 };
-
-void AppendRequestContextChangedTagIfNeeded(std::string* source, int changes) {
-  if (changes != 0)
-    base::StringAppendF(source, kRequestContextChangedTag, changes);
-}
 
 }  // namespace
 
@@ -223,6 +216,8 @@ GaiaCookieManagerService::ExternalCcResultFetcher::CreateFetcher(
   fetcher->SetRequestContext(helper_->request_context());
   fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                         net::LOAD_DO_NOT_SAVE_COOKIES);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher.get(), data_use_measurement::DataUseUserData::SIGNIN);
 
   // Fetchers are sometimes cancelled because a network change was detected,
   // especially at startup and after sign-in on ChromeOS.
@@ -402,7 +397,7 @@ void GaiaCookieManagerService::ForceOnCookieChangedProcessing() {
   std::unique_ptr<net::CanonicalCookie> cookie(net::CanonicalCookie::Create(
       google_url, kGaiaCookieName, std::string(), "." + google_url.host(),
       std::string(), base::Time(), base::Time(), false, false,
-      net::CookieSameSite::DEFAULT_MODE, false, net::COOKIE_PRIORITY_DEFAULT));
+      net::CookieSameSite::DEFAULT_MODE, net::COOKIE_PRIORITY_DEFAULT));
   OnCookieChanged(*cookie, net::CookieStore::ChangeCause::UNKNOWN_DELETION);
 }
 
@@ -473,19 +468,12 @@ void GaiaCookieManagerService::CancelAll() {
 
 std::string GaiaCookieManagerService::GetSourceForRequest(
     const GaiaCookieManagerService::GaiaCookieRequest& request) {
-  std::string source = request.source().empty() ? source_ : request.source();
-  AppendRequestContextChangedTagIfNeeded(
-      &source,
-      signin_client_->number_of_request_context_pointer_changes());
-  return source;
+  return request.source().empty() ? GetDefaultSourceForRequest() :
+      request.source();
 }
 
 std::string GaiaCookieManagerService::GetDefaultSourceForRequest() {
-  std::string source = source_;
-  AppendRequestContextChangedTagIfNeeded(
-      &source,
-      signin_client_->number_of_request_context_pointer_changes());
-  return source;
+  return source_;
 }
 
 void GaiaCookieManagerService::OnCookieChanged(
@@ -506,17 +494,20 @@ void GaiaCookieManagerService::OnCookieChanged(
       case net::CookieStore::ChangeCause::INSERTED:
         source += "INSERTED";
         break;
-      case net::CookieStore::ChangeCause::EXPLICIT_DELETE:
-        source += "EXPLICIT_DELETE";
+      case net::CookieStore::ChangeCause::EXPLICIT:
+        source += "EXPLICIT";
         break;
-      case net::CookieStore::ChangeCause::EXPLICIT_DUPLICATE_IN_BACKING_STORE:
-        source += "EXPLICIT_DUPLICATE_IN_BACKING_STORE";
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_BETWEEN:
+        source += "EXPLICIT_DELETE_BETWEEN";
         break;
-      case net::CookieStore::ChangeCause::EXPLICIT_DONT_RECORD:
-        source += "EXPLICIT_DONT_RECORD";
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_PREDICATE:
+        source += "EXPLICIT_DELETE_PREDICATE";
         break;
-      case net::CookieStore::ChangeCause::EXPLICIT_LAST_ENTRY:
-        source += "EXPLICIT_LAST_ENTRY";
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_SINGLE:
+        source += "EXPLICIT_DELETE_SINGLE";
+        break;
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_CANONICAL:
+        source += "EXPLICIT_DELETE_CANONICAL";
         break;
       case net::CookieStore::ChangeCause::UNKNOWN_DELETION:
         source += "UNKNOWN_DELETION";

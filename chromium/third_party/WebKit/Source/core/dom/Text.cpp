@@ -85,7 +85,7 @@ Node* Text::mergeNextSiblingNodesIfPossible() {
     document().didMergeTextNodes(*this, *nextText, offset);
 
     // Empty nextText for layout update.
-    nextText->setDataWithoutUpdate(emptyString());
+    nextText->setDataWithoutUpdate(emptyString);
     nextText->updateTextLayoutObject(0, nextTextData.length());
 
     // Restore nextText for mutation event.
@@ -233,7 +233,7 @@ Node::NodeType Text::getNodeType() const {
   return kTextNode;
 }
 
-Node* Text::cloneNode(bool /*deep*/) {
+Node* Text::cloneNode(bool /*deep*/, ExceptionState&) {
   return cloneWithData(data());
 }
 
@@ -254,6 +254,8 @@ static inline bool canHaveWhitespaceChildren(const LayoutObject& parent) {
 
 bool Text::textLayoutObjectIsNeeded(const ComputedStyle& style,
                                     const LayoutObject& parent) const {
+  DCHECK(!document().childNeedsDistributionRecalc());
+
   if (!parent.canHaveChildren())
     return false;
 
@@ -278,11 +280,6 @@ bool Text::textLayoutObjectIsNeeded(const ComputedStyle& style,
 
   // pre/pre-wrap/pre-line always make layoutObjects.
   if (style.preserveNewline())
-    return true;
-
-  // childNeedsDistributionRecalc() here is rare, only happens JS calling
-  // surroundContents() etc. from DOMNodeInsertedIntoDocument etc.
-  if (document().childNeedsDistributionRecalc())
     return true;
 
   // Avoiding creation of a layoutObject for the text node is a non-essential
@@ -349,12 +346,17 @@ LayoutText* Text::createTextLayoutObject(const ComputedStyle& style) {
 }
 
 void Text::attachLayoutTree(const AttachContext& context) {
-  if (ContainerNode* layoutParent = LayoutTreeBuilderTraversal::parent(*this)) {
-    if (LayoutObject* parentLayoutObject = layoutParent->layoutObject()) {
-      if (textLayoutObjectIsNeeded(*parentLayoutObject->style(),
-                                   *parentLayoutObject))
-        LayoutTreeBuilderForText(*this, parentLayoutObject)
-            .createLayoutObject();
+  ContainerNode* styleParent = LayoutTreeBuilderTraversal::parent(*this);
+  LayoutObject* parentLayoutObject =
+      LayoutTreeBuilderTraversal::parentLayoutObject(*this);
+
+  if (styleParent && parentLayoutObject) {
+    DCHECK(styleParent->computedStyle());
+    if (textLayoutObjectIsNeeded(*styleParent->computedStyle(),
+                                 *parentLayoutObject)) {
+      LayoutTreeBuilderForText(*this, parentLayoutObject,
+                               styleParent->mutableComputedStyle())
+          .createLayoutObject();
     }
   }
   CharacterData::attachLayoutTree(context);
@@ -362,13 +364,13 @@ void Text::attachLayoutTree(const AttachContext& context) {
 
 void Text::reattachLayoutTreeIfNeeded(const AttachContext& context) {
   bool layoutObjectIsNeeded = false;
-  ContainerNode* layoutParent = LayoutTreeBuilderTraversal::parent(*this);
-  if (layoutParent) {
-    if (LayoutObject* parentLayoutObject = layoutParent->layoutObject()) {
-      if (textLayoutObjectIsNeeded(*parentLayoutObject->style(),
-                                   *parentLayoutObject))
-        layoutObjectIsNeeded = true;
-    }
+  ContainerNode* styleParent = LayoutTreeBuilderTraversal::parent(*this);
+  LayoutObject* parentLayoutObject =
+      LayoutTreeBuilderTraversal::parentLayoutObject(*this);
+  if (styleParent && parentLayoutObject) {
+    DCHECK(styleParent->computedStyle());
+    layoutObjectIsNeeded = textLayoutObjectIsNeeded(
+        *styleParent->computedStyle(), *parentLayoutObject);
   }
 
   if (layoutObjectIsNeeded == !!layoutObject())
@@ -382,9 +384,11 @@ void Text::reattachLayoutTreeIfNeeded(const AttachContext& context) {
 
   if (getStyleChangeType() < NeedsReattachStyleChange)
     detachLayoutTree(reattachContext);
-  if (layoutObjectIsNeeded)
-    LayoutTreeBuilderForText(*this, layoutParent->layoutObject())
+  if (layoutObjectIsNeeded) {
+    LayoutTreeBuilderForText(*this, parentLayoutObject,
+                             styleParent->mutableComputedStyle())
         .createLayoutObject();
+  }
   CharacterData::attachLayoutTree(reattachContext);
 }
 
@@ -423,9 +427,14 @@ static bool shouldUpdateLayoutByReattaching(const Text& textNode,
   DCHECK_EQ(textNode.layoutObject(), textLayoutObject);
   if (!textLayoutObject)
     return true;
-  if (!textNode.textLayoutObjectIsNeeded(*textLayoutObject->style(),
-                                         *textLayoutObject->parent()))
+  // In general we do not want to branch on lifecycle states such as
+  // |childNeedsDistributionRecalc|, but this code tries to figure out if we can
+  // use an optimized code path that avoids reattach.
+  if (!textNode.document().childNeedsDistributionRecalc() &&
+      !textNode.textLayoutObjectIsNeeded(*textLayoutObject->style(),
+                                         *textLayoutObject->parent())) {
     return true;
+  }
   if (textLayoutObject->isTextFragment()) {
     // Changes of |textNode| may change first letter part, so we should
     // reattach.

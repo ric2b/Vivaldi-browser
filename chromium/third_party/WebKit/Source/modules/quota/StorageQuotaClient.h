@@ -42,8 +42,6 @@ namespace blink {
 
 class ExecutionContext;
 class Page;
-class ScriptPromise;
-class ScriptState;
 class StorageErrorCallback;
 class StorageQuotaCallback;
 
@@ -54,14 +52,11 @@ class StorageQuotaClient : public Supplement<Page> {
   StorageQuotaClient() {}
   virtual ~StorageQuotaClient() {}
 
-  virtual void requestQuota(ExecutionContext*,
+  virtual void requestQuota(ScriptState*,
                             WebStorageQuotaType,
                             unsigned long long newQuotaInBytes,
                             StorageQuotaCallback*,
                             StorageErrorCallback*) = 0;
-  virtual ScriptPromise requestPersistentQuota(
-      ScriptState*,
-      unsigned long long newQuotaInBytes) = 0;
 
   static const char* supplementName();
   static StorageQuotaClient* from(ExecutionContext*);

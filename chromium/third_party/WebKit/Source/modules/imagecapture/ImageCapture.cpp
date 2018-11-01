@@ -107,7 +107,7 @@ ScriptPromise ImageCapture::getPhotoCapabilities(
     return promise;
   }
 
-  m_serviceRequests.add(resolver);
+  m_serviceRequests.insert(resolver);
 
   // m_streamTrack->component()->source()->id() is the renderer "name" of the
   // camera;
@@ -138,7 +138,7 @@ ScriptPromise ImageCapture::setOptions(ScriptState* scriptState,
     return promise;
   }
 
-  m_serviceRequests.add(resolver);
+  m_serviceRequests.insert(resolver);
 
   // TODO(mcasas): should be using a mojo::StructTraits instead.
   media::mojom::blink::PhotoSettingsPtr settings =
@@ -223,7 +223,7 @@ ScriptPromise ImageCapture::takePhoto(ScriptState* scriptState,
     return promise;
   }
 
-  m_serviceRequests.add(resolver);
+  m_serviceRequests.insert(resolver);
 
   // m_streamTrack->component()->source()->id() is the renderer "name" of the
   // camera;
@@ -341,7 +341,7 @@ void ImageCapture::onCapabilities(
     caps->setSharpness(sharpness);
     resolver->resolve(caps);
   }
-  m_serviceRequests.remove(resolver);
+  m_serviceRequests.erase(resolver);
 }
 
 void ImageCapture::onSetOptions(ScriptPromiseResolver* resolver, bool result) {
@@ -352,7 +352,7 @@ void ImageCapture::onSetOptions(ScriptPromiseResolver* resolver, bool result) {
     resolver->resolve();
   else
     resolver->reject(DOMException::create(UnknownError, "setOptions failed"));
-  m_serviceRequests.remove(resolver);
+  m_serviceRequests.erase(resolver);
 }
 
 void ImageCapture::onTakePhoto(ScriptPromiseResolver* resolver,
@@ -366,14 +366,10 @@ void ImageCapture::onTakePhoto(ScriptPromiseResolver* resolver,
   else
     resolver->resolve(
         Blob::create(blob->data.data(), blob->data.size(), blob->mime_type));
-  m_serviceRequests.remove(resolver);
+  m_serviceRequests.erase(resolver);
 }
 
 void ImageCapture::onServiceConnectionError() {
-  if (!Platform::current()) {
-    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
-    return;
-  }
   m_service.reset();
   for (ScriptPromiseResolver* resolver : m_serviceRequests)
     resolver->reject(DOMException::create(NotFoundError, kNoServiceError));

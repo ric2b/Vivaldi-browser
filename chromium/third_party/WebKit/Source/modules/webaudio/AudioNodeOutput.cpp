@@ -161,14 +161,14 @@ unsigned AudioNodeOutput::renderingFanOutCount() const {
 
 void AudioNodeOutput::addInput(AudioNodeInput& input) {
   ASSERT(deferredTaskHandler().isGraphOwner());
-  m_inputs.add(&input);
+  m_inputs.insert(&input);
   input.handler().makeConnection();
 }
 
 void AudioNodeOutput::removeInput(AudioNodeInput& input) {
   ASSERT(deferredTaskHandler().isGraphOwner());
   input.handler().breakConnection();
-  m_inputs.remove(&input);
+  m_inputs.erase(&input);
 }
 
 void AudioNodeOutput::disconnectAllInputs() {
@@ -193,12 +193,12 @@ void AudioNodeOutput::disconnectAudioParam(AudioParamHandler& param) {
 
 void AudioNodeOutput::addParam(AudioParamHandler& param) {
   ASSERT(deferredTaskHandler().isGraphOwner());
-  m_params.add(&param);
+  m_params.insert(&param);
 }
 
 void AudioNodeOutput::removeParam(AudioParamHandler& param) {
   ASSERT(deferredTaskHandler().isGraphOwner());
-  m_params.remove(&param);
+  m_params.erase(&param);
 }
 
 void AudioNodeOutput::disconnectAllParams() {

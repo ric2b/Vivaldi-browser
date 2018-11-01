@@ -5,6 +5,9 @@
 
 #include "sync/glue/notes_model_associator.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
@@ -18,19 +21,19 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/sync/driver/sync_client.h"
-#include "content/public/browser/browser_thread.h"
-#include "components/sync/model/sync_error.h"
-#include "components/sync/model/sync_merge_result.h"
-#include "components/sync/syncable/read_node.h"
-#include "components/sync/syncable/read_transaction.h"
-#include "components/sync/syncable/write_node.h"
-#include "components/sync/syncable/write_transaction.h"
-#include "components/sync/engine/engine_util.h"
-#include "components/sync/syncable/entry.h"
-#include "components/sync/syncable/syncable_write_transaction.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/data_type_histogram.h"
+#include "components/sync/driver/sync_client.h"
+#include "components/sync/engine/engine_util.h"
+#include "components/sync/model/sync_error.h"
+#include "components/sync/model/sync_merge_result.h"
+#include "components/sync/syncable/entry.h"
+#include "components/sync/syncable/read_node.h"
+#include "components/sync/syncable/read_transaction.h"
+#include "components/sync/syncable/syncable_write_transaction.h"
+#include "components/sync/syncable/write_node.h"
+#include "components/sync/syncable/write_transaction.h"
+#include "content/public/browser/browser_thread.h"
 #include "notes/notes_model.h"
 #include "notes/notesnode.h"
 #include "sync/glue/notes_change_processor.h"
@@ -244,8 +247,8 @@ void NotesModelAssociator::Context::IncrementSyncItemsDeleted(int count) {
 
 void NotesModelAssociator::Context::UpdateDuplicateCount(
     const base::string16& title,
-  const base::string16& content,
-  const GURL& url) {
+    const base::string16& content,
+    const GURL& url) {
   // base::Hash is defined for 8-byte strings only so have to
   // cast the title data to char* and double the length in order to
   // compute its hash.
@@ -372,12 +375,12 @@ bool NotesModelAssociator::SyncModelHasUserCreatedNodes(bool* has_nodes) {
 
   syncer::ReadNode other_note_node(&trans);
   if (other_note_node.InitByTagLookupForNotes(kNotesOtherTag) !=
-    syncer::BaseNode::INIT_OK) {
+      syncer::BaseNode::INIT_OK) {
     return false;
   }
   syncer::ReadNode trash_note_node(&trans);
   if (trash_note_node.InitByTagLookupForNotes(kNotesTrashTag) !=
-    syncer::BaseNode::INIT_OK) {
+      syncer::BaseNode::INIT_OK) {
     return false;
   }
 

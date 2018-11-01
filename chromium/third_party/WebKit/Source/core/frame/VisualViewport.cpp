@@ -30,10 +30,13 @@
 
 #include "core/frame/VisualViewport.h"
 
+#include <memory>
 #include "core/dom/DOMNodeIds.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/PageScaleConstraints.h"
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/RootFrameViewport.h"
@@ -41,7 +44,6 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
@@ -56,7 +58,6 @@
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebScrollbar.h"
 #include "public/platform/WebScrollbarLayer.h"
-#include <memory>
 
 namespace blink {
 
@@ -253,7 +254,7 @@ bool VisualViewport::didSetScaleOrLocation(float scale,
   if (scale != m_scale) {
     m_scale = scale;
     valuesChanged = true;
-    frameHost().chromeClient().pageScaleFactorChanged();
+    frameHost().page().chromeClient().pageScaleFactorChanged();
     enqueueResizeEvent();
   }
 
@@ -269,7 +270,7 @@ bool VisualViewport::didSetScaleOrLocation(float scale,
             frameHost().page().scrollingCoordinator())
       coordinator->scrollableAreaScrollLayerDidChange(this);
 
-    if (!frameHost().settings().getInertVisualViewport()) {
+    if (!frameHost().page().settings().getInertVisualViewport()) {
       if (Document* document = mainFrame()->document())
         document->enqueueScrollEventForNode(document);
     }
@@ -283,7 +284,7 @@ bool VisualViewport::didSetScaleOrLocation(float scale,
   if (!valuesChanged)
     return false;
 
-  InspectorInstrumentation::didUpdateLayout(mainFrame());
+  probe::didUpdateLayout(mainFrame());
   mainFrame()->loader().saveScrollState();
 
   clampToBoundaries();
@@ -295,8 +296,8 @@ bool VisualViewport::magnifyScaleAroundAnchor(float magnifyDelta,
                                               const FloatPoint& anchor) {
   const float oldPageScale = scale();
   const float newPageScale =
-      frameHost().chromeClient().clampPageScaleFactorToLimits(magnifyDelta *
-                                                              oldPageScale);
+      frameHost().page().chromeClient().clampPageScaleFactorToLimits(
+          magnifyDelta * oldPageScale);
   if (newPageScale == oldPageScale)
     return false;
   if (!mainFrame() || !mainFrame()->view())
@@ -376,7 +377,7 @@ void VisualViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot) {
     // Set masks to bounds so the compositor doesn't clobber a manually
     // set inner viewport container layer size.
     m_innerViewportContainerLayer->setMasksToBounds(
-        frameHost().settings().getMainFrameClipsContent());
+        frameHost().page().settings().getMainFrameClipsContent());
     m_innerViewportContainerLayer->setSize(FloatSize(m_size));
 
     m_innerViewportScrollLayer->platformLayer()->setScrollClipLayer(
@@ -410,7 +411,7 @@ void VisualViewport::initializeScrollbars() {
     return;
 
   if (visualViewportSuppliesScrollbars() &&
-      !frameHost().settings().getHideScrollbars()) {
+      !frameHost().page().settings().getHideScrollbars()) {
     if (!m_overlayScrollbarHorizontal->parent())
       m_innerViewportContainerLayer->addChild(
           m_overlayScrollbarHorizontal.get());
@@ -423,6 +424,13 @@ void VisualViewport::initializeScrollbars() {
 
   setupScrollbar(WebScrollbar::Horizontal);
   setupScrollbar(WebScrollbar::Vertical);
+
+  // Ensure existing FrameView scrollbars are removed if the visual viewport
+  // scrollbars are now supplied, or created if the visual viewport no longer
+  // supplies scrollbars.
+  LocalFrame* frame = mainFrame();
+  if (frame && frame->view())
+    frame->view()->visualViewportScrollbarsChanged();
 }
 
 void VisualViewport::setupScrollbar(WebScrollbar::Orientation orientation) {
@@ -486,15 +494,15 @@ void VisualViewport::setScrollLayerOnScrollbars(WebLayer* scrollLayer) const {
 }
 
 bool VisualViewport::visualViewportSuppliesScrollbars() const {
-  return frameHost().settings().getViewportEnabled();
+  return frameHost().page().settings().getViewportEnabled();
 }
 
 bool VisualViewport::scrollAnimatorEnabled() const {
-  return frameHost().settings().getScrollAnimatorEnabled();
+  return frameHost().page().settings().getScrollAnimatorEnabled();
 }
 
 HostWindow* VisualViewport::getHostWindow() const {
-  return &frameHost().chromeClient();
+  return &frameHost().page().chromeClient();
 }
 
 bool VisualViewport::shouldUseIntegerScrollOffset() const {
@@ -592,10 +600,10 @@ float VisualViewport::browserControlsAdjustment() const {
 }
 
 IntRect VisualViewport::scrollableAreaBoundingBox() const {
-  // This method should return the bounding box in the parent view's coordinate
-  // space; however, VisualViewport technically isn't a child of any Frames.
-  // Nonetheless, the VisualViewport always occupies the entire main frame so
-  // just return that.
+  // This method should return the bounding box in the top-level FrameView's
+  // coordinate space; however, VisualViewport technically isn't a child of any
+  // Frames.  Nonetheless, the VisualViewport always occupies the entire main
+  // frame so just return that.
   LocalFrame* frame = mainFrame();
 
   if (!frame || !frame->view())
@@ -627,6 +635,10 @@ IntRect VisualViewport::visibleContentRect(
                   rootFrameViewport->horizontalScrollbarHeight() / m_scale);
   }
   return rect;
+}
+
+RefPtr<WebTaskRunner> VisualViewport::getTimerTaskRunner() const {
+  return TaskRunnerHelper::get(TaskType::UnspecedTimer, mainFrame());
 }
 
 void VisualViewport::updateScrollOffset(const ScrollOffset& position,
@@ -669,7 +681,7 @@ LocalFrame* VisualViewport::mainFrame() const {
              : 0;
 }
 
-Widget* VisualViewport::getWidget() {
+FrameViewBase* VisualViewport::getWidget() {
   return mainFrame()->view();
 }
 

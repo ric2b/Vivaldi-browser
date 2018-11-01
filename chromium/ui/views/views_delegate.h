@@ -199,21 +199,34 @@ class VIEWS_EXPORT ViewsDelegate {
   // Returns the insets that should be applied around a DialogClientView. Note
   // that the top inset is used for the distance between the buttons and the
   // DialogClientView's content view.
-  virtual gfx::Insets GetDialogButtonInsets();
+  virtual gfx::Insets GetDialogButtonInsets() const;
+
+  // Returns the distance between a dialog's edge and the close button in the
+  // upper trailing corner.
+  virtual int GetDialogCloseButtonMargin() const;
 
   // Returns the spacing between a pair of related horizontal buttons, used for
   // dialog layout.
-  virtual int GetDialogRelatedButtonHorizontalSpacing();
+  virtual int GetDialogRelatedButtonHorizontalSpacing() const;
 
   // Returns the spacing between a pair of related vertical controls, used for
   // dialog layout.
-  virtual int GetDialogRelatedControlVerticalSpacing();
+  virtual int GetDialogRelatedControlVerticalSpacing() const;
 
   // Returns the insets that should be applied around a dialog's frame view.
-  virtual gfx::Insets GetDialogFrameViewInsets();
+  virtual gfx::Insets GetDialogFrameViewInsets() const;
 
   // Returns the margins that should be applied around a bubble dialog.
-  virtual gfx::Insets GetBubbleDialogMargins();
+  virtual gfx::Insets GetBubbleDialogMargins() const;
+
+  // Returns the default minimum width of a button.
+  virtual int GetButtonMinimumWidth() const;
+
+  // Returns the minimum width of a dialog button.
+  virtual int GetDialogButtonMinimumWidth() const;
+
+  // Returns the default padding to add on each side of a button's label.
+  virtual int GetButtonHorizontalPadding() const;
 
  protected:
   ViewsDelegate();

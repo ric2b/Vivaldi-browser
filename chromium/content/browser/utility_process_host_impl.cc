@@ -311,11 +311,14 @@ bool UtilityProcessHostImpl::StartProcess() {
 #endif  // defined(OS_WIN)
 
     if (vivaldi::IsVivaldiRunning())
-      cmd_line->AppendSwitchNoDup(switches::kRunningVivaldi);
+      vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
+                                            switches::kRunningVivaldi);
     else
-      cmd_line->AppendSwitchNoDup(switches::kDisableVivaldi);
+      vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
+                                            switches::kDisableVivaldi);
     if (vivaldi::IsDebuggingVivaldi())
-      cmd_line->AppendSwitchNoDup(switches::kDebugVivaldi);
+      vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
+                                            switches::kDebugVivaldi);
 
     if (no_sandbox_)
       cmd_line->AppendSwitch(switches::kNoSandbox);

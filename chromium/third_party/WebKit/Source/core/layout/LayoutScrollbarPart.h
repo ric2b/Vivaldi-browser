@@ -74,12 +74,14 @@ class LayoutScrollbarPart final : public LayoutBlock {
     return type == LayoutObjectLayoutScrollbarPart ||
            LayoutBlock::isOfType(type);
   }
-  LayoutObject* layoutObjectOwningScrollbar() const;
+  LayoutObject* scrollbarStyleSource() const;
 
   // Must call setStyleWithWritingModeOfParent() instead.
   void setStyle(PassRefPtr<ComputedStyle>) = delete;
 
-  LayoutRect visualRect() const override;
+  // Expose for LayoutScrollbar and PaintInvalidationCapableScrollableArea for
+  // paint invalidation.
+  using LayoutObject::setVisualRect;
 
  protected:
   void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;

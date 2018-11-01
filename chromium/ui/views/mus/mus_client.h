@@ -12,6 +12,8 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "ui/aura/client/capture_client.h"
 #include "ui/aura/mus/window_tree_client_delegate.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/views/mus/mus_export.h"
@@ -20,7 +22,6 @@
 
 namespace aura {
 class PropertyConverter;
-class MusContextFactory;
 class Window;
 class WindowTreeClient;
 }
@@ -36,11 +37,6 @@ class ClientDiscardableSharedMemoryManager;
 
 namespace service_manager {
 class Connector;
-class Identity;
-}
-
-namespace ui {
-class Gpu;
 }
 
 namespace wm {
@@ -50,6 +46,7 @@ class WMState;
 namespace views {
 
 class MusClientObserver;
+class MusPropertyMirror;
 class PointerWatcherEventRouter;
 class ScreenMus;
 
@@ -63,8 +60,7 @@ class MusClientTestApi;
 
 // MusClient establishes a connection to mus and sets up necessary state so that
 // aura and views target mus. This class is useful for typical clients, not the
-// WindowManager. Most clients don't create this directly, rather use
-// AuraInit.
+// WindowManager. Most clients don't create this directly, rather use AuraInit.
 class VIEWS_MUS_EXPORT MusClient
     : public aura::WindowTreeClientDelegate,
       public ScreenMusDelegate,
@@ -100,16 +96,27 @@ class VIEWS_MUS_EXPORT MusClient
     return pointer_watcher_event_router_.get();
   }
 
-  ui::Gpu* gpu() { return gpu_.get(); }
-
   // Creates DesktopNativeWidgetAura with DesktopWindowTreeHostMus. This is
   // set as the factory function used for creating NativeWidgets when a
   //  NativeWidget has not been explicitly set.
   NativeWidget* CreateNativeWidget(const Widget::InitParams& init_params,
                                    internal::NativeWidgetDelegate* delegate);
 
+  // Called when the capture client has been set for a window to notify
+  // PointerWatcherEventRouter and CaptureSynchronizer.
+  void OnCaptureClientSet(aura::client::CaptureClient* capture_client);
+
+  // Called when the capture client will be unset for a window to notify
+  // PointerWatcherEventRouter and CaptureSynchronizer.
+  void OnCaptureClientUnset(aura::client::CaptureClient* capture_client);
+
   void AddObserver(MusClientObserver* observer);
   void RemoveObserver(MusClientObserver* observer);
+
+  void SetMusPropertyMirror(std::unique_ptr<MusPropertyMirror> mirror);
+  MusPropertyMirror* mus_property_mirror() {
+    return mus_property_mirror_.get();
+  }
 
  private:
   friend class AuraInit;
@@ -122,7 +129,6 @@ class VIEWS_MUS_EXPORT MusClient
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               aura::Window* target) override;
-  aura::client::CaptureClient* GetCaptureClient() override;
   aura::PropertyConverter* GetPropertyConverter() override;
 
   // ScreenMusDelegate:
@@ -147,14 +153,11 @@ class VIEWS_MUS_EXPORT MusClient
   std::unique_ptr<ScreenMus> screen_;
 
   std::unique_ptr<aura::PropertyConverter> property_converter_;
+  std::unique_ptr<MusPropertyMirror> mus_property_mirror_;
 
   std::unique_ptr<aura::WindowTreeClient> window_tree_client_;
 
-  std::unique_ptr<ui::Gpu> gpu_;
-
   std::unique_ptr<PointerWatcherEventRouter> pointer_watcher_event_router_;
-
-  std::unique_ptr<aura::MusContextFactory> compositor_context_factory_;
 
   std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;

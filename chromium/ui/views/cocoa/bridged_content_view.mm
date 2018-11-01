@@ -732,9 +732,8 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   if (hostedView_->GetWidget()->GetLayer())
     return;
 
-  gfx::CanvasSkiaPaint canvas(dirtyRect, false /* opaque */);
-  hostedView_->GetWidget()->OnNativeWidgetPaint(
-      ui::CanvasPainter(&canvas, 1.f).context());
+  // TODO(tapted): Add a NOTREACHED() here.  At the moment, low-level
+  // BridgedNativeWidget unit tests may not have a ui::Layer.
 }
 
 - (BOOL)isOpaque {
@@ -833,11 +832,40 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   hostedView_->GetWidget()->OnScrollEvent(&event);
 }
 
+// Called when we get a three-finger swipe, and they're enabled in System
+// Preferences.
+- (void)swipeWithEvent:(NSEvent*)event {
+  if (!hostedView_)
+    return;
+
+  // themblsha: In my testing all three-finger swipes send only a single event
+  // with a value of +/-1 on either axis. Diagonal swipes are not handled by
+  // AppKit.
+
+  // We need to invert deltas in order to match GestureEventDetails's
+  // directions.
+  ui::GestureEventDetails swipeDetails(ui::ET_GESTURE_SWIPE, -[event deltaX],
+                                       -[event deltaY]);
+  swipeDetails.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHPAD);
+  swipeDetails.set_touch_points(3);
+
+  gfx::PointF location = ui::EventLocationFromNative(event);
+  // Note this uses the default unique_touch_event_id of 0 (Swipe events do not
+  // support -[NSEvent eventNumber]). This doesn't seem like a real omission
+  // because the three-finger swipes are instant and can't be tracked anyway.
+  ui::GestureEvent gestureEvent(location.x(), location.y(),
+                                ui::EventFlagsFromNative(event),
+                                ui::EventTimeFromNative(event), swipeDetails);
+
+  hostedView_->GetWidget()->OnGestureEvent(&gestureEvent);
+}
+
 - (void)quickLookWithEvent:(NSEvent*)theEvent {
   if (!hostedView_)
     return;
 
-  const gfx::Point locationInContent = ui::EventLocationFromNative(theEvent);
+  const gfx::Point locationInContent =
+      gfx::ToFlooredPoint(ui::EventLocationFromNative(theEvent));
   views::View* target = hostedView_->GetEventHandlerForPoint(locationInContent);
   if (!target)
     return;

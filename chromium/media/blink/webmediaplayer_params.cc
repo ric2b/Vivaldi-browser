@@ -25,7 +25,10 @@ WebMediaPlayerParams::WebMediaPlayerParams(
     const AdjustAllocatedMemoryCB& adjust_allocated_memory_cb,
     blink::WebContentDecryptionModule* initial_cdm,
     SurfaceManager* surface_manager,
-    base::WeakPtr<MediaObserver> media_observer)
+    base::WeakPtr<MediaObserver> media_observer,
+    base::TimeDelta max_keyframe_distance_to_disable_background_video,
+    bool enable_instant_source_buffer_gc,
+    bool allow_suspend)
     : defer_load_cb_(defer_load_cb),
       audio_renderer_sink_(audio_renderer_sink),
       media_log_(media_log),
@@ -39,7 +42,11 @@ WebMediaPlayerParams::WebMediaPlayerParams(
       adjust_allocated_memory_cb_(adjust_allocated_memory_cb),
       initial_cdm_(initial_cdm),
       surface_manager_(surface_manager),
-      media_observer_(media_observer) {}
+      media_observer_(media_observer),
+      max_keyframe_distance_to_disable_background_video_(
+          max_keyframe_distance_to_disable_background_video),
+      enable_instant_source_buffer_gc_(enable_instant_source_buffer_gc),
+      allow_suspend_(allow_suspend) {}
 
 WebMediaPlayerParams::~WebMediaPlayerParams() {}
 

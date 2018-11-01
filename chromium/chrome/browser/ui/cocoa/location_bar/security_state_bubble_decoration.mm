@@ -30,8 +30,8 @@
 
 namespace {
 
-// Padding between the icon and label.
-CGFloat kIconLabelPadding = 4.0;
+// Padding between the label and icon/divider.
+CGFloat kLabelPadding = 4.0;
 
 // Inset for the background.
 const CGFloat kBackgroundYInset = 4.0;
@@ -80,6 +80,8 @@ SecurityStateBubbleDecoration::SecurityStateBubbleDecoration(
   base::scoped_nsobject<NSMutableParagraphStyle> style(
       [[NSMutableParagraphStyle alloc] init]);
   [style setLineBreakMode:NSLineBreakByClipping];
+  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
+    [style setAlignment:NSRightTextAlignment];
   [attributes_ setObject:style forKey:NSParagraphStyleAttributeName];
   animation_.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
 }
@@ -162,10 +164,13 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
               fraction:image_alpha
         respectFlipped:YES
                  hints:nil];
-    if (is_rtl)
-      text_right_offset = NSMinX(image_rect) - kIconLabelPadding;
-    else
-      text_left_offset = NSMaxX(image_rect) + kIconLabelPadding;
+    if (is_rtl) {
+      text_left_offset += DividerPadding();
+      text_right_offset = NSMinX(image_rect);
+    } else {
+      text_right_offset -= DividerPadding();
+      text_left_offset = NSMaxX(image_rect);
+    }
   }
 
   // Set the text color and draw the text.
@@ -198,6 +203,7 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
     text_rect.origin.y = std::round(NSMidY(text_rect) - textHeight / 2.0) - 1;
     text_rect.size.width = text_right_offset - text_left_offset;
     text_rect.size.height = textHeight;
+    text_rect = NSInsetRect(text_rect, kLabelPadding, 0);
 
     NSAffineTransform* transform = [NSAffineTransform transform];
     CGFloat progress = GetAnimationProgress();

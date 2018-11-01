@@ -4,6 +4,9 @@
 
 #include "net/quic/core/quic_spdy_session.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <string>
 #include <utility>
 
 #include "net/quic/core/quic_flags.h"
@@ -135,9 +138,9 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   void OnError(SpdyFramer* framer) override {
-    CloseConnection(
-        QuicStrCat("SPDY framing error: ",
-                   SpdyFramer::ErrorCodeToString(framer->error_code())));
+    CloseConnection(QuicStrCat(
+        "SPDY framing error: ",
+        SpdyFramer::SpdyFramerErrorToString(framer->spdy_framer_error())));
   }
 
   void OnDataFrameHeader(SpdyStreamId stream_id,
@@ -149,8 +152,7 @@ class QuicSpdySession::SpdyFramerVisitor
     CloseConnection("SPDY DATA frame received.");
   }
 
-  void OnRstStream(SpdyStreamId stream_id,
-                   SpdyRstStreamStatus status) override {
+  void OnRstStream(SpdyStreamId stream_id, SpdyErrorCode error_code) override {
     CloseConnection("SPDY RST_STREAM frame received.");
   }
 
@@ -208,7 +210,7 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
-                SpdyGoAwayStatus status) override {
+                SpdyErrorCode error_code) override {
     CloseConnection("SPDY GOAWAY frame received.");
   }
 
@@ -256,7 +258,7 @@ class QuicSpdySession::SpdyFramerVisitor
     CloseConnection("SPDY PRIORITY frame received.");
   }
 
-  bool OnUnknownFrame(SpdyStreamId stream_id, int frame_type) override {
+  bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override {
     CloseConnection("Unknown frame type received.");
     return false;
   }
@@ -438,7 +440,10 @@ void QuicSpdySession::WriteDataFrame(
     StringPiece data,
     bool fin,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
-  SpdyDataIR spdy_data(id, data);
+  // Note that certain SpdyDataIR constructors perform a deep copy of |data|
+  // which should be avoided here.
+  SpdyDataIR spdy_data(id);
+  spdy_data.SetDataShallow(data);
   spdy_data.set_fin(fin);
   SpdySerializedFrame frame(spdy_framer_.SerializeFrame(spdy_data));
   QuicReferenceCountedPointer<ForceHolAckListener> force_hol_ack_listener;
@@ -566,7 +571,7 @@ void QuicSpdySession::OnConfigNegotiated() {
   }
   const QuicVersion version = connection()->version();
   if (FLAGS_quic_reloadable_flag_quic_enable_force_hol_blocking &&
-      version > QUIC_VERSION_35 && config()->ForceHolBlocking(perspective())) {
+      version == QUIC_VERSION_36 && config()->ForceHolBlocking(perspective())) {
     force_hol_blocking_ = true;
     // Since all streams are tunneled through the headers stream, it
     // is important that headers stream never flow control blocks.

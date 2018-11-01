@@ -54,11 +54,13 @@
 #include "core/html/HTMLSlotElement.h"
 #include "core/html/TextControlElement.h"
 #include "core/input/EventHandler.h"
+#include "core/layout/HitTestResult.h"
 #include "core/page/ChromeClient.h"
+#include "core/page/FocusChangedObserver.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
-#include "core/layout/HitTestResult.h"
 #include "core/page/SpatialNavigation.h"
+
 #include <limits>
 
 namespace blink {
@@ -766,6 +768,8 @@ void FocusController::setFocusedFrame(Frame* frame, bool notifyEmbedder) {
   // part of dispatching the focus event above. See https://crbug.com/570874.
   if (m_focusedFrame && m_focusedFrame->client() && notifyEmbedder)
     m_focusedFrame->client()->frameFocused();
+
+  notifyFocusChangedObservers();
 }
 
 void FocusController::focusDocumentView(Frame* frame, bool notifyEmbedder) {
@@ -855,7 +859,9 @@ void FocusController::setFocused(bool focused) {
   if (!m_isFocused && focusedOrMainFrame()->isLocalFrame())
     toLocalFrame(focusedOrMainFrame())->eventHandler().stopAutoscroll();
 
-  if (!m_focusedFrame)
+  // Do not set a focused frame when being unfocused. This might reset
+  // m_isFocused to true.
+  if (!m_focusedFrame && m_isFocused)
     setFocusedFrame(m_page->mainFrame());
 
   // setFocusedFrame above might reject to update m_focusedFrame, or
@@ -866,6 +872,8 @@ void FocusController::setFocused(bool focused) {
     dispatchEventsOnWindowAndFocusedElement(
         toLocalFrame(m_focusedFrame.get())->document(), focused);
   }
+
+  notifyFocusChangedObservers();
 }
 
 bool FocusController::setInitialFocus(WebFocusType type) {
@@ -1068,10 +1076,11 @@ static void clearSelectionIfNeeded(LocalFrame* oldFocusedFrame,
     return;
 
   FrameSelection& selection = oldFocusedFrame->selection();
-  if (selection.isNone())
+  const SelectionInDOMTree& selectionInDOMTree = selection.selectionInDOMTree();
+  if (selectionInDOMTree.isNone())
     return;
 
-  Node* selectionStartNode = selection.selection().start().anchorNode();
+  Node* selectionStartNode = selectionInDOMTree.base().anchorNode();
   if (selectionStartNode == newFocusedElement ||
       selectionStartNode->isDescendantOf(newFocusedElement))
     return;
@@ -1394,9 +1403,22 @@ bool FocusController::advanceFocusDirectionally(WebFocusType type) {
   return consumed;
 }
 
+void FocusController::registerFocusChangedObserver(
+    FocusChangedObserver* observer) {
+  DCHECK(observer);
+  DCHECK(!m_focusChangedObservers.contains(observer));
+  m_focusChangedObservers.insert(observer);
+}
+
+void FocusController::notifyFocusChangedObservers() const {
+  for (const auto& it : m_focusChangedObservers)
+    it->focusedFrameChanged();
+}
+
 DEFINE_TRACE(FocusController) {
   visitor->trace(m_page);
   visitor->trace(m_focusedFrame);
+  visitor->trace(m_focusChangedObservers);
 }
 
 }  // namespace blink

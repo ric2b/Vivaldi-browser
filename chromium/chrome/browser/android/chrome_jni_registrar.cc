@@ -54,9 +54,9 @@
 #include "chrome/browser/android/history_report/history_report_jni_bridge.h"
 #include "chrome/browser/android/instantapps/instant_apps_infobar_delegate.h"
 #include "chrome/browser/android/instantapps/instant_apps_settings.h"
-#include "chrome/browser/android/java_exception_reporter.h"
 #include "chrome/browser/android/large_icon_bridge.h"
 #include "chrome/browser/android/locale/special_locale_handler.h"
+#include "chrome/browser/android/location_settings_impl.h"
 #include "chrome/browser/android/logo_bridge.h"
 #include "chrome/browser/android/metrics/launch_metrics.h"
 #include "chrome/browser/android/metrics/uma_session_stats.h"
@@ -169,8 +169,8 @@
 #include "components/gcm_driver/android/component_jni_registrar.h"
 #include "components/gcm_driver/instance_id/android/component_jni_registrar.h"
 #include "components/invalidation/impl/android/component_jni_registrar.h"
-#include "components/payments/android/currency_formatter_android.h"
-#include "components/payments/android/payments_jni_registrar.h"
+#include "components/payments/content/android/currency_formatter_android.h"
+#include "components/payments/content/android/payment_details_validation_android.h"
 #include "components/policy/core/browser/android/component_jni_registrar.h"
 #include "components/safe_browsing_db/android/jni_registrar.h"
 #include "components/safe_json/android/component_jni_registrar.h"
@@ -187,7 +187,7 @@
 #include "printing/printing_context_android.h"
 #endif
 
-#if defined(ENABLE_VR_SHELL) || defined(ENABLE_WEBVR)
+#if defined(ENABLE_WEBVR)
 #include "chrome/browser/android/vr_shell/vr_shell.h"
 #include "chrome/browser/android/vr_shell/vr_shell_delegate.h"
 #include "third_party/gvr-android-sdk/display_synchronizer_jni.h"
@@ -307,14 +307,13 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
      invalidation::InvalidationServiceFactoryAndroid::Register},
     {"SimpleConfirmInfoBarBuilder", RegisterSimpleConfirmInfoBarBuilder},
     {"ShortcutHelper", ShortcutHelper::RegisterShortcutHelper},
-    {"JavaExceptionReporter",
-     chrome::android::RegisterJavaExceptionReporterJni},
     {"JavascriptAppModalDialog",
      JavascriptAppModalDialogAndroid::RegisterJavascriptAppModalDialog},
     {"LargeIconBridge", LargeIconBridge::RegisterLargeIconBridge},
     {"LaunchMetrics", metrics::RegisterLaunchMetrics},
     {"LayerTitleCache", RegisterLayerTitleCache},
     {"SpecialLocaleHandler", RegisterSpecialLocaleHandler},
+    {"LocationSettingsImpl", LocationSettingsImpl::Register},
     {"LogoBridge", RegisterLogoBridge},
     {"MediaDrmCredentialManager",
      MediaDrmCredentialManager::RegisterMediaDrmCredentialManager},
@@ -413,7 +412,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"UsbChooserDialogAndroid", UsbChooserDialogAndroid::Register},
     {"Variations", variations::android::RegisterVariations},
     {"VariationsSession", chrome::android::RegisterVariationsSession},
-#if defined(ENABLE_VR_SHELL) || defined(ENABLE_WEBVR)
+#if defined(ENABLE_WEBVR)
     {"VrShell", vr_shell::RegisterVrShell},
     {"VrShellDelegate", vr_shell::RegisterVrShellDelegate},
     {"DisplaySynchronizer",

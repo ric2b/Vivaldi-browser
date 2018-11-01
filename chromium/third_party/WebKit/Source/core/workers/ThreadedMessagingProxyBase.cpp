@@ -8,7 +8,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/Deprecation.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/workers/ParentFrameTaskRunners.h"
+#include "core/loader/ThreadableLoadingContext.h"
 #include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "wtf/CurrentTime.h"
@@ -56,7 +56,7 @@ void ThreadedMessagingProxyBase::initializeWorkerThread(
 
   m_loaderProxy = WorkerLoaderProxy::create(this);
   m_workerThread = createWorkerThread(originTime);
-  m_workerThread->start(std::move(startupData));
+  m_workerThread->start(std::move(startupData), getParentFrameTaskRunners());
   workerThreadCreated();
 }
 
@@ -72,14 +72,19 @@ void ThreadedMessagingProxyBase::postTaskToWorkerGlobalScope(
 
 void ThreadedMessagingProxyBase::postTaskToLoader(
     const WebTraceLocation& location,
-    std::unique_ptr<ExecutionContextTask> task) {
-  DCHECK(getExecutionContext()->isDocument());
+    std::unique_ptr<WTF::CrossThreadClosure> task) {
   m_parentFrameTaskRunners->get(TaskType::Networking)
-      ->postTask(BLINK_FROM_HERE,
-                 crossThreadBind(
-                     &ExecutionContextTask::performTaskIfContextIsValid,
-                     WTF::passed(std::move(task)),
-                     wrapCrossThreadWeakPersistent(getExecutionContext())));
+      ->postTask(BLINK_FROM_HERE, std::move(task));
+}
+
+ThreadableLoadingContext*
+ThreadedMessagingProxyBase::getThreadableLoadingContext() {
+  DCHECK(isParentContextThread());
+  if (!m_loadingContext) {
+    m_loadingContext =
+        ThreadableLoadingContext::create(*toDocument(m_executionContext));
+  }
+  return m_loadingContext;
 }
 
 void ThreadedMessagingProxyBase::countFeature(UseCounter::Feature feature) {
@@ -114,7 +119,8 @@ void ThreadedMessagingProxyBase::workerThreadCreated() {
 void ThreadedMessagingProxyBase::parentObjectDestroyed() {
   DCHECK(isParentContextThread());
 
-  m_parentFrameTaskRunners->get(TaskType::UnspecedTimer)
+  getParentFrameTaskRunners()
+      ->get(TaskType::UnspecedTimer)
       ->postTask(
           BLINK_FROM_HERE,
           WTF::bind(&ThreadedMessagingProxyBase::parentObjectDestroyedInternal,
@@ -166,7 +172,7 @@ void ThreadedMessagingProxyBase::postMessageToPageInspector(
 bool ThreadedMessagingProxyBase::isParentContextThread() const {
   // TODO(nhiroki): Nested worker is not supported yet, so the parent context
   // thread should be equal to the main thread (http://crbug.com/31666).
-  DCHECK(getExecutionContext()->isDocument());
+  DCHECK(m_executionContext->isDocument());
   return isMainThread();
 }
 

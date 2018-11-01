@@ -11,6 +11,7 @@
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/screen_orientation_controller_test_api.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,6 +31,12 @@ namespace {
 
 using DisplayUnitInfoList = DisplayInfoProvider::DisplayUnitInfoList;
 using DisplayLayoutList = DisplayInfoProvider::DisplayLayoutList;
+
+void EnableMaximizeMode(bool enable) {
+  ash::WmShell::Get()
+      ->maximize_mode_controller()
+      ->EnableMaximizeModeWindowManager(enable);
+}
 
 class DisplayInfoProviderChromeosTest : public ash::test::AshTestBase {
  public:
@@ -921,36 +928,35 @@ TEST_F(DisplayInfoProviderChromeosTest, SetRotationBeforeMaximizeMode) {
   EXPECT_FALSE(screen_orientation_controller->rotation_locked());
 
   // Entering maximize mode enables accelerometer screen rotations.
-  ash::WmShell::Get()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  EnableMaximizeMode(true);
   // Rotation lock should not activate because DisplayInfoProvider::SetInfo()
   // was called when not in maximize mode.
   EXPECT_FALSE(screen_orientation_controller->rotation_locked());
 
   // ScreenOrientationController rotations override display info.
-  screen_orientation_controller->SetDisplayRotation(
-      display::Display::ROTATE_0, display::Display::ROTATION_SOURCE_ACTIVE);
+  ash::test::ScreenOrientationControllerTestApi test_api(
+      screen_orientation_controller);
+  test_api.SetDisplayRotation(display::Display::ROTATE_0,
+                              display::Display::ROTATION_SOURCE_ACTIVE);
   EXPECT_EQ(display::Display::ROTATE_0, GetCurrentInternalDisplayRotation());
 
   // Exiting maximize mode should restore the initial rotation
-  ash::WmShell::Get()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  EnableMaximizeMode(false);
   EXPECT_EQ(display::Display::ROTATE_90, GetCurrentInternalDisplayRotation());
 }
 
 // Tests that rotation changes made during maximize mode lock the display
-// against accelerometer rotations.
+// against accelerometer rotations, and is set as user rotation locked.
 TEST_F(DisplayInfoProviderChromeosTest, SetRotationDuringMaximizeMode) {
   // Entering maximize mode enables accelerometer screen rotations.
-  ash::WmShell::Get()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  EnableMaximizeMode(true);
 
   ASSERT_FALSE(ash::Shell::GetInstance()
                    ->screen_orientation_controller()
                    ->rotation_locked());
+  ASSERT_FALSE(ash::Shell::GetInstance()
+                   ->screen_orientation_controller()
+                   ->user_rotation_locked());
 
   api::system_display::DisplayProperties info;
   info.rotation.reset(new int(90));
@@ -966,6 +972,9 @@ TEST_F(DisplayInfoProviderChromeosTest, SetRotationDuringMaximizeMode) {
   EXPECT_TRUE(ash::Shell::GetInstance()
                   ->screen_orientation_controller()
                   ->rotation_locked());
+  EXPECT_TRUE(ash::Shell::GetInstance()
+                  ->screen_orientation_controller()
+                  ->user_rotation_locked());
 }
 
 TEST_F(DisplayInfoProviderChromeosTest, SetInvalidRotation) {

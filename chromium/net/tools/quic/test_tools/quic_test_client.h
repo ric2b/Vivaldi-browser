@@ -5,9 +5,6 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_QUIC_TEST_CLIENT_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_QUIC_TEST_CLIENT_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -17,7 +14,6 @@
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_packet_creator.h"
 #include "net/quic/core/quic_packets.h"
-#include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -26,13 +22,9 @@ using base::StringPiece;
 namespace net {
 
 class ProofVerifier;
-
-class ProofVerifier;
 class QuicPacketWriterWrapper;
 
 namespace test {
-
-class MockableQuicClient;
 
 // A quic client which allows mocking out reads and writes.
 class MockableQuicClient : public QuicClient {
@@ -65,10 +57,6 @@ class MockableQuicClient : public QuicClient {
   QuicConnectionId GenerateNewConnectionId() override;
   void UseWriter(QuicPacketWriterWrapper* writer);
   void UseConnectionId(QuicConnectionId connection_id);
-  void SendCachedNetworkParamaters(
-      const CachedNetworkParameters& cached_network_params) {
-    cached_network_paramaters_ = cached_network_params;
-  }
   const QuicReceivedPacket* last_incoming_packet() {
     return last_incoming_packet_.get();
   }
@@ -250,8 +238,6 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   void set_allow_bidirectional_data(bool value) {
     allow_bidirectional_data_ = value;
   }
-
-  bool allow_bidirectional_data() const { return allow_bidirectional_data_; }
 
   size_t num_requests() const { return num_requests_; }
 

@@ -9,10 +9,12 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "mojo/public/cpp/bindings/disconnect_reason.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
+#include "mojo/public/cpp/bindings/pipe_control_message_proxy.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace mojo {
@@ -85,8 +87,8 @@ class InterfaceRequest {
       return;
 
     Message message =
-        internal::ControlMessageProxy::ConstructDisconnectReasonMessage(
-            custom_reason, description);
+        PipeControlMessageProxy::ConstructPeerEndpointClosedMessage(
+            kMasterInterfaceId, DisconnectReason(custom_reason, description));
     MojoResult result = WriteMessageNew(
         handle_.get(), message.TakeMojoMessage(), MOJO_WRITE_MESSAGE_FLAG_NONE);
     DCHECK_EQ(MOJO_RESULT_OK, result);

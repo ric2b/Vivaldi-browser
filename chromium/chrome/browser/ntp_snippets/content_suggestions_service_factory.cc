@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -58,21 +59,26 @@
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/ntp/ntp_snippets_launcher.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
+#include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/download/download_history.h"
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/ntp_snippets/download_suggestions_provider.h"
 #include "components/ntp_snippets/offline_pages/recent_tab_suggestions_provider.h"
 #include "components/ntp_snippets/physical_web_pages/physical_web_page_suggestions_provider.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/recent_tabs/recent_tabs_ui_adapter_delegate.h"
 #include "components/physical_web/data_source/physical_web_data_source.h"
 
 using content::DownloadManager;
 using ntp_snippets::PhysicalWebPageSuggestionsProvider;
 using ntp_snippets::RecentTabSuggestionsProvider;
 using offline_pages::OfflinePageModel;
+using offline_pages::RequestCoordinator;
 using offline_pages::OfflinePageModelFactory;
+using offline_pages::RequestCoordinatorFactory;
 using physical_web::PhysicalWebDataSource;
 #endif  // OS_ANDROID
 
@@ -84,6 +90,7 @@ using ntp_snippets::BookmarkSuggestionsProvider;
 using ntp_snippets::CategoryRanker;
 using ntp_snippets::ContentSuggestionsService;
 using ntp_snippets::ForeignSessionsSuggestionsProvider;
+using ntp_snippets::GetFetchEndpoint;
 using ntp_snippets::PersistentScheduler;
 using ntp_snippets::RemoteSuggestionsDatabase;
 using ntp_snippets::RemoteSuggestionsFetcher;
@@ -95,14 +102,19 @@ using suggestions::ImageDecoderImpl;
 using syncer::SyncService;
 using translate::LanguageModel;
 
-namespace {
-
-// Clear the tasks that can be scheduled by running services.
-void ClearScheduledTasks() {
+// For now, ContentSuggestionsService must only be instantiated on Android.
+// See also crbug.com/688366.
 #if defined(OS_ANDROID)
-  NTPSnippetsLauncher::Get()->Unschedule();
+#define CONTENT_SUGGESTIONS_ENABLED 1
+#else
+#define CONTENT_SUGGESTIONS_ENABLED 0
 #endif  // OS_ANDROID
-}
+
+// The actual #if that does the work is below in BuildServiceInstanceFor. This
+// one is just required to avoid "unused code" compiler errors.
+#if CONTENT_SUGGESTIONS_ENABLED
+
+namespace {
 
 #if defined(OS_ANDROID)
 
@@ -114,10 +126,14 @@ bool IsRecentTabProviderEnabled() {
 }
 
 void RegisterRecentTabProvider(OfflinePageModel* offline_page_model,
+                               RequestCoordinator* request_coordinator,
                                ContentSuggestionsService* service,
                                PrefService* pref_service) {
+  offline_pages::DownloadUIAdapter* ui_adapter = offline_pages::
+      RecentTabsUIAdapterDelegate::GetOrCreateRecentTabsUIAdapter(
+          offline_page_model, request_coordinator);
   auto provider = base::MakeUnique<RecentTabSuggestionsProvider>(
-      service, offline_page_model, pref_service);
+      service, ui_adapter, pref_service);
   service->RegisterProvider(std::move(provider));
 }
 
@@ -128,9 +144,10 @@ void RegisterDownloadsProvider(OfflinePageModel* offline_page_model,
                                PrefService* pref_service) {
   auto provider = base::MakeUnique<DownloadSuggestionsProvider>(
       service, offline_page_model, download_manager, download_history,
-      pref_service);
+      pref_service, base::MakeUnique<base::DefaultClock>());
   service->RegisterProvider(std::move(provider));
 }
+
 #endif  // OS_ANDROID
 
 void RegisterBookmarkProvider(BookmarkModel* bookmark_model,
@@ -157,6 +174,7 @@ void RegisterPhysicalWebPageProvider(
       service, physical_web_data_source, pref_service);
   service->RegisterProvider(std::move(provider));
 }
+
 #endif  // OS_ANDROID
 
 void RegisterArticleProvider(SigninManagerBase* signin_manager,
@@ -178,15 +196,16 @@ void RegisterArticleProvider(SigninManagerBase* signin_manager,
               base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
   bool is_stable_channel =
       chrome::GetChannel() == version_info::Channel::STABLE;
+  auto suggestions_fetcher = base::MakeUnique<RemoteSuggestionsFetcher>(
+      signin_manager, token_service, request_context, pref_service,
+      language_model, base::Bind(&safe_json::SafeJsonParser::Parse),
+      GetFetchEndpoint(chrome::GetChannel()),
+      is_stable_channel ? google_apis::GetAPIKey()
+                        : google_apis::GetNonStableAPIKey(),
+      service->user_classifier());
   auto provider = base::MakeUnique<RemoteSuggestionsProviderImpl>(
       service, pref_service, g_browser_process->GetApplicationLocale(),
-      service->category_ranker(),
-      base::MakeUnique<RemoteSuggestionsFetcher>(
-          signin_manager, token_service, request_context, pref_service,
-          language_model, base::Bind(&safe_json::SafeJsonParser::Parse),
-          is_stable_channel ? google_apis::GetAPIKey()
-                            : google_apis::GetNonStableAPIKey(),
-          service->user_classifier()),
+      service->category_ranker(), std::move(suggestions_fetcher),
       base::MakeUnique<ImageFetcherImpl>(base::MakeUnique<ImageDecoderImpl>(),
                                          request_context.get()),
       base::MakeUnique<ImageDecoderImpl>(),
@@ -199,10 +218,12 @@ void RegisterArticleProvider(SigninManagerBase* signin_manager,
   scheduler = NTPSnippetsLauncher::Get();
 #endif  // OS_ANDROID
 
+  RemoteSuggestionsProviderImpl* provider_raw = provider.get();
   auto scheduling_provider =
       base::MakeUnique<SchedulingRemoteSuggestionsProvider>(
           service, std::move(provider), scheduler, service->user_classifier(),
           pref_service, base::MakeUnique<base::DefaultClock>());
+  provider_raw->SetRemoteSuggestionsScheduler(scheduling_provider.get());
   service->set_remote_suggestions_provider(scheduling_provider.get());
   service->set_remote_suggestions_scheduler(scheduling_provider.get());
   service->RegisterProvider(std::move(scheduling_provider));
@@ -219,6 +240,8 @@ void RegisterForeignSessionsProvider(SyncService* sync_service,
 }
 
 }  // namespace
+
+#endif  // CONTENT_SUGGESTIONS_ENABLED
 
 // static
 ContentSuggestionsServiceFactory*
@@ -258,15 +281,13 @@ ContentSuggestionsServiceFactory::~ContentSuggestionsServiceFactory() = default;
 
 KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
+#if CONTENT_SUGGESTIONS_ENABLED
+
   using State = ContentSuggestionsService::State;
   Profile* profile = Profile::FromBrowserContext(context);
   DCHECK(!profile->IsOffTheRecord());
 
   // Create the ContentSuggestionsService.
-  State state =
-      base::FeatureList::IsEnabled(ntp_snippets::kContentSuggestionsFeature)
-          ? State::ENABLED
-          : State::DISABLED;
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(profile);
   HistoryService* history_service = HistoryServiceFactory::GetForProfile(
@@ -276,18 +297,14 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
       ntp_snippets::BuildSelectedCategoryRanker(
           pref_service, base::MakeUnique<base::DefaultClock>());
   auto* service =
-      new ContentSuggestionsService(state, signin_manager, history_service,
-                                    pref_service, std::move(category_ranker));
-  if (state == State::DISABLED) {
-    // Since we won't initialise the services, they won't get a chance to
-    // unschedule their tasks. We do it explicitly here instead.
-    ClearScheduledTasks();
-    return service;
-  }
+      new ContentSuggestionsService(State::ENABLED, signin_manager,
+          history_service, pref_service, std::move(category_ranker));
 
 #if defined(OS_ANDROID)
   OfflinePageModel* offline_page_model =
       OfflinePageModelFactory::GetForBrowserContext(profile);
+  RequestCoordinator* request_coordinator =
+      RequestCoordinatorFactory::GetForBrowserContext(profile);
   DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(profile);
   DownloadService* download_service =
@@ -307,7 +324,8 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
 
 #if defined(OS_ANDROID)
   if (IsRecentTabProviderEnabled()) {
-    RegisterRecentTabProvider(offline_page_model, service, pref_service);
+    RegisterRecentTabProvider(offline_page_model, request_coordinator, service,
+                              pref_service);
   }
 
   bool show_asset_downloads =
@@ -346,4 +364,8 @@ KeyedService* ContentSuggestionsServiceFactory::BuildServiceInstanceFor(
   }
 
   return service;
+
+#else
+  return nullptr;
+#endif  // CONTENT_SUGGESTIONS_ENABLED
 }

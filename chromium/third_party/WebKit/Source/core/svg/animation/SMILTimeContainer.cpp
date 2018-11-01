@@ -48,12 +48,15 @@ SMILTimeContainer::SMILTimeContainer(SVGSVGElement& owner)
       m_started(false),
       m_paused(false),
       m_documentOrderIndexesDirty(false),
-      m_wakeupTimer(this, &SMILTimeContainer::wakeupTimerFired),
-      m_animationPolicyOnceTimer(this,
-                                 &SMILTimeContainer::animationPolicyTimerFired),
-      m_ownerSVGElement(&owner)
-{
-}
+      m_wakeupTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &owner.document()),
+          this,
+          &SMILTimeContainer::wakeupTimerFired),
+      m_animationPolicyOnceTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &owner.document()),
+          this,
+          &SMILTimeContainer::animationPolicyTimerFired),
+      m_ownerSVGElement(&owner) {}
 
 SMILTimeContainer::~SMILTimeContainer() {
   cancelAnimationFrame();
@@ -77,11 +80,11 @@ void SMILTimeContainer::schedule(SVGSMILElement* animation,
 
   ElementAttributePair key(target, attributeName);
   Member<AnimationsLinkedHashSet>& scheduled =
-      m_scheduledAnimations.add(key, nullptr).storedValue->value;
+      m_scheduledAnimations.insert(key, nullptr).storedValue->value;
   if (!scheduled)
     scheduled = new AnimationsLinkedHashSet;
   ASSERT(!scheduled->contains(animation));
-  scheduled->add(animation);
+  scheduled->insert(animation);
 
   SMILTime nextFireTime = animation->nextProgressTime();
   if (nextFireTime.isFinite())
@@ -436,7 +439,7 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
   AnimationsVector scheduledAnimationsInSameGroup;
   for (const auto& entry : m_scheduledAnimations) {
     if (!entry.key.first || entry.value->isEmpty()) {
-      invalidKeys.add(entry.key);
+      invalidKeys.insert(entry.key);
       continue;
     }
 

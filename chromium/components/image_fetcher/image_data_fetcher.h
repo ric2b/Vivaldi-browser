@@ -13,7 +13,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
+#include "components/image_fetcher/request_metadata.h"
+#include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
+#include "net/url_request/url_request.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -25,8 +28,17 @@ namespace image_fetcher {
 
 class ImageDataFetcher : public net::URLFetcherDelegate {
  public:
+  // Impossible http response code. Used to signal that no http response code
+  // was received.
+  enum ResponseCode {
+    RESPONSE_CODE_INVALID = net::URLFetcher::RESPONSE_CODE_INVALID
+  };
+
+  // Callback with the |image_data|. If an error prevented a http response,
+  // |request_metadata.response_code| will be RESPONSE_CODE_INVALID.
   using ImageDataFetcherCallback =
-      base::Callback<void(const std::string& image_data)>;
+      base::Callback<void(const std::string& image_data,
+                          const RequestMetadata& request_metadata)>;
 
   using DataUseServiceName = data_use_measurement::DataUseUserData::ServiceName;
 
@@ -42,6 +54,12 @@ class ImageDataFetcher : public net::URLFetcherDelegate {
   // of an error an empty string is passed to the callback.
   void FetchImageData(const GURL& image_url,
                       const ImageDataFetcherCallback& callback);
+
+  // Like above, but lets the caller set a referrer.
+  void FetchImageData(const GURL& image_url,
+                      const ImageDataFetcherCallback& callback,
+                      const std::string& referrer,
+                      net::URLRequest::ReferrerPolicy referrer_policy);
 
  private:
   struct ImageDataFetcherRequest;

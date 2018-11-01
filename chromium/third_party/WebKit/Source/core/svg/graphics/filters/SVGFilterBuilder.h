@@ -23,13 +23,12 @@
 
 #include "core/style/SVGComputedStyleDefs.h"
 #include "platform/graphics/filters/FilterEffect.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/AtomicStringHash.h"
-
-class SkPaint;
 
 namespace blink {
 
@@ -59,7 +58,7 @@ class SVGFilterGraphNodeMap final
   // Required to change the attributes of a filter during an
   // svgAttributeChanged.
   inline FilterEffect* effectByRenderer(LayoutObject* object) {
-    return m_effectRenderer.get(object);
+    return m_effectRenderer.at(object);
   }
 
   void invalidateDependentEffects(FilterEffect*);
@@ -81,8 +80,8 @@ class SVGFilterBuilder {
  public:
   SVGFilterBuilder(FilterEffect* sourceGraphic,
                    SVGFilterGraphNodeMap* = nullptr,
-                   const SkPaint* fillPaint = nullptr,
-                   const SkPaint* strokePaint = nullptr);
+                   const PaintFlags* fillFlags = nullptr,
+                   const PaintFlags* strokeFlags = nullptr);
 
   void buildGraph(Filter*, SVGFilterElement&, const FloatRect&);
 

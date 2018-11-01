@@ -52,6 +52,7 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   bool CheckExtensionIDs(const std::set<FullHash>& extension_ids,
                          Client* client) override;
   bool CheckResourceUrl(const GURL& url, Client* client) override;
+  bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override;
   bool MatchCsdWhitelistUrl(const GURL& url) override;
   bool MatchDownloadWhitelistString(const std::string& str) override;
   bool MatchDownloadWhitelistUrl(const GURL& url) override;
@@ -101,10 +102,14 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
     // extension is a unsafe.
     CHECK_EXTENSION_IDS = 3,
 
+    // This respresents the case when we're trying to determine if a URL belongs
+    // to the list where subresource filter should be active.
+    CHECK_URL_FOR_SUBRESOURCE_FILTER = 4,
+
     // This represents the other cases when a check is being performed
     // synchronously so a client callback isn't required. For instance, when
     // trying to determing if an IP address is unsafe due to hosting Malware.
-    CHECK_OTHER = 4,
+    CHECK_OTHER = 5,
   };
 
   // The information we need to process a URL safety reputation request and
@@ -129,8 +134,8 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
     // know whether the URL in |url| is safe or unsafe.
     const ClientCallbackType client_callback_type;
 
-    // The threat verdict for the URL being checked.
-    SBThreatType result_threat_type;
+    // The most severe threat verdict for the URLs/hashes being checked.
+    SBThreatType most_severe_threat_type;
 
     // When the check was sent to the SafeBrowsing service. Used to record the
     // time it takes to get the uncached full hashes from the service (or a
@@ -144,9 +149,12 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
     // one of |full_hashes| and |urls| should be greater than 0.
     const std::vector<GURL> urls;
 
-    // The full hashes that are being checked for being safe. The size of
-    // exactly one of |full_hashes| and |urls| should be greater than 0.
+    // The full hashes that are being checked for being safe.
     std::vector<FullHash> full_hashes;
+
+    // The most severe SBThreatType for each full hash in |full_hashes|. The
+    // length of |full_hash_threat_type| must always match |full_hashes|.
+    std::vector<SBThreatType> full_hash_threat_types;
 
     // The metadata associated with the full hash of the severest match found
     // for that URL.
@@ -191,13 +199,18 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
       const std::unique_ptr<PendingCheck>& check,
       FullHashToStoreAndHashPrefixesMap* full_hash_to_store_and_hash_prefixes);
 
-  // Finds the most severe |SBThreatType| and the corresponding |metadata|, and
-  // |matching_full_hash| from |full_hash_infos|.
+  // Goes over the |full_hash_infos| and stores the most severe SBThreatType in
+  // |most_severe_threat_type|, the corresponding metadata in |metadata|, and
+  // the matching full hash in |matching_full_hash|. Also, updates in
+  // |full_hash_threat_types|, the threat type for each full hash in
+  // |full_hashes|.
   void GetSeverestThreatTypeAndMetadata(
-      SBThreatType* result_threat_type,
+      const std::vector<FullHashInfo>& full_hash_infos,
+      const std::vector<FullHash>& full_hashes,
+      std::vector<SBThreatType>* full_hash_threat_types,
+      SBThreatType* most_severe_threat_type,
       ThreatMetadata* metadata,
-      FullHash* matching_full_hash,
-      const std::vector<FullHashInfo>& full_hash_infos);
+      FullHash* matching_full_hash);
 
   // Returns the SBThreatType for a given ListIdentifier.
   SBThreatType GetSBThreatTypeForList(const ListIdentifier& list_id);
@@ -267,9 +280,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // Called when the V4Database has finished applying the latest update and is
   // ready to process next update.
   DatabaseUpdatedCallback db_updated_callback_;
-
-  // Whether the service is running.
-  bool enabled_;
 
   // Callback to get the current extended reporting level. Needed by the update
   // manager.

@@ -12,17 +12,17 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_info.h"
 #include "components/ntp_snippets/remote/json_request.h"
-#include "components/ntp_snippets/remote/ntp_snippet.h"
+#include "components/ntp_snippets/remote/remote_suggestion.h"
 #include "components/ntp_snippets/remote/request_params.h"
-#include "components/ntp_snippets/remote/request_throttler.h"
 #include "components/ntp_snippets/status.h"
 #include "components/translate/core/browser/language_model.h"
+#include "components/version_info/version_info.h"
 #include "net/url_request/url_request_context_getter.h"
 
 class PrefService;
@@ -35,6 +35,10 @@ class Value;
 namespace ntp_snippets {
 
 class UserClassifier;
+
+// Returns the appropriate API endpoint for the fetcher, in consideration of
+// the channel and variation parameters.
+GURL GetFetchEndpoint(version_info::Channel channel);
 
 // TODO(tschumann): BuildArticleCategoryInfo() and BuildRemoteCategoryInfo()
 // don't really belong into this library. However, as the fetcher is
@@ -62,7 +66,7 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
   struct FetchedCategory {
     Category category;
     CategoryInfo info;
-    NTPSnippet::PtrVector snippets;
+    RemoteSuggestion::PtrVector suggestions;
 
     FetchedCategory(Category c, CategoryInfo&& info);
     FetchedCategory(FetchedCategory&&);             // = default, in .cc
@@ -72,9 +76,6 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
   using FetchedCategoriesVector = std::vector<FetchedCategory>;
   using OptionalFetchedCategories = base::Optional<FetchedCategoriesVector>;
 
-  // |snippets| contains parsed snippets if a fetch succeeded. If problems
-  // occur, |snippets| contains no value (no actual vector in base::Optional).
-  // Error details can be retrieved using last_status().
   using SnippetsAvailableCallback =
       base::OnceCallback<void(Status status,
                               OptionalFetchedCategories fetched_categories)>;
@@ -86,6 +87,7 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
       PrefService* pref_service,
       translate::LanguageModel* language_model,
       const ParseJSONCallback& parse_json_callback,
+      const GURL& api_endpoint,
       const std::string& api_key,
       const UserClassifier* user_classifier);
   ~RemoteSuggestionsFetcher() override;
@@ -98,24 +100,18 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
   void FetchSnippets(const RequestParams& params,
                      SnippetsAvailableCallback callback);
 
-  std::string PersonalizationModeString() const;
-
   // Debug string representing the status/result of the last fetch attempt.
   const std::string& last_status() const { return last_status_; }
 
   // Returns the last JSON fetched from the server.
   const std::string& last_json() const { return last_fetch_json_; }
 
-  // Returns the personalization setting of the fetcher as used in tests.
-  // TODO(fhorschig): Reconsider these tests and remove this getter.
-  Personalization personalization() const { return personalization_; }
-
   // Returns the URL endpoint used by the fetcher.
   const GURL& fetch_url() const { return fetch_url_; }
 
   // Overrides internal clock for testing purposes.
-  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock) {
-    tick_clock_ = std::move(tick_clock);
+  void SetClockForTesting(std::unique_ptr<base::Clock> clock) {
+    clock_ = std::move(clock);
   }
 
  private:
@@ -167,12 +163,8 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
                      const std::string& error_details);
 
   bool JsonToSnippets(const base::Value& parsed,
-                      FetchedCategoriesVector* categories);
-
-  bool DemandQuotaForRequest(bool interactive_request);
-
-  // Does the fetcher use authentication to get personalized results?
-  bool NeedsAuthentication() const;
+                      FetchedCategoriesVector* categories,
+                      const base::Time& fetch_time);
 
   // Authentication for signed-in users.
   SigninManagerBase* signin_manager_;
@@ -196,7 +188,7 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
 
   const ParseJSONCallback parse_json_callback_;
 
-  // API endpoint for fetching snippets.
+  // API endpoint for fetching suggestions.
   const GURL fetch_url_;
   // Which API to use
   const internal::FetchAPI fetch_api_;
@@ -204,25 +196,15 @@ class RemoteSuggestionsFetcher : public OAuth2TokenService::Consumer,
   // API key to use for non-authenticated requests.
   const std::string api_key_;
 
-  // The variant of the fetching to use, loaded from variation parameters.
-  Personalization personalization_;
-
-  // Allow for an injectable tick clock for testing.
-  std::unique_ptr<base::TickClock> tick_clock_;
+  // Allow for an injectable clock for testing.
+  std::unique_ptr<base::Clock> clock_;
 
   // Classifier that tells us how active the user is. Not owned.
   const UserClassifier* user_classifier_;
 
-  // Request throttlers for limiting requests for different classes of users.
-  RequestThrottler request_throttler_rare_ntp_user_;
-  RequestThrottler request_throttler_active_ntp_user_;
-  RequestThrottler request_throttler_active_suggestions_consumer_;
-
   // Info on the last finished fetch.
   std::string last_status_;
   std::string last_fetch_json_;
-
-  base::WeakPtrFactory<RemoteSuggestionsFetcher> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(RemoteSuggestionsFetcher);
 };

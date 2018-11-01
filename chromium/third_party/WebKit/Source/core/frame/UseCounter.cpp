@@ -31,9 +31,9 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/FrameConsole.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/page/Page.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "platform/Histogram.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -46,7 +46,7 @@ int totalPagesMeasuredCSSSampleId() {
 }
 
 // Make sure update_use_counter_css.py was run which updates histograms.xml.
-constexpr int kMaximumCSSSampleId = 555;
+constexpr int kMaximumCSSSampleId = 556;
 
 }  // namespace
 
@@ -1079,6 +1079,8 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(
       return 554;
     case CSSPropertyMaxBlockSize:
       return 555;
+    case CSSPropertyAliasLineBreak:
+      return 556;
     // 1. Add new features above this line (don't change the assigned numbers of
     // the existing items).
     // 2. Update kMaximumCSSSampleId with the new maximum value.
@@ -1125,6 +1127,7 @@ void UseCounter::recordMeasurement(Feature feature) {
       TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.feature_usage"),
                    "FeatureFirstUsed", "feature", feature);
       featuresHistogram().count(feature);
+      notifyFeatureCounted(feature);
     }
     m_featuresRecorded.quickSet(feature);
   }
@@ -1141,6 +1144,10 @@ bool UseCounter::hasRecordedMeasurement(Feature feature) const {
   DCHECK(feature < NumberOfFeatures);
 
   return m_featuresRecorded.quickGet(feature);
+}
+
+DEFINE_TRACE(UseCounter) {
+  visitor->trace(m_observers);
 }
 
 void UseCounter::didCommitLoad(KURL url) {
@@ -1168,11 +1175,11 @@ void UseCounter::didCommitLoad(KURL url) {
 void UseCounter::count(const Frame* frame, Feature feature) {
   if (!frame)
     return;
-  FrameHost* host = frame->host();
-  if (!host)
+  Page* page = frame->page();
+  if (!page)
     return;
 
-  host->useCounter().count(feature);
+  page->useCounter().count(feature);
 }
 
 void UseCounter::count(const Document& document, Feature feature) {
@@ -1180,31 +1187,30 @@ void UseCounter::count(const Document& document, Feature feature) {
 }
 
 bool UseCounter::isCounted(Document& document, Feature feature) {
-  Frame* frame = document.frame();
-  if (!frame)
+  Page* page = document.page();
+  if (!page)
     return false;
-  FrameHost* host = frame->host();
-  if (!host)
-    return false;
-  return host->useCounter().hasRecordedMeasurement(feature);
+  return page->useCounter().hasRecordedMeasurement(feature);
 }
 
 bool UseCounter::isCounted(CSSPropertyID unresolvedProperty) {
   return m_CSSRecorded.quickGet(unresolvedProperty);
 }
 
+void UseCounter::addObserver(Observer* observer) {
+  DCHECK(!m_observers.contains(observer));
+  m_observers.insert(observer);
+}
+
 bool UseCounter::isCounted(Document& document, const String& string) {
-  Frame* frame = document.frame();
-  if (!frame)
-    return false;
-  FrameHost* host = frame->host();
-  if (!host)
+  Page* page = document.page();
+  if (!page)
     return false;
 
   CSSPropertyID unresolvedProperty = unresolvedCSSPropertyID(string);
   if (unresolvedProperty == CSSPropertyInvalid)
     return false;
-  return host->useCounter().isCounted(unresolvedProperty);
+  return page->useCounter().isCounted(unresolvedProperty);
 }
 
 void UseCounter::count(ExecutionContext* context, Feature feature) {
@@ -1246,28 +1252,18 @@ void UseCounter::count(CSSParserMode cssParserMode, CSSPropertyID property) {
 }
 
 void UseCounter::count(Feature feature) {
-  DCHECK(Deprecation::deprecationMessage(feature).isEmpty());
   recordMeasurement(feature);
 }
 
-UseCounter* UseCounter::getFrom(const Document* document) {
-  if (document && document->frameHost())
-    return &document->frameHost()->useCounter();
-  return 0;
-}
-
-UseCounter* UseCounter::getFrom(const CSSStyleSheet* sheet) {
-  if (sheet)
-    return getFrom(sheet->contents());
-  return 0;
-}
-
-UseCounter* UseCounter::getFrom(const StyleSheetContents* sheetContents) {
-  // FIXME: We may want to handle stylesheets that have multiple owners
-  //        https://crbug.com/242125
-  if (sheetContents && sheetContents->hasSingleOwnerNode())
-    return getFrom(sheetContents->singleOwnerDocument());
-  return 0;
+void UseCounter::notifyFeatureCounted(Feature feature) {
+  DCHECK(!m_muteCount);
+  DCHECK(!m_disableReporting);
+  HeapHashSet<Member<Observer>> toBeRemoved;
+  for (auto observer : m_observers) {
+    if (observer->onCountFeature(feature))
+      toBeRemoved.insert(observer);
+  }
+  m_observers.removeAll(toBeRemoved);
 }
 
 EnumerationHistogram& UseCounter::featuresHistogram() const {

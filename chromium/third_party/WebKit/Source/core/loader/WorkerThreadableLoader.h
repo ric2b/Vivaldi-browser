@@ -47,6 +47,7 @@
 
 namespace blink {
 
+class ThreadableLoadingContext;
 class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
@@ -145,8 +146,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
                                std::unique_ptr<CrossThreadResourceRequestData>,
                                const ThreadableLoaderOptions&,
                                const ResourceLoaderOptions&,
-                               PassRefPtr<WaitableEventWithTasks>,
-                               ExecutionContext*);
+                               PassRefPtr<WaitableEventWithTasks>);
     ~MainThreadLoaderHolder() override;
 
     void overrideTimeout(unsigned long timeoutMillisecond);
@@ -173,7 +173,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
 
    private:
     MainThreadLoaderHolder(TaskForwarder*, WorkerThreadLifecycleContext*);
-    void start(Document&,
+    void start(ThreadableLoadingContext&,
                std::unique_ptr<CrossThreadResourceRequestData>,
                const ThreadableLoaderOptions&,
                const ResourceLoaderOptions&);

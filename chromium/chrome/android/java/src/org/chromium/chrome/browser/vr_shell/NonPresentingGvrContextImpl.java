@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.vr_shell;
 
 import android.app.Activity;
+import android.os.StrictMode;
 
 import com.google.vr.ndk.base.GvrLayout;
 
@@ -15,25 +16,18 @@ public class NonPresentingGvrContextImpl implements NonPresentingGvrContext {
     private GvrLayout mGvrLayout;
 
     public NonPresentingGvrContextImpl(Activity activity) {
-        mGvrLayout = new GvrLayout(activity);
+        // Creating the GvrLayout can sometimes create the Daydream config file.
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+        try {
+            mGvrLayout = new GvrLayout(activity);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
     }
 
     @Override
     public long getNativeGvrContext() {
         return mGvrLayout.getGvrApi().getNativeGvrContext();
-    }
-
-    @Override
-    public void resume() {
-        mGvrLayout.getGvrApi().resumeTracking();
-    }
-
-    @Override
-    public void pause() {
-        // We can't pause/resume the GvrLayout, because doing so will force us to enter VR. However,
-        // we should be safe not pausing it as we never add it to the view hierarchy, or give it a
-        // presentation view, so there's nothing to pause but the tracking.
-        mGvrLayout.getGvrApi().pauseTracking();
     }
 
     @Override

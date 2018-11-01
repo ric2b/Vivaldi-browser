@@ -9,7 +9,7 @@
 Polymer({
   is: 'cr-policy-pref-indicator',
 
-  behaviors: [CrPolicyIndicatorBehavior, CrPolicyPrefBehavior],
+  behaviors: [CrPolicyIndicatorBehavior],
 
   properties: {
     /**
@@ -22,23 +22,53 @@ Polymer({
     /**
      * Which indicator type to show (or NONE).
      * @type {CrPolicyIndicatorType}
+     * @override
      */
     indicatorType: {
       type: String,
       value: CrPolicyIndicatorType.NONE,
-      computed: 'getIndicatorType(pref.controlledBy, pref.enforcement)',
+      computed: 'getIndicatorTypeForPref_(pref.controlledBy, pref.enforcement)',
+    },
+
+    /** @override */
+    indicatorTooltip: {
+      type: String,
+      computed: 'getIndicatorTooltipForPref_(indicatorType, pref.*)',
     },
   },
 
   /**
-   * @param {CrPolicyIndicatorType} type
-   * @param {!chrome.settingsPrivate.PrefObject} pref
-   * @return {string} The tooltip text for |type|.
+   * @param {!chrome.settingsPrivate.ControlledBy|undefined} controlledBy
+   * @param {!chrome.settingsPrivate.Enforcement|undefined} enforcement
+   * @return {CrPolicyIndicatorType} The indicator type based on |controlledBy|
+   *     and |enforcement|.
+   */
+  getIndicatorTypeForPref_: function(controlledBy, enforcement) {
+    if (enforcement == chrome.settingsPrivate.Enforcement.RECOMMENDED)
+      return CrPolicyIndicatorType.RECOMMENDED;
+    if (enforcement == chrome.settingsPrivate.Enforcement.ENFORCED) {
+      switch (controlledBy) {
+        case chrome.settingsPrivate.ControlledBy.PRIMARY_USER:
+          return CrPolicyIndicatorType.PRIMARY_USER;
+        case chrome.settingsPrivate.ControlledBy.OWNER:
+          return CrPolicyIndicatorType.OWNER;
+        case chrome.settingsPrivate.ControlledBy.USER_POLICY:
+          return CrPolicyIndicatorType.USER_POLICY;
+        case chrome.settingsPrivate.ControlledBy.DEVICE_POLICY:
+          return CrPolicyIndicatorType.DEVICE_POLICY;
+      }
+    }
+    return CrPolicyIndicatorType.NONE;
+  },
+
+  /**
+   * @param {CrPolicyIndicatorType} indicatorType
+   * @return {string} The tooltip text for |indicatorType|.
    * @private
    */
-  getTooltip_: function(type, pref) {
-    var matches = pref && pref.value == pref.recommendedValue;
-    return this.getPolicyIndicatorTooltip(
-        type, pref.controlledByName || '', matches);
-  }
+  getIndicatorTooltipForPref_: function(indicatorType) {
+    var matches = this.pref && this.pref.value == this.pref.recommendedValue;
+    return this.getIndicatorTooltip(
+        indicatorType, this.pref.controlledByName || '', matches);
+  },
 });

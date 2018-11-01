@@ -98,7 +98,7 @@ TreeScopeStyleSheetCollection* StyleEngine::ensureStyleSheetCollectionFor(
     return &documentStyleSheetCollection();
 
   StyleSheetCollectionMap::AddResult result =
-      m_styleSheetCollectionMap.add(&treeScope, nullptr);
+      m_styleSheetCollectionMap.insert(&treeScope, nullptr);
   if (result.isNewEntry)
     result.storedValue->value =
         new ShadowTreeStyleSheetCollection(toShadowRoot(treeScope));
@@ -161,8 +161,12 @@ void StyleEngine::addPendingSheet(StyleEngineContext& context) {
   m_pendingScriptBlockingStylesheets++;
 
   context.addingPendingSheet(document());
-  if (context.addedPendingSheetBeforeBody())
+  if (context.addedPendingSheetBeforeBody()) {
     m_pendingRenderBlockingStylesheets++;
+  } else {
+    m_pendingBodyStylesheets++;
+    document().didAddPendingStylesheetInBody();
+  }
 }
 
 // This method is called whenever a top-level stylesheet has finished loading.
@@ -174,6 +178,11 @@ void StyleEngine::removePendingSheet(Node& styleSheetCandidateNode,
   if (context.addedPendingSheetBeforeBody()) {
     DCHECK_GT(m_pendingRenderBlockingStylesheets, 0);
     m_pendingRenderBlockingStylesheets--;
+  } else {
+    DCHECK_GT(m_pendingBodyStylesheets, 0);
+    m_pendingBodyStylesheets--;
+    if (!m_pendingBodyStylesheets)
+      document().didRemoveAllPendingBodyStylesheets();
   }
 
   // Make sure we knew this sheet was pending, and that our count isn't out of
@@ -205,7 +214,7 @@ void StyleEngine::addStyleSheetCandidateNode(Node& node) {
 
   setNeedsActiveStyleUpdate(treeScope);
   if (treeScope != m_document)
-    m_activeTreeScopes.add(&treeScope);
+    m_activeTreeScopes.insert(&treeScope);
 }
 
 void StyleEngine::removeStyleSheetCandidateNode(Node& node,
@@ -297,7 +306,7 @@ void StyleEngine::updateActiveStyleSheetsInShadow(
   DCHECK(collection);
   collection->updateActiveStyleSheets(*this);
   if (!collection->hasStyleSheetCandidateNodes()) {
-    treeScopesRemoved.add(treeScope);
+    treeScopesRemoved.insert(treeScope);
     // When removing TreeScope from ActiveTreeScopes,
     // its resolver should be destroyed by invoking resetAuthorStyle.
     DCHECK(!treeScope->scopedStyleResolver());
@@ -328,10 +337,10 @@ void StyleEngine::updateActiveStyleSheets() {
         updateActiveStyleSheetsInShadow(treeScope, treeScopesRemoved);
     }
     for (TreeScope* treeScope : treeScopesRemoved)
-      m_activeTreeScopes.remove(treeScope);
+      m_activeTreeScopes.erase(treeScope);
   }
 
-  InspectorInstrumentation::activeStyleSheetsUpdated(m_document);
+  probe::activeStyleSheetsUpdated(m_document);
 
   m_dirtyTreeScopes.clear();
   m_documentScopeDirty = false;
@@ -368,7 +377,7 @@ const ActiveStyleSheetVector StyleEngine::activeStyleSheetsForInspector() {
       documentStyleSheetCollection().activeAuthorStyleSheets());
   for (TreeScope* treeScope : m_activeTreeScopes) {
     if (TreeScopeStyleSheetCollection* collection =
-            m_styleSheetCollectionMap.get(treeScope))
+            m_styleSheetCollectionMap.at(treeScope))
       activeStyleSheets.appendVector(collection->activeAuthorStyleSheets());
   }
 
@@ -379,9 +388,9 @@ const ActiveStyleSheetVector StyleEngine::activeStyleSheetsForInspector() {
 }
 
 void StyleEngine::shadowRootRemovedFromDocument(ShadowRoot* shadowRoot) {
-  m_styleSheetCollectionMap.remove(shadowRoot);
-  m_activeTreeScopes.remove(shadowRoot);
-  m_dirtyTreeScopes.remove(shadowRoot);
+  m_styleSheetCollectionMap.erase(shadowRoot);
+  m_activeTreeScopes.erase(shadowRoot);
+  m_dirtyTreeScopes.erase(shadowRoot);
   resetAuthorStyle(*shadowRoot);
 }
 
@@ -496,7 +505,7 @@ void StyleEngine::markTreeScopeDirty(TreeScope& scope) {
   }
 
   DCHECK(m_styleSheetCollectionMap.contains(&scope));
-  m_dirtyTreeScopes.add(&scope);
+  m_dirtyTreeScopes.insert(&scope);
   document().scheduleLayoutTreeUpdateIfNeeded();
 }
 
@@ -521,7 +530,7 @@ CSSStyleSheet* StyleEngine::createSheet(Element& element,
 
   AtomicString textContent(text);
 
-  auto result = m_textToSheetCache.add(textContent, nullptr);
+  auto result = m_textToSheetCache.insert(textContent, nullptr);
   StyleSheetContents* contents = result.storedValue->value;
   if (result.isNewEntry || !contents ||
       !contents->isCacheableForStyleElement()) {
@@ -529,7 +538,7 @@ CSSStyleSheet* StyleEngine::createSheet(Element& element,
     styleSheet = parseSheet(element, text, startPosition);
     if (styleSheet->contents()->isCacheableForStyleElement()) {
       result.storedValue->value = styleSheet->contents();
-      m_sheetToTextCache.add(styleSheet->contents(), textContent);
+      m_sheetToTextCache.insert(styleSheet->contents(), textContent);
     }
   } else {
     DCHECK(contents);
@@ -563,11 +572,6 @@ void StyleEngine::collectScopedStyleFeaturesTo(RuleFeatureSet& features) const {
     document().scopedStyleResolver()->collectFeaturesTo(
         features, visitedSharedStyleSheetContents);
   for (TreeScope* treeScope : m_activeTreeScopes) {
-    // When creating StyleResolver, dirty treescopes might not be processed.
-    // So some active treescopes might not have a scoped style resolver.
-    // In this case, we should skip collectFeatures for the treescopes without
-    // scoped style resolvers. When invoking updateActiveStyleSheets,
-    // the treescope's features will be processed.
     if (ScopedStyleResolver* resolver = treeScope->scopedStyleResolver())
       resolver->collectFeaturesTo(features, visitedSharedStyleSheetContents);
   }
@@ -582,7 +586,7 @@ void StyleEngine::fontsNeedUpdate(CSSFontSelector*) {
   document().setNeedsStyleRecalc(
       SubtreeStyleChange,
       StyleChangeReasonForTracing::create(StyleChangeReason::Fonts));
-  InspectorInstrumentation::fontsUpdated(m_document);
+  probe::fontsUpdated(m_document);
 }
 
 void StyleEngine::setFontSelector(CSSFontSelector* fontSelector) {
@@ -823,13 +827,19 @@ void StyleEngine::scheduleRuleSetInvalidationsForElement(
     for (const Attribute& attribute : element.attributes())
       ruleSet->features().collectInvalidationSetsForAttribute(
           invalidationLists, element, attribute.name());
-    if (ruleSet->tagRules(element.localNameForSelectorMatching()))
-      element.setNeedsStyleRecalc(LocalStyleChange,
-                                  StyleChangeReasonForTracing::create(
-                                      StyleChangeReason::StyleSheetChange));
   }
   m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists,
                                                      element);
+}
+
+void StyleEngine::scheduleTypeRuleSetInvalidations(
+    ContainerNode& node,
+    const HeapHashSet<Member<RuleSet>>& ruleSets) {
+  InvalidationLists invalidationLists;
+  for (const auto& ruleSet : ruleSets)
+    ruleSet->features().collectTypeRuleInvalidationSet(invalidationLists, node);
+  DCHECK(invalidationLists.siblings.isEmpty());
+  m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, node);
 }
 
 void StyleEngine::invalidateSlottedElements(HTMLSlotElement& slot) {
@@ -853,6 +863,8 @@ void StyleEngine::scheduleInvalidationsForRuleSets(
 
   TRACE_EVENT0("blink,blink_style",
                "StyleEngine::scheduleInvalidationsForRuleSets");
+
+  scheduleTypeRuleSetInvalidations(treeScope.rootNode(), ruleSets);
 
   bool invalidateSlotted = false;
   if (treeScope.rootNode().isShadowRoot()) {
@@ -1098,7 +1110,7 @@ bool StyleEngine::mediaQueryAffectedByViewportChange() {
   const auto& results =
       m_globalRuleSet.ruleFeatureSet().viewportDependentMediaQueryResults();
   for (unsigned i = 0; i < results.size(); ++i) {
-    if (evaluator.eval(results[i]->expression()) != results[i]->result())
+    if (evaluator.eval(results[i].expression()) != results[i].result())
       return true;
   }
   return false;
@@ -1109,7 +1121,7 @@ bool StyleEngine::mediaQueryAffectedByDeviceChange() {
   const auto& results =
       m_globalRuleSet.ruleFeatureSet().deviceDependentMediaQueryResults();
   for (unsigned i = 0; i < results.size(); ++i) {
-    if (evaluator.eval(results[i]->expression()) != results[i]->result())
+    if (evaluator.eval(results[i].expression()) != results[i].result())
       return true;
   }
   return false;

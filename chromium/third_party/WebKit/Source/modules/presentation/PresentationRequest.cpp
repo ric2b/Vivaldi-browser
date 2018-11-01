@@ -109,7 +109,7 @@ const AtomicString& PresentationRequest::interfaceName() const {
 }
 
 ExecutionContext* PresentationRequest::getExecutionContext() const {
-  return ContextLifecycleObserver::getExecutionContext();
+  return ContextClient::getExecutionContext();
 }
 
 void PresentationRequest::addedEventListener(
@@ -221,11 +221,25 @@ const Vector<KURL>& PresentationRequest::urls() const {
 DEFINE_TRACE(PresentationRequest) {
   visitor->trace(m_availabilityProperty);
   EventTargetWithInlineData::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 PresentationRequest::PresentationRequest(ExecutionContext* executionContext,
                                          const Vector<KURL>& urls)
-    : ContextLifecycleObserver(executionContext), m_urls(urls) {}
+    : ContextClient(executionContext), m_urls(urls) {
+  recordOriginTypeAccess(executionContext);
+}
+
+void PresentationRequest::recordOriginTypeAccess(
+    ExecutionContext* executionContext) const {
+  DCHECK(executionContext);
+  if (executionContext->isSecureContext()) {
+    UseCounter::count(executionContext,
+                      UseCounter::PresentationRequestSecureOrigin);
+  } else {
+    UseCounter::count(executionContext,
+                      UseCounter::PresentationRequestInsecureOrigin);
+  }
+}
 
 }  // namespace blink

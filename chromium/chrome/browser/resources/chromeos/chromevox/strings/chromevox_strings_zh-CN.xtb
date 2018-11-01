@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">单选按钮组</translation>
 <translation id="2471138580042810658">6级标题标记</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{1个星号}other{#个星号}}</translation>
+<translation id="2523609930580546572">ChromeVox 教程</translation>
 <translation id="2525706221823668172">Chromebook 键盘快捷键</translation>
 <translation id="2549392850788122959">已重置“<ph name="KEY" />”。</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
@@ -222,7 +223,6 @@
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">访问过的链接</translation>
 <translation id="3232388865800379423">弹出式按钮</translation>
-<translation id="323731244387692321">打开ChromeVox键盘帮助</translation>
 <translation id="3241052487511142956">上一个访问过的链接</translation>
 <translation id="3286390186030710347">滑块</translation>
 <translation id="3299925995433437805">不存在下一个访问过的链接。</translation>
@@ -377,6 +377,7 @@
 <translation id="4372435075475052704">最小值为<ph name="X" /></translation>
 <translation id="4372705107434148843">关闭语音</translation>
 <translation id="4373197658375206385">不存在上一个非链接项。</translation>
+<translation id="4376316291247992553">以盲文的形式查看图形</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">重置</translation>
 <translation id="4471074325120394300">无任何链接。</translation>
@@ -719,6 +720,7 @@
 <translation id="7693840228159394336">上一个单选按钮</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />，<ph name="NAME" />，密码文本框</translation>
+<translation id="7776293189010177726">打开 ChromeVox 菜单</translation>
 <translation id="7805247615045262757">默认导航</translation>
 <translation id="7805768142964895445">状态</translation>
 <translation id="7810781339813764006">下一个群组</translation>

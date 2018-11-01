@@ -31,22 +31,23 @@
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/ImageBufferSurface.h"
+#include "platform/graphics/paint/PaintRecorder.h"
+#include "platform/graphics/paint/PaintSurface.h"
 #include "public/platform/WebExternalTextureLayer.h"
-#include "public/platform/WebThread.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkSurface.h"
+#include "ui/gfx/color_space.h"
 #include "wtf/Allocator.h"
 #include "wtf/Deque.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/WeakPtr.h"
+
 #include <memory>
 
 class SkImage;
 struct SkImageInfo;
-class SkPictureRecorder;
 
 namespace gpu {
 namespace gles2 {
@@ -78,7 +79,6 @@ class SharedContextRateLimiter;
 
 class PLATFORM_EXPORT Canvas2DLayerBridge
     : public NON_EXPORTED_BASE(cc::TextureLayerClient),
-      public WebThread::TaskObserver,
       public RefCounted<Canvas2DLayerBridge> {
   WTF_MAKE_NONCOPYABLE(Canvas2DLayerBridge);
 
@@ -94,7 +94,8 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
                       int msaaSampleCount,
                       OpacityMode,
                       AccelerationMode,
-                      sk_sp<SkColorSpace>,
+                      const gfx::ColorSpace&,
+                      bool skSurfacesUseColorSpace,
                       SkColorType);
 
   ~Canvas2DLayerBridge() override;
@@ -110,11 +111,12 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
                        bool lostResource);
 
   // ImageBufferSurface implementation
-  void finalizeFrame(const FloatRect& dirtyRect);
+  void finalizeFrame();
+  void doPaintInvalidation(const FloatRect& dirtyRect);
   void willWritePixels();
   void willOverwriteAllPixels();
   void willOverwriteCanvas();
-  SkCanvas* canvas();
+  PaintCanvas* canvas();
   void disableDeferral(DisableDeferralReason);
   bool checkSurfaceValid();
   bool restoreSurface();
@@ -131,7 +133,6 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
                    int y);
   void flush();
   void flushGpu();
-  void prepareSurfaceForPaintingIfNeeded();
   bool isHidden() { return m_isHidden; }
   OpacityMode opacityMode() { return m_opacityMode; }
   void dontUseIdleSchedulingForTesting() {
@@ -141,7 +142,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
   void beginDestruction();
   void hibernate();
   bool isHibernating() const { return m_hibernationImage.get(); }
-  sk_sp<SkColorSpace> colorSpace() const { return m_colorSpace; }
+  sk_sp<SkColorSpace> skSurfaceColorSpace() const;
   SkColorType colorType() const { return m_colorType; }
 
   bool hasRecordedDrawCommands() { return m_haveRecordedDrawCommands; }
@@ -202,14 +203,9 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
   void startRecording();
   void skipQueuedDrawCommands();
   void flushRecordingOnly();
-  void unregisterTaskObserver();
   void reportSurfaceCreationFailure();
 
-  // WebThread::TaskOberver implementation
-  void willProcessTask() override;
-  void didProcessTask() override;
-
-  SkSurface* getOrCreateSurface(AccelerationHint = PreferAcceleration);
+  PaintSurface* getOrCreateSurface(AccelerationHint = PreferAcceleration);
   bool shouldAccelerate(AccelerationHint) const;
 
   // Returns the GL filter associated with |m_filterQuality|.
@@ -245,8 +241,8 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
   // changing texture bindings.
   void resetSkiaTextureBinding();
 
-  std::unique_ptr<SkPictureRecorder> m_recorder;
-  sk_sp<SkSurface> m_surface;
+  std::unique_ptr<PaintRecorder> m_recorder;
+  sk_sp<PaintSurface> m_surface;
   sk_sp<SkImage> m_hibernationImage;
   int m_initialSurfaceSaveCount;
   std::unique_ptr<WebExternalTextureLayer> m_layer;
@@ -256,14 +252,13 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
   WeakPtrFactory<Canvas2DLayerBridge> m_weakPtrFactory;
   ImageBuffer* m_imageBuffer;
   int m_msaaSampleCount;
+  int m_framesSinceLastCommit = 0;
   size_t m_bytesAllocated;
   bool m_haveRecordedDrawCommands;
   bool m_destructionInProgress;
   SkFilterQuality m_filterQuality;
   bool m_isHidden;
   bool m_isDeferralEnabled;
-  bool m_isRegisteredTaskObserver;
-  bool m_renderingTaskCompletedForCurrentFrame;
   bool m_softwareRenderingWhileHidden;
   bool m_surfaceCreationFailedAtLeastOnce = false;
   bool m_hibernationScheduled = false;
@@ -289,7 +284,10 @@ class PLATFORM_EXPORT Canvas2DLayerBridge
   AccelerationMode m_accelerationMode;
   OpacityMode m_opacityMode;
   const IntSize m_size;
-  sk_sp<SkColorSpace> m_colorSpace;
+  // The color space that the compositor is to use. This will always be
+  // defined.
+  gfx::ColorSpace m_colorSpace;
+  bool m_skSurfacesUseColorSpace = false;
   SkColorType m_colorType;
   int m_recordingPixelCount;
 

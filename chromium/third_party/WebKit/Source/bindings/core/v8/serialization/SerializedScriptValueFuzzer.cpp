@@ -4,23 +4,22 @@
 
 #include "bindings/core/v8/SerializedScriptValue.h"
 
-#include "bindings/core/v8/ScriptState.h"
-#include "core/dom/MessagePort.h"
-#include "core/frame/Settings.h"
-#include "core/testing/DummyPageHolder.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/testing/BlinkFuzzerTestSupport.h"
-#include "platform/testing/UnitTestHelpers.h"
-#include "public/platform/WebBlobInfo.h"
-#include "public/platform/WebMessagePortChannel.h"
-#include "wtf/StringHasher.h"
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <v8.h>
 
-using namespace blink;
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/V8PerIsolateData.h"
+#include "core/dom/MessagePort.h"
+#include "core/frame/Settings.h"
+#include "core/testing/DummyPageHolder.h"
+#include "platform/testing/BlinkFuzzerTestSupport.h"
+#include "public/platform/WebBlobInfo.h"
+#include "public/platform/WebMessagePortChannel.h"
+#include "v8/include/v8.h"
+#include "wtf/StringHasher.h"
+
+namespace blink {
 
 namespace {
 
@@ -38,8 +37,7 @@ class WebMessagePortChannelImpl final : public WebMessagePortChannel {
  public:
   // WebMessagePortChannel
   void setClient(WebMessagePortChannelClient* client) override {}
-  void destroy() override { delete this; }
-  void postMessage(const WebString&, WebMessagePortChannelArray*) {
+  void postMessage(const WebString&, WebMessagePortChannelArray) {
     NOTIMPLEMENTED();
   }
   bool tryGetMessage(WebString*, WebMessagePortChannelArray&) { return false; }
@@ -47,9 +45,10 @@ class WebMessagePortChannelImpl final : public WebMessagePortChannel {
 
 }  // namespace
 
-extern "C" int LLVMFuzzerInitialize(int* argc, char*** argv) {
+int LLVMFuzzerInitialize(int* argc, char*** argv) {
+  const char kExposeGC[] = "--expose_gc";
+  v8::V8::SetFlagsFromString(kExposeGC, sizeof(kExposeGC));
   InitializeBlinkFuzzTest(argc, argv);
-  RuntimeEnabledFeatures::setV8BasedStructuredCloneEnabled(true);
   pageHolder = DummyPageHolder::create().release();
   pageHolder->frame().settings()->setScriptEnabled(true);
   blobInfoArray = new WebBlobInfoArray();
@@ -60,7 +59,7 @@ extern "C" int LLVMFuzzerInitialize(int* argc, char*** argv) {
   return 0;
 }
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Odd sizes are handled in various ways, depending how they arrive.
   // Let's not worry about that case here.
   if (size % sizeof(UChar))
@@ -97,13 +96,24 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   CHECK(!tryCatch.HasCaught())
       << "deserialize() should return null rather than throwing an exception.";
 
-  // Clean up. We have to periodically run pending tasks so that scheduled
-  // Oilpan GC occurs.
-  static int iterations = 0;
-  if (iterations++ == 2048) {
-    testing::runPendingTasks();
-    iterations = 0;
-  }
+  // Request a V8 GC. Oilpan will be invoked by the GC epilogue.
+  //
+  // Multiple GCs may be required to ensure everything is collected (due to
+  // a chain of persistent handles), so some objects may not be collected until
+  // a subsequent iteration. This is slow enough as is, so we compromise on one
+  // major GC, as opposed to the 5 used in V8GCController for unit tests.
+  V8PerIsolateData::mainThreadIsolate()->RequestGarbageCollectionForTesting(
+      v8::Isolate::kFullGarbageCollection);
 
   return 0;
+}
+
+}  // namespace blink
+
+extern "C" int LLVMFuzzerInitialize(int* argc, char*** argv) {
+  return blink::LLVMFuzzerInitialize(argc, argv);
+}
+
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+  return blink::LLVMFuzzerTestOneInput(data, size);
 }

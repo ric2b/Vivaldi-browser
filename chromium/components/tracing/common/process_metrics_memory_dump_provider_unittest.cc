@@ -7,15 +7,26 @@
 #include <stdint.h>
 
 #include <memory>
+#include <unordered_set>
 
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/process/process_metrics.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/process_memory_maps.h"
 #include "base/trace_event/process_memory_totals.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_MACOSX)
+#include <libgen.h>
+#include <mach-o/dyld.h>
+#endif
+
+#if defined(OS_WIN)
+#include <base/strings/sys_string_conversions.h>
+#endif
 
 namespace tracing {
 
@@ -123,6 +134,25 @@ void CreateTempFileWithContents(const char* contents, base::ScopedFILE* file) {
 
 }  // namespace
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+
+class MockMemoryDumpProvider : public ProcessMetricsMemoryDumpProvider {
+ public:
+  MockMemoryDumpProvider(base::ProcessId process);
+  ~MockMemoryDumpProvider() override;
+};
+
+std::unordered_set<MockMemoryDumpProvider*> g_live_mocks;
+std::unordered_set<MockMemoryDumpProvider*> g_dead_mocks;
+
+MockMemoryDumpProvider::MockMemoryDumpProvider(base::ProcessId process)
+    : ProcessMetricsMemoryDumpProvider(process) {
+  g_live_mocks.insert(this);
+}
+
+MockMemoryDumpProvider::~MockMemoryDumpProvider() {
+  g_live_mocks.erase(this);
+  g_dead_mocks.insert(this);
+}
 
 TEST(ProcessMetricsMemoryDumpProviderTest, DumpRSS) {
   const base::trace_event::MemoryDumpArgs high_detail_args = {
@@ -235,6 +265,27 @@ TEST(ProcessMetricsMemoryDumpProviderTest, ParseProcSmaps) {
   EXPECT_EQ(4 * 1024UL, regions_2[0].byte_stats_private_dirty_resident);
   EXPECT_EQ(0 * 1024UL, regions_2[0].byte_stats_swapped);
 }
+
+TEST(ProcessMetricsMemoryDumpProviderTest, DoubleRegister) {
+  auto factory = [](base::ProcessId process) {
+    return std::unique_ptr<ProcessMetricsMemoryDumpProvider>(
+        new MockMemoryDumpProvider(process));
+  };
+  ProcessMetricsMemoryDumpProvider::factory_for_testing = factory;
+  ProcessMetricsMemoryDumpProvider::RegisterForProcess(1);
+  ProcessMetricsMemoryDumpProvider::RegisterForProcess(1);
+  ASSERT_EQ(1u, g_live_mocks.size());
+  ASSERT_EQ(1u, g_dead_mocks.size());
+  auto* manager = base::trace_event::MemoryDumpManager::GetInstance();
+  MockMemoryDumpProvider* live_mock = *g_live_mocks.begin();
+  EXPECT_TRUE(manager->IsDumpProviderRegisteredForTesting(live_mock));
+  auto* dead_mock = *g_dead_mocks.begin();
+  EXPECT_FALSE(manager->IsDumpProviderRegisteredForTesting(dead_mock));
+  ProcessMetricsMemoryDumpProvider::UnregisterForProcess(1);
+  g_live_mocks.clear();
+  g_dead_mocks.clear();
+}
+
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 TEST(ProcessMetricsMemoryDumpProviderTest, TestPollFastMemoryTotal) {
@@ -269,4 +320,118 @@ TEST(ProcessMetricsMemoryDumpProviderTest, TestPollFastMemoryTotal) {
 #endif
 }
 
+#if defined(OS_WIN)
+
+void DummyFunction() {}
+
+TEST(ProcessMetricsMemoryDumpProviderTest, TestWinModuleReading) {
+  using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+
+  ProcessMetricsMemoryDumpProvider mdp(base::kNullProcessId);
+  base::trace_event::MemoryDumpArgs args;
+  base::trace_event::ProcessMemoryDump dump(nullptr, args);
+  ASSERT_TRUE(mdp.DumpProcessMemoryMaps(args, &dump));
+  ASSERT_TRUE(dump.has_process_mmaps());
+
+  wchar_t module_name[MAX_PATH];
+  DWORD result = GetModuleFileName(nullptr, module_name, MAX_PATH);
+  ASSERT_TRUE(result);
+  std::string executable_name = base::SysWideToNativeMB(module_name);
+
+  HMODULE module_containing_dummy = nullptr;
+  uintptr_t dummy_function_address =
+      reinterpret_cast<uintptr_t>(&DummyFunction);
+  result = GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                             reinterpret_cast<LPCWSTR>(dummy_function_address),
+                             &module_containing_dummy);
+  ASSERT_TRUE(result);
+  result = GetModuleFileName(nullptr, module_name, MAX_PATH);
+  ASSERT_TRUE(result);
+  std::string module_containing_dummy_name =
+      base::SysWideToNativeMB(module_name);
+
+  bool found_executable = false;
+  bool found_region_with_dummy = false;
+  for (const VMRegion& region : dump.process_mmaps()->vm_regions()) {
+    EXPECT_NE(0u, region.start_address);
+    EXPECT_NE(0u, region.size_in_bytes);
+
+    if (region.mapped_file.find(executable_name) != std::string::npos)
+      found_executable = true;
+
+    if (dummy_function_address >= region.start_address &&
+        dummy_function_address < region.start_address + region.size_in_bytes) {
+      found_region_with_dummy = true;
+      EXPECT_EQ(module_containing_dummy_name, region.mapped_file);
+    }
+  }
+  EXPECT_TRUE(found_executable);
+  EXPECT_TRUE(found_region_with_dummy);
+}
+#endif
+
+#if defined(OS_MACOSX)
+TEST(ProcessMetricsMemoryDumpProviderTest, TestMachOReading) {
+  using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+  ProcessMetricsMemoryDumpProvider mdp(base::kNullProcessId);
+  base::trace_event::MemoryDumpArgs args;
+  base::trace_event::ProcessMemoryDump dump(nullptr, args);
+  ASSERT_TRUE(mdp.DumpProcessMemoryMaps(args, &dump));
+  ASSERT_TRUE(dump.has_process_mmaps());
+  uint32_t size = 100;
+  char full_path[size];
+  int result = _NSGetExecutablePath(full_path, &size);
+  ASSERT_EQ(0, result);
+  std::string name = basename(full_path);
+
+  uint64_t components_unittests_resident_pages = 0;
+  bool found_appkit = false;
+  for (const VMRegion& region : dump.process_mmaps()->vm_regions()) {
+    EXPECT_NE(0u, region.start_address);
+    EXPECT_NE(0u, region.size_in_bytes);
+
+    EXPECT_LT(region.size_in_bytes, 1ull << 32);
+    uint32_t required_protection_flags =
+        VMRegion::kProtectionFlagsRead | VMRegion::kProtectionFlagsExec;
+    if (region.mapped_file.find(name) != std::string::npos &&
+        region.protection_flags == required_protection_flags) {
+      components_unittests_resident_pages +=
+          region.byte_stats_private_dirty_resident +
+          region.byte_stats_shared_dirty_resident +
+          region.byte_stats_private_clean_resident +
+          region.byte_stats_shared_clean_resident;
+    }
+
+    if (region.mapped_file.find("AppKit") != std::string::npos) {
+      found_appkit = true;
+    }
+  }
+  EXPECT_GT(components_unittests_resident_pages, 0u);
+  EXPECT_TRUE(found_appkit);
+}
+
+TEST(ProcessMetricsMemoryDumpProviderTest, NoDuplicateRegions) {
+  using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+  ProcessMetricsMemoryDumpProvider mdp(base::kNullProcessId);
+  base::trace_event::MemoryDumpArgs args;
+  base::trace_event::ProcessMemoryDump dump(nullptr, args);
+  ASSERT_TRUE(mdp.DumpProcessMemoryMaps(args, &dump));
+  ASSERT_TRUE(dump.has_process_mmaps());
+
+  std::vector<VMRegion> regions;
+  regions.reserve(dump.process_mmaps()->vm_regions().size());
+  for (const VMRegion& region : dump.process_mmaps()->vm_regions())
+    regions.push_back(region);
+  std::sort(regions.begin(), regions.end(),
+            [](const VMRegion& a, const VMRegion& b) -> bool {
+              return a.start_address < b.start_address;
+            });
+  uint64_t last_address = 0;
+  for (const VMRegion& region : regions) {
+    EXPECT_GE(region.start_address, last_address);
+    last_address = region.start_address + region.size_in_bytes;
+  }
+}
+
+#endif  // defined(OS_MACOSX)
 }  // namespace tracing

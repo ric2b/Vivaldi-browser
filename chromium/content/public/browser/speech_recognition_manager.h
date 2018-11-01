@@ -75,17 +75,6 @@ class SpeechRecognitionManager {
                          int render_view_id,
                          int request_id) const = 0;
 
-  // Returns true if the OS reports existence of audio recording devices.
-  virtual bool HasAudioInputDevices() = 0;
-
-  // Returns a human readable string for the model/make of the active audio
-  // input device for this computer.
-  virtual base::string16 GetAudioInputDeviceModel() = 0;
-
-  // Invokes the platform provided microphone settings UI in a non-blocking way,
-  // via the BrowserThread::FILE thread.
-  virtual void ShowAudioInputSettings() = 0;
-
  protected:
   virtual ~SpeechRecognitionManager() {}
 

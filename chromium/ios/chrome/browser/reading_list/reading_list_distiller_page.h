@@ -91,6 +91,8 @@ class ReadingListDistillerPage : public dom_distiller::DistillerPageIOS {
   // Continue the distillation on the page that is currently loaded in
   // |CurrentWebState()|.
   void ContinuePageDistillation();
+  // Starts the fetching of |page_url|'s favicon.
+  void FetchFavicon(const GURL& page_url);
 
   // Continues distillation by calling superclass |OnLoadURLDone|.
   void DelayedOnLoadURLDone(int delayed_task_id);

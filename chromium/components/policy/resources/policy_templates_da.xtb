@@ -26,6 +26,9 @@
       Hvis den angives som Sand eller slet ikke indstilles, rapporteres statistikken.</translation>
 <translation id="1046484220783400299">Aktivér forældede funktioner på webplatformen i en begrænset periode</translation>
 <translation id="1047128214168693844">Tillad ikke, at websites sporer brugerens fysiske placering</translation>
+<translation id="1049138910114524876">Konfigurerer den landestandard, der gennemtvinges på loginskærmen for <ph name="PRODUCT_OS_NAME" />.
+
+Hvis denne politik er angivet, vises loginskærmen i den landestandard, der er angivet af den første værdi i denne politik (politikken er defineret som en liste til fremadrettet kompatibilitet). Hvis politikken ikke er angivet eller er angivet som en tom liste, vises loginskærmen i den landestandard, der blev anvendt i den forrige brugersession. Hvis denne politik er angivet med en værdi, der ikke er en gyldig landestandard, vises loginskærmen i en reservelandestandard (som i øjeblikket er en-US).</translation>
 <translation id="1062011392452772310">Aktivér fjernattestering for enheden</translation>
 <translation id="1090892140761957285">Webadresse til validering af token til klientgodkendelse for fjernadgang.
 
@@ -270,6 +273,7 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
       Hvis en indstilling ikke er specificeret, anvendes en standardværdi.
 
       Hvis denne politik ikke er indstillet, anvendes standarder for alle indstillinger.</translation>
+<translation id="1960840544413786116">Hvorvidt der skal gives tilladelse til certifikater, som er udstedt af lokale tillidsankre og mangler udvidelsen subjectAlternativeName</translation>
 <translation id="1964634611280150550">Inkognitotilstand er deaktiveret</translation>
 <translation id="1964802606569741174">Denne politik påvirker ikke YouTube-appen til Android. Hvis Beskyttet tilstand på YouTube skal håndhæves, skal installation af YouTube-appen til Android ikke tillades.</translation>
 <translation id="1969212217917526199">Tilsidesætter politikker i fejlfindingsbuilds for hosten for fjernadgang.
@@ -324,6 +328,21 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
       Hvis HardwareAccelerationModeEnabled er angivet til Falsk, ignoreres Disable3DAPIs, og det svarer til, at Disable3DAPIs er angivet til Sand.</translation>
 <translation id="2168397434410358693">Inaktivitetsforsinkelse, når strømforsyningen er tilsluttet</translation>
 <translation id="2170233653554726857">Aktivér WPAD-optimering</translation>
+<translation id="2176565653304920879">Når denne politik er indstillet, fungerer flowet for registrering af tidszoner på en af de følgende måder, alt efter hvilken værdi der bruges i indstillingen:
+
+      Hvis der er indstillet til TimezoneAutomaticDetectionUsersDecide, kan brugerne kontrollere den automatiske registrering af tidszoner med de almindelige kontrolelementer i chrome://settings.
+
+      Hvis der er indstillet til TimezoneAutomaticDetectionDisabled, bliver de automatiske kontrolelementer for tidszoner i chrome://settings deaktiveret. Automatisk registrering af tidszoner vil altid være deaktiveret.
+
+      Hvis der er indstillet til TimezoneAutomaticDetectionIPOnly, bliver kontrolelementerne for tidszone i chrome://settings deaktiveret. Automatisk registrering af tidszoner vil altid være aktiveret. Registreringen af tidszoner bruger udelukkende IP-metoden til at fastlægge placeringen.
+
+      Hvis der indstilles til TimezoneAutomaticDetectionSendWiFiAccessPoints, bliver kontrolelementerne for tidszoner i chrome://settings deaktiveret. Automatisk registrering af tidszoner vil altid være aktiveret. Listen over synlige Wi-Fi-adgangspunkter sendes altid til Geolocation API-serveren, så der kan foretages detaljeret registrering af tidszoner.
+
+      Hvis der indstilles til TimezoneAutomaticDetectionSendAllLocationInfo, bliver kontrolelementerne for tidszoner i chrome://settings deaktiveret. Automatisk registrering af tidszoner vil altid være aktiveret. Placeringsoplysninger (som f.eks. Wi-Fi-adgangspunkter, tilgængelige mobiltårne, GPS) bliver sendt til en server, så der kan foretages detaljeret registrering af tidszoner.
+
+      Hvis politikken ikke indstilles, svarer det til, at TimezoneAutomaticDetectionUsersDecide er indstillet.
+
+      Hvis politikken SystemTimezone indstilles, tilsidesættes denne politik. I dette tilfælde deaktiveres registrering af tidszoner helt.</translation>
 <translation id="2178899310296064282">Gennemtving som minimum Moderat begrænset tilstand på YouTube</translation>
 <translation id="2183294522275408937">Denne indstilling styrer, hvor ofte låseskærmen kræver, at adgangskoden indtastes for at fortsætte med at bruge hurtig oplåsning. Når du går ind på låseskærmen, vil hurtig oplåsning ikke være tilgængelig, hvis den seneste adgang med adgangskode overskrider denne indstilling. Hvis brugeren bliver på låseskærmen ud over det angivne tidsrum, anmodes der om en adgangskode, næste gang brugeren indtaster den forkerte kode eller går ind på låseskærmen, alt efter hvad der kommer først.
 
@@ -360,11 +379,12 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 
       Hvis denne indstilling ikke er konfigureret, kan brugerne vælge, om stavekontrol skal aktiveres eller ej.</translation>
 <translation id="2294382669900758280">Videoafspilning i Android-apps tages ikke med i betragtning, selv hvis denne politik angives som <ph name="TRUE" />.</translation>
+<translation id="2298647742290373702">Konfigurer standardsiden Ny fane i <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2299220924812062390">Angiv en liste over aktiverede plugins</translation>
 <translation id="2309390639296060546">Standardindstilling for geoplacering</translation>
 <translation id="2312134445771258233">Giver dig mulighed for at konfigurere de sider, der indlæses ved opstart. Indholdet af listen "Webadresser, der skal åbnes ved opstart" ignoreres, medmindre du vælger "Åbn en liste over webadresser" i "Handling ved opstart".</translation>
+<translation id="23323722127921515">Viser Google Cast-ikonet på værktøjslinjen</translation>
 <translation id="2337466621458842053">Giver dig mulighed for at oprette en liste med webadressemønstre, der angiver websites, hvor billedvisning tillades. Hvis denne politik ikke er angivet, anvendes den globale standardværdi for alle websites, enten fra politikken "DefaultImagesSetting", hvis den er angivet, eller fra brugerens personlige konfiguration.</translation>
-<translation id="2366415278352956652">Aktiverer casting</translation>
 <translation id="2372547058085956601">Forsinkelse for automatisk login på offentlige sessioner.
 
       Hvis politikken |DeviceLocalAccountAutoLoginId| ikke er angivet, har den ingen effekt. Derudover:
@@ -492,6 +512,7 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 
       Hvis denne politik er indstillet til False, vises en fejlmeddelelse i stedet for meddelelsen om netværkskonfiguration.</translation>
 <translation id="2498238926436517902">Skjul altid hylden automatisk</translation>
+<translation id="2503514368596117142">Konfigurer politikker for Google Cast, som er en funktion, der giver brugerne mulighed for at sende indholdet af faner, websites eller skrivebordet fra browseren til eksterne skærme og lydsystemer.</translation>
 <translation id="2514328368635166290">Angiver den foretrukne ikonwebadressen for standardsøgemaskinen. Denne politik er valgfri. Hvis den ikke er angivet, vises der ikke noget ikon for søgeudbyderen. Denne politik respekteres kun, hvis politikken "DefaultSearchProviderEnabled" er aktiveret.</translation>
 <translation id="2516525961735516234">Angiver, om videoaktivitet påvirker strømstyringen.
 
@@ -509,6 +530,9 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 <translation id="2529880111512635313">Konfigurer listen over udvidelser og apps med tvungen installation</translation>
 <translation id="253135976343875019">Advarsel om inaktivitetsforsinkelse, når strømforsyningen er tilsluttet</translation>
 <translation id="2552966063069741410">Tidszone</translation>
+<translation id="2558917182010914102">Hvis denne politik angives som Sand eller ikke angives, aktiveres Google Cast, og brugerne kan starte funktionen via appmenuen, sidegenvejsmenuer, mediekontrolelementer på Cast-kompatible websites og (hvis det er angivet) via Cast-ikonet på værktøjslinjen.
+
+          Hvis denne politik angives som Falsk, deaktiveres Google Cast.</translation>
 <translation id="2562339630163277285">Angiver webadressen for den søgemaskine, der bruges til at give direkte resultater. Webadressen skal indeholde strengen <ph name="SEARCH_TERM_MARKER" />, som på forespørgselstidspunktet erstattes af den tekst, som brugeren har indtastet hidtil.
 
           Denne politik er valgfri. Hvis den ikke angives, gives der ikke direkte søgeresultater.
@@ -901,6 +925,11 @@ Hvis kompatabilitet med en fejlbehæftet server skal opretholdes, kan denne poli
 
           Hvis denne indstilling ikke er konfigureret, håndhæves der ingen begrænsninger for de acceptable udvidelses-/apptyper.</translation>
 <translation id="3780152581321609624">Inkluder en port, der ikke er standard, i Kerberos-SPN</translation>
+<translation id="3780319008680229708">Hvis denne politik angives som Sand, vises Cast-ikonet altid på værktøjslinjen eller i prikmenuen, og brugerne kan ikke fjerne det.
+
+          Hvis denne politik angives som Falsk eller ikke angives, kan brugerne fastgøre eller fjerne ikonet via genvejsmenuen.
+
+          Hvis politikken "EnableMediaRouter" angives som Falsk, træder denne politik ikke i kraft, og ikonet vises ikke på værktøjslinjen.</translation>
 <translation id="3788662722837364290">Indstillinger for strømstyring, når brugeren bliver inaktiv</translation>
 <translation id="3793095274466276777">Konfigurerer standardbrowserens tjek i <ph name="PRODUCT_NAME" /> og forhindrer brugerne i at ændre dem. 
 
@@ -999,6 +1028,9 @@ Hvis denne indstilling ikke er angivet, vil <ph name="PRODUCT_NAME" /> tillade b
 
           Hvis denne indstilling ikke er konfigureret eller er angivet til Falsk, kan brugerne overføre filer til Google Drev.</translation>
 <translation id="3915395663995367577">Webadresse til en proxyfil af typen .pac</translation>
+<translation id="3926940573869375969">Konfigurerer, hvilke tastaturlayouts der tillades på loginskærmen for <ph name="PRODUCT_OS_NAME" />.
+
+Hvis denne politik er angivet med en liste over indtastningsmetode-id'er, vil de angivne indtastningsmetoder være tilgængelige på loginskærmen. Den første angivne indtastningsmetode udvælges på forhånd. Mens en bruger-pod fokuserer på loginskærmen, vil den indtastningsmetode, som brugeren har brugt mindst for nylig, være tilgængelig udover de indtastningsmetoder, der er angivet i denne politik. Hvis denne politik ikke er angivet, hentes indtastningsmetoderne på loginskærmen fra den landestandard, der gælder for loginskærmen. Værdier, der ikke er gyldige indtastningsmetode-id'er, ignoreres.</translation>
 <translation id="3939893074578116847">Send netværkspakker til administrationsserveren for at overvåge onlinestatus, så
       serveren kan registrere, om enheden er offline.
 
@@ -1081,6 +1113,17 @@ Hvis denne indstilling ikke er angivet, vil <ph name="PRODUCT_NAME" /> tillade b
 
       Hvis denne politik er angivet som falsk, kan brugerne ikke låse skærmen (de kan kun logge ud fra brugersessionen). Hvis indstillingen er angivet som sand eller ikke er angivet, kan brugere, der har godkendt med en adgangskode, låse skærmen.</translation>
 <translation id="4121350739760194865">Undgå, at appkampagner vises på ny fane-siden</translation>
+<translation id="4133301551755536858">Konfigurerer webadressen til standardsiden Ny fane i <ph name="PRODUCT_NAME" /> og forhindrer, at brugerne ændrer den.
+
+          Siden Ny fane er den side, der åbnes, når der oprettes nye faner (herunder den, der åbnes i nye vinduer).
+
+          Denne politik afgør ikke, hvilke sider der skal åbnes ved start. Disse kontrolleres af RestoreOnStartup-politikkerne, som dog godt kan angive åbning af siden Ny fane.
+
+          NewTabPageLocation kan indstilles til en webadresse, som du angiver her. Den påvirker også startsiden, hvis den er indstillet til både at åbne siden Ny fane og opstartssiden, hvis denne er indstillet til siden Ny fane.
+
+          Hvis politikken ikke er angivet eller efterlades tom, bruges standardsiden for nye faner.
+
+          Denne politik er ikke tilgængelig i Windows-forekomster, der ikke er knyttet til et Active Directory-domæne.</translation>
 <translation id="4147054660081653009">Klientcertifikat til at oprette forbindelse til RemoteAccessHostTokenValidationUrl.
 
           Hvis denne politik er indstillet, benytter hosten et klientcertifikat med det angivne udstederkaldenavn (CN) til godkendelse over for RemoteAccessHostTokenValidationUrl. Angiv det til "*" for at benytte et hvilket som helst tilgængeligt certifikat.
@@ -1110,6 +1153,7 @@ Hvis denne indstilling ikke er angivet, vil <ph name="PRODUCT_NAME" /> tillade b
           Hvis denne politik ikke angives, anvendes den globale standardværdi på alle websites, enten fra politikken "DefaultKeygenSetting", hvis den er angivet, eller fra brugerens personlige konfiguration.</translation>
 <translation id="4239720644496144453">Cachen bruges ikke til Android-apps. Hvis flere brugere installerer den samme Android-app, downloades den på ny for hver bruger.</translation>
 <translation id="4250680216510889253">Nej</translation>
+<translation id="4261820385751181068">Landestandard for loginskærme på enheder</translation>
 <translation id="4272136423200695428">Aktiverer påtvungen login for <ph name="PRODUCT_NAME" />.</translation>
 <translation id="427632463972968153">Angiver de parametre, der anvendes ved billedsøgning med POST. De består af kommaseparerede navne/værdipar. Hvis en værdi er en skabelonparameter såsom {imageThumbnail} i ovenstående eksempel, bliver den erstattet af data om rigtige miniaturebilleder.
 
@@ -1158,9 +1202,9 @@ Mens selve politikken understøttes på ovenstående platforme, kan den funktion
 <translation id="4467952432486360968">Bloker cookies fra tredjeparter</translation>
 <translation id="4474167089968829729">Aktivér lagring af adgangskoder i adgangskodeadministratoren</translation>
 <translation id="4476769083125004742">Hvis denne politik angives som <ph name="BLOCK_GEOLOCATION_SETTING" />, kan Android-apps ikke få adgang til placeringsoplysninger. Hvis du angiver denne politik til en anden værdi eller ikke angiver den, bliver brugeren bedt om at give sit samtykke, når en Android-app vil have adgang til placeringsoplysninger.</translation>
-<translation id="447686899376429408">Hvis politikken er angivet som Sand eller ikke er angivet, kan brugerne caste faner, websites eller skrivebordet fra browseren. Hvis politikken er angivet som Falsk, deaktiveres denne valgmulighed.</translation>
 <translation id="4480694116501920047">Gennemtving Beskyttet Søgning</translation>
 <translation id="4482640907922304445">Viser knappen Startside på værktøjslinjen i <ph name="PRODUCT_NAME" />. Hvis du aktiverer denne indstilling, vises knappen Startside altid. Hvis du deaktiverer denne indstilling, vises knappen Startside aldrig. Hvis du aktiverer eller deaktiverer denne indstilling, kan brugerne ikke ændre eller tilsidesætte denne indstilling i <ph name="PRODUCT_NAME" />. Hvis denne politik ikke angives, kan brugeren vælge, om knappen Startside skal vises.</translation>
+<translation id="4485425108474077672">Konfigurer webadressen for siden Ny fane</translation>
 <translation id="4492287494009043413">Deaktiver screenshots</translation>
 <translation id="450537894712826981">Konfigurerer cachestørrelsen, som <ph name="PRODUCT_NAME" /> vil bruge til at lagre cachelagrede filer på disken.
 
@@ -1268,6 +1312,7 @@ Mens selve politikken understøttes på ovenstående platforme, kan den funktion
           Hvis denne politik er angivet til sand eller ikke er angivet, indfries aktiveringslåse for skærm med strømstyring.
 
           Hvis denne politik er angivet til falsk, ignoreres anmodninger om aktiveringslås for skærm.</translation>
+<translation id="4876805738539874299">Maksimalversion af SSL er aktiveret</translation>
 <translation id="4882546920824859909">Definer domæner, der har adgang til Google Apps</translation>
 <translation id="4890209226533226410">Indstil den type lup, der er aktiveret.
 
@@ -1332,12 +1377,6 @@ Hvis denne politik er sat til True (sandt), forhindrer <ph name="PRODUCT_OS_NAME
 
 Hvis denne politik slås fra eller indstilles til False (falsk), er udviklertilstand fortsat tilgængelig for enheden.</translation>
 <translation id="5208240613060747912">Giver dig mulighed for at oprette en liste med webadressemønstre, der angiver websites, hvor det ikke er tilladt at vise underretninger. Hvis denne politik ikke angives, anvendes den globale standardværdi på alle websites, enten fra politikken "DefaultNotificationsSetting", hvis den er indstillet, eller brugerens personlige konfiguration.</translation>
-<translation id="5209594095390052164">Gør det muligt at vælge, om netværksbegrænsning er aktiveret eller ej.
-      Dette gælder for alle brugere og for alle grænseflader på enheden. Når denne indstilling er valgt,
-      beholdes begrænsningen, indtil politikken ændres for at deaktivere den.
-
-      Hvis den er indstillet til falsk, er der ingen begrænsning.
-      Hvis den er indstillet til sand, er systemet begrænset for at opnå de angivne upload- og downloadhastigheder (i kbits/s).</translation>
 <translation id="5219844027738217407">I Android-apps påvirker denne politik kun mikrofonen. Når denne politik angives som Sand, slås lyden på mikrofonen fra i alle Android-apps uden undtagelser.</translation>
 <translation id="5226033722357981948">Angiv, om pluginsøgning skal deaktiveres</translation>
 <translation id="523505283826916779">Indstillinger for hjælpefunktioner</translation>
@@ -1376,6 +1415,13 @@ Hvis denne politik slås fra eller indstilles til False (falsk), er udviklertils
 <translation id="5378985487213287085">Giver dig mulighed for at angive, om websites må vise underretninger på skrivebordet. Visning af underretninger på skrivebordet kan tillades som standard, nægtes som standard, eller brugeren kan blive spurgt, hver gang et website ønsker at vise underretninger på skrivebordet. Hvis denne politik ikke angives, anvendes "AskNotifications", og brugeren vil kunne ændre det.</translation>
 <translation id="538108065117008131">Tillad, at <ph name="PRODUCT_FRAME_NAME" /> håndterer følgende indholdstyper.</translation>
 <translation id="5388730678841939057">Vælger den strategi, der bruges til at frigøre diskplads ved automatisk oprydning (udfaset)</translation>
+<translation id="5392172595902933844">Der sendes oplysninger om status for Android tilbage til
+      serveren.
+
+      Hvis politikken indstilles til falsk eller ikke indstilles, rapporteres der ingen statusoplysninger.
+      Hvis der indstilles til sand, rapporteres der statusoplysninger.
+
+      Denne politik gælder kun, hvis Android-apps er aktiveret.</translation>
 <translation id="5395271912574071439">Aktiverer skærmning af eksterne hosts, mens en forbindelse er etableret.
 
           Hvis denne indstilling aktiveres, deaktiveres de fysiske input- og outputenheder for hosts, mens en fjernforbindelse er etableret.
@@ -1413,13 +1459,6 @@ Hvis denne politik slås fra eller indstilles til False (falsk), er udviklertils
       Når værdien af ​​denne politik er indstillet og ikke er 0, logges den demobruger, der i øjeblikket er logget på, automatisk ud, når vedkommende har været inaktiv i en angivet tidsperiode.
 
       Politikkens værdi bør angives i millisekunder.</translation>
-<translation id="5506213378070007377">Oplysninger om status for Android sendes tilbage til
-      serveren.
-
-      Hvis politikken er indstillet til falsk, rapporteres der ikke nogen statusoplysninger.
-      Hvis den er indstillet til sand eller ikke er indstillet, rapporteres der statusoplysninger.
-
-      Denne politik gælder kun, hvis Android-apps er aktiverede.</translation>
 <translation id="5511702823008968136">Aktiver bogmærkelinje</translation>
 <translation id="5512418063782665071">Startsidens webadresse</translation>
 <translation id="5523812257194833591">Automatisk login på en offentlig session efter en forsinkelse.
@@ -1453,6 +1492,11 @@ Hvis denne politik ikke er indstillet, er standardfrekvensen 3 minutter. Minimum
       Hvis du indstiller denne politik, kan brugere ikke ændre eller tilsidesætte den.
 
       Hvis politikken ikke indstilles, kan brugere vælge, om hylden skal skjules automatisk.</translation>
+<translation id="557360560705413259">Når denne indstilling er aktiveret, bruger <ph name="PRODUCT_NAME" /> commonName for et servercertificat til at matche et hostnavn, hvis certifikatet mangler en subjectAlternativeName-udvidelse, såfremt det kan godkendes og kobles til lokalt installerede CA-certifikater.
+
+      Bemærk, at dette ikke anbefales, da det kan tillade tilsidesættelse af udvidelsen nameConstraints, som begrænser de hostnavne, et givet certifikat kan godkendes til.
+
+      Hvis denne politik ikke er indstillet eller er indstillet til falsk, anses servercertifikater, som ikke indeholder en subjectAlternativeName-udvidelse med enten et DNS-navn eller en IP-adresse, ikke for pålidelige.</translation>
 <translation id="557658534286111200">Aktiverer eller deaktiverer redigering af bogmærker</translation>
 <translation id="5586942249556966598">Gør ingenting</translation>
 <translation id="5613179474872285001">Konfigurerer det påkrævede klientdomænenavn, som klienter med fjernadgang skal bruge, og forhindrer brugere i at ændre det.
@@ -1561,6 +1605,12 @@ Hvis denne politik ikke er indstillet, er standardfrekvensen 3 minutter. Minimum
 
           Hvis denne indstilling er deaktiveret eller ikke er konfigureret, oprettes der ingen proxyforbindelse for anmodninger om gnubby-godkendelse.</translation>
 <translation id="5898486742390981550">Når flere brugere er logget ind, er det kun den primære bruger, der kan bruge Android-apps.</translation>
+<translation id="5906199912611534122">Gør det muligt at aktivere eller deaktivere netværksbegrænsning.
+      Dette gælder for alle brugere og for alle grænseflader på enheden. Når denne indstilling er valgt,
+      beholdes begrænsningen, indtil politikken ændres for at deaktivere den.
+
+      Hvis den er angivet som falsk, er der ingen begrænsning.
+      Hvis den er angivet som sand, er systemet begrænset for at opnå de angivne upload- og downloadhastigheder (i kbits/s).</translation>
 <translation id="5921713479449475707">Tillad download af automatiske opdateringer via HTTP</translation>
 <translation id="5921888683953999946">Indstil standardtilstanden for hjælpefunktionen med den store markør på loginskærmen.
 
@@ -1577,6 +1627,7 @@ Hvis denne politik ikke er indstillet, er standardfrekvensen 3 minutter. Minimum
 
       Hvis du deaktiverer denne indstilling eller ikke konfigurerer en værdi, håndhæves Beskyttet søgning i Google Søgning ikke.</translation>
 <translation id="5937539742111853215">Denne politik styrer kun udviklertilstanden for <ph name="PRODUCT_OS_NAME" />. Hvis du vil forhindre adgang til Indstillinger for udviklere i Android, skal du angive politikken <ph name="DEVELOPER_TOOLS_POLICY" />.</translation>
+<translation id="5940306398763671235">Aktiverer Google Cast</translation>
 <translation id="5946082169633555022">Betakanal</translation>
 <translation id="5950205771952201658">Set i lyset af, at ikke-omfattende tilbagekaldskontroller på nettet ikke giver nogen effektiv form for sikkerhed, er disse deaktiveret som standard i <ph name="PRODUCT_NAME" /> version 19 og nyere. Ved at angive denne politik til Sand gendannes de tidligere indstillinger, så der udføres OCSP/CRL-kontroller på nettet.
 
@@ -1600,6 +1651,7 @@ Hvis denne politik ikke er indstillet, er standardfrekvensen 3 minutter. Minimum
       Hvis denne politik er angivet til Sand eller ikke er angivet, aktiveres hardwareacceleration, medmindre en bestemt GPU-funktion er blacklistet.
 
       Hvis denne politik er indstillet til Falsk, deaktiveres hardwareacceleration.</translation>
+<translation id="6070667616071269965">Tastaturlayouts for loginskærme på enheder</translation>
 <translation id="6074963268421707432">Tillad ikke, at websites viser skrivebordsunderretninger</translation>
 <translation id="6076099373507468537">Definerer listen over USB-enheder, der gerne må frigøres fra deres kernedriver, så de kan bruges via chrome.usb API direkte i en webapplikation. Poster er par bestående af et USB-leverandør-id og et produkt-id til identifikation af en bestemt hardware.
 
@@ -1881,6 +1933,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
       Hukommelsesoplysninger rapporteres dog stadigvæk til siden uanset indstillingsværdien, men de rapporterede
       størrelser er kvantiseret, og opdateringsfrekvensen er begrænset af sikkerhedsmæssige hensyn. Du kan få
       nøjagtige data i realtid ved at bruge værktøjer som f.eks. Telemetri.</translation>
+<translation id="6894178810167845842">Webadresse for siden Ny fane</translation>
 <translation id="6899705656741990703">Registrer proxyindstillinger automatisk</translation>
 <translation id="6903814433019432303">Denne politik er kun aktiv i detailtilstand.
 
@@ -2000,6 +2053,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
 <translation id="7132877481099023201">Webadresser, der får adgang til videooptagelsesenheder, uden at du skal give tilladelse hertil.</translation>
 <translation id="7167436895080860385">Tillad, at brugerne kan se adgangskoder i adgangskodeadministratoren</translation>
 <translation id="7173856672248996428">Efemerisk profil</translation>
+<translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="718956142899066210">Forbindelsestyper, der tillades til opdateringer</translation>
 <translation id="7194407337890404814">Standardsøgemaskinens navn</translation>
 <translation id="7195064223823777550">Angiv, hvad der skal ske, når brugeren slår skærmen ned.
@@ -2135,6 +2189,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
 <translation id="7625444193696794922">Angiver den udgivelseskanal, som denne enhed skal være låst til.</translation>
 <translation id="7632724434767231364">Navn på GSSAPI-samling</translation>
 <translation id="7635471475589566552">Konfigurerer applikationens landestandard i <ph name="PRODUCT_NAME" /> og forhindrer brugerne i at ændre landestandarden. Hvis du aktiverer denne indstilling, anvender <ph name="PRODUCT_NAME" /> den angivne landestandard. Hvis den konfigurerede landestandard ikke understøttes, bruges "en-US" i stedet. Hvis denne indstilling er deaktiveret eller ikke konfigureret, bruger <ph name="PRODUCT_NAME" /> enten den brugerdefinerede landestandard (hvis denne er konfigureret), systemets landestandard eller reservelandestandarden "en-US".</translation>
+<translation id="7638300388094655454">Google Cast</translation>
 <translation id="7651739109954974365">Bestemmer, om dataroaming skal aktiveres for enheden. Hvis den er indstillet til sand, tillades dataroaming. Hvis den ikke er konfigureret eller er angivet til falsk, vil dataroaming ikke være tilgængelig.</translation>
 <translation id="76810863974142048">Webadresse, hvor klienter med fjernadgang skal hente deres godkendelsestoken.
 
@@ -2216,6 +2271,7 @@ Kun hvis allowCorporateKeyUsage er angivet som "sand" for en udvidelse, kan den 
 
           Du kan finde flere valgmuligheder og detaljerede eksempler på:
           <ph name="PROXY_HELP_URL" />.</translation>
+<translation id="7781069478569868053">Siden Ny fane</translation>
 <translation id="7788511847830146438">Pr. profil</translation>
 <translation id="7796141075993499320">Giver dig mulighed for at oprette en liste over webadressemønstre, der angiver websites, som må køre plugins. Hvis denne politik ikke angives, anvendes den globale standardværdi på alle websites, enten fra politikken "DefaultPluginsSetting", hvis den er angivet, eller brugerens personlige konfiguration.</translation>
 <translation id="7801886189430766248">Når denne politik angives som sand, uploades Android-appdata til alternative servere for Android, hvorfra de gendannes, efter kompatible apps er installeret igen.
@@ -2242,19 +2298,6 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
 <translation id="7842869978353666042">Konfigurer indstillinger for Google Drev</translation>
 <translation id="7843525027689416831">Angiver de markeringer, der skal anvendes for <ph name="PRODUCT_NAME" /> ved opstart. De angivne markeringer anvendes kun på loginskærmen. Markeringer, der angives via denne politik, oveføres ikke til brugersessioner.</translation>
 <translation id="7848840259379156480">Giver dig mulighed for at konfigurere din standardgengivelse af HTML, når <ph name="PRODUCT_FRAME_NAME" /> er installeret. Standardindstillingen er, at værtsbrowseren foretager gengivelsen, men du har mulighed for at tilsidesætte denne og få <ph name="PRODUCT_FRAME_NAME" /> til at gengive HTML-sider som standard.</translation>
-<translation id="7853178359124471330">Når denne politik er angivet, foregår automatisk registrering af tidszone på en af følgende måder afhængigt af indstillingens værdi:
-
-      Hvis den er angivet til TimezoneAutomaticDetectionUsersDecide, kan brugerne automatisk kontrollere registrering af tidszone ved hjælp af normale kontrolelementer i chrome://indstillinger.
-
-      Hvis den er angivet til TimeZoneAutomaticDetectionDisabled, er automatiske kontrolelementer for tidszone i chrome://indstillinger deaktiveret. Automatisk registrering af tidszone er altid slået fra.
-
-      Hvis den er angivet til TimezoneAutomaticDetectionIPOnly, er kontrolelementer for tidszone i chrome://indstillinger deaktiveret. Automatisk registrering af tidszone er altid slået til. Registrering af tidszone anvender metoden Kun IP til at opdatere placeringen.
-
-      Hvis den er angivet til TimezoneAutomaticDetectionSendWiFiAccessPoints, er kontrolelementer for tidszone i chrome://indstillinger deaktiveret. Automatisk registrering af tidszone er altid slået til. Listen over synlige Wi-Fi-adgangspunkter sendes altid til Geolocation API-server til detaljeret registrering af tidszone.
-
-      Hvis politikken ikke er angivet, opfører den sig, som hvis TimezoneAutomaticDetectionUsersDecide er angivet.
-
-      Hvis politikken SystemTimezone er angivet, tilsidesætter den denne politik, og automatisk registrering af tidszone deaktiveres fuldstændigt.</translation>
 <translation id="787125417158068494">Hvis den er angivet til SyncDisabled eller ikke er konfigureret, er certifikater i <ph name="PRODUCT_OS_NAME" /> ikke tilgængelige for ARC-apps.
 
       Hvis den er angivet til CopyCaCerts, er alle ONC-installerede CA-certifikater med <ph name="WEB_TRUSTED_BIT" /> tilgængelige for ARC-apps.</translation>
@@ -2292,6 +2335,7 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
 <translation id="7937766917976512374">Tillad eller afvis videooptagelse</translation>
 <translation id="7941975817681987555">Forudse ikke netværkshandlinger på nogen netværksforbindelse</translation>
 <translation id="7953256619080733119">Manuel undtagelse for host for administreret bruger</translation>
+<translation id="7965394584578183156">Send altid Wi-Fi-adgangspunkter til serveren under opdatering af tidszone.</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Denne politik understøttes ikke længere. Muliggør brug af STUN- og relæservere ved oprettelse af forbindelse til en ekstern klient. Hvis denne indstilling er aktiveret, kan denne maskine finde og oprette forbindelse til eksterne værtsmaskiner, selvom de er adskilt af en firewall. Hvis denne indstilling er deaktiveret, og udgående UDP-forbindelser filtreres af firewallen, kan denne maskine kun oprette forbindelse til værtsmaskiner inden for det lokale netværk.</translation>
 <translation id="7986374692540430898">Du kan ikke tvinge Android-apps til at anvende en proxy. Bestemte proxyindstillinger er tilgængelige for Android-apps, som de kan vælge at imødekomme. Se politikken <ph name="PROXY_MODE_POLICY" /> for at få flere oplysninger.</translation>
@@ -2440,6 +2484,7 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
 <translation id="8390049129576938611">Deaktiverer den interne PDF-fremviser i <ph name="PRODUCT_NAME" />. Behandler den i stedet som download og gør det muligt for brugeren at åbne PDF-filer via standardapplikationen.
 
       Hvis politikken ikke angives, eller hvis den deaktiveres, anvendes PDF-pluginnet til at åbne PDF-filer, medmindre brugeren deaktiverer pluginnet.</translation>
+<translation id="8398203849316312944">Send altid eventuelle tilgængelige placeringssignaler til serveren under opdatering af tidszone.</translation>
 <translation id="8402079500086185021">Åbn altid PDF-filer eksternt</translation>
 <translation id="8412312801707973447">Om der udføres online kontrol af OCSP/CRL</translation>
 <translation id="8413348101535146315">Aktiverer mulighed for at afslutte processer i Jobliste for <ph name="PRODUCT_NAME" />.
@@ -2555,7 +2600,6 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
       Hvis denne politik er angivet til Falsk, kan hverken brugeren eller nogen apps eller udvidelser anvende fuldskærmstilstand.
 
       På alle platforme med undtagelse af <ph name="PRODUCT_OS_NAME" /> er terminaltilstand utilgængelig, når fuldskærmstilstand er deaktiveret.</translation>
-<translation id="8795495354632096254">Send altid Wi-Fi-adgangspunkter til serveren under opdatering af tidszone.</translation>
 <translation id="8818173863808665831">Rapportér enhedens geografiske placering.
 
       Hvis politikken ikke er angivet eller angivet til falsk, rapporteres placeringen ikke.</translation>
@@ -2676,6 +2720,11 @@ Dynamisk opdatering af denne politik understøttes i M56 og nyere versioner.</tr
       Hvis funktionen er aktiveret, kan der ikke tages screenshots ved hjælp af tastaturgenveje eller udvidelses-API'er.
 
       Hvis funktionen er deaktiveret eller ikke specificeret, kan der tages screenshots.</translation>
+<translation id="9212233969680267790">Advarsel! Politikken for den maksimale TLS-version fjernes fuldstændig fra <ph name="PRODUCT_NAME" /> omkring version 66 (omtrent februar 2018).
+
+      Hvis denne politik ikke konfigureres, anvender <ph name="PRODUCT_NAME" /> en standardmaksimumversion.
+
+      Den kan også angives til en af følgende værdier: "tls1.2" eller "tls1.3". Når der er angivet en værdi, vil <ph name="PRODUCT_NAME" /> ikke anvende SSL/TLS-versioner, der er højere end den angivne version. Ukendte værdier ignoreres.</translation>
 <translation id="9213347477683611358">Konfigurer baggrundsbillede på enhedsniveau, der vises på loginskærmen, hvis der ikke er nogen bruger, der er logget ind på enheden. Politikken angives ved at angive den webadresse, som Chrome OS-enheden kan downloade baggrundsbilledet fra, samt et kryptografisk hash, der bruges til at bekræfte downloadens integritet. Billedet skal være i JPEG-format, og filstørrelsen må ikke overskride 16 MB. Webadressen skal være tilgængelig uden godkendelse. Baggrundsbilledet downloades og gemmes i cachen. Det downloades på ny, hver gang webadressen eller hashet ændres.
 
       Politikken bør angives som en streng, der viser webadressen og hashet i JSON-format, f.eks.,

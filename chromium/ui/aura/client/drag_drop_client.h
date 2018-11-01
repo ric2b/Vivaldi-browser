@@ -34,8 +34,15 @@ class AURA_EXPORT DragDropClient {
                                aura::Window* source_window,
                                const gfx::Point& screen_location,
                                int operation,
+                               ui::DragDropTypes::DragEventSource source);
+
+  virtual int StartDragAndDrop(const ui::OSExchangeData& data,
+                               aura::Window* root_window,
+                               aura::Window* source_window,
+                               const gfx::Point& screen_location,
+                               int operation,
                                ui::DragDropTypes::DragEventSource source,
-                               bool& cancelled) = 0;
+                               bool& cancelled);
 
   // Called when a drag and drop session is cancelled.
   virtual void DragCancel() = 0;

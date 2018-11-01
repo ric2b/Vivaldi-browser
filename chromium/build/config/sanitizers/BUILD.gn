@@ -200,6 +200,9 @@ config("default_sanitizer_ldflags") {
     ldflags = []
     if (is_asan) {
       ldflags += [ "-fsanitize=address" ]
+      if (!is_mac) {
+        ldflags += [ "-fsanitize-address-use-after-scope" ]
+      }
     }
     if (is_lsan) {
       ldflags += [ "-fsanitize=leak" ]
@@ -309,6 +312,9 @@ config("asan_flags") {
   cflags = []
   if (is_asan) {
     cflags += [ "-fsanitize=address" ]
+    if (!is_mac && !is_win) {
+      cflags += [ "-fsanitize-address-use-after-scope" ]
+    }
     if (!asan_globals) {
       cflags += [
         "-mllvm",
@@ -338,9 +344,11 @@ config("link_executable") {
       # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
       assert(false, "win/asan does not work in 64-bit yet")
       libs = [ "clang_rt.asan-x86_64.lib" ]
+      ldflags = [ "-wholearchive:clang_rt.asan-x86_64.lib" ]
     } else {
       assert(target_cpu == "x86", "WinASan unsupported architecture")
       libs = [ "clang_rt.asan-i386.lib" ]
+      ldflags = [ "-wholearchive:clang_rt.asan-i386.lib" ]
     }
   }
 }
@@ -528,6 +536,12 @@ config("ubsan_vptr_flags") {
   }
 }
 
+config("fuzzing_build_mode") {
+  if (use_libfuzzer || use_afl) {
+    defines = [ "FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION" ]
+  }
+}
+
 all_sanitizer_configs = [
   ":common_sanitizer_flags",
   ":coverage_flags",
@@ -542,6 +556,7 @@ all_sanitizer_configs = [
   ":ubsan_null_flags",
   ":ubsan_security_flags",
   ":ubsan_vptr_flags",
+  ":fuzzing_build_mode",
 ]
 
 # This config is applied by default to all targets. It sets the compiler flags

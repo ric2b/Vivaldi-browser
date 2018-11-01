@@ -9,6 +9,7 @@
 #include "ash/common/ash_constants.h"
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -197,7 +198,7 @@ void SetKnownUserWallpaperFilesId(
 // A helper to set the wallpaper image for Classic Ash and Mash.
 void SetWallpaper(const gfx::ImageSkia& image,
                   wallpaper::WallpaperLayout layout) {
-  if (chrome::IsRunningInMash()) {
+  if (ash_util::IsRunningInMash()) {
     // In mash, connect to the WallpaperController interface via mojo.
     service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
@@ -205,8 +206,7 @@ void SetWallpaper(const gfx::ImageSkia& image,
       return;
 
     ash::mojom::WallpaperControllerPtr wallpaper_controller;
-    connector->BindInterface(ash_util::GetAshServiceName(),
-                             &wallpaper_controller);
+    connector->BindInterface(ash::mojom::kServiceName, &wallpaper_controller);
     // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
     // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
     wallpaper_controller->SetWallpaper(*image.bitmap(), layout);
@@ -888,7 +888,7 @@ WallpaperManager::WallpaperManager()
   if (connection && connection->GetConnector()) {
     // Connect to the wallpaper controller interface in the ash service.
     ash::mojom::WallpaperControllerPtr wallpaper_controller_ptr;
-    connection->GetConnector()->BindInterface(ash_util::GetAshServiceName(),
+    connection->GetConnector()->BindInterface(ash::mojom::kServiceName,
                                               &wallpaper_controller_ptr);
     // Register this object as the wallpaper picker.
     wallpaper_controller_ptr->SetWallpaperPicker(
@@ -1041,20 +1041,10 @@ void WallpaperManager::OnDeviceWallpaperDecoded(
                                   wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED,
                                   user_manager::User::DEVICE,
                                   base::Time::Now().LocalMidnight()};
-  if (user_manager::UserManager::Get()->IsUserLoggedIn()) {
-    // In a user's session treat the device wallpaper as a normal custom
-    // wallpaper. It should be persistent and can be overriden by other user
-    // selected wallpapers.
-    SetUserWallpaperInfo(account_id, wallpaper_info, true /* is_persistent */);
-    GetPendingWallpaper(account_id, false)
-        ->ResetSetWallpaperImage(user_image->image(), wallpaper_info);
-    wallpaper_cache_[account_id] = CustomWallpaperElement(
-        GetDeviceWallpaperFilePath(), user_image->image());
-  } else {
-    // In the login screen set the device wallpaper as the wallpaper.
-    GetPendingWallpaper(user_manager::SignInAccountId(), false)
-        ->ResetSetWallpaperImage(user_image->image(), wallpaper_info);
-  }
+  DCHECK(!user_manager::UserManager::Get()->IsUserLoggedIn());
+  // In the login screen set the device wallpaper as the wallpaper.
+  GetPendingWallpaper(user_manager::SignInAccountId(), false)
+      ->ResetSetWallpaperImage(user_image->image(), wallpaper_info);
 }
 
 void WallpaperManager::InitializeRegisteredDeviceWallpaper() {
@@ -1150,19 +1140,9 @@ bool WallpaperManager::ShouldSetDeviceWallpaper(const AccountId& account_id,
     return false;
   }
 
-  // Only set the device wallpaper if 1) we're at the login screen or 2) there
-  // is no user policy wallpaper in a user session and the user has the default
-  // wallpaper or device wallpaper in a user session. Note in the latter case,
-  // the device wallpaper can be overridden by user-selected wallpapers.
-  if (user_manager::UserManager::Get()->IsUserLoggedIn()) {
-    WallpaperInfo info;
-    if (GetUserWallpaperInfo(account_id, &info) &&
-        (info.type == user_manager::User::POLICY ||
-         (info.type != user_manager::User::DEFAULT &&
-          info.type != user_manager::User::DEVICE))) {
-      return false;
-    }
-  }
+  // Only set the device wallpaper if we're at the login screen.
+  if (user_manager::UserManager::Get()->IsUserLoggedIn())
+    return false;
 
   return true;
 }

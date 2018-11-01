@@ -2,8 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
 static_library("lib") {
@@ -51,10 +53,6 @@ service("filesystem") {
     "//services/service_manager/public/cpp",
     "//services/tracing/public/cpp",
   ]
-
-  data_deps = [
-    ":manifest",
-  ]
 }
 
 service_manifest("manifest") {
@@ -62,13 +60,15 @@ service_manifest("manifest") {
   source = "manifest.json"
 }
 
-test("filesystem_service_unittests") {
+service_test("filesystem_service_unittests") {
   sources = [
     "directory_impl_unittest.cc",
     "file_impl_unittest.cc",
     "files_test_base.cc",
     "files_test_base.h",
   ]
+
+  catalog = ":filesystem_service_unittests_catalog"
 
   deps = [
     "//base",
@@ -78,11 +78,9 @@ test("filesystem_service_unittests") {
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp:service_test_support",
     "//services/service_manager/public/cpp:sources",
-    "//services/service_manager/public/cpp/test:run_all_service_tests",
   ]
 
   data_deps = [
-    ":test_manifest",
     ":filesystem",
   ]
 }
@@ -90,4 +88,9 @@ test("filesystem_service_unittests") {
 service_manifest("test_manifest") {
   name = "filesystem_service_unittests"
   source = "test_manifest.json"
+}
+
+catalog("filesystem_service_unittests_catalog") {
+  embedded_services = [ ":test_manifest" ]
+  standalone_services = [ ":manifest" ]
 }

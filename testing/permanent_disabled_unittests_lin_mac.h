@@ -6,7 +6,3 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-  // Disabled video tests on linux and mac, until the tests can be fixed
-  DISABLE(MediaSourceTest, Playback_Video_WEBM_Audio_MP4)
-  DISABLE_MULTI(MediaTest, VideoBearHighBitDepthMp4)
-

@@ -54,7 +54,7 @@ IN_PROC_BROWSER_TEST_F(EnrollmentScreenTest, TestCancel) {
             enrollment_screen);
 
   EXPECT_CALL(mock_base_screen_delegate,
-              OnExit(_, BaseScreenDelegate::ENTERPRISE_ENROLLMENT_COMPLETED, _))
+              OnExit(_, ScreenExitCode::ENTERPRISE_ENROLLMENT_COMPLETED, _))
       .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   enrollment_screen->OnCancel();
   content::RunThisRunLoop(&run_loop);
@@ -118,7 +118,7 @@ IN_PROC_BROWSER_TEST_F(AttestationAuthEnrollmentScreenTest, TestCancel) {
             enrollment_screen);
 
   EXPECT_CALL(mock_base_screen_delegate,
-              OnExit(_, BaseScreenDelegate::ENTERPRISE_ENROLLMENT_COMPLETED, _))
+              OnExit(_, ScreenExitCode::ENTERPRISE_ENROLLMENT_COMPLETED, _))
       .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   ASSERT_FALSE(enrollment_screen->AdvanceToNextAuth());
   enrollment_screen->OnCancel();
@@ -136,25 +136,25 @@ IN_PROC_BROWSER_TEST_F(EnrollmentScreenTest, EnrollmentSpinner) {
   EnrollmentScreen* enrollment_screen = EnrollmentScreen::Get(wcontroller);
   ASSERT_TRUE(enrollment_screen);
 
-  EnrollmentScreenActor* actor = enrollment_screen->GetActor();
-  ASSERT_TRUE(actor);
+  EnrollmentScreenView* view = enrollment_screen->GetView();
+  ASSERT_TRUE(view);
 
   test::JSChecker checker(
       LoginDisplayHost::default_host()->GetWebUILoginView()->GetWebContents());
 
   // Run through the flow
-  actor->Show();
+  view->Show();
   OobeScreenWaiter(OobeScreen::SCREEN_OOBE_ENROLLMENT).Wait();
   checker.ExpectTrue(
       "window.getComputedStyle(document.getElementById('oauth-enroll-step-"
       "signin')).display !== 'none'");
 
-  actor->ShowEnrollmentSpinnerScreen();
+  view->ShowEnrollmentSpinnerScreen();
   checker.ExpectTrue(
       "window.getComputedStyle(document.getElementById('oauth-enroll-step-"
       "working')).display !== 'none'");
 
-  actor->ShowAttestationBasedEnrollmentSuccessScreen("fake domain");
+  view->ShowAttestationBasedEnrollmentSuccessScreen("fake domain");
   checker.ExpectTrue(
       "window.getComputedStyle(document.getElementById('oauth-enroll-step-abe-"
       "success')).display !== 'none'");
@@ -190,7 +190,7 @@ IN_PROC_BROWSER_TEST_F(ForcedAttestationAuthEnrollmentScreenTest, TestCancel) {
             enrollment_screen);
 
   EXPECT_CALL(mock_base_screen_delegate,
-              OnExit(_, BaseScreenDelegate::ENTERPRISE_ENROLLMENT_BACK, _))
+              OnExit(_, ScreenExitCode::ENTERPRISE_ENROLLMENT_BACK, _))
       .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   ASSERT_FALSE(enrollment_screen->AdvanceToNextAuth());
   enrollment_screen->OnCancel();
@@ -237,7 +237,7 @@ IN_PROC_BROWSER_TEST_F(MultiAuthEnrollmentScreenTest, TestCancel) {
             enrollment_screen);
 
   EXPECT_CALL(mock_base_screen_delegate,
-              OnExit(_, BaseScreenDelegate::ENTERPRISE_ENROLLMENT_BACK, _))
+              OnExit(_, ScreenExitCode::ENTERPRISE_ENROLLMENT_BACK, _))
       .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   ASSERT_TRUE(enrollment_screen->AdvanceToNextAuth());
   enrollment_screen->OnCancel();
@@ -282,7 +282,7 @@ IN_PROC_BROWSER_TEST_F(ProvisionedEnrollmentScreenTest, TestBackButton) {
             enrollment_screen);
 
   EXPECT_CALL(mock_base_screen_delegate,
-              OnExit(_, BaseScreenDelegate::ENTERPRISE_ENROLLMENT_BACK, _))
+              OnExit(_, ScreenExitCode::ENTERPRISE_ENROLLMENT_BACK, _))
       .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   enrollment_screen->OnCancel();
   content::RunThisRunLoop(&run_loop);

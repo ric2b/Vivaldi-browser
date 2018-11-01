@@ -134,11 +134,8 @@ class QuickLaunchUI : public views::WidgetDelegateView,
   }
 
   void Launch(const std::string& name, bool new_window) {
-    std::unique_ptr<service_manager::Connection> connection =
-        connector_->Connect(name);
     ::mash::mojom::LaunchablePtr launchable;
-    connection->GetInterface(&launchable);
-    connections_.push_back(std::move(connection));
+    connector_->BindInterface(name, &launchable);
     launchable->Launch(mojom::kWindow,
                        new_window ? mojom::LaunchMode::MAKE_NEW
                                   : mojom::LaunchMode::REUSE);
@@ -147,7 +144,6 @@ class QuickLaunchUI : public views::WidgetDelegateView,
   QuickLaunch* quick_launch_;
   service_manager::Connector* connector_;
   views::Textfield* prompt_;
-  std::vector<std::unique_ptr<service_manager::Connection>> connections_;
   catalog::mojom::CatalogPtr catalog_;
   std::set<base::string16> app_names_;
   bool suggestion_rejected_ = false;
@@ -155,8 +151,14 @@ class QuickLaunchUI : public views::WidgetDelegateView,
   DISALLOW_COPY_AND_ASSIGN(QuickLaunchUI);
 };
 
-QuickLaunch::QuickLaunch() {}
-QuickLaunch::~QuickLaunch() {}
+QuickLaunch::QuickLaunch() {
+  registry_.AddInterface<::mash::mojom::Launchable>(this);
+}
+
+QuickLaunch::~QuickLaunch() {
+  while (!windows_.empty())
+    windows_.front()->CloseNow();
+}
 
 void QuickLaunch::RemoveWindow(views::Widget* window) {
   auto it = std::find(windows_.begin(), windows_.end(), window);
@@ -176,10 +178,12 @@ void QuickLaunch::OnStart() {
   Launch(mojom::kWindow, mojom::LaunchMode::MAKE_NEW);
 }
 
-bool QuickLaunch::OnConnect(const service_manager::ServiceInfo& remote_info,
-                            service_manager::InterfaceRegistry* registry) {
-  registry->AddInterface<::mash::mojom::Launchable>(this);
-  return true;
+void QuickLaunch::OnBindInterface(
+    const service_manager::ServiceInfo& source_info,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  registry_.BindInterface(source_info.identity, interface_name,
+                          std::move(interface_pipe));
 }
 
 void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {

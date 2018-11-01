@@ -334,8 +334,7 @@ void SystemTrayDelegateChromeOS::ShowUserLogin() {
   }
 
   if (user_manager::UserManager::Get()->GetLoggedInUsers().size() >=
-      session_manager::SessionManager::Get()
-          ->GetMaximumNumberOfUserSessions()) {
+      session_manager::kMaxmiumNumberOfUserSessions) {
     return;
   }
 
@@ -477,6 +476,13 @@ void SystemTrayDelegateChromeOS::GetCurrentIMEProperties(
     property.selected = menu_list[i].is_selection_item_checked;
     list->push_back(property);
   }
+}
+
+base::string16 SystemTrayDelegateChromeOS::GetIMEManagedMessage() {
+  auto ime_state = input_method::InputMethodManager::Get()->GetActiveIMEState();
+  return ime_state->GetAllowedInputMethods().empty()
+             ? base::string16()
+             : l10n_util::GetStringUTF16(IDS_OPTIONS_CONTROLLED_SETTING_POLICY);
 }
 
 void SystemTrayDelegateChromeOS::SwitchIME(const std::string& ime_id) {

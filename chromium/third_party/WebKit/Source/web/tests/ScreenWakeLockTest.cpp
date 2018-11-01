@@ -15,7 +15,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
@@ -83,15 +82,17 @@ class ScreenWakeLockTest : public testing::Test {
  protected:
   void SetUp() override {
     m_webViewHelper.initialize(true, &m_testWebFrameClient);
-    blink::URLTestHelpers::registerMockedURLFromBaseURL(
+    blink::URLTestHelpers::registerMockedURLLoadFromBase(
         blink::WebString::fromUTF8("http://example.com/"),
+        blink::testing::webTestDataPath(),
         blink::WebString::fromUTF8("foo.html"));
     loadFrame();
   }
 
   void TearDown() override {
-    blink::Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    blink::WebCache::clear();
+    blink::Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
     blink::testing::runPendingTasks();
   }
 

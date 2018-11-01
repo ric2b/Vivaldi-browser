@@ -17,6 +17,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/layers/layer.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/trees/layer_tree_host.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
@@ -136,7 +138,7 @@ class SkPictureSerializer {
   // Each layer in the tree is serialized into a separate skp file
   // in the given directory.
   void Serialize(const cc::Layer* root_layer) {
-    for (auto* layer : *root_layer->GetLayerTree()) {
+    for (auto* layer : *root_layer->layer_tree_host()) {
       sk_sp<SkPicture> picture = layer->GetPicture();
       if (!picture)
         continue;
@@ -354,7 +356,8 @@ bool BeginSmoothScroll(v8::Isolate* isolate,
         ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
     mouseMove.x = (contentRect.x + contentRect.width / 2) * page_scale_factor;
     mouseMove.y = (contentRect.y + contentRect.height / 2) * page_scale_factor;
-    context.web_view()->handleInputEvent(mouseMove);
+    context.web_view()->handleInputEvent(
+        blink::WebCoalescedInputEvent(mouseMove));
     context.web_view()->setCursorVisibilityState(true);
   }
 
@@ -471,17 +474,18 @@ static void PrintDocument(blink::WebFrame* frame, SkDocument* doc) {
   params.printerDPI = 300;
   int page_count = frame->printBegin(params);
   for (int i = 0; i < page_count; ++i) {
-    SkCanvas* canvas = doc->beginPage(kPageWidth, kPageHeight);
-    SkAutoCanvasRestore auto_restore(canvas, true);
-    canvas->translate(kMarginLeft, kMarginTop);
+    SkCanvas* sk_canvas = doc->beginPage(kPageWidth, kPageHeight);
+    cc::PaintCanvasPassThrough canvas(sk_canvas);
+    cc::PaintCanvasAutoRestore auto_restore(&canvas, true);
+    canvas.translate(kMarginLeft, kMarginTop);
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
     float page_shrink = frame->getPrintPageShrink(i);
     DCHECK(page_shrink > 0);
-    canvas->scale(page_shrink, page_shrink);
+    canvas.scale(page_shrink, page_shrink);
 #endif
 
-    frame->printPage(i, canvas);
+    frame->printPage(i, &canvas);
   }
   frame->printEnd();
 }

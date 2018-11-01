@@ -5,7 +5,7 @@
 // This features file defines permissions for extension APIs implemented
 // under src/extensions.
 // See chrome/common/extensions/api/_features.md to understand this file, as
-// well as feature.h, simple_feature.h, and base_feature_provider.h.
+// well as feature.h, simple_feature.h, and feature_provider.h.
 
 // If you add a new platform_app permission please update the "stubs_app" test:
 // chrome/test/data/extensions/api_test/stubs_app/manifest.json
@@ -117,11 +117,7 @@
         "0C0426C12F94156F330FFAF346A976BA8878DE78",  // http://crbug.com/496954
         "AC4538682FCECD28587C7A0F80849F78F4872BC2",  // http://crbug.com/496954
         "CCA4D85A67ADD65DA6C02E49EE3C080C54A8211C",  // http://crbug.com/496954
-        "05EBA3051DFCA6AF17070AEE5FE8C66322FF4738",  // http://crbug.com/431978
-        "11B478CEC461C766A2DC1E5BEEB7970AE06DC9C2",  // http://crbug.com/458218
-        "0EFB879311E9EFBB7C45251F89EC655711B1F6ED",  // http://crbug.com/458218
-        "9193D3A51E2FE33B496CDA53EA330423166E7F02",  // http://crbug.com/458218
-        "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89"   // http://crbug.com/458218
+        "05EBA3051DFCA6AF17070AEE5FE8C66322FF4738"   // http://crbug.com/431978
      ]
     }
   ],
@@ -142,6 +138,7 @@
       "61FF4757F9420B62B19BA5C96084649339DB31F5",  // http://crbug.com/587613
       "F3013F58BED982D1BC75943792FF877E5D458672",  // http://crbug.com/587613
       "1B7734733E207CCE5C33BFAA544CA89634BF881F",  // http://crbug.com/587613
+      "23EEC2E3B4F6A62F5E6C8556364F7B749F9A809C",  // http://crbug.com/587613
       "2F6F6FDB84E0290ABAB7A9D7571EB344821E5F12",  // http://crbug.com/610452
       "5B9E39EA374B136CBE7AED2D872003107642EAD5",  // http://crbug.com/610452
       "E0E94FB0C01FFB9CDC7A5F098C99B5A8D2F95902",  // http://crbug.com/610452
@@ -153,13 +150,8 @@
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
     "whitelist": [
       "9448CAB302F268FB4917D06F70703893DCDA26C4",  // Cast Test Extension
-      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Dev
-      "FA01E0B81978950F2BC5A50512FD769725F57510",  // Beta
-      "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // Canary
-      "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
-      "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/457908
-      "226CF815E39A363090A1E547D53063472B8279FA"   // http://crbug.com/574889
+      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Media Router Dev
+      "226CF815E39A363090A1E547D53063472B8279FA"   // Media Router Stable
     ]
   },
   "clipboard": {
@@ -289,11 +281,8 @@
       "C449A798C495E6CF7D6AF10162113D564E67AD12",  // CRD Dogfood
       "01E9FFA9A8F3C18271FE91BEE46207F3B81755CC",  // Pre-release CRD
       "97B23E01B2AA064E8332EE43A7A85C628AADC3F2",  // Sample app_remoting app.
-      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/504940
-      "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",  // http://crbug.com/504940
-      "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",  // http://crbug.com/504940
-      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // http://crbug.com/504940
+      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Media Router Dev
+      "226CF815E39A363090A1E547D53063472B8279FA",  // Media Router Stable
       // TODO (ntang) Remove the following 2 hashes by 12/31/2017.
       "B620CF4203315F9F2E046EDED22C7571A935958D",  // http://crbug.com/510270
       "B206D8716769728278D2D300349C6CB7D7DE2EF9",  // http://crbug.com/510270
@@ -324,16 +313,8 @@
       "8C3741E3AF0B93B6E8E0DDD499BB0B74839EA578",  // http://crbug.com/234235
       "E703483CEF33DEC18B4B6DD84B5C776FB9182BDB",  // http://crbug.com/234235
       "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/329690
-      "11B478CEC461C766A2DC1E5BEEB7970AE06DC9C2",  // http://crbug.com/380890
-      "0EFB879311E9EFBB7C45251F89EC655711B1F6ED",  // http://crbug.com/380890
-      "9193D3A51E2FE33B496CDA53EA330423166E7F02",  // http://crbug.com/380890
-      "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89",  // http://crbug.com/380890
-      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Dev
-      "FA01E0B81978950F2BC5A50512FD769725F57510",  // Beta
-      "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // Canary
-      "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // Google Cast Beta
-      "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // Google Cast Stable
-      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/588179
+      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Media Router Dev
+      "226CF815E39A363090A1E547D53063472B8279FA",  // Media Router Stable
       "7AE714FFD394E073F0294CFA134C9F91DB5FBAA4",  // CCD Development
       "C7DA3A55C2355F994D3FDDAD120B426A0DF63843",  // CCD Testing
       "75E3CFFFC530582C583E4690EF97C70B9C8423B7",  // CCD Release
@@ -362,10 +343,6 @@
       "8C3741E3AF0B93B6E8E0DDD499BB0B74839EA578",  // http://crbug.com/234235
       "E703483CEF33DEC18B4B6DD84B5C776FB9182BDB",  // http://crbug.com/234235
       "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/329690
-      "11B478CEC461C766A2DC1E5BEEB7970AE06DC9C2",  // http://crbug.com/380890
-      "0EFB879311E9EFBB7C45251F89EC655711B1F6ED",  // http://crbug.com/380890
-      "9193D3A51E2FE33B496CDA53EA330423166E7F02",  // http://crbug.com/380890
-      "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89",  // http://crbug.com/380890
       "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Dev
       "FA01E0B81978950F2BC5A50512FD769725F57510",  // Beta
       "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // Canary
@@ -545,6 +522,12 @@
       ]
     }
   ],
+  "virtualKeyboard": {
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "platforms": ["chromeos"],
+    "session_types": ["kiosk"]
+  },
   "virtualKeyboardPrivate": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],

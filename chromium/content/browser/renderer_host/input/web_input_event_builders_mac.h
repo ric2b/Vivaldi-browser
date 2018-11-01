@@ -8,6 +8,7 @@
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 
 @class NSEvent;
@@ -22,7 +23,11 @@ class CONTENT_EXPORT WebKeyboardEventBuilder {
 
 class CONTENT_EXPORT WebMouseEventBuilder {
  public:
-  static blink::WebMouseEvent Build(NSEvent* event, NSView* view);
+  static blink::WebMouseEvent Build(
+      NSEvent* event,
+      NSView* view,
+      blink::WebPointerProperties::PointerType pointerType =
+          blink::WebPointerProperties::PointerType::Mouse);
 };
 
 class CONTENT_EXPORT WebMouseWheelEventBuilder {

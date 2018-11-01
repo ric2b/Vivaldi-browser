@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Rādīt saglabātu (t.i., novecojušu) šīs lapas versiju.</translation>
 <translation id="1559528461873125649">Nav tāda faila vai direktorija</translation>
 <translation id="1710259589646384581">Operētājsistēma</translation>
-<translation id="1838667051080421715">Jūs skatāt tīmekļa lapas avotu.</translation>
 <translation id="194030505837763158">Apmeklējiet vietni <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Vai domājāt <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Mazāk</translation>
 <translation id="2166378884831602661">Šī vietne nevar garantēt drošu savienojumu</translation>
 <translation id="2292556288342944218">Piekļuve internetam ir bloķēta</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> nosūtīja nederīgu atbildi.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">Piekļuve failam tika noraidīta.</translation>
 <translation id="2705137772291741111">Nevar nolasīt šīs vietnes saglabāto (kešatmiņā ievietoto) kopiju.</translation>
 <translation id="2784949926578158345">Savienojums tika atiestatīts.</translation>
-<translation id="284702764277384724">Šķiet, ka servera sertifikāts vietnē <ph name="HOST_NAME" /> ir viltojums.</translation>
 <translation id="2909946352844186028">Konstatētas tīkla izmaiņas.</translation>
 <translation id="3005723025932146533">Rādīt saglabāto versiju</translation>
 <translation id="3109728660330352905">Jums nav pilnvaru, lai skatītu šo lapu.</translation>
@@ -37,7 +34,6 @@
 <translation id="4021036232240155012">DNS ir tīkla pakalpojums, kurā vietnes nosaukums tiek tulkots uz tās interneta adresi.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> nepieņēma jūsu pieteikšanās sertifikātu, vai arī pieteikšanās sertifikāts netika iesniegts.</translation>
 <translation id="4522570452068850558">Informācija</translation>
-<translation id="4670097147947922288">Jūs skatāt paplašinājumu lapu.</translation>
 <translation id="4708268264240856090">Savienojums tika pārtraukts</translation>
 <translation id="4744603770635761495">Izpildāms ceļš</translation>
 <translation id="4764776831041365478">Tīmekļa lapa vietnē <ph name="URL" /> var īslaicīgi nebūt pieejama, vai tā var būt pārvietota uz jaunu tīmekļa adresi.</translation>
@@ -54,7 +50,6 @@
 <translation id="5675650730144413517">Šī lapa nedarbojas</translation>
 <translation id="5869405914158311789">Šī vietne nav sasniedzama</translation>
 <translation id="5990559369517809815">Paplašinājums ir bloķējis pieprasījumus serverim.</translation>
-<translation id="6042308850641462728">Vairāk</translation>
 <translation id="6146055958333702838">Pārbaudiet vadus un atkārtoti palaidiet maršrutētājus, modemus vai citas
     izmantotās tīkla ierīces.</translation>
 <translation id="6165508094623778733">Uzziniet vairāk</translation>
@@ -64,10 +59,8 @@
 <translation id="6328639280570009161">Tīkla prognožu atspējošana</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> noraidīja savienojuma izveidi.</translation>
 <translation id="6711464428925977395">Starpniekserverī radās kļūda, vai arī adrese nav pareiza.</translation>
-<translation id="6830600606572693159"><ph name="URL" /> tīmekļa lapa pašlaik nav pieejama.  Tā var būt pārslogota vai nedarbojas uzturēšanas darbu dēļ.</translation>
 <translation id="6897140037006041989">Lietotāja aģents</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> neatbilst drošības standartiem.</translation>
-<translation id="7269802741830436641">Tīmekļa lapai ir pārvirzes cilpa</translation>
 <translation id="7353601530677266744">Komandrinda</translation>
 <translation id="7419106976560586862">Profila ceļš</translation>
 <translation id="7518003948725431193">Šādā tīmekļa adresē netika atrasta neviena tīmekļa lapa: <ph name="URL" /></translation>
@@ -75,7 +68,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> pašlaik nevar apstrādāt šo pieprasījumu.</translation>
 <translation id="7716424297397655342">Šo vietni nevar ielādēt no kešatmiņas</translation>
 <translation id="7758069387465995638">Iespējams, savienojumu ir bloķējis ugunsmūris vai pretvīrusu programmatūra.</translation>
-<translation id="778579833039460630">Dati nav saņemti</translation>
 <translation id="7951415247503192394">(32 bitu)</translation>
 <translation id="8134994873729925007">Nevarēja atrast <ph name="HOST_NAME" /> servera <ph name="BEGIN_ABBR" />DNS adresi<ph name="END_ABBR" />.</translation>
 <translation id="8142868475871995937">Apmeklējiet vietni &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, lai skatītu melnajā sarakstā iekļautos vietrāžus URL, kā arī citas politikas, ko noteicis sistēmas administrators.</translation>

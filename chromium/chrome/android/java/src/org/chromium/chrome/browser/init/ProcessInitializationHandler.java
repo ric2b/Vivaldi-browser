@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.init;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.view.View;
 
 import com.google.ipc.invalidation.external.client.android.service.AndroidLogger;
@@ -17,6 +16,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.DeferredStartupHandler;
@@ -35,7 +35,6 @@ import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.services.AccountsChangedReceiver;
 import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.sync.SyncController;
-import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.components.signin.AccountManagerHelper;
 import org.chromium.content.common.ContentSwitches;
 import org.chromium.printing.PrintDocumentAdapterWrapper;
@@ -52,7 +51,6 @@ public class ProcessInitializationHandler {
     private static final String SESSIONS_UUID_PREF_KEY = "chromium.sync.sessions.id";
     private static final String DEV_TOOLS_SERVER_SOCKET_PREFIX = "chrome";
 
-    private static Class<? extends ProcessInitializationHandler> sHandlerClassOverride;
     private static ProcessInitializationHandler sInstance;
 
     private boolean mInitializedPreNative;
@@ -61,43 +59,15 @@ public class ProcessInitializationHandler {
     private DevToolsServer mDevToolsServer;
 
     /**
-     * Overrides the type of ProcessInitializationHandler to be created.
-     * <p>
-     * This must be called before {@link #getInstance()} is triggered.
-     *
-     * @param classOverride The ProcessInitializationHandler class type to be created instead of
-     *                      the default.
-     */
-    public static void setProcessInitializationHandlerType(
-            Class<? extends ProcessInitializationHandler> classOverride) {
-        if (sInstance != null) {
-            throw new IllegalStateException("Browser delegate override set after initialized");
-        }
-        sHandlerClassOverride = classOverride;
-    }
-
-    /**
      * @return The ProcessInitializationHandler for use during the lifetime of the browser process.
      */
     public static ProcessInitializationHandler getInstance() {
         ThreadUtils.assertOnUiThread();
         if (sInstance == null) {
-            if (sHandlerClassOverride != null) {
-                try {
-                    sInstance = sHandlerClassOverride.newInstance();
-                } catch (InstantiationException | IllegalAccessException e) {
-                    assert false : "Unable to instantiate ProcessInitializationHandler override.";
-                }
-            }
-            if (sInstance == null) sInstance = new ProcessInitializationHandler();
+            sInstance = AppHooks.get().createProcessInitializationHandler();
         }
         return sInstance;
     }
-
-    /**
-     * Constructor exposed to allow overriding.
-     */
-    protected ProcessInitializationHandler() {}
 
     /**
      * Initializes the any dependencies that must occur before native library has been loaded.
@@ -140,7 +110,7 @@ public class ProcessInitializationHandler {
         // only once and before AccountMangerHelper.get(...) is called to avoid using the
         // default AccountManagerDelegate.
         AccountManagerHelper.initializeAccountManagerHelper(
-                application, application.createAccountManagerDelegate());
+                application, AppHooks.get().createAccountManagerDelegate());
 
         // Set the unique identification generator for invalidations.  The
         // invalidations system can start and attempt to fetch the client ID
@@ -179,7 +149,7 @@ public class ProcessInitializationHandler {
         DataReductionProxySettings.reconcileDataReductionProxyEnabledState(application);
         ChromeActivitySessionTracker.getInstance().initializeWithNative();
         ChromeApplication.removeSessionCookies();
-        AppBannerManager.setAppDetailsDelegate(application.createAppDetailsDelegate());
+        AppBannerManager.setAppDetailsDelegate(AppHooks.get().createAppDetailsDelegate());
         ChromeLifetimeController.initialize();
 
         PrefServiceBridge.getInstance().migratePreferences(application);
@@ -210,7 +180,7 @@ public class ProcessInitializationHandler {
                 AccountsChangedReceiver.addObserver(
                         new AccountsChangedReceiver.AccountsChangedObserver() {
                             @Override
-                            public void onAccountsChanged(Context context, Intent intent) {
+                            public void onAccountsChanged() {
                                 ThreadUtils.runOnUiThread(new Runnable() {
                                     @Override
                                     public void run() {
@@ -255,13 +225,6 @@ public class ProcessInitializationHandler {
                             R.string.error_printing_failed);
                     PrintingControllerImpl.create(new PrintDocumentAdapterWrapper(), errorText);
                 }
-            }
-        });
-
-        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                ChromeWebApkHost.initCanUseGooglePlayToInstallWebApk();
             }
         });
     }

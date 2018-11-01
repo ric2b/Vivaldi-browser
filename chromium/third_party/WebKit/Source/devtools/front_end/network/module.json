@@ -107,7 +107,9 @@
         "components",
         "perf_ui",
         "cookie_table",
-        "data_grid"
+        "data_grid",
+        "network_conditions",
+        "object_ui"
     ],
     "scripts": [
         "BlockedURLsPane.js",
@@ -142,6 +144,7 @@
         "networkLogView.css",
         "networkManageCustomHeadersView.css",
         "networkPanel.css",
+        "networkTimingTable.css",
         "networkWaterfallColumn.css",
         "requestCookiesView.css",
         "requestHeadersTree.css",

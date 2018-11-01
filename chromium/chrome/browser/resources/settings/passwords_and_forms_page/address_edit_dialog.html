@@ -3,10 +3,11 @@
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys/iron-a11y-keys.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-textarea.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/settings_vars_css.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
 
 <dom-module id="settings-address-edit-dialog">
   <template>
@@ -53,7 +54,7 @@
         }
       }
     </style>
-    <dialog is="cr-dialog" id="dialog">
+    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
       <div class="title">[[title_]]</div>
       <div class="body">
         <template is="dom-repeat" items="[[addressWrapper_]]">
@@ -62,14 +63,19 @@
               <template is="dom-if" if="[[item.isTextArea]]">
                 <paper-textarea label="[[item.component.fieldName]]"
                     value="{{item.value}}" on-value-changed="updateCanSave_"
-                    class$="address-column [[long_(item)]]" always-float-label>
+                    class$="address-column [[long_(item)]]" always-float-label
+                    autofocus>
                 </paper-textarea>
               </template>
               <template is="dom-if" if="[[!item.isTextArea]]">
                 <paper-input type="text" label="[[item.component.fieldName]]"
-                    always-float-label value="{{item.value}}"
+                    always-float-label autofocus value="{{item.value}}"
                     on-value-changed="updateCanSave_"
-                    class$="address-column [[long_(item)]]"></paper-input>
+                    class$="address-column [[long_(item)]]">
+                  <iron-a11y-keys keys="enter"
+                      on-keys-pressed="onSaveButtonTap_">
+                  </iron-a11y-keys>
+                </paper-input>
               </template>
             </template>
           </div>
@@ -91,6 +97,8 @@
           </span>
         </div>
         <div class="address-row">
+          <iron-a11y-keys keys="enter" on-keys-pressed="onSaveButtonTap_">
+          </iron-a11y-keys>
           <paper-input id="phoneInput" type="text" label="$i18n{addressPhone}"
               always-float-label class="address-column"
               on-value-changed="updateCanSave_" value="{{phoneNumber_}}">
@@ -102,7 +110,8 @@
         </div>
       </div>
       <div class="button-container">
-        <paper-button id="cancelButton" on-tap="onCancelTap_">
+        <paper-button id="cancelButton" class="cancel-button"
+            on-tap="onCancelTap_">
           $i18n{cancel}
         </paper-button>
         <paper-button id="saveButton" class="action-button"
@@ -112,5 +121,5 @@
       </div>
     </dialog>
   </template>
-  <script src="/passwords_and_forms_page/address_edit_dialog.js"></script>
+  <script src="address_edit_dialog.js"></script>
 </dom-module>

@@ -39,7 +39,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -53,8 +52,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
-#include "chrome/browser/ui/search/search_delegate.h"
-#include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -84,7 +81,6 @@
 #include "chrome/browser/ui/views/new_back_shortcut_bubble.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
-#include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -128,7 +124,6 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/content_accelerators/accelerator_util.h"
@@ -160,6 +155,7 @@
 #endif  // !defined(OS_CHROMEOS)
 
 #if defined(USE_AURA)
+#include "chrome/browser/ui/views/theme_profile_key.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -177,9 +173,6 @@
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 #include "chrome/browser/ui/sync/one_click_signin_links_delegate_impl.h"
 #include "chrome/browser/ui/views/sync/one_click_signin_dialog_view.h"
-#endif
-
-#if defined(OS_LINUX)
 #endif
 
 using base::TimeDelta;
@@ -273,6 +266,23 @@ void PaintAttachedBookmarkBar(gfx::Canvas* canvas,
                     ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
         view->GetLocalBounds(), true);
   }
+}
+
+bool GetGestureCommand(ui::GestureEvent* event, int* command) {
+  DCHECK(command);
+  *command = 0;
+#if defined(OS_MACOSX)
+  if (event->details().type() == ui::ET_GESTURE_SWIPE) {
+    if (event->details().swipe_left()) {
+      *command = IDC_BACK;
+      return true;
+    } else if (event->details().swipe_right()) {
+      *command = IDC_FORWARD;
+      return true;
+    }
+  }
+#endif  // OS_MACOSX
+  return false;
 }
 
 }  // namespace
@@ -415,6 +425,10 @@ BrowserView::~BrowserView() {
   // OS with some tabs than the NativeBrowserFrame should have destroyed them.
   DCHECK_EQ(0, browser_->tab_strip_model()->count());
 
+  // Stop the animation timer explicitly here to avoid running it in a nested
+  // message loop, which may run by Browser destructor.
+  loading_animation_timer_.Stop();
+
   // Immersive mode may need to reparent views before they are removed/deleted.
   immersive_mode_controller_.reset();
 
@@ -485,9 +499,9 @@ void BrowserView::Paint1pxHorizontalLine(gfx::Canvas* canvas,
   gfx::RectF rect(gfx::ScaleRect(gfx::RectF(bounds), scale));
   const float inset = rect.height() - 1;
   rect.Inset(0, at_bottom ? inset : 0, 0, at_bottom ? 0 : inset);
-  SkPaint paint;
-  paint.setColor(color);
-  canvas->sk_canvas()->drawRect(gfx::RectFToSkRect(rect), paint);
+  cc::PaintFlags flags;
+  flags.setColor(color);
+  canvas->sk_canvas()->drawRect(gfx::RectFToSkRect(rect), flags);
 }
 
 void BrowserView::InitStatusBubble() {
@@ -1207,10 +1221,9 @@ ShowTranslateBubbleResult BrowserView::ShowTranslateBubble(
     translate::TranslateErrors::Type error_type,
     bool is_user_gesture) {
   if (contents_web_view_->HasFocus() &&
-      !GetLocationBarView()->IsMouseHovered()) {
-    content::RenderViewHost* rvh = web_contents->GetRenderViewHost();
-    if (rvh->IsFocusedElementEditable())
-      return ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE;
+      !GetLocationBarView()->IsMouseHovered() &&
+      web_contents->IsFocusedElementEditable()) {
+    return ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE;
   }
 
   translate::LanguageState& language_state =
@@ -1278,14 +1291,9 @@ void BrowserView::ShowWebsiteSettings(
     content::WebContents* web_contents,
     const GURL& virtual_url,
     const security_state::SecurityInfo& security_info) {
-  views::View* popup_anchor = nullptr;
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
-    popup_anchor = toolbar_->location_bar();
-  else
-    popup_anchor = GetLocationBarView()->location_icon_view()->GetImageView();
-
-  WebsiteSettingsPopupView::ShowPopup(popup_anchor, gfx::Rect(), profile,
-                                      web_contents, virtual_url, security_info);
+  WebsiteSettingsPopupView::ShowPopup(
+      GetLocationBarView()->GetSecurityBubbleAnchorView(), gfx::Rect(), profile,
+      web_contents, virtual_url, security_info);
 }
 
 void BrowserView::ShowAppMenu() {
@@ -1338,7 +1346,7 @@ bool BrowserView::PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
   }
 
 #if defined(OS_CHROMEOS)
-  if (chrome::IsAcceleratorDeprecated(accelerator)) {
+  if (ash_util::IsAcceleratorDeprecated(accelerator)) {
     if (event.type() == blink::WebInputEvent::RawKeyDown)
       *is_keyboard_shortcut = true;
     return false;
@@ -1957,6 +1965,18 @@ void BrowserView::Layout() {
       IsToolbarVisible() ? FocusBehavior::ALWAYS : FocusBehavior::NEVER);
 }
 
+void BrowserView::OnGestureEvent(ui::GestureEvent* event) {
+  int command;
+  if (GetGestureCommand(event, &command) &&
+      chrome::IsCommandEnabled(browser(), command)) {
+    chrome::ExecuteCommandWithDisposition(
+        browser(), command, ui::DispositionFromEventFlags(event->flags()));
+    return;
+  }
+
+  ClientView::OnGestureEvent(event);
+}
+
 void BrowserView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   if (!initialized_ && details.is_add && details.child == this && GetWidget()) {
@@ -2026,7 +2046,7 @@ void BrowserView::InfoBarContainerStateChanged(bool is_animating) {
 
 bool BrowserView::DrawInfoBarArrows(int* x) const {
   if (x) {
-    gfx::Point anchor(toolbar_->location_bar()->GetLocationBarAnchorPoint());
+    gfx::Point anchor(toolbar_->location_bar()->GetInfoBarAnchorPoint());
     ConvertPointToTarget(toolbar_->location_bar(), this, &anchor);
     *x = anchor.x();
   }
@@ -2044,6 +2064,13 @@ void BrowserView::InitViews() {
   // can get it later when all we have is a native view.
   GetWidget()->SetNativeWindowProperty(Profile::kProfileKey,
                                        browser_->profile());
+
+#if defined(USE_AURA)
+  // Stow a pointer to the browser's original profile onto the window handle so
+  // that windows will be styled with the appropriate NativeTheme.
+  SetThemeProfileForWindow(GetNativeWindow(),
+                           browser_->profile()->GetOriginalProfile());
+#endif
 
   LoadAccelerators();
 
@@ -2333,6 +2360,7 @@ void BrowserView::ProcessFullscreen(bool fullscreen,
   if (ShouldUseImmersiveFullscreenForUrl(url))
     immersive_mode_controller_->SetEnabled(fullscreen);
 
+  browser_->WindowFullscreenStateWillChange();
   browser_->WindowFullscreenStateChanged();
 
   if (fullscreen && !chrome::IsRunningInAppMode()) {
@@ -2477,7 +2505,8 @@ void BrowserView::UpdateAcceleratorMetrics(const ui::Accelerator& accelerator,
 void BrowserView::ShowAvatarBubbleFromAvatarButton(
     AvatarBubbleMode mode,
     const signin::ManageAccountsParams& manage_accounts_params,
-    signin_metrics::AccessPoint access_point) {
+    signin_metrics::AccessPoint access_point,
+    bool focus_first_profile_button) {
 #if !defined(OS_CHROMEOS)
   // Do not show avatar bubble if there is no avatar menu button.
   if (!frame_->GetNewAvatarMenuButton())
@@ -2492,7 +2521,8 @@ void BrowserView::ShowAvatarBubbleFromAvatarButton(
   } else {
     ProfileChooserView::ShowBubble(bubble_view_mode, tutorial_mode,
                                    manage_accounts_params, access_point,
-                                   frame_->GetNewAvatarMenuButton(), browser());
+                                   frame_->GetNewAvatarMenuButton(), browser(),
+                                   focus_first_profile_button);
     ProfileMetrics::LogProfileOpenMethod(ProfileMetrics::ICON_AVATAR_BUBBLE);
   }
 #else
@@ -2574,8 +2604,7 @@ int BrowserView::GetMaxTopInfoBarArrowHeight() {
   // popup.
   if (!IsFullscreen() &&
       !GetLocationBar()->GetOmniboxView()->model()->popup_model()->IsOpen()) {
-    gfx::Point icon_bottom(
-        toolbar_->location_bar()->GetLocationBarAnchorPoint());
+    gfx::Point icon_bottom(toolbar_->location_bar()->GetInfoBarAnchorPoint());
     ConvertPointToTarget(toolbar_->location_bar(), this, &icon_bottom);
     gfx::Point infobar_top;
     ConvertPointToTarget(infobar_container_, this, &infobar_top);

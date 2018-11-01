@@ -20,13 +20,13 @@
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/laser/laser_pointer_controller.h"
+#include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/metrics/task_switch_metrics_recorder.h"
 #include "ash/shared/immersive_fullscreen_controller.h"
 #include "ash/shell.h"
 #include "ash/touch/touch_uma.h"
 #include "ash/virtual_keyboard_controller.h"
 #include "ash/wm/drag_window_resizer.h"
-#include "ash/wm/lock_state_controller.h"
 #include "ash/wm/maximize_mode/maximize_mode_event_handler_aura.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_cycle_event_filter_aura.h"
@@ -140,8 +140,9 @@ bool WmShellAura::IsForceMaximizeOnFirstRun() {
 
 void WmShellAura::SetDisplayWorkAreaInsets(WmWindow* window,
                                            const gfx::Insets& insets) {
-  aura::Window* aura_window = WmWindow::GetAuraWindow(window);
-  Shell::GetInstance()->SetDisplayWorkAreaInsets(aura_window, insets);
+  Shell::GetInstance()
+      ->window_tree_host_manager()
+      ->UpdateWorkAreaOfDisplayNearestWindow(window->aura_window(), insets);
 }
 
 bool WmShellAura::IsPinned() {
@@ -263,10 +264,6 @@ void WmShellAura::RemovePointerWatcher(views::PointerWatcher* watcher) {
   pointer_watcher_adapter_->RemovePointerWatcher(watcher);
 }
 
-void WmShellAura::RequestShutdown() {
-  Shell::GetInstance()->lock_state_controller()->RequestShutdown();
-}
-
 bool WmShellAura::IsTouchDown() {
   return aura::Env::GetInstance()->is_touch_down();
 }
@@ -279,6 +276,10 @@ void WmShellAura::ToggleIgnoreExternalKeyboard() {
 
 void WmShellAura::SetLaserPointerEnabled(bool enabled) {
   Shell::GetInstance()->laser_pointer_controller()->SetEnabled(enabled);
+}
+
+void WmShellAura::SetPartialMagnifierEnabled(bool enabled) {
+  Shell::GetInstance()->partial_magnification_controller()->SetEnabled(enabled);
 }
 
 void WmShellAura::CreatePointerWatcherAdapter() {

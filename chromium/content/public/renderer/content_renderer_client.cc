@@ -68,9 +68,7 @@ ContentRendererClient::OverrideCreateMIDIAccessor(
   return nullptr;
 }
 
-blink::WebAudioDevice*
-ContentRendererClient::OverrideCreateAudioDevice(
-    double sample_rate) {
+blink::WebAudioDevice* ContentRendererClient::OverrideCreateAudioDevice() {
   return nullptr;
 }
 
@@ -222,6 +220,10 @@ bool ContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
 
 GURL ContentRendererClient::OverrideFlashEmbedWithHTML(const GURL& url) {
   return GURL();
+}
+
+bool ContentRendererClient::AllowMediaSuspend() {
+  return true;
 }
 
 }  // namespace content

@@ -4,6 +4,7 @@
 
 #include "modules/serviceworkers/NavigatorServiceWorker.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -26,14 +27,16 @@ NavigatorServiceWorker& NavigatorServiceWorker::from(Navigator& navigator) {
   if (!supplement) {
     supplement = new NavigatorServiceWorker(navigator);
     provideTo(navigator, supplementName(), supplement);
-    if (navigator.frame() &&
-        navigator.frame()
-            ->securityContext()
-            ->getSecurityOrigin()
-            ->canAccessServiceWorkers()) {
-      // Initialize ServiceWorkerContainer too.
-      supplement->serviceWorker(navigator.frame(), ASSERT_NO_EXCEPTION);
-    }
+  }
+  if (navigator.frame() &&
+      navigator.frame()
+          ->securityContext()
+          ->getSecurityOrigin()
+          ->canAccessServiceWorkers()) {
+    // Ensure ServiceWorkerContainer. It can be cleared regardless of
+    // |supplement|. See comments in NavigatorServiceWorker::serviceWorker() for
+    // details.
+    supplement->serviceWorker(navigator.frame(), ASSERT_NO_EXCEPTION);
   }
   return *supplement;
 }
@@ -49,9 +52,10 @@ const char* NavigatorServiceWorker::supplementName() {
 }
 
 ServiceWorkerContainer* NavigatorServiceWorker::serviceWorker(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     Navigator& navigator,
     ExceptionState& exceptionState) {
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
   DCHECK(!navigator.frame() ||
          executionContext->getSecurityOrigin()->canAccessCheckSuborigins(
              navigator.frame()->securityContext()->getSecurityOrigin()));
@@ -60,9 +64,10 @@ ServiceWorkerContainer* NavigatorServiceWorker::serviceWorker(
 }
 
 ServiceWorkerContainer* NavigatorServiceWorker::serviceWorker(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     Navigator& navigator,
     String& errorMessage) {
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
   DCHECK(!navigator.frame() ||
          executionContext->getSecurityOrigin()->canAccessCheckSuborigins(
              navigator.frame()->securityContext()->getSecurityOrigin()));

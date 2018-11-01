@@ -253,24 +253,14 @@ float SVGAnimationElement::getSimpleDuration(
   return clampTo<float>(duration.value());
 }
 
-void SVGAnimationElement::beginElement() {
-  beginElementAt(0);
-}
-
 void SVGAnimationElement::beginElementAt(float offset) {
-  ASSERT(std::isfinite(offset));
-  SMILTime elapsed = this->elapsed();
-  addBeginTime(elapsed, elapsed + offset, SMILTimeWithOrigin::ScriptOrigin);
-}
-
-void SVGAnimationElement::endElement() {
-  endElementAt(0);
+  DCHECK(std::isfinite(offset));
+  addInstanceTime(Begin, elapsed() + offset, SMILTimeWithOrigin::ScriptOrigin);
 }
 
 void SVGAnimationElement::endElementAt(float offset) {
-  ASSERT(std::isfinite(offset));
-  SMILTime elapsed = this->elapsed();
-  addEndTime(elapsed, elapsed + offset, SMILTimeWithOrigin::ScriptOrigin);
+  DCHECK(std::isfinite(offset));
+  addInstanceTime(End, elapsed() + offset, SMILTimeWithOrigin::ScriptOrigin);
 }
 
 void SVGAnimationElement::updateAnimationMode() {
@@ -559,11 +549,11 @@ void SVGAnimationElement::startedActiveInterval() {
     // For to-animations the from value is the current accumulated value from
     // lower priority animations.
     // The value is not static and is determined during the animation.
-    m_animationValid = calculateFromAndToValues(emptyString(), to);
+    m_animationValid = calculateFromAndToValues(emptyString, to);
   } else if (animationMode == FromByAnimation) {
     m_animationValid = calculateFromAndByValues(from, by);
   } else if (animationMode == ByAnimation) {
-    m_animationValid = calculateFromAndByValues(emptyString(), by);
+    m_animationValid = calculateFromAndByValues(emptyString, by);
   } else if (animationMode == ValuesAnimation) {
     m_animationValid =
         m_values.size() >= 1 && (calcMode == CalcModePaced ||

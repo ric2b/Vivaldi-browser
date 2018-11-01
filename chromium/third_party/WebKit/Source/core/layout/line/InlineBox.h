@@ -173,6 +173,9 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
     m_bitfields.setFirstLine(firstLine);
   }
   bool isFirstLineStyle() const { return m_bitfields.firstLine(); }
+  const ComputedStyle& lineStyleRef() const {
+    return getLineLayoutItem().styleRef(isFirstLineStyle());
+  }
 
   void remove(MarkLineBoxes = MarkLineBoxesDirty);
 
@@ -315,15 +318,16 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   virtual SelectionState getSelectionState() const;
 
   virtual bool canAccommodateEllipsis(bool ltr,
-                                      int blockEdge,
-                                      int ellipsisWidth) const;
+                                      LayoutUnit blockEdge,
+                                      LayoutUnit ellipsisWidth) const;
   // visibleLeftEdge, visibleRightEdge are in the parent's coordinate system.
   virtual LayoutUnit placeEllipsisBox(bool ltr,
                                       LayoutUnit visibleLeftEdge,
                                       LayoutUnit visibleRightEdge,
                                       LayoutUnit ellipsisWidth,
                                       LayoutUnit& truncatedWidth,
-                                      bool&);
+                                      bool&,
+                                      LayoutUnit logicalLeftOffset);
 
 #if DCHECK_IS_ON()
   void setHasBadParent();

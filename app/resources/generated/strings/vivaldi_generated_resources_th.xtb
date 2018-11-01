@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">ส่วนขยายนี้ไม่จำเป็นต้องมีสิทธิ์พิเศษ</translation>
 <translation id="1620510694547887537">กล้องถ่ายรูป</translation>
 <translation id="1635033183663317347">ติดตั้งโดยผู้ดูแล</translation>
-<translation id="1652965563555864525">ปิ&amp;ดเสียง</translation>
 <translation id="1723824996674794290">&amp;หน้าต่างใหม่</translation>
 <translation id="1729533290416704613">อีกทั้งยังควบคุมหน้าที่จะแสดงเมื่อคุณทำการค้นหาจากแถบอเนกประสงค์ด้วย</translation>
 <translation id="1789575671122666129">ป๊อปอัป</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">เลือก&amp;ทั้งหมด</translation>
 <translation id="1965328510789761112">หน่วยความจำส่วนตัว</translation>
 <translation id="1992397118740194946">ไม่ได้ตั้งค่า</translation>
-<translation id="2011110593081822050">Web Worker: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">ซ่อนปลั๊กอินนี้</translation>
 <translation id="2087822576218954668">พิมพ์: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">อัปเดตปลั๊กอิน</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">การแจ้งเตือน</translation>
 <translation id="2501797496290880632">พิมพ์แป้นพิมพ์ลัด</translation>
 <translation id="2509857212037838238">ติดตั้ง <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;หยุดชั่วคราว</translation>
 <translation id="2550212893339833758">หน่วยความจำสว็อป</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">เปิดการใช้งานอีกครั้ง</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">ปฏิเสธ</translation>
 <translation id="3936390757709632190">เปิดเสี&amp;ยงในแท็บใหม่</translation>
 <translation id="3943582379552582368">&amp;กลับ</translation>
-<translation id="3954582159466790312">ยกเลิก&amp;การปิดเสียง</translation>
 <translation id="3979395879372752341">เพิ่มส่วนขยายใหม่แล้ว (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">สร้างส่วนขยายแล้ว:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968">&amp;ไปที่ <ph name="URL" /></translation>
 <translation id="4595560905247879544">แอปและส่วนขยายสามารถแก้ไขได้โดยผู้จัดการ (<ph name="CUSTODIAN_NAME" />) เท่านั้น</translation>
 <translation id="4613271546271159013">ส่วนขยายได้เปลี่ยนแปลงหน้าที่แสดงขึ้นเมื่อคุณเปิดแท็บใหม่</translation>
-<translation id="4623537843784569564">ส่วนขยายนี้อาจมีการอัปเดตที่ไม่ถูกต้อง โปรดลองติดตั้งใหม่</translation>
 <translation id="4677772697204437347">หน่วยความจำ GPU</translation>
 <translation id="4711638718396952945">กู้คืนการตั้งค่า</translation>
 <translation id="4839303808932127586">บั&amp;นทึกวิดีโอเป็น...</translation>
 <translation id="4851858059374029925">ติดตั้ง <ph name="PLUGIN_NAME" /> ไหม โปรดติดตั้งเฉพาะปลั๊กอินที่คุณไว้ใจเท่านั้น</translation>
-<translation id="4861833787540810454">เ&amp;ล่น</translation>
-<translation id="4883993111890464517">ส่วนขยายนี้อาจได้รับความเสียหาย โปรดลองติดตั้งใหม่</translation>
 <translation id="488785315393301722">แสดงรายละเอียด</translation>
 <translation id="4911714727432509308">ไม่มีส่วนขยา่ยใดที่มีการกำหนดแป้นพิมพ์ลัดให้</translation>
-<translation id="4919987486109157213">ส่วนขยายเกิดความเสียหาย โปรดลองติดตั้งใหม่</translation>
 <translation id="4927301649992043040">แพคส่วนขยาย</translation>
 <translation id="49896407730300355">หมุน&amp;ทวนเข็มนาฬิกา</translation>
 <translation id="4989966318180235467">ตรวจสอบ&amp;หน้าพื้นหลัง</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">แป้นพิมพ์ลัด</translation>
 <translation id="6798954102094737107">ปลั๊กอิน: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">เก็บการเปลี่ยนแปลงไว้</translation>
-<translation id="6844537474943985871">ส่วนขยายนี้อาจได้รับความเสียหาย โปรดลองถอนการติดตั้งและติดตั้งใหม่</translation>
 <translation id="6863910145616405334">ไม่พบปลั๊กอิน</translation>
 <translation id="6886871292305414135">เปิดลิงก์ในแ&amp;ท็บใหม่</translation>
 <translation id="6900284862687837908">แอปพื้นหลัง: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">แท็บใหม่</translation>
 <translation id="7564847347806291057">สิ้นสุดกระบวนการ</translation>
-<translation id="7618337809041914424">&amp;พิมพ์เฟรม...</translation>
 <translation id="7629827748548208700">แท็บ: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">ยกเลิก</translation>
 <translation id="7663719505383602579">เครื่องรับ: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -260,7 +250,6 @@
 <translation id="8916476537757519021">เฟรมย่อยแบบไม่ระบุตัวตน: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">ซ่อนรายละเอียด</translation>
 <translation id="9088234649737575428">นโยบายองค์กรบล็อก <ph name="PLUGIN_NAME" /> ไว้</translation>
-<translation id="9101691533782776290">เปิดแอป</translation>
 <translation id="9170848237812810038">เ&amp;ลิกทำ</translation>
 <translation id="9215293857209265904">เพิ่ม "<ph name="EXTENSION_NAME" />" แล้ว</translation>
 <translation id="9219103736887031265">ภาพ</translation>

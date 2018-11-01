@@ -21,7 +21,6 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSStyleSheet.h"
-#include "core/css/MediaQuery.h"
 #include "core/css/MediaQueryExp.h"
 #include "core/css/parser/MediaQueryParser.h"
 #include "wtf/text/StringBuilder.h"
@@ -58,7 +57,7 @@ MediaQuerySet::MediaQuerySet(const MediaQuerySet& o)
     m_queries[i] = o.m_queries[i]->copy();
 }
 
-MediaQuerySet* MediaQuerySet::create(const String& mediaString) {
+RefPtr<MediaQuerySet> MediaQuerySet::create(const String& mediaString) {
   if (mediaString.isEmpty())
     return MediaQuerySet::create();
 
@@ -66,7 +65,7 @@ MediaQuerySet* MediaQuerySet::create(const String& mediaString) {
 }
 
 bool MediaQuerySet::set(const String& mediaString) {
-  MediaQuerySet* result = create(mediaString);
+  RefPtr<MediaQuerySet> result = create(mediaString);
   m_queries.swap(result->m_queries);
   return true;
 }
@@ -75,24 +74,24 @@ bool MediaQuerySet::add(const String& queryString) {
   // To "parse a media query" for a given string means to follow "the parse
   // a media query list" steps and return "null" if more than one media query
   // is returned, or else the returned media query.
-  MediaQuerySet* result = create(queryString);
+  RefPtr<MediaQuerySet> result = create(queryString);
 
   // Only continue if exactly one media query is found, as described above.
   if (result->m_queries.size() != 1)
     return true;
 
-  MediaQuery* newQuery = result->m_queries[0].release();
+  std::unique_ptr<MediaQuery> newQuery = std::move(result->m_queries[0]);
   ASSERT(newQuery);
 
   // If comparing with any of the media queries in the collection of media
   // queries returns true terminate these steps.
   for (size_t i = 0; i < m_queries.size(); ++i) {
-    MediaQuery* query = m_queries[i].get();
-    if (*query == *newQuery)
+    MediaQuery& query = *m_queries[i];
+    if (query == *newQuery)
       return true;
   }
 
-  m_queries.push_back(newQuery);
+  m_queries.push_back(std::move(newQuery));
   return true;
 }
 
@@ -100,21 +99,21 @@ bool MediaQuerySet::remove(const String& queryStringToRemove) {
   // To "parse a media query" for a given string means to follow "the parse
   // a media query list" steps and return "null" if more than one media query
   // is returned, or else the returned media query.
-  MediaQuerySet* result = create(queryStringToRemove);
+  RefPtr<MediaQuerySet> result = create(queryStringToRemove);
 
   // Only continue if exactly one media query is found, as described above.
   if (result->m_queries.size() != 1)
     return true;
 
-  MediaQuery* newQuery = result->m_queries[0].release();
+  std::unique_ptr<MediaQuery> newQuery = std::move(result->m_queries[0]);
   ASSERT(newQuery);
 
   // Remove any media query from the collection of media queries for which
   // comparing with the media query returns true.
   bool found = false;
   for (size_t i = 0; i < m_queries.size(); ++i) {
-    MediaQuery* query = m_queries[i].get();
-    if (*query == *newQuery) {
+    MediaQuery& query = *m_queries[i];
+    if (query == *newQuery) {
       m_queries.remove(i);
       --i;
       found = true;
@@ -124,8 +123,8 @@ bool MediaQuerySet::remove(const String& queryStringToRemove) {
   return found;
 }
 
-void MediaQuerySet::addMediaQuery(MediaQuery* mediaQuery) {
-  m_queries.push_back(mediaQuery);
+void MediaQuerySet::addMediaQuery(std::unique_ptr<MediaQuery> mediaQuery) {
+  m_queries.push_back(std::move(mediaQuery));
 }
 
 String MediaQuerySet::mediaText() const {
@@ -142,16 +141,13 @@ String MediaQuerySet::mediaText() const {
   return text.toString();
 }
 
-DEFINE_TRACE(MediaQuerySet) {
-  visitor->trace(m_queries);
-}
-
-MediaList::MediaList(MediaQuerySet* mediaQueries, CSSStyleSheet* parentSheet)
+MediaList::MediaList(RefPtr<MediaQuerySet> mediaQueries,
+                     CSSStyleSheet* parentSheet)
     : m_mediaQueries(mediaQueries),
       m_parentStyleSheet(parentSheet),
       m_parentRule(nullptr) {}
 
-MediaList::MediaList(MediaQuerySet* mediaQueries, CSSRule* parentRule)
+MediaList::MediaList(RefPtr<MediaQuerySet> mediaQueries, CSSRule* parentRule)
     : m_mediaQueries(mediaQueries),
       m_parentStyleSheet(nullptr),
       m_parentRule(parentRule) {}
@@ -166,7 +162,8 @@ void MediaList::setMediaText(const String& value) {
 }
 
 String MediaList::item(unsigned index) const {
-  const HeapVector<Member<MediaQuery>>& queries = m_mediaQueries->queryVector();
+  const Vector<std::unique_ptr<MediaQuery>>& queries =
+      m_mediaQueries->queryVector();
   if (index < queries.size())
     return queries[index]->cssText();
   return String();
@@ -202,13 +199,12 @@ void MediaList::appendMedium(const String& medium,
     m_parentStyleSheet->didMutate();
 }
 
-void MediaList::reattach(MediaQuerySet* mediaQueries) {
+void MediaList::reattach(RefPtr<MediaQuerySet> mediaQueries) {
   ASSERT(mediaQueries);
   m_mediaQueries = mediaQueries;
 }
 
 DEFINE_TRACE(MediaList) {
-  visitor->trace(m_mediaQueries);
   visitor->trace(m_parentStyleSheet);
   visitor->trace(m_parentRule);
 }

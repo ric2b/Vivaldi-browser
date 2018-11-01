@@ -215,9 +215,10 @@ bool LayoutSVGRoot::shouldApplyViewportClip() const {
   // clipped. When the svg is stand-alone (isDocumentElement() == true) the
   // viewport clipping should always be applied, noting that the window
   // scrollbars should be hidden if overflow=hidden.
-  return style()->overflowX() == EOverflow::Hidden ||
-         style()->overflowX() == EOverflow::Auto ||
-         style()->overflowX() == EOverflow::Scroll || this->isDocumentElement();
+  return style()->overflowX() == EOverflow::kHidden ||
+         style()->overflowX() == EOverflow::kAuto ||
+         style()->overflowX() == EOverflow::kScroll ||
+         this->isDocumentElement();
 }
 
 LayoutRect LayoutSVGRoot::visualOverflowRect() const {
@@ -247,7 +248,7 @@ void LayoutSVGRoot::styleDidChange(StyleDifference diff,
                                    const ComputedStyle* oldStyle) {
   if (diff.needsFullLayout())
     setNeedsBoundariesUpdate();
-  if (diff.needsPaintInvalidation()) {
+  if (diff.needsFullPaintInvalidation()) {
     // Box decorations may have appeared/disappeared - recompute status.
     m_hasBoxDecorationBackground = styleRef().hasBoxDecorationBackground();
   }

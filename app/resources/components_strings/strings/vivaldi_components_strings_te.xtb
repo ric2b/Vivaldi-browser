@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">ఈ పేజీ యొక్క సేవ్ చేసిన (అంటే పాతది) కాపీని చూపుతుంది.</translation>
 <translation id="1559528461873125649">అటువంటి ఫైల్ లేదా డైరెక్టరీ లేదు</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">మీరు వెబ్ పేజీ యొక్క సోర్స్‌ను వీక్షిస్తున్నారు.</translation>
 <translation id="194030505837763158"><ph name="LINK" />కి వెళ్లండి</translation>
 <translation id="2030481566774242610">మీ ఉద్దేశ్యం <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">తక్కువ</translation>
 <translation id="2166378884831602661">ఈ సైట్ సురక్షితమైన కనెక్షన్‌ను అందించలేదు</translation>
 <translation id="2292556288342944218">మీ ఇంటర్నెట్ ప్రాప్యత బ్లాక్ చేయబడింది</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> చెల్లని ప్రతిస్పందనను పంపింది.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">ఫైల్‌కు ప్రాప్యత తిరస్కరించబడింది</translation>
 <translation id="2705137772291741111">ఈ సైట్ యొక్క సేవ్ చేయబడిన (కాష్ చేసిన) కాపీ చదవదగినట్లుగా లేదు.</translation>
 <translation id="2784949926578158345">కనెక్షన్ మళ్ళీ సెట్ చెయ్యబడింది.</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" />లో సర్వర్ ప్రమాణపత్రం నకిలీదిగా కనిపిస్తోంది.</translation>
 <translation id="2909946352844186028">నెట్‌వర్క్ మార్పు గుర్తించబడింది.</translation>
 <translation id="3005723025932146533">సేవ్ చేయబడిన కాపీని చూపు</translation>
 <translation id="3109728660330352905">మీకు ఈ పేజీని వీక్షించడానికి అధికారం లేదు.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS అనేది వెబ్‌సైట్ పేరును దాని ఇంటర్నెట్ చిరునామాకి అనువదించే నెట్‌వర్క్ సేవ.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> మీ లాగిన్ ప్రమాణపత్రాన్ని ఆమోదించలేదు లేదా ఏదీ అందించి ఉండకపోవచ్చు.</translation>
 <translation id="4522570452068850558">వివరాలు</translation>
-<translation id="4670097147947922288">మీరు పొడిగింపు పేజీని వీక్షిస్తున్నారు.</translation>
 <translation id="4708268264240856090">మీ కనెక్షన్‌కు అంతరాయం ఏర్పడింది</translation>
 <translation id="4744603770635761495">అమలు చేయగల మార్గం</translation>
 <translation id="4764776831041365478"><ph name="URL" /> వద్ద వెబ్‌పేజీ తాత్కాలికంగా తెరుచుకోవటం లేదు లేదా అది క్రొత్త వెబ్ చిరునామాకు శాశ్వతంగా తరలించబడి ఉండవచ్చు.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">ఈ పేజీ పని చేయడం లేదు</translation>
 <translation id="5869405914158311789">ఈ సైట్‌ను చేరుకోలేకపోయాము</translation>
 <translation id="5990559369517809815">సర్వర్‌కు అభ్యర్థనలను ఒక పొడిగింపు బ్లాక్ చేయబడ్డాయి.</translation>
-<translation id="6042308850641462728">మరింత</translation>
 <translation id="6146055958333702838">ఏవైనా కేబుల్‌లను తనిఖీ చేయండి మరియు మీరు ఉపయోగించే ఏవైనా రూటర్‌లు, మోడెమ్‌లు
         లేదా ఇతర నెట్‌వర్క్ పరికరాలను రీబూట్ చేయండి.</translation>
 <translation id="6165508094623778733">మరింత తెలుసుకోండి</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">నెట్‌వర్క్ సూచనను నిలిపివేసి ప్రయత్నించండి</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> కనెక్ట్ కావడానికి నిరాకరించింది.</translation>
 <translation id="6711464428925977395">ప్రాక్సీ సర్వర్‌లో ఏదో తప్పు ఉంది లేదా చిరునామా సరైనది కాదు.</translation>
-<translation id="6830600606572693159"><ph name="URL" /> వద్ద ఉన్న వెబ్‌పేజీ ప్రస్తుతానికి అందుబాటులో లేదు.  నిర్వహణ కోసం ఇది ఎక్కవ లేదా తక్కవ కావచ్చు.</translation>
 <translation id="6897140037006041989">వినియోగదారు ప్రతినిధి</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> భద్రతా ప్రమాణాలకు కట్టుబడి లేదు.</translation>
-<translation id="7269802741830436641">ఈ వెబ్‌పేజీ దారిమళ్ళించబడ్డ లూప్‌ని కలిగి ఉంది</translation>
 <translation id="7353601530677266744">ఆదేశ పంక్తి</translation>
 <translation id="7419106976560586862">ప్రొఫైల్ మార్గం</translation>
 <translation id="7518003948725431193">వెబ్ చిరునామాకు వెబ్‌పేజీ కనుగొనబడలేదు: <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ప్రస్తుతం ఈ అభ్యర్థనను నిర్వహించలేదు.</translation>
 <translation id="7716424297397655342">కాష్ నుండి ఈ సైట్‌ను లోడ్ చేయలేకపోయాము</translation>
 <translation id="7758069387465995638">ఫైర్‌వాల్ లేదా యాంటీవైరస్ సాఫ్ట్‌వేర్ కనెక్షన్‌ను బ్లాక్ చేసి ఉండవచ్చు.</translation>
-<translation id="778579833039460630">ఏ డేటా స్వీకరించబడలేదు</translation>
 <translation id="7951415247503192394">(32-బిట్)</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" /> సర్వర్ <ph name="BEGIN_ABBR" />DNS చిరునామా<ph name="END_ABBR" />ను కనుగొనడం సాధ్యపడలేదు.</translation>
 <translation id="8142868475871995937">నిరోధిత జాబితాలో ఉన్న URLల జాబితాను మరియు మీ సిస్టమ్ నిర్వాహకుని ద్వారా అమలు చేయబడిన ఇతర విధానాలను చూడటానికి &lt;strong&gt;vivaldi://policy&lt;/strong&gt;ని సందర్శించండి.</translation>

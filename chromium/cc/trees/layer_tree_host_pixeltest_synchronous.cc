@@ -35,9 +35,9 @@ TEST_F(LayerTreeHostSynchronousPixelTest, OneContentLayer) {
 
   FakeContentLayerClient client;
   client.set_bounds(bounds);
-  SkPaint green_paint;
-  green_paint.setColor(SkColorSetARGB(255, 0, 255, 0));
-  client.add_draw_rect(gfx::Rect(bounds), green_paint);
+  PaintFlags green_flags;
+  green_flags.setColor(SkColorSetARGB(255, 0, 255, 0));
+  client.add_draw_rect(gfx::Rect(bounds), green_flags);
   scoped_refptr<PictureLayer> root = PictureLayer::Create(&client);
   root->SetBounds(bounds);
   root->SetIsDrawable(true);
@@ -51,7 +51,6 @@ class LayerTreeHostSynchronousGPUPixelTest : public LayerTreePixelTest {
   void InitializeSettings(LayerTreeSettings* settings) override {
     LayerTreePixelTest::InitializeSettings(settings);
     settings->single_thread_proxy_scheduler = false;
-    settings->gpu_rasterization_enabled = true;
     settings->gpu_rasterization_forced = true;
   }
 
@@ -66,9 +65,9 @@ TEST_F(LayerTreeHostSynchronousGPUPixelTest, OneContentLayer) {
 
   FakeContentLayerClient client;
   client.set_bounds(bounds);
-  SkPaint green_paint;
-  green_paint.setColor(SkColorSetARGB(255, 0, 255, 0));
-  client.add_draw_rect(gfx::Rect(bounds), green_paint);
+  PaintFlags green_flags;
+  green_flags.setColor(SkColorSetARGB(255, 0, 255, 0));
+  client.add_draw_rect(gfx::Rect(bounds), green_flags);
   scoped_refptr<PictureLayer> root = PictureLayer::Create(&client);
   root->SetBounds(bounds);
   client.set_bounds(bounds);

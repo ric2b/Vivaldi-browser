@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("spotlight") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "actions_spotlight_manager.h",
     "actions_spotlight_manager.mm",
@@ -60,6 +61,7 @@ source_set("unit_tests") {
     "//components/bookmarks/browser",
     "//components/bookmarks/test",
     "//components/favicon/core",
+    "//components/favicon/core/test:test_support",
     "//components/favicon_base",
     "//ios/chrome/browser/bookmarks",
     "//ios/public/provider/chrome/browser",

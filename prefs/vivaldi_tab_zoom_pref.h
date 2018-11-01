@@ -11,7 +11,7 @@ class WebContents;
 // browser code in components. Prevents linker errors when
 // compiled in components_unit_tests
 namespace vivaldi {
-  bool isTabZoomEnabled(content::WebContents *web_contents);
+bool isTabZoomEnabled(content::WebContents* web_contents);
 }  // namespace vivaldi
 
 #endif  // PREFS_VIVALDI_TAB_ZOOM_PREF_H_

@@ -13,12 +13,11 @@
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 
-#include "base/threading/thread_local.h"
+#include "base/threading/thread_restrictions.h"
 
 namespace base {
 
@@ -131,10 +130,9 @@ struct PathData {
   }
 };
 
-static LazyInstance<PathData>::Leaky g_path_data = LAZY_INSTANCE_INITIALIZER;
-
 static PathData* GetPathData() {
-  return g_path_data.Pointer();
+  static auto* path_data = new PathData();
+  return path_data;
 }
 
 // Tries to find |key| in the cache. |path_data| should be locked by the caller!
@@ -213,8 +211,8 @@ bool PathService::Get(int key, FilePath* result) {
     bool last_ioallow = base::ThreadRestrictions::SetIOAllowed(true);
     // Make sure path service never returns a path with ".." in it.
     path = MakeAbsoluteFilePath(path);
-	// Turn it back on, if it was on.
-	base::ThreadRestrictions::SetIOAllowed(last_ioallow);
+    // Turn it back on, if it was on.
+    base::ThreadRestrictions::SetIOAllowed(last_ioallow);
     if (path.empty())
       return false;
   }

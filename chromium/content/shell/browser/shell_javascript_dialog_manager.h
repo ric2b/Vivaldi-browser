@@ -25,7 +25,7 @@ class ShellJavaScriptDialogManager : public JavaScriptDialogManager {
   // JavaScriptDialogManager:
   void RunJavaScriptDialog(WebContents* web_contents,
                            const GURL& origin_url,
-                           JavaScriptMessageType javascript_message_type,
+                           JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
                            const DialogClosedCallback& callback,
@@ -36,7 +36,6 @@ class ShellJavaScriptDialogManager : public JavaScriptDialogManager {
                              const DialogClosedCallback& callback) override;
 
   void CancelDialogs(WebContents* web_contents,
-                     bool suppress_callbacks,
                      bool reset_state) override;
 
   // Called by the ShellJavaScriptDialog when it closes.

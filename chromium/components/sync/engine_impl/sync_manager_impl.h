@@ -72,11 +72,10 @@ class SyncManagerImpl
                           ModelTypeSet to_journal,
                           ModelTypeSet to_unapply) override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
-  void StartSyncingNormally(const ModelSafeRoutingInfo& routing_info,
-                            base::Time last_poll_time) override;
+  void StartSyncingNormally(base::Time last_poll_time) override;
+  void StartConfiguration() override;
   void ConfigureSyncer(ConfigureReason reason,
                        ModelTypeSet to_download,
-                       const ModelSafeRoutingInfo& new_routing_info,
                        const base::Closure& ready_task,
                        const base::Closure& retry_task) override;
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
@@ -89,6 +88,7 @@ class SyncManagerImpl
   void SaveChanges() override;
   void ShutdownOnSyncThread(ShutdownReason reason) override;
   UserShare* GetUserShare() override;
+  ModelTypeConnector* GetModelTypeConnector() override;
   std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
@@ -200,7 +200,7 @@ class SyncManagerImpl
 
   base::TimeDelta GetNudgeDelayTimeDelta(const ModelType& model_type);
 
-  typedef std::map<ModelType, NotificationInfo> NotificationInfoMap;
+  using NotificationInfoMap = std::map<ModelType, NotificationInfo>;
 
   // Determine if the parents or predecessors differ between the old and new
   // versions of an entry.  Note that a node's index may change without its
@@ -291,7 +291,7 @@ class SyncManagerImpl
   // forwarded to the observer slightly later, at the TRANSACTION_ENDING step
   // by HandleTransactionEndingChangeEvent. The list is cleared after observer
   // finishes processing.
-  typedef std::map<int, ImmutableChangeRecordList> ChangeRecordMap;
+  using ChangeRecordMap = std::map<int, ImmutableChangeRecordList>;
   ChangeRecordMap change_records_;
 
   SyncManager::ChangeDelegate* change_delegate_;

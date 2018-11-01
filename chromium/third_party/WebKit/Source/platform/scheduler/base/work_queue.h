@@ -115,7 +115,7 @@ class BLINK_PLATFORM_EXPORT WorkQueue {
   bool BlockedByFence() const;
 
  private:
-  WTF::Deque<TaskQueueImpl::Task> work_queue_;
+  TaskQueueImpl::TaskDeque work_queue_;
   WorkQueueSets* work_queue_sets_;   // NOT OWNED.
   TaskQueueImpl* const task_queue_;  // NOT OWNED.
   size_t work_queue_set_index_;

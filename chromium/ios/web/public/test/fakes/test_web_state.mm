@@ -20,7 +20,8 @@ void TestWebState::RemoveObserver(WebStateObserver* observer) {
 }
 
 TestWebState::TestWebState()
-    : web_usage_enabled_(false),
+    : browser_state_(nullptr),
+      web_usage_enabled_(false),
       is_loading_(false),
       trust_level_(kAbsolute),
       content_is_html_(true) {}
@@ -39,7 +40,7 @@ WebStateDelegate* TestWebState::GetDelegate() {
 void TestWebState::SetDelegate(WebStateDelegate* delegate) {}
 
 BrowserState* TestWebState::GetBrowserState() const {
-  return nullptr;
+  return browser_state_;
 }
 
 bool TestWebState::IsWebUsageEnabled() const {
@@ -66,6 +67,10 @@ const NavigationManager* TestWebState::GetNavigationManager() const {
 
 NavigationManager* TestWebState::GetNavigationManager() {
   return navigation_manager_.get();
+}
+
+CRWSessionStorage* TestWebState::BuildSessionStorage() {
+  return nil;
 }
 
 void TestWebState::SetNavigationManager(
@@ -119,6 +124,10 @@ bool TestWebState::IsShowingWebInterstitial() const {
 
 WebInterstitial* TestWebState::GetWebInterstitial() const {
   return nullptr;
+}
+
+void TestWebState::SetBrowserState(BrowserState* browser_state) {
+  browser_state_ = browser_state;
 }
 
 void TestWebState::SetContentIsHTML(bool content_is_html) {
@@ -177,14 +186,6 @@ void TestWebState::SetTrustLevel(URLVerificationTrustLevel trust_level) {
 
 CRWWebViewProxyType TestWebState::GetWebViewProxy() const {
   return nullptr;
-}
-
-int TestWebState::DownloadImage(const GURL& url,
-                                bool is_favicon,
-                                uint32_t max_bitmap_size,
-                                bool bypass_cache,
-                                const ImageDownloadCallback& callback) {
-  return 0;
 }
 
 service_manager::InterfaceRegistry* TestWebState::GetMojoInterfaceRegistry() {

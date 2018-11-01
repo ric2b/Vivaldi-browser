@@ -22,7 +22,6 @@
 // installer\util\google_chrome_distribution.cc
 namespace vivaldi {
 
-
 base::string16 LocalizeUrl(const wchar_t* url) {
   std::wstring lang = installer::GetCurrentTranslation();
   return base::ReplaceStringPlaceholders(url, lang.c_str(), NULL);
@@ -35,7 +34,7 @@ base::string16 GetUninstallSurveyUrl() {
 
 bool NavigateToUrlWithEdge(const base::string16& url) {
   base::string16 protocol_url = L"microsoft-edge:" + url;
-  SHELLEXECUTEINFO info = { sizeof(info) };
+  SHELLEXECUTEINFO info = {sizeof(info)};
   info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
   info.lpVerb = L"open";
   info.lpFile = protocol_url.c_str();
@@ -72,22 +71,21 @@ void DoPostUninstallOperations(const base::Version& version) {
   const base::win::OSInfo* os_info = base::win::OSInfo::GetInstance();
   base::win::OSInfo::VersionNumber version_number = os_info->version_number();
   base::string16 os_version =
-    base::StringPrintf(L"W%d.%d.%d", version_number.major,
-      version_number.minor, version_number.build);
+      base::StringPrintf(L"W%d.%d.%d", version_number.major,
+                         version_number.minor, version_number.build);
 
   base::string16 url = GetUninstallSurveyUrl() + L"&" + kVersionParam + L"=" +
-    base::ASCIIToUTF16(version.GetString()) + L"&" +
-    kOSParam + L"=" + os_version;
+                       base::ASCIIToUTF16(version.GetString()) + L"&" +
+                       kOSParam + L"=" + os_version;
 
   if (os_info->version() >= base::win::VERSION_WIN10 &&
-    NavigateToUrlWithEdge(url)) {
+      NavigateToUrlWithEdge(url)) {
     return;
   }
   NavigateToUrlWithIExplore(url);
 }
 
-HRESULT FindDesktopFolderView(REFIID riid, void **ppv)
-{
+HRESULT FindDesktopFolderView(REFIID riid, void** ppv) {
   CComPtr<IShellWindows> spShellWindows;
   HRESULT hr = spShellWindows.CoCreateInstance(CLSID_ShellWindows);
   if (FAILED(hr))
@@ -95,16 +93,16 @@ HRESULT FindDesktopFolderView(REFIID riid, void **ppv)
 
   CComVariant vtLoc(CSIDL_DESKTOP);
   CComVariant vtEmpty;
-  long lhwnd = 0;
+  long lhwnd = 0;  // NOLINT - Unusual, but this API does take a long
   CComPtr<IDispatch> spdisp;
   hr = spShellWindows->FindWindowSW(&vtLoc, &vtEmpty, SWC_DESKTOP, &lhwnd,
-      SWFO_NEEDDISPATCH, &spdisp);
+                                    SWFO_NEEDDISPATCH, &spdisp);
   if (FAILED(hr))
     return hr;
 
   CComPtr<IShellBrowser> spBrowser;
-  hr = CComQIPtr<IServiceProvider>(spdisp)->QueryService(SID_STopLevelBrowser,
-      IID_PPV_ARGS(&spBrowser));
+  hr = CComQIPtr<IServiceProvider>(spdisp)->QueryService(
+      SID_STopLevelBrowser, IID_PPV_ARGS(&spBrowser));
   if (FAILED(hr))
     return hr;
 
@@ -116,8 +114,7 @@ HRESULT FindDesktopFolderView(REFIID riid, void **ppv)
   return spView->QueryInterface(riid, ppv);
 }
 
-HRESULT GetDesktopAutomationObject(REFIID riid, void **ppv)
-{
+HRESULT GetDesktopAutomationObject(REFIID riid, void** ppv) {
   CComPtr<IShellView> spsv;
   HRESULT hr = FindDesktopFolderView(IID_PPV_ARGS(&spsv));
   if (FAILED(hr))
@@ -135,8 +132,7 @@ bool ShellExecuteFromExplorer(const base::FilePath& application_path,
                               const base::string16& parameters,
                               const base::FilePath& directory,
                               const base::string16& operation,
-                              int nShowCmd)
-{
+                              int nShowCmd) {
   CComPtr<IShellFolderViewDual> spFolderView;
   HRESULT hr = GetDesktopAutomationObject(IID_PPV_ARGS(&spFolderView));
   if (FAILED(hr))
@@ -149,12 +145,12 @@ bool ShellExecuteFromExplorer(const base::FilePath& application_path,
 
   AllowSetForegroundWindow(ASFW_ANY);
 
-  hr = CComQIPtr<IShellDispatch2>(spdispShell)->ShellExecute(
-      CComBSTR(application_path.value().c_str()),
-      CComVariant(parameters.c_str()),
-      CComVariant(directory.value().c_str()),
-      CComVariant(operation.c_str()),
-      CComVariant(nShowCmd));
+  hr =
+      CComQIPtr<IShellDispatch2>(spdispShell)
+          ->ShellExecute(CComBSTR(application_path.value().c_str()),
+                         CComVariant(parameters.c_str()),
+                         CComVariant(directory.value().c_str()),
+                         CComVariant(operation.c_str()), CComVariant(nShowCmd));
 
   return (hr == S_OK);
 }
@@ -167,14 +163,13 @@ base::string16 GetNewFeaturesUrl(const base::Version& version) {
   const base::win::OSInfo* os_info = base::win::OSInfo::GetInstance();
   base::win::OSInfo::VersionNumber version_number = os_info->version_number();
   base::string16 os_version =
-    base::StringPrintf(L"W%d.%d.%d", version_number.major,
-        version_number.minor, version_number.build);
+      base::StringPrintf(L"W%d.%d.%d", version_number.major,
+                         version_number.minor, version_number.build);
 
   base::string16 url = LocalizeUrl(kBaseUrl);
   url = url + L"&" + kVersionParam + L"=" +
-      base::ASCIIToUTF16(version.GetString()) + L"&" +
-      kOSParam + L"=" + os_version;
+        base::ASCIIToUTF16(version.GetString()) + L"&" + kOSParam + L"=" +
+        os_version;
   return url;
 }
-
-}
+}  // namespace vivaldi

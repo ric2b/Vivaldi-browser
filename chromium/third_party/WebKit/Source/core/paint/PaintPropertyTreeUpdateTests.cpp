@@ -35,7 +35,8 @@ TEST_P(PaintPropertyTreeUpdateTest,
   EXPECT_FALSE(frameScroll()->threadedScrollingDisabled());
   EXPECT_FALSE(overflowA->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->threadedScrollingDisabled());
 
   document().settings()->setThreadedScrollingEnabled(false);
@@ -47,7 +48,8 @@ TEST_P(PaintPropertyTreeUpdateTest,
   EXPECT_TRUE(frameScroll()->threadedScrollingDisabled());
   EXPECT_TRUE(overflowA->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->threadedScrollingDisabled());
 }
 
@@ -88,11 +90,13 @@ TEST_P(PaintPropertyTreeUpdateTest,
   EXPECT_TRUE(frameScroll()->hasBackgroundAttachmentFixedDescendants());
   EXPECT_TRUE(overflowA->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_TRUE(overflowB->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->hasBackgroundAttachmentFixedDescendants());
 
   // Removing a main thread scrolling reason should update the entire tree.
@@ -101,11 +105,13 @@ TEST_P(PaintPropertyTreeUpdateTest,
   EXPECT_FALSE(frameScroll()->hasBackgroundAttachmentFixedDescendants());
   EXPECT_FALSE(overflowA->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_FALSE(overflowB->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->hasBackgroundAttachmentFixedDescendants());
 
   // Adding a main thread scrolling reason should update the entire tree.
@@ -114,11 +120,13 @@ TEST_P(PaintPropertyTreeUpdateTest,
   EXPECT_TRUE(frameScroll()->hasBackgroundAttachmentFixedDescendants());
   EXPECT_TRUE(overflowA->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_TRUE(overflowB->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->hasBackgroundAttachmentFixedDescendants());
 }
 
@@ -232,15 +240,18 @@ TEST_P(PaintPropertyTreeUpdateTest,
   // reasons as we could be.
   EXPECT_TRUE(overflowA->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_FALSE(overflowB->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_TRUE(overflowB->layoutObject()
                   ->paintProperties()
-                  ->scroll()
+                  ->scrollTranslation()
+                  ->scrollNode()
                   ->parent()
                   ->isRoot());
 
@@ -249,15 +260,18 @@ TEST_P(PaintPropertyTreeUpdateTest,
   document().view()->updateAllLifecyclePhases();
   EXPECT_FALSE(overflowA->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_FALSE(overflowB->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->hasBackgroundAttachmentFixedDescendants());
   EXPECT_FALSE(overflowB->layoutObject()
                    ->paintProperties()
-                   ->scroll()
+                   ->scrollTranslation()
+                   ->scrollNode()
                    ->parent()
                    ->hasBackgroundAttachmentFixedDescendants());
 }
@@ -328,6 +342,9 @@ TEST_P(PaintPropertyTreeUpdateTest, UpdatingFrameViewContentClip) {
   EXPECT_EQ(FloatRoundedRect(0, 0, 5, 5), frameContentClip()->clipRect());
 }
 
+// There is also FrameThrottlingTest.UpdatePaintPropertiesOnUnthrottling
+// testing with real frame viewport intersection observer. This one tests
+// paint property update with or without AllowThrottlingScope.
 TEST_P(PaintPropertyTreeUpdateTest, BuildingStopsAtThrottledFrames) {
   setBodyInnerHTML(
       "<style>body { margin: 0; }</style>"
@@ -378,7 +395,7 @@ TEST_P(PaintPropertyTreeUpdateTest, BuildingStopsAtThrottledFrames) {
     // actively throttled descendants.
     document().view()->updateAllLifecyclePhases();
     EXPECT_FALSE(document().layoutView()->needsPaintPropertyUpdate());
-    EXPECT_TRUE(document().layoutView()->descendantNeedsPaintPropertyUpdate());
+    EXPECT_FALSE(document().layoutView()->descendantNeedsPaintPropertyUpdate());
     EXPECT_FALSE(transform->needsPaintPropertyUpdate());
     EXPECT_FALSE(transform->descendantNeedsPaintPropertyUpdate());
     EXPECT_FALSE(iframeLayoutView->needsPaintPropertyUpdate());
@@ -631,6 +648,78 @@ TEST_P(PaintPropertyTreeUpdateTest, TransformUpdatesOnRelativeLengthChanges) {
   document().view()->updateAllLifecyclePhases();
   EXPECT_EQ(TransformationMatrix().translate3d(100, 150, 0),
             transformObject->paintProperties()->transform()->matrix());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, CSSClipDependingOnSize) {
+  setBodyInnerHTML(
+      "<style>"
+      "  body { margin: 0 }"
+      "  #outer {"
+      "    position: absolute;"
+      "    width: 100px; height: 100px; top: 50px; left: 50px;"
+      "  }"
+      "  #clip {"
+      "    position: absolute;"
+      "    clip: rect(auto auto auto -5px);"
+      "    top: 0; left: 0; right: 0; bottom: 0;"
+      "  }"
+      "</style>"
+      "<div id='outer'>"
+      "  <div id='clip'></div>"
+      "</div>");
+
+  auto* outer = document().getElementById("outer");
+  auto* clip = getLayoutObjectByElementId("clip");
+  EXPECT_EQ(FloatRect(45, 50, 105, 100),
+            clip->paintProperties()->cssClip()->clipRect().rect());
+
+  outer->setAttribute(HTMLNames::styleAttr, "height: 200px");
+  document().view()->updateAllLifecyclePhases();
+  EXPECT_EQ(FloatRect(45, 50, 105, 200),
+            clip->paintProperties()->cssClip()->clipRect().rect());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, ScrollBoundsChange) {
+  setBodyInnerHTML(
+      "<div id='container'"
+      "    style='width: 100px; height: 100px; overflow: scroll'>"
+      "  <div id='content' style='width: 200px; height: 200px'></div>"
+      "</div>");
+
+  auto* container = getLayoutObjectByElementId("container");
+  auto* scrollNode =
+      container->paintProperties()->scrollTranslation()->scrollNode();
+  EXPECT_EQ(IntSize(100, 100), scrollNode->clip());
+  EXPECT_EQ(IntSize(200, 200), scrollNode->bounds());
+
+  document().getElementById("content")->setAttribute(
+      HTMLNames::styleAttr, "width: 200px; height: 300px");
+  document().view()->updateAllLifecyclePhases();
+  EXPECT_EQ(scrollNode,
+            container->paintProperties()->scrollTranslation()->scrollNode());
+  EXPECT_EQ(IntSize(100, 100), scrollNode->clip());
+  EXPECT_EQ(IntSize(200, 300), scrollNode->bounds());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, ScrollbarWidthChange) {
+  setBodyInnerHTML(
+      "<style>::-webkit-scrollbar {width: 20px; height: 20px}</style>"
+      "<div id='container'"
+      "    style='width: 100px; height: 100px; overflow: scroll'>"
+      "  <div id='content' style='width: 200px; height: 200px'></div>"
+      "</div>");
+
+  auto* container = getLayoutObjectByElementId("container");
+  auto* overflowClip = container->paintProperties()->overflowClip();
+  EXPECT_EQ(FloatSize(80, 80), overflowClip->clipRect().rect().size());
+
+  auto* newStyle = document().createElement("style");
+  newStyle->setTextContent("::-webkit-scrollbar {width: 40px; height: 40px}");
+  document().body()->appendChild(newStyle);
+
+  document().view()->updateAllLifecyclePhases();
+  EXPECT_EQ(overflowClip, container->paintProperties()->overflowClip());
+  EXPECT_EQ(FloatSize(60, 60), overflowClip->clipRect().rect().size());
 }
 
 }  // namespace blink

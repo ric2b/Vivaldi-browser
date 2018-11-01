@@ -4,9 +4,13 @@
 
 #include "chrome/browser/android/vr_shell/vr_shell_delegate.h"
 
+#include <utility>
+
 #include "base/android/jni_android.h"
-#include "chrome/browser/android/vr_shell/vr_shell.h"
+#include "chrome/browser/android/vr_shell/non_presenting_gvr_delegate.h"
+#include "device/vr/android/gvr/gvr_device.h"
 #include "device/vr/android/gvr/gvr_device_provider.h"
+#include "device/vr/android/gvr/gvr_gamepad_data_fetcher.h"
 #include "jni/VrShellDelegate_jni.h"
 
 using base::android::JavaParamRef;
@@ -14,84 +18,139 @@ using base::android::AttachCurrentThread;
 
 namespace vr_shell {
 
-// A non presenting delegate for magic window mode.
-class GvrNonPresentingDelegate : public device::GvrDelegate {
- public:
-  explicit GvrNonPresentingDelegate(jlong context) {
-    gvr_api_ =
-        gvr::GvrApi::WrapNonOwned(reinterpret_cast<gvr_context*>(context));
-  }
-
-  virtual ~GvrNonPresentingDelegate() = default;
-
-  // GvrDelegate implementation
-  void SetWebVRSecureOrigin(bool secure_origin) override {}
-  void SubmitWebVRFrame() override {}
-  void UpdateWebVRTextureBounds(const gvr::Rectf& left_bounds,
-                                const gvr::Rectf& right_bounds) override {}
-  void SetGvrPoseForWebVr(const gvr::Mat4f& pose,
-                          uint32_t pose_index) override {}
-  void SetWebVRRenderSurfaceSize(int width, int height) override {}
-  gvr::Sizei GetWebVRCompositorSurfaceSize() override {
-    return device::kInvalidRenderTargetSize; }
-  gvr::GvrApi* gvr_api() override { return gvr_api_.get(); }
- private:
-  std::unique_ptr<gvr::GvrApi> gvr_api_;
-};
-
-VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj) {
+VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj)
+    : weak_ptr_factory_(this) {
   j_vr_shell_delegate_.Reset(env, obj);
-  GvrDelegateProvider::SetInstance(this);
 }
 
 VrShellDelegate::~VrShellDelegate() {
-  GvrDelegateProvider::SetInstance(nullptr);
   if (device_provider_) {
-    device_provider_->OnNonPresentingDelegateRemoved();
+    device_provider_->Device()->OnDelegateChanged();
   }
 }
 
-VrShellDelegate* VrShellDelegate::GetNativeDelegate(
-    JNIEnv* env, jobject jdelegate) {
-  long native_delegate = Java_VrShellDelegate_getNativePointer(env, jdelegate);
-  return reinterpret_cast<VrShellDelegate*>(native_delegate);
+device::GvrDelegateProvider* VrShellDelegate::CreateVrShellDelegate() {
+  JNIEnv* env = AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jobject> jdelegate =
+      Java_VrShellDelegate_getInstance(env);
+  if (!jdelegate.is_null())
+    return GetNativeVrShellDelegate(env, jdelegate.obj());
+  return nullptr;
 }
 
-void VrShellDelegate::SetDelegate(device::GvrDelegate* delegate) {
-  // TODO(mthiesse): There's no reason for this delegate to be a WeakPtr
-  // anymore.
+VrShellDelegate* VrShellDelegate::GetNativeVrShellDelegate(JNIEnv* env,
+                                                           jobject jdelegate) {
+  return reinterpret_cast<VrShellDelegate*>(
+      Java_VrShellDelegate_getNativePointer(env, jdelegate));
+}
+
+void VrShellDelegate::SetDelegate(device::GvrDelegate* delegate,
+                                  gvr_context* context) {
+  context_ = context;
   delegate_ = delegate;
-  if (device_provider_) {
-    device_provider_->OnGvrDelegateReady(delegate_);
+  // Clean up the non-presenting delegate.
+  if (non_presenting_delegate_) {
+    device::mojom::VRVSyncProviderRequest request =
+        non_presenting_delegate_->OnSwitchToPresentingDelegate();
+    if (request.is_pending())
+      delegate->OnVRVsyncProviderRequest(std::move(request));
+    non_presenting_delegate_ = nullptr;
+    JNIEnv* env = AttachCurrentThread();
+    Java_VrShellDelegate_shutdownNonPresentingNativeContext(
+        env, j_vr_shell_delegate_.obj());
   }
+  if (device_provider_) {
+    device::GvrDevice* device = device_provider_->Device();
+    device::GamepadDataFetcherManager::GetInstance()->AddFactory(
+        new device::GvrGamepadDataFetcher::Factory(context, device->id()));
+    device->OnDelegateChanged();
+  }
+
+  delegate_->UpdateVSyncInterval(timebase_nanos_, interval_seconds_);
 }
 
 void VrShellDelegate::RemoveDelegate() {
-  if (device_provider_) {
-    device_provider_->OnGvrDelegateRemoved();
-  }
   delegate_ = nullptr;
+  device::GamepadDataFetcherManager::GetInstance()->RemoveSourceFactory(
+      device::GAMEPAD_SOURCE_GVR);
+  if (device_provider_) {
+    CreateNonPresentingDelegate();
+    device_provider_->Device()->OnDelegateChanged();
+  }
 }
 
-void VrShellDelegate::SetPresentResult(JNIEnv* env, jobject obj,
+void VrShellDelegate::SetPresentResult(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj,
                                        jboolean result) {
   CHECK(!present_callback_.is_null());
   present_callback_.Run(result);
   present_callback_.Reset();
 }
 
-void VrShellDelegate::DisplayActivate(JNIEnv* env, jobject obj) {
+void VrShellDelegate::DisplayActivate(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj) {
   if (device_provider_) {
-    device_provider_->OnDisplayActivate();
+    device_provider_->Device()->OnActivate(
+        device::mojom::VRDisplayEventReason::MOUNTED);
   }
+}
+
+void VrShellDelegate::UpdateVSyncInterval(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj,
+                                          jlong timebase_nanos,
+                                          jdouble interval_seconds) {
+  timebase_nanos_ = timebase_nanos;
+  interval_seconds_ = interval_seconds;
+  if (delegate_) {
+    delegate_->UpdateVSyncInterval(timebase_nanos_, interval_seconds_);
+  }
+  if (non_presenting_delegate_) {
+    non_presenting_delegate_->UpdateVSyncInterval(timebase_nanos_,
+                                                  interval_seconds_);
+  }
+}
+
+void VrShellDelegate::OnPause(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+  if (non_presenting_delegate_) {
+    non_presenting_delegate_->Pause();
+  }
+}
+
+void VrShellDelegate::OnResume(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+  if (non_presenting_delegate_) {
+    non_presenting_delegate_->Resume();
+  }
+}
+
+void VrShellDelegate::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+  delete this;
+}
+
+void VrShellDelegate::ShowTab(int id) {
+  JNIEnv* env = AttachCurrentThread();
+  Java_VrShellDelegate_showTab(env, j_vr_shell_delegate_.obj(), id);
+}
+
+void VrShellDelegate::OpenNewTab(bool incognito) {
+  JNIEnv* env = AttachCurrentThread();
+  Java_VrShellDelegate_openNewTab(env, j_vr_shell_delegate_.obj(), incognito);
 }
 
 void VrShellDelegate::SetDeviceProvider(
     device::GvrDeviceProvider* device_provider) {
+  CHECK(!device_provider_);
   device_provider_ = device_provider;
-  if (device_provider_ && delegate_) {
-    device_provider_->OnGvrDelegateReady(delegate_);
-  }
+  if (!delegate_)
+    CreateNonPresentingDelegate();
+  device_provider_->Device()->OnDelegateChanged();
+}
+
+void VrShellDelegate::ClearDeviceProvider() {
+  non_presenting_delegate_ = nullptr;
+  JNIEnv* env = AttachCurrentThread();
+  Java_VrShellDelegate_shutdownNonPresentingNativeContext(
+      env, j_vr_shell_delegate_.obj());
+  device_provider_ = nullptr;
 }
 
 void VrShellDelegate::RequestWebVRPresent(
@@ -117,31 +176,36 @@ void VrShellDelegate::ExitWebVRPresent() {
   Java_VrShellDelegate_exitWebVR(env, j_vr_shell_delegate_.obj());
 }
 
-void VrShellDelegate::ForceExitVr() {
+base::WeakPtr<VrShellDelegate> VrShellDelegate::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
+void VrShellDelegate::OnVRVsyncProviderRequest(
+    device::mojom::VRVSyncProviderRequest request) {
+  device::GvrDelegate* delegate = GetDelegate();
+  if (!delegate)
+    return;
+  delegate->OnVRVsyncProviderRequest(std::move(request));
+}
+
+void VrShellDelegate::CreateNonPresentingDelegate() {
   JNIEnv* env = AttachCurrentThread();
-  Java_VrShellDelegate_forceExitVr(env, j_vr_shell_delegate_.obj());
+  gvr_context* context = reinterpret_cast<gvr_context*>(
+      Java_VrShellDelegate_createNonPresentingNativeContext(
+          env, j_vr_shell_delegate_.obj()));
+  if (!context)
+    return;
+  context_ = context;
+  non_presenting_delegate_ =
+      base::MakeUnique<NonPresentingGvrDelegate>(context);
+  non_presenting_delegate_->UpdateVSyncInterval(timebase_nanos_,
+                                                interval_seconds_);
 }
 
-device::GvrDelegate* VrShellDelegate::GetNonPresentingDelegate() {
-  if (!non_presenting_delegate_) {
-    JNIEnv* env = AttachCurrentThread();
-    jlong context = Java_VrShellDelegate_createNonPresentingNativeContext(
-        env, j_vr_shell_delegate_.obj());
-    if (!context)
-      return nullptr;
-
-    non_presenting_delegate_.reset(new GvrNonPresentingDelegate(context));
-  }
-  return static_cast<GvrNonPresentingDelegate*>(non_presenting_delegate_.get());
-}
-
-void VrShellDelegate::DestroyNonPresentingDelegate() {
-  if (non_presenting_delegate_) {
-    non_presenting_delegate_.reset(nullptr);
-    JNIEnv* env = AttachCurrentThread();
-    Java_VrShellDelegate_shutdownNonPresentingNativeContext(
-        env, j_vr_shell_delegate_.obj());
-  }
+device::GvrDelegate* VrShellDelegate::GetDelegate() {
+  if (delegate_)
+    return delegate_;
+  return non_presenting_delegate_.get();
 }
 
 void VrShellDelegate::SetListeningForActivate(bool listening) {
@@ -160,6 +224,11 @@ bool RegisterVrShellDelegate(JNIEnv* env) {
 
 jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   return reinterpret_cast<intptr_t>(new VrShellDelegate(env, obj));
+}
+
+static void OnLibraryAvailable(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
+  device::GvrDelegateProvider::SetInstance(
+      base::Bind(&VrShellDelegate::CreateVrShellDelegate));
 }
 
 }  // namespace vr_shell

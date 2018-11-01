@@ -94,8 +94,11 @@ UI.DragHandler = class {
 
   _createGlassPane() {
     this._glassPaneInUse = true;
-    if (!UI.DragHandler._glassPaneUsageCount++)
-      UI.DragHandler._glassPane = new UI.GlassPane(UI.DragHandler._documentForMouseOut);
+    if (!UI.DragHandler._glassPaneUsageCount++) {
+      UI.DragHandler._glassPane = new UI.GlassPane();
+      UI.DragHandler._glassPane.setBlockPointerEvents(true);
+      UI.DragHandler._glassPane.show(UI.DragHandler._documentForMouseOut);
+    }
   }
 
   _disposeGlassPane() {
@@ -104,7 +107,7 @@ UI.DragHandler = class {
     this._glassPaneInUse = false;
     if (--UI.DragHandler._glassPaneUsageCount)
       return;
-    UI.DragHandler._glassPane.dispose();
+    UI.DragHandler._glassPane.hide();
     delete UI.DragHandler._glassPane;
     delete UI.DragHandler._documentForMouseOut;
   }
@@ -297,35 +300,6 @@ UI.installInertialDragHandle = function(
     elementDrag(lastX, lastY);
   }
 };
-
-/**
- * @unrestricted
- */
-UI.GlassPane = class {
-  /**
-   * @param {!Document} document
-   * @param {boolean=} dimmed
-   */
-  constructor(document, dimmed) {
-    this.element = createElement('div');
-    var background = dimmed ? 'rgba(255, 255, 255, 0.5)' : 'transparent';
-    this._zIndex = UI._glassPane ? UI._glassPane._zIndex + 1000 :
-                                   3000;  // Deliberately starts with 3000 to hide other z-indexed elements below.
-    this.element.style.cssText = 'position:absolute;top:0;bottom:0;left:0;right:0;background-color:' + background +
-        ';z-index:' + this._zIndex + ';overflow:hidden;';
-    document.body.appendChild(this.element);
-    UI._glassPane = this;
-    // TODO(dgozman): disallow focus outside of glass pane?
-  }
-
-  dispose() {
-    delete UI._glassPane;
-    this.element.remove();
-  }
-};
-
-/** @type {!UI.GlassPane|undefined} */
-UI._glassPane;
 
 /**
  * @param {?Node=} node
@@ -752,8 +726,13 @@ UI.anotherProfilerActiveLabel = function() {
  * @return {string}
  */
 UI.asyncStackTraceLabel = function(description) {
-  if (description)
+  if (description) {
+    if (description === 'Promise.resolve')
+      description = Common.UIString('Promise resolved');
+    else if (description === 'Promise.reject')
+      description = Common.UIString('Promise rejected');
     return description + ' ' + Common.UIString('(async)');
+  }
   return Common.UIString('Async Call');
 };
 
@@ -1211,7 +1190,7 @@ UI.initializeUIUtils = function(document, themeSetting) {
 
   var body = /** @type {!Element} */ (document.body);
   UI.appendStyle(body, 'ui/inspectorStyle.css');
-  UI.appendStyle(body, 'ui/popover.css');
+  UI.GlassPane.setContainer(/** @type {!Element} */ (document.body));
 };
 
 /**
@@ -1287,7 +1266,7 @@ UI.createCheckboxLabel = function(title, checked, subtitle) {
   var element = createElement('label', 'dt-checkbox');
   element.checkboxElement.checked = !!checked;
   if (title !== undefined) {
-    element.textElement = element.createChild('div', 'dt-checkbox-text');
+    element.textElement = element.shadowRoot.createChild('div', 'dt-checkbox-text');
     element.textElement.textContent = title;
     if (subtitle !== undefined) {
       element.subtitleElement = element.textElement.createChild('div', 'dt-checkbox-subtitle');
@@ -1395,7 +1374,8 @@ UI.appendStyle = function(node, cssFile) {
        * @this {Node}
        */
       function toggleCheckbox(event) {
-        if (event.target !== checkboxElement && event.target !== this) {
+        var deepTarget = event.deepElementFromPoint();
+        if (deepTarget !== checkboxElement && deepTarget !== this) {
           event.consume();
           checkboxElement.click();
         }
@@ -1525,6 +1505,12 @@ UI.appendStyle = function(node, cssFile) {
     createdCallback: function() {
       var root = UI.createShadowRootWithCoreStyles(this, 'ui/closeButton.css');
       this._buttonElement = root.createChild('div', 'close-button');
+      var regularIcon = UI.Icon.create('smallicon-cross', 'default-icon');
+      this._hoverIcon = UI.Icon.create('smallicon-red-cross-hover', 'hover-icon');
+      this._activeIcon = UI.Icon.create('smallicon-red-cross-active', 'active-icon');
+      this._buttonElement.appendChild(regularIcon);
+      this._buttonElement.appendChild(this._hoverIcon);
+      this._buttonElement.appendChild(this._activeIcon);
     },
 
     /**
@@ -1532,7 +1518,13 @@ UI.appendStyle = function(node, cssFile) {
      * @this {Element}
      */
     set gray(gray) {
-      this._buttonElement.className = gray ? 'close-button-gray' : 'close-button';
+      if (gray) {
+        this._hoverIcon.setIconType('smallicon-gray-cross-hover');
+        this._activeIcon.setIconType('smallicon-gray-cross-active');
+      } else {
+        this._hoverIcon.setIconType('smallicon-red-cross-hover');
+        this._activeIcon.setIconType('smallicon-red-cross-active');
+      }
     },
 
     __proto__: HTMLDivElement.prototype
@@ -1950,7 +1942,7 @@ UI.createExternalLink = function(url, linkText, className, preventClick) {
     a.href = href;
     a.classList.add('devtools-link');
     if (!preventClick) {
-      a.addEventListener('click', (event) => {
+      a.addEventListener('click', event => {
         event.consume(true);
         InspectorFrontendHost.openInNewTab(/** @type {string} */ (href));
       }, false);
@@ -2038,3 +2030,44 @@ UI.createFileSelectorElement = function(callback) {
  * @type {number}
  */
 UI.MaxLengthForDisplayedURLs = 150;
+
+/**
+ * @unrestricted
+ */
+UI.ConfirmDialog = class extends UI.VBox {
+  /**
+   * @param {!Document|!Element} where
+   * @param {string} message
+   * @param {!Function} callback
+   */
+  static show(where, message, callback) {
+    var dialog = new UI.Dialog();
+    dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.MeasureContent);
+    dialog.addCloseButton();
+    dialog.setDimmed(true);
+    new UI
+        .ConfirmDialog(
+            message,
+            () => {
+              dialog.hide();
+              callback();
+            },
+            () => dialog.hide())
+        .show(dialog.contentElement);
+    dialog.show(where);
+  }
+
+  /**
+   * @param {string} message
+   * @param {!Function} okCallback
+   * @param {!Function} cancelCallback
+   */
+  constructor(message, okCallback, cancelCallback) {
+    super(true);
+    this.registerRequiredCSS('ui/confirmDialog.css');
+    this.contentElement.createChild('div', 'message').createChild('span').textContent = message;
+    var buttonsBar = this.contentElement.createChild('div', 'button');
+    buttonsBar.appendChild(UI.createTextButton(Common.UIString('Ok'), okCallback));
+    buttonsBar.appendChild(UI.createTextButton(Common.UIString('Cancel'), cancelCallback));
+  }
+};

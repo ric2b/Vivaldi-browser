@@ -32,9 +32,9 @@
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/SecurityContext.h"
-#include "core/fetch/AccessControlStatus.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "public/platform/WebTraceLocation.h"
@@ -54,6 +54,11 @@ class LocalDOMWindow;
 class PublicURLManager;
 class SecurityOrigin;
 enum class TaskType : unsigned;
+
+enum ReasonForCallingCanExecuteScripts {
+  AboutToExecuteScript,
+  NotAboutToExecuteScript
+};
 
 class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
                                      public Supplementable<ExecutionContext> {
@@ -99,7 +104,7 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
       TaskType,
       const WebTraceLocation&,
       std::unique_ptr<ExecutionContextTask>,
-      const String& taskNameForInstrumentation = emptyString()) = 0;
+      const String& taskNameForInstrumentation = emptyString) = 0;
 
   // Gets the DOMTimerCoordinator which maintains the "active timer
   // list" of tasks created by setTimeout and setInterval. The
@@ -111,6 +116,10 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   KURL contextURL() const { return virtualURL(); }
   KURL contextCompleteURL(const String& url) const {
     return virtualCompleteURL(url);
+  }
+
+  virtual bool canExecuteScripts(ReasonForCallingCanExecuteScripts) {
+    return false;
   }
 
   bool shouldSanitizeScriptError(const String& sourceURL, AccessControlStatus);

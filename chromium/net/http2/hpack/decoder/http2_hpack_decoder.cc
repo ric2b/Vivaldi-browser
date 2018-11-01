@@ -5,6 +5,7 @@
 #include "net/http2/hpack/decoder/http2_hpack_decoder.h"
 
 #include "base/logging.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "net/http2/decoder/decode_status.h"
 
 using base::StringPiece;
@@ -26,6 +27,11 @@ void Http2HpackDecoder::set_listener(HpackDecoderListener* listener) {
 
 HpackDecoderListener* Http2HpackDecoder::listener() const {
   return decoder_state_.listener();
+}
+
+void Http2HpackDecoder::set_tables_debug_listener(
+    HpackDecoderTablesDebugListener* debug_listener) {
+  decoder_state_.set_tables_debug_listener(debug_listener);
 }
 
 void Http2HpackDecoder::set_max_string_size_bytes(
@@ -109,6 +115,10 @@ bool Http2HpackDecoder::error_detected() {
     }
   }
   return error_detected_;
+}
+
+size_t Http2HpackDecoder::EstimateMemoryUsage() const {
+  return base::trace_event::EstimateMemoryUsage(entry_buffer_);
 }
 
 void Http2HpackDecoder::ReportError(StringPiece error_message) {

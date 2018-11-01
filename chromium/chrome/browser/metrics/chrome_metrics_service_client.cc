@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -17,17 +18,21 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/google/google_brand.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
 #include "chrome/browser/metrics/https_engagement_metrics_provider.h"
@@ -35,8 +40,10 @@
 #include "chrome/browser/metrics/network_quality_estimator_provider_impl.h"
 #include "chrome/browser/metrics/sampling_metrics_provider.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_metrics_provider.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
@@ -46,11 +53,14 @@
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/util_constants.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_watcher/stability_debugging.h"
+#include "components/history/core/browser/history_service.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
 #include "components/metrics/file_metrics_provider.h"
 #include "components/metrics/gpu/gpu_metrics_provider.h"
+#include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "components/metrics/metrics_service.h"
@@ -70,6 +80,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/device_info/device_count_metrics_provider.h"
 #include "components/translate/core/browser/translate_ranker_metrics_provider.h"
+#include "components/ukm/ukm_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
@@ -200,9 +211,15 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
 
   base::FilePath user_data_dir;
   if (base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
-    // Register the file holding browser metrics.
+    // Reporting of persistent histograms from last session is controlled by
+    // a feature param. TODO(bcwhite): The current default is not to upload
+    // until some issues are resolved. See crbug.com/706422 for details.
+    std::string send_unreported = base::GetFieldTrialParamValueByFeature(
+        base::kPersistentHistogramsFeature, "send_unreported_metrics");
+    bool report_previous_persistent_histograms =
+        metrics_reporting_enabled && (send_unreported == "yes");
     RegisterOrRemovePreviousRunMetricsFile(
-        metrics_reporting_enabled, user_data_dir,
+        report_previous_persistent_histograms, user_data_dir,
         ChromeMetricsServiceClient::kBrowserMetricsName, task_runner,
         file_metrics_provider.get());
 
@@ -318,6 +335,7 @@ std::unique_ptr<ChromeMetricsServiceClient> ChromeMetricsServiceClient::Create(
 // static
 void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   metrics::MetricsService::RegisterPrefs(registry);
+  ukm::UkmService::RegisterPrefs(registry);
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
 
   RegisterFileMetricsPreferences(registry);
@@ -335,6 +353,10 @@ void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
 
 metrics::MetricsService* ChromeMetricsServiceClient::GetMetricsService() {
   return metrics_service_.get();
+}
+
+ukm::UkmService* ChromeMetricsServiceClient::GetUkmService() {
+  return ukm_service_.get();
 }
 
 void ChromeMetricsServiceClient::SetMetricsClientId(
@@ -501,11 +523,12 @@ std::unique_ptr<metrics::MetricsLogUploader>
 ChromeMetricsServiceClient::CreateUploader(
     const std::string& server_url,
     const std::string& mime_type,
+    metrics::MetricsLogUploader::MetricServiceType service_type,
     const base::Callback<void(int)>& on_upload_complete) {
   return std::unique_ptr<metrics::MetricsLogUploader>(
       new metrics::NetMetricsLogUploader(
-          g_browser_process->system_request_context(),
-          server_url, mime_type, on_upload_complete));
+          g_browser_process->system_request_context(), server_url, mime_type,
+          service_type, on_upload_complete));
 }
 
 base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
@@ -553,12 +576,22 @@ void ChromeMetricsServiceClient::Initialize() {
   metrics_service_.reset(
       new metrics::MetricsService(metrics_state_manager_, this, local_state));
 
+  RegisterMetricsServiceProviders();
+
+  if (base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
+    ukm_service_.reset(new ukm::UkmService(local_state, this));
+    RegisterUKMProviders();
+  }
+}
+
+void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
+  PrefService* local_state = g_browser_process->local_state();
+
   // Gets access to persistent metrics shared by sub-processes.
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new SubprocessMetricsProvider()));
 
-  // Register metrics providers.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
@@ -577,12 +610,15 @@ void ChromeMetricsServiceClient::Initialize() {
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(new OmniboxMetricsProvider(
           base::Bind(&chrome::IsIncognitoSessionActive))));
+
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new ChromeStabilityMetricsProvider(local_state)));
+
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::GPUMetricsProvider));
+
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::ScreenInfoMetricsProvider));
@@ -698,6 +734,14 @@ void ChromeMetricsServiceClient::Initialize() {
           new CertificateReportingMetricsProvider()));
 }
 
+void ChromeMetricsServiceClient::RegisterUKMProviders() {
+  ukm_service_->RegisterMetricsProvider(
+      base::MakeUnique<metrics::NetworkMetricsProvider>(
+          base::MakeUnique<metrics::NetworkQualityEstimatorProviderImpl>(
+              g_browser_process->io_thread()),
+          content::BrowserThread::GetBlockingPool()));
+}
+
 bool ChromeMetricsServiceClient::ShouldIncludeProfilerDataInLog() {
   // Upload profiler data at most once per session.
   if (has_uploaded_profiler_data_)
@@ -752,11 +796,6 @@ void ChromeMetricsServiceClient::CollectFinalHistograms() {
   details->StartFetch();
 }
 
-void ChromeMetricsServiceClient::MergeHistogramDeltas() {
-  DCHECK(GetMetricsService());
-  GetMetricsService()->MergeHistogramDeltas();
-}
-
 void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -791,10 +830,8 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
 
   // Merge histograms from metrics providers into StatisticsRecorder.
   content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&ChromeMetricsServiceClient::MergeHistogramDeltas,
-                 weak_ptr_factory_.GetWeakPtr()),
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&base::StatisticsRecorder::ImportProvidedHistograms),
       callback);
 
   // Set up the callback task to call after we receive histograms from all
@@ -864,6 +901,25 @@ void ChromeMetricsServiceClient::RegisterForNotifications() {
       OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(
           base::Bind(&ChromeMetricsServiceClient::OnURLOpenedFromOmnibox,
                      base::Unretained(this)));
+
+  // Observe history deletions for all profiles.
+  registrar_.Add(this, chrome::NOTIFICATION_PROFILE_ADDED,
+                 content::NotificationService::AllBrowserContextsAndSources());
+  for (Profile* profile :
+       g_browser_process->profile_manager()->GetLoadedProfiles()) {
+    RegisterForProfileEvents(profile);
+  }
+}
+
+void ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
+  history::HistoryService* history_service =
+      HistoryServiceFactory::GetForProfile(profile,
+                                           ServiceAccessType::IMPLICIT_ACCESS);
+  ObserveServiceForDeletions(history_service);
+  browser_sync::ProfileSyncService* sync =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
+  if (sync)
+    ObserveServiceForSyncDisables(static_cast<syncer::SyncService*>(sync));
 }
 
 void ChromeMetricsServiceClient::Observe(
@@ -884,6 +940,10 @@ void ChromeMetricsServiceClient::Observe(
       metrics_service_->OnApplicationNotIdle();
       break;
 
+    case chrome::NOTIFICATION_PROFILE_ADDED:
+      RegisterForProfileEvents(content::Source<Profile>(source).ptr());
+      break;
+
     default:
       NOTREACHED();
   }
@@ -895,4 +955,24 @@ void ChromeMetricsServiceClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
 
 bool ChromeMetricsServiceClient::IsUMACellularUploadLogicEnabled() {
   return metrics::IsCellularLogicEnabled();
+}
+
+void ChromeMetricsServiceClient::OnHistoryDeleted() {
+  if (ukm_service_)
+    ukm_service_->Purge();
+}
+
+void ChromeMetricsServiceClient::OnSyncPrefsChanged(bool must_purge) {
+  if (!ukm_service_)
+    return;
+  if (must_purge) {
+    ukm_service_->Purge();
+    ukm_service_->ResetClientId();
+  }
+  // Signal service manager to enable/disable UKM based on new state.
+  UpdateRunningServices();
+}
+
+bool ChromeMetricsServiceClient::IsHistorySyncEnabledOnAllProfiles() {
+  return SyncDisableObserver::IsHistorySyncEnabledOnAllProfiles();
 }

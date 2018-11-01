@@ -375,8 +375,8 @@
         {
             "type": "setting",
             "category": "Sources",
-            "title": "Search in content scripts",
-            "settingName": "searchInContentScripts",
+            "title": "Search in anonymous and content scripts",
+            "settingName": "searchInAnonymousAndContentScripts",
             "settingType": "boolean",
             "defaultValue": false
         },
@@ -615,10 +615,11 @@
         "persistence",
         "quick_open",
         "inline_editor",
-        "color_picker"
+        "color_picker",
+        "event_listeners",
+        "object_ui"
     ],
     "scripts": [
-        "UIList.js",
         "AddSourceMapURLDialog.js",
         "CallStackSidebarPane.js",
         "DebuggerPausedMessage.js",
@@ -655,7 +656,7 @@
         "ObjectEventListenersSidebarPane.js"
     ],
     "resources": [
-        "uiList.css",
+        "callStackSidebarPane.css",
         "debuggerPausedMessage.css",
         "eventListenerBreakpoints.css",
         "fileBasedSearchResultsPane.css",
@@ -666,6 +667,7 @@
         "sourcesPanel.css",
         "sourcesSearch.css",
         "sourcesView.css",
+        "threadsSidebarPane.css",
         "dialog.css"
     ]
 }

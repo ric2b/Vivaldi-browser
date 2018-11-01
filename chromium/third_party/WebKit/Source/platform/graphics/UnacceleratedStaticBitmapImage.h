@@ -19,13 +19,12 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
   IntSize size() const override;
   sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override;
 
-  void draw(SkCanvas*,
-            const SkPaint&,
+  void draw(PaintCanvas*,
+            const PaintFlags&,
             const FloatRect& dstRect,
             const FloatRect& srcRect,
             RespectImageOrientationEnum,
-            ImageClampingMode,
-            const ColorBehavior&) override;
+            ImageClampingMode) override;
 
  private:
   UnacceleratedStaticBitmapImage(sk_sp<SkImage>);

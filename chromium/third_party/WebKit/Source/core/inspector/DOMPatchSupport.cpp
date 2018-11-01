@@ -215,7 +215,7 @@ bool DOMPatchSupport::innerPatchNode(Digest* oldDigest,
 
   bool result = innerPatchChildren(oldElement, oldDigest->m_children,
                                    newDigest->m_children, exceptionState);
-  m_unusedNodesMap.remove(newDigest->m_sha1);
+  m_unusedNodesMap.erase(newDigest->m_sha1);
   return result;
 }
 
@@ -261,12 +261,12 @@ DOMPatchSupport::diff(const HeapVector<Member<Digest>>& oldList,
   DiffTable oldTable;
 
   for (size_t i = 0; i < newList.size(); ++i) {
-    newTable.add(newList[i]->m_sha1, Vector<size_t>())
+    newTable.insert(newList[i]->m_sha1, Vector<size_t>())
         .storedValue->value.push_back(i);
   }
 
   for (size_t i = 0; i < oldList.size(); ++i) {
-    oldTable.add(oldList[i]->m_sha1, Vector<size_t>())
+    oldTable.insert(oldList[i]->m_sha1, Vector<size_t>())
         .storedValue->value.push_back(i);
   }
 
@@ -335,7 +335,7 @@ bool DOMPatchSupport::innerPatchChildren(
       usedNewOrdinals;
   for (size_t i = 0; i < oldList.size(); ++i) {
     if (oldMap[i].first) {
-      if (usedNewOrdinals.add(oldMap[i].second).isNewEntry)
+      if (usedNewOrdinals.insert(oldMap[i].second).isNewEntry)
         continue;
       oldMap[i].first = 0;
       oldMap[i].second = 0;
@@ -387,7 +387,7 @@ bool DOMPatchSupport::innerPatchChildren(
       newMap[i].second = 0;
       continue;
     }
-    usedOldOrdinals.add(oldOrdinal);
+    usedOldOrdinals.insert(oldOrdinal);
     markNodeAsUsed(newMap[i].first);
   }
 
@@ -489,7 +489,7 @@ DOMPatchSupport::Digest* DOMPatchSupport::createDigest(
       base64Encode(reinterpret_cast<const char*>(digestResult.data()), 10);
 
   if (unusedNodesMap)
-    unusedNodesMap->add(digest->m_sha1, digest);
+    unusedNodesMap->insert(digest->m_sha1, digest);
   return digest;
 }
 
@@ -541,7 +541,7 @@ void DOMPatchSupport::markNodeAsUsed(Digest* digest) {
   queue.append(digest);
   while (!queue.isEmpty()) {
     Digest* first = queue.takeFirst();
-    m_unusedNodesMap.remove(first->m_sha1);
+    m_unusedNodesMap.erase(first->m_sha1);
     for (size_t i = 0; i < first->m_children.size(); ++i)
       queue.append(first->m_children[i].get());
   }

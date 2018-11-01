@@ -12,22 +12,22 @@ namespace vivaldi {
 
 // Called by Dispatcher::GetJsResources()
 void VivaldiAddScriptResources(
-        std::vector<std::pair<std::string, int> > &resources) {
-  resources.push_back(std::make_pair("webViewPrivateMethods",
-                                     IDR_WEB_VIEW_PRIVATE_API_METHODS_JS));
-  resources.push_back(std::make_pair("webViewPrivate",
-                                     IDR_WEB_VIEW_PRIVATE_JS));
-  resources.push_back(std::make_pair("webViewEventsPrivate",
-                                     IDR_WEB_VIEW_PRIVATE_EVENTS_JS));
-  resources.push_back(std::make_pair("webViewAttributesPrivate",
-                                     IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS));
-  resources.push_back(std::make_pair("webViewConstantsPrivate",
-                                     IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS));
+    std::vector<std::pair<const char*, int> >* resources) {
+  resources->push_back(std::make_pair("webViewPrivateMethods",
+                                      IDR_WEB_VIEW_PRIVATE_API_METHODS_JS));
+  resources->push_back(
+      std::make_pair("webViewPrivate", IDR_WEB_VIEW_PRIVATE_JS));
+  resources->push_back(
+      std::make_pair("webViewEventsPrivate", IDR_WEB_VIEW_PRIVATE_EVENTS_JS));
+  resources->push_back(std::make_pair("webViewAttributesPrivate",
+                                      IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS));
+  resources->push_back(std::make_pair("webViewConstantsPrivate",
+                                      IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS));
 }
 
 // Called by Dispatcher::RequireGuestViewModules()
 void VivaldiAddRequiredModules(extensions::ScriptContext* context,
-         extensions::ModuleSystem* module_system) {
+                               extensions::ModuleSystem* module_system) {
   // Require WebView.
   if (context->GetAvailability("webViewInternal").is_available() &&
       vivaldi::IsVivaldiRunning()) {
@@ -35,4 +35,4 @@ void VivaldiAddRequiredModules(extensions::ScriptContext* context,
   }
 }
 
-} // namespace vivaldi
+}  // namespace vivaldi

@@ -1,7 +1,13 @@
 //
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved.
 //
+#ifndef UI_COCOA_VIVALDI_MAIN_MENU_MAC_H_
+#define UI_COCOA_VIVALDI_MAIN_MENU_MAC_H_
+
 #import <Cocoa/Cocoa.h>
+
+#include <memory>
+#include <string>
 
 #include "base/task/cancelable_task_tracker.h"
 
@@ -19,12 +25,13 @@ namespace vivaldi {
 
 class FaviconLoaderMac {
  public:
-  FaviconLoaderMac(Profile* profile);
+  explicit FaviconLoaderMac(Profile* profile);
   ~FaviconLoaderMac();
 
-  void LoadFavicon(NSMenuItem *item, const std::string& url);
-  void OnFaviconDataAvailable(NSMenuItem* item,
-    const favicon_base::FaviconImageResult& image_result);
+  void LoadFavicon(NSMenuItem* item, const std::string& url);
+  void OnFaviconDataAvailable(
+      NSMenuItem* item,
+      const favicon_base::FaviconImageResult& image_result);
   void CancelPendingRequests();
 
  private:
@@ -34,3 +41,5 @@ class FaviconLoaderMac {
 };
 
 }  // namespace vivaldi
+
+#endif  // UI_COCOA_VIVALDI_MAIN_MENU_MAC_H_

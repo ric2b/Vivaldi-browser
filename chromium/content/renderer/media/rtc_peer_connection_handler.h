@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -132,7 +133,7 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   blink::WebRTCSessionDescription localDescription() override;
   blink::WebRTCSessionDescription remoteDescription() override;
 
-  bool setConfiguration(
+  blink::WebRTCErrorType setConfiguration(
       const blink::WebRTCConfiguration& configuration) override;
   bool addICECandidate(const blink::WebRTCICECandidate& candidate) override;
   bool addICECandidate(const blink::WebRTCVoidRequest& request,
@@ -249,7 +250,7 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   blink::WebFrame* frame_ = nullptr;
 
-  ScopedVector<WebRtcMediaStreamAdapter> local_streams_;
+  std::vector<std::unique_ptr<WebRtcMediaStreamAdapter>> local_streams_;
 
   base::WeakPtr<PeerConnectionTracker> peer_connection_tracker_;
 

@@ -14,24 +14,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 
-#if defined(USE_CAIRO)
-#if defined(OS_OPENBSD)
-#include <cairo.h>
-#elif defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-#include <cairo/cairo.h>
-#endif
-#endif
-
-#if defined(OS_MACOSX)
-#if defined(OS_IOS)
-#include <CoreGraphics/CoreGraphics.h>
-#else
-#include <ApplicationServices/ApplicationServices.h>
-#endif
-
-#include "base/mac/scoped_cftyperef.h"
-#endif
-
 namespace gfx {
 
 namespace {
@@ -47,8 +29,7 @@ bool HasClipOrTransform(SkCanvas& canvas) {
 
   // Now we know the clip is a regular rectangle, make sure it covers the
   // entire canvas.
-  SkIRect clip_bounds;
-  canvas.getClipDeviceBounds(&clip_bounds);
+  SkIRect clip_bounds = canvas.getDeviceClipBounds();
 
   SkImageInfo info;
   size_t row_bytes;

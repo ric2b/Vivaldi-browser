@@ -38,7 +38,6 @@ source_set("lib") {
     "frame/custom_frame_view_mus.h",
     "frame/detached_title_area_renderer.cc",
     "frame/detached_title_area_renderer.h",
-    "frame/detached_title_area_renderer_host.h",
     "keyboard_ui_mus.cc",
     "keyboard_ui_mus.h",
     "move_event_handler.cc",
@@ -51,10 +50,6 @@ source_set("lib") {
     "property_util.h",
     "screen_mus.cc",
     "screen_mus.h",
-    "shadow.cc",
-    "shadow.h",
-    "shadow_controller.cc",
-    "shadow_controller.h",
     "shelf_delegate_mus.cc",
     "shelf_delegate_mus.h",
     "shell_delegate_mus.cc",
@@ -80,7 +75,6 @@ source_set("lib") {
     "//chromeos:power_manager_proto",
     "//components/user_manager",
     "//components/wallpaper",
-    "//content/public/common:service_names",
     "//device/bluetooth",
     "//ui/app_list/presenter",
     "//ui/app_list/presenter:mojom",
@@ -93,8 +87,7 @@ source_set("lib") {
 
   public_deps = [
     "//ash",
-    "//ash/public/cpp",
-    "//ash/public/interfaces",
+    "//ash/public/cpp:ash_public_cpp",
     "//base",
     "//base:i18n",
     "//mash/public/interfaces",
@@ -140,13 +133,9 @@ service("mus") {
   # TODO(beng): This target relies on //mash/session, but there is a cycle so we
   #             can't state that dependency here.
   data_deps = [
-    ":manifest",
+    ":resources",
+    ":resources_200",
     "//services/ui",
-  ]
-
-  resources = [
-    "$root_out_dir/ash_mus_resources.pak",
-    "$root_out_dir/ash_mus_resources_200.pak",
   ]
 }
 
@@ -160,8 +149,8 @@ service_manifest("manifest") {
 repack("resources") {
   output = "$root_out_dir/ash_mus_resources.pak"
   sources = [
-    "$root_gen_dir/ash/common/strings/ash_strings_en-US.pak",
     "$root_gen_dir/ash/resources/ash_resources_100_percent.pak",
+    "$root_gen_dir/ash/strings/ash_strings_en-US.pak",
     "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_100_percent.pak",
     "$root_gen_dir/ui/chromeos/strings/ui_chromeos_strings_en-US.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
@@ -170,8 +159,8 @@ repack("resources") {
     "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak",
   ]
   deps = [
-    "//ash/common/strings",
     "//ash/resources",
+    "//ash/strings",
     "//ui/chromeos/resources",
     "//ui/chromeos/strings",
     "//ui/resources",
@@ -201,11 +190,9 @@ source_set("unittests") {
   testonly = true
 
   sources = [
-    "accelerators/accelerator_controller_registrar_test_api.cc",
-    "accelerators/accelerator_controller_registrar_test_api.h",
-    "accelerators/accelerator_controller_unittest.cc",
     "app_launch_unittest.cc",
     "bridge/wm_shell_mus_test_api.h",
+    "screen_mus_unittest.cc",
     "test/ash_test_impl_mus.cc",
     "test/ash_test_impl_mus.h",
     "test/wm_test_base.cc",
@@ -220,8 +207,7 @@ source_set("unittests") {
     ":lib",
     ":resources",
     "//ash",
-    "//ash/common/test:test_support",
-    "//ash/public/interfaces",
+    "//ash/public/cpp:ash_public_cpp",
     "//ash/test:test_support_without_content",
     "//base",
     "//base/test:test_config",
@@ -231,7 +217,6 @@ source_set("unittests") {
     "//services/service_manager/public/cpp:service_test_support",
     "//services/ui/common:mus_common",
     "//services/ui/public/cpp",
-    "//services/ui/public/cpp/tests:unittest_support",
     "//services/ui/public/interfaces",
     "//skia",
     "//testing/gtest",

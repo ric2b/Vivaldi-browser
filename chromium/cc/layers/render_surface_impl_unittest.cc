@@ -28,7 +28,8 @@ TEST(RenderSurfaceLayerImplTest, Occlusion) {
 
   impl.CalcDrawProps(viewport_size);
 
-  RenderSurfaceImpl* render_surface_impl = owning_layer_impl->render_surface();
+  RenderSurfaceImpl* render_surface_impl =
+      owning_layer_impl->GetRenderSurface();
   ASSERT_TRUE(render_surface_impl);
 
   {
@@ -71,11 +72,10 @@ TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
   LayerTestCommon::LayerImplTest impl;
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(impl.host_impl()->active_tree(), 2);
-  root->SetHasRenderSurface(true);
   std::unique_ptr<LayerImpl> surface =
       LayerImpl::Create(impl.host_impl()->active_tree(), 3);
   surface->SetBounds(layer_size);
-  surface->SetHasRenderSurface(true);
+  surface->test_properties()->force_render_surface = true;
 
   gfx::Transform scale;
   scale.Scale(2, 2);
@@ -104,14 +104,14 @@ TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
                                ->root_layer_for_testing()
                                ->test_properties()
                                ->children[0];
-  RenderSurfaceImpl* render_surface_impl = surface_raw->render_surface();
+  RenderSurfaceImpl* render_surface_impl = surface_raw->GetRenderSurface();
   std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
   AppendQuadsData append_quads_data;
   render_surface_impl->AppendQuads(render_pass.get(), &append_quads_data);
 
   const RenderPassDrawQuad* quad =
       RenderPassDrawQuad::MaterialCast(render_pass->quad_list.front());
-  EXPECT_EQ(gfx::Vector2dF(0.0005f, 0.0005f), quad->mask_uv_scale);
+  EXPECT_EQ(gfx::RectF(0, 0, 1.f, 1.f), quad->mask_uv_rect);
   EXPECT_EQ(gfx::Vector2dF(2.f, 2.f), quad->filters_scale);
 }
 

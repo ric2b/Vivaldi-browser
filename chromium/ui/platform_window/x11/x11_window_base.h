@@ -24,7 +24,7 @@ class XScopedEventSelector;
 // are platform specific are left unimplemented.
 class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
  public:
-  explicit X11WindowBase(PlatformWindowDelegate* delegate);
+  X11WindowBase(PlatformWindowDelegate* delegate, const gfx::Rect& bounds);
   ~X11WindowBase() override;
 
   // Creates new underlying XWindow. Does not map XWindow.
@@ -71,29 +71,13 @@ class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
 
   base::string16 window_title_;
 
-  // Setting the bounds is an asynchronous operation in X11. |requested_bounds_|
-  // is the bounds requested using XConfigureWindow, and |confirmed_bounds_| is
-  // the bounds the X11 server has set on the window.
-  gfx::Rect requested_bounds_;
-  gfx::Rect confirmed_bounds_;
+  // The bounds of |xwindow_|.
+  gfx::Rect bounds_;
 
   bool window_mapped_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(X11WindowBase);
 };
-
-namespace test {
-
-// Sets the value of the |override_redirect| flag when creating an X11 window.
-// It is necessary to set this flag on for various tests, otherwise the call to
-// X11WindowBase::Show() blocks because it never receives the MapNotify event.
-// It is
-// unclear why this is necessary, but might be related to calls to
-// XInitThreads().
-X11_WINDOW_EXPORT void SetUseOverrideRedirectWindowByDefault(
-    bool override_redirect);
-
-}  // namespace test
 
 }  // namespace ui
 

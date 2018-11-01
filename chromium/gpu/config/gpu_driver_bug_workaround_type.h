@@ -207,6 +207,8 @@
          wake_up_gpu_before_drawing)                         \
   GPU_OP(USE_TESTING_GPU_DRIVER_WORKAROUND,                  \
          use_gpu_driver_workaround_for_testing)              \
+  GPU_OP(DISABLE_NON_EMPTY_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES, \
+         disable_non_empty_post_sub_buffers_for_onscreen_surfaces) \
 // clang-format on
 
 namespace gpu {

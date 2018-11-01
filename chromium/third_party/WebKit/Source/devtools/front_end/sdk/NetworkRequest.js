@@ -650,7 +650,7 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
    */
   get requestCookies() {
     if (!this._requestCookies)
-      this._requestCookies = SDK.CookieParser.parseCookie(this.target(), this.requestHeaderValue('Cookie'));
+      this._requestCookies = SDK.CookieParser.parseCookie(this.requestHeaderValue('Cookie'));
     return this._requestCookies;
   }
 
@@ -749,7 +749,7 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
    */
   get responseCookies() {
     if (!this._responseCookies)
-      this._responseCookies = SDK.CookieParser.parseSetCookie(this.target(), this.responseHeaderValue('Set-Cookie'));
+      this._responseCookies = SDK.CookieParser.parseSetCookie(this.responseHeaderValue('Set-Cookie'));
     return this._responseCookies;
   }
 
@@ -1136,7 +1136,8 @@ SDK.NetworkRequest.InitiatorType = {
   Other: 'other',
   Parser: 'parser',
   Redirect: 'redirect',
-  Script: 'script'
+  Script: 'script',
+  Preload: 'preload'
 };
 
 /** @typedef {!{name: string, value: string}} */

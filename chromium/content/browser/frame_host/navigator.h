@@ -52,6 +52,7 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   virtual void DidStartProvisionalLoad(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
+      const std::vector<GURL>& redirect_chain,
       const base::TimeTicks& navigation_start) {};
 
   // The RenderFrameHostImpl has failed a provisional load.
@@ -154,15 +155,6 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   virtual void OnBeginNavigation(FrameTreeNode* frame_tree_node,
                                  const CommonNavigationParams& common_params,
                                  const BeginNavigationParams& begin_params);
-
-  // PlzNavigate
-  // Called when a NavigationRequest for |frame_tree_node| failed. An
-  // appropriate RenderFrameHost should be selected and asked to show an error
-  // page. |has_stale_copy_in_cache| is true if there is a stale copy of the
-  // unreachable page in cache.
-  virtual void FailedNavigation(FrameTreeNode* frame_tree_node,
-                                bool has_stale_copy_in_cache,
-                                int error_code) {}
 
   // PlzNavigate
   // Cancel a NavigationRequest for |frame_tree_node|. Called when

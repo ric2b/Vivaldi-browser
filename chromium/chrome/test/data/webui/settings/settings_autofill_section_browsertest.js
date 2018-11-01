@@ -18,6 +18,7 @@ GEN_INCLUDE([
  * @constructor
  */
 function CountryDetailManagerTestImpl() {}
+
 CountryDetailManagerTestImpl.prototype = {
   /** @override */
   getCountryList: function() {
@@ -126,9 +127,13 @@ SettingsAutofillSectionBrowserTest.prototype = {
    * @private
    */
   createAutofillSection_: function(addresses, creditCards) {
+    // Override the AutofillManagerImpl for testing.
+    this.autofillManager = new TestAutofillManager();
+    this.autofillManager.data.addresses = addresses;
+    this.autofillManager.data.creditCards = creditCards;
+    AutofillManagerImpl.instance_ = this.autofillManager;
+
     var section = document.createElement('settings-autofill-section');
-    section.addresses = addresses;
-    section.creditCards = creditCards;
     document.body.appendChild(section);
     Polymer.dom.flush();
     return section;
@@ -167,6 +172,10 @@ SettingsAutofillSectionBrowserTest.prototype = {
 
 TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
   var self = this;
+
+  setup(function() {
+    PolymerTest.clearBody();
+  });
 
   suite('AutofillSection', function() {
     test('verifyCreditCardCount', function() {
@@ -217,6 +226,32 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
                    row.querySelector('#creditCardExpiration').textContent);
     });
 
+    test('verifyCreditCardRowButtonIsDropdownWhenLocal', function() {
+      var creditCard = FakeDataMaker.creditCardEntry();
+      creditCard.metadata.isLocal = true;
+      var section = self.createAutofillSection_([], [creditCard]);
+      var creditCardList = section.$.creditCardList;
+      var row = creditCardList.children[0];
+      assertTrue(!!row);
+      var menuButton = row.querySelector('#creditCardMenu');
+      assertTrue(!!menuButton);
+      var outlinkButton = row.querySelector('[is="paper-icon-button-light"');
+      assertFalse(!!outlinkButton);
+    });
+
+    test('verifyCreditCardRowButtonIsOutlinkWhenRemote', function() {
+      var creditCard = FakeDataMaker.creditCardEntry();
+      creditCard.metadata.isLocal = false;
+      var section = self.createAutofillSection_([], [creditCard]);
+      var creditCardList = section.$.creditCardList;
+      var row = creditCardList.children[0];
+      assertTrue(!!row);
+      var menuButton = row.querySelector('#creditCardMenu');
+      assertFalse(!!menuButton);
+      var outlinkButton = row.querySelector('[is="paper-icon-button-light"');
+      assertTrue(!!outlinkButton);
+    });
+
     test('verifyAddVsEditCreditCardTitle', function() {
       var newCreditCard = FakeDataMaker.emptyCreditCardEntry();
       var newCreditCardDialog = self.createCreditCardDialog_(newCreditCard);
@@ -226,6 +261,12 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
       assertNotEquals(oldCreditCardDialog.title_, newCreditCardDialog.title_);
       assertNotEquals('', newCreditCardDialog.title_);
       assertNotEquals('', oldCreditCardDialog.title_);
+
+      // Wait for dialogs to open before finishing test.
+      return Promise.all([
+        test_util.whenAttributeIs(newCreditCardDialog.$.dialog, 'open', true),
+        test_util.whenAttributeIs(oldCreditCardDialog.$.dialog, 'open', true),
+      ]);
     });
 
     test('verifyExpiredCreditCardYear', function() {
@@ -303,7 +344,7 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
       });
     });
 
-    test('verifySaveExpiredCreditCardEdit', function(done) {
+    test('verify save disabled for expired credit card', function() {
       var creditCard = FakeDataMaker.emptyCreditCardEntry();
 
       var now = new Date();
@@ -315,29 +356,29 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
 
       return test_util.whenAttributeIs(
           creditCardDialog.$.dialog, 'open', true).then(function() {
-        creditCardDialog.addEventListener('save-credit-card', function() {
-          // Fail the test because the save event should not be called when
-          // the card is expired.
-          assertTrue(false);
-        });
-        creditCardDialog.addEventListener('tap', function() {
-          // Test is |done| in a timeout in order to ensure that
-          // 'save-credit-card' is NOT fired after this test.
-          assertFalse(creditCardDialog.$.expired.hidden);
-          window.setTimeout(done, 100);
-        });
-        MockInteractions.tap(creditCardDialog.$.saveButton);
+        assertTrue(creditCardDialog.$.saveButton.disabled);
       });
     });
 
     // Test will timeout if event is not received.
-    test('verifySaveCreditCardEdit', function(done) {
+    test('verify save new credit card', function(done) {
       var creditCard = FakeDataMaker.emptyCreditCardEntry();
       var creditCardDialog = self.createCreditCardDialog_(creditCard);
 
       return test_util.whenAttributeIs(
           creditCardDialog.$.dialog, 'open', true).then(function() {
+        // Not expired, but still can't be saved, because there's no name.
         assertTrue(creditCardDialog.$.expired.hidden);
+        assertTrue(creditCardDialog.$.saveButton.disabled);
+
+        // Add a name and trigger the on-input handler.
+        creditCardDialog.set('creditCard.name', 'Jane Doe');
+        creditCardDialog.onCreditCardNameOrNumberChanged_();
+        Polymer.dom.flush();
+
+        assertTrue(creditCardDialog.$.expired.hidden);
+        assertFalse(creditCardDialog.$.saveButton.disabled);
+
         creditCardDialog.addEventListener('save-credit-card', function(event) {
           assertEquals(creditCard.guid, event.detail.guid);
           done();
@@ -375,6 +416,10 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'CreditCardTests', function() {
 
 TEST_F('SettingsAutofillSectionBrowserTest', 'AddressTests', function() {
   var self = this;
+
+  setup(function() {
+    PolymerTest.clearBody();
+  });
 
   suite('AutofillSection', function() {
     test('verifyNoAddresses', function() {
@@ -430,11 +475,38 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'AddressTests', function() {
       assertEquals(addressSummary, actualSummary);
     });
 
+    test('verifyAddressRowButtonIsDropdownWhenLocal', function() {
+      var address = FakeDataMaker.addressEntry();
+      address.metadata.isLocal = true;
+      var section = self.createAutofillSection_([address], []);
+      var addressList = section.$.addressList;
+      var row = addressList.children[0];
+      assertTrue(!!row);
+      var menuButton = row.querySelector('#addressMenu')
+      assertTrue(!!menuButton);
+      var outlinkButton = row.querySelector('[is="paper-icon-button-light"]');
+      assertFalse(!!outlinkButton);
+    });
+
+    test('verifyAddressRowButtonIsOutlinkWhenRemote', function() {
+      var address = FakeDataMaker.addressEntry();
+      address.metadata.isLocal = false;
+      var section = self.createAutofillSection_([address], []);
+      var addressList = section.$.addressList;
+      var row = addressList.children[0];
+      assertTrue(!!row);
+      var menuButton = row.querySelector('#addressMenu')
+      assertFalse(!!menuButton);
+      var outlinkButton = row.querySelector('[is="paper-icon-button-light"]');
+      assertTrue(!!outlinkButton);
+    });
+
     test('verifyAddAddressDialog', function() {
       return self.createAddressDialog_(
           FakeDataMaker.emptyAddressEntry()).then(function(dialog) {
         var title = dialog.$$('.title');
-        assertEquals(loadTimeData.getString('addAddress'), title.textContent);
+        assertEquals(loadTimeData.getString('addAddressTitle'),
+            title.textContent);
         // Shouldn't be possible to save until something is typed in.
         assertTrue(dialog.$.saveButton.disabled);
       });
@@ -618,6 +690,10 @@ TEST_F('SettingsAutofillSectionBrowserTest', 'AddressTests', function() {
 
 TEST_F('SettingsAutofillSectionBrowserTest', 'AddressLocaleTests', function() {
   var self = this;
+
+  setup(function() {
+    PolymerTest.clearBody();
+  });
 
   suite('AutofillSection', function() {
     // US address has 3 fields on the same line.

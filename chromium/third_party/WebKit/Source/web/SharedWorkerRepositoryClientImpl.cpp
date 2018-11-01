@@ -30,6 +30,8 @@
 
 #include "web/SharedWorkerRepositoryClientImpl.h"
 
+#include <memory>
+#include <utility>
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
 #include "core/frame/UseCounter.h"
@@ -37,10 +39,10 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/workers/SharedWorker.h"
 #include "platform/network/ResourceResponse.h"
+#include "public/platform/WebContentSecurityPolicy.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
-#include "public/web/WebContentSecurityPolicy.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebKit.h"
 #include "public/web/WebSharedWorker.h"
@@ -49,8 +51,6 @@
 #include "public/web/WebSharedWorkerRepositoryClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
-#include <utility>
 
 namespace blink {
 
@@ -95,6 +95,11 @@ class SharedWorkerConnectListener final
   }
 
   void connected() override { m_worker->setIsBeingConnected(false); }
+
+  void countFeature(uint32_t feature) override {
+    UseCounter::count(m_worker->getExecutionContext(),
+                      static_cast<UseCounter::Feature>(feature));
+  }
 
   Persistent<SharedWorker> m_worker;
 };

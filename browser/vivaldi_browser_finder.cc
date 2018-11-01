@@ -2,10 +2,10 @@
 
 #include "browser/vivaldi_browser_finder.h"
 
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
 
 using content::WebContents;
 
@@ -19,19 +19,20 @@ Browser* FindBrowserWithWebContents(WebContents* web_contents) {
   // content and use that information to look up the browser.
   if (!browser) {
     guest_view::GuestViewBase* gvb =
-      guest_view::GuestViewBase::FromWebContents(web_contents);
+        guest_view::GuestViewBase::FromWebContents(web_contents);
     if (gvb) {
       WebContents* embedder_web_contents = gvb->embedder_web_contents();
       content::BrowserContext* browser_context = gvb->browser_context();
       if (embedder_web_contents && browser_context) {
         extensions::AppWindowRegistry* registry =
-          extensions::AppWindowRegistry::Get(browser_context);
+            extensions::AppWindowRegistry::Get(browser_context);
         extensions::AppWindow* app_window =
-          registry ? registry->GetAppWindowForWebContents(embedder_web_contents)
-                   : nullptr;
+            registry
+                ? registry->GetAppWindowForWebContents(embedder_web_contents)
+                : nullptr;
         if (app_window) {
           browser =
-            chrome::FindBrowserWithWindow(app_window->GetNativeWindow());
+              chrome::FindBrowserWithWindow(app_window->GetNativeWindow());
         }
       }
     }

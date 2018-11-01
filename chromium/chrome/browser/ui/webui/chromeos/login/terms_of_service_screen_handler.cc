@@ -13,7 +13,7 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
-#include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
+#include "chrome/browser/chromeos/login/screens/core_oobe_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -37,17 +37,14 @@ const char kJsScreenPath[] = "login.TermsOfServiceScreen";
 namespace chromeos {
 
 TermsOfServiceScreenHandler::TermsOfServiceScreenHandler(
-    CoreOobeActor* core_oobe_actor)
-    : BaseScreenHandler(kJsScreenPath),
-      screen_(NULL),
-      core_oobe_actor_(core_oobe_actor),
-      show_on_init_(false),
-      load_error_(false) {
+    CoreOobeView* core_oobe_view)
+    : core_oobe_view_(core_oobe_view) {
+  set_call_js_prefix(kJsScreenPath);
 }
 
 TermsOfServiceScreenHandler::~TermsOfServiceScreenHandler() {
   if (screen_)
-    screen_->OnActorDestroyed(this);
+    screen_->OnViewDestroyed(this);
 }
 
 void TermsOfServiceScreenHandler::RegisterMessages() {
@@ -141,7 +138,7 @@ void TermsOfServiceScreenHandler::OnLanguageChangedCallback(
   // Update the screen contents to the new locale.
   base::DictionaryValue localized_strings;
   GetOobeUI()->GetLocalizedStrings(&localized_strings);
-  core_oobe_actor_->ReloadContent(localized_strings);
+  core_oobe_view_->ReloadContent(localized_strings);
 
   DoShow();
 }

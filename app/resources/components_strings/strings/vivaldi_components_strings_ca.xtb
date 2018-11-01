@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Mostra una còpia desada (és a dir, no actualitzada) d'aquesta pàgina.</translation>
 <translation id="1559528461873125649">No existeix el fitxer o el directori</translation>
 <translation id="1710259589646384581">SO</translation>
-<translation id="1838667051080421715">Estàs veient el codi font d'una pàgina web.</translation>
 <translation id="194030505837763158">Vés a <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Volíeu dir <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Menys</translation>
 <translation id="2166378884831602661">Aquest lloc no pot proporcionar una connexió segura</translation>
 <translation id="2292556288342944218">El vostre accés a Internet està bloquejat</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ha enviat una resposta que no és vàlida.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">S'ha denegat l'accés al fitxer</translation>
 <translation id="2705137772291741111">La còpia desada (a la memòria cau) d'aquest lloc no s'ha pogut llegir.</translation>
 <translation id="2784949926578158345">S'ha restablert la connexió.</translation>
-<translation id="284702764277384724">Sembla que el certificat de servidor disponible a <ph name="HOST_NAME" /> és una falsificació.</translation>
 <translation id="2909946352844186028">S'ha detectat un canvi a la xarxa.</translation>
 <translation id="3005723025932146533">Mostra la còpia desada</translation>
 <translation id="3109728660330352905">No teniu permís per veure aquesta pàgina.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS és el servei de xarxa que tradueix el nom d'un lloc web en l'adreça d'Internet corresponent.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> no ha acceptat el certificat d'inici de sessió o pot ser que no se n'hagi proporcionat cap.</translation>
 <translation id="4522570452068850558">Detalls</translation>
-<translation id="4670097147947922288">Estàs consultant la pàgina d'una extensió.</translation>
 <translation id="4708268264240856090">La connexió s'ha interromput</translation>
 <translation id="4744603770635761495">Camí executable</translation>
 <translation id="4764776831041365478">És possible que la pàgina web de <ph name="URL" /> estigui temporalment inactiva o que s'hagi desplaçat permanentment a una nova adreça web.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">Aquesta pàgina no funciona</translation>
 <translation id="5869405914158311789">No es pot accedir a aquest lloc</translation>
 <translation id="5990559369517809815">Una extensió ha bloquejat les peticions al servidor.</translation>
-<translation id="6042308850641462728">Més</translation>
 <translation id="6146055958333702838">Reviseu els cables i reinicieu els encaminadors, els mòdems o altres
         dispositius de xarxa que feu servir.</translation>
 <translation id="6165508094623778733">Més informació</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">Proveu de desactivar la predicció de xarxa</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> no ens ha permès establir la connexió.</translation>
 <translation id="6711464428925977395">Hi ha hagut algun problema amb el servidor intermediari o l'adreça no és correcta.</translation>
-<translation id="6830600606572693159">En aquests moments, la pàgina web de <ph name="URL" /> no està disponible. Pot ser que estigui sobrecarregada o bé que s'hi estiguin realitzant tasques de manteniment.</translation>
 <translation id="6897140037006041989">Agent d'usuari</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no compleix la normativa de seguretat.</translation>
-<translation id="7269802741830436641">Aquesta pàgina web té un bucle de redirecció</translation>
 <translation id="7353601530677266744">Línia d'ordres</translation>
 <translation id="7419106976560586862">Camí del perfil</translation>
 <translation id="7518003948725431193">No s'ha trobat cap pàgina web per a l'adreça: <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> no pot gestionar la sol·licitud en aquest moment.</translation>
 <translation id="7716424297397655342">Aquest lloc no es pot carregar des de la memòria cau</translation>
 <translation id="7758069387465995638">És possible que l'antivirus o el tallafoc hagi bloquejat la connexió.</translation>
-<translation id="778579833039460630">No s'han rebut les dades</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="8134994873729925007">No s'ha trobat l'<ph name="BEGIN_ABBR" />adreça DNS<ph name="END_ABBR" /> del servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Visiteu &lt;strong&gt;vivaldi://policy&lt;/strong&gt; per veure la llista d'URL inclosos a la llista negra i altres polítiques aplicades per l'administrador del sistema.</translation>

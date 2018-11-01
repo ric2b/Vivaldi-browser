@@ -233,9 +233,6 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   // Returns the base extension url for a given |extension_id|.
   static GURL GetBaseURLFromExtensionId(const ExtensionId& extension_id);
 
-  // Whether context menu should be shown for page and browser actions.
-  bool ShowConfigureContextMenus() const;
-
   // Returns true if this extension or app includes areas within |origin|.
   bool OverlapsWithOrigin(const GURL& origin) const;
 
@@ -253,19 +250,19 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   // settings page (i.e. chrome://extensions).
   bool ShouldDisplayInExtensionSettings() const;
 
-  // Returns true if the extension should not be shown anywhere. This is
-  // mostly the same as the extension being a component extension, but also
-  // includes non-component apps that are hidden from the app launcher and ntp.
-  bool ShouldNotBeVisible() const;
+  // Returns true if the extension should be exposed via the chrome.management
+  // API.
+  bool ShouldExposeViaManagementAPI() const;
 
   // Get the manifest data associated with the key, or NULL if there is none.
   // Can only be called after InitValue is finished.
   ManifestData* GetManifestData(const std::string& key) const;
 
-  // Sets |data| to be associated with the key. Takes ownership of |data|.
+  // Sets |data| to be associated with the key.
   // Can only be called before InitValue is finished. Not thread-safe;
   // all SetManifestData calls should be on only one thread.
-  void SetManifestData(const std::string& key, ManifestData* data);
+  void SetManifestData(const std::string& key,
+                       std::unique_ptr<ManifestData> data);
 
   // Accessors:
 

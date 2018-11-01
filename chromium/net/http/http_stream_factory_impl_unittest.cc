@@ -707,7 +707,6 @@ TEST_F(HttpStreamFactoryTest, JobNotifiesProxy) {
 const int quic_proxy_test_mock_errors[] = {
     ERR_PROXY_CONNECTION_FAILED,
     ERR_NAME_NOT_RESOLVED,
-    ERR_INTERNET_DISCONNECTED,
     ERR_ADDRESS_UNREACHABLE,
     ERR_CONNECTION_CLOSED,
     ERR_CONNECTION_TIMED_OUT,
@@ -1239,6 +1238,7 @@ TEST_F(HttpStreamFactoryTest, OnlyOnePreconnectToProxyServer) {
       }
 
       SpdySessionDependencies session_deps;
+      session_deps.restrict_to_one_preconnect_for_proxies = true;
       HttpNetworkSession::Params params =
           SpdySessionDependencies::CreateSessionParams(&session_deps);
       params.enable_quic = true;
@@ -1329,6 +1329,7 @@ TEST_F(HttpStreamFactoryTest, ProxyServerPreconnectDifferentPrivacyModes) {
   http_server_properties.SetSupportsSpdy(spdy_server, true);
 
   SpdySessionDependencies session_deps;
+  session_deps.restrict_to_one_preconnect_for_proxies = true;
   HttpNetworkSession::Params params =
       SpdySessionDependencies::CreateSessionParams(&session_deps);
   params.enable_quic = true;
@@ -1595,6 +1596,54 @@ TEST_F(HttpStreamFactoryTest, RequestHttpStream) {
   EXPECT_TRUE(waiter.used_proxy_info().is_direct());
 }
 
+// Test the race of SetPriority versus stream completion where SetPriority
+// may be called on an HttpStreamFactoryImpl::Job after the stream
+// has been created by the job.
+TEST_F(HttpStreamFactoryTest, ReprioritizeAfterStreamReceived) {
+  SpdySessionDependencies session_deps(ProxyService::CreateDirect());
+
+  MockRead mock_read(SYNCHRONOUS, ERR_IO_PENDING);
+  StaticSocketDataProvider socket_data(&mock_read, 1, nullptr, 0);
+  socket_data.set_connect_data(MockConnect(SYNCHRONOUS, OK));
+  session_deps.socket_factory->AddSocketDataProvider(&socket_data);
+
+  SSLSocketDataProvider ssl_socket_data(SYNCHRONOUS, OK);
+  ssl_socket_data.next_proto = kProtoHTTP2;
+  session_deps.socket_factory->AddSSLSocketDataProvider(&ssl_socket_data);
+
+  std::unique_ptr<HttpNetworkSession> session(
+      SpdySessionDependencies::SpdyCreateSession(&session_deps));
+
+  // Now request a stream.
+  HttpRequestInfo request_info;
+  request_info.method = "GET";
+  request_info.url = GURL("https://www.google.com");
+  request_info.load_flags = 0;
+
+  SSLConfig ssl_config;
+  StreamRequestWaiter waiter;
+  EXPECT_EQ(0, GetSpdySessionCount(session.get()));
+  std::unique_ptr<HttpStreamRequest> request(
+      session->http_stream_factory()->RequestStream(
+          request_info, LOWEST, ssl_config, ssl_config, &waiter,
+          NetLogWithSource()));
+  EXPECT_FALSE(waiter.stream_done());
+
+  // Confirm a stream has been created by asserting that a new session
+  // has been created.  (The stream is only created at the SPDY level on
+  // first write, which happens after the request has returned a stream).
+  ASSERT_EQ(1, GetSpdySessionCount(session.get()));
+
+  // Test to confirm that a SetPriority received after the stream is created
+  // but before the request returns it does not crash.
+  request->SetPriority(HIGHEST);
+
+  waiter.WaitForStream();
+  EXPECT_TRUE(waiter.stream_done());
+  ASSERT_TRUE(waiter.stream());
+  EXPECT_FALSE(waiter.websocket_stream());
+}
+
 TEST_F(HttpStreamFactoryTest, RequestHttpStreamOverSSL) {
   SpdySessionDependencies session_deps(ProxyService::CreateDirect());
 
@@ -1693,6 +1742,7 @@ TEST_F(HttpStreamFactoryTest, RequestHttpStreamOverProxy) {
 TEST_F(HttpStreamFactoryTest, RequestHttpStreamOverProxyWithPreconnects) {
   SpdySessionDependencies session_deps(
       ProxyService::CreateFixed("https://myproxy.org:443"));
+  session_deps.restrict_to_one_preconnect_for_proxies = true;
 
   // Set up the proxy server as a server that supports request priorities.
   std::unique_ptr<HttpServerPropertiesImpl> http_server_properties(

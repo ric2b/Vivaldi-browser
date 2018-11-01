@@ -23,7 +23,7 @@ import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.RepostFormWarningDialog;
 import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.document.DocumentWebContentsDelegate;
@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.findinpage.FindMatchRectsDetails;
 import org.chromium.chrome.browser.findinpage.FindNotificationDetails;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
+import org.chromium.chrome.browser.media.VideoPersister;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
@@ -214,13 +215,8 @@ public class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
 
     @Override
     public void toggleFullscreenModeForTab(boolean enableFullscreen) {
-        if (mTab.getFullscreenManager() != null) {
-            mTab.getFullscreenManager().setPersistentFullscreenMode(enableFullscreen);
-        }
-
-        RewindableIterator<TabObserver> observers = mTab.getTabObservers();
-        while (observers.hasNext()) {
-            observers.next().onToggleFullscreenMode(mTab, enableFullscreen);
+        if (!VideoPersister.getInstance().shouldDelayFullscreenModeChange(mTab, enableFullscreen)) {
+            mTab.toggleFullscreenMode(enableFullscreen);
         }
     }
 
@@ -337,8 +333,7 @@ public class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
                 webContents, mTab.getId(), TabLaunchType.FROM_LONGPRESS_FOREGROUND, url);
         boolean success = tabCreator.createsTabsAsynchronously() || createdSuccessfully;
         if (success && disposition == WindowOpenDisposition.NEW_POPUP) {
-            PolicyAuditor auditor =
-                    ((ChromeApplication) mTab.getApplicationContext()).getPolicyAuditor();
+            PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
             auditor.notifyAuditEvent(mTab.getApplicationContext(),
                     AuditEvent.OPEN_POPUP_URL_SUCCESS, url, "");
         }
@@ -399,9 +394,6 @@ public class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
         if (activity == null) return false;
         if (reverse) {
             View menuButton = activity.findViewById(R.id.menu_button);
-            if (menuButton == null || !menuButton.isShown()) {
-                menuButton = activity.findViewById(R.id.document_menu_button);
-            }
             if (menuButton != null && menuButton.isShown()) {
                 return menuButton.requestFocus();
             }

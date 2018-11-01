@@ -47,21 +47,20 @@ class CompositorFrameSinkHolder
 
   void SetNeedsBeginFrame(bool needs_begin_frame);
 
-  void Satisfy(const cc::SurfaceSequence& sequence);
-  void Require(const cc::SurfaceId& id, const cc::SurfaceSequence& sequence);
-
   // Overridden from cc::mojom::MojoCompositorFrameSinkClient:
   void DidReceiveCompositorFrameAck() override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface() override;
+  void WillDrawSurface(const cc::LocalSurfaceId& local_surface_id,
+                       const gfx::Rect& damage_rect) override;
 
   // Overridden from cc::BeginFrameObserver:
   const cc::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
   void OnBeginFrameSourcePausedChanged(bool paused) override;
 
-  // Overridden from cc::ExternalBeginFrameSouceClient:
+  // Overridden from cc::ExternalBeginFrameSourceClient:
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
+  void OnDidFinishFrame(const cc::BeginFrameAck& ack) override;
 
   // Overridden from SurfaceObserver:
   void OnSurfaceDestroying(Surface* surface) override;

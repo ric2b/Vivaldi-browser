@@ -9,14 +9,6 @@
 
 namespace content {
 
-FeaturePolicyParsedWhitelist::FeaturePolicyParsedWhitelist()
-    : matches_all_origins(false) {}
-
-FeaturePolicyParsedWhitelist::FeaturePolicyParsedWhitelist(
-    const FeaturePolicyParsedWhitelist& fppw) = default;
-
-FeaturePolicyParsedWhitelist::~FeaturePolicyParsedWhitelist() {}
-
 FrameReplicationState::FrameReplicationState()
     : sandbox_flags(blink::WebSandboxFlags::None),
       scope(blink::WebTreeScopeType::Document),

@@ -26,6 +26,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# pylint: disable=relative-import
+
 """Blink IDL Intermediate Representation (IR) classes.
 
 Classes are primarily constructors, which build an IdlDefinitions object
@@ -64,7 +66,13 @@ Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 
 import abc
 
-from idl_types import IdlType, IdlUnionType, IdlArrayType, IdlSequenceType, IdlFrozenArrayType, IdlNullableType
+from idl_types import IdlArrayType
+from idl_types import IdlFrozenArrayType
+from idl_types import IdlNullableType
+from idl_types import IdlRecordType
+from idl_types import IdlSequenceType
+from idl_types import IdlType
+from idl_types import IdlUnionType
 
 SPECIAL_KEYWORD_LIST = ['LEGACYCALLER', 'GETTER', 'SETTER', 'DELETER']
 
@@ -355,6 +363,10 @@ class IdlInterface(object):
 
         if has_integer_typed_length and has_indexed_property_getter:
             self.has_indexed_elements = True
+        else:
+            if self.iterable is not None and self.iterable.key_type is None:
+                raise ValueError('Value iterators (iterable<V>) must be accompanied by an indexed '
+                                 'property getter and an integer-typed length attribute.')
 
     def accept(self, visitor):
         visitor.visit_interface(self)
@@ -513,7 +525,10 @@ class IdlLiteral(object):
 
     def __str__(self):
         if self.idl_type == 'DOMString':
-            return 'String("%s")' % self.value
+            if self.value:
+                return '"%s"' % self.value
+            else:
+                return 'WTF::emptyString'
         if self.idl_type == 'integer':
             return '%d' % self.value
         if self.idl_type == 'float':
@@ -1011,7 +1026,7 @@ def type_node_inner_to_type(node):
     # Note Type*r*ef, not Typedef, meaning the type is an identifier, thus
     # either a typedef shorthand (but not a Typedef declaration itself) or an
     # interface type. We do not distinguish these, and just use the type name.
-    if node_class in ['PrimitiveType', 'Typeref']:
+    if node_class in ['PrimitiveType', 'StringType', 'Typeref']:
         # unrestricted syntax: unrestricted double | unrestricted float
         is_unrestricted = bool(node.GetProperty('UNRESTRICTED'))
         return IdlType(node.GetName(), is_unrestricted=is_unrestricted)
@@ -1023,7 +1038,22 @@ def type_node_inner_to_type(node):
         return union_type_node_to_idl_union_type(node)
     elif node_class == 'Promise':
         return IdlType('Promise')
+    elif node_class == 'Record':
+        return record_node_to_type(node)
     raise ValueError('Unrecognized node class: %s' % node_class)
+
+
+def record_node_to_type(node):
+    children = node.GetChildren()
+    if len(children) != 2:
+        raise ValueError('record<K,V> node expects exactly 2 children, got %d' % (len(children)))
+    key_child = children[0]
+    value_child = children[1]
+    if key_child.GetClass() != 'StringType':
+        raise ValueError('Keys in record<K,V> nodes must be string types.')
+    if value_child.GetClass() != 'Type':
+        raise ValueError('Unrecognized node class for record<K,V> value: %s' % value_child.GetClass())
+    return IdlRecordType(IdlType(key_child.GetName()), type_node_to_type(value_child))
 
 
 def sequence_node_to_type(node):

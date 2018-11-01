@@ -95,7 +95,7 @@ CocoaScrollBarThumb::CocoaScrollBarThumb(CocoaScrollBar* scroll_bar)
 
   // This is necessary, otherwise the thumb will be rendered below the views if
   // those views paint to their own layers.
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 }
 
@@ -122,13 +122,13 @@ void CocoaScrollBarThumb::OnPaint(gfx::Canvas* canvas) {
   }
 
   gfx::Rect local_bounds(GetLocalBounds());
-  SkPaint paint;
-  paint.setAntiAlias(true);
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(thumb_color);
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setColor(thumb_color);
   const SkScalar radius =
       std::min(local_bounds.width(), local_bounds.height());
-  canvas->DrawRoundRect(local_bounds, radius, paint);
+  canvas->DrawRoundRect(local_bounds, radius, flags);
 }
 
 bool CocoaScrollBarThumb::OnMousePressed(const ui::MouseEvent& event) {
@@ -177,7 +177,7 @@ CocoaScrollBar::CocoaScrollBar(bool horizontal)
 
   thickness_animation_.SetSlideDuration(kExpandDurationMs);
 
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   has_scrolltrack_ = scroller_style_ == NSScrollerStyleLegacy;
   layer()->SetOpacity(scroller_style_ == NSScrollerStyleOverlay ? 0.0f : 1.0f);
 }
@@ -256,30 +256,30 @@ void CocoaScrollBar::OnPaint(gfx::Canvas* canvas) {
     gradient_bounds[0].set(track_rect.x(), track_rect.y());
     gradient_bounds[1].set(track_rect.right(), track_rect.y());
   }
-  SkPaint gradient;
-  gradient.setShader(SkGradientShader::MakeLinear(
+  cc::PaintFlags gradient;
+  gradient.setShader(cc::WrapSkShader(SkGradientShader::MakeLinear(
       gradient_bounds, kScrollerTrackGradientColors, nullptr,
-      arraysize(kScrollerTrackGradientColors), SkShader::kClamp_TileMode));
+      arraysize(kScrollerTrackGradientColors), SkShader::kClamp_TileMode)));
   canvas->DrawRect(track_rect, gradient);
 
   // Draw the inner border: top if horizontal, left if vertical.
-  SkPaint paint;
-  paint.setColor(kScrollerTrackInnerBorderColor);
+  cc::PaintFlags flags;
+  flags.setColor(kScrollerTrackInnerBorderColor);
   gfx::Rect inner_border(track_rect);
   if (IsHorizontal())
     inner_border.set_height(kScrollerTrackBorderWidth);
   else
     inner_border.set_width(kScrollerTrackBorderWidth);
-  canvas->DrawRect(inner_border, paint);
+  canvas->DrawRect(inner_border, flags);
 
   // Draw the outer border: bottom if horizontal, right if veritcal.
-  paint.setColor(kScrollerTrackOuterBorderColor);
+  flags.setColor(kScrollerTrackOuterBorderColor);
   gfx::Rect outer_border(inner_border);
   if (IsHorizontal())
     outer_border.set_y(track_rect.bottom());
   else
     outer_border.set_x(track_rect.right());
-  canvas->DrawRect(outer_border, paint);
+  canvas->DrawRect(outer_border, flags);
 }
 
 bool CocoaScrollBar::OnMousePressed(const ui::MouseEvent& event) {

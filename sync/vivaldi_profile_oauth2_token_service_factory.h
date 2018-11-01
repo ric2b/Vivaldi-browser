@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_FACTORY_H_
-#define VIVALDI_SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_FACTORY_H_
+#ifndef SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_FACTORY_H_
+#define SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_FACTORY_H_
 
 #include "base/memory/singleton.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
@@ -48,6 +48,6 @@ class VivaldiProfileOAuth2TokenServiceFactory
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiProfileOAuth2TokenServiceFactory);
 };
-}
+}  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_FACTORY_H_
+#endif  // SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_FACTORY_H_

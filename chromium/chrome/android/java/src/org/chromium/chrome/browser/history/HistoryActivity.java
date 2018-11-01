@@ -7,19 +7,19 @@ package org.chromium.chrome.browser.history;
 import android.os.Bundle;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.SynchronousInitializationActivity;
+import org.chromium.chrome.browser.SnackbarActivity;
 
 /**
  * Activity for displaying the browsing history manager.
  */
-public class HistoryActivity extends SynchronousInitializationActivity {
+public class HistoryActivity extends SnackbarActivity {
     private HistoryManager mHistoryManager;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        mHistoryManager = new HistoryManager(this);
+        mHistoryManager = new HistoryManager(this, null);
         setContentView(mHistoryManager.getView());
     }
 

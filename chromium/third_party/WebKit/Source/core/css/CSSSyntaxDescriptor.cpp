@@ -4,6 +4,9 @@
 
 #include "core/css/CSSSyntaxDescriptor.h"
 
+#include "core/animation/CSSColorInterpolationType.h"
+#include "core/animation/CSSLengthInterpolationType.h"
+#include "core/animation/CSSValueInterpolationType.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSURIValue.h"
 #include "core/css/CSSValueList.h"
@@ -97,7 +100,7 @@ CSSSyntaxDescriptor::CSSSyntaxDescriptor(String input) {
     if (offset != input.length())
       return;
     m_syntaxComponents.push_back(
-        CSSSyntaxComponent(CSSSyntaxType::TokenStream, emptyString(), false));
+        CSSSyntaxComponent(CSSSyntaxType::TokenStream, emptyString, false));
     return;
   }
 

@@ -62,10 +62,12 @@ SimpleFontData::SimpleFontData(const FontPlatformData& platformData,
     : m_maxCharWidth(-1),
       m_avgCharWidth(-1),
       m_platformData(platformData),
-      m_isTextOrientationFallback(isTextOrientationFallback),
       m_verticalData(nullptr),
+      m_customFontData(customData),
+      m_isTextOrientationFallback(isTextOrientationFallback),
       m_hasVerticalGlyphs(false),
-      m_customFontData(customData) {
+      visual_overflow_inflation_for_ascent_(0),
+      visual_overflow_inflation_for_descent_(0) {
   platformInit(subpixelAscentDescent);
   platformGlyphInit();
   if (platformData.isVerticalAnyUpright() && !isTextOrientationFallback) {
@@ -81,10 +83,12 @@ SimpleFontData::SimpleFontData(PassRefPtr<CustomFontData> customData,
                                bool syntheticItalic)
     : m_platformData(
           FontPlatformData(fontSize, syntheticBold, syntheticItalic)),
-      m_isTextOrientationFallback(false),
       m_verticalData(nullptr),
+      m_customFontData(customData),
+      m_isTextOrientationFallback(false),
       m_hasVerticalGlyphs(false),
-      m_customFontData(customData) {}
+      visual_overflow_inflation_for_ascent_(0),
+      visual_overflow_inflation_for_descent_(0) {}
 
 void SimpleFontData::platformInit(bool subpixelAscentDescent) {
   if (!m_platformData.size()) {
@@ -137,30 +141,37 @@ void SimpleFontData::platformInit(bool subpixelAscentDescent) {
   if (isVDMXValid) {
     ascent = vdmxAscent;
     descent = -vdmxDescent;
-  } else {
+  } else if (subpixelAscentDescent &&
+             (-metrics.fAscent < 3 ||
+              -metrics.fAscent + metrics.fDescent < 2)) {
     // For tiny fonts, the rounding of fAscent and fDescent results in equal
     // baseline for different types of text baselines (crbug.com/338908).
     // Please see CanvasRenderingContext2D::getFontBaseline for the heuristic.
-    if (subpixelAscentDescent &&
-        (-metrics.fAscent < 3 || -metrics.fAscent + metrics.fDescent < 2)) {
-      ascent = -metrics.fAscent;
-      descent = metrics.fDescent;
-    } else {
-      ascent = SkScalarRoundToScalar(-metrics.fAscent);
-      descent = SkScalarRoundToScalar(metrics.fDescent);
-    }
+    ascent = -metrics.fAscent;
+    descent = metrics.fDescent;
+  } else {
+    ascent = SkScalarRoundToScalar(-metrics.fAscent);
+    descent = SkScalarRoundToScalar(metrics.fDescent);
+
+    if (ascent < -metrics.fAscent)
+      visual_overflow_inflation_for_ascent_ = 1;
+    if (descent < metrics.fDescent) {
+      visual_overflow_inflation_for_descent_ = 1;
 #if OS(LINUX) || OS(ANDROID)
-    // When subpixel positioning is enabled, if the descent is rounded down, the
-    // descent part of the glyph may be truncated when displayed in a 'overflow:
-    // hidden' container.  To avoid that, borrow 1 unit from the ascent when
-    // possible.
-    // FIXME: This can be removed if sub-pixel ascent/descent is supported.
-    if (platformData().getFontRenderStyle().useSubpixelPositioning &&
-        descent < SkScalarToFloat(metrics.fDescent) && ascent >= 1) {
-      ++descent;
-      --ascent;
-    }
+      // When subpixel positioning is enabled, if the descent is rounded down,
+      // the descent part of the glyph may be truncated when displayed in a
+      // 'overflow: hidden' container.  To avoid that, borrow 1 unit from the
+      // ascent when possible.
+      if (platformData().getFontRenderStyle().useSubpixelPositioning &&
+          ascent >= 1) {
+        ++descent;
+        --ascent;
+        // We should inflate overflow 1 more pixel for ascent instead.
+        visual_overflow_inflation_for_descent_ = 0;
+        ++visual_overflow_inflation_for_ascent_;
+      }
 #endif
+    }
   }
 
 #if OS(MACOSX)

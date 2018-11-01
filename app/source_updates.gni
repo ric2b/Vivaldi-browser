@@ -53,6 +53,7 @@ foreach(
         "//chrome/app:chromium_strings",
         "//vivaldi/app/resources/strings/vivaldi_strings.grd",
         {
+          have_strings_flag = false
         },
       ],
       [
@@ -65,7 +66,7 @@ foreach(
         "//chrome/app/resources:locale_settings",
         "//vivaldi/app/resources/locale/vivaldi_locale_strings.grd",
         {
-          translation_dir_setting = "."
+          have_strings_flag = false
         },
       ],
       [
@@ -128,21 +129,21 @@ foreach(
         "//components/strings:components_chromium_strings",
         "//vivaldi/app/resources/components/vivaldi_components.grd",
         {
-          translation_dir_setting = "strings"
+          have_strings_flag = false
         },
       ],
       [
         "//components/strings:components_google_chrome_strings",
         "//vivaldi/app/resources/components/vivaldi_components.grd",
         {
-          translation_dir_setting = "strings"
+          have_strings_flag = false
         },
       ],
       [
         "//components/strings:components_locale_settings",
         "//vivaldi/app/resources/components_locale_settings/vivaldi_components_locale_settings.grd",
         {
-          translation_dir_setting = "strings"
+          have_strings_flag = false
         },
       ],
       [

@@ -18,11 +18,11 @@
   return @[
     @{
       showcase::kClassForDisplayKey : @"SettingsViewController",
-      showcase::kClassForInstantiationKey : @"SettingsCoordinator",
+      showcase::kClassForInstantiationKey : @"SCSettingsCoordinator",
       showcase::kUseCaseKey : @"Main settings screen",
     },
     @{
-      showcase::kClassForDisplayKey : @"SuggestionsViewController",
+      showcase::kClassForDisplayKey : @"ContentSuggestionsViewController",
       showcase::kClassForInstantiationKey : @"SCSuggestionsCoordinator",
       showcase::kUseCaseKey : @"New Suggestions UI",
     },
@@ -45,6 +45,11 @@
       showcase::kClassForDisplayKey : @"TabStripContainerViewController",
       showcase::kClassForInstantiationKey : @"SCTabStripCoordinator",
       showcase::kUseCaseKey : @"Tab strip container",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"ToolbarViewController",
+      showcase::kClassForInstantiationKey : @"SCToolbarCoordinator",
+      showcase::kUseCaseKey : @"Toolbar",
     },
   ];
 }

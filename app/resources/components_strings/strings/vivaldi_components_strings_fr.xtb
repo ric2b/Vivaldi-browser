@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Afficher une copie enregistrée en cache (non actualisée) de cette page.</translation>
 <translation id="1559528461873125649">Fichier ou répertoire inexistant</translation>
 <translation id="1710259589646384581">Système d’exploitation</translation>
-<translation id="1838667051080421715">Vous consultez actuellement la source d'une page Web.</translation>
+<translation id="1728677426644403582">Vous consultez actuellement le code source d’une page Web</translation>
 <translation id="194030505837763158">Accéder à <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Souhaitez-vous plutôt accéder à ce lien : <ph name="LINK" /> ?</translation>
-<translation id="2089090684895656482">Moins</translation>
 <translation id="2166378884831602661">Ce site ne peut pas fournir de connexion sécurisée</translation>
 <translation id="2292556288342944218">Votre accès à Internet est bloqué</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a envoyé une réponse incorrecte.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Accès au fichier refusé</translation>
 <translation id="2705137772291741111">La copie enregistrée (en cache) de ce site est illisible.</translation>
 <translation id="2784949926578158345">La connexion a été réinitialisée.</translation>
-<translation id="284702764277384724">Le certificat du serveur relatif à <ph name="HOST_NAME" /> semble être contrefait.</translation>
 <translation id="2909946352844186028">Un changement de réseau a été détecté.</translation>
 <translation id="3005723025932146533">Afficher la copie enregistrée</translation>
 <translation id="3093245981617870298">Vous êtes en mode « hors-ligne ».</translation>
@@ -39,7 +37,6 @@
 <translation id="4021036232240155012">DNS est le service Web qui convertit les noms de sites Web en adresses Internet.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> n’a pas accepté votre certificat de connexion, ou vous ne l’avez pas fourni.</translation>
 <translation id="4522570452068850558">Détails</translation>
-<translation id="4670097147947922288">Vous consultez actuellement une page d'extension.</translation>
 <translation id="4708268264240856090">Votre connexion a été interrompue</translation>
 <translation id="4744603770635761495">Chemin d’accès à l’exécutable</translation>
 <translation id="4764776831041365478">Il se peut que la page Web à l’adresse <ph name="URL" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
@@ -56,7 +53,6 @@
 <translation id="5675650730144413517">Cette page ne fonctionne pas</translation>
 <translation id="5869405914158311789">Ce site est inaccessible</translation>
 <translation id="5990559369517809815">Les requêtes vers le serveur ont été bloquées par une extension.</translation>
-<translation id="6042308850641462728">Plus</translation>
 <translation id="6146055958333702838">Vérifiez les câbles et redémarrez votre routeur, votre modem
     ou tout autre périphérique réseau utilisé.</translation>
 <translation id="6165508094623778733">En savoir plus</translation>
@@ -65,12 +61,11 @@
 <translation id="6321917430147971392">Vérifiez vos paramètres DNS</translation>
 <translation id="6328639280570009161">Essayez de désactiver la prédiction réseau</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> n’autorise pas la connexion.</translation>
+<translation id="6569060085658103619">Vous consultez actuellement une page d’extension</translation>
 <translation id="6711464428925977395">Le serveur proxy présente une erreur, ou l’adresse est incorrecte.</translation>
 <translation id="6757797048963528358">Votre ordinateur s’est mis en veille.</translation>
-<translation id="6830600606572693159">La page Web <ph name="URL" /> n’est pas disponible pour le moment. Cela peut être dû à une surcharge ou à une opération de maintenance.</translation>
 <translation id="6897140037006041989">Agent utilisateur</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ne respecte pas les normes de sécurité.</translation>
-<translation id="7269802741830436641">Cette page Web présente une boucle de redirection</translation>
 <translation id="7353601530677266744">Ligne de commande</translation>
 <translation id="7419106976560586862">Chemin d’accès au profil</translation>
 <translation id="7518003948725431193">Aucune page Web trouvée à l’adresse : <ph name="URL" /></translation>
@@ -78,8 +73,8 @@
 <translation id="759889825892636187">Impossible actuellement de traiter cette demande via <ph name="HOST_NAME" />.</translation>
 <translation id="7716424297397655342">Impossible de charger ce site à partir du cache</translation>
 <translation id="7758069387465995638">Il est possible qu’un pare-feu ou un logiciel antivirus ait bloqué la connexion.</translation>
-<translation id="778579833039460630">Aucune donnée reçue</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
+<translation id="8089520772729574115">moins de 1 Mo</translation>
 <translation id="8134994873729925007">Impossible de trouver l’<ph name="BEGIN_ABBR" />adresse DNS<ph name="END_ABBR" /> du serveur <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Accéder à &lt;strong&gt;vivaldi://policy&lt;/strong&gt; pour consulter une liste des URL ajoutées à la liste noire et des autres règles définies par votre administrateur système.</translation>
 <translation id="8149426793427495338">Votre ordinateur s’est mis en veille.</translation>

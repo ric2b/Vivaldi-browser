@@ -5,6 +5,7 @@
 import logging
 import os
 import random
+import sys
 
 from gpu_tests import gpu_integration_test
 from gpu_tests import path_util
@@ -38,8 +39,8 @@ class ScreenshotSyncIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     return 'screenshot_sync'
 
   @classmethod
-  def setUpClass(cls):
-    super(cls, ScreenshotSyncIntegrationTest).setUpClass()
+  def SetUpProcess(cls):
+    super(cls, ScreenshotSyncIntegrationTest).SetUpProcess()
     cls._original_finder_options = cls._finder_options.Copy()
     cls.CustomizeBrowserArgs([])
     cls.StartBrowser()
@@ -114,8 +115,9 @@ class ScreenshotSyncIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                                      random.randint(0, 255),
                                      255)
     tab = self.tab
-    tab.EvaluateJavaScript("window.draw(%d, %d, %d);" % (
-      canvasRGB.r, canvasRGB.g, canvasRGB.b))
+    tab.EvaluateJavaScript(
+        "window.draw({{ red }}, {{ green }}, {{ blue }});",
+        red=canvasRGB.r, green=canvasRGB.g, blue=canvasRGB.b)
     screenshot = tab.Screenshot(5)
     start_x = 10
     start_y = 0
@@ -132,3 +134,7 @@ class ScreenshotSyncIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     repetitions = 20
     for _ in range(0, repetitions):
       self._CheckScreenshot()
+
+def load_tests(loader, tests, pattern):
+  del loader, tests, pattern  # Unused.
+  return gpu_integration_test.LoadAllTestsInModule(sys.modules[__name__])

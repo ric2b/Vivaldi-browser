@@ -352,6 +352,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   }
   void OnWindowInputEvent(uint32_t event_id,
                           Id window_id,
+                          int64_t display_id,
                           std::unique_ptr<ui::Event> event,
                           bool matches_pointer_watcher) override {
     // Ack input events to clear the state on the server. These can be received
@@ -362,7 +363,8 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
     // may come in at random points.
   }
   void OnPointerEventObserved(std::unique_ptr<ui::Event>,
-                              uint32_t window_id) override {}
+                              uint32_t window_id,
+                              int64_t display_id) override {}
   void OnWindowSharedPropertyChanged(
       uint32_t window,
       const std::string& name,
@@ -430,8 +432,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
     window_manager_binding_ =
         base::MakeUnique<mojo::AssociatedBinding<mojom::WindowManager>>(
             this, std::move(internal));
-    tree_->GetWindowManagerClient(
-        MakeRequest(&window_manager_client_, tree_.associated_group()));
+    tree_->GetWindowManagerClient(MakeRequest(&window_manager_client_));
   }
 
   // mojom::WindowManager:
@@ -457,6 +458,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
       const base::Optional<std::vector<uint8_t>>& value) override {
     window_manager_client_->WmResponse(change_id, false);
   }
+  void WmSetCanFocus(uint32_t window_id, bool can_focus) override {}
   void WmCreateTopLevelWindow(
       uint32_t change_id,
       ClientSpecificId requesting_client_id,
@@ -476,6 +478,13 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   }
   void WmCancelMoveLoop(uint32_t window_id) override { NOTIMPLEMENTED(); }
   void WmDeactivateWindow(uint32_t window_id) override { NOTIMPLEMENTED(); }
+  void WmStackAbove(uint32_t change_id, uint32_t above_id,
+                    uint32_t below_id) override {
+    NOTIMPLEMENTED();
+  }
+  void WmStackAtTop(uint32_t change_id, uint32_t window_id) override {
+    NOTIMPLEMENTED();
+  }
   void OnAccelerator(uint32_t ack_id,
                      uint32_t accelerator_id,
                      std::unique_ptr<ui::Event> event) override {
@@ -2166,8 +2175,8 @@ TEST_F(WindowTreeClientTest, SurfaceIdPropagation) {
   render_pass->SetNew(1, frame_rect, frame_rect, gfx::Transform());
   compositor_frame.render_pass_list.push_back(std::move(render_pass));
   compositor_frame.metadata.device_scale_factor = 1.f;
-  cc::LocalFrameId local_frame_id(1, base::UnguessableToken::Create());
-  surface_ptr->SubmitCompositorFrame(local_frame_id,
+  cc::LocalSurfaceId local_surface_id(1, base::UnguessableToken::Create());
+  surface_ptr->SubmitCompositorFrame(local_surface_id,
                                      std::move(compositor_frame));
   // Make sure the parent connection gets the surface ID.
   wt_client1()->WaitForChangeCount(1);

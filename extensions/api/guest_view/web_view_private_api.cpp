@@ -3,8 +3,11 @@
 #include "extensions/api/guest_view/web_view_private_api.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
+
 #include "base/base64.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -24,9 +27,9 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_frame_observer.h"
 #include "extensions/schema/web_view_private.h"
+#include "renderer/vivaldi_render_messages.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -46,11 +49,9 @@ using vivaldi::ui_tools::EncodeBitmap;
 namespace extensions {
 namespace vivaldi {
 
-WebViewPrivateSetVisibleFunction::WebViewPrivateSetVisibleFunction() {
-}
+WebViewPrivateSetVisibleFunction::WebViewPrivateSetVisibleFunction() {}
 
-WebViewPrivateSetVisibleFunction::~WebViewPrivateSetVisibleFunction() {
-}
+WebViewPrivateSetVisibleFunction::~WebViewPrivateSetVisibleFunction() {}
 
 bool WebViewPrivateSetVisibleFunction::RunAsyncSafe(WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::SetVisible::Params> params(
@@ -76,8 +77,7 @@ WebViewInternalThumbnailFunction::WebViewInternalThumbnailFunction()
                                                               // PNG.
 {}
 
-WebViewInternalThumbnailFunction::~WebViewInternalThumbnailFunction() {
-}
+WebViewInternalThumbnailFunction::~WebViewInternalThumbnailFunction() {}
 
 // Turn a bitmap of the screen into an image, set that image as the result,
 // and call SendResponse().
@@ -104,7 +104,7 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
     bitmap = screen_capture;
   }
   gfx::Size size(width_, height_);
-  bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_, size,
+  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_, size,
                               scale_, image_quality_, need_resize);
   if (!encoded) {
     error_ = "Internal Thumbnail error";
@@ -112,19 +112,19 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
     return;
   }
   std::string base64_result;
-  base::StringPiece stream_as_string(
-    reinterpret_cast<const char*>(data.data()), data.size());
+  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
+                                     data.size());
 
   base::Base64Encode(stream_as_string, &base64_result);
-  base64_result.insert(0, base::StringPrintf("data:%s;base64,",
-    mime_type.c_str()));
+  base64_result.insert(
+      0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
   SetResult(base::MakeUnique<base::StringValue>(base64_result));
   SendResponse(true);
 }
 
 bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
     WebViewGuest* guest,
-    std::unique_ptr<vivaldi::web_view_private::ThumbnailParams>& params) {
+    const std::unique_ptr<vivaldi::web_view_private::ThumbnailParams>& params) {
   if (params.get()) {
     if (params->scale.get()) {
       scale_ = *params->scale.get();
@@ -161,11 +161,8 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
   }
   content::RenderWidgetHostView* embedder_view =
       guest->embedder_web_contents()->GetRenderWidgetHostView();
-  RenderViewHost* embedder_render_view_host =
-      guest->embedder_web_contents()->GetRenderViewHost();
-  gfx::Point source_origin =
-      view->GetViewBounds().origin() -
-      embedder_view->GetViewBounds().OffsetFromOrigin();
+  gfx::Point source_origin = view->GetViewBounds().origin() -
+                             embedder_view->GetViewBounds().OffsetFromOrigin();
   gfx::Rect source_rect(source_origin, view->GetViewBounds().size());
 
   // Remove scrollbars from thumbnail (even if they're not here!)
@@ -174,7 +171,7 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
   source_rect.set_height(
       std::max(1, source_rect.height() - gfx::scrollbar_size()));
 
-  embedder_render_view_host->GetWidget()->CopyFromBackingStore(
+  embedder_view->CopyFromSurface(
       source_rect, source_rect.size(),
       base::Bind(
           &WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete,
@@ -185,7 +182,8 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
 }
 
 void WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete(
-    const SkBitmap& bitmap, content::ReadbackResponse response) {
+    const SkBitmap& bitmap,
+    content::ReadbackResponse response) {
   if (response == content::READBACK_SUCCESS) {
     VLOG(1) << "captureVisibleTab() got image from backing store.";
     SendResultFromBitmap(bitmap);
@@ -193,11 +191,9 @@ void WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete(
   }
 }
 
-WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction() {
-}
+WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction() {}
 
-WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {
-}
+WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {}
 
 bool WebViewPrivateGetThumbnailFunction::RunAsyncSafe(WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::GetThumbnail::Params> params(
@@ -214,12 +210,10 @@ void WebViewPrivateGetThumbnailFunction::SendInternalError() {
 }
 
 WebViewPrivateGetThumbnailFromServiceFunction::
-    WebViewPrivateGetThumbnailFromServiceFunction() {
-}
+    WebViewPrivateGetThumbnailFromServiceFunction() {}
 
 WebViewPrivateGetThumbnailFromServiceFunction::
-    ~WebViewPrivateGetThumbnailFromServiceFunction() {
-}
+    ~WebViewPrivateGetThumbnailFromServiceFunction() {}
 
 bool WebViewPrivateGetThumbnailFromServiceFunction::RunAsyncSafe(
     WebViewGuest* guest) {
@@ -242,7 +236,7 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-    ThumbnailServiceFactory::GetForProfile(profile);
+      ThumbnailServiceFactory::GetForProfile(profile);
 
   // Scale the  bitmap.
   SkAutoLockPixels screen_capture_lock(screen_capture);
@@ -274,18 +268,16 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
     thumbnail_service->SetPageThumbnail(*context, image);
   }
 
-  SetResult(base::MakeUnique<base::StringValue>(
-            std::string("chrome://thumb/") + context->url.spec()));
+  SetResult(base::MakeUnique<base::StringValue>(std::string("chrome://thumb/") +
+                                                context->url.spec()));
   SendResponse(true);
 }
 
 WebViewPrivateAddToThumbnailServiceFunction::
-    WebViewPrivateAddToThumbnailServiceFunction() {
-}
+    WebViewPrivateAddToThumbnailServiceFunction() {}
 
 WebViewPrivateAddToThumbnailServiceFunction::
-    ~WebViewPrivateAddToThumbnailServiceFunction() {
-}
+    ~WebViewPrivateAddToThumbnailServiceFunction() {}
 
 bool WebViewPrivateAddToThumbnailServiceFunction::RunAsyncSafe(
     WebViewGuest* guest) {
@@ -314,7 +306,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SetPageThumbnailOnUIThread(
 
   if (send_result) {
     SetResult(base::MakeUnique<base::StringValue>(
-              std::string("chrome://thumb/") + context->url.spec()));
+        std::string("chrome://thumb/") + context->url.spec()));
     SendResponse(true);
   }
   Release();
@@ -326,7 +318,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
     const SkBitmap& screen_capture) {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-    ThumbnailServiceFactory::GetForProfile(profile);
+      ThumbnailServiceFactory::GetForProfile(profile);
 
   // Scale the  bitmap.
   SkAutoLockPixels screen_capture_lock(screen_capture);
@@ -356,7 +348,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
   // Do not store any urls for private windows.
   if (is_incognito_) {
     SetResult(base::MakeUnique<base::StringValue>(
-              std::string("chrome://thumb/") + context->url.spec()));
+        std::string("chrome://thumb/") + context->url.spec()));
     SendResponse(true);
   } else {
     AddRef();
@@ -374,8 +366,7 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
   }
 }
 
-WebViewPrivateShowPageInfoFunction::WebViewPrivateShowPageInfoFunction() {
-}
+WebViewPrivateShowPageInfoFunction::WebViewPrivateShowPageInfoFunction() {}
 
 WebViewPrivateShowPageInfoFunction::~WebViewPrivateShowPageInfoFunction() {
   Respond(NoArguments());
@@ -390,8 +381,7 @@ bool WebViewPrivateShowPageInfoFunction::RunAsyncSafe(WebViewGuest* guest) {
   return true;
 }
 
-WebViewPrivateSetIsFullscreenFunction::
-    WebViewPrivateSetIsFullscreenFunction() {
+WebViewPrivateSetIsFullscreenFunction::WebViewPrivateSetIsFullscreenFunction() {
 }
 
 WebViewPrivateSetIsFullscreenFunction::
@@ -407,12 +397,9 @@ bool WebViewPrivateSetIsFullscreenFunction::RunAsyncSafe(WebViewGuest* guest) {
   return true;
 }
 
-WebViewPrivateGetPageHistoryFunction::WebViewPrivateGetPageHistoryFunction() {
-}
+WebViewPrivateGetPageHistoryFunction::WebViewPrivateGetPageHistoryFunction() {}
 
-WebViewPrivateGetPageHistoryFunction::
-    ~WebViewPrivateGetPageHistoryFunction() {
-}
+WebViewPrivateGetPageHistoryFunction::~WebViewPrivateGetPageHistoryFunction() {}
 
 bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::GetPageHistory::Params> params(
@@ -453,8 +440,7 @@ WebViewPrivateSetExtensionHostFunction::
 WebViewPrivateSetExtensionHostFunction::
     ~WebViewPrivateSetExtensionHostFunction() {}
 
-bool WebViewPrivateSetExtensionHostFunction::RunAsyncSafe(
-    WebViewGuest *guest) {
+bool WebViewPrivateSetExtensionHostFunction::RunAsyncSafe(WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::SetExtensionHost::Params> params(
       vivaldi::web_view_private::SetExtensionHost::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -464,16 +450,16 @@ bool WebViewPrivateSetExtensionHostFunction::RunAsyncSafe(
 }
 
 WebViewPrivateAllowBlockedInsecureContentFunction::
-WebViewPrivateAllowBlockedInsecureContentFunction() {}
+    WebViewPrivateAllowBlockedInsecureContentFunction() {}
 
 WebViewPrivateAllowBlockedInsecureContentFunction::
-~WebViewPrivateAllowBlockedInsecureContentFunction() {}
+    ~WebViewPrivateAllowBlockedInsecureContentFunction() {}
 
 bool WebViewPrivateAllowBlockedInsecureContentFunction::RunAsyncSafe(
-    WebViewGuest *guest) {
-    guest->AllowRunningInsecureContent();
-    SendResponse(true);
-    return true;
+    WebViewGuest* guest) {
+  guest->AllowRunningInsecureContent();
+  SendResponse(true);
+  return true;
 }
 
 WebViewPrivateGetFocusedElementInfoFunction::
@@ -483,28 +469,26 @@ WebViewPrivateGetFocusedElementInfoFunction::
     ~WebViewPrivateGetFocusedElementInfoFunction() {}
 
 bool WebViewPrivateGetFocusedElementInfoFunction::RunAsyncSafe(
-    WebViewGuest *guest) {
+    WebViewGuest* guest) {
   std::unique_ptr<vivaldi::web_view_private::GetFocusedElementInfo::Params>
-      params(
-          vivaldi::web_view_private::GetFocusedElementInfo::Params::Create(
-              *args_));
+      params(vivaldi::web_view_private::GetFocusedElementInfo::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  ::vivaldi::VivaldiFrameObserver *frame_observer = NULL;
+  ::vivaldi::VivaldiFrameObserver* frame_observer = NULL;
   if (guest->web_contents()) {
     frame_observer =
-      ::vivaldi::VivaldiFrameObserver::FromWebContents(guest->web_contents());
+        ::vivaldi::VivaldiFrameObserver::FromWebContents(guest->web_contents());
   }
   std::string tagname = "";
   std::string type = "";
   bool editable = false;
   std::string role = "";
-  if(frame_observer != NULL) {
+  if (frame_observer != NULL) {
     frame_observer->GetFocusedElementInfo(&tagname, &type, &editable, &role);
   }
-  results_ =
-      vivaldi::web_view_private::GetFocusedElementInfo
-             ::Results::Create(tagname, type, editable, role);
+  results_ = vivaldi::web_view_private::GetFocusedElementInfo ::Results::Create(
+      tagname, type, editable, role);
   SendResponse(true);
   return true;
 }
@@ -516,8 +500,35 @@ WebViewPrivateResetGestureStateFunction::
     ~WebViewPrivateResetGestureStateFunction() {}
 
 bool WebViewPrivateResetGestureStateFunction::RunAsyncSafe(
-    WebViewGuest *guest) {
+    WebViewGuest* guest) {
   guest->ResetGestureState();
+  SendResponse(true);
+  return true;
+}
+
+WebViewPrivateSendRequestFunction::WebViewPrivateSendRequestFunction() {}
+
+WebViewPrivateSendRequestFunction::~WebViewPrivateSendRequestFunction() {}
+
+bool WebViewPrivateSendRequestFunction::RunAsyncSafe(WebViewGuest* guest) {
+  std::unique_ptr<vivaldi::web_view_private::SendRequest::Params> params(
+      vivaldi::web_view_private::SendRequest::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  // All the arguments passed to the constructor are ultimately ignored
+  content::OpenURLParams url_params(
+      GURL(params->url), content::Referrer(), WindowOpenDisposition::UNKNOWN,
+      params->was_typed ? ui::PAGE_TRANSITION_TYPED
+                        : ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      false);
+
+  url_params.uses_post = params->use_post;
+  url_params.post_data = content::ResourceRequestBody::CreateFromBytes(
+      params->post_data.c_str(), params->post_data.length());
+  url_params.extra_headers = params->extra_headers;
+
+  guest->NavigateGuest(params->url, true, params->was_typed, nullptr,
+                       &url_params);
   SendResponse(true);
   return true;
 }

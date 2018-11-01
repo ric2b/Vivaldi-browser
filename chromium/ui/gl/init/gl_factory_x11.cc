@@ -31,6 +31,7 @@ std::vector<GLImplementation> GetAllowedGLImplementations() {
   impls.push_back(kGLImplementationDesktopGL);
   impls.push_back(kGLImplementationEGLGLES2);
   impls.push_back(kGLImplementationOSMesaGL);
+  impls.push_back(kGLImplementationSwiftShaderGL);
   return impls;
 }
 
@@ -56,11 +57,18 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
     case kGLImplementationDesktopGL:
       return InitializeGLContext(new GLContextGLX(share_group),
                                  compatible_surface, attribs);
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       return InitializeGLContext(new GLContextEGL(share_group),
                                  compatible_surface, attribs);
     case kGLImplementationMockGL:
       return new GLContextStub(share_group);
+    case kGLImplementationStubGL: {
+      scoped_refptr<GLContextStub> stub_context =
+          new GLContextStub(share_group);
+      stub_context->SetUseStubApi(true);
+      return stub_context;
+    }
     default:
       NOTREACHED();
       return nullptr;
@@ -74,10 +82,12 @@ scoped_refptr<GLSurface> CreateViewGLSurface(gfx::AcceleratedWidget window) {
       return InitializeGLSurface(new GLSurfaceOSMesaX11(window));
     case kGLImplementationDesktopGL:
       return InitializeGLSurface(new GLSurfaceGLXX11(window));
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       DCHECK(window != gfx::kNullAcceleratedWidget);
       return InitializeGLSurface(new NativeViewGLSurfaceEGLX11(window));
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();
@@ -96,10 +106,12 @@ scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
     case kGLImplementationDesktopGL:
       return InitializeGLSurfaceWithFormat(
           new UnmappedNativeViewGLSurfaceGLX(size), format);
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       return InitializeGLSurfaceWithFormat(
           new PbufferGLSurfaceEGL(size), format);
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();

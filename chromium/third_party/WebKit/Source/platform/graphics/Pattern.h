@@ -31,6 +31,8 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/graphics/Image.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintShader.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 #include "wtf/Noncopyable.h"
@@ -38,8 +40,6 @@
 #include "wtf/RefCounted.h"
 
 class SkMatrix;
-class SkPaint;
-class SkPicture;
 
 namespace blink {
 
@@ -57,11 +57,12 @@ class PLATFORM_EXPORT Pattern : public RefCounted<Pattern> {
 
   static PassRefPtr<Pattern> createImagePattern(PassRefPtr<Image>,
                                                 RepeatMode = RepeatModeXY);
-  static PassRefPtr<Pattern> createPicturePattern(sk_sp<SkPicture>,
-                                                  RepeatMode = RepeatModeXY);
+  static PassRefPtr<Pattern> createPaintRecordPattern(
+      sk_sp<PaintRecord>,
+      RepeatMode = RepeatModeXY);
   virtual ~Pattern();
 
-  void applyToPaint(SkPaint&, const SkMatrix&);
+  void applyToFlags(PaintFlags&, const SkMatrix&);
 
   bool isRepeatX() const { return m_repeatMode & RepeatModeX; }
   bool isRepeatY() const { return m_repeatMode & RepeatModeY; }
@@ -70,7 +71,7 @@ class PLATFORM_EXPORT Pattern : public RefCounted<Pattern> {
   virtual bool isTextureBacked() const { return false; }
 
  protected:
-  virtual sk_sp<SkShader> createShader(const SkMatrix&) = 0;
+  virtual sk_sp<PaintShader> createShader(const SkMatrix&) = 0;
   virtual bool isLocalMatrixChanged(const SkMatrix&) const;
 
   void adjustExternalMemoryAllocated(int64_t delta);
@@ -78,7 +79,7 @@ class PLATFORM_EXPORT Pattern : public RefCounted<Pattern> {
   RepeatMode m_repeatMode;
 
   Pattern(RepeatMode, int64_t externalMemoryAllocated = 0);
-  mutable sk_sp<SkShader> m_cachedShader;
+  mutable sk_sp<PaintShader> m_cachedShader;
 
  private:
   int64_t m_externalMemoryAllocated;

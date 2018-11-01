@@ -6,25 +6,58 @@
 #define NGBreakToken_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/ng_layout_input_node.h"
 #include "platform/heap/Handle.h"
+#include "wtf/RefCounted.h"
 
 namespace blink {
 
-class CORE_EXPORT NGBreakToken
-    : public GarbageCollectedFinalized<NGBreakToken> {
+// A break token is a continuation token for layout. A single layout input node
+// can have multiple fragments asssociated with it.
+//
+// Each fragment has a break token which can be used to determine if a layout
+// input node has finished producing fragments (aka. is "exhausted" of
+// fragments), and optionally used to produce the next fragment in the chain.
+//
+// See CSS Fragmentation (https://drafts.csswg.org/css-break/) for a detailed
+// description of different types of breaks which can occur in CSS.
+//
+// Each layout algorithm which can fragment, e.g. block-flow can optionally
+// accept a break token. For example:
+//
+// NGLayoutInputNode* node = ...;
+// NGPhysicalFragment* fragment = node->Layout(space);
+// DCHECK(!fragment->BreakToken()->IsFinished());
+// NGPhysicalFragment* fragment2 = node->Layout(space, fragment->BreakToken());
+//
+// The break token should encapsulate enough information to "resume" the layout.
+class CORE_EXPORT NGBreakToken : public RefCounted<NGBreakToken> {
  public:
   virtual ~NGBreakToken() {}
 
   enum NGBreakTokenType { kBlockBreakToken, kTextBreakToken };
   NGBreakTokenType Type() const { return static_cast<NGBreakTokenType>(type_); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  enum NGBreakTokenStatus { kUnfinished, kFinished };
+
+  // Whether the layout node cannot produce any more fragments.
+  bool IsFinished() const { return status_ == kFinished; }
+
+  // Returns the node associated with this break token. A break token cannot be
+  // used with any other node.
+  NGLayoutInputNode* InputNode() const { return node_; }
 
  protected:
-  NGBreakToken(NGBreakTokenType type) : type_(type) {}
+  NGBreakToken(NGBreakTokenType type,
+               NGBreakTokenStatus status,
+               NGLayoutInputNode* node)
+      : type_(type), status_(status), node_(node) {}
 
  private:
   unsigned type_ : 1;
+  unsigned status_ : 1;
+
+  Persistent<NGLayoutInputNode> node_;
 };
 
 }  // namespace blink

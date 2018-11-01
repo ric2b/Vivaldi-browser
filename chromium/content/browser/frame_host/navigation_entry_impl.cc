@@ -9,7 +9,6 @@
 #include <queue>
 #include <utility>
 
-#include "base/debug/dump_without_crashing.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -66,11 +65,7 @@ void RecursivelyGenerateFrameEntries(
   page_state.top = state;
   std::string data;
   EncodePageState(page_state, &data);
-  if (data.empty()) {
-    // Temporarily generate a minidump to diagnose https://crbug.com/568703.
-    base::debug::DumpWithoutCrashing();
-    NOTREACHED() << "Shouldn't generate an empty PageState.";
-  }
+  DCHECK(!data.empty()) << "Shouldn't generate an empty PageState.";
   node->frame_entry->SetPageState(PageState::CreateFromEncodedData(data));
 
   // Don't pass the file list to subframes, since that would result in multiple
@@ -355,11 +350,6 @@ const base::string16& NavigationEntryImpl::GetTitle() const {
 }
 
 void NavigationEntryImpl::SetPageState(const PageState& state) {
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    frame_tree_->frame_entry->SetPageState(state);
-    return;
-  }
-
   // SetPageState should only be called before the NavigationEntry has been
   // loaded, such as for restore (when there are no subframe
   // FrameNavigationEntries yet).  However, some callers expect to call this
@@ -387,10 +377,9 @@ void NavigationEntryImpl::SetPageState(const PageState& state) {
 }
 
 PageState NavigationEntryImpl::GetPageState() const {
-  // Just return the main frame's PageState in default Chrome, or if there are
-  // no subframe FrameNavigationEntries.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries() ||
-      frame_tree_->children.size() == 0U)
+  // Just return the main frame's state if there are no subframe
+  // FrameNavigationEntries.
+  if (frame_tree_->children.size() == 0U)
     return frame_tree_->frame_entry->page_state();
 
   // When we're using subframe entries, each FrameNavigationEntry has a
@@ -710,7 +699,8 @@ StartNavigationParams NavigationEntryImpl::ConstructStartNavigationParams()
 
 RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
     const FrameNavigationEntry& frame_entry,
-    bool is_same_document_history_load,
+    const GURL& original_url,
+    const std::string& original_method,
     bool is_history_navigation_in_new_child,
     const std::map<std::string, bool>& subframe_unique_names,
     bool has_committed_real_load,
@@ -742,8 +732,8 @@ RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
   user_gesture = has_user_gesture();
 #endif
   RequestNavigationParams request_params(
-      GetIsOverridingUserAgent(), redirects, GetCanLoadLocalResources(),
-      frame_entry.page_state(), GetUniqueID(), is_same_document_history_load,
+      GetIsOverridingUserAgent(), redirects, original_url, original_method,
+      GetCanLoadLocalResources(), frame_entry.page_state(), GetUniqueID(),
       is_history_navigation_in_new_child, subframe_unique_names,
       has_committed_real_load, intended_as_new_entry, pending_offset_to_send,
       current_offset_to_send, current_length_to_send, IsViewSourceMode(),

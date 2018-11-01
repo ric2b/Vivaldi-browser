@@ -24,7 +24,6 @@
 #include "gpu/ipc/common/surface_handle.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
-#include "ui/android/context_provider_factory.h"
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/android/window_android_compositor.h"
@@ -34,9 +33,11 @@ struct ANativeWindow;
 namespace cc {
 class AnimationHost;
 class Display;
+class FrameSinkId;
 class Layer;
 class LayerTreeHost;
 class OutputSurface;
+class SurfaceManager;
 class VulkanContextProvider;
 }
 
@@ -57,6 +58,9 @@ class CONTENT_EXPORT CompositorImpl
   ~CompositorImpl() override;
 
   static bool IsInitialized();
+
+  static cc::SurfaceManager* GetSurfaceManager();
+  static cc::FrameSinkId AllocateFrameSinkId();
 
   // ui::ResourceProvider implementation.
   cc::UIResourceId CreateUIResource(cc::UIResourceClient* client) override;
@@ -103,6 +107,8 @@ class CONTENT_EXPORT CompositorImpl
       std::unique_ptr<cc::CopyOutputRequest> request) override;
   void SetNeedsAnimate() override;
   cc::FrameSinkId GetFrameSinkId() override;
+  void AddChildFrameSink(const cc::FrameSinkId& frame_sink_id) override;
+  void RemoveChildFrameSink(const cc::FrameSinkId& frame_sink_id) override;
 
   void SetVisible(bool visible);
   void CreateLayerTreeHost();
@@ -113,12 +119,13 @@ class CONTENT_EXPORT CompositorImpl
   void CreateVulkanOutputSurface();
 #endif
   void OnGpuChannelEstablished(
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
-      ui::ContextProviderFactory::GpuChannelHostResult result);
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host);
+  void OnGpuChannelTimeout();
   void InitializeDisplay(
       std::unique_ptr<cc::OutputSurface> display_output_surface,
       scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
       scoped_refptr<cc::ContextProvider> context_provider);
+  void DidSwapBuffers();
 
   bool HavePendingReadbacks();
   void SetBackgroundColor(int color);
@@ -152,11 +159,13 @@ class CONTENT_EXPORT CompositorImpl
   // Whether we need to update animations on the next composite.
   bool needs_animate_;
 
-  // The number of SwapBuffer calls that have not returned and ACK'd from
+  // The number of SubmitFrame calls that have not returned and ACK'd from
   // the GPU thread.
-  unsigned int pending_swapbuffers_;
+  unsigned int pending_frames_;
 
   size_t num_successive_context_creation_failures_;
+
+  base::OneShotTimer establish_gpu_channel_timeout_;
 
   // Whether there is an CompositorFrameSink request pending from the current
   // |host_|. Becomes |true| if RequestNewCompositorFrameSink is called, and
@@ -165,6 +174,9 @@ class CONTENT_EXPORT CompositorImpl
   bool compositor_frame_sink_request_pending_;
 
   gpu::Capabilities gpu_capabilities_;
+  bool has_compositor_frame_sink_ = false;
+  std::unordered_set<cc::FrameSinkId, cc::FrameSinkIdHash>
+      pending_child_frame_sink_ids_;
   base::WeakPtrFactory<CompositorImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorImpl);

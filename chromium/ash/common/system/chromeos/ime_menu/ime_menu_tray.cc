@@ -11,7 +11,6 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/chromeos/ime_menu/ime_list_view.h"
-#include "ash/common/system/tray/fixed_sized_scroll_view.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/system_menu_button.h"
 #include "ash/common/system/tray/system_tray_controller.h"
@@ -25,11 +24,11 @@
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ash/root_window_controller.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/text_input_client.h"
@@ -42,6 +41,7 @@
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -54,7 +54,7 @@ namespace {
 gfx::Range GetImeListViewRange() {
   const int max_items = 5;
   const int min_items = 1;
-  const int tray_item_height = GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT);
+  const int tray_item_height = kTrayPopupItemMinHeight;
   return gfx::Range(tray_item_height * min_items, tray_item_height * max_items);
 }
 
@@ -113,12 +113,9 @@ class ImeMenuLabel : public views::Label {
 
   // views:Label:
   gfx::Size GetPreferredSize() const override {
-    const int tray_constant = GetTrayConstant(TRAY_IME_MENU_ICON);
-    return gfx::Size(tray_constant, tray_constant);
+    return gfx::Size(kTrayItemSize, kTrayItemSize);
   }
-  int GetHeightForWidth(int width) const override {
-    return GetTrayConstant(TRAY_IME_MENU_ICON);
-  }
+  int GetHeightForWidth(int width) const override { return kTrayItemSize; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ImeMenuLabel);
@@ -143,21 +140,22 @@ class ImeTitleView : public views::View, public views::ButtonListener {
   explicit ImeTitleView(bool show_settings_button) : settings_button_(nullptr) {
     SetBorder(views::CreatePaddedBorder(
         views::CreateSolidSidedBorder(0, 0, kSeparatorWidth, 0,
-                                      kHorizontalSeparatorColor),
+                                      kMenuSeparatorColor),
         gfx::Insets(kMenuSeparatorVerticalPadding - kSeparatorWidth, 0)));
     auto* box_layout =
         new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
-    box_layout->set_minimum_cross_axis_size(
-        GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT));
+    box_layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
     SetLayoutManager(box_layout);
-    title_label_ =
+    auto* title_label =
         new views::Label(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
-    title_label_->SetBorder(views::CreateEmptyBorder(
-        0, kMenuEdgeEffectivePadding, kTrayMenuBottomRowPadding, 0));
-    UpdateStyle();
-    title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    AddChildView(title_label_);
-    box_layout->SetFlexForView(title_label_, 1);
+    title_label->SetBorder(
+        views::CreateEmptyBorder(0, kMenuEdgeEffectivePadding, 1, 0));
+    title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE);
+    style.SetupLabel(title_label);
+
+    AddChildView(title_label);
+    box_layout->SetFlexForView(title_label, 1);
 
     if (show_settings_button) {
       settings_button_ = CreateImeMenuButton(
@@ -166,21 +164,6 @@ class ImeTitleView : public views::View, public views::ButtonListener {
         settings_button_->SetEnabled(false);
       AddChildView(settings_button_);
     }
-  }
-
-  void UpdateStyle() {
-    if (!GetNativeTheme() || !title_label_) {
-      return;
-    }
-
-    TrayPopupItemStyle style(GetNativeTheme(),
-                             TrayPopupItemStyle::FontStyle::TITLE);
-    style.SetupLabel(title_label_);
-  }
-
-  // views::View:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    UpdateStyle();
   }
 
   // views::ButtonListener:
@@ -192,8 +175,6 @@ class ImeTitleView : public views::View, public views::ButtonListener {
   ~ImeTitleView() override {}
 
  private:
-  views::Label* title_label_;
-
   // Settings button that is only used in material design, and only if the
   // emoji, handwriting and voice buttons are not available.
   SystemMenuButton* settings_button_;
@@ -292,14 +273,13 @@ class ImeButtonsView : public views::View,
     if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
       auto* box_layout =
           new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
-      box_layout->set_minimum_cross_axis_size(
-          GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT));
+      box_layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
       SetLayoutManager(box_layout);
       SetBorder(views::CreatePaddedBorder(
           views::CreateSolidSidedBorder(kSeparatorWidth, 0, 0, 0,
-                                        kHorizontalSeparatorColor),
+                                        kMenuSeparatorColor),
           gfx::Insets(kMenuSeparatorVerticalPadding - kSeparatorWidth,
-                      GetTrayConstant(TRAY_POPUP_ITEM_LEFT_INSET))));
+                      kMenuExtraMarginFromLeftEdge)));
     } else {
       auto* box_layout =
           new views::BoxLayout(views::BoxLayout::kHorizontal, 4, 4, 0);
@@ -351,10 +331,7 @@ class ImeButtonsView : public views::View,
 // The list view that contains the selected IME and property items.
 class ImeMenuListView : public ImeListView {
  public:
-  ImeMenuListView(SystemTrayItem* owner,
-                  bool show_keyboard_toggle,
-                  SingleImeBehavior single_ime_behavior)
-      : ImeListView(owner, show_keyboard_toggle, single_ime_behavior) {
+  ImeMenuListView(SystemTrayItem* owner) : ImeListView(owner) {
     set_should_focus_ime_after_selection_with_keyboard(true);
   }
 
@@ -363,19 +340,7 @@ class ImeMenuListView : public ImeListView {
  protected:
   void Layout() override {
     gfx::Range height_range = GetImeListViewRange();
-    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      scroller()->ClipHeightTo(height_range.start(), height_range.end());
-    } else {
-      uint32_t current_height = scroll_content()->height();
-      int minimum_menu_width = GetMinimumMenuWidth();
-      if (current_height > height_range.end()) {
-        scroller()->SetFixedSize(
-            gfx::Size(minimum_menu_width, height_range.end()));
-      } else if (current_height < height_range.start()) {
-        scroller()->SetFixedSize(
-            gfx::Size(minimum_menu_width, height_range.start()));
-      }
-    }
+    scroller()->ClipHeightTo(height_range.start(), height_range.end());
     ImeListView::Layout();
   }
 
@@ -452,8 +417,9 @@ void ImeMenuTray::ShowImeMenuBubbleInternal() {
   }
 
   // Adds IME list to the bubble.
-  ime_list_view_ = new ImeMenuListView(nullptr, ShouldShowKeyboardToggle(),
-                                       ImeListView::SHOW_SINGLE_IME);
+  ime_list_view_ = new ImeMenuListView(nullptr);
+  ime_list_view_->Init(ShouldShowKeyboardToggle(),
+                       ImeListView::SHOW_SINGLE_IME);
   bubble_view->AddChildView(ime_list_view_);
 
   if (ShouldShowEmojiHandwritingVoiceButtons()) {

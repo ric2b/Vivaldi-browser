@@ -927,9 +927,7 @@ TEST_F(ElementAnimationsTest, UpdateStateWithoutAnimate) {
 
   player_impl_->Tick(kInitialTickTime + TimeDelta::FromMilliseconds(1500));
   player_impl_->UpdateState(true, events.get());
-  EXPECT_EQ(
-      Animation::WAITING_FOR_DELETION,
-      player_impl_->GetAnimation(TargetProperty::SCROLL_OFFSET)->run_state());
+  EXPECT_EQ(nullptr, player_impl_->GetAnimation(TargetProperty::SCROLL_OFFSET));
 
   // Add second scroll offset animation.
   AddScrollOffsetAnimationToPlayer(player_impl_.get(),
@@ -1789,6 +1787,43 @@ TEST_F(ElementAnimationsTest, TransformAnimationBounds) {
   EXPECT_FALSE(player_impl_->TransformAnimationBoundsForBox(box, &bounds));
 }
 
+TEST_F(ElementAnimationsTest, TransformAnimationBoundsTwoPlayers) {
+  AttachTimelinePlayerLayer();
+  CreateImplTimelineAndPlayer();
+
+  scoped_refptr<AnimationPlayer> player2 =
+      AnimationPlayer::Create(AnimationIdProvider::NextPlayerId());
+  timeline_->AttachPlayer(player2);
+  player2->AttachElement(element_id_);
+
+  std::unique_ptr<KeyframedTransformAnimationCurve> curve(
+      KeyframedTransformAnimationCurve::Create());
+
+  TransformOperations operations;
+  curve->AddKeyframe(
+      TransformKeyframe::Create(base::TimeDelta(), operations, nullptr));
+  operations.AppendScale(2.0, 3.0, 4.0);
+  curve->AddKeyframe(TransformKeyframe::Create(
+      base::TimeDelta::FromSecondsD(1.0), operations, nullptr));
+
+  std::unique_ptr<Animation> animation(
+      Animation::Create(std::move(curve), 1, 1, TargetProperty::TRANSFORM));
+  player2->AddAnimation(std::move(animation));
+
+  gfx::BoxF box(1.f, 2.f, -1.f, 3.f, 4.f, 5.f);
+  gfx::BoxF bounds;
+
+  EXPECT_FALSE(player_impl_->HasTransformAnimationThatInflatesBounds());
+  EXPECT_TRUE(player2->TransformAnimationBoundsForBox(box, &bounds));
+  EXPECT_EQ(gfx::BoxF(1.f, 2.f, -4.f, 7.f, 16.f, 20.f).ToString(),
+            bounds.ToString());
+
+  EXPECT_TRUE(
+      element_animations_->TransformAnimationBoundsForBox(box, &bounds));
+  EXPECT_EQ(gfx::BoxF(1.f, 2.f, -4.f, 7.f, 16.f, 20.f).ToString(),
+            bounds.ToString());
+}
+
 // Tests that AbortAnimations aborts all animations targeting the specified
 // property.
 TEST_F(ElementAnimationsTest, AbortAnimations) {
@@ -1975,9 +2010,7 @@ TEST_F(ElementAnimationsTest, ImplThreadTakeoverAnimationGetsDeleted) {
   EXPECT_EQ(
       target_value,
       events->events_[0].curve->ToScrollOffsetAnimationCurve()->target_value());
-  EXPECT_EQ(
-      Animation::WAITING_FOR_DELETION,
-      player_impl_->GetAnimation(TargetProperty::SCROLL_OFFSET)->run_state());
+  EXPECT_EQ(nullptr, player_impl_->GetAnimation(TargetProperty::SCROLL_OFFSET));
 
   // MT receives the event to take over.
   player_->NotifyAnimationTakeover(events->events_[0]);

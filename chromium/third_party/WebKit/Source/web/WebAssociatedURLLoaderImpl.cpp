@@ -30,14 +30,18 @@
 
 #include "web/WebAssociatedURLLoaderImpl.h"
 
+#include <limits.h>
+#include <memory>
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/fetch/CrossOriginAccessControl.h"
-#include "core/fetch/FetchUtils.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/DocumentThreadableLoaderClient.h"
+#include "core/loader/ThreadableLoadingContext.h"
 #include "platform/Timer.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
+#include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "platform/loader/fetch/FetchUtils.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceError.h"
 #include "public/platform/WebHTTPHeaderVisitor.h"
@@ -50,8 +54,6 @@
 #include "wtf/HashSet.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/text/WTFString.h"
-#include <limits.h>
-#include <memory>
 
 namespace blink {
 
@@ -92,7 +94,8 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   static std::unique_ptr<ClientAdapter> create(
       WebAssociatedURLLoaderImpl*,
       WebAssociatedURLLoaderClient*,
-      const WebAssociatedURLLoaderOptions&);
+      const WebAssociatedURLLoaderOptions&,
+      RefPtr<WebTaskRunner>);
 
   // ThreadableLoaderClient
   void didSendData(unsigned long long /*bytesSent*/,
@@ -133,7 +136,8 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
  private:
   ClientAdapter(WebAssociatedURLLoaderImpl*,
                 WebAssociatedURLLoaderClient*,
-                const WebAssociatedURLLoaderOptions&);
+                const WebAssociatedURLLoaderOptions&,
+                RefPtr<WebTaskRunner>);
 
   void notifyError(TimerBase*);
 
@@ -142,7 +146,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   WebAssociatedURLLoaderOptions m_options;
   WebURLError m_error;
 
-  Timer<ClientAdapter> m_errorTimer;
+  TaskRunnerTimer<ClientAdapter> m_errorTimer;
   bool m_enableErrorNotifications;
   bool m_didFail;
 };
@@ -151,18 +155,21 @@ std::unique_ptr<WebAssociatedURLLoaderImpl::ClientAdapter>
 WebAssociatedURLLoaderImpl::ClientAdapter::create(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
-    const WebAssociatedURLLoaderOptions& options) {
-  return WTF::wrapUnique(new ClientAdapter(loader, client, options));
+    const WebAssociatedURLLoaderOptions& options,
+    RefPtr<WebTaskRunner> taskRunner) {
+  return WTF::wrapUnique(
+      new ClientAdapter(loader, client, options, taskRunner));
 }
 
 WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
-    const WebAssociatedURLLoaderOptions& options)
+    const WebAssociatedURLLoaderOptions& options,
+    RefPtr<WebTaskRunner> taskRunner)
     : m_loader(loader),
       m_client(client),
       m_options(options),
-      m_errorTimer(this, &ClientAdapter::notifyError),
+      m_errorTimer(std::move(taskRunner), this, &ClientAdapter::notifyError),
       m_enableErrorNotifications(false),
       m_didFail(false) {
   DCHECK(m_loader);
@@ -215,7 +222,7 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::didReceiveResponse(
     if (FetchUtils::isForbiddenResponseHeaderName(header.key) ||
         (!isOnAccessControlResponseHeaderWhitelist(header.key) &&
          !exposedHeaders.contains(header.key)))
-      blockedHeaders.add(header.key);
+      blockedHeaders.insert(header.key);
   }
 
   if (blockedHeaders.isEmpty()) {
@@ -382,8 +389,12 @@ void WebAssociatedURLLoaderImpl::loadAsynchronously(
     }
   }
 
+  RefPtr<WebTaskRunner> taskRunner = TaskRunnerHelper::get(
+      TaskType::UnspecedLoading,
+      m_observer ? toDocument(m_observer->lifecycleContext()) : nullptr);
   m_client = client;
-  m_clientAdapter = ClientAdapter::create(this, client, m_options);
+  m_clientAdapter =
+      ClientAdapter::create(this, client, m_options, std::move(taskRunner));
 
   if (allowLoad) {
     ThreadableLoaderOptions options;
@@ -410,11 +421,9 @@ void WebAssociatedURLLoaderImpl::loadAsynchronously(
 
     Document* document = toDocument(m_observer->lifecycleContext());
     DCHECK(document);
-    // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-    CHECK(!m_loader);
     m_loader = DocumentThreadableLoader::create(
-        *document, m_clientAdapter.get(), options, resourceLoaderOptions,
-        ThreadableLoader::ClientSpec::kWebAssociatedURLLoader);
+        *ThreadableLoadingContext::create(*document), m_clientAdapter.get(),
+        options, resourceLoaderOptions);
     m_loader->start(webcoreRequest);
   }
 

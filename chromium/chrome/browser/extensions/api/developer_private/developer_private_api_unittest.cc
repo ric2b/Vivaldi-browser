@@ -304,7 +304,7 @@ void DeveloperPrivateApiUnitTest::SetUp() {
   InitializeExtensionService(init_params);
 
   browser_window_.reset(new TestBrowserWindow());
-  Browser::CreateParams params(profile());
+  Browser::CreateParams params(profile(), true);
   params.type = Browser::TYPE_TABBED;
   params.window = browser_window_.get();
   browser_.reset(new Browser(params));
@@ -637,7 +637,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
 // when DeveloperToolsDisabled policy is active.
 TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDevModeDisabledPolicy) {
   testing_pref_service()->SetManagedPref(prefs::kExtensionsUIDeveloperMode,
-                                         new base::FundamentalValue(false));
+                                         new base::Value(false));
 
   UpdateProfileConfigurationDevMode(true);
 

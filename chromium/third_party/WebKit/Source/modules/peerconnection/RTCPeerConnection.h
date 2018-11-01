@@ -109,10 +109,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
 
   String signalingState() const;
 
-  void updateIce(ExecutionContext*,
-                 const RTCConfiguration&,
-                 const Dictionary&,
-                 ExceptionState&);
+  void setConfiguration(ScriptState*, const RTCConfiguration&, ExceptionState&);
 
   // Certificate management
   // http://w3c.github.io/webrtc-pc/#sec.cert-mgmt
@@ -138,7 +135,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
 
   MediaStream* getStreamById(const String& streamId);
 
-  void addStream(ExecutionContext*,
+  void addStream(ScriptState*,
                  MediaStream*,
                  const Dictionary& mediaConstraints,
                  ExceptionState&);
@@ -150,7 +147,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
                          MediaStreamTrack* selector = nullptr);
   ScriptPromise getStats(ScriptState*);
 
-  RTCDataChannel* createDataChannel(ExecutionContext*,
+  RTCDataChannel* createDataChannel(ScriptState*,
                                     String label,
                                     const Dictionary& dataChannelDict,
                                     ExceptionState&);

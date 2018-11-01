@@ -35,6 +35,7 @@
 #include "net/cert/test_keychain_search_list_mac.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 #include "net/cert/x509_util_mac.h"
 
 // CSSM functions are deprecated as of OSX 10.7, but have no replacement.
@@ -203,6 +204,39 @@ void CopyCertChainToVerifyResult(CFArrayRef cert_chain,
       X509Certificate::CreateFromHandle(verified_cert, verified_chain);
 }
 
+// Returns true if the certificate uses MD2, MD4, MD5, or SHA1, and false
+// otherwise. A return of false also includes the case where the signature
+// algorithm couldn't be conclusively labeled as weak.
+bool CertUsesWeakHash(X509Certificate::OSCertHandle cert_handle) {
+  x509_util::CSSMCachedCertificate cached_cert;
+  OSStatus status = cached_cert.Init(cert_handle);
+  if (status)
+    return false;
+
+  x509_util::CSSMFieldValue signature_field;
+  status =
+      cached_cert.GetField(&CSSMOID_X509V1SignatureAlgorithm, &signature_field);
+  if (status || !signature_field.field())
+    return false;
+
+  const CSSM_X509_ALGORITHM_IDENTIFIER* sig_algorithm =
+      signature_field.GetAs<CSSM_X509_ALGORITHM_IDENTIFIER>();
+  if (!sig_algorithm)
+    return false;
+
+  const CSSM_OID* alg_oid = &sig_algorithm->algorithm;
+
+  return (CSSMOIDEqual(alg_oid, &CSSMOID_MD2WithRSA) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_MD4WithRSA) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_MD5WithRSA) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA_OIW) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_CMS) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_JDK) ||
+          CSSMOIDEqual(alg_oid, &CSSMOID_ECDSA_WithSHA1));
+}
+
 // Returns true if the intermediates (excluding trusted certificates) use a
 // weak hashing algorithm, but the target does not use a weak hash.
 bool IsWeakChainBasedOnHashingAlgorithms(
@@ -227,22 +261,12 @@ bool IsWeakChainBasedOnHashingAlgorithms(
       continue;
     }
 
-    X509Certificate::SignatureHashAlgorithm hash_algorithm =
-        X509Certificate::GetSignatureHashAlgorithm(chain_cert);
-
-    switch (hash_algorithm) {
-      case X509Certificate::kSignatureHashAlgorithmMd2:
-      case X509Certificate::kSignatureHashAlgorithmMd4:
-      case X509Certificate::kSignatureHashAlgorithmMd5:
-      case X509Certificate::kSignatureHashAlgorithmSha1:
-        if (i == 0) {
-          leaf_uses_weak_hash = true;
-        } else {
-          intermediates_contain_weak_hash = true;
-        }
-        break;
-      case X509Certificate::kSignatureHashAlgorithmOther:
-        break;
+    if (CertUsesWeakHash(chain_cert)) {
+      if (i == 0) {
+        leaf_uses_weak_hash = true;
+      } else {
+        intermediates_contain_weak_hash = true;
+      }
     }
   }
 
@@ -295,8 +319,8 @@ void GetCandidateEVPolicy(const X509Certificate* cert_input,
     return;
   }
 
-  scoped_refptr<ParsedCertificate> cert(
-      ParsedCertificate::Create(der_cert, {}, nullptr));
+  scoped_refptr<ParsedCertificate> cert(ParsedCertificate::Create(
+      x509_util::CreateCryptoBuffer(der_cert), {}, nullptr));
   if (!cert)
     return;
 
@@ -314,7 +338,11 @@ void GetCandidateEVPolicy(const X509Certificate* cert_input,
   for (const der::Input& policy_oid : policies) {
     if (metadata->IsEVPolicyOID(policy_oid)) {
       *ev_policy_oid = policy_oid.AsString();
-      return;
+
+      // De-prioritize the CA/Browser forum Extended Validation policy
+      // (2.23.140.1.1). See crbug.com/705285.
+      if (!EVRootCAMetadata::IsCaBrowserForumEvOid(policy_oid))
+        break;
     }
   }
 }
@@ -346,7 +374,8 @@ bool CheckCertChainEV(const X509Certificate* cert,
     if (!X509Certificate::GetDEREncoded(os_cert_chain[i], &der_cert))
       return false;
     scoped_refptr<ParsedCertificate> intermediate_cert(
-        ParsedCertificate::Create(der_cert, {}, nullptr));
+        ParsedCertificate::Create(x509_util::CreateCryptoBuffer(der_cert), {},
+                                  nullptr));
     if (!intermediate_cert)
       return false;
     if (!HasPolicyOrAnyPolicy(intermediate_cert.get(), ev_policy_oid))
@@ -986,13 +1015,9 @@ int VerifyWithGivenFlags(X509Certificate* cert,
       break;
   }
 
-  // Perform hostname verification independent of SecTrustEvaluate. In order to
-  // do so, mask off any reported name errors first.
+  // Hostname validation is handled by CertVerifyProc, so mask off any errors
+  // that SecTrustEvaluate may have set, as its results are not used.
   verify_result->cert_status &= ~CERT_STATUS_COMMON_NAME_INVALID;
-  if (!cert->VerifyNameMatch(hostname,
-                             &verify_result->common_name_fallback_used)) {
-    verify_result->cert_status |= CERT_STATUS_COMMON_NAME_INVALID;
-  }
 
   // TODO(wtc): Suppress CERT_STATUS_NO_REVOCATION_MECHANISM for now to be
   // compatible with Windows, which in turn implements this behavior to be

@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Mostrar uma cópia guardada desta página (isto é, uma cópia desatualizada).</translation>
 <translation id="1559528461873125649">Esse ficheiro ou diretório não existe</translation>
 <translation id="1710259589646384581">SO</translation>
-<translation id="1838667051080421715">Está a ver a fonte de uma página Web.</translation>
 <translation id="194030505837763158">Aceder a <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Será que quis dizer <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Menos</translation>
 <translation id="2166378884831602661">Este site não consegue fornecer uma ligação segura</translation>
 <translation id="2292556288342944218">O acesso à Internet está bloqueado</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">O acesso ao ficheiro foi negado</translation>
 <translation id="2705137772291741111">A cópia guardada (em cache) deste site era ilegível.</translation>
 <translation id="2784949926578158345">A ligação foi reposta.</translation>
-<translation id="284702764277384724">O certificado do servidor de <ph name="HOST_NAME" /> parece ser uma falsificação.</translation>
 <translation id="2909946352844186028">Foi detetada uma alteração de rede.</translation>
 <translation id="3005723025932146533">Mostrar cópia guardada</translation>
 <translation id="3093245981617870298">Está offline.</translation>
@@ -39,7 +36,6 @@
 <translation id="4021036232240155012">O DNS é o serviço de rede que converte o nome de um Website no respetivo endereço de Internet.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> não aceitou o seu certificado de início de sessão ou este pode não ter sido fornecido.</translation>
 <translation id="4522570452068850558">Detalhes</translation>
-<translation id="4670097147947922288">Está a ver a página de uma extensão.</translation>
 <translation id="4708268264240856090">A ligação foi interrompida</translation>
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4764776831041365478">A página Web em <ph name="URL" /> poderá estar temporariamente inactiva ou poderá ter sido movida permanentemente para um novo endereço Web.</translation>
@@ -56,7 +52,6 @@
 <translation id="5675650730144413517">Esta página não está a funcionar</translation>
 <translation id="5869405914158311789">Não é possível aceder a este site</translation>
 <translation id="5990559369517809815">Os pedidos para o servidor foram bloqueados por uma extensão.</translation>
-<translation id="6042308850641462728">Mais</translation>
 <translation id="6146055958333702838">Verifique os cabos e reinicie todos os routers, modems ou outros
     dispositivos de rede que possa estar a utilizar.</translation>
 <translation id="6165508094623778733">Saiba mais</translation>
@@ -67,10 +62,8 @@
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> recusou estabelecer ligação.</translation>
 <translation id="6711464428925977395">Existe um problema com o servidor proxy ou o endereço está incorreto.</translation>
 <translation id="6757797048963528358">O seu diapositivo entrou em suspensão.</translation>
-<translation id="6830600606572693159">De momento, a página Web em <ph name="URL" /> está indisponível. Poderá estar sobrecarregada ou em manutenção.</translation>
 <translation id="6897140037006041989">Agente do utilizador</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não respeita os padrões de segurança.</translation>
-<translation id="7269802741830436641">Esta página Web tem um ciclo de redireccionamento</translation>
 <translation id="7353601530677266744">Linha de comandos</translation>
 <translation id="7419106976560586862">Caminho do Perfil</translation>
 <translation id="7518003948725431193">Não foi encontrada qualquer página Web para o endereço Web: <ph name="URL" /></translation>
@@ -78,7 +71,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> não consegue processar este pedido de momento.</translation>
 <translation id="7716424297397655342">Não é possível carregar este site a partir da cache</translation>
 <translation id="7758069387465995638">O software de firewall ou antivírus pode ter bloqueado a ligação.</translation>
-<translation id="778579833039460630">Nenhum dado recebido</translation>
 <translation id="7951415247503192394">32 bits</translation>
 <translation id="8134994873729925007">Não foi possível encontrar o <ph name="BEGIN_ABBR" />endereço DNS<ph name="END_ABBR" /> do servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Visite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver os URLs que foram colocados na lista negra e outras políticas aplicadas pelo administrador do sistema.</translation>

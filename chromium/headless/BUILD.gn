@@ -3,6 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//headless/headless.gni")
+import("//build/util/process_version.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
@@ -10,6 +12,10 @@ import("//tools/grit/repack.gni")
 
 config("headless_implementation") {
   defines = [ "HEADLESS_IMPLEMENTATION" ]
+
+  if (headless_use_embedded_resources) {
+    defines += [ "HEADLESS_USE_EMBEDDED_RESOURCES" ]
+  }
 }
 
 group("headless") {
@@ -20,12 +26,12 @@ group("headless") {
 
 repack("pak") {
   sources = [
-    "$root_gen_dir/blink/devtools_resources.pak",
     "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/blink/public/resources/blink_resources.pak",
     "$root_gen_dir/components/strings/components_strings_en-US.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
+    "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/headless/headless_lib_resources.pak",
@@ -58,6 +64,39 @@ repack("pak") {
   ]
 
   output = "$root_out_dir/headless_lib.pak"
+}
+
+action("embed_resources") {
+  # TODO(altimin): Consider zipping file here, it can reduce size up to 80%.
+  script = "//headless/lib/embed_data.py"
+
+  inputs = [
+    "$root_out_dir/headless_lib.pak",
+  ]
+
+  outputs = [
+    "$root_gen_dir/headless/embedded_resource_pak.cc",
+    "$root_gen_dir/headless/embedded_resource_pak.h",
+  ]
+
+  args = [
+    "--data_file",
+    rebase_path("$root_out_dir/headless_lib.pak"),
+    "--gendir",
+    rebase_path("$root_gen_dir"),
+    "--header_file",
+    "headless/embedded_resource_pak.h",
+    "--source_file",
+    "headless/embedded_resource_pak.cc",
+    "--namespace",
+    "headless",
+    "--variable_name",
+    "kHeadlessResourcePak",
+  ]
+
+  deps = [
+    ":pak",
+  ]
 }
 
 grit("resources") {
@@ -157,6 +196,7 @@ static_library("headless_lib") {
               "lib/browser/headless_browser_context_options.h",
               "lib/browser/headless_browser_impl.cc",
               "lib/browser/headless_browser_impl.h",
+              "lib/browser/headless_browser_impl_mac.mm",
               "lib/browser/headless_browser_main_parts.cc",
               "lib/browser/headless_browser_main_parts.h",
               "lib/browser/headless_content_browser_client.cc",
@@ -167,18 +207,15 @@ static_library("headless_lib") {
               "lib/browser/headless_devtools_client_impl.h",
               "lib/browser/headless_devtools_manager_delegate.cc",
               "lib/browser/headless_devtools_manager_delegate.h",
+              "lib/browser/headless_macros.h",
               "lib/browser/headless_platform_event_source.cc",
               "lib/browser/headless_platform_event_source.h",
-              "lib/browser/headless_screen.cc",
-              "lib/browser/headless_screen.h",
               "lib/browser/headless_url_request_context_getter.cc",
               "lib/browser/headless_url_request_context_getter.h",
               "lib/browser/headless_web_contents_impl.cc",
               "lib/browser/headless_web_contents_impl.h",
-              "lib/browser/headless_window_parenting_client.cc",
-              "lib/browser/headless_window_parenting_client.h",
-              "lib/browser/headless_window_tree_host.cc",
-              "lib/browser/headless_window_tree_host.h",
+              "lib/headless_crash_reporter_client.cc",
+              "lib/headless_crash_reporter_client.h",
               "lib/headless_content_client.cc",
               "lib/headless_content_client.h",
               "lib/headless_content_main_delegate.cc",
@@ -207,6 +244,8 @@ static_library("headless_lib") {
               "public/util/expedited_dispatcher.h",
               "public/util/generic_url_request_job.cc",
               "public/util/generic_url_request_job.h",
+              "public/util/flat_dom_tree_extractor.cc",
+              "public/util/flat_dom_tree_extractor.h",
               "public/util/http_url_fetcher.cc",
               "public/util/http_url_fetcher.h",
               "public/util/in_memory_protocol_handler.cc",
@@ -215,6 +254,7 @@ static_library("headless_lib") {
               "public/util/in_memory_request_job.h",
               "public/util/managed_dispatch_url_request_job.cc",
               "public/util/managed_dispatch_url_request_job.h",
+              "public/util/navigation_request.h",
               "public/util/testing/generic_url_request_mocks.cc",
               "public/util/testing/generic_url_request_mocks.h",
               "public/util/url_fetcher.cc",
@@ -224,26 +264,63 @@ static_library("headless_lib") {
               "public/util/user_agent.h",
             ]
 
+  if (use_aura) {
+    sources += [
+      "lib/browser/headless_browser_impl_aura.cc",
+      "lib/browser/headless_focus_client.cc",
+      "lib/browser/headless_focus_client.h",
+      "lib/browser/headless_screen.cc",
+      "lib/browser/headless_screen.h",
+      "lib/browser/headless_window_parenting_client.cc",
+      "lib/browser/headless_window_parenting_client.h",
+      "lib/browser/headless_window_tree_host.cc",
+      "lib/browser/headless_window_tree_host.h",
+    ]
+  }
+
   deps = [
     ":gen_devtools_client_api",
-    ":pak",
+    ":version_header",
     "//base",
+    "//components/crash/content/browser",
     "//components/security_state/content",
     "//components/security_state/core",
     "//content/public/app:both",
     "//content/public/browser",
+    "//content/public/child:child",
     "//content/public/common",
     "//content/public/common:service_names",
     "//net",
     "//services/service_manager/public/cpp",
     "//third_party/mesa:osmesa",
-    "//ui/aura",
     "//ui/base",
     "//ui/compositor",
     "//ui/display",
     "//ui/events/devices",
     "//url",
   ]
+
+  if (is_win) {
+    deps += [
+      "//build/win:default_exe_manifest",
+      "//content:sandbox_helper_win",
+      "//sandbox",
+    ]
+  }
+
+  if (!is_mac) {
+    deps += [ "//ui/aura" ]
+  }
+
+  if (headless_use_embedded_resources) {
+    deps += [ ":embed_resources" ]
+    sources += [
+      "$root_gen_dir/headless/embedded_resource_pak.cc",
+      "$root_gen_dir/headless/embedded_resource_pak.h",
+    ]
+  } else {
+    deps += [ ":pak" ]
+  }
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
@@ -257,6 +334,7 @@ group("headless_tests") {
 
   deps = [
     ":headless_browsertests",
+    ":headless_example",
     ":headless_unittests",
   ]
 }
@@ -321,6 +399,8 @@ test("headless_browsertests") {
     "lib/headless_devtools_client_browsertest.cc",
     "lib/headless_web_contents_browsertest.cc",
     "public/util/dom_tree_extractor_browsertest.cc",
+    "public/util/flat_dom_tree_extractor_browsertest.cc",
+    "public/util/protocol_handler_request_id_browsertest.cc",
     "test/headless_browser_test.cc",
     "test/headless_browser_test.h",
     "test/headless_test_launcher.cc",
@@ -357,19 +437,45 @@ test("headless_browsertests") {
 static_library("headless_shell_lib") {
   sources = [
     "app/headless_shell.cc",
+    "app/headless_shell.h",
     "app/headless_shell_switches.cc",
     "app/headless_shell_switches.h",
+    "app/shell_navigation_request.cc",
+    "app/shell_navigation_request.h",
     "public/headless_shell.h",
   ]
 
   deps = [
     "//headless:headless_lib",
   ]
+
+  configs += [ ":headless_implementation" ]
 }
 
 executable("headless_shell") {
   sources = [
     "app/headless_shell_main.cc",
+  ]
+
+  deps = [
+    "//headless:headless_shell_lib",
+  ]
+
+  configs += [ ":headless_implementation" ]
+}
+
+process_version("version_header") {
+  template_file = "public/version.h.in"
+  sources = [
+    "//build/util/LASTCHANGE",
+    "//chrome/VERSION",
+  ]
+  output = "$target_gen_dir/public/version.h"
+}
+
+executable("headless_example") {
+  sources = [
+    "app/headless_example.cc",
   ]
 
   deps = [

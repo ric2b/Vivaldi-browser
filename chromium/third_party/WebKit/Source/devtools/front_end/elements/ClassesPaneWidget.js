@@ -222,7 +222,7 @@ Elements.ClassesPaneWidget.ClassNamePrompt = class extends UI.TextPrompt {
     var completions = new Set();
     this._selectedFrameId = selectedNode.frameId();
 
-    var cssModel = SDK.CSSModel.fromTarget(selectedNode.target());
+    var cssModel = SDK.CSSModel.fromNode(selectedNode);
     var allStyleSheets = cssModel.allStyleSheets();
     for (var stylesheet of allStyleSheets) {
       if (stylesheet.frameId !== this._selectedFrameId)
@@ -258,7 +258,7 @@ Elements.ClassesPaneWidget.ClassNamePrompt = class extends UI.TextPrompt {
     return this._classNamesPromise.then(completions => {
       if (prefix[0] === '.')
         completions = completions.map(value => '.' + value);
-      return completions.filter(value => value.startsWith(prefix)).map(completion => ({title: completion}));
+      return completions.filter(value => value.startsWith(prefix)).map(completion => ({text: completion}));
     });
   }
 };

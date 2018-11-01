@@ -90,8 +90,10 @@ class WTF_EXPORT String {
   String(const char* characters, unsigned length);
 
   // Construct a string with latin1 data, from a null-terminated source.
-  String(const LChar* characters);
-  String(const char* characters);
+  String(const LChar* characters)
+      : String(reinterpret_cast<const char*>(characters)) {}
+  String(const char* characters)
+      : String(characters, characters ? strlen(characters) : 0) {}
 
   // Construct a string referencing an existing StringImpl.
   String(StringImpl* impl) : m_impl(impl) {}
@@ -102,10 +104,11 @@ class WTF_EXPORT String {
   template <typename CharType>
   static String adopt(StringBuffer<CharType>& buffer) {
     if (!buffer.length())
-      return StringImpl::empty();
+      return StringImpl::empty;
     return String(buffer.release());
   }
 
+  explicit operator bool() const { return !isNull(); }
   bool isNull() const { return !m_impl; }
   bool isEmpty() const { return !m_impl || !m_impl->length(); }
 
@@ -290,6 +293,10 @@ class WTF_EXPORT String {
   String lower(const AtomicString& localeIdentifier) const;
   String upper(const AtomicString& localeIdentifier) const;
 
+  // Returns a uppercase version of the string.
+  // This function converts ASCII characters only.
+  String upperASCII() const;
+
   String stripWhiteSpace() const;
   String stripWhiteSpace(IsWhiteSpaceFunctionPtr) const;
   String simplifyWhiteSpace(StripBehavior = StripExtraWhiteSpace) const;
@@ -431,10 +438,6 @@ class WTF_EXPORT String {
 #endif
 
  private:
-  typedef struct ImplicitConversionFromWTFStringToBoolDisallowed*(
-      String::*UnspecifiedBoolType);
-  operator UnspecifiedBoolType() const;
-
   template <typename CharacterType>
   void appendInternal(CharacterType);
 
@@ -481,10 +484,6 @@ inline bool equalIgnoringNullity(const Vector<UChar, inlineCapacity>& a,
   return equalIgnoringNullity(a, b.impl());
 }
 
-inline bool operator!(const String& str) {
-  return str.isNull();
-}
-
 inline void swap(String& a, String& b) {
   a.swap(b);
 }
@@ -494,7 +493,7 @@ inline void swap(String& a, String& b) {
 template <size_t inlineCapacity>
 String::String(const Vector<UChar, inlineCapacity>& vector)
     : m_impl(vector.size() ? StringImpl::create(vector.data(), vector.size())
-                           : StringImpl::empty()) {}
+                           : StringImpl::empty) {}
 
 template <>
 inline const LChar* String::getCharacters<LChar>() const {
@@ -571,8 +570,8 @@ struct DefaultHash<String> {
 };
 
 // Shared global empty string.
-WTF_EXPORT const String& emptyString();
-WTF_EXPORT const String& emptyString16Bit();
+WTF_EXPORT extern const String& emptyString;
+WTF_EXPORT extern const String& emptyString16Bit;
 WTF_EXPORT extern const String& xmlnsWithColon;
 
 // Pretty printer for gtest and base/logging.*.  It prepends and appends

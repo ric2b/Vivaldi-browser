@@ -435,7 +435,7 @@ void WebGLFramebuffer::setAttachmentInternal(GLenum target,
   DCHECK(m_object);
   removeAttachmentInternal(target, attachment);
   if (texture && texture->object()) {
-    m_attachments.add(
+    m_attachments.insert(
         attachment, TraceWrapperMember<WebGLAttachment>(
                         this, WebGLTextureAttachment::create(texture, texTarget,
                                                              level, layer)));
@@ -451,7 +451,7 @@ void WebGLFramebuffer::setAttachmentInternal(GLenum target,
   DCHECK(m_object);
   removeAttachmentInternal(target, attachment);
   if (renderbuffer && renderbuffer->object()) {
-    m_attachments.add(
+    m_attachments.insert(
         attachment,
         TraceWrapperMember<WebGLAttachment>(
             this, WebGLRenderbufferAttachment::create(renderbuffer)));
@@ -468,7 +468,7 @@ void WebGLFramebuffer::removeAttachmentInternal(GLenum target,
   WebGLAttachment* attachmentObject = getAttachment(attachment);
   if (attachmentObject) {
     attachmentObject->onDetached(context()->contextGL());
-    m_attachments.remove(attachment);
+    m_attachments.erase(attachment);
     drawBuffersIfNecessary(false);
   }
 }
@@ -506,18 +506,30 @@ void WebGLFramebuffer::commitWebGL1DepthStencilIfConsistent(GLenum target) {
 
   gpu::gles2::GLES2Interface* gl = context()->contextGL();
   if (depthAttachment) {
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_STENCIL_ATTACHMENT,
+                                GL_RENDERBUFFER, 0);
     depthAttachment->attach(gl, target, GL_DEPTH_ATTACHMENT);
     gl->FramebufferRenderbuffer(target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
                                 0);
   } else if (stencilAttachment) {
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_STENCIL_ATTACHMENT,
+                                GL_RENDERBUFFER, 0);
     gl->FramebufferRenderbuffer(target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
                                 0);
     stencilAttachment->attach(gl, target, GL_STENCIL_ATTACHMENT);
   } else if (depthStencilAttachment) {
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
+    gl->FramebufferRenderbuffer(target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
     depthStencilAttachment->attach(gl, target, GL_DEPTH_STENCIL_ATTACHMENT);
   } else {
     gl->FramebufferRenderbuffer(target, GL_DEPTH_STENCIL_ATTACHMENT,
                                 GL_RENDERBUFFER, 0);
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
+    gl->FramebufferRenderbuffer(target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
   }
 }
 
@@ -529,15 +541,6 @@ GLenum WebGLFramebuffer::getDrawBuffer(GLenum drawBuffer) {
   if (drawBuffer == GL_DRAW_BUFFER0_EXT)
     return GL_COLOR_ATTACHMENT0;
   return GL_NONE;
-}
-
-void WebGLFramebuffer::visitChildDOMWrappers(
-    v8::Isolate* isolate,
-    const v8::Persistent<v8::Object>& wrapper) {
-  for (const auto& attachment : m_attachments) {
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-        wrapper, attachment.value->object(), isolate);
-  }
 }
 
 DEFINE_TRACE(WebGLFramebuffer) {

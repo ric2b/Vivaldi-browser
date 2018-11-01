@@ -124,9 +124,6 @@
 #define SK_REF_CNT_MIXIN_INCLUDE "sk_ref_cnt_ext_release.h"
 #endif
 
-#define SK_SCALAR_IS_FLOAT
-#undef SK_SCALAR_IS_FIXED
-
 #define SK_MSCALAR_IS_FLOAT
 #undef SK_MSCALAR_IS_DOUBLE
 
@@ -227,6 +224,14 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_CLIPOP_EXOTIC_NAMES
 #endif
 
+#ifndef SK_SUPPORT_LEGACY_PATHEFFECT_SUBCLASSES
+#define SK_SUPPORT_LEGACY_PATHEFFECT_SUBCLASSES
+#endif
+
+#ifndef SK_DISABLE_DEFERRED_PROXIES
+#define SK_DISABLE_DEFERRED_PROXIES
+#endif
+
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 
 /* In some places Skia can use static initializers for global initialization,
@@ -256,13 +261,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 // Updating to a correct SkPMColor lerp will require layout test rebaselines.
 #define SK_SUPPORT_LEGACY_BROKEN_LERP
-
-// Enabling the screenspace AA tessellating path renderer needs rebaselines.
-#define SK_DISABLE_SCREENSPACE_TESS_AA_PATH_RENDERER
-
-#ifndef    SK_SUPPORT_LEGACY_AAA
-#   define SK_SUPPORT_LEGACY_AAA
-#endif
 
 // ===== End Chrome-specific definitions =====
 

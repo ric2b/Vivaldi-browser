@@ -6,11 +6,11 @@
 
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/fetch/IntegrityMetadata.h"
-#include "core/fetch/RawResource.h"
-#include "core/fetch/Resource.h"
 #include "core/html/HTMLScriptElement.h"
 #include "platform/Crypto.h"
+#include "platform/loader/fetch/IntegrityMetadata.h"
+#include "platform/loader/fetch/RawResource.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -141,7 +141,7 @@ class SubresourceIntegrityTest : public ::testing::Test {
       size_t expectedMetadataArraySize) {
     IntegrityMetadataSet expectedMetadataSet;
     for (size_t i = 0; i < expectedMetadataArraySize; i++) {
-      expectedMetadataSet.add(expectedMetadataArray[i].toPair());
+      expectedMetadataSet.insert(expectedMetadataArray[i].toPair());
     }
     IntegrityMetadataSet metadataSet;
     EXPECT_EQ(SubresourceIntegrity::IntegrityParseValidResult,

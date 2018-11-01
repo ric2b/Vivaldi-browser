@@ -101,13 +101,15 @@ function testLoadAsDataUrlFromExifThumbnail(callback) {
       }), callback);
 }
 
-function testLoadAsDataUrlFromExifThumbnailRotate(callback) {
+function testLoadAsDataUrlFromExifThumbnailPropagatesTransform(callback) {
   ImageLoaderClient.getInstance = function() {
     return {
       load: function(url, callback, opt_option) {
-        // Assert that data url is passed.
+        // Assert that data url and transform info is passed.
         assertTrue(/^data:/i.test(url));
-        callback({status: 'success', data: url, width: 64, height: 32});
+        assertEquals(1, opt_option.orientation.rotate90);
+        callback({status: 'success', data: generateSampleImageDataUrl(32, 64),
+            width: 32, height: 64});
       }
     };
   };
@@ -131,8 +133,6 @@ function testLoadAsDataUrlFromExifThumbnailRotate(callback) {
       .then(function(result) {
         assertEquals(32, result.width);
         assertEquals(64, result.height);
-        // For test image, transformed image should become equal to the
-        // following generated sample image.
         assertEquals(generateSampleImageDataUrl(32, 64), result.data);
       }), callback);
 }
@@ -169,13 +169,17 @@ function testLoadAsDataUrlFromExternal(callback) {
       }), callback);
 }
 
-function testLoadDetachedFromExifInCavnasModeThumbnailRotate(callback) {
+function testLoadDetachedFromExifInCavnasModeThumbnailDoesNotRotate(callback) {
   ImageLoaderClient.getInstance = function() {
     return {
       load: function(url, callback, opt_option) {
         // Assert that data url is passed.
         assertTrue(/^data:/i.test(url));
-        callback({status: 'success', data: url, width: 64, height: 32});
+        // Assert that the rotation is propagated to ImageLoader.
+        assertEquals(1, opt_option.orientation.rotate90);
+        // ImageLoader returns rotated image.
+        callback({status: 'success', data: generateSampleImageDataUrl(32, 64),
+            width: 32, height: 64});
       }
     };
   };
@@ -201,6 +205,7 @@ function testLoadDetachedFromExifInCavnasModeThumbnailRotate(callback) {
       thumbnailLoader.loadDetachedImage(resolve);
     }).then(function() {
       var image = thumbnailLoader.getImage();
+      // No need to rotate by loadDetachedImage() as it's already done.
       assertEquals(32, image.width);
       assertEquals(64, image.height);
     }), callback);

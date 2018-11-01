@@ -17,6 +17,7 @@ import org.chromium.chrome.browser.download.DownloadNotificationService;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadItem;
 import org.chromium.chrome.browser.widget.DateDividedAdapter.TimedItem;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.DownloadState;
 import org.chromium.ui.widget.Toast;
 
@@ -122,6 +123,11 @@ public abstract class DownloadHistoryItemWrapper extends TimedItem {
     public final File getFile() {
         if (mFile == null) mFile = new File(getFilePath());
         return mFile;
+    }
+
+    /** @return String to display for the hostname. */
+    public final String getDisplayHostname() {
+        return UrlFormatter.formatUrlForSecurityDisplay(getUrl(), false);
     }
 
     /** @return String to display for the file. */
@@ -454,8 +460,7 @@ public abstract class DownloadHistoryItemWrapper extends TimedItem {
         public String getDisplayFileName() {
             String title = mItem.getTitle();
             if (TextUtils.isEmpty(title)) {
-                File path = new File(getFilePath());
-                return path.getName();
+                return getDisplayHostname();
             } else {
                 return title;
             }
@@ -478,7 +483,7 @@ public abstract class DownloadHistoryItemWrapper extends TimedItem {
 
         @Override
         public String getMimeType() {
-            return "text/plain";
+            return "text/html";
         }
 
         @Override
@@ -500,7 +505,27 @@ public abstract class DownloadHistoryItemWrapper extends TimedItem {
         @Override
         public String getStatusString() {
             Context context = ContextUtils.getApplicationContext();
-            return context.getString(R.string.download_notification_completed);
+
+            int state = mItem.getDownloadState();
+
+            if (state == org.chromium.components.offlinepages.downloads.DownloadState.COMPLETE) {
+                return context.getString(R.string.download_notification_completed);
+            }
+
+            if (state == org.chromium.components.offlinepages.downloads.DownloadState.PENDING) {
+                return context.getString(R.string.download_notification_pending);
+            }
+
+            if (state == org.chromium.components.offlinepages.downloads.DownloadState.PAUSED) {
+                return context.getString(R.string.download_notification_paused);
+            }
+
+            long bytesReceived = mItem.getDownloadProgressBytes();
+            if (bytesReceived == 0) {
+                return context.getString(R.string.download_started);
+            } else {
+                return DownloadUtils.getStringForDownloadedBytes(context, bytesReceived);
+            }
         }
 
         @Override
@@ -511,17 +536,17 @@ public abstract class DownloadHistoryItemWrapper extends TimedItem {
 
         @Override
         public void cancel() {
-            assert false;
+            mBackendProvider.getOfflinePageBridge().cancelDownload(getId());
         }
 
         @Override
         public void pause() {
-            assert false;
+            mBackendProvider.getOfflinePageBridge().pauseDownload(getId());
         }
 
         @Override
         public void resume() {
-            assert false;
+            mBackendProvider.getOfflinePageBridge().resumeDownload(getId());
         }
 
         @Override
@@ -541,14 +566,21 @@ public abstract class DownloadHistoryItemWrapper extends TimedItem {
             return false;
         }
 
+        /** @return Whether this page is to be shown in the suggested reading section. */
+        public boolean isSuggested() {
+            return mItem.isSuggested();
+        }
+
         @Override
         public boolean isComplete() {
-            return true;
+            return mItem.getDownloadState()
+                    == org.chromium.components.offlinepages.downloads.DownloadState.COMPLETE;
         }
 
         @Override
         public boolean isPaused() {
-            return false;
+            return mItem.getDownloadState()
+                    == org.chromium.components.offlinepages.downloads.DownloadState.PAUSED;
         }
     }
 }

@@ -86,21 +86,7 @@ class ResourceBundleDelegate : public ui::ResourceBundle::Delegate {
 
   base::FilePath GetPathForLocalePack(const base::FilePath& pack_path,
                                       const std::string& locale) override {
-    if (!pack_path.empty())
-      return AddVersionToPathIfNeeded(pack_path);
-
-    // TODO(julienp): This is just ugly. It might be better to just split out
-    // most of the update notifier in a dll residing in the versioned folder
-    // so that we don't need this workaround.
-    base::FilePath new_path;
-    base::PathService::Get(base::DIR_EXE, &new_path);
-    new_path.Append(UpdateNotifierManager::GetInstance()->current_version());
-    new_path.Append(FILE_PATH_LITERAL("locales"));
-    new_path.AppendASCII(locale + ".pak");
-    if (base::PathExists(new_path))
-      return new_path;
-    else
-      return pack_path;
+    return AddVersionToPathIfNeeded(pack_path);
   }
 
   gfx::Image GetImageNamed(int resource_id) override { return gfx::Image(); }
@@ -421,6 +407,26 @@ void UpdateNotifierManager::OnEventTriggered(
   }
 }
 
+bool PathProvider(int key, base::FilePath* result) {
+  base::FilePath cur;
+  switch (key) {
+    case ui::DIR_LOCALES:
+      if (!PathService::Get(base::DIR_MODULE, &cur))
+        return false;
+      cur = cur.Append(FILE_PATH_LITERAL("locales"));
+      break;
+    default:
+      return false;
+  }
+
+  *result = cur;
+  return true;
+}
+
+void RegisterPathProvider() {
+  PathService::RegisterProvider(PathProvider, ui::PATH_START, ui::PATH_END);
+}
+
 bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   instance_ = instance;
 
@@ -433,7 +439,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   DCHECK(file_version_info.get());
   current_version_.assign(file_version_info->file_version());
 
-  ui::RegisterPathProvider();
+  RegisterPathProvider();
   chrome::RegisterPathProvider();
 
   l10n_util::OverrideLocaleWithUILanguageList();
@@ -442,7 +448,9 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   CHECK(PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
   scoped_refptr<JsonPrefStore> local_state = new JsonPrefStore(
       local_state_path, ui_thread_loop_->task_runner(), nullptr);
-  const base::Value* locale_value;
+  local_state->ReadPrefs();
+
+  const base::Value* locale_value = nullptr;
   std::string locale;
   if (local_state->GetValue(prefs::kApplicationLocale, &locale_value))
     locale_value->GetAsString(&locale);

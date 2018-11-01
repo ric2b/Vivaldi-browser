@@ -182,10 +182,6 @@ bool LayerTreeHostCommon::ScrollbarsUpdateInfo::operator==(
   return layer_id == other.layer_id && hidden == other.hidden;
 }
 
-ReflectedMainFrameState::ReflectedMainFrameState() : page_scale_delta(1.0f) {}
-
-ReflectedMainFrameState::~ReflectedMainFrameState() = default;
-
 ScrollAndScaleSet::ScrollAndScaleSet()
     : page_scale_delta(1.f), top_controls_delta(0.f) {
 }
@@ -295,10 +291,10 @@ static void ComputeInitialRenderSurfaceLayerList(
   // all non-skipped layers to the layer list of their target surface, and
   // add their content rect to their target surface's accumulated content rect.
   for (LayerImpl* layer : *layer_tree_impl) {
-    if (layer->render_surface()) {
-      layer->ClearRenderSurfaceLayerList();
-      ClearMaskLayersAreDrawnRenderSurfaceLayerListMembers(
-          layer->render_surface());
+    RenderSurfaceImpl* render_surface = layer->GetRenderSurface();
+    if (render_surface) {
+      render_surface->ClearLayerLists();
+      ClearMaskLayersAreDrawnRenderSurfaceLayerListMembers(render_surface);
     }
     layer->set_is_drawn_render_surface_layer_list_member(false);
 
@@ -310,29 +306,28 @@ static void ComputeInitialRenderSurfaceLayerList(
       continue;
 
     bool render_to_separate_surface =
-        is_root || (can_render_to_separate_surface && layer->render_surface());
+        is_root || (can_render_to_separate_surface && render_surface);
 
     if (render_to_separate_surface) {
-      DCHECK(layer->render_surface());
-      DCHECK(layer->render_target() == layer->render_surface());
-      RenderSurfaceImpl* surface = layer->render_surface();
-      surface->ClearAccumulatedContentRect();
+      DCHECK(render_surface);
+      DCHECK(layer->render_target() == render_surface);
+      render_surface->ClearAccumulatedContentRect();
       render_surface_layer_list->push_back(layer);
       if (is_root) {
         // The root surface does not contribute to any other surface, it has no
         // target.
-        layer->render_surface()->set_contributes_to_drawn_surface(false);
+        render_surface->set_contributes_to_drawn_surface(false);
       } else {
-        surface->render_target()->layer_list().push_back(layer);
+        render_surface->render_target()->layer_list().push_back(layer);
         bool contributes_to_drawn_surface =
             property_trees->effect_tree.ContributesToDrawnSurface(
                 layer->effect_tree_index());
-        layer->render_surface()->set_contributes_to_drawn_surface(
+        render_surface->set_contributes_to_drawn_surface(
             contributes_to_drawn_surface);
       }
 
       draw_property_utils::ComputeSurfaceDrawProperties(property_trees,
-                                                        surface);
+                                                        render_surface);
 
       // Ignore occlusion from outside the surface when surface contents need to
       // be fully drawn. Layers with copy-request need to be complete.  We could
@@ -341,17 +336,18 @@ static void ComputeInitialRenderSurfaceLayerList(
       // like overkill.
       // TODO(senorblanco): make this smarter for the SkImageFilter case (check
       // for pixel-moving filters)
-      const FilterOperations& filters = surface->Filters();
-      bool is_occlusion_immune = surface->HasCopyRequest() ||
+      const FilterOperations& filters = render_surface->Filters();
+      bool is_occlusion_immune = render_surface->HasCopyRequest() ||
                                  filters.HasReferenceFilter() ||
                                  filters.HasFilterThatMovesPixels();
       if (is_occlusion_immune) {
-        surface->SetNearestOcclusionImmuneAncestor(surface);
+        render_surface->SetNearestOcclusionImmuneAncestor(render_surface);
       } else if (is_root) {
-        surface->SetNearestOcclusionImmuneAncestor(nullptr);
+        render_surface->SetNearestOcclusionImmuneAncestor(nullptr);
       } else {
-        surface->SetNearestOcclusionImmuneAncestor(
-            surface->render_target()->nearest_occlusion_immune_ancestor());
+        render_surface->SetNearestOcclusionImmuneAncestor(
+            render_surface->render_target()
+                ->nearest_occlusion_immune_ancestor());
       }
     }
     bool layer_is_drawn =
@@ -376,20 +372,22 @@ static void ComputeSurfaceContentRects(LayerTreeImpl* layer_tree_impl,
   // Walk the list backwards, accumulating each surface's content rect into its
   // target's content rect.
   for (LayerImpl* layer : base::Reversed(*render_surface_layer_list)) {
+    RenderSurfaceImpl* render_surface = layer->GetRenderSurface();
     if (layer_tree_impl->IsRootLayer(layer)) {
       // The root layer's surface content rect is always the entire viewport.
-      layer->render_surface()->SetContentRectToViewport();
+      render_surface->SetContentRectToViewport();
       continue;
     }
-    RenderSurfaceImpl* surface = layer->render_surface();
+
     // Now all contributing drawable content rect has been accumulated to this
     // render surface, calculate the content rect.
-    surface->CalculateContentRectFromAccumulatedContentRect(max_texture_size);
+    render_surface->CalculateContentRectFromAccumulatedContentRect(
+        max_texture_size);
 
     // Now the render surface's content rect is calculated correctly, it could
     // contribute to its render target.
-    surface->render_target()
-        ->AccumulateContentRectFromContributingRenderSurface(surface);
+    render_surface->render_target()
+        ->AccumulateContentRectFromContributingRenderSurface(render_surface);
   }
 }
 
@@ -403,7 +401,7 @@ static void ComputeListOfNonEmptySurfaces(LayerTreeImpl* layer_tree_impl,
   // the final list do not get added to the final list.
   for (LayerImpl* layer : *initial_surface_list) {
     bool is_root = layer_tree_impl->IsRootLayer(layer);
-    RenderSurfaceImpl* surface = layer->render_surface();
+    RenderSurfaceImpl* surface = layer->GetRenderSurface();
     RenderSurfaceImpl* target_surface = surface->render_target();
     if (!is_root && (surface->content_rect().IsEmpty() ||
                      target_surface->layer_list().empty())) {
@@ -569,7 +567,7 @@ void CalculateDrawPropertiesInternal(
 
   // A root layer render_surface should always exist after
   // CalculateDrawProperties.
-  DCHECK(inputs->root_layer->render_surface());
+  DCHECK(inputs->root_layer->GetRenderSurface());
 }
 
 void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
@@ -577,7 +575,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   LayerList update_layer_list;
   bool can_render_to_separate_surface = true;
   PropertyTrees* property_trees =
-      inputs->root_layer->GetLayerTree()->property_trees();
+      inputs->root_layer->layer_tree_host()->property_trees();
   Layer* overscroll_elasticity_layer = nullptr;
   gfx::Vector2dF elastic_overscroll;
   PropertyTreeBuilder::BuildPropertyTrees(
@@ -590,7 +588,8 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   draw_property_utils::UpdatePropertyTrees(property_trees,
                                            can_render_to_separate_surface);
   draw_property_utils::FindLayersThatNeedUpdates(
-      inputs->root_layer->GetLayerTree(), property_trees, &update_layer_list);
+      inputs->root_layer->layer_tree_host(), property_trees,
+      &update_layer_list);
 }
 
 void LayerTreeHostCommon::CalculateDrawProperties(
@@ -605,11 +604,9 @@ void LayerTreeHostCommon::CalculateDrawProperties(
           layer_tree_impl->FindActiveTreeLayerById(inputs->root_layer->id());
       float jitter = 0.f;
       if (active_tree_root) {
-        LayerImpl* last_scrolled_layer = layer_tree_impl->LayerById(
-            active_tree_root->layer_tree_impl()->LastScrolledLayerId());
-        if (last_scrolled_layer) {
-          const int last_scrolled_scroll_node_id =
-              last_scrolled_layer->scroll_tree_index();
+        int last_scrolled_node_index =
+            active_tree_root->layer_tree_impl()->LastScrolledScrollNodeIndex();
+        if (last_scrolled_node_index != ScrollTree::kInvalidNodeId) {
           std::unordered_set<int> jitter_nodes;
           for (auto* layer : *layer_tree_impl) {
             // Layers that have the same scroll tree index jitter together. So,
@@ -617,7 +614,7 @@ void LayerTreeHostCommon::CalculateDrawProperties(
             // after we find a jittering layer, we need not consider other
             // layers with the same scroll tree index.
             int scroll_tree_index = layer->scroll_tree_index();
-            if (last_scrolled_scroll_node_id <= scroll_tree_index &&
+            if (last_scrolled_node_index <= scroll_tree_index &&
                 jitter_nodes.find(scroll_tree_index) == jitter_nodes.end()) {
               float layer_jitter = CalculateLayerJitter(layer);
               if (layer_jitter > 0.f) {
@@ -650,7 +647,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
 }
 
 PropertyTrees* GetPropertyTrees(Layer* layer) {
-  return layer->GetLayerTree()->property_trees();
+  return layer->layer_tree_host()->property_trees();
 }
 
 PropertyTrees* GetPropertyTrees(LayerImpl* layer) {

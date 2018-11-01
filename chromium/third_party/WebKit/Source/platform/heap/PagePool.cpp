@@ -10,7 +10,13 @@
 
 namespace blink {
 
-FreePagePool::~FreePagePool() {
+PagePool::PagePool() {
+  for (int i = 0; i < BlinkGC::NumberOfArenas; ++i) {
+    m_pool[i] = nullptr;
+  }
+}
+
+PagePool::~PagePool() {
   for (int index = 0; index < BlinkGC::NumberOfArenas; ++index) {
     while (PoolEntry* entry = m_pool[index]) {
       m_pool[index] = entry->next;
@@ -22,18 +28,16 @@ FreePagePool::~FreePagePool() {
   }
 }
 
-void FreePagePool::addFreePage(int index, PageMemory* memory) {
+void PagePool::add(int index, PageMemory* memory) {
   // When adding a page to the pool we decommit it to ensure it is unused
   // while in the pool.  This also allows the physical memory, backing the
   // page, to be given back to the OS.
   memory->decommit();
-  MutexLocker locker(m_mutex[index]);
   PoolEntry* entry = new PoolEntry(memory, m_pool[index]);
   m_pool[index] = entry;
 }
 
-PageMemory* FreePagePool::takeFreePage(int index) {
-  MutexLocker locker(m_mutex[index]);
+PageMemory* PagePool::take(int index) {
   while (PoolEntry* entry = m_pool[index]) {
     m_pool[index] = entry->next;
     PageMemory* memory = entry->data;
@@ -47,96 +51,5 @@ PageMemory* FreePagePool::takeFreePage(int index) {
   }
   return nullptr;
 }
-
-OrphanedPagePool::~OrphanedPagePool() {
-  for (int index = 0; index < BlinkGC::NumberOfArenas; ++index) {
-    while (PoolEntry* entry = m_pool[index]) {
-      m_pool[index] = entry->next;
-      BasePage* page = entry->data;
-      delete entry;
-      PageMemory* memory = page->storage();
-      ASSERT(memory);
-      page->~BasePage();
-      delete memory;
-    }
-  }
-}
-
-void OrphanedPagePool::addOrphanedPage(int index, BasePage* page) {
-  page->markOrphaned();
-  PoolEntry* entry = new PoolEntry(page, m_pool[index]);
-  m_pool[index] = entry;
-}
-
-NO_SANITIZE_ADDRESS
-void OrphanedPagePool::decommitOrphanedPages() {
-  ASSERT(ThreadState::current()->isInGC());
-  ASSERT(ThreadState::current()->heap().isAtSafePoint());
-
-  for (int index = 0; index < BlinkGC::NumberOfArenas; ++index) {
-    PoolEntry* entry = m_pool[index];
-    PoolEntry** prevNext = &m_pool[index];
-    while (entry) {
-      BasePage* page = entry->data;
-      // Check if we should reuse the memory or just free it.
-      // Large object memory is not reused but freed, normal blink heap
-      // pages are reused.
-      // NOTE: We call the destructor before freeing or adding to the
-      // free page pool.
-      PageMemory* memory = page->storage();
-      if (page->isLargeObjectPage()) {
-        page->~BasePage();
-        delete memory;
-      } else {
-        page->~BasePage();
-        clearMemory(memory);
-        ThreadHeap::mainThreadHeap()->getFreePagePool()->addFreePage(index,
-                                                                     memory);
-      }
-
-      PoolEntry* deadEntry = entry;
-      entry = entry->next;
-      *prevNext = entry;
-      delete deadEntry;
-    }
-  }
-}
-
-// Make the compiler think that something is going on there.
-static inline void breakOptimization(void* arg) {
-#if !defined(_WIN32) || defined(__clang__)
-  __asm__ __volatile__("" : : "r"(arg) : "memory");
-#endif
-}
-
-NO_SANITIZE_ADDRESS
-void OrphanedPagePool::asanDisabledMemset(Address address,
-                                          char value,
-                                          size_t size) {
-  // Don't use memset when running with ASan since this needs to zap
-  // poisoned memory as well and the NO_SANITIZE_ADDRESS annotation
-  // only works for code in this method and not for calls to memset.
-  for (Address current = address; current < address + size; ++current) {
-    breakOptimization(current);
-    *current = value;
-  }
-}
-
-void OrphanedPagePool::clearMemory(PageMemory* memory) {
-  asanDisabledMemset(memory->writableStart(), 0, blinkPagePayloadSize());
-}
-
-#if DCHECK_IS_ON()
-bool OrphanedPagePool::contains(void* object) {
-  for (int index = 0; index < BlinkGC::NumberOfArenas; ++index) {
-    for (PoolEntry* entry = m_pool[index]; entry; entry = entry->next) {
-      BasePage* page = entry->data;
-      if (page->contains(reinterpret_cast<Address>(object)))
-        return true;
-    }
-  }
-  return false;
-}
-#endif
 
 }  // namespace blink

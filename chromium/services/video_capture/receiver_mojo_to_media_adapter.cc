@@ -4,9 +4,6 @@
 
 #include "services/video_capture/receiver_mojo_to_media_adapter.h"
 
-#include "media/mojo/common/media_type_converters.h"
-#include "media/mojo/common/mojo_shared_buffer_video_frame.h"
-
 namespace video_capture {
 
 ReceiverMojoToMediaAdapter::ReceiverMojoToMediaAdapter(
@@ -15,9 +12,20 @@ ReceiverMojoToMediaAdapter::ReceiverMojoToMediaAdapter(
 
 ReceiverMojoToMediaAdapter::~ReceiverMojoToMediaAdapter() = default;
 
-void ReceiverMojoToMediaAdapter::OnIncomingCapturedVideoFrame(
-    media::VideoCaptureDevice::Client::Buffer buffer,
-    scoped_refptr<media::VideoFrame> frame) {
+void ReceiverMojoToMediaAdapter::OnNewBufferHandle(
+    int buffer_id,
+    std::unique_ptr<media::VideoCaptureDevice::Client::Buffer::HandleProvider>
+        handle_provider) {
+  NOTIMPLEMENTED();
+}
+
+void ReceiverMojoToMediaAdapter::OnFrameReadyInBuffer(
+    int buffer_id,
+    int frame_feedback_id,
+    std::unique_ptr<
+        media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
+        buffer_usage_reservation,
+    media::mojom::VideoFrameInfoPtr frame_info) {
   NOTIMPLEMENTED();
 }
 
@@ -29,12 +37,12 @@ void ReceiverMojoToMediaAdapter::OnLog(const std::string& message) {
   receiver_->OnLog(message);
 }
 
-void ReceiverMojoToMediaAdapter::OnBufferDestroyed(int buffer_id_to_drop) {
-  // Nothing to do here.
-  // This call is only needed for clients who need to explicitly share buffers
-  // with other processes and keep track of which buffers the buffer pool is
-  // no longer going to reuse/resurrect.
-  // In the world of Mojo, we do not need to share buffers explicitly.
+void ReceiverMojoToMediaAdapter::OnStarted() {
+  receiver_->OnStarted();
+}
+
+void ReceiverMojoToMediaAdapter::OnBufferRetired(int buffer_id) {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace video_capture

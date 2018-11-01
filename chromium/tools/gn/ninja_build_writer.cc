@@ -284,7 +284,7 @@ void NinjaBuildWriter::WriteAllPools() {
         used_pools.insert(tool->pool().ptr);
     }
   }
-  for (auto it: build_settings_->global_pools() )
+  for (auto* it: build_settings_->global_pools() )
     used_pools.insert(it->AsPool());
 
   // Write pools sorted by their name, to make output deterministic.

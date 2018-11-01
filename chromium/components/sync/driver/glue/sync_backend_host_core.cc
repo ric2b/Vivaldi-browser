@@ -10,7 +10,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -114,7 +113,9 @@ void SyncBackendHostCore::OnInitializationComplete(
   // the initializing downloading control types or initializing the encryption
   // handler in order to receive notifications triggered during encryption
   // startup.
-  sync_manager_->GetEncryptionHandler()->AddObserver(this);
+  DCHECK(encryption_observer_proxy_);
+  sync_manager_->GetEncryptionHandler()->AddObserver(
+      encryption_observer_proxy_.get());
 
   // Sync manager initialization is complete, so we can schedule recurring
   // SaveChanges.
@@ -141,6 +142,16 @@ void SyncBackendHostCore::OnInitializationComplete(
 
   ModelTypeSet new_control_types =
       registrar_->ConfigureDataTypes(ControlTypes(), ModelTypeSet());
+
+  // Control types don't have DataTypeControllers, but they need to have
+  // update handlers registered in ModelTypeRegistry. Register them here.
+  ModelTypeConnector* model_type_connector =
+      sync_manager_->GetModelTypeConnector();
+  ModelTypeSet control_types = ControlTypes();
+  for (auto it = control_types.First(); it.Good(); it.Inc()) {
+    model_type_connector->RegisterDirectoryType(it.Get(), GROUP_PASSIVE);
+  }
+
   ModelSafeRoutingInfo routing_info;
   registrar_->GetModelSafeRoutingInfo(&routing_info);
   SDVLOG(1) << "Control Types " << ModelTypeSetToString(new_control_types)
@@ -152,7 +163,7 @@ void SyncBackendHostCore::OnInitializationComplete(
   sync_manager_->PurgeDisabledTypes(types_to_purge, ModelTypeSet(),
                                     ModelTypeSet());
   sync_manager_->ConfigureSyncer(
-      reason, new_control_types, routing_info,
+      reason, new_control_types,
       base::Bind(&SyncBackendHostCore::DoInitialProcessControlTypes,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Closure());
@@ -163,64 +174,6 @@ void SyncBackendHostCore::OnConnectionStatusChange(ConnectionStatus status) {
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::HandleConnectionStatusChangeOnFrontendLoop,
              status);
-}
-
-void SyncBackendHostCore::OnPassphraseRequired(
-    PassphraseRequiredReason reason,
-    const sync_pb::EncryptedData& pending_keys) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  host_.Call(FROM_HERE, &SyncBackendHostImpl::NotifyPassphraseRequired, reason,
-             pending_keys);
-}
-
-void SyncBackendHostCore::OnPassphraseAccepted() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  host_.Call(FROM_HERE, &SyncBackendHostImpl::NotifyPassphraseAccepted);
-}
-
-void SyncBackendHostCore::OnBootstrapTokenUpdated(
-    const std::string& bootstrap_token,
-    BootstrapTokenType type) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  host_.Call(FROM_HERE, &SyncBackendHostImpl::PersistEncryptionBootstrapToken,
-             bootstrap_token, type);
-}
-
-void SyncBackendHostCore::OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
-                                                  bool encrypt_everything) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // NOTE: We're in a transaction.
-  host_.Call(FROM_HERE, &SyncBackendHostImpl::NotifyEncryptedTypesChanged,
-             encrypted_types, encrypt_everything);
-}
-
-void SyncBackendHostCore::OnEncryptionComplete() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // NOTE: We're in a transaction.
-  host_.Call(FROM_HERE, &SyncBackendHostImpl::NotifyEncryptionComplete);
-}
-
-void SyncBackendHostCore::OnCryptographerStateChanged(
-    Cryptographer* cryptographer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // Do nothing.
-}
-
-void SyncBackendHostCore::OnPassphraseTypeChanged(PassphraseType type,
-                                                  base::Time passphrase_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  host_.Call(FROM_HERE,
-             &SyncBackendHostImpl::HandlePassphraseTypeChangedOnFrontendLoop,
-             type, passphrase_time);
-}
-
-void SyncBackendHostCore::OnLocalSetPassphraseEncryption(
-    const SyncEncryptionHandler::NigoriState& nigori_state) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  host_.Call(
-      FROM_HERE,
-      &SyncBackendHostImpl::HandleLocalSetPassphraseEncryptionOnFrontendLoop,
-      nigori_state);
 }
 
 void SyncBackendHostCore::OnCommitCountersUpdated(
@@ -339,8 +292,12 @@ void SyncBackendHostCore::DoInitialize(SyncEngine::InitParams params) {
   last_invalidation_versions_ = params.invalidation_versions;
 
   DCHECK(!registrar_);
+  DCHECK(params.registrar);
   registrar_ = std::move(params.registrar);
-  DCHECK(registrar_);
+
+  DCHECK(!encryption_observer_proxy_);
+  DCHECK(params.encryption_observer_proxy);
+  encryption_observer_proxy_ = std::move(params.encryption_observer_proxy);
 
   sync_manager_ = params.sync_manager_factory->CreateSyncManager(name_);
   sync_manager_->AddObserver(this);
@@ -389,11 +346,13 @@ void SyncBackendHostCore::DoUpdateCredentials(
   }
 }
 
-void SyncBackendHostCore::DoStartSyncing(
-    const ModelSafeRoutingInfo& routing_info,
-    base::Time last_poll_time) {
+void SyncBackendHostCore::DoStartConfiguration() {
+  sync_manager_->StartConfiguration();
+}
+
+void SyncBackendHostCore::DoStartSyncing(base::Time last_poll_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  sync_manager_->StartSyncingNormally(routing_info, last_poll_time);
+  sync_manager_->StartSyncingNormally(last_poll_time);
 }
 
 void SyncBackendHostCore::DoSetEncryptionPassphrase(
@@ -515,9 +474,6 @@ void SyncBackendHostCore::DoConfigureSyncer(
 
   registrar_->ConfigureDataTypes(params.enabled_types, params.disabled_types);
 
-  ModelSafeRoutingInfo routing_info;
-  registrar_->GetModelSafeRoutingInfo(&routing_info);
-
   base::Closure chained_ready_task(base::Bind(
       &SyncBackendHostCore::DoFinishConfigureDataTypes,
       weak_ptr_factory_.GetWeakPtr(), params.to_download, params.ready_task));
@@ -526,8 +482,7 @@ void SyncBackendHostCore::DoConfigureSyncer(
                  weak_ptr_factory_.GetWeakPtr(), params.retry_callback));
 
   sync_manager_->ConfigureSyncer(params.reason, params.to_download,
-                                 routing_info, chained_ready_task,
-                                 chained_retry_task);
+                                 chained_ready_task, chained_retry_task);
 }
 
 void SyncBackendHostCore::DoFinishConfigureDataTypes(

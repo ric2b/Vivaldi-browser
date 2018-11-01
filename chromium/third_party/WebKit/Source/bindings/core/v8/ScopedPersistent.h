@@ -31,11 +31,12 @@
 #ifndef ScopedPersistent_h
 #define ScopedPersistent_h
 
+#include <memory>
+
 #include "bindings/core/v8/ScriptWrappableVisitor.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
@@ -86,11 +87,6 @@ class ScopedPersistent {
 
   // Note: This is clear in the std::unique_ptr sense, not the v8::Handle sense.
   void clear() { m_handle.Reset(); }
-
-  void setReference(const v8::Persistent<v8::Object>& parent,
-                    v8::Isolate* isolate) {
-    isolate->SetReference(parent, m_handle);
-  }
 
   bool operator==(const ScopedPersistent<T>& other) {
     return m_handle == other.m_handle;

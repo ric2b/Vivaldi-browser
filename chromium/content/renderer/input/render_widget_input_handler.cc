@@ -25,7 +25,9 @@
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatSize.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/latency_info.h"
@@ -205,9 +207,10 @@ RenderWidgetInputHandler::RenderWidgetInputHandler(
 RenderWidgetInputHandler::~RenderWidgetInputHandler() {}
 
 void RenderWidgetInputHandler::HandleInputEvent(
-    const WebInputEvent& input_event,
+    const blink::WebCoalescedInputEvent& coalesced_event,
     const ui::LatencyInfo& latency_info,
     InputEventDispatchType dispatch_type) {
+  const WebInputEvent& input_event = coalesced_event.event();
   base::AutoReset<bool> handling_input_event_resetter(&handling_input_event_,
                                                       true);
   base::AutoReset<WebInputEvent::Type> handling_event_type_resetter(
@@ -279,7 +282,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
         static_cast<const WebKeyboardEvent&>(input_event);
     if (key_event.nativeKeyCode == AKEYCODE_DPAD_CENTER &&
         widget_->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE) {
-      widget_->showVirtualKeyboard();
+      widget_->showVirtualKeyboardOnElementFocus();
       prevent_default = true;
     }
 #endif
@@ -306,7 +309,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
       !suppress_next_char_events_) {
     suppress_next_char_events_ = false;
     if (processed == WebInputEventResult::NotHandled && widget_->GetWebWidget())
-      processed = widget_->GetWebWidget()->handleInputEvent(input_event);
+      processed = widget_->GetWebWidget()->handleInputEvent(coalesced_event);
   }
 
   // TODO(dtapuska): Use the input_event.timeStampSeconds as the start

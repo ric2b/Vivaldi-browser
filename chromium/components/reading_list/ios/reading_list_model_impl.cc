@@ -143,6 +143,18 @@ void ReadingListModelImpl::MarkAllSeen() {
   DCHECK(unseen_entry_count_ == 0);
 }
 
+bool ReadingListModelImpl::DeleteAllEntries() {
+  DCHECK(CalledOnValidThread());
+  if (!loaded()) {
+    return false;
+  }
+  auto scoped_model_batch_updates = BeginBatchUpdates();
+  for (const auto& url : Keys()) {
+    RemoveEntryByURL(url);
+  }
+  return entries_->empty();
+}
+
 void ReadingListModelImpl::UpdateEntryStateCountersOnEntryRemoval(
     const ReadingListEntry& entry) {
   if (!entry.HasBeenSeen()) {
@@ -313,10 +325,9 @@ const ReadingListEntry& ReadingListModelImpl::AddEntry(
   DCHECK(url.SchemeIsHTTPOrHTTPS());
   RemoveEntryByURL(url);
 
-  std::string trimmedTitle(title);
-  base::TrimWhitespaceASCII(trimmedTitle, base::TRIM_ALL, &trimmedTitle);
+  std::string trimmed_title = base::CollapseWhitespaceASCII(title, false);
 
-  ReadingListEntry entry(url, trimmedTitle);
+  ReadingListEntry entry(url, trimmed_title);
   for (auto& observer : observers_)
     observer.ReadingListWillAddEntry(this, entry);
   UpdateEntryStateCountersOnEntryInsertion(entry);
@@ -372,14 +383,15 @@ void ReadingListModelImpl::SetEntryTitle(const GURL& url,
     return;
   }
   ReadingListEntry& entry = iterator->second;
-  if (entry.Title() == title) {
+  std::string trimmed_title = base::CollapseWhitespaceASCII(title, false);
+  if (entry.Title() == trimmed_title) {
     return;
   }
 
   for (ReadingListModelObserver& observer : observers_) {
     observer.ReadingListWillUpdateEntry(this, url);
   }
-  entry.SetTitle(title);
+  entry.SetTitle(trimmed_title);
   if (storage_layer_) {
     storage_layer_->SaveEntry(entry);
   }
@@ -391,7 +403,9 @@ void ReadingListModelImpl::SetEntryTitle(const GURL& url,
 void ReadingListModelImpl::SetEntryDistilledInfo(
     const GURL& url,
     const base::FilePath& distilled_path,
-    const GURL& distilled_url) {
+    const GURL& distilled_url,
+    int64_t distillation_size,
+    int64_t distillation_date) {
   DCHECK(CalledOnValidThread());
   DCHECK(loaded());
   auto iterator = entries_->find(url);
@@ -407,7 +421,8 @@ void ReadingListModelImpl::SetEntryDistilledInfo(
   for (ReadingListModelObserver& observer : observers_) {
     observer.ReadingListWillUpdateEntry(this, url);
   }
-  entry.SetDistilledInfo(distilled_path, distilled_url);
+  entry.SetDistilledInfo(distilled_path, distilled_url, distillation_size,
+                         distillation_date);
   if (storage_layer_) {
     storage_layer_->SaveEntry(entry);
   }

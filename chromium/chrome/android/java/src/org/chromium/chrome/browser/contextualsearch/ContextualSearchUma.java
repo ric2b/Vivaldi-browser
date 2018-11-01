@@ -210,11 +210,6 @@ public class ContextualSearchUma {
     private static final int ICON_SPRITE_NOT_ANIMATED_RESULTS_NOT_SEEN_FROM_LONG_PRESS = 7;
     private static final int ICON_SPRITE_BOUNDARY = 8;
 
-    // Constants used to log UMA "enum" histograms for any kind of Tap suppression.
-    private static final int TAP_SUPPRESSED = 0;
-    private static final int NOT_TAP_SUPPRESSED = 1;
-    private static final int TAP_SUPPRESSED_BOUNDARY = 2;
-
     // Constants used to log UMA "enum" histograms for Quick Answers.
     private static final int QUICK_ANSWER_ACTIVATED_WAS_AN_ANSWER_SEEN = 0;
     private static final int QUICK_ANSWER_ACTIVATED_WAS_AN_ANSWER_NOT_SEEN = 1;
@@ -860,8 +855,32 @@ public class ContextualSearchUma {
      * @param wasSuppressed Whether showing the UX was suppressed.
      */
     public static void logBarOverlapSuppression(boolean wasSuppressed) {
-        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchBarOverlap",
-                wasSuppressed ? TAP_SUPPRESSED : NOT_TAP_SUPPRESSED, TAP_SUPPRESSED_BOUNDARY);
+        RecordHistogram.recordBooleanHistogram("Search.ContextualSearchBarOverlap", wasSuppressed);
+    }
+
+    /**
+     * Logs the length of the selection in two histograms, one when results were seen and one when
+     * results were not seen.
+     * @param wasPanelSeen Whether the panel was seen.
+     * @param selectionLength The length of the triggering selection.
+     */
+    public static void logSelectionLengthResultsSeen(boolean wasPanelSeen, int selectionLength) {
+        if (wasPanelSeen) {
+            RecordHistogram.recordSparseSlowlyHistogram(
+                    "Search.ContextualSearchSelectionLengthSeen", selectionLength);
+        } else {
+            RecordHistogram.recordSparseSlowlyHistogram(
+                    "Search.ContextualSearchSelectionLengthNotSeen", selectionLength);
+        }
+    }
+
+    /**
+     * Log whether the UX was suppressed due to the selection length.
+     * @param wasSuppressed Whether showing the UX was suppressed due to selection length.
+     */
+    public static void logSelectionLengthSuppression(boolean wasSuppressed) {
+        RecordHistogram.recordBooleanHistogram(
+                "Search.ContextualSearchSelectionLengthSuppression", wasSuppressed);
     }
 
     /**
@@ -889,8 +908,8 @@ public class ContextualSearchUma {
      * @param wasSuppressed Whether showing the UX was suppressed.
      */
     public static void logScreenTopTapSuppression(boolean wasSuppressed) {
-        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchScreenTopSuppressed",
-                wasSuppressed ? TAP_SUPPRESSED : NOT_TAP_SUPPRESSED, TAP_SUPPRESSED_BOUNDARY);
+        RecordHistogram.recordBooleanHistogram(
+                "Search.ContextualSearchScreenTopSuppressed", wasSuppressed);
     }
 
     /**
@@ -1021,26 +1040,12 @@ public class ContextualSearchUma {
     }
 
     /**
-     * Logs the duration since a recent scroll.
-     * @param durationSinceRecentScrollMs The amount of time since the most recent scroll.
-     * @param wasSearchContentViewSeen If the panel was opened.
-     */
-    public static void logRecentScrollDuration(
-            int durationSinceRecentScrollMs, boolean wasSearchContentViewSeen) {
-        String histogram = wasSearchContentViewSeen ? "Search.ContextualSearchRecentScrollSeen"
-                                                    : "Search.ContextualSearchRecentScrollNotSeen";
-        if (durationSinceRecentScrollMs < 1000) {
-            RecordHistogram.recordCount1000Histogram(histogram, durationSinceRecentScrollMs);
-        }
-    }
-
-    /**
      * Log whether the UX was suppressed by a recent scroll.
      * @param wasSuppressed Whether showing the UX was suppressed by a recent scroll.
      */
     public static void logRecentScrollSuppression(boolean wasSuppressed) {
-        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchRecentScrollSuppression",
-                wasSuppressed ? TAP_SUPPRESSED : NOT_TAP_SUPPRESSED, TAP_SUPPRESSED_BOUNDARY);
+        RecordHistogram.recordBooleanHistogram(
+                "Search.ContextualSearchRecentScrollSuppression", wasSuppressed);
     }
 
     /**
@@ -1488,6 +1493,8 @@ public class ContextualSearchUma {
                 return "Event";
             case QuickActionCategory.PHONE:
                 return "Phone";
+            case QuickActionCategory.WEBSITE:
+                return "Website";
             default:
                 return "None";
         }

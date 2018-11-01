@@ -8,11 +8,10 @@ namespace show_menu = extensions::vivaldi::show_menu;
 
 namespace vivaldi {
 
-void CreateVivaldiMainMenu(
-    Profile* profile,
-    std::vector<show_menu::MenuItem>& items,
-    const std::string& mode) {
+void CreateVivaldiMainMenu(Profile* profile,
+                           std::vector<show_menu::MenuItem>* items,
+                           const std::string& mode) {
   NOTREACHED();
-  }
+}
 
 }  // namespace vivaldi

@@ -29,15 +29,16 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/surface_manager.h"
 #include "media/base/video_decoder_config.h"
+#include "media/media_features.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/formats/mp4/box_definitions.h"
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/pipeline_stats.h"
+#include "platform_media/common/pipeline_stats.h"
 #endif
 
 namespace media {
@@ -47,7 +48,7 @@ namespace {
 // be on the beefy side.
 static const size_t kSharedMemorySegmentBytes = 100 << 10;
 
-#if defined(OS_ANDROID) && defined(USE_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Extract the SPS and PPS lists from |extra_data|. Each SPS and PPS is prefixed
 // with 0x0001, the Annex B framing bytes. The out parameters are not modified
 // on failure.
@@ -374,8 +375,9 @@ void GpuVideoDecoder::CompleteInitialization(int surface_id) {
   vda_config.encryption_scheme = config_.encryption_scheme();
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
+  vda_config.color_space = config_.color_space_info();
 
-#if defined(OS_ANDROID) && defined(USE_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
   // We pass the SPS and PPS on Android because it lets us initialize
   // MediaCodec more reliably (http://crbug.com/649185).
   if (config_.codec() == kCodecH264)
@@ -910,13 +912,11 @@ bool GpuVideoDecoder::IsProfileSupported(
     bool is_encrypted) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   for (const auto& supported_profile : capabilities.supported_profiles) {
-    if (profile == supported_profile.profile) {
-      if (supported_profile.encrypted_only && !is_encrypted)
-        continue;
-
-      return IsCodedSizeSupported(coded_size,
-                                  supported_profile.min_resolution,
-                                  supported_profile.max_resolution);
+    if (profile == supported_profile.profile &&
+        !(supported_profile.encrypted_only && !is_encrypted) &&
+        IsCodedSizeSupported(coded_size, supported_profile.min_resolution,
+                             supported_profile.max_resolution)) {
+      return true;
     }
   }
   return false;

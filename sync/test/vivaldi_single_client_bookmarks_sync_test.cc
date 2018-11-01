@@ -7,4 +7,4 @@
 #define SingleClientBookmarksSyncTest VivaldiSingleClientBookmarksSyncTest
 #define SyncTest VivaldiSyncTest
 
-#include "chromium/chrome/browser/sync/test/integration/single_client_bookmarks_sync_test.cc"
+#include "chromium/chrome/browser/sync/test/integration/single_client_bookmarks_sync_test.cc"  // NOLINT

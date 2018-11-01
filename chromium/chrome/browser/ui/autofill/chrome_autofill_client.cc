@@ -26,7 +26,6 @@
 #include "chrome/browser/ui/autofill/credit_card_scanner_controller.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/web_data_service_factory.h"
@@ -152,6 +151,10 @@ IdentityProvider* ChromeAutofillClient::GetIdentityProvider() {
 
 rappor::RapporServiceImpl* ChromeAutofillClient::GetRapporServiceImpl() {
   return g_browser_process->rappor_service();
+}
+
+ukm::UkmService* ChromeAutofillClient::GetUkmService() {
+  return g_browser_process->ukm_service();
 }
 
 void ChromeAutofillClient::ShowAutofillSettings() {
@@ -359,15 +362,7 @@ void ChromeAutofillClient::OnFirstUserGestureObserved() {
       ContentAutofillDriverFactory::FromWebContents(web_contents());
   DCHECK(factory);
 
-  for (content::RenderFrameHost* frame : web_contents()->GetAllFrames()) {
-    // No need to notify non-live frames.
-    // And actually they have no corresponding drivers in the factory's map.
-    if (!frame->IsRenderFrameLive())
-      continue;
-    ContentAutofillDriver* driver = factory->DriverForFrame(frame);
-    DCHECK(driver);
-    driver->NotifyFirstUserGestureObservedInTab();
-  }
+  factory->OnFirstUserGestureObserved();
 }
 
 bool ChromeAutofillClient::IsContextSecure() {
@@ -390,14 +385,11 @@ bool ChromeAutofillClient::IsContextSecure() {
 
 bool ChromeAutofillClient::ShouldShowSigninPromo() {
 #if !defined(OS_ANDROID)
-  // Determine if we are in a valid context (on desktop platforms, we could be
-  // in an app window with no Browser).
-  if (!chrome::FindBrowserWithWebContents(web_contents()))
-    return false;
-#endif
-
+  return false;
+#else
   return signin::ShouldShowPromo(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+#endif
 }
 
 void ChromeAutofillClient::StartSigninFlow() {
@@ -405,13 +397,6 @@ void ChromeAutofillClient::StartSigninFlow() {
   chrome::android::SigninPromoUtilAndroid::StartAccountSigninActivityForPromo(
       content::ContentViewCore::FromWebContents(web_contents()),
       signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN);
-#else
-  chrome::FindBrowserWithWebContents(web_contents())
-      ->window()
-      ->ShowAvatarBubbleFromAvatarButton(
-          BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
-          signin::ManageAccountsParams(),
-          signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN);
 #endif
 }
 

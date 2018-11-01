@@ -79,7 +79,6 @@ InternalSettings::Backup::Backup(Settings* settings)
           RuntimeEnabledFeatures::langAttributeAwareFormControlUIEnabled()),
       m_imagesEnabled(settings->getImagesEnabled()),
       m_defaultVideoPosterURL(settings->getDefaultVideoPosterURL()),
-      m_originalLayerSquashingEnabled(settings->getLayerSquashingEnabled()),
       m_originalImageAnimationPolicy(settings->getImageAnimationPolicy()),
       m_originalScrollTopLeftInteropEnabled(
           RuntimeEnabledFeatures::scrollTopLeftInteropEnabled()),
@@ -131,7 +130,7 @@ InternalSettings::~InternalSettings() {}
 
 InternalSettings::InternalSettings(Page& page)
     : InternalSettingsGenerated(&page),
-      m_page(&page),
+      Supplement<Page>(page),
       m_backup(&page.settings()) {}
 
 void InternalSettings::resetToConsistentState() {
@@ -371,7 +370,6 @@ void InternalSettings::setDefaultVideoPosterURL(
 }
 
 DEFINE_TRACE(InternalSettings) {
-  visitor->trace(m_page);
   InternalSettingsGenerated::trace(visitor);
   Supplement<Page>::trace(visitor);
 }

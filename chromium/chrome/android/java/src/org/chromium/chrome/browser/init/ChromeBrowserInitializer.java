@@ -31,6 +31,7 @@ import org.chromium.base.annotations.RemovableInRelease;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeStrictMode;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -44,7 +45,6 @@ import org.chromium.chrome.browser.webapps.ActivityAssigner;
 import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.content.browser.DeviceUtils;
 import org.chromium.content.browser.SpeechRecognition;
 import org.chromium.net.NetworkChangeNotifier;
@@ -310,15 +310,6 @@ public class ChromeBrowserInitializer {
             }
         });
 
-        // See crbug.com/593250. This can be removed after N SDK is released, crbug.com/592722.
-        ChildProcessCreationParams creationParams = mApplication.getChildProcessCreationParams();
-        // WebAPK uses this code path to initialize Chrome's native code, and the
-        // ChildProcessCreationParams has been set in {@link WebApkActivity}. We have to prevent
-        // resetting with a wrong parameter here. TODO(hanxi): Remove the entire if block after
-        // N SDK is released, since it breaks WebAPKs on N+.
-        if (creationParams != null && ChildProcessCreationParams.get() != null) {
-            ChildProcessCreationParams.set(creationParams);
-        }
         if (isAsync) {
             // We want to start this queue once the C++ startup tasks have run; allow the
             // C++ startup to run asynchonously, and set it up to start the Java queue once
@@ -348,7 +339,7 @@ public class ChromeBrowserInitializer {
             BrowserStartupController.StartupCallback callback) throws ProcessInitException {
         try {
             TraceEvent.begin("ChromeBrowserInitializer.startChromeBrowserProcessesAsync");
-            BrowserStartupController.get(mApplication, LibraryProcessType.PROCESS_BROWSER)
+            BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                     .startBrowserProcessesAsync(startGpuProcess, callback);
         } finally {
             TraceEvent.end("ChromeBrowserInitializer.startChromeBrowserProcessesAsync");
@@ -365,7 +356,7 @@ public class ChromeBrowserInitializer {
             libraryLoader.ensureInitialized();
             StrictMode.setThreadPolicy(oldPolicy);
             libraryLoader.asyncPrefetchLibrariesToMemory();
-            BrowserStartupController.get(mApplication, LibraryProcessType.PROCESS_BROWSER)
+            BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                     .startBrowserProcessesSync(false);
             GoogleServicesManager.get(mApplication);
         } finally {
@@ -387,7 +378,7 @@ public class ChromeBrowserInitializer {
         if (mNativeInitializationComplete) return;
         // The policies are used by browser startup, so we need to register the policy providers
         // before starting the browser process.
-        mApplication.registerPolicyProviders(CombinedPolicyProvider.get());
+        AppHooks.get().registerPolicyProviders(CombinedPolicyProvider.get());
 
         SpeechRecognition.initialize(mApplication);
     }

@@ -95,10 +95,9 @@ class BookmarkNodeFinder {
   // Maps bookmark node titles to instances, duplicates allowed.
   // Titles are converted to the sync internal format before
   // being used as keys for the map.
-  typedef base::hash_multimap<std::string,
-                              const BookmarkNode*> BookmarkNodeMap;
-  typedef std::pair<BookmarkNodeMap::iterator,
-                    BookmarkNodeMap::iterator> BookmarkNodeRange;
+  using BookmarkNodeMap = std::multimap<std::string, const BookmarkNode*>;
+  using BookmarkNodeRange =
+      std::pair<BookmarkNodeMap::iterator, BookmarkNodeMap::iterator>;
 
   // Converts and truncates bookmark titles in the form sync does internally
   // to avoid mismatches due to sync munging titles.
@@ -781,13 +780,10 @@ const BookmarkNode* BookmarkModelAssociator::CreateBookmarkNode(
   const std::string& sync_title = sync_child_node->GetTitle();
 
   if (!sync_child_node->GetIsFolder() && !url.is_valid()) {
-    unrecoverable_error_handler_->CreateAndUploadError(
-        FROM_HERE,
-        "Cannot associate sync node " + sync_child_node->GetSyncId().value() +
-            " with invalid url " + url.possibly_invalid_spec() + " and title " +
-            sync_title,
-        model_type());
-    // Don't propagate the error to the model_type in this case.
+    LOG(WARNING) << "Cannot associate sync node "
+                 << sync_child_node->GetSyncId().value() << " with invalid url "
+                 << url.possibly_invalid_spec() << " and title " << sync_title;
+    // Don't propagate an error to the model_type in this case.
     return nullptr;
   }
 
@@ -830,7 +826,7 @@ struct FolderInfo {
   const BookmarkNode* parent;
   int64_t sync_id;
 };
-typedef std::vector<FolderInfo> FolderInfoList;
+using FolderInfoList = std::vector<FolderInfo>;
 
 void BookmarkModelAssociator::ApplyDeletesFromSyncJournal(
     syncer::BaseTransaction* trans,

@@ -9,25 +9,23 @@
 
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/launcher/app_shortcut_launcher_item_controller.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 
-class ArcAppLauncher;
 class ChromeLauncherController;
 
 class ArcPlaystoreShortcutLauncherItemController
     : public AppShortcutLauncherItemController {
  public:
-  ArcPlaystoreShortcutLauncherItemController(
+  explicit ArcPlaystoreShortcutLauncherItemController(
       ChromeLauncherController* controller);
   ~ArcPlaystoreShortcutLauncherItemController() override;
 
   // LauncherItemController overrides:
-  ash::ShelfItemDelegate::PerformedAction Activate(
-      ash::LaunchSource source) override;
+  ash::ShelfAction ItemSelected(ui::EventType event_type,
+                                int event_flags,
+                                int64_t display_id,
+                                ash::ShelfLaunchSource source) override;
 
  private:
-  std::unique_ptr<ArcAppLauncher> playstore_launcher_;
-
   DISALLOW_COPY_AND_ASSIGN(ArcPlaystoreShortcutLauncherItemController);
 };
 

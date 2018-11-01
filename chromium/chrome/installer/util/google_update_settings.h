@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -184,10 +185,6 @@ class GoogleUpdateSettings {
   // Updates Chrome's "did run" state, returning true if the update succeeds.
   static bool UpdateDidRunState(bool did_run);
 
-  // Returns the channel name: "" (stable), "dev", "beta", "canary", or
-  // "unknown" if unknown. See kChromeChannel* in util_constants.h
-  static base::string16 GetChromeChannel(bool system_install);
-
   // This method changes the Google Update "ap" value to move the installation
   // on to or off of one of the recovery channels.
   // - If incremental installer fails we append a magic string ("-full"), if
@@ -256,7 +253,7 @@ class GoogleUpdateSettings {
   // Returns the effective update policy for |app_guid| as dictated by
   // Group Policy settings.  |is_overridden|, if non-NULL, is populated with
   // true if an app-specific policy override is in force, or false otherwise.
-  static UpdatePolicy GetAppUpdatePolicy(const base::string16& app_guid,
+  static UpdatePolicy GetAppUpdatePolicy(base::StringPiece16 app_guid,
                                          bool* is_overridden);
 
   // Returns true if Chrome should be updated automatically by Google Update
@@ -314,12 +311,11 @@ class GoogleUpdateSettings {
 
   // Returns product data for Google Update.  (Equivalent to calling
   // GetUpdateDetailForAppGuid with the app guid for Google Update itself.)
-  static bool GetUpdateDetailForGoogleUpdate(bool system_install,
-                                             ProductData* data);
+  static bool GetUpdateDetailForGoogleUpdate(ProductData* data);
 
   // Returns product data for the current product. (Equivalent to calling
   // GetUpdateDetailForApp with the app guid stored in BrowserDistribution.)
-  static bool GetUpdateDetail(bool system_install, ProductData* data);
+  static bool GetUpdateDetail(ProductData* data);
 
   // Sets |experiment_labels| as the Google Update experiment_labels value in
   // the ClientState key for this Chrome product, if appropriate. If

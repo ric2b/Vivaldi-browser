@@ -6,7 +6,11 @@ package org.chromium.chrome.browser.download.ui;
 
 import android.text.TextUtils;
 
+import org.chromium.chrome.browser.widget.DateDividedAdapter.TimedItem;
+
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Stores a List of DownloadHistoryItemWrappers for a particular download backend.
@@ -31,15 +35,25 @@ public abstract class BackendItems extends ArrayList<DownloadHistoryItemWrapper>
     }
 
     /**
-     * Filters out items that are displayed in this list for the current filter.
-     * TODO(dfalcantara): Show all non-cancelled downloads.
-     *
+     * Filters out items that match the query and are displayed in this list for the current filter.
      * @param filterType    Filter to use.
+     * @param query         The text to match.
      * @param filteredItems List for appending items that match the filter.
      */
-    public void filter(int filterType, BackendItems filteredItems) {
+    public void filter(int filterType, String query, List<TimedItem> filteredItems) {
+        if (TextUtils.isEmpty(query)) {
+            filter(filterType, filteredItems);
+            return;
+        }
+
         for (DownloadHistoryItemWrapper item : this) {
-            if (item.isVisibleToUser(filterType)) filteredItems.add(item);
+            query = query.toLowerCase(Locale.getDefault());
+            Locale locale = Locale.getDefault();
+            if (item.isVisibleToUser(filterType)
+                    && (item.getDisplayHostname().toLowerCase(locale).contains(query)
+                    || item.getDisplayFileName().toLowerCase(locale).contains(query))) {
+                filteredItems.add(item);
+            }
         }
     }
 
@@ -72,5 +86,17 @@ public abstract class BackendItems extends ArrayList<DownloadHistoryItemWrapper>
 
     public void setIsInitialized() {
         mIsInitialized = true;
+    }
+
+    /**
+     * Filters out items that are displayed in this list for the current filter.
+     *
+     * @param filterType    Filter to use.
+     * @param filteredItems List for appending items that match the filter.
+     */
+    private void filter(int filterType, List<TimedItem> filteredItems) {
+        for (DownloadHistoryItemWrapper item : this) {
+            if (item.isVisibleToUser(filterType)) filteredItems.add(item);
+        }
     }
 }

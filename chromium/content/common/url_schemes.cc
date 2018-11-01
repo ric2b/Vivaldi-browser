@@ -65,6 +65,9 @@ void RegisterContentSchemes(bool lock_schemes) {
   for (auto& scheme : schemes.cors_enabled_schemes)
     url::AddCORSEnabledScheme(scheme.c_str());
 
+  for (auto& scheme : schemes.csp_bypassing_schemes)
+    url::AddCSPBypassingScheme(scheme.c_str());
+
   // Prevent future modification of the scheme lists. This is to prevent
   // accidental creation of data races in the program. Add*Scheme aren't
   // threadsafe so must be called when GURL isn't used on any other thread. This
@@ -76,7 +79,7 @@ void RegisterContentSchemes(bool lock_schemes) {
   // Combine the default savable schemes with the additional ones given.
   delete savable_schemes;
   savable_schemes = new std::vector<std::string>;
-  for (auto& default_scheme : kDefaultSavableSchemes)
+  for (auto* default_scheme : kDefaultSavableSchemes)
     savable_schemes->push_back(default_scheme);
   savable_schemes->insert(savable_schemes->end(),
                           schemes.savable_schemes.begin(),

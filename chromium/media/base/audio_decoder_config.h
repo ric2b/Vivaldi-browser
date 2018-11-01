@@ -87,6 +87,12 @@ class MEDIA_EXPORT AudioDecoderConfig {
     return encryption_scheme_;
   }
 
+  // Sets the config to be encrypted or not encrypted manually. This can be
+  // useful for decryptors that decrypts an encrypted stream to a clear stream,
+  // or for decoder selectors that wants to select decrypting decoders instead
+  // of clear decoders.
+  void SetIsEncrypted(bool is_encrypted);
+
   // The sampling rate on decoder input.  Note that |samples_per_second| refers
   // to the output sampling rate.
   // TODO(wdzierzanowski): This should become unnecessary when DNA-35764 is

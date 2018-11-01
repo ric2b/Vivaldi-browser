@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/clean/chrome/browser/browser_coordinator.h"
 #import "ios/clean/chrome/browser/browser_coordinator+internal.h"
+#import "ios/clean/chrome/browser/browser_coordinator.h"
 
-#include "base/logging.h"
+#import "ios/shared/chrome/browser/coordinator_context/coordinator_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
-#include "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -49,7 +48,9 @@
 
 @end
 
-TEST(BrowserCoordinatorTest, TestStopOnDealloc) {
+namespace {
+
+TEST(BrowserCoordinatorTest, TestDontStopOnDealloc) {
   __block BOOL called = NO;
 
   {
@@ -59,7 +60,7 @@ TEST(BrowserCoordinatorTest, TestStopOnDealloc) {
     };
   }
 
-  EXPECT_TRUE(called);
+  EXPECT_FALSE(called);
 }
 
 TEST(BrowserCoordinatorTest, TestChildren) {
@@ -69,13 +70,13 @@ TEST(BrowserCoordinatorTest, TestChildren) {
   [parent addChildCoordinator:child];
   EXPECT_TRUE([parent.children containsObject:child]);
   EXPECT_EQ(parent, child.parentCoordinator);
-  EXPECT_EQ(parent.viewController, child.rootViewController);
+  EXPECT_EQ(parent.viewController, child.context.baseViewController);
 
   [parent removeChildCoordinator:child];
   EXPECT_FALSE([parent.children containsObject:child]);
   EXPECT_EQ(nil, child.parentCoordinator);
-  // Unparenting shouldn't change a child's rootViewController.
-  EXPECT_EQ(parent.viewController, child.rootViewController);
+  // Unparenting shouldn't change a child's baseViewController.
+  EXPECT_EQ(parent.viewController, child.context.baseViewController);
 
   TestCoordinator* otherParent = [[TestCoordinator alloc] init];
   TestCoordinator* otherChild = [[TestCoordinator alloc] init];
@@ -135,3 +136,5 @@ TEST(BrowserCoordinatorTest, TestOverlay) {
   [noOverlays addOverlayCoordinator:thirdOverlay];
   EXPECT_FALSE(thirdOverlay.overlaying);
 }
+
+}  // namespace

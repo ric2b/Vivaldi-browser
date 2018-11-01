@@ -4,7 +4,6 @@
 
 #include "ash/common/system/update/tray_update.h"
 
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/system/tray/fixed_sized_image_view.h"
 #include "ash/common/system/tray/system_tray.h"
@@ -16,8 +15,7 @@
 #include "ash/common/wm_shell.h"
 #include "ash/public/interfaces/update.mojom.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
@@ -29,37 +27,9 @@
 namespace ash {
 namespace {
 
-// Decides the non-material design image resource to use for a given update
-// severity.
-// TODO(tdanderson): This is only used for non-material design, so remove it
-// when material design is the default. See crbug.com/625692.
-int DecideResource(mojom::UpdateSeverity severity, bool dark) {
-  switch (severity) {
-    case mojom::UpdateSeverity::NONE:
-    case mojom::UpdateSeverity::LOW:
-      return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK : IDR_AURA_UBER_TRAY_UPDATE;
-
-    case mojom::UpdateSeverity::ELEVATED:
-      return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK_GREEN
-                  : IDR_AURA_UBER_TRAY_UPDATE_GREEN;
-
-    case mojom::UpdateSeverity::HIGH:
-      return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK_ORANGE
-                  : IDR_AURA_UBER_TRAY_UPDATE_ORANGE;
-
-    case mojom::UpdateSeverity::SEVERE:
-    case mojom::UpdateSeverity::CRITICAL:
-      return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK_RED
-                  : IDR_AURA_UBER_TRAY_UPDATE_RED;
-  }
-
-  NOTREACHED() << "Unknown update severity level.";
-  return 0;
-}
-
-// Returns the color to use for the material design update icon when the update
-// severity is |severity|. If |for_menu| is true, the icon color for the system
-// menu is given, otherwise the icon color for the system tray is given.
+// Returns the color to use for the update icon when the update severity is
+// |severity|. If |for_menu| is true, the icon color for the system menu is
+// given, otherwise the icon color for the system tray is given.
 SkColor IconColorForUpdateSeverity(mojom::UpdateSeverity severity,
                                    bool for_menu) {
   const SkColor default_color = for_menu ? kMenuIconColor : kTrayIconColor;
@@ -94,23 +64,16 @@ bool TrayUpdate::factory_reset_required_ = false;
 class TrayUpdate::UpdateView : public ActionableView {
  public:
   explicit UpdateView(TrayUpdate* owner)
-      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS),
-        label_(nullptr) {
+      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS) {
     SetLayoutManager(new views::FillLayout);
 
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     TriView* tri_view = TrayPopupUtils::CreateDefaultRowView();
     AddChildView(tri_view);
     views::ImageView* image = TrayPopupUtils::CreateMainImageView();
-    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      image->SetImage(gfx::CreateVectorIcon(
-          kSystemMenuUpdateIcon,
-          IconColorForUpdateSeverity(owner->severity_, true)));
-    } else {
-      image->SetImage(
-          bundle.GetImageNamed(DecideResource(owner->severity_, true))
-              .ToImageSkia());
-    }
+    image->SetImage(gfx::CreateVectorIcon(
+        kSystemMenuUpdateIcon,
+        IconColorForUpdateSeverity(owner->severity_, true)));
     tri_view->AddView(TriView::Container::START, image);
 
     base::string16 label_text =
@@ -118,26 +81,19 @@ class TrayUpdate::UpdateView : public ActionableView {
             ? bundle.GetLocalizedString(
                   IDS_ASH_STATUS_TRAY_RESTART_AND_POWERWASH_TO_UPDATE)
             : bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_UPDATE);
-    label_ = TrayPopupUtils::CreateDefaultLabel();
-    label_->SetText(label_text);
     SetAccessibleName(label_text);
-    tri_view->AddView(TriView::Container::CENTER, label_);
+    auto* label = TrayPopupUtils::CreateDefaultLabel();
+    label->SetText(label_text);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
+    style.SetupLabel(label);
+    tri_view->AddView(TriView::Container::CENTER, label);
 
-    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      UpdateStyle();
-      SetInkDropMode(InkDropHostView::InkDropMode::ON);
-    }
+    SetInkDropMode(InkDropHostView::InkDropMode::ON);
   }
 
   ~UpdateView() override {}
 
  private:
-  void UpdateStyle() {
-    TrayPopupItemStyle style(GetNativeTheme(),
-                             TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
-    style.SetupLabel(label_);
-  }
-
   // Overridden from ActionableView.
   bool PerformAction(const ui::Event& event) override {
     WmShell::Get()->system_tray_controller()->RequestRestartForUpdate();
@@ -147,21 +103,11 @@ class TrayUpdate::UpdateView : public ActionableView {
     return true;
   }
 
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    ActionableView::OnNativeThemeChanged(theme);
-
-    if (!MaterialDesignController::IsSystemTrayMenuMaterial())
-      return;
-    UpdateStyle();
-  }
-
-  views::Label* label_;
-
   DISALLOW_COPY_AND_ASSIGN(UpdateView);
 };
 
 TrayUpdate::TrayUpdate(SystemTray* system_tray)
-    : TrayImageItem(system_tray, IDR_AURA_UBER_TRAY_UPDATE, UMA_UPDATE) {}
+    : TrayImageItem(system_tray, kSystemTrayUpdateIcon, UMA_UPDATE) {}
 
 TrayUpdate::~TrayUpdate() {}
 
@@ -183,10 +129,7 @@ void TrayUpdate::ShowUpdateIcon(mojom::UpdateSeverity severity,
   factory_reset_required_ = factory_reset_required;
 
   // Show the icon in the tray.
-  if (MaterialDesignController::UseMaterialDesignSystemIcons())
-    SetIconColor(IconColorForUpdateSeverity(severity_, false));
-  else
-    SetImageFromResourceId(DecideResource(severity_, false));
+  SetIconColor(IconColorForUpdateSeverity(severity_, false));
   tray_view()->SetVisible(true);
 }
 

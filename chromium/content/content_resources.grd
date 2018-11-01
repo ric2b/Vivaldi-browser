@@ -28,11 +28,12 @@
       <include name="IDR_MEDIA_INTERNALS_HTML" file="browser/resources/media/media_internals.html" flattenhtml="true" allowexternalscript="true" compress="gzip" type="BINDATA" />
       <include name="IDR_MEDIA_INTERNALS_JS" file="browser/resources/media/media_internals.js" flattenhtml="true" compress="gzip" type="BINDATA" />
       <include name="IDR_MOJO_CATALOG_MANIFEST" file="../services/catalog/manifest.json" type="BINDATA" />
-      <include name="IDR_MOJO_CONTENT_BROWSER_MANIFEST" file="${root_out_dir}/Packages/content_browser/manifest.json" use_base_dir="false" type="BINDATA" />
-      <include name="IDR_MOJO_CONTENT_GPU_MANIFEST" file="${root_out_dir}/Packages/content_gpu/manifest.json" use_base_dir="false" type="BINDATA" />
-      <include name="IDR_MOJO_CONTENT_PLUGIN_MANIFEST" file="${root_out_dir}/Packages/content_plugin/manifest.json" use_base_dir="false" type="BINDATA" />
-      <include name="IDR_MOJO_CONTENT_RENDERER_MANIFEST" file="${root_out_dir}/Packages/content_renderer/manifest.json" use_base_dir="false" type="BINDATA" />
-      <include name="IDR_MOJO_CONTENT_UTILITY_MANIFEST" file="${root_out_dir}/Packages/content_utility/manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_BROWSER_MANIFEST" file="${root_gen_dir}/content/public/app/browser_manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_GPU_MANIFEST" file="${root_gen_dir}/content/public/app/gpu_manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_PACKAGED_SERVICES_MANIFEST" file="${root_gen_dir}/content/public/app/packaged_services_manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_PLUGIN_MANIFEST" file="${root_gen_dir}/content/public/app/plugin_manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_RENDERER_MANIFEST" file="${root_gen_dir}/content/public/app/renderer_manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_UTILITY_MANIFEST" file="${root_gen_dir}/content/public/app/utility_manifest.json" use_base_dir="false" type="BINDATA" />
       <include name="IDR_NETWORK_ERROR_LISTING_HTML" file="browser/resources/net/network_errors_listing.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_NETWORK_ERROR_LISTING_JS" file="browser/resources/net/network_errors_listing.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_NETWORK_ERROR_LISTING_CSS" file="browser/resources/net/network_errors_listing.css" flattenhtml="true" type="BINDATA" />
@@ -53,6 +54,9 @@
         <include name="IDR_MOJO_BUFFER_JS" file="../mojo/public/js/buffer.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MOJO_CODEC_JS" file="../mojo/public/js/codec.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MOJO_CONNECTOR_JS" file="../mojo/public/js/connector.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MOJO_CONTROL_MESSAGE_HANDLER_JS" file="../mojo/public/js/lib/control_message_handler.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MOJO_CONTROL_MESSAGE_PROXY_JS" file="../mojo/public/js/lib/control_message_proxy.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MOJO_INTERFACE_CONTROL_MESSAGES_MOJOM_JS" file="${root_gen_dir}/mojo/public/interfaces/bindings/interface_control_messages.mojom.js" use_base_dir="false" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MOJO_INTERFACE_TYPES_JS" file="../mojo/public/js/interface_types.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MOJO_ROUTER_JS" file="../mojo/public/js/router.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MOJO_UNICODE_JS" file="../mojo/public/js/unicode.js" flattenhtml="true" type="BINDATA" />

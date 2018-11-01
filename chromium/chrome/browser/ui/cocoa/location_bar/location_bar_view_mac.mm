@@ -56,9 +56,11 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/grit/components_scaled_resources.h"
 #import "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/vector_icons.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/toolbar/vector_icons.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/zoom/zoom_controller.h"
@@ -76,7 +78,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 
 using content::WebContents;
 
@@ -255,10 +256,6 @@ bool LocationBarViewMac::ShowPageActionPopup(
   return false;
 }
 
-void LocationBarViewMac::UpdateOpenPDFInReaderPrompt() {
-  // Not implemented on Mac.
-}
-
 void LocationBarViewMac::SaveStateToContents(WebContents* contents) {
   // TODO(shess): Why SaveStateToContents vs SaveStateToTab?
   omnibox_view_->SaveStateToTab(contents);
@@ -333,6 +330,19 @@ void LocationBarViewMac::TestPageActionPressed(size_t index) {
 bool LocationBarViewMac::GetBookmarkStarVisibility() {
   DCHECK(star_decoration_.get());
   return star_decoration_->IsVisible();
+}
+
+bool LocationBarViewMac::TestContentSettingImagePressed(size_t index) {
+  if (index >= content_setting_decorations_.size())
+    return false;
+
+  // TODO(tapted): Use OnAccessibilityViewAction() here. Currently it's broken.
+  ContentSettingDecoration* decoration =
+      content_setting_decorations_[index].get();
+  AutocompleteTextFieldCell* cell = [field_ cell];
+  NSRect frame = [cell frameForDecoration:decoration inFrame:[field_ bounds]];
+  decoration->OnMousePressed(frame, NSZeroPoint);
+  return true;
 }
 
 void LocationBarViewMac::SetEditable(bool editable) {
@@ -531,24 +541,6 @@ void LocationBarViewMac::RedrawDecoration(LocationBarDecoration* decoration) {
     [field_ setNeedsDisplayInRect:frame];
 }
 
-void LocationBarViewMac::SetPreviewEnabledPageAction(
-    ExtensionAction* page_action, bool preview_enabled) {
-  DCHECK(page_action);
-  WebContents* contents = GetWebContents();
-  if (!contents)
-    return;
-  RefreshPageActionDecorations();
-  Layout();
-
-  PageActionDecoration* decoration = GetPageActionDecoration(page_action);
-  DCHECK(decoration);
-  if (!decoration)
-    return;
-
-  decoration->set_preview_enabled(preview_enabled);
-  decoration->UpdateVisibility(contents);
-}
-
 NSRect LocationBarViewMac::GetPageActionFrame(ExtensionAction* page_action) {
   PageActionDecoration* decoration = GetPageActionDecoration(page_action);
   if (!decoration)
@@ -606,11 +598,10 @@ void LocationBarViewMac::UpdateWithoutTabRestore() {
 
 void LocationBarViewMac::UpdateLocationIcon() {
   SkColor vector_icon_color = GetLocationBarIconColor();
-  gfx::VectorIconId vector_icon_id =
-      ShouldShowEVBubble() ? gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID
-                           : omnibox_view_->GetVectorIcon();
+  const gfx::VectorIcon& vector_icon_id = ShouldShowEVBubble()
+                                              ? toolbar::kHttpsValidIcon
+                                              : omnibox_view_->GetVectorIcon();
 
-  DCHECK(vector_icon_id != gfx::VectorIconId::VECTOR_ICON_NONE);
   NSImage* image = NSImageFromImageSkiaWithColorSpace(
       gfx::CreateVectorIcon(vector_icon_id, kDefaultIconSize,
                             vector_icon_color),
@@ -714,8 +705,7 @@ NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
   SkColor icon_color =
       IsLocationBarDark() ? kMaterialDarkVectorIconColor : gfx::kGoogleBlue700;
   return NSImageFromImageSkiaWithColorSpace(
-      gfx::CreateVectorIcon(gfx::VectorIconId::OMNIBOX_SEARCH, kDefaultIconSize,
-                            icon_color),
+      gfx::CreateVectorIcon(omnibox::kSearchIcon, kDefaultIconSize, icon_color),
       base::mac::GetSRGBColorSpace());
 }
 
@@ -792,7 +782,7 @@ void LocationBarViewMac::RefreshPageActionDecorations() {
 
   if (PageActionsDiffer(new_page_actions)) {
     DeletePageActionDecorations();
-    for (const auto new_page_action : new_page_actions) {
+    for (auto* new_page_action : new_page_actions) {
       page_action_decorations_.push_back(base::MakeUnique<PageActionDecoration>(
           this, browser_, new_page_action));
     }
@@ -878,6 +868,9 @@ void LocationBarViewMac::UpdateSecurityState(bool tab_changed) {
   using SecurityLevel = security_state::SecurityLevel;
   SecurityLevel new_security_level = GetToolbarModel()->GetSecurityLevel(false);
 
+  if (tab_changed)
+    security_state_bubble_decoration_->ResetAnimation();
+
   // If there's enough space, but the secure state decoration had animated
   // out, animate it back in. Otherwise, if the security state has changed,
   // animate the decoration if animation is enabled and the state changed is
@@ -885,18 +878,24 @@ void LocationBarViewMac::UpdateSecurityState(bool tab_changed) {
   if ((ShouldShowSecurityState() || ShouldShowExtensionBubble() ||
        ShouldShowChromeBubble()) &&
       is_width_available_for_security_verbose_) {
-    bool is_secure_to_secure = IsSecureConnection(new_security_level) &&
-                               IsSecureConnection(security_level_);
-    bool is_new_security_level =
-        security_level_ != new_security_level && !is_secure_to_secure;
-    if (!tab_changed && security_state_bubble_decoration_->HasAnimatedOut())
-      security_state_bubble_decoration_->AnimateIn(false);
-    else if (tab_changed || !CanAnimateSecurityLevel(new_security_level))
+    if (tab_changed) {
       security_state_bubble_decoration_->ShowWithoutAnimation();
-    else if (is_new_security_level)
-      security_state_bubble_decoration_->AnimateIn();
+    } else {
+      bool is_secure_to_secure = IsSecureConnection(new_security_level) &&
+                                 IsSecureConnection(security_level_);
+      bool is_new_security_level =
+          security_level_ != new_security_level && !is_secure_to_secure;
+      if (!is_new_security_level &&
+          security_state_bubble_decoration_->HasAnimatedOut()) {
+        security_state_bubble_decoration_->AnimateIn(false);
+      } else if (!CanAnimateSecurityLevel(new_security_level)) {
+        security_state_bubble_decoration_->ShowWithoutAnimation();
+      } else if (is_new_security_level) {
+        security_state_bubble_decoration_->AnimateIn();
+      }
+    }
   } else if (!is_width_available_for_security_verbose_ ||
-             CanAnimateSecurityLevel(security_level_)) {
+             (!tab_changed && CanAnimateSecurityLevel(security_level_))) {
     security_state_bubble_decoration_->AnimateOut();
   }
 
@@ -905,8 +904,9 @@ void LocationBarViewMac::UpdateSecurityState(bool tab_changed) {
 
 bool LocationBarViewMac::CanAnimateSecurityLevel(
     security_state::SecurityLevel level) const {
-  return security_level_ == security_state::SecurityLevel::DANGEROUS ||
-         security_level_ == security_state::SecurityLevel::HTTP_SHOW_WARNING;
+  return !GetOmniboxView()->IsEditingOrEmpty() &&
+         (level == security_state::DANGEROUS ||
+          level == security_state::HTTP_SHOW_WARNING);
 }
 
 bool LocationBarViewMac::IsSecureConnection(

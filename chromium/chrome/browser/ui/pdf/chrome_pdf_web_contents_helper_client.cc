@@ -7,8 +7,6 @@
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 
@@ -18,7 +16,7 @@ content::WebContents* GetWebContentsToUse(
     content::WebContents* web_contents) {
   // If we're viewing the PDF in a MimeHandlerViewGuest, use its embedder
   // WebContents.
-  auto guest_view =
+  auto* guest_view =
       extensions::MimeHandlerViewGuest::FromWebContents(web_contents);
   if (guest_view)
     return guest_view->embedder_web_contents();
@@ -31,23 +29,6 @@ ChromePDFWebContentsHelperClient::ChromePDFWebContentsHelperClient() {
 }
 
 ChromePDFWebContentsHelperClient::~ChromePDFWebContentsHelperClient() {
-}
-
-void ChromePDFWebContentsHelperClient::UpdateLocationBar(
-    content::WebContents* contents) {
-  Browser* browser = chrome::FindBrowserWithWebContents(contents);
-  if (!browser)
-    return;
-
-  BrowserWindow* window = browser->window();
-  if (!window)
-    return;
-
-  LocationBar* location_bar = window->GetLocationBar();
-  if (!location_bar)
-    return;
-
-  location_bar->UpdateOpenPDFInReaderPrompt();
 }
 
 void ChromePDFWebContentsHelperClient::UpdateContentRestrictions(

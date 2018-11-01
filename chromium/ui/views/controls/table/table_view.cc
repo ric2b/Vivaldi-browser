@@ -14,6 +14,7 @@
 #include "base/i18n/rtl.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -27,7 +28,6 @@
 #include "ui/views/controls/table/table_header.h"
 #include "ui/views/controls/table/table_utils.h"
 #include "ui/views/controls/table/table_view_observer.h"
-#include "ui/views/controls/table/table_view_row_background_painter.h"
 
 // Padding around the text (on each side).
 static const int kTextVerticalPadding = 3;
@@ -177,11 +177,6 @@ View* TableView::CreateParentIfNecessary() {
   if (header_)
     scroll_view->SetHeader(header_);
   return scroll_view;
-}
-
-void TableView::SetRowBackgroundPainter(
-    std::unique_ptr<TableViewRowBackgroundPainter> painter) {
-  row_background_painter_ = std::move(painter);
 }
 
 void TableView::SetGrouper(TableGrouper* grouper) {
@@ -549,15 +544,8 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
   for (int i = region.min_row; i < region.max_row; ++i) {
     const int model_index = ViewToModel(i);
     const bool is_selected = selection_model_.IsSelected(model_index);
-    if (is_selected) {
+    if (is_selected)
       canvas->FillRect(GetRowBounds(i), selected_bg_color);
-    } else if (row_background_painter_) {
-      row_background_painter_->PaintRowBackground(model_index,
-                                                  GetRowBounds(i),
-                                                  canvas);
-    }
-    if (selection_model_.active() == model_index && HasFocus())
-      canvas->DrawFocusRect(GetRowBounds(i));
     for (int j = region.min_column; j < region.max_column; ++j) {
       const gfx::Rect cell_bounds(GetCellBounds(i, j));
       int text_x = kTextHorizontalPadding + cell_bounds.x();
@@ -599,10 +587,10 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
 
   const SkColor grouping_color = GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_TableGroupingIndicatorColor);
-  SkPaint grouping_paint;
-  grouping_paint.setColor(grouping_color);
-  grouping_paint.setStyle(SkPaint::kFill_Style);
-  grouping_paint.setAntiAlias(true);
+  cc::PaintFlags grouping_flags;
+  grouping_flags.setColor(grouping_color);
+  grouping_flags.setStyle(cc::PaintFlags::kFill_Style);
+  grouping_flags.setAntiAlias(true);
   const int group_indicator_x = GetMirroredXInView(GetCellBounds(0, 0).x() +
       kTextHorizontalPadding + kGroupingIndicatorSize / 2);
   for (int i = region.min_row; i < region.max_row; ) {
@@ -623,23 +611,30 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
                            kGroupingIndicatorSize,
                            last_cell_bounds.y() - start_cell_bounds.y()),
                        grouping_color);
-      canvas->DrawCircle(gfx::Point(group_indicator_x,
-                                    last_cell_bounds.CenterPoint().y()),
-                         kGroupingIndicatorSize / 2, grouping_paint);
+      canvas->DrawCircle(
+          gfx::Point(group_indicator_x, last_cell_bounds.CenterPoint().y()),
+          kGroupingIndicatorSize / 2, grouping_flags);
     }
-    canvas->DrawCircle(gfx::Point(group_indicator_x,
-                                  start_cell_bounds.CenterPoint().y()),
-                       kGroupingIndicatorSize / 2, grouping_paint);
+    canvas->DrawCircle(
+        gfx::Point(group_indicator_x, start_cell_bounds.CenterPoint().y()),
+        kGroupingIndicatorSize / 2, grouping_flags);
     i = last + 1;
   }
 }
 
 void TableView::OnFocus() {
+  ScrollView* scroll_view = ScrollView::GetScrollViewForContents(this);
+  if (scroll_view)
+    scroll_view->SetHasFocusIndicator(true);
   SchedulePaintForSelection();
+
   NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
 }
 
 void TableView::OnBlur() {
+  ScrollView* scroll_view = ScrollView::GetScrollViewForContents(this);
+  if (scroll_view)
+    scroll_view->SetHasFocusIndicator(false);
   SchedulePaintForSelection();
 }
 
@@ -786,7 +781,7 @@ TableView::PaintRegion TableView::GetPaintRegion(
 
 gfx::Rect TableView::GetPaintBounds(gfx::Canvas* canvas) const {
   SkRect sk_clip_rect;
-  if (canvas->sk_canvas()->getClipBounds(&sk_clip_rect))
+  if (canvas->sk_canvas()->getLocalClipBounds(&sk_clip_rect))
     return gfx::ToEnclosingRect(gfx::SkRectToRectF(sk_clip_rect));
   return GetVisibleBounds();
 }

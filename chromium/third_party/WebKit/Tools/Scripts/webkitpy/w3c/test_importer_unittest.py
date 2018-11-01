@@ -1,177 +1,195 @@
-# Copyright (C) 2013 Adobe Systems Incorporated. All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-# 1. Redistributions of source code must retain the above
-#    copyright notice, this list of conditions and the following
-#    disclaimer.
-# 2. Redistributions in binary form must reproduce the above
-#    copyright notice, this list of conditions and the following
-#    disclaimer in the documentation and/or other materials
-#    provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER "AS IS" AND ANY
-# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-# OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
-# TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
-# THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-# SUCH DAMAGE.
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 
-import unittest
+import collections
 
+from webkitpy.common.checkout.git_mock import MockGit
 from webkitpy.common.host_mock import MockHost
-from webkitpy.common.system.executive_mock import MockExecutive, ScriptError
-from webkitpy.common.system.filesystem_mock import MockFileSystem
+from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.w3c.test_importer import TestImporter
 
 
-FAKE_SOURCE_REPO_DIR = '/blink'
-
-FAKE_FILES = {
-    '/mock-checkout/third_party/Webkit/LayoutTests/external/OWNERS': '',
-    '/blink/w3c/dir/has_shebang.txt': '#!',
-    '/blink/w3c/dir/README.txt': '',
-    '/blink/w3c/dir/OWNERS': '',
-    '/blink/w3c/dir/reftest.list': '',
-    '/blink/w3c/dir1/OWNERS': '',
-    '/blink/w3c/dir1/reftest.list': '',
-    '/mock-checkout/third_party/WebKit/LayoutTests/external/README.txt': '',
-    '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations': '',
-}
+MockChromiumCommit = collections.namedtuple('ChromiumCommit', ('sha', 'position'))
 
 
-class TestImporterTest(unittest.TestCase):
+class TestImporterTest(LoggingTestCase):
 
-    def test_import_dir_with_no_tests(self):
+    def test_abort_on_exportable_commits(self):
+        importer = TestImporter(MockHost())
+        importer.exportable_but_not_exported_commits = lambda _: [
+            MockChromiumCommit(sha='deadbeef', position=123)]
+        importer.checkout_is_okay = lambda _: True
+        return_code = importer.main(['wpt'])
+        self.assertEqual(return_code, 0)
+        self.assertLog([
+            'INFO: Cloning repo: https://chromium.googlesource.com/external/w3c/web-platform-tests.git\n',
+            'INFO: Local path: /mock-checkout/third_party/WebKit/wpt\n',
+            'INFO: There were exportable but not-yet-exported commits:\n',
+            'INFO:   https://chromium.googlesource.com/chromium/src/+/deadbeef\n',
+            'INFO: Aborting import to prevent clobbering these commits.\n',
+            'INFO: Deleting temp repo directory /mock-checkout/third_party/WebKit/wpt.\n',
+        ])
+
+    def test_update_test_expectations(self):
         host = MockHost()
-        host.executive = MockExecutive(exception=ScriptError('error'))
-        host.filesystem = MockFileSystem(files=FAKE_FILES)
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR, 'destination')
-        importer.do_import()  # No exception raised.
+        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/TestExpectations'] = (
+            'Bug(test) some/test/a.html [ Failure ]\n'
+            'Bug(test) some/test/b.html [ Failure ]\n'
+            'Bug(test) some/test/c.html [ Failure ]\n')
+        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/VirtualTestSuites'] = '[]'
+        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/new/a.html'] = ''
+        host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/new/b.html'] = ''
+        importer = TestImporter(host)
+        deleted_tests = ['some/test/b.html']
+        renamed_test_pairs = {
+            'some/test/a.html': 'new/a.html',
+            'some/test/c.html': 'new/c.html',
+        }
+        importer.update_all_test_expectations_files(deleted_tests, renamed_test_pairs)
+        self.assertMultiLineEqual(
+            host.filesystem.read_text_file('/mock-checkout/third_party/WebKit/LayoutTests/TestExpectations'),
+            ('Bug(test) new/a.html [ Failure ]\n'
+             'Bug(test) new/c.html [ Failure ]\n'))
 
-    def test_path_too_long_true(self):
-        host = MockHost()
-        host.filesystem = MockFileSystem(files=FAKE_FILES)
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        self.assertTrue(importer.path_too_long(FAKE_SOURCE_REPO_DIR + '/' + ('x' * 150) + '.html'))
+    # Tests for protected methods - pylint: disable=protected-access
 
-    def test_path_too_long_false(self):
+    def test_commit_changes(self):
         host = MockHost()
-        host.filesystem = MockFileSystem(files=FAKE_FILES)
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        self.assertFalse(importer.path_too_long(FAKE_SOURCE_REPO_DIR + '/x.html'))
-
-    def test_does_not_import_owner_files(self):
-        host = MockHost()
-        host.filesystem = MockFileSystem(files=FAKE_FILES)
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        importer.find_importable_tests()
+        importer = TestImporter(host)
+        importer._has_changes = lambda: True
+        importer._commit_changes('dummy message')
         self.assertEqual(
-            importer.import_list,
-            [
-                {
-                    'copy_list': [
-                        {'dest': 'has_shebang.txt', 'src': '/blink/w3c/dir/has_shebang.txt'},
-                        {'dest': 'README.txt', 'src': '/blink/w3c/dir/README.txt'}
-                    ],
-                    'dirname': '/blink/w3c/dir',
-                    'jstests': 0,
-                    'reftests': 0,
-                    'total_tests': 0,
-                }
-            ])
+            host.executive.calls,
+            [['git', 'commit', '--all', '-F', '-']])
 
-    def test_does_not_import_reftestlist_file(self):
-        host = MockHost()
-        host.filesystem = MockFileSystem(files=FAKE_FILES)
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        importer.find_importable_tests()
+    def test_commit_message(self):
+        importer = TestImporter(MockHost())
         self.assertEqual(
-            importer.import_list,
-            [
-                {
-                    'copy_list': [
-                        {'dest': 'has_shebang.txt', 'src': '/blink/w3c/dir/has_shebang.txt'},
-                        {'dest': 'README.txt', 'src': '/blink/w3c/dir/README.txt'}
-                    ],
-                    'dirname': '/blink/w3c/dir',
-                    'jstests': 0,
-                    'reftests': 0,
-                    'total_tests': 0,
-                }
-            ])
+            importer._commit_message('aaaa', '1111'),
+            'Import 1111\n\n'
+            'Using wpt-import in Chromium aaaa.\n\n'
+            'NOEXPORT=true')
 
-    def test_files_with_shebang_are_made_executable(self):
+    def test_cl_description_with_empty_environ(self):
         host = MockHost()
-        host.filesystem = MockFileSystem(files=FAKE_FILES)
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        importer.do_import()
+        host.executive = MockExecutive(output='Last commit message\n\n')
+        importer = TestImporter(host)
+        description = importer._cl_description(directory_owners={})
         self.assertEqual(
-            host.filesystem.executable_files,
-            set(['/mock-checkout/third_party/WebKit/LayoutTests/external/blink/w3c/dir/has_shebang.txt']))
+            description,
+            ('Last commit message\n\n'
+             'TBR=qyearsley@chromium.org\n'
+             'NOEXPORT=true'))
+        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
 
-    def test_ref_test_with_ref_is_copied(self):
+    def test_cl_description_with_environ_variables(self):
         host = MockHost()
-        host.filesystem = MockFileSystem(files={
-            '/blink/w3c/dir1/my-ref-test.html': '<html><head><link rel="match" href="ref-file.html" />test</head></html>',
-            '/blink/w3c/dir1/ref-file.html': '<html><head>test</head></html>',
-            '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations': '',
-            '/mock-checkout/third_party/WebKit/Source/core/css/CSSProperties.in': '',
+        host.executive = MockExecutive(output='Last commit message\n')
+        importer = TestImporter(host)
+        importer.host.environ['BUILDBOT_MASTERNAME'] = 'my.master'
+        importer.host.environ['BUILDBOT_BUILDERNAME'] = 'b'
+        importer.host.environ['BUILDBOT_BUILDNUMBER'] = '123'
+        description = importer._cl_description(directory_owners={})
+        self.assertEqual(
+            description,
+            ('Last commit message\n'
+             'Build: https://build.chromium.org/p/my.master/builders/b/builds/123\n\n'
+             'TBR=qyearsley@chromium.org\n'
+             'NOEXPORT=true'))
+        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
+
+    def test_cl_description_moves_noexport_tag(self):
+        host = MockHost()
+        host.executive = MockExecutive(output='Summary\n\nNOEXPORT=true\n\n')
+        importer = TestImporter(host)
+        description = importer._cl_description(directory_owners={})
+        self.assertEqual(
+            description,
+            ('Summary\n\n'
+             'TBR=qyearsley@chromium.org\n'
+             'NOEXPORT=true'))
+
+    def test_cl_description_with_directory_owners(self):
+        host = MockHost()
+        host.executive = MockExecutive(output='Last commit message\n\n')
+        importer = TestImporter(host)
+        description = importer._cl_description(directory_owners={
+            ('someone@chromium.org',): ['external/wpt/foo', 'external/wpt/bar'],
+            ('x@chromium.org', 'y@chromium.org'): ['external/wpt/baz'],
         })
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        importer.find_importable_tests()
         self.assertEqual(
-            importer.import_list,
+            description,
+            ('Last commit message\n\n'
+             'Directory owners for changes in this CL:\n'
+             'someone@chromium.org:\n'
+             '  external/wpt/foo\n'
+             '  external/wpt/bar\n'
+             'x@chromium.org, y@chromium.org:\n'
+             '  external/wpt/baz\n\n'
+             'TBR=qyearsley@chromium.org\n'
+             'NOEXPORT=true'))
+
+    def test_generate_manifest_command_not_found(self):
+        # If we're updating csswg-test, then the manifest file won't be found.
+        host = MockHost()
+        host.filesystem.files = {}
+        importer = TestImporter(host)
+        importer._generate_manifest(
+            '/mock-checkout/third_party/WebKit/LayoutTests/external/csswg-test')
+        self.assertEqual(host.executive.calls, [])
+
+    def test_generate_manifest_successful_run(self):
+        # This test doesn't test any aspect of the real manifest script, it just
+        # asserts that TestImporter._generate_manifest would invoke the script.
+        host = MockHost()
+        importer = TestImporter(host)
+        importer._generate_manifest(
+            '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt')
+        self.assertEqual(
+            host.executive.calls,
             [
-                {
-                    'copy_list': [
-                        {'src': '/blink/w3c/dir1/ref-file.html', 'dest': 'ref-file.html'},
-                        {'src': '/blink/w3c/dir1/ref-file.html', 'dest': 'my-ref-test-expected.html', 'reference_support_info': {}},
-                        {'src': '/blink/w3c/dir1/my-ref-test.html', 'dest': 'my-ref-test.html'}
-                    ],
-                    'dirname': '/blink/w3c/dir1',
-                    'jstests': 0,
-                    'reftests': 1,
-                    'total_tests': 1
-                }
+                [
+                    'python',
+                    '/mock-checkout/third_party/WebKit/Tools/Scripts/webkitpy/thirdparty/wpt/wpt/manifest',
+                    '--work',
+                    '--tests-root',
+                    '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt'
+                ],
+                [
+                    'git',
+                    'add',
+                    '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt/MANIFEST.json'
+                ]
             ])
 
-    def test_ref_test_without_ref_is_skipped(self):
+    def test_get_directory_owners(self):
         host = MockHost()
-        host.filesystem = MockFileSystem(files={
-            '/blink/w3c/dir1/my-ref-test.html': '<html><head><link rel="match" href="not-here.html" /></head></html>',
-            '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations': '',
-            '/mock-checkout/third_party/WebKit/Source/core/css/CSSProperties.in': '',
-        })
-        importer = TestImporter(host, FAKE_SOURCE_REPO_DIR)
-        importer.find_importable_tests()
-        self.assertEqual(importer.import_list, [])
+        host.filesystem.write_text_file(
+            '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations',
+            '## Owners: someone@chromium.org\n'
+            '# external/wpt/foo [ Pass ]\n')
+        git = MockGit()
+        git.changed_files = lambda: ['third_party/WebKit/LayoutTests/external/wpt/foo/x.html']
+        host.git = lambda: git
+        importer = TestImporter(host)
+        self.assertEqual(importer.get_directory_owners(), {('someone@chromium.org',): ['external/wpt/foo']})
 
-    def test_should_try_to_convert_positive_cases(self):
-        self.assertTrue(TestImporter.should_try_to_convert({}, 'foo.css', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestImporter.should_try_to_convert({}, 'foo.htm', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestImporter.should_try_to_convert({}, 'foo.html', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestImporter.should_try_to_convert({}, 'foo.xht', 'LayoutTests/external/csswg-test/x'))
-        self.assertTrue(TestImporter.should_try_to_convert({}, 'foo.xhtml', 'LayoutTests/external/csswg-test/x'))
+    def test_get_directory_owners_no_changed_files(self):
+        host = MockHost()
+        host.filesystem.write_text_file(
+            '/mock-checkout/third_party/WebKit/LayoutTests/W3CImportExpectations',
+            '## Owners: someone@chromium.org\n'
+            '# external/wpt/foo [ Pass ]\n')
+        importer = TestImporter(host)
+        self.assertEqual(importer.get_directory_owners(), {})
 
-    def test_should_not_try_to_convert_js_test(self):
-        self.assertFalse(TestImporter.should_try_to_convert({'is_jstest': True}, 'foo.html', 'LayoutTests/external/csswg-test/x'))
-
-    def test_should_not_try_to_convert_test_in_wpt(self):
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.html', 'LayoutTests/external/wpt/foo'))
-
-    def test_should_not_try_to_convert_other_file_types(self):
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.bar', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.js', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.md', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.png', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.svg', 'LayoutTests/external/csswg-test/x'))
-        self.assertFalse(TestImporter.should_try_to_convert({}, 'foo.svgz', 'LayoutTests/external/csswg-test/x'))
+    def test_cc_part(self):
+        directory_owners = {
+            ('someone@chromium.org',): ['external/wpt/foo', 'external/wpt/bar'],
+            ('x@chromium.org', 'y@chromium.org'): ['external/wpt/baz'],
+        }
+        self.assertEqual(
+            TestImporter._cc_part(directory_owners),
+            ['--cc=someone@chromium.org', '--cc=x@chromium.org', '--cc=y@chromium.org'])

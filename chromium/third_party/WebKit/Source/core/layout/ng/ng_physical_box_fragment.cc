@@ -4,29 +4,28 @@
 
 #include "core/layout/ng/ng_physical_box_fragment.h"
 
+#include "core/layout/ng/ng_floating_object.h"
+
 namespace blink {
 
 NGPhysicalBoxFragment::NGPhysicalBoxFragment(
+    LayoutObject* layout_object,
     NGPhysicalSize size,
     NGPhysicalSize overflow,
-    HeapVector<Member<const NGPhysicalFragment>>& children,
-    HeapLinkedHashSet<WeakMember<NGBlockNode>>& out_of_flow_descendants,
-    Vector<NGStaticPosition>& out_of_flow_positions,
-    NGMarginStrut margin_strut,
-    NGBreakToken* break_token)
-    : NGPhysicalFragment(size,
+    Vector<RefPtr<NGPhysicalFragment>>& children,
+    Vector<Persistent<NGFloatingObject>>& positioned_floats,
+    const WTF::Optional<NGLogicalOffset>& bfc_offset,
+    const NGMarginStrut& end_margin_strut,
+    RefPtr<NGBreakToken> break_token)
+    : NGPhysicalFragment(layout_object,
+                         size,
                          overflow,
                          kFragmentBox,
-                         out_of_flow_descendants,
-                         out_of_flow_positions,
-                         break_token),
-      margin_strut_(margin_strut) {
+                         std::move(break_token)),
+      positioned_floats_(positioned_floats),
+      bfc_offset_(bfc_offset),
+      end_margin_strut_(end_margin_strut) {
   children_.swap(children);
-}
-
-DEFINE_TRACE_AFTER_DISPATCH(NGPhysicalBoxFragment) {
-  visitor->trace(children_);
-  NGPhysicalFragment::traceAfterDispatch(visitor);
 }
 
 }  // namespace blink

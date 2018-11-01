@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.ntp.cards;
 
 import android.support.annotation.CallSuper;
+import android.support.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
@@ -16,15 +17,18 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
-import org.chromium.chrome.browser.offlinepages.ClientId;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
+import org.chromium.chrome.browser.suggestions.SuggestionsOfflineModelObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A group of suggestions, with a header, a status card, and a progress indicator. This is
@@ -35,8 +39,7 @@ public class SuggestionsSection extends InnerNode {
 
     private final Delegate mDelegate;
     private final SuggestionsCategoryInfo mCategoryInfo;
-    private final OfflinePageBridge mOfflinePageBridge;
-    private final OfflinePageBridge.OfflinePageModelObserver mOfflinePageObserver;
+    private final OfflineModelObserver mOfflineModelObserver;
 
     // Children
     private final SectionHeader mHeader;
@@ -71,7 +74,6 @@ public class SuggestionsSection extends InnerNode {
             SuggestionsCategoryInfo info) {
         mDelegate = delegate;
         mCategoryInfo = info;
-        mOfflinePageBridge = offlinePageBridge;
 
         mHeader = new SectionHeader(info.getTitle());
         mSuggestionsList = new SuggestionsList(uiDelegate, ranker, info);
@@ -80,35 +82,10 @@ public class SuggestionsSection extends InnerNode {
         mProgressIndicator = new ProgressItem();
         addChildren(mHeader, mSuggestionsList, mStatus, mMoreButton, mProgressIndicator);
 
-        mOfflinePageObserver =
-                new OfflinePageBridge.OfflinePageModelObserver() {
-                    @Override
-                    public void offlinePageModelLoaded() {
-                        updateAllSnippetOfflineAvailability();
-                    }
+        mOfflineModelObserver = new OfflineModelObserver(offlinePageBridge);
+        uiDelegate.addDestructionObserver(mOfflineModelObserver);
 
-                    @Override
-                    public void offlinePageAdded(OfflinePageItem addedPage) {
-                        updateAllSnippetOfflineAvailability();
-                    }
-
-                    @Override
-                    public void offlinePageDeleted(long offlineId, ClientId clientId) {
-                        for (SnippetArticle article : mSuggestionsList) {
-                            if (article.requiresExactOfflinePage()) continue;
-                            Long articleOfflineId = article.getOfflinePageOfflineId();
-                            if (articleOfflineId == null) continue;
-                            if (articleOfflineId.longValue() != offlineId) continue;
-                            // The old value cannot be simply removed without a request to the
-                            // model, because there may be an older offline page for the same
-                            // URL.
-                            updateSnippetOfflineAvailability(article);
-                        }
-                    }
-                };
-        mOfflinePageBridge.addObserver(mOfflinePageObserver);
-
-        refreshChildrenVisibility();
+        mStatus.setVisible(!hasSuggestions());
     }
 
     private static class SuggestionsList extends ChildNode implements Iterable<SnippetArticle> {
@@ -127,7 +104,7 @@ public class SuggestionsSection extends InnerNode {
         }
 
         @Override
-        public int getItemCount() {
+        protected int getItemCountForDebugging() {
             return mSuggestions.size();
         }
 
@@ -139,25 +116,17 @@ public class SuggestionsSection extends InnerNode {
         }
 
         @Override
-        public void onBindViewHolder(
-                NewTabPageViewHolder holder, int position, List<Object> payloads) {
+        public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
             checkIndex(position);
             assert holder instanceof SnippetArticleViewHolder;
             SnippetArticle suggestion = getSuggestionAt(position);
             mSuggestionsRanker.rankSuggestion(suggestion);
-            ((SnippetArticleViewHolder) holder)
-                    .onBindViewHolder(suggestion, mCategoryInfo, payloads);
+            ((SnippetArticleViewHolder) holder).onBindViewHolder(suggestion, mCategoryInfo);
         }
 
         @Override
         public SnippetArticle getSuggestionAt(int position) {
             return mSuggestions.get(position);
-        }
-
-        @Override
-        public int getDismissSiblingPosDelta(int position) {
-            checkIndex(position);
-            return 0;
         }
 
         public void clear() {
@@ -199,6 +168,11 @@ public class SuggestionsSection extends InnerNode {
         }
 
         @Override
+        public Set<Integer> getItemDismissalGroup(int position) {
+            return Collections.singleton(position);
+        }
+
+        @Override
         public void dismissItem(int position, Callback<String> itemRemovedCallback) {
             checkIndex(position);
             SuggestionsSource suggestionsSource = mUiDelegate.getSuggestionsSource();
@@ -225,25 +199,34 @@ public class SuggestionsSection extends InnerNode {
             article.setOfflinePageOfflineId(newId);
 
             if ((oldId == null) == (newId == null)) return;
-            notifyItemChanged(index, SnippetArticleViewHolder.PARTIAL_UPDATE_OFFLINE_ID);
+            notifyItemChanged(
+                    index, SnippetArticleViewHolder.REFRESH_OFFLINE_BADGE_VISIBILITY_CALLBACK);
         }
     }
 
     @Override
     @CallSuper
     public void detach() {
-        mOfflinePageBridge.removeObserver(mOfflinePageObserver);
+        mOfflineModelObserver.onDestroy();
         super.detach();
     }
 
-    private void refreshChildrenVisibility() {
-        mStatus.setVisible(!hasSuggestions());
-        mMoreButton.refreshVisibility();
+    private void onSuggestionsListCountChanged(int oldSuggestionsCount) {
+        int newSuggestionsCount = getSuggestionsCount();
+        if ((newSuggestionsCount == 0) == (oldSuggestionsCount == 0)) return;
+
+        mStatus.setVisible(newSuggestionsCount == 0);
+
+        // When the ActionItem stops being dismissable, it is possible that it was being interacted
+        // with. We need to reset the view's related property changes.
+        if (mMoreButton.isVisible()) {
+            mMoreButton.notifyItemChanged(0, NewTabPageRecyclerView.RESET_FOR_DISMISS_CALLBACK);
+        }
     }
 
     @Override
     public void dismissItem(int position, Callback<String> itemRemovedCallback) {
-        if (!hasSuggestions()) {
+        if (getSectionDismissalRange().contains(position)) {
             mDelegate.dismissSection(this);
             itemRemovedCallback.onResult(getHeaderText());
             return;
@@ -255,12 +238,43 @@ public class SuggestionsSection extends InnerNode {
     @Override
     public void onItemRangeRemoved(TreeNode child, int index, int count) {
         super.onItemRangeRemoved(child, index, count);
-        if (child == mSuggestionsList) refreshChildrenVisibility();
+        if (child == mSuggestionsList) onSuggestionsListCountChanged(getSuggestionsCount() + count);
     }
 
     @Override
-    public void onBindViewHolder(NewTabPageViewHolder holder, int position, List<Object> payloads) {
-        super.onBindViewHolder(holder, position, payloads);
+    public void onItemRangeInserted(TreeNode child, int index, int count) {
+        super.onItemRangeInserted(child, index, count);
+        if (child == mSuggestionsList) onSuggestionsListCountChanged(getSuggestionsCount() - count);
+    }
+
+    @Override
+    protected void notifyItemRangeInserted(int index, int count) {
+        super.notifyItemRangeInserted(index, count);
+        notifyNeighboursModified(index - 1, index + count);
+    }
+
+    @Override
+    protected void notifyItemRangeRemoved(int index, int count) {
+        super.notifyItemRangeRemoved(index, count);
+        notifyNeighboursModified(index - 1, index);
+    }
+
+    /** Sends a notification to the items at the provided indices to refresh their background. */
+    private void notifyNeighboursModified(int aboveNeighbour, int belowNeighbour) {
+        assert aboveNeighbour < belowNeighbour;
+
+        if (aboveNeighbour >= 0) {
+            notifyItemChanged(aboveNeighbour, NewTabPageViewHolder.UPDATE_LAYOUT_PARAMS_CALLBACK);
+        }
+
+        if (belowNeighbour < getItemCount()) {
+            notifyItemChanged(belowNeighbour, NewTabPageViewHolder.UPDATE_LAYOUT_PARAMS_CALLBACK);
+        }
+    }
+
+    @Override
+    public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
+        super.onBindViewHolder(holder, position);
         childSeen(position);
     }
 
@@ -271,13 +285,13 @@ public class SuggestionsSection extends InnerNode {
      */
     private void childSeen(int position) {
         Log.d(TAG, "childSeen: position %d in category %d", position, mCategoryInfo.getCategory());
-        assert getStartingOffsetForChild(mSuggestionsList) == 1;
-        // We assume all non-snippet cards come after all cards of type SNIPPET.
+
         if (getItemViewType(position) == ItemViewType.SNIPPET) {
-            // As asserted above, first suggestion has position 1, etc., so the position of this
-            // child coincides with the number of suggestions above this child (including this one).
+            // We assume that all suggestions are clustered together, so the number seen can be
+            // obtained from the index of the last suggestion seen.
+            int firstSuggestionPosition = getStartingOffsetForChild(mSuggestionsList);
             mNumberOfSuggestionsSeen =
-                    Math.max(mNumberOfSuggestionsSeen, position);
+                    Math.max(mNumberOfSuggestionsSeen, position - firstSuggestionPosition + 1);
         }
     }
 
@@ -362,20 +376,10 @@ public class SuggestionsSection extends InnerNode {
                             suggestions.size() - targetCountToAppend);
                     suggestions.subList(targetCountToAppend, suggestions.size()).clear();
                 }
-
-                if (mNumberOfSuggestionsSeen == 1) {
-                    NewTabPageUma.recordUIUpdateResult(NewTabPageUma.UI_UPDATE_SUCCESS_1_SEEN);
-                } else if (mNumberOfSuggestionsSeen == 2) {
-                    NewTabPageUma.recordUIUpdateResult(NewTabPageUma.UI_UPDATE_SUCCESS_2_SEEN);
-                } else if (mNumberOfSuggestionsSeen == 3) {
-                    NewTabPageUma.recordUIUpdateResult(NewTabPageUma.UI_UPDATE_SUCCESS_3_SEEN);
-                } else {
-                    NewTabPageUma.recordUIUpdateResult(
-                            NewTabPageUma.UI_UPDATE_SUCCESS_MORE_THAN_3_SEEN);
-                }
-            } else {
-                NewTabPageUma.recordUIUpdateResult(NewTabPageUma.UI_UPDATE_SUCCESS_NONE_SEEN);
             }
+            NewTabPageUma.recordNumberOfSuggestionsSeenBeforeUIUpdateSuccess(
+                    mNumberOfSuggestionsSeen);
+            NewTabPageUma.recordUIUpdateResult(NewTabPageUma.UI_UPDATE_SUCCESS_REPLACED);
         } else {
             NewTabPageUma.recordUIUpdateResult(NewTabPageUma.UI_UPDATE_SUCCESS_APPENDED);
         }
@@ -386,39 +390,12 @@ public class SuggestionsSection extends InnerNode {
 
         for (SnippetArticle article : suggestions) {
             if (!article.requiresExactOfflinePage()) {
-                updateSnippetOfflineAvailability(article);
+                mOfflineModelObserver.updateOfflinableSuggestionAvailability(article);
             }
         }
-
-        refreshChildrenVisibility();
     }
 
-    private void updateSnippetOfflineAvailability(final SnippetArticle article) {
-        // This method is not applicable to articles for which the exact offline id must specified.
-        assert !article.requiresExactOfflinePage();
-        if (!mOfflinePageBridge.isOfflinePageModelLoaded()) return;
-        // TabId is relevant only for recent tab offline pages, which we do not handle here, so we
-        // do not care about tab id.
-        mOfflinePageBridge.selectPageForOnlineUrl(
-                article.mUrl, /*tabId=*/0, new Callback<OfflinePageItem>() {
-                    @Override
-                    public void onResult(OfflinePageItem item) {
-                        mSuggestionsList.updateSuggestionOfflineId(
-                                article, item == null ? null : item.getOfflineId());
-                    }
-                });
-    }
 
-    /**
-     * Checks which SnippetArticles are available offline and updates them with offline id of the
-     * matched offline page.
-     */
-    private void updateAllSnippetOfflineAvailability() {
-        for (final SnippetArticle article : mSuggestionsList) {
-            if (article.requiresExactOfflinePage()) continue;
-            updateSnippetOfflineAvailability(article);
-        }
-    }
 
     /** Lets the {@link SuggestionsSection} know when a suggestion fetch has been started. */
     public void onFetchStarted() {
@@ -429,7 +406,6 @@ public class SuggestionsSection extends InnerNode {
     public void setStatus(@CategoryStatusEnum int status) {
         if (!SnippetsBridge.isCategoryStatusAvailable(status)) mSuggestionsList.clear();
         mProgressIndicator.setVisible(SnippetsBridge.isCategoryLoading(status));
-        refreshChildrenVisibility();
     }
 
     @CategoryInt
@@ -438,23 +414,32 @@ public class SuggestionsSection extends InnerNode {
     }
 
     @Override
-    public int getDismissSiblingPosDelta(int position) {
-        // The only dismiss siblings we have so far are the More button and the status card.
-        // Exit early if there is no More button.
-        if (!mMoreButton.isVisible()) return 0;
+    public Set<Integer> getItemDismissalGroup(int position) {
+        // The section itself can be dismissed via any of the items in the dismissal group,
+        // otherwise we fall back to the default implementation, which dispatches to our children.
+        Set<Integer> sectionDismissalRange = getSectionDismissalRange();
+        if (sectionDismissalRange.contains(position)) return sectionDismissalRange;
 
-        // When there are suggestions we won't have contiguous status and action items.
-        if (hasSuggestions()) return 0;
+        return super.getItemDismissalGroup(position);
+    }
 
-        TreeNode child = getChildForPosition(position);
+    /** Sets the visibility of this section's header. */
+    public void setHeaderVisibility(boolean headerVisibility) {
+        mHeader.setVisible(headerVisibility);
+    }
 
-        // The sibling of the more button is the status card, that should be right above.
-        if (child == mMoreButton) return -1;
+    /**
+     * @return The set of indices corresponding to items that can dismiss this entire section
+     * (as opposed to individual items in it).
+     */
+    private Set<Integer> getSectionDismissalRange() {
+        if (hasSuggestions()) return Collections.emptySet();
 
-        // The sibling of the status card is the more button when it exists, should be right below.
-        if (child == mStatus) return 1;
+        int statusCardIndex = getStartingOffsetForChild(mStatus);
+        if (!mMoreButton.isVisible()) return Collections.singleton(statusCardIndex);
 
-        return 0;
+        assert statusCardIndex + 1 == getStartingOffsetForChild(mMoreButton);
+        return new HashSet<>(Arrays.asList(statusCardIndex, statusCardIndex + 1));
     }
 
     public SuggestionsCategoryInfo getCategoryInfo() {
@@ -471,5 +456,25 @@ public class SuggestionsSection extends InnerNode {
 
     ActionItem getActionItemForTesting() {
         return mMoreButton;
+    }
+
+    SectionHeader getHeaderItemForTesting() {
+        return mHeader;
+    }
+
+    private class OfflineModelObserver extends SuggestionsOfflineModelObserver<SnippetArticle> {
+        public OfflineModelObserver(OfflinePageBridge bridge) {
+            super(bridge);
+        }
+
+        @Override
+        public void onSuggestionOfflineIdChanged(SnippetArticle suggestion, @Nullable Long id) {
+            mSuggestionsList.updateSuggestionOfflineId(suggestion, id);
+        }
+
+        @Override
+        public Iterable<SnippetArticle> getOfflinableSuggestions() {
+            return mSuggestionsList;
+        }
     }
 }

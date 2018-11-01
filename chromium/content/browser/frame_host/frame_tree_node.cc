@@ -7,6 +7,7 @@
 #include <queue>
 #include <utility>
 
+#include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -229,6 +230,7 @@ void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
 
 void FrameTreeNode::SetOriginalOpener(FrameTreeNode* opener) {
   DCHECK(!original_opener_ || !opener);
+  DCHECK(opener == nullptr || !opener->parent());
 
   original_opener_ = opener;
 
@@ -284,23 +286,26 @@ void FrameTreeNode::SetFrameName(const std::string& name,
 }
 
 void FrameTreeNode::SetFeaturePolicyHeader(
-    const ParsedFeaturePolicy& parsed_header) {
+    const ParsedFeaturePolicyHeader& parsed_header) {
   replication_state_.feature_policy_header = parsed_header;
 }
 
-void FrameTreeNode::ResetFeaturePolicy() {
+void FrameTreeNode::ResetFeaturePolicyHeader() {
   replication_state_.feature_policy_header.clear();
 }
 
 void FrameTreeNode::AddContentSecurityPolicy(
-    const ContentSecurityPolicyHeader& header) {
+    const ContentSecurityPolicyHeader& header,
+    const std::vector<ContentSecurityPolicy>& policies) {
   replication_state_.accumulated_csp_headers.push_back(header);
   render_manager_.OnDidAddContentSecurityPolicy(header);
+  csp_policies_.insert(csp_policies_.end(), policies.begin(), policies.end());
 }
 
 void FrameTreeNode::ResetContentSecurityPolicy() {
   replication_state_.accumulated_csp_headers.clear();
   render_manager_.OnDidResetContentSecurityPolicy();
+  csp_policies_.clear();
 }
 
 void FrameTreeNode::SetInsecureRequestPolicy(
@@ -391,9 +396,10 @@ void FrameTreeNode::CreatedNavigationRequest(
   navigation_request_ = std::move(navigation_request);
   render_manager()->DidCreateNavigationRequest(navigation_request_.get());
 
-  // TODO(fdegans): Check if this is a same-document navigation and set the
-  // proper argument.
-  DidStartLoading(true, was_previously_loading);
+  bool to_different_document = !FrameMsg_Navigate_Type::IsSameDocument(
+      navigation_request_->common_params().navigation_type);
+
+  DidStartLoading(to_different_document, was_previously_loading);
 }
 
 void FrameTreeNode::ResetNavigationRequest(bool keep_state) {

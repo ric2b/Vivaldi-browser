@@ -5,8 +5,10 @@
 
 #include "extensions/browser/api/guest_view/web_view/web_view_internal_api.h"
 
+#include <memory>
 #include <string>
 #include <vector>
+
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "extensions/browser/extension_function.h"
@@ -41,7 +43,7 @@ class WebViewInternalThumbnailFunction
   virtual void SendResultFromBitmap(const SkBitmap& screen_capture);
   bool InternalRunAsyncSafe(
       WebViewGuest* guest,
-      std::unique_ptr<web_view_private::ThumbnailParams>& params);
+      const std::unique_ptr<web_view_private::ThumbnailParams>& params);
 
   // Quality setting to use when encoding jpegs.  Set in RunImpl().
   int image_quality_;
@@ -194,51 +196,66 @@ class WebViewPrivateSetExtensionHostFunction
 
 class WebViewPrivateAllowBlockedInsecureContentFunction
     : public LegacyWebViewInternalExtensionFunction {
-public:
-    DECLARE_EXTENSION_FUNCTION("webViewPrivate.allowBlockedInsecureContent",
-                               WEBVIEWINTERNAL_ALLOWBLOCKEDINSECURECONTENT)
-    WebViewPrivateAllowBlockedInsecureContentFunction();
+ public:
+  DECLARE_EXTENSION_FUNCTION("webViewPrivate.allowBlockedInsecureContent",
+                             WEBVIEWINTERNAL_ALLOWBLOCKEDINSECURECONTENT)
+  WebViewPrivateAllowBlockedInsecureContentFunction();
 
-protected:
-    ~WebViewPrivateAllowBlockedInsecureContentFunction() override;
+ protected:
+  ~WebViewPrivateAllowBlockedInsecureContentFunction() override;
 
-private:
-    bool RunAsyncSafe(WebViewGuest* guest) override;
+ private:
+  bool RunAsyncSafe(WebViewGuest* guest) override;
 
-    DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
+  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
 };
 
 class WebViewPrivateGetFocusedElementInfoFunction
     : public LegacyWebViewInternalExtensionFunction {
-  public:
-   DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
-                              WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
-   WebViewPrivateGetFocusedElementInfoFunction();
+ public:
+  DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
+                             WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
+  WebViewPrivateGetFocusedElementInfoFunction();
 
-  protected:
-   ~WebViewPrivateGetFocusedElementInfoFunction() override;
+ protected:
+  ~WebViewPrivateGetFocusedElementInfoFunction() override;
 
-  private:
-   bool RunAsyncSafe(WebViewGuest* guest) override;
+ private:
+  bool RunAsyncSafe(WebViewGuest* guest) override;
 
-   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
+  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
 };
-
 
 class WebViewPrivateResetGestureStateFunction
     : public LegacyWebViewInternalExtensionFunction {
-public:
-    DECLARE_EXTENSION_FUNCTION("webViewPrivate.resetGestureState",
-                               WEBVIEWINTERNAL_RESETGESTURESTATE)
-    WebViewPrivateResetGestureStateFunction();
+ public:
+  DECLARE_EXTENSION_FUNCTION("webViewPrivate.resetGestureState",
+                             WEBVIEWINTERNAL_RESETGESTURESTATE)
+  WebViewPrivateResetGestureStateFunction();
 
-protected:
-    ~WebViewPrivateResetGestureStateFunction() override;
+ protected:
+  ~WebViewPrivateResetGestureStateFunction() override;
 
-private:
-    bool RunAsyncSafe(WebViewGuest* guest) override;
+ private:
+  bool RunAsyncSafe(WebViewGuest* guest) override;
 
-    DISALLOW_COPY_AND_ASSIGN(WebViewPrivateResetGestureStateFunction);
+  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateResetGestureStateFunction);
+};
+
+class WebViewPrivateSendRequestFunction
+    : public LegacyWebViewInternalExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("webViewPrivate.sendRequest",
+                             WEBVIEWINTERNAL_SENDREQUEST)
+  WebViewPrivateSendRequestFunction();
+
+ protected:
+  ~WebViewPrivateSendRequestFunction() override;
+
+ private:
+  bool RunAsyncSafe(WebViewGuest* guest) override;
+
+  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSendRequestFunction);
 };
 
 }  // namespace vivaldi

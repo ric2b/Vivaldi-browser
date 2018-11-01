@@ -230,18 +230,18 @@ void SVGSVGElement::collectStyleForPresentationAttribute(
     MutableStylePropertySet* style) {
   SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
   if (property == m_x) {
-    addPropertyToPresentationAttributeStyle(style, CSSPropertyX,
+    addPropertyToPresentationAttributeStyle(style, property->cssPropertyId(),
                                             m_x->cssValue());
   } else if (property == m_y) {
-    addPropertyToPresentationAttributeStyle(style, CSSPropertyY,
+    addPropertyToPresentationAttributeStyle(style, property->cssPropertyId(),
                                             m_y->cssValue());
   } else if (isOutermostSVGSVGElement() &&
              (property == m_width || property == m_height)) {
     if (property == m_width) {
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth,
+      addPropertyToPresentationAttributeStyle(style, property->cssPropertyId(),
                                               m_width->cssValue());
     } else if (property == m_height) {
-      addPropertyToPresentationAttributeStyle(style, CSSPropertyHeight,
+      addPropertyToPresentationAttributeStyle(style, property->cssPropertyId(),
                                               m_height->cssValue());
     }
   } else {
@@ -450,57 +450,18 @@ SVGTransformTearOff* SVGSVGElement::createSVGTransformFromMatrix(
   return SVGTransformTearOff::create(matrix);
 }
 
-AffineTransform SVGSVGElement::localCoordinateSpaceTransform(
-    SVGElement::CTMScope mode) const {
-  AffineTransform viewBoxTransform;
-  if (!hasEmptyViewBox()) {
-    FloatSize size = currentViewportSize();
-    viewBoxTransform = viewBoxToViewTransform(size.width(), size.height());
-  }
-
+AffineTransform SVGSVGElement::localCoordinateSpaceTransform() const {
   AffineTransform transform;
   if (!isOutermostSVGSVGElement()) {
     SVGLengthContext lengthContext(this);
     transform.translate(m_x->currentValue()->value(lengthContext),
                         m_y->currentValue()->value(lengthContext));
-  } else if (mode == SVGElement::ScreenScope) {
-    if (LayoutObject* layoutObject = this->layoutObject()) {
-      FloatPoint location;
-      float zoomFactor = 1;
-
-      // At the SVG/HTML boundary (aka LayoutSVGRoot), we apply the
-      // localToBorderBoxTransform to map an element from SVG viewport
-      // coordinates to CSS box coordinates.  LayoutSVGRoot's localToAbsolute
-      // method expects CSS box coordinates.  We also need to adjust for the
-      // zoom level factored into CSS coordinates (bug #96361).
-      if (layoutObject->isSVGRoot()) {
-        location = toLayoutSVGRoot(layoutObject)
-                       ->localToBorderBoxTransform()
-                       .mapPoint(location);
-        zoomFactor = 1 / layoutObject->style()->effectiveZoom();
-      }
-
-      // Translate in our CSS parent coordinate space
-      // FIXME: This doesn't work correctly with CSS transforms.
-      location = layoutObject->localToAbsolute(location, UseTransforms);
-      location.scale(zoomFactor, zoomFactor);
-
-      // Be careful here! localToBorderBoxTransform() included the x/y offset
-      // coming from the viewBoxToViewTransform(), so we have to subtract it
-      // here (original cause of bug #27183)
-      transform.translate(location.x() - viewBoxTransform.e(),
-                          location.y() - viewBoxTransform.f());
-
-      // Respect scroll offset.
-      if (FrameView* view = document().view()) {
-        LayoutSize scrollOffset(view->getScrollOffset());
-        scrollOffset.scale(zoomFactor);
-        transform.translate(-scrollOffset.width(), -scrollOffset.height());
-      }
-    }
   }
-
-  return transform.multiply(viewBoxTransform);
+  if (!hasEmptyViewBox()) {
+    FloatSize size = currentViewportSize();
+    transform.multiply(viewBoxToViewTransform(size.width(), size.height()));
+  }
+  return transform;
 }
 
 bool SVGSVGElement::layoutObjectIsNeeded(const ComputedStyle& style) {
@@ -510,7 +471,10 @@ bool SVGSVGElement::layoutObjectIsNeeded(const ComputedStyle& style) {
   // https://bugs.webkit.org/show_bug.cgi?id=103493
   if (document().documentElement() == this)
     return true;
-  return Element::layoutObjectIsNeeded(style);
+
+  // <svg> elements don't need an SVG parent to render, so we bypass
+  // SVGElement::layoutObjectIsNeeded.
+  return isValid() && Element::layoutObjectIsNeeded(style);
 }
 
 LayoutObject* SVGSVGElement::createLayoutObject(const ComputedStyle&) {

@@ -66,13 +66,15 @@ using PerformanceObserverVector = HeapVector<Member<PerformanceObserver>>;
 static const size_t defaultResourceTimingBufferSize = 150;
 static const size_t defaultFrameTimingBufferSize = 150;
 
-PerformanceBase::PerformanceBase(double timeOrigin)
+PerformanceBase::PerformanceBase(double timeOrigin,
+                                 RefPtr<WebTaskRunner> taskRunner)
     : m_frameTimingBufferSize(defaultFrameTimingBufferSize),
       m_resourceTimingBufferSize(defaultResourceTimingBufferSize),
       m_userTiming(nullptr),
       m_timeOrigin(timeOrigin),
       m_observerFilterOptions(PerformanceEntry::Invalid),
       m_deliverObservationsTimer(
+          std::move(taskRunner),
           this,
           &PerformanceBase::deliverObservationsTimerFired) {}
 
@@ -493,7 +495,7 @@ void PerformanceBase::clearMeasures(const String& measureName) {
 void PerformanceBase::registerPerformanceObserver(
     PerformanceObserver& observer) {
   m_observerFilterOptions |= observer.filterOptions();
-  m_observers.add(&observer);
+  m_observers.insert(&observer);
   updateLongTaskInstrumentation();
 }
 
@@ -535,7 +537,7 @@ void PerformanceBase::activateObserver(PerformanceObserver& observer) {
   if (m_activeObservers.isEmpty())
     m_deliverObservationsTimer.startOneShot(0, BLINK_FROM_HERE);
 
-  m_activeObservers.add(&observer);
+  m_activeObservers.insert(&observer);
 }
 
 void PerformanceBase::resumeSuspendedObservers() {
@@ -559,7 +561,7 @@ void PerformanceBase::deliverObservationsTimerFired(TimerBase*) {
   m_activeObservers.swap(observers);
   for (const auto& observer : observers) {
     if (observer->shouldBeSuspended())
-      m_suspendedObservers.add(observer);
+      m_suspendedObservers.insert(observer);
     else
       observer->deliver();
   }
@@ -579,7 +581,8 @@ DOMHighResTimeStamp PerformanceBase::monotonicTimeToDOMHighResTimeStamp(
     return 0.0;
 
   double timeInSeconds = monotonicTime - timeOrigin;
-  DCHECK_GE(timeInSeconds, 0);
+  if (timeInSeconds < 0)
+    return 0.0;
   return convertSecondsToDOMHighResTimeStamp(
       clampTimeResolution(timeInSeconds));
 }

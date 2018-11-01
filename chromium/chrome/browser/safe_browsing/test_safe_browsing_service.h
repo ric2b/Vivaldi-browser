@@ -8,7 +8,6 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 
 #include "chrome/browser/safe_browsing/protocol_manager.h"
-#include "chrome/browser/safe_browsing/protocol_manager_helper.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 
@@ -40,7 +39,8 @@ class TestSafeBrowsingUIManager;
 //   test_sb_factory_.
 class TestSafeBrowsingService : public SafeBrowsingService {
  public:
-  TestSafeBrowsingService();
+  explicit TestSafeBrowsingService(
+      V4FeatureList::V4UsageStatus v4_usage_status);
   // SafeBrowsingService overrides
   SafeBrowsingProtocolConfig GetProtocolConfig() const override;
   V4ProtocolConfig GetV4ProtocolConfig() const override;
@@ -80,7 +80,9 @@ class TestSafeBrowsingService : public SafeBrowsingService {
 
 class TestSafeBrowsingServiceFactory : public SafeBrowsingServiceFactory {
  public:
-  TestSafeBrowsingServiceFactory();
+  explicit TestSafeBrowsingServiceFactory(
+      V4FeatureList::V4UsageStatus v4_usage_status =
+          V4FeatureList::V4UsageStatus::V4_DISABLED);
   ~TestSafeBrowsingServiceFactory() override;
 
   // Creates test safe browsing service, and configures test UI manager,
@@ -101,6 +103,7 @@ class TestSafeBrowsingServiceFactory : public SafeBrowsingServiceFactory {
   scoped_refptr<TestSafeBrowsingDatabaseManager> test_database_manager_;
   scoped_refptr<TestSafeBrowsingUIManager> test_ui_manager_;
   SafeBrowsingProtocolConfig* test_protocol_config_;
+  V4FeatureList::V4UsageStatus v4_usage_status_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSafeBrowsingServiceFactory);
 };

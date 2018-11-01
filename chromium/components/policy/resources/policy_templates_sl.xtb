@@ -26,6 +26,9 @@
       Če je pravilnik omogočen ali ni nastavljen, se statistični podatki poročajo.</translation>
 <translation id="1046484220783400299">Začasno omogočanje zastarelih funkcij spletnega okolja</translation>
 <translation id="1047128214168693844">Nobenemu mestu ne dovoli spremljanja fizične lokacije uporabnika</translation>
+<translation id="1049138910114524876">Konfigurira jezik, uveljavljen na zaslonu za prijavo brskalnika <ph name="PRODUCT_OS_NAME" />.
+
+      Če je ta pravilnik nastavljen, bo zaslon za prijavo vedno prikazan v jeziku, ki ga posreduje prva vrednost tega pravilnika (pravilnik je opredeljen kot seznam za združljivost vnaprej). Če ta pravilnik ni nastavljen ali je nastavljen na prazen seznam, je zaslon za prijavo prikazan v jeziku zadnje uporabniške seje. Če je ta pravilnik nastavljen na vrednost, ki ni veljaven jezik, bo zaslon za prijavo prikazan v rezervnem jeziku (trenutno je to ameriška angleščina, en-US).</translation>
 <translation id="1062011392452772310">Omogoči oddaljeno potrditev naprave</translation>
 <translation id="1090892140761957285">URL za preverjanje žetona za preverjanje pristnosti odjemalca za oddaljeni dostop.
 
@@ -278,6 +281,7 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
       Če nastavitev ni določena, se uporabi privzeta vrednost.
 
       Če ta pravilnik ni nastavljen, se za vse nastavitve uporabijo privzete vrednosti.</translation>
+<translation id="1960840544413786116">Ali naj se dovoli potrdila, ki jih izdajo lokalna sidra zaupanja in jim manjka razširitev subjectAlternativeName</translation>
 <translation id="1964634611280150550">Način brez beleženja zgodovine je onemogočen</translation>
 <translation id="1964802606569741174">Ta pravilnik ne vpliva na aplikacijo YouTube za Android. Če naj bo varni način v YouTubu uveljavljen, mora biti namestitev aplikacije YouTube za Android onemogočena.</translation>
 <translation id="1969212217917526199">Preglasi pravilnike za delovne različice gostitelja za oddaljeni dostop, namenjene odpravljanju napak.
@@ -332,6 +336,21 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
       Če je pravilnik HardwareAccelerationModeEnabled onemogočen, se pravilnik Disable3DAPIs prezre in je enako, kot če je pravilnik Disable3DAPIs omogočen.</translation>
 <translation id="2168397434410358693">Časovni zamik nedejavnosti ob napajanju iz električnega omrežja</translation>
 <translation id="2170233653554726857">Omogočanje optimizacije za WPAD</translation>
+<translation id="2176565653304920879">Če je ta pravilnik nastavljen, je samodejno zaznavanje časovnega pasu odvisno od vrednosti nastavitve:
+
+      Če je nastavljen na TimezoneAutomaticDetectionUsersDecide, lahko uporabniki z običajnimi kontrolniki v chrome://settings nadzirajo samodejno zaznavanje časovnega pasu.
+
+      Če je nastavljen na TimezoneAutomaticDetectionDisabled, so kontrolniki za samodejno zaznavanje časovnega pasu v chrome://settings onemogočeni. Samodejno zaznavanje časovnega pasu je vedno izklopljeno.
+
+      Če je nastavljen na TimezoneAutomaticDetectionIPOnly, so kontrolniki za časovni pas v chrome://settings onemogočeni. Samodejno zaznavanje časovnega pasu je vedno vklopljeno. Pri zaznavanju časovnega pasu se za določanje lokacije uporablja samo IP.
+
+      Če je nastavljen na TimezoneAutomaticDetectionSendWiFiAccessPoints, so kontrolniki za časovni pas v chrome://settings onemogočeni. Samodejno zaznavanje časovnega pasu bo vedno vklopljeno. Seznam vidnih dostopnih točk Wi-Fi bo vedno poslan v strežnik API-ja za geolokacijo zaradi natančnega zaznavanja časovnega pasu.
+
+      Če je nastavljen na TimezoneAutomaticDetectionSendAllLocationInfo, so kontrolniki za časovni pas v chrome://settings onemogočeni. Samodejno zaznavanje časovnega pasu bo vedno vklopljeno. Podatki o lokaciji (na primer dostopne točke Wi-Fi, dosegljive bazne postaje, GPS) bodo poslani v strežnik zaradi natančnega zaznavanja časovnega pasu.
+
+      Če ta pravilnik ni nastavljen, deluje, kot da je nastavljena možnost TimezoneAutomaticDetectionUsersDecide.
+
+      Če je nastavljen pravilnik SystemTimezone, preglasi ta pravilnik. V tem primeru je samodejno zaznavanje časovnega pasu v celoti onemogočeno.</translation>
 <translation id="2178899310296064282">Uveljavitev vsaj Zmerno omejenega načina v YouTubu</translation>
 <translation id="2183294522275408937">Ta nastavitev nadzira, kako pogosto zaklenjeni zaslon zahteva vnos gesla, če želi uporabnik naprej uporabljati hitro odklepanje. Ob vsakem odpiranju zaklenjenega zaslona se preveri čas, ki je pretekel od zadnjega vnosa gesla – če presega to vrednost, ob odpiranju zaklenjenega zaslona hitro odklepanje ne bo na voljo. Če se uporabnik zadrži pri zaklenjenem zaslonu dlje od tega časovnega obdobja, bo od uporabnika zahtevano geslo, ko naslednjič vnese napačno kodo ali znova odpre zaklenjeni zaslon, kar koli se zgodi prej.
 
@@ -378,15 +397,16 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
 
       Če ta nastavitev ni nastavljena, lahko uporabniki izberejo, ali bo storitev preverjanja črkovanja uporabljena ali ne.</translation>
 <translation id="2294382669900758280">Predvajanje videoposnetkov v aplikacijah za Android se ne upošteva, tudi če je ta pravilnik nastavljen na <ph name="TRUE" />.</translation>
+<translation id="2298647742290373702">Konfiguriranje privzete strani »Nov zavihek« v brskalniku <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2299220924812062390">Določi seznam omogočenih vtičnikov</translation>
 <translation id="2309390639296060546">Privzeta nastavitev geolokacije</translation>
 <translation id="2312134445771258233">Omogoča, da nastavite strani, ki se naložijo pri zagonu.
 
       Vsebina seznama »URL-ji, ki naj se odprejo ob zagonu« se prezre, razen če v možnosti »Dejanje ob zagonu« izberete »Odpri seznam URL-jev«.</translation>
+<translation id="23323722127921515">Pokaže ikono za Google Cast v orodni vrstici</translation>
 <translation id="2337466621458842053">Omogoča nastavitev seznama vzorcev URL-jev, s katerim se določijo, ki lahko prikazujejo slike.
 
           Če ta pravilnik ni nastavljen, bo za vsa spletna mesta uporabljena splošna privzeta vrednost iz pravilnika »DefaultImagesSetting«, kadar je ta nastavljen, ali iz uporabnikove osebne konfiguracije, kadar pravilnik »DefaultImagesSetting« ni nastavljen.</translation>
-<translation id="2366415278352956652">Omogoča predvajanje</translation>
 <translation id="2372547058085956601">Zamik samodejne prijave v javno sejo.
 
       Če pravilnik |DeviceLocalAccountAutoLoginId| ni nastavljen, se ne uporablja. V nasprotnem primeru:
@@ -517,6 +537,7 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 
       Če je ta pravilnik nastavljen na »False«, se namesto poziva za konfiguracijo omrežja prikaže sporočilo o napaki.</translation>
 <translation id="2498238926436517902">Vedno samodejno skrij polico</translation>
+<translation id="2503514368596117142">Konfiguriranje pravilnikov za Google Cast – to je funkcija, ki uporabnikom omogoča predvajanje vsebine zavihkov, spletnih mest ali namizja iz brskalnika na oddaljene zaslone ali zvočne sisteme.</translation>
 <translation id="2514328368635166290">Določa URL ikone priljubljene strani privzetega ponudnika iskanja.
 
           Ta pravilnik je izbiren. Če ni nastavljen, ikona za ponudnika iskanja ne bo prikazana.
@@ -538,6 +559,9 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 <translation id="2529880111512635313">Konfiguriranje seznama vsiljenih namestitev aplikacij in razširitev</translation>
 <translation id="253135976343875019">Časovni zamik opozorila o nedejavnosti ob napajanju iz električnega omrežja</translation>
 <translation id="2552966063069741410">Časovni pas</translation>
+<translation id="2558917182010914102">Če je ta pravilnik omogočen ali ni nastavljen, bo Google Cast omogočen in uporabniki ga bodo lahko zagnali iz menija aplikacije, priročnih menijev na straneh, s kontrolniki za predstavnosti na spletnih mestih, ki podpirajo Google Cast, in ikone za Google Cast v orodni vrstici.
+
+          Če je ta pravilnik onemogočen, bo Google Cast onemogočen.</translation>
 <translation id="2562339630163277285">Določa URL iskalnika, ki se uporablja za prikaz rezultatov dinamičnega iskanja. URL mora vsebovati niz »<ph name="SEARCH_TERM_MARKER" />«, ki ga bo ob času poizvedbe nadomestilo besedilo, ki ga je uporabnik vnesel do takrat.
 
           Ta pravilnik je izbiren. Če ni nastavljen, ne bo prikazan noben rezultat dinamičnega iskanja.
@@ -942,6 +966,11 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 
           Če ta nastavitev ni konfigurirana, za sprejemljive vrste razširitev/aplikacij ne veljajo omejitve.</translation>
 <translation id="3780152581321609624">Vključi nestandardna vrata v SPN za Kerberos</translation>
+<translation id="3780319008680229708">Če je ta pravilnik omogočen, bo ikona za Google Cast v orodni vrstici vedno prikazana v orodni vrstici ali v meniju z dodatnimi elementi in je uporabniki ne bodo mogli odstraniti.
+
+          Če je ta pravilnik onemogočen ali ni nastavljen, bodo lahko uporabniki ikono pripeli ali odstranili prek priročnega menija.
+
+          Če je pravilnik »EnableMediaRouter« onemogočen, vrednost tega pravilnika ne bo imela vpliva in ikona v orodni vrstici ne bo prikazana.</translation>
 <translation id="3788662722837364290">Nastavitve upravljanja energije, ko uporabnik postane nedejaven</translation>
 <translation id="3793095274466276777">Nastavi privzeta preverjanja brskalnika v programu <ph name="PRODUCT_NAME" /> in prepreči, da bi jih uporabniki spreminjali.
 
@@ -1042,6 +1071,9 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 
 Če ta možnost ni nastavljena ali je nastavljena na »False«, bodo uporabniki lahko prenesli datoteke v Google Drive.</translation>
 <translation id="3915395663995367577">URL za datoteko .pac v proxyju</translation>
+<translation id="3926940573869375969">Konfigurira, katere postavitve tipkovnice so dovoljene na zaslonu za prijavo brskalnika <ph name="PRODUCT_OS_NAME" />.
+
+      Če je ta pravilnik nastavljen na seznam identifikatorjev načinov vnosa, so dani načini vnosa na voljo na zaslonu za prijavo. Prvi dani način vnosa je vnaprej izbran. Medtem ko je sklop za uporabnika osredotočen na zaslon za prijavo, je poleg načinov vnosa, ki jih zagotavlja ta pravilnik, na voljo tudi način vnosa, ki ga je uporabnik uporabljal pred največ časa. Če ta pravilnik ni nastavljen, se načini vnosa na zaslonu za prijavo izpeljejo iz jezika, v katerem je prikazan zaslon za prijavo. Vrednosti, ki niso veljavni identifikatorji načinov vnosa, bodo prezrte.</translation>
 <translation id="3939893074578116847">Pošiljanje omrežnih paketov v strežnik za upravljanje zaradi spremljanja stanja povezave, tako da lahko
       strežnik zazna, ali ima naprava povezavo.
 
@@ -1132,6 +1164,17 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 
       Če je ta pravilnik onemogočen, uporabniki ne bodo mogli zakleniti zaslona (mogoča bo samo odjava iz uporabniške seje). Če je ta nastavitev omogočena ali nastavljena, bodo lahko zaslon zaklenili uporabniki, ki so preverili pristnost z geslom.</translation>
 <translation id="4121350739760194865">Onemogoči prikaz oglasov za programe na strani »Nov zavihek«.</translation>
+<translation id="4133301551755536858">Konfigurira privzeti URL strani »Nov zavihek« v brskalniku <ph name="PRODUCT_NAME" /> in uporabnikom prepreči, da bi ga spremenili.
+
+          Stran »Nov zavihek« je stran, ki se odpre, ko so ustvarjeni novi zavihki (vključno s stranjo, odprto v novih oknih).
+
+          Ta pravilnik ne odloča o tem, katere strani se odprejo ob zagonu. Te nadzirajo pravilniki RestoreOnStartup, ki jih je mogoče uporabiti za odpiranje strani »Nov zavihek«.
+
+          Pravilnik NewTabPageLocation je mogoče nastaviti na URL, ki ga navedete tukaj. To bo prav tako vplivalo na začetno stran, če je nastavljena tako, da se odpre stran »Nov zavihek«, in na začetno stran, če je nastavljena na stran »Nov zavihek«.
+
+          Če pravilnik ni nastavljen ali pustite praznega, se uporabi privzeta stran »Nov zavihek«.
+
+          Ta pravilnik ni na voljo v primerkih sistema Windows, ki niso pridruženi v domeno Active Directory.</translation>
 <translation id="4147054660081653009">Potrdilo odjemalca za vzpostavljanje povezave s tem: RemoteAccessHostTokenValidationUrl.
 
           Če je ta pravilnik nastavljen, gostitelj za preverjanje pristnosti prek RemoteAccessHostTokenValidationUrl uporabi potrdilo odjemalca, ki ga izda CN. Če želite uporabiti poljubno razpoložljivo potrdilo odjemalca, pravilnik nastavite na »*«.
@@ -1161,6 +1204,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
           Če ta pravilnik ni nastavljen, bo za vsa spletna mesta uporabljena splošna privzeta vrednost iz pravilnika »DefaultKeygenSetting«, kadar je ta nastavljen, ali iz uporabnikove osebne konfiguracije, kadar pravilnik »DefaultKeygenSetting« ni nastavljen.</translation>
 <translation id="4239720644496144453">Predpomnilnik se ne uporablja za aplikacije za Android. Če več uporabnikov namesti enako aplikacijo za Android, bo za vsakega uporabnika znova prenesena.</translation>
 <translation id="4250680216510889253">Ne</translation>
+<translation id="4261820385751181068">Jezik na zaslonu za prijavo v napravi</translation>
 <translation id="4272136423200695428">Omogočanje vsiljene prijave za brskalnik <ph name="PRODUCT_NAME" />.</translation>
 <translation id="427632463972968153">Določa parametre, uporabljene pri slikovnem iskanju z metodo POST. Sestavljena je iz parov ime/vrednost, ločenih z vejico. Če je vrednost parameter predloge, kot je v zgornjih primerih {imageThumbnail}, bo zamenjana s pravimi podatki sličice slike.
 
@@ -1209,7 +1253,6 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 <translation id="4467952432486360968">Blokiraj piškotke drugih spletnih mest</translation>
 <translation id="4474167089968829729">Omogočanje shranjevanja gesel v upravitelju gesel</translation>
 <translation id="4476769083125004742">Če je ta pravilnik nastavljen na <ph name="BLOCK_GEOLOCATION_SETTING" />, aplikacije za Android ne morejo dostopati do podatkov o lokaciji. Če pravilnik nastavite na katero koli drugo vrednost ali ga ne nastavite, je uporabnik pozvan, da poda soglasje, kadar želi aplikacija za Android dostopati do podatkov o lokaciji.</translation>
-<translation id="447686899376429408">Če je pravilnik omogočen ali ni nastavljen, bo uporabnikom omogočeno predvajanje vsebine zavihkov, spletnih mest ali namizja iz brskalnika. Če je onemogočen, bo ta možnost onemogočena.</translation>
 <translation id="4480694116501920047">Uveljavitev Google Varnega iskanja</translation>
 <translation id="4482640907922304445">Pokaže gumb za domačo stran v orodni vrstici brskalnika <ph name="PRODUCT_NAME" />.
 
@@ -1220,6 +1263,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
       Če to nastavitev omogočite ali onemogočite, je uporabniki v brskalniku <ph name="PRODUCT_NAME" /> ne morejo spremeniti ali preglasiti.
 
       Če tega pravilnika ne nastavite, lahko uporabnik izbere, ali bo gumb za domačo stran prikazan.</translation>
+<translation id="4485425108474077672">Konfiguriranje URL-ja strani »Nov zavihek«</translation>
 <translation id="4492287494009043413">Onemogoči ustvarjanje posnetkov zaslona</translation>
 <translation id="450537894712826981">Nastavi velikost predpomnilnika, ki ga bo izdelek <ph name="PRODUCT_NAME" /> uporabljal za shranjevanje predpomnjenih predstavnostnih datotek na disku.
 
@@ -1328,6 +1372,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
           Če je ta pravilnik nastavljen na »True« ali ni nastavljen, bo za upravljanje porabe uporabljeno zaklepanje preklopa zaslona iz mirovanja.
 
           Če je ta pravilnik nastavljen na »False«, bodo zahteve za zaklepanje preklopa zaslona iz mirovanja prezrta.</translation>
+<translation id="4876805738539874299">Najvišja omogočena različica protokola SSL</translation>
 <translation id="4882546920824859909">Opredelitev domen, ki smejo dostopati do storitve Google Apps</translation>
 <translation id="4890209226533226410">Nastavitev vrste lupe, ki je omogočena.
 
@@ -1408,12 +1453,6 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 <translation id="5208240613060747912">Omogoča nastavitev seznama vzorcev URL-jev, s katerim so določena spletna mesta, ki jim ni dovoljeno prikazovati obvestil.
 
           Če ta pravilnik ni nastavljen, bo za vsa spletna mesta uporabljena splošna privzeta vrednost iz pravilnika »DefaultNotificationsSetting«, kadar je ta nastavljen, ali iz uporabnikove osebne konfiguracije, kadar pravilnik »DefaultImagesSetting« ni nastavljen.</translation>
-<translation id="5209594095390052164">Omogoča izbiro, ali je omejevanje omrežja omogočeno ali ne.
-      Ta pravilnik se uporabi za vse uporabnike in vse vmesnike v napravi. Ko je nastavljen,
-      je omejevanje v rabi, dokler se ne onemogoči s spremembo pravilnika.
-
-      Če je pravilnik onemogočen, se omrežje ne omejuje.
-      Če je pravilnik omogočen, se sistem omejuje, da doseže navedeni hitrosti nalaganja in prenašanja (v KB/s).</translation>
 <translation id="5219844027738217407">Pri aplikacijah za Android ta pravilnik vpliva samo na mikrofon. Če je ta pravilnik omogočen, ima mikrofon brez izjem izklopljen zvok pri vseh aplikacijah za Android.</translation>
 <translation id="5226033722357981948">Določi, ali naj bo iskalnik vtičnikov onemogočen</translation>
 <translation id="523505283826916779">Nastavitve funkcij za ljudi s posebnimi potrebami</translation>
@@ -1454,6 +1493,13 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
           Če ta pravilnik ni nastavljen, bo uporabljen pravilnik »AskNotifications« in uporabnik bo lahko to spremenil.</translation>
 <translation id="538108065117008131">Dovoli, da <ph name="PRODUCT_FRAME_NAME" /> obravnava te vrste vsebine.</translation>
 <translation id="5388730678841939057">Izbere strategijo za sproščanje prostora na disku med samodejnim čiščenjem (zastarelo)</translation>
+<translation id="5392172595902933844">Podatki o stanju Androida se pošljejo nazaj v
+      strežnik.
+
+      Če je pravilnik onemogočen ali ni nastavljen, se podatki o stanju ne poročajo.
+      Če je omogočen, se podatki o stanju poročajo.
+
+      Ta pravilnik se uporabi samo, če so aplikacije za Android omogočene.</translation>
 <translation id="5395271912574071439">Omogoča zakrivanja gostiteljev za oddaljeni dostop, ko je vzpostavljena povezava.
 
           Če je ta nastavitev omogočena, so vhodne in izhodne naprave gostitelja onemogočene, ko je vzpostavljena povezava na daljavo.
@@ -1498,13 +1544,6 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
       Ko je vrednost tega pravilnika nastavljena in ni 0, bo trenutno prijavljen uporabnik predstavitvenega načina samodejno odjavljen po določenem času nedejavnosti.
 
       Vrednost pravilnika mora biti v milisekundah.</translation>
-<translation id="5506213378070007377">Podatki o stanju Androida se pošljejo nazaj v
-      strežnik.
-
-      Če je pravilnik onemogočen, se podatki o stanju ne poročajo.
-      Če je onemogočen ali ni nastavljen, se podatki o stanju poročajo.
-
-      Ta pravilnik se uporabi samo, če so aplikacije za Android omogočene.</translation>
 <translation id="5511702823008968136">Omogoči vrstico z zaznamki</translation>
 <translation id="5512418063782665071">URL domače strani</translation>
 <translation id="5523812257194833591">Samodejna prijava javne seje po časovnem zamiku.
@@ -1540,6 +1579,11 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
       Če ta pravilnik nastavite, ga uporabniki ne morejo spremeniti ali preglasiti.
 
       Če tega pravilnika ne nastavite, lahko uporabniki izberejo, ali naj se polica samodejno skrije.</translation>
+<translation id="557360560705413259">Če je ta nastavitev omogočena, bo <ph name="PRODUCT_NAME" /> uporabil commonName potrdila strežnika zaradi ujemanja z imenom gostitelja, če potrdilu manjka razširitev subjectAlternativeName in če so potrdila uspešno potrjena ter povezana s potrdili lokalno nameščenega overitelja.
+
+      To ni priporočljivo, saj morda omogoča zaobidenje razširitve nameConstraints, ki omejuje imena gostiteljev, za katera je lahko odobreno določeno potrdilo.
+
+      Če ta pravilnik ni nastavljen ali je onemogočen, potrdila strežnika, ki jim manjka razširitev subjectAlternativeName, ki vsebuje ime DNS-ja ali naslov IP, ne bodo zaupanja vredna.</translation>
 <translation id="557658534286111200">Omogoči ali onemogoči urejanje zaznamkov</translation>
 <translation id="5586942249556966598">Ne naredi nič</translation>
 <translation id="5613179474872285001">Konfigurira potrebno ime domene, ki bo vsiljeno odjemalcem za oddaljeni dostop, in uporabnikom prepreči, da bi ga spremenili.
@@ -1653,6 +1697,12 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 
           Če je ta nastavitev onemogočena ali ni konfigurirana, zahteve za preverjanje pristnosti »gnubby« ne bodo posredovane.</translation>
 <translation id="5898486742390981550">Če je prijavljenih več uporabnikov, lahko aplikacije za Android uporablja samo primarni uporabnik.</translation>
+<translation id="5906199912611534122">Omogoča omogočanje ali onemogočanje omejevanja omrežja.
+      Ta pravilnik se uporabi za vse uporabnike in vse vmesnike v napravi. Ko je nastavljen,
+      je omejevanje v rabi, dokler se ne onemogoči s spremembo pravilnika.
+
+      Če je pravilnik onemogočen, se omrežje ne omejuje.
+      Če je pravilnik omogočen, se sistem omejuje, da doseže navedeni hitrosti nalaganja in prenašanja (v KB/s).</translation>
 <translation id="5921713479449475707">Dovoli samoposodobitvene prenose prek HTTP</translation>
 <translation id="5921888683953999946">Nastavitev privzetega stanja funkcije velikega kazalca za ljudi s posebnimi potrebami na prijavnem zaslonu.
 
@@ -1669,6 +1719,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 
       Če to nastavitev onemogočite ali ne nastavite vrednosti, Google Varno iskanje v Iskanju Google ni uveljavljeno.</translation>
 <translation id="5937539742111853215">Ta pravilnik nadzira samo način za razvijalce sistema <ph name="PRODUCT_OS_NAME" />. Če želite preprečiti dostop do možnosti za razvijalce za Android, morate nastaviti pravilnik <ph name="DEVELOPER_TOOLS_POLICY" />.</translation>
+<translation id="5940306398763671235">Omogoči Google Cast</translation>
 <translation id="5946082169633555022">Preskusna različica</translation>
 <translation id="5950205771952201658">Ker mehko preverjanje preklica ne zagotavlja dodatne varnosti, je v brskalniku <ph name="PRODUCT_NAME" /> različice 19 ali novejšem privzeto onemogočeno. Če ta pravilnik nastavite na »true«, se obnovijo prejšnje nastavitve in se izvajajo spletna preverjanja OCSP/CRL.
 
@@ -1694,6 +1745,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
       Če je ta pravilnik omogočen ali ni nastavljen, bo strojno pospeševanje omogočeno, razen če je določena funkcija GPE-ja na seznamu blokiranih.
 
       Če je ta pravilnik onemogočen, bo strojno pospeševanje onemogočeno.</translation>
+<translation id="6070667616071269965">Postavitve tipkovnice na zaslonu za prijavo v napravi</translation>
 <translation id="6074963268421707432">Nobenemu spletnemu mestu ne dovoli, da pokaže namizna obvestila</translation>
 <translation id="6076099373507468537">Določa seznam naprav USB, za katere je dovoljena prekinitev povezave z gonilnikom jedra zaradi uporabe prek API-ja chrome.usb neposredno v spletni aplikaciji. Vnosi so pari, ki so sestavljeni iz identifikatorja proizvajalca za USB in identifikatorja izdelka ter ki omogočajo prepoznavo posamezne strojne opreme.
 
@@ -2000,6 +2052,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Podatki o pomnilniku se vseeno pošiljajo strani, ne glede na vrednost možnosti, vendar se poslane vrednosti
       kvantizirajo in je hitrost posodobitev iz varnostnih razlogov omejena. Če želite sprotne natančne podatke,
       uporabite orodja, kot je Telemetry.</translation>
+<translation id="6894178810167845842">URL strani »Nov zavihek«</translation>
 <translation id="6899705656741990703">Samodejno zaznavanje nastavitev proxyja</translation>
 <translation id="6903814433019432303">Ta pravilnik je aktiven samo v maloprodajnem načinu.
 
@@ -2133,6 +2186,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="7132877481099023201">URL-ji, ki jim bo brez poziva dovoljen dostop do naprav za zajem videa</translation>
 <translation id="7167436895080860385">Dovoli uporabnikom, da pokažejo gesla v upravitelju gesel (zastarelo).</translation>
 <translation id="7173856672248996428">Kratkotrajni profil</translation>
+<translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="718956142899066210">Dovoljene vrste povezav za posodobitve</translation>
 <translation id="7194407337890404814">Privzeto ime iskalnika</translation>
 <translation id="7195064223823777550">Navedite dejanje, ki naj se izvede, ko uporabnik zapre pokrov.
@@ -2274,6 +2328,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Če to nastavitev omogočite, <ph name="PRODUCT_NAME" /> uporabi nastavljene območne nastavitve. Če nastavljene območne nastavitve niso podprte, bo uporabljena nastavitev »en-US«.
 
      Če to nastavitev onemogočite ali je ne nastavite, <ph name="PRODUCT_NAME" /> uporabi prednostne območne nastavitve, ki jih izbere uporabnik (če so nastavljene), sistemske območne nastavitve ali rezervne območne nastavitve (»en-US«).</translation>
+<translation id="7638300388094655454">Google Cast</translation>
 <translation id="7651739109954974365">Določa, ali je podatkovno gostovanje za napravo omogočeno. Če je pravilnik omogočen, je podatkovno gostovanje omogočeno. Če ni nastavljen ali je onemogočen, podatkovno gostovanje ni na voljo.</translation>
 <translation id="76810863974142048">URL, na katerem morajo odjemalci za oddaljeni dostop pridobiti žeton za preverjanje pristnosti.
 
@@ -2355,6 +2410,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 
           Več o drugih možnostih in podrobnejše primere najdete na:
           <ph name="PROXY_HELP_URL" /></translation>
+<translation id="7781069478569868053">Stran »Nov zavihek«</translation>
 <translation id="7788511847830146438">Za profil</translation>
 <translation id="7796141075993499320">Omogoča nastavitev seznama vzorcev URL-jev, s katerim so določena spletna mesta, ki lahko izvajajo vtičnike.
 
@@ -2382,19 +2438,6 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="7842869978353666042">Konfigurira možnosti storitve Google Drive</translation>
 <translation id="7843525027689416831">Določa zastavice, ki naj se uporabijo za <ph name="PRODUCT_NAME" />, ko se zažene. Izbrane zastavice se uporabijo samo na zaslonu za prijavo. Zastavice, nastavljene prek tega pravilnika, se ne prenesejo v uporabniške seje.</translation>
 <translation id="7848840259379156480">Omogoča nastavitev privzetega upodabljalnika HTML-ja, ko je nameščen <ph name="PRODUCT_FRAME_NAME" />. Privzeta nastavitev je, da upodabljanje izvaja gostiteljski brskalnik, vendar lahko to preglasite in določite, da <ph name="PRODUCT_FRAME_NAME" /> privzeto upodablja strani HTML.</translation>
-<translation id="7853178359124471330">Če je ta pravilnik nastavljen, je samodejno zaznavanje časovnega pasu odvisno od vrednosti nastavitve:
-
-      Če je nastavljen na TimezoneAutomaticDetectionUsersDecide, lahko uporabniki z običajnimi kontrolniki v chrome://settings nadzirajo samodejno zaznavanje časovnega pasu.
-
-      Če je nastavljen na TimezoneAutomaticDetectionDisabled, so kontrolniki za samodejno zaznavanje časovnega pasu v chrome://settings onemogočeni. Samodejno zaznavanje časovnega pasu je vedno izklopljeno.
-
-      Če je nastavljen na TimezoneAutomaticDetectionIPOnly, so kontrolniki za časovni pas v chrome://settings onemogočeni. Samodejno zazavanje časovnega pasu je vedno vklopljeno. Pri zaznavanju časovnega pasu se za določanje lokacije uporablja samo IP.
-
-      Če je nastavljen na TimezoneAutomaticDetectionSendWiFiAccessPoints, so kontrolniki za časovni pas v chrome://settings onemogočeni. Samodejno zaznavanje časovnega pasu bo vedno vklopljeno. Seznam vidnih dostopnih točk Wi-Fi bo vedno poslan v strežnik API-ja za geolokacijo zaradi natančnega zaznavanja časovnega pasu.
-
-      Če ta pravilnik ni nastavljen, deluje, kot da je nastavljena možnost TimezoneAutomaticDetectionUsersDecide.
-
-      Če je nastavljen pravilnik SystemTimezone, preglasi ta pravilnik. V tem primeru je samodejno zaznavanje časovnega pasu v celoti onemogočeno.</translation>
 <translation id="787125417158068494">Če je pravilnik nastavljen na »SyncDisabled« ali ni konfiguriran, potrdila sistema <ph name="PRODUCT_OS_NAME" /> niso na voljo za aplikacije ARC.
 
       Če je pravilnik nastavljen na »CopyCaCerts«, so vsa potrdila overitelja potrdil, nameščena s pravilnikom ONC in za katera velja <ph name="WEB_TRUSTED_BIT" />, na voljo za aplikacije ARC.</translation>
@@ -2432,6 +2475,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="7937766917976512374">Omogočanje ali onemogočanje snemanje videoposnetka</translation>
 <translation id="7941975817681987555">Ne predvidevaj omrežnih dejanj v nobeni omrežni povezavi</translation>
 <translation id="7953256619080733119">Gostitelji ročnih izjem za upravljanega uporabnika</translation>
+<translation id="7965394584578183156">Vedno pošlji dostopne točke Wi-Fi v strežnik pri določanju časovnega pasu.</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Ta pravilnik ni več podprt.
           Omogoča uporabo strežnikov STUN in posredovalnih strežnikov pri povezovanju z oddaljenim odjemalcem.
@@ -2598,6 +2642,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="8390049129576938611">V brskalniku <ph name="PRODUCT_NAME" /> onemogoči notranji pregledovalnik PDF-jev. Namesto tega datoteke PDF obravnava kot prenose in uporabniku omogoča njihovo odpiranje s privzeto aplikacijo.
 
       Če ta pravilnik ni nastavljen ali je onemogočen, se bo za odpiranje datotek PDF uporabljal vtičnik za PDF-je, razen če ga uporabnik onemogoči.</translation>
+<translation id="8398203849316312944">Vedno pošlji vse razpoložljive signale lokacije v strežnik pri določanju časovnega pasu.</translation>
 <translation id="8402079500086185021">Vedno odpri datoteke PDF v zunanjem pregledovalniku</translation>
 <translation id="8412312801707973447">Ali se izvaja spletni pregled OCSP/CRL</translation>
 <translation id="8413348101535146315">Omogoča procese prekinitve v upravitelju opravil izdelka <ph name="PRODUCT_NAME" />.
@@ -2726,7 +2771,6 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Če je ta pravilnik nastavljen na »false«, uporabnik ter aplikacije in razširitve ne morejo preklopiti v celozaslonski način.
 
       V vseh okoljih, razen v sistemu <ph name="PRODUCT_OS_NAME" />, način kioska ni na voljo, ko je celozaslonski način onemogočen.</translation>
-<translation id="8795495354632096254">Vedno pošlji dostopne točke Wi-Fi v strežnik pri določanju časovnega pasu.</translation>
 <translation id="8818173863808665831">Prijava zemljepisne lokacije naprave.
 
       Če pravilnik ni nastavljen ali je nastavljen na »False«, lokacija ne bo prijavljena.</translation>
@@ -2859,6 +2903,11 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Če je ta pravilnik omogočen, z bližnjimi tipkami ali API-ji razširitev ni mogoče ustvarjati posnetkov zaslona.
 
       Če je onemogočen ali ni določen, je ustvarjanje posnetkov zaslona dovoljeno.</translation>
+<translation id="9212233969680267790">Opozorilo: pravilnik za najvišjo različico protokola TLS bo v celoti odstranjen iz izdelka <ph name="PRODUCT_NAME" /> okoli različice 66 (okoli februarja 2018).
+
+      Če ta pravilnik ni konfiguriran, <ph name="PRODUCT_NAME" /> uporablja privzeto najvišjo različico.
+
+      Sicer bo nastavljen na eno od teh vrednosti: »tls1.2« ali »tls1.3«. Če je nastavljen, <ph name="PRODUCT_NAME" /> ne bo uporabljal različic protokolov SSL/TLS, višjih od navedene različice. Neprepoznane vrednosti bodo prezrte.</translation>
 <translation id="9213347477683611358">Konfiguriranje slike za ozadje na ravni naprave, ki je prikazana na zaslonu za prijavo, če ni v napravi prijavljen še noben uporabnik. Pravilnik se nastavi z določanjem URL-ja, s katerega lahko naprava OS Chrome prenese sliko za ozadje, in kriptografske razpršilne vrednosti za preverjanje celovitosti prenosa. Slika mora biti v obliki JPEG in njena velikost ne sme presegati 16 MB. URL mora biti dostopen brez preverjanja pristnosti. Slika za ozadje se prenese in shrani v predpomnilnik. Ob vsaki spremembi URL-ja ali razpršilne vrednosti se znova prenese.
 
       Pravilnik mora biti določen kot niz, ki izraža URL in razpršilno vrednost v obliki JSON, npr.

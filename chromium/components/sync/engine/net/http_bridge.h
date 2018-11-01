@@ -11,7 +11,6 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
@@ -37,7 +36,6 @@ class URLFetcher;
 namespace syncer {
 
 class CancelationSignal;
-extern const base::Feature kSyncClientToServerCompression;
 
 // A bridge between the syncer and Chromium HTTP layers.
 // Provides a way for the sync backend to use Chromium directly for HTTP
@@ -54,7 +52,7 @@ class HttpBridge : public base::RefCountedThreadSafe<HttpBridge>,
              const NetworkTimeUpdateCallback& network_time_update_callback,
              const BindToTrackerCallback& bind_to_tracker_callback);
 
-  // HttpPostProvider implementation.
+  // HttpPostProviderInterface implementation.
   void SetExtraRequestHeaders(const char* headers) override;
   void SetURL(const char* url, int port) override;
   void SetPostPayload(const char* content_type,

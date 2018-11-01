@@ -7,17 +7,11 @@
 
 #include <memory>
 
+#include "cc/ipc/display_compositor.mojom.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 
-namespace cc {
-namespace mojom {
-class DisplayCompositor;
-}
-}
-
 namespace ui {
-
 
 namespace ws {
 

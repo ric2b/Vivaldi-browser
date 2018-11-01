@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/policy/system_log_uploader.h"
+
+#include <map>
 #include <utility>
 
 #include "base/bind.h"
@@ -9,10 +12,11 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/syslog_logging.h"
-#include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/upload_job_impl.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service.h"
@@ -20,9 +24,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/feedback/anonymizer_tool.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
-#include "content/public/browser/browser_thread.h"
 #include "net/http/http_request_headers.h"
-#include "system_log_uploader.h"
 
 namespace {
 // The maximum number of successive retries.
@@ -93,9 +95,10 @@ void SystemLogDelegate::LoadSystemLogs(
     const LogUploadCallback& upload_callback) {
   // Run ReadFiles() in the thread that interacts with the file system and
   // return system logs to |upload_callback| on the current thread.
-  base::PostTaskAndReplyWithResult(content::BrowserThread::GetBlockingPool(),
-                                   FROM_HERE, base::Bind(&ReadFiles),
-                                   upload_callback);
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
+      base::Bind(&ReadFiles), upload_callback);
 }
 
 std::unique_ptr<policy::UploadJob> SystemLogDelegate::CreateUploadJob(
@@ -176,6 +179,7 @@ SystemLogUploader::SystemLogUploader(
   if (!syslog_delegate_)
     syslog_delegate_.reset(new SystemLogDelegate(task_runner));
   DCHECK(syslog_delegate_);
+  SYSLOG(INFO) << "Creating system log uploader.";
 
   // Watch for policy changes.
   upload_enabled_observer_ = chromeos::CrosSettings::Get()->AddSettingsObserver(
@@ -198,6 +202,7 @@ void SystemLogUploader::OnSuccess() {
   SYSLOG(INFO) << "Upload successful.";
   upload_job_.reset();
   last_upload_attempt_ = base::Time::NowFromSystemTime();
+  log_upload_in_progress_ = false;
   retry_count_ = 0;
 
   // On successful log upload schedule the next log upload after
@@ -208,6 +213,7 @@ void SystemLogUploader::OnSuccess() {
 void SystemLogUploader::OnFailure(UploadJob::ErrorCode error_code) {
   upload_job_.reset();
   last_upload_attempt_ = base::Time::NowFromSystemTime();
+  log_upload_in_progress_ = false;
 
   //  If we have hit the maximum number of retries, terminate this upload
   //  attempt and schedule the next one using the normal delay. Otherwise, retry
@@ -232,6 +238,11 @@ std::string SystemLogUploader::RemoveSensitiveData(
     const std::string& data) {
   return anonymizer->Anonymize(data);
 }
+
+void SystemLogUploader::ScheduleNextSystemLogUploadImmediately() {
+  ScheduleNextSystemLogUpload(base::TimeDelta());
+}
+
 void SystemLogUploader::RefreshUploadSettings() {
   // Attempt to fetch the current value of the reporting settings.
   // If trusted values are not available, register this function to be called
@@ -256,6 +267,8 @@ void SystemLogUploader::UploadSystemLogs(
   // Must be called on the main thread.
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!upload_job_);
+
+  SYSLOG(INFO) << "Uploading system logs.";
 
   GURL upload_url(GetUploadUrl());
   DCHECK(upload_url.is_valid());
@@ -283,10 +296,13 @@ void SystemLogUploader::StartLogUpload() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (upload_enabled_) {
+    SYSLOG(INFO) << "Starting system log upload.";
+    log_upload_in_progress_ = true;
     syslog_delegate_->LoadSystemLogs(base::Bind(
         &SystemLogUploader::UploadSystemLogs, weak_factory_.GetWeakPtr()));
   } else {
     // If upload is disabled, schedule the next attempt after 12h.
+    SYSLOG(INFO) << "System log upload is disabled, rescheduling.";
     retry_count_ = 0;
     last_upload_attempt_ = base::Time::NowFromSystemTime();
     ScheduleNextSystemLogUpload(upload_frequency_);
@@ -294,11 +310,21 @@ void SystemLogUploader::StartLogUpload() {
 }
 
 void SystemLogUploader::ScheduleNextSystemLogUpload(base::TimeDelta frequency) {
+  // Don't schedule a new system log upload if there's a log upload in progress
+  // (it will be scheduled once the current one completes).
+  if (log_upload_in_progress_) {
+    SYSLOG(INFO) << "In the middle of a system log upload, not scheduling the "
+                 << "next one until this one finishes.";
+    return;
+  }
+
   // Calculate when to fire off the next update.
   base::TimeDelta delay = std::max(
       (last_upload_attempt_ + frequency) - base::Time::NowFromSystemTime(),
       base::TimeDelta());
-  // Ensure that we never have more than one pending delayed task.
+  SYSLOG(INFO) << "Scheduling next system log upload " << delay << " from now.";
+  // Ensure that we never have more than one pending delayed task
+  // (InvalidateWeakPtrs() will cancel any pending log uploads).
   weak_factory_.InvalidateWeakPtrs();
   task_runner_->PostDelayedTask(FROM_HERE,
                                 base::Bind(&SystemLogUploader::StartLogUpload,

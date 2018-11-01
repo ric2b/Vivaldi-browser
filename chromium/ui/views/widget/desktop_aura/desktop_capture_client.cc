@@ -4,6 +4,7 @@
 
 #include "ui/views/widget/desktop_aura/desktop_capture_client.h"
 
+#include "ui/aura/client/capture_client_observer.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tracker.h"
@@ -12,12 +13,20 @@
 namespace views {
 
 // static
-DesktopCaptureClient::CaptureClients*
-DesktopCaptureClient::capture_clients_ = NULL;
+DesktopCaptureClient::CaptureClients* DesktopCaptureClient::capture_clients_ =
+    nullptr;
+
+// static
+aura::Window* DesktopCaptureClient::GetCaptureWindowGlobal() {
+  for (auto* client : *capture_clients_) {
+    if (client->capture_window_)
+      return client->capture_window_;
+  }
+  return nullptr;
+}
 
 DesktopCaptureClient::DesktopCaptureClient(aura::Window* root)
-    : root_(root),
-      capture_window_(NULL) {
+    : root_(root), capture_window_(nullptr) {
   if (!capture_clients_)
     capture_clients_ = new CaptureClients;
   capture_clients_->insert(this);
@@ -25,7 +34,7 @@ DesktopCaptureClient::DesktopCaptureClient(aura::Window* root)
 }
 
 DesktopCaptureClient::~DesktopCaptureClient() {
-  aura::client::SetCaptureClient(root_, NULL);
+  aura::client::SetCaptureClient(root_, nullptr);
   capture_clients_->erase(this);
 }
 
@@ -77,12 +86,15 @@ void DesktopCaptureClient::SetCapture(aura::Window* new_capture_window) {
       }
     }
   }  // else case is capture is remaining in our root, nothing to do.
+
+  for (auto& observer : observers_)
+    observer.OnCaptureChanged(old_capture_window, capture_window_);
 }
 
 void DesktopCaptureClient::ReleaseCapture(aura::Window* window) {
   if (capture_window_ != window)
     return;
-  SetCapture(NULL);
+  SetCapture(nullptr);
 }
 
 aura::Window* DesktopCaptureClient::GetCaptureWindow() {
@@ -90,22 +102,17 @@ aura::Window* DesktopCaptureClient::GetCaptureWindow() {
 }
 
 aura::Window* DesktopCaptureClient::GetGlobalCaptureWindow() {
-  for (CaptureClients::iterator i = capture_clients_->begin();
-       i != capture_clients_->end(); ++i) {
-    if ((*i)->capture_window_)
-      return (*i)->capture_window_;
-  }
-  return NULL;
+  return GetCaptureWindowGlobal();
 }
 
 void DesktopCaptureClient::AddObserver(
     aura::client::CaptureClientObserver* observer) {
-  NOTREACHED();
+  observers_.AddObserver(observer);
 }
 
 void DesktopCaptureClient::RemoveObserver(
     aura::client::CaptureClientObserver* observer) {
-  NOTREACHED();
+  observers_.RemoveObserver(observer);
 }
 
 }  // namespace views

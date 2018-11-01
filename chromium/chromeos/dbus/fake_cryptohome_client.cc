@@ -574,6 +574,18 @@ void FakeCryptohomeClient::FlushAndSignBootAttributes(
   ReturnProtobufMethodCallback(reply, callback);
 }
 
+void FakeCryptohomeClient::RemoveFirmwareManagementParametersFromTpm(
+    const cryptohome::RemoveFirmwareManagementParametersRequest& request,
+    const ProtobufMethodCallback& callback) {
+  ReturnProtobufMethodCallback(cryptohome::BaseReply(), callback);
+}
+
+void FakeCryptohomeClient::SetFirmwareManagementParametersInTpm(
+    const cryptohome::SetFirmwareManagementParametersRequest& request,
+    const ProtobufMethodCallback& callback) {
+  ReturnProtobufMethodCallback(cryptohome::BaseReply(), callback);
+}
+
 void FakeCryptohomeClient::SetServiceIsAvailable(bool is_available) {
   service_is_available_ = is_available;
   if (is_available) {

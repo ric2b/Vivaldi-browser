@@ -8,7 +8,7 @@
 namespace vivaldi {
 
 // Function to init Vivaldi specific tap helpers
-void InitHelpers(content::WebContents *web_contents);
+void InitHelpers(content::WebContents* web_contents);
 
 }  // namespace vivaldi
 

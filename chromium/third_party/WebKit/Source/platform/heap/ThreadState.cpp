@@ -93,50 +93,11 @@ const char* ThreadState::gcReasonString(BlinkGC::GCReason reason) {
       return "MemoryPressureGC";
     case BlinkGC::PageNavigationGC:
       return "PageNavigationGC";
-    default:
-      NOTREACHED();
+    case BlinkGC::ThreadTerminationGC:
+      return "ThreadTerminationGC";
   }
   return "<Unknown>";
 }
-
-class ParkThreadsScope final {
-  STACK_ALLOCATED();
-
- public:
-  explicit ParkThreadsScope(ThreadState* state)
-      : m_state(state), m_shouldResumeThreads(false) {}
-
-  bool parkThreads() {
-    TRACE_EVENT0("blink_gc", "ThreadHeap::ParkThreadsScope");
-
-    // TODO(haraken): In an unlikely coincidence that two threads decide
-    // to collect garbage at the same time, avoid doing two GCs in
-    // a row and return false.
-    double startTime = WTF::currentTimeMS();
-
-    m_shouldResumeThreads = m_state->heap().park();
-
-    double timeForStoppingThreads = WTF::currentTimeMS() - startTime;
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(
-        CustomCountHistogram, timeToStopThreadsHistogram,
-        new CustomCountHistogram("BlinkGC.TimeForStoppingThreads", 1, 1000,
-                                 50));
-    timeToStopThreadsHistogram.count(timeForStoppingThreads);
-
-    return m_shouldResumeThreads;
-  }
-
-  ~ParkThreadsScope() {
-    // Only cleanup if we parked all threads in which case the GC happened
-    // and we need to resume the other threads.
-    if (m_shouldResumeThreads)
-      m_state->heap().resume();
-  }
-
- private:
-  ThreadState* m_state;
-  bool m_shouldResumeThreads;
-};
 
 ThreadState::ThreadState()
     : m_thread(currentThread()),
@@ -144,8 +105,6 @@ ThreadState::ThreadState()
       m_startOfStack(reinterpret_cast<intptr_t*>(WTF::getStackStart())),
       m_endOfStack(reinterpret_cast<intptr_t*>(WTF::getStackStart())),
       m_safePointScopeMarker(nullptr),
-      m_atSafePoint(false),
-      m_interruptors(),
       m_sweepForbidden(false),
       m_noAllocationCount(0),
       m_gcForbiddenCount(0),
@@ -153,11 +112,9 @@ ThreadState::ThreadState()
       m_accumulatedSweepingTime(0),
       m_vectorBackingArenaIndex(BlinkGC::Vector1ArenaIndex),
       m_currentArenaAges(0),
-      m_isTerminating(false),
       m_gcMixinMarker(nullptr),
       m_shouldFlushHeapDoesNotContainCache(false),
       m_gcState(NoGCScheduled),
-      m_threadLocalWeakCallbackStack(CallbackStack::create()),
       m_isolate(nullptr),
       m_traceDOMWrappers(nullptr),
       m_invalidateDeadObjectsInWrappersMarkingDeque(nullptr),
@@ -174,9 +131,7 @@ ThreadState::ThreadState()
   ASSERT(!**s_threadSpecific);
   **s_threadSpecific = this;
 
-  m_heap = new ThreadHeap();
-  ASSERT(m_heap);
-  m_heap->attach(this);
+  m_heap = WTF::wrapUnique(new ThreadHeap(this));
 
   for (int arenaIndex = 0; arenaIndex < BlinkGC::LargeObjectArenaIndex;
        arenaIndex++)
@@ -191,6 +146,10 @@ ThreadState::ThreadState()
 
 ThreadState::~ThreadState() {
   ASSERT(checkThread());
+  if (isMainThread())
+    DCHECK_EQ(heap().heapStats().allocatedSpace(), 0u);
+  CHECK(gcState() == ThreadState::NoGCScheduled);
+
   for (int i = 0; i < BlinkGC::NumberOfArenas; ++i)
     delete m_arenas[i];
 
@@ -198,25 +157,29 @@ ThreadState::~ThreadState() {
 }
 
 void ThreadState::attachMainThread() {
-  RELEASE_ASSERT(!ProcessHeap::s_shutdownComplete);
   s_threadSpecific = new WTF::ThreadSpecific<ThreadState*>();
   new (s_mainThreadStateStorage) ThreadState();
 }
 
 void ThreadState::attachCurrentThread() {
-  RELEASE_ASSERT(!ProcessHeap::s_shutdownComplete);
   new ThreadState();
 }
 
-void ThreadState::cleanupPages() {
+void ThreadState::detachCurrentThread() {
+  ThreadState* state = current();
+  state->runTerminationGC();
+  delete state;
+}
+
+void ThreadState::removeAllPages() {
   ASSERT(checkThread());
   for (int i = 0; i < BlinkGC::NumberOfArenas; ++i)
-    m_arenas[i]->cleanupPages();
+    m_arenas[i]->removeAllPages();
 }
 
 void ThreadState::runTerminationGC() {
   if (isMainThread()) {
-    cleanupPages();
+    removeAllPages();
     return;
   }
   ASSERT(checkThread());
@@ -225,15 +188,6 @@ void ThreadState::runTerminationGC() {
   completeSweep();
 
   releaseStaticPersistentNodes();
-
-  // From here on ignore all conservatively discovered
-  // pointers into the heap owned by this thread.
-  m_isTerminating = true;
-
-  // Set the terminate flag on all heap pages of this thread. This is used to
-  // ensure we don't trace pages on other threads that are not part of the
-  // thread local GC.
-  prepareForThreadStateTermination();
 
   ProcessHeap::crossThreadPersistentRegion().prepareForThreadStateTermination(
       this);
@@ -244,7 +198,8 @@ void ThreadState::runTerminationGC() {
   int currentCount = getPersistentRegion()->numberOfPersistents();
   ASSERT(currentCount >= 0);
   while (currentCount != oldCount) {
-    collectGarbageForTerminatingThread();
+    collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::GCWithSweep,
+                   BlinkGC::ThreadTerminationGC);
     // Release the thread-local static persistents that were
     // instantiated while running the termination GC.
     releaseStaticPersistentNodes();
@@ -258,43 +213,7 @@ void ThreadState::runTerminationGC() {
   ASSERT(m_orderedPreFinalizers.isEmpty());
   RELEASE_ASSERT(gcState() == NoGCScheduled);
 
-  // Add pages to the orphaned page pool to ensure any global GCs from this
-  // point on will not trace objects on this thread's arenas.
-  cleanupPages();
-}
-
-void ThreadState::cleanupMainThread() {
-  ASSERT(isMainThread());
-
-  releaseStaticPersistentNodes();
-
-  // Finish sweeping before shutting down V8. Otherwise, some destructor
-  // may access V8 and cause crashes.
-  completeSweep();
-
-  // It is unsafe to trigger GCs after this point because some
-  // destructor may access already-detached V8 and cause crashes.
-  // Also it is useless. So we forbid GCs.
-  enterGCForbiddenScope();
-}
-
-void ThreadState::detachMainThread() {
-  // Enter a safe point before trying to acquire threadAttachMutex
-  // to avoid dead lock if another thread is preparing for GC, has acquired
-  // threadAttachMutex and waiting for other threads to pause or reach a
-  // safepoint.
-  ThreadState* state = mainThreadState();
-  ASSERT(!state->isSweepingInProgress());
-
-  state->heap().detach(state);
-  state->~ThreadState();
-}
-
-void ThreadState::detachCurrentThread() {
-  ThreadState* state = current();
-  state->heap().detach(state);
-  RELEASE_ASSERT(state->gcState() == ThreadState::NoGCScheduled);
-  delete state;
+  removeAllPages();
 }
 
 NO_SANITIZE_ADDRESS
@@ -383,62 +302,6 @@ ThreadState::GCSnapshotInfo::GCSnapshotInfo(size_t numObjectTypes)
       deadCount(Vector<int>(numObjectTypes)),
       liveSize(Vector<size_t>(numObjectTypes)),
       deadSize(Vector<size_t>(numObjectTypes)) {}
-
-void ThreadState::pushThreadLocalWeakCallback(void* object,
-                                              WeakCallback callback) {
-  CallbackStack::Item* slot = m_threadLocalWeakCallbackStack->allocateEntry();
-  *slot = CallbackStack::Item(object, callback);
-}
-
-bool ThreadState::popAndInvokeThreadLocalWeakCallback(Visitor* visitor) {
-  ASSERT(checkThread());
-  // For weak processing we should never reach orphaned pages since orphaned
-  // pages are not traced and thus objects on those pages are never be
-  // registered as objects on orphaned pages. We cannot assert this here since
-  // we might have an off-heap collection. We assert it in
-  // ThreadHeap::pushThreadLocalWeakCallback.
-  if (CallbackStack::Item* item = m_threadLocalWeakCallbackStack->pop()) {
-    item->call(visitor);
-    return true;
-  }
-  return false;
-}
-
-void ThreadState::threadLocalWeakProcessing() {
-  ASSERT(checkThread());
-  ASSERT(!sweepForbidden());
-  TRACE_EVENT0("blink_gc", "ThreadState::threadLocalWeakProcessing");
-  double startTime = WTF::currentTimeMS();
-
-  SweepForbiddenScope sweepForbiddenScope(this);
-  ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
-
-  // Disallow allocation during weak processing.
-  // It would be technically safe to allow allocations, but it is unsafe
-  // to mutate an object graph in a way in which a dead object gets
-  // resurrected or mutate a HashTable (because HashTable's weak processing
-  // assumes that the HashTable hasn't been mutated since the latest marking).
-  // Due to the complexity, we just forbid allocations.
-  NoAllocationScope noAllocationScope(this);
-
-  GCForbiddenScope gcForbiddenScope(this);
-  std::unique_ptr<Visitor> visitor =
-      Visitor::create(this, VisitorMarkingMode::WeakProcessing);
-
-  // Perform thread-specific weak processing.
-  while (popAndInvokeThreadLocalWeakCallback(visitor.get())) {
-  }
-
-  m_threadLocalWeakCallbackStack->decommit();
-
-  if (isMainThread()) {
-    double timeForThreadLocalWeakProcessing = WTF::currentTimeMS() - startTime;
-    DEFINE_STATIC_LOCAL(
-        CustomCountHistogram, timeForWeakHistogram,
-        ("BlinkGC.TimeForThreadLocalWeakProcessing", 1, 10 * 1000, 50));
-    timeForWeakHistogram.count(timeForThreadLocalWeakProcessing);
-  }
-}
 
 size_t ThreadState::totalMemorySize() {
   return m_heap->heapStats().allocatedObjectSize() +
@@ -756,30 +619,27 @@ void ThreadState::performIdleLazySweep(double deadlineSeconds) {
                "ThreadState::performIdleLazySweep", "idleDeltaInSeconds",
                deadlineSeconds - monotonicallyIncreasingTime());
 
-  bool sweepCompleted = true;
   SweepForbiddenScope scope(this);
-  {
-    double startTime = WTF::currentTimeMS();
-    ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
+  ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
 
-    for (int i = 0; i < BlinkGC::NumberOfArenas; i++) {
-      // lazySweepWithDeadline() won't check the deadline until it sweeps
-      // 10 pages. So we give a small slack for safety.
-      double slack = 0.001;
-      double remainingBudget =
-          deadlineSeconds - slack - monotonicallyIncreasingTime();
-      if (remainingBudget <= 0 ||
-          !m_arenas[i]->lazySweepWithDeadline(deadlineSeconds)) {
-        // We couldn't finish the sweeping within the deadline.
-        // We request another idle task for the remaining sweeping.
-        scheduleIdleLazySweep();
-        sweepCompleted = false;
-        break;
-      }
+  double startTime = WTF::currentTimeMS();
+  bool sweepCompleted = true;
+  for (int i = 0; i < BlinkGC::NumberOfArenas; i++) {
+    // lazySweepWithDeadline() won't check the deadline until it sweeps
+    // 10 pages. So we give a small slack for safety.
+    double slack = 0.001;
+    double remainingBudget =
+        deadlineSeconds - slack - monotonicallyIncreasingTime();
+    if (remainingBudget <= 0 ||
+        !m_arenas[i]->lazySweepWithDeadline(deadlineSeconds)) {
+      // We couldn't finish the sweeping within the deadline.
+      // We request another idle task for the remaining sweeping.
+      scheduleIdleLazySweep();
+      sweepCompleted = false;
+      break;
     }
-
-    accumulateSweepingTime(WTF::currentTimeMS() - startTime);
   }
+  accumulateSweepingTime(WTF::currentTimeMS() - startTime);
 
   if (sweepCompleted)
     postSweep();
@@ -986,8 +846,7 @@ void ThreadState::makeConsistentForMutator() {
 }
 
 void ThreadState::preGC() {
-  if (RuntimeEnabledFeatures::traceWrappablesEnabled() && m_isolate &&
-      m_performCleanup)
+  if (m_isolate && m_performCleanup)
     m_performCleanup(m_isolate);
 
   ASSERT(!isInGC());
@@ -995,31 +854,14 @@ void ThreadState::preGC() {
   makeConsistentForGC();
   flushHeapDoesNotContainCacheIfNeeded();
   clearArenaAges();
-
-  // It is possible, albeit rare, for a thread to be kept
-  // at a safepoint across multiple GCs, as resuming all attached
-  // threads after the "global" GC phases will contend for the shared
-  // safepoint barrier mutexes etc, which can additionally delay
-  // a thread. Enough so that another thread may initiate
-  // a new GC before this has happened.
-  //
-  // In which case the parked thread's ThreadState will have unprocessed
-  // entries on its local weak callback stack when that later GC goes
-  // ahead. Clear out and invalidate the stack now, as the thread
-  // should only process callbacks that's found to be reachable by
-  // the latest GC, when it eventually gets to next perform
-  // thread-local weak processing.
-  m_threadLocalWeakCallbackStack->decommit();
-  m_threadLocalWeakCallbackStack->commit();
 }
 
 void ThreadState::postGC(BlinkGC::GCType gcType) {
-  if (RuntimeEnabledFeatures::traceWrappablesEnabled() &&
-      m_invalidateDeadObjectsInWrappersMarkingDeque) {
+  if (m_invalidateDeadObjectsInWrappersMarkingDeque)
     m_invalidateDeadObjectsInWrappersMarkingDeque(m_isolate);
-  }
 
-  ASSERT(isInGC());
+  DCHECK(isInGC());
+  DCHECK(checkThread());
   for (int i = 0; i < BlinkGC::NumberOfArenas; i++)
     m_arenas[i]->prepareForSweep();
 
@@ -1036,10 +878,6 @@ void ThreadState::postGC(BlinkGC::GCType gcType) {
     m_gcState = NoGCScheduled;
     return;
   }
-
-  ASSERT(checkThread());
-
-  threadLocalWeakProcessing();
 }
 
 void ThreadState::preSweep(BlinkGC::GCType gcType) {
@@ -1140,25 +978,23 @@ void ThreadState::completeSweep() {
     return;
 
   SweepForbiddenScope scope(this);
-  {
-    ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
+  ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
 
-    TRACE_EVENT0("blink_gc,devtools.timeline", "ThreadState::completeSweep");
-    double startTime = WTF::currentTimeMS();
+  TRACE_EVENT0("blink_gc,devtools.timeline", "ThreadState::completeSweep");
+  double startTime = WTF::currentTimeMS();
 
-    static_assert(BlinkGC::EagerSweepArenaIndex == 0,
-                  "Eagerly swept arenas must be processed first.");
-    for (int i = 0; i < BlinkGC::NumberOfArenas; i++)
-      m_arenas[i]->completeSweep();
+  static_assert(BlinkGC::EagerSweepArenaIndex == 0,
+                "Eagerly swept arenas must be processed first.");
+  for (int i = 0; i < BlinkGC::NumberOfArenas; i++)
+    m_arenas[i]->completeSweep();
 
-    double timeForCompleteSweep = WTF::currentTimeMS() - startTime;
-    accumulateSweepingTime(timeForCompleteSweep);
+  double timeForCompleteSweep = WTF::currentTimeMS() - startTime;
+  accumulateSweepingTime(timeForCompleteSweep);
 
-    if (isMainThread()) {
-      DEFINE_STATIC_LOCAL(CustomCountHistogram, completeSweepHistogram,
-                          ("BlinkGC.CompleteSweep", 1, 10 * 1000, 50));
-      completeSweepHistogram.count(timeForCompleteSweep);
-    }
+  if (isMainThread()) {
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, completeSweepHistogram,
+                        ("BlinkGC.CompleteSweep", 1, 10 * 1000, 50));
+    completeSweepHistogram.count(timeForCompleteSweep);
   }
 
   postSweep();
@@ -1240,12 +1076,6 @@ void ThreadState::postSweep() {
   }
 }
 
-void ThreadState::prepareForThreadStateTermination() {
-  ASSERT(checkThread());
-  for (int i = 0; i < BlinkGC::NumberOfArenas; ++i)
-    m_arenas[i]->prepareHeapForTermination();
-}
-
 #if DCHECK_IS_ON()
 BasePage* ThreadState::findPageFromAddress(Address address) {
   for (int i = 0; i < BlinkGC::NumberOfArenas; ++i) {
@@ -1255,6 +1085,15 @@ BasePage* ThreadState::findPageFromAddress(Address address) {
   return nullptr;
 }
 #endif
+
+bool ThreadState::isAddressInHeapDoesNotContainCache(Address address) {
+  // If the cache has been marked as invalidated, it's cleared prior
+  // to performing the next GC. Hence, consider the cache as being
+  // effectively empty.
+  if (m_shouldFlushHeapDoesNotContainCache)
+    return false;
+  return heap().m_heapDoesNotContainCache->lookup(address);
+}
 
 size_t ThreadState::objectPayloadSizeForTesting() {
   size_t objectPayloadSize = 0;
@@ -1268,11 +1107,6 @@ void ThreadState::safePoint(BlinkGC::StackState stackState) {
   ThreadHeap::reportMemoryUsageForTracing();
 
   runScheduledGC(stackState);
-  ASSERT(!m_atSafePoint);
-  m_stackState = stackState;
-  m_atSafePoint = true;
-  m_heap->checkAndPark(this, nullptr);
-  m_atSafePoint = false;
   m_stackState = BlinkGC::HeapPointersOnStack;
 }
 
@@ -1301,6 +1135,17 @@ NO_SANITIZE_ADDRESS static void* adjustScopeMarkerForAdressSanitizer(
 }
 #endif
 
+// TODO(haraken): The first void* pointer is unused. Remove it.
+using PushAllRegistersCallback = void (*)(void*, ThreadState*, intptr_t*);
+extern "C" void pushAllRegisters(void*, ThreadState*, PushAllRegistersCallback);
+
+static void enterSafePointAfterPushRegisters(void*,
+                                             ThreadState* state,
+                                             intptr_t* stackEnd) {
+  state->recordStackEnd(stackEnd);
+  state->copyStackUntilSafePointScope();
+}
+
 void ThreadState::enterSafePoint(BlinkGC::StackState stackState,
                                  void* scopeMarker) {
   ASSERT(checkThread());
@@ -1310,18 +1155,13 @@ void ThreadState::enterSafePoint(BlinkGC::StackState stackState,
 #endif
   ASSERT(stackState == BlinkGC::NoHeapPointersOnStack || scopeMarker);
   runScheduledGC(stackState);
-  ASSERT(!m_atSafePoint);
-  m_atSafePoint = true;
   m_stackState = stackState;
   m_safePointScopeMarker = scopeMarker;
-  m_heap->enterSafePoint(this);
+  pushAllRegisters(nullptr, this, enterSafePointAfterPushRegisters);
 }
 
-void ThreadState::leaveSafePoint(SafePointAwareMutexLocker* locker) {
+void ThreadState::leaveSafePoint() {
   ASSERT(checkThread());
-  ASSERT(m_atSafePoint);
-  m_heap->leaveSafePoint(this, locker);
-  m_atSafePoint = false;
   m_stackState = BlinkGC::HeapPointersOnStack;
   clearSafePointScopeMarker();
 }
@@ -1382,16 +1222,6 @@ void ThreadState::copyStackUntilSafePointScope() {
   }
 }
 
-void ThreadState::addInterruptor(
-    std::unique_ptr<BlinkGCInterruptor> interruptor) {
-  ASSERT(checkThread());
-  SafePointScope scope(BlinkGC::HeapPointersOnStack);
-  {
-    MutexLocker locker(m_heap->threadAttachMutex());
-    m_interruptors.push_back(std::move(interruptor));
-  }
-}
-
 void ThreadState::registerStaticPersistentNode(
     PersistentNode* node,
     PersistentClearCallback callback) {
@@ -1401,7 +1231,7 @@ void ThreadState::registerStaticPersistentNode(
 #endif
 
   ASSERT(!m_staticPersistents.contains(node));
-  m_staticPersistents.add(node, callback);
+  m_staticPersistents.insert(node, callback);
 }
 
 void ThreadState::releaseStaticPersistentNodes() {
@@ -1436,24 +1266,16 @@ void ThreadState::leaveStaticReferenceRegistrationDisabledScope() {
 }
 #endif
 
-void ThreadState::lockThreadAttachMutex() {
-  m_heap->threadAttachMutex().lock();
-}
-
-void ThreadState::unlockThreadAttachMutex() {
-  m_heap->threadAttachMutex().unlock();
-}
-
 void ThreadState::invokePreFinalizers() {
   ASSERT(checkThread());
   ASSERT(!sweepForbidden());
   TRACE_EVENT0("blink_gc", "ThreadState::invokePreFinalizers");
 
+  SweepForbiddenScope sweepForbidden(this);
+  ScriptForbiddenIfMainThreadScope scriptForbidden;
+
   double startTime = WTF::currentTimeMS();
   if (!m_orderedPreFinalizers.isEmpty()) {
-    SweepForbiddenScope sweepForbidden(this);
-    ScriptForbiddenIfMainThreadScope scriptForbidden;
-
     // Call the prefinalizers in the opposite order to their registration.
     //
     // The prefinalizer callback wrapper returns |true| when its associated
@@ -1627,25 +1449,17 @@ void ThreadState::collectGarbage(BlinkGC::StackState stackState,
     {
       SafePointScope safePointScope(stackState, this);
 
-      // Resume all parked threads upon leaving this scope.
-      ParkThreadsScope parkThreadsScope(this);
-
-      // Try to park the other threads. If we're unable to, bail out of the GC.
-      if (!parkThreadsScope.parkThreads())
-        return;
-
       std::unique_ptr<Visitor> visitor;
       if (gcType == BlinkGC::TakeSnapshot) {
-        visitor = Visitor::create(this, VisitorMarkingMode::SnapshotMarking);
+        visitor = Visitor::create(this, Visitor::SnapshotMarking);
       } else {
         DCHECK(gcType == BlinkGC::GCWithSweep ||
                gcType == BlinkGC::GCWithoutSweep);
         if (heap().compaction()->shouldCompact(this, gcType, reason)) {
           heap().compaction()->initialize(this);
-          visitor = Visitor::create(
-              this, VisitorMarkingMode::GlobalMarkingWithCompaction);
+          visitor = Visitor::create(this, Visitor::GlobalMarkingWithCompaction);
         } else {
-          visitor = Visitor::create(this, VisitorMarkingMode::GlobalMarking);
+          visitor = Visitor::create(this, Visitor::GlobalMarking);
         }
       }
 
@@ -1687,13 +1501,8 @@ void ThreadState::collectGarbage(BlinkGC::StackState stackState,
         heap().processMarkingStack(visitor.get());
 
         heap().postMarkingProcessing(visitor.get());
-        heap().globalWeakProcessing(visitor.get());
+        heap().weakProcessing(visitor.get());
       }
-
-      // Now we can delete all orphaned pages because there are no dangling
-      // pointers to the orphaned pages.  (If we have such dangling pointers,
-      // we should have crashed during marking before getting here.)
-      heap().getOrphanedPagePool()->decommitOrphanedPages();
 
       double markingTimeInMilliseconds = WTF::currentTimeMS() - startTime;
       heap().heapStats().setEstimatedMarkingTimePerByte(
@@ -1714,8 +1523,8 @@ void ThreadState::collectGarbage(BlinkGC::StackState stackState,
       markingTimeHistogram.count(markingTimeInMilliseconds);
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, totalObjectSpaceHistogram,
-          new CustomCountHistogram("BlinkGC.TotalObjectSpace", 0, 4 * 1024 * 1024,
-                                   50));
+          new CustomCountHistogram("BlinkGC.TotalObjectSpace", 0,
+                                   4 * 1024 * 1024, 50));
       totalObjectSpaceHistogram.count(ProcessHeap::totalAllocatedObjectSize() /
                                       1024);
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
@@ -1727,7 +1536,7 @@ void ThreadState::collectGarbage(BlinkGC::StackState stackState,
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           EnumerationHistogram, gcReasonHistogram,
           new EnumerationHistogram("BlinkGC.GCReason",
-                                   BlinkGC::NumberOfGCReason));
+                                   BlinkGC::LastGCReason + 1));
       gcReasonHistogram.count(reason);
 
       heap().m_lastGCReason = reason;
@@ -1739,47 +1548,6 @@ void ThreadState::collectGarbage(BlinkGC::StackState stackState,
   }
 
   heap().preSweep(gcType);
-  heap().decommitCallbackStacks();
-}
-
-void ThreadState::collectGarbageForTerminatingThread() {
-  // A thread-specific termination GC must not allow other global GCs to go
-  // ahead while it is running, hence the termination GC does not enter a
-  // safepoint. VisitorScope will not enter also a safepoint scope for
-  // ThreadTerminationGC.
-  GCForbiddenScope gcForbiddenScope(this);
-
-  {
-    std::unique_ptr<Visitor> visitor =
-        Visitor::create(this, VisitorMarkingMode::ThreadLocalMarking);
-
-    NoAllocationScope noAllocationScope(this);
-
-    heap().commitCallbackStacks();
-    preGC();
-
-    // 1. Trace the thread local persistent roots. For thread local GCs we
-    // don't trace the stack (ie. no conservative scanning) since this is
-    // only called during thread shutdown where there should be no objects
-    // on the stack.
-    // We also assume that orphaned pages have no objects reachable from
-    // persistent handles on other threads or CrossThreadPersistents.  The
-    // only cases where this could happen is if a subsequent conservative
-    // global GC finds a "pointer" on the stack or due to a programming
-    // error where an object has a dangling cross-thread pointer to an
-    // object on this heap.
-    visitPersistents(visitor.get());
-
-    // 2. Trace objects reachable from the thread's persistent roots
-    // including ephemerons.
-    heap().processMarkingStack(visitor.get());
-
-    heap().postMarkingProcessing(visitor.get());
-    heap().globalWeakProcessing(visitor.get());
-  }
-
-  postGC(BlinkGC::GCWithSweep);
-  preSweep(BlinkGC::GCWithSweep);
   heap().decommitCallbackStacks();
 }
 

@@ -431,7 +431,7 @@ def _CheckNoUNIT_TESTInSourceFiles(input_api, output_api):
 
 
 def _CheckDCHECK_IS_ONHasBraces(input_api, output_api):
-  """Checks to make sure DCHECK_IS_ON() does not skip the braces."""
+  """Checks to make sure DCHECK_IS_ON() does not skip the parentheses."""
   errors = []
   pattern = input_api.re.compile(r'DCHECK_IS_ON(?!\(\))',
                                  input_api.re.MULTILINE)
@@ -442,7 +442,7 @@ def _CheckDCHECK_IS_ONHasBraces(input_api, output_api):
       if input_api.re.search(pattern, line):
         errors.append(output_api.PresubmitError(
           ('%s:%d: Use of DCHECK_IS_ON() must be written as "#if ' +
-           'DCHECK_IS_ON()", not forgetting the braces.')
+           'DCHECK_IS_ON()", not forgetting the parentheses.')
           % (f.LocalPath(), lnum)))
   return errors
 
@@ -1191,6 +1191,7 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^remoting[\\\/]host[\\\/].*",
                  r"^sandbox[\\\/]linux[\\\/].*",
                  r"^tools[\\\/]",
+                 r"^ui[\\\/]base[\\\/]resource[\\\/]data_pack.cc$",
                  r"^ui[\\\/]aura[\\\/]bench[\\\/]bench_main\.cc$",
                  r"^ui[\\\/]ozone[\\\/]platform[\\\/]cast[\\\/]",
                  r"^storage[\\\/]browser[\\\/]fileapi[\\\/]" +
@@ -1455,13 +1456,19 @@ def _CheckIpcOwners(input_api, output_api):
   Whether or not a file affects IPC is determined by a simple whitelist of
   filename patterns."""
   file_patterns = [
+      # Legacy IPC:
       '*_messages.cc',
       '*_messages*.h',
       '*_param_traits*.*',
+      # Mojo IPC:
       '*.mojom',
       '*_struct_traits*.*',
       '*_type_converter*.*',
-      # Blink uses a different file naming convention
+      '*.typemap',
+      # Android native IPC:
+      '*.aidl',
+      # Blink uses a different file naming convention:
+      '*EnumTraits*.*',
       '*StructTraits*.*',
       '*TypeConverter*.*',
   ]
@@ -1657,10 +1664,13 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
     - Are using a tag that is shorter than 20 characters (error)
   """
 
-  # Do not check format of logs in //chrome/android/webapk because
-  # //chrome/android/webapk cannot depend on //base
+  # Do not check format of logs in the given files
   cr_log_check_excluded_paths = [
+    # //chrome/android/webapk cannot depend on //base
     r"^chrome[\\\/]android[\\\/]webapk[\\\/].*",
+    # WebView license viewer code cannot depend on //base; used in stub APK.
+    r"^android_webview[\\\/]glue[\\\/]java[\\\/]src[\\\/]com[\\\/]android[\\\/]"
+    r"webview[\\\/]chromium[\\\/]License.*",
   ]
 
   cr_log_import_pattern = input_api.re.compile(
@@ -2309,6 +2319,8 @@ def CheckChangeOnUpload(input_api, output_api):
   results.extend(_CommonChecks(input_api, output_api))
   results.extend(_CheckValidHostsInDEPS(input_api, output_api))
   results.extend(
+      input_api.canned_checks.CheckPatchFormatted(input_api, output_api))
+  results.extend(
       input_api.canned_checks.CheckGNFormatted(input_api, output_api))
   results.extend(_CheckUmaHistogramChanges(input_api, output_api))
   results.extend(_AndroidSpecificOnUploadChecks(input_api, output_api))
@@ -2363,6 +2375,8 @@ def CheckChangeOnCommit(input_api, output_api):
       output_api,
       json_url='http://chromium-status.appspot.com/current?format=json'))
 
+  results.extend(
+      input_api.canned_checks.CheckPatchFormatted(input_api, output_api))
   results.extend(input_api.canned_checks.CheckChangeHasBugField(
       input_api, output_api))
   results.extend(input_api.canned_checks.CheckChangeHasDescription(

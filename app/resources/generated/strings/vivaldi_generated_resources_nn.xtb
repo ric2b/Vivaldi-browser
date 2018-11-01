@@ -7,7 +7,6 @@
 <translation id="1163931534039071049">Sy&amp;n rammekjelda</translation>
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">Skriv &amp;ut …</translation>
-<translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Dvaleoppvaking</translation>
 <translation id="119944043368869598">Tøm alt</translation>
 <translation id="1278049586634282054">Inspeksjonsvisingar:</translation>
@@ -22,7 +21,6 @@
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1616206807336925449">Denne utvidinga krev ingen spesielle tilgangar.</translation>
 <translation id="1627276047960621195">Filskildrarar</translation>
-<translation id="1652965563555864525">&amp;Demp</translation>
 <translation id="1708338024780164500">(Ikkje i bruk)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1725149567830788547">Syn &amp;kontrollar</translation>
@@ -35,7 +33,6 @@
 <translation id="1965328510789761112">Privatminne</translation>
 <translation id="1989112275319619282">Bla</translation>
 <translation id="1992397118740194946">Ikkje bestemt</translation>
-<translation id="2011110593081822050">Nettråd: <ph name="WORKER_NAME" /></translation>
 <translation id="2019718679933488176">Opna ly&amp;dfila i ei ny fane</translation>
 <translation id="2087822576218954668">Utskrift: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Last om att &amp;ramma</translation>
@@ -48,7 +45,6 @@
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagra &amp;bildet som …</translation>
-<translation id="253434972992662860">&amp;Pause</translation>
 <translation id="2550212893339833758">Veksleminne</translation>
 <translation id="2785873697295365461">Filskildrarar</translation>
 <translation id="2861941300086904918">Tryggleiksstyrar lokalklient</translation>
@@ -71,7 +67,6 @@
 <translation id="33022249435934718">GDI-handtak</translation>
 <translation id="3341703758641437857">Tillatt tilgang til filadresser</translation>
 <translation id="3347086966102161372">Kopier &amp;bildeadressa</translation>
-<translation id="3435896845095436175">Slå på</translation>
 <translation id="345693547134384690">Opna &amp;bildet i ei ny fane</translation>
 <translation id="3467267818798281173">Spør Google om forslag</translation>
 <translation id="3487007233252413104">anonym funksjon</translation>
@@ -81,16 +76,12 @@
 <translation id="3760460896538743390">Inspiser &amp;bakgrunnssida</translation>
 <translation id="3798449238516105146">Utgåve</translation>
 <translation id="3855441664322950881">Komprimer utvidinga</translation>
-<translation id="3866249974567520381">Skildring</translation>
 <translation id="3909791450649380159">Klipp &amp;ut</translation>
 <translation id="3936390757709632190">Opna ly&amp;dfila i ei ny fane</translation>
 <translation id="3943582379552582368">&amp;Attende</translation>
-<translation id="3954582159466790312">Skru &amp;opp</translation>
 <translation id="3978267865113951599">(Kræsja)</translation>
 <translation id="4021279097213088397">–</translation>
-<translation id="4059285154003114015">Skriv &amp;ut ramma …</translation>
 <translation id="411666854932687641">Privatminne</translation>
-<translation id="4176463684765177261">Slått av</translation>
 <translation id="4206944295053515692">Spør Google om forslag</translation>
 <translation id="4240511609794012987">Delt minne</translation>
 <translation id="4256316378292851214">Lagra &amp;videoen som …</translation>
@@ -106,7 +97,6 @@
 <translation id="4726710629007580002">Det kom åtvaringar under installasjonen av denne utvidinga:</translation>
 <translation id="4839303808932127586">Lagra &amp;videoen som …</translation>
 <translation id="4850258771229959924">Vis i utviklarverktøya</translation>
-<translation id="4861833787540810454">&amp;Spel av</translation>
 <translation id="4912643508233590958">Dvaleoppvaking</translation>
 <translation id="4927753642311223124">Ingenting å finna her; gå vidare.</translation>
 <translation id="49896407730300355">Roter mo&amp;t klokka</translation>
@@ -127,7 +117,6 @@
 <translation id="5509693895992845810">Lagra &amp;som …</translation>
 <translation id="5532223876348815659">Globalt</translation>
 <translation id="5542132724887566711">Profil</translation>
-<translation id="5556459405103347317">Last på nytt</translation>
 <translation id="5575473780076478375">Privatutviding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">Logg</translation>
 <translation id="5707185214361380026">Klarte ikkje å lasta utvidinga frå:</translation>
@@ -136,10 +125,8 @@
 <translation id="5764483294734785780">Lagra l&amp;ydfila som …</translation>
 <translation id="5780973441651030252">Prosessprioritet</translation>
 <translation id="5804241973901381774">Tilgangar</translation>
-<translation id="583281660410589416">Ukjend</translation>
 <translation id="5849869942539715694">Komprimer utvidinga …</translation>
 <translation id="5910363049092958439">Lagra &amp;bildet som …</translation>
-<translation id="59174027418879706">I bruk</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> topp)</translation>
 <translation id="6025215716629925253">Stabelsporing</translation>
 <translation id="6124650939968185064">Desse utvidingane er avhengig av denne utvidinga:</translation>
@@ -159,7 +146,6 @@
 <translation id="6498249116389603658">&amp;Alle språka dine</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kopier b&amp;ildet</translation>
-<translation id="6550675742724504774">Val</translation>
 <translation id="6639554308659482635">SQLite-minne</translation>
 <translation id="6655190889273724601">Utviklarmodus</translation>
 <translation id="6691936601825168937">&amp;Framover</translation>
@@ -180,9 +166,7 @@
 <translation id="7421925624202799674">S&amp;yn kjeldekoden</translation>
 <translation id="7427348830195639090">Bakgrunnsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7564847347806291057">Avslutt prosessen</translation>
-<translation id="7618337809041914424">Skriv &amp;ut ramma …</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Avbryt</translation>
 <translation id="7663719505383602579">Mottakar: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
 <translation id="7701869757853594372">USER-handtak</translation>
@@ -198,7 +182,6 @@
 <translation id="7965010376480416255">Delt minne</translation>
 <translation id="7966241909927244760">Kopier &amp;bildeadressa</translation>
 <translation id="7967437925638594022">Utvidingar &amp; appar</translation>
-<translation id="7982789257301363584">Nettverk</translation>
 <translation id="7997826902155442747">Prosessprioritet</translation>
 <translation id="8004582292198964060">Nettlesar</translation>
 <translation id="8023801379949507775">Oppdater utvidingane no</translation>
@@ -218,7 +201,6 @@
 <translation id="8661290697478713397">Opna lenkja i eit &amp;privatvindauge</translation>
 <translation id="8664389313780386848">S&amp;yn kjeldekoden</translation>
 <translation id="8770406935328356739">Utvidinga sin rotkatalog</translation>
-<translation id="8798099450830957504">Standard</translation>
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Opna lenkja i eit nytt &amp;vindauge</translation>
 <translation id="8916476537757519021">Underramme privatvindauge: <ph name="SUBFRAME_SITE" /></translation>

@@ -11,7 +11,7 @@
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
+#include "chrome/browser/chromeos/login/screens/core_oobe_view.h"
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_web_dialog.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
@@ -82,9 +82,9 @@ void ShowCreditsDialog(Profile* profile,
 
 namespace chromeos {
 
-EulaScreenHandler::EulaScreenHandler(CoreOobeActor* core_oobe_actor)
-    : BaseScreenHandler(kJsScreenPath),
-      core_oobe_actor_(core_oobe_actor) {
+EulaScreenHandler::EulaScreenHandler(CoreOobeView* core_oobe_view)
+    : core_oobe_view_(core_oobe_view), weak_factory_(this) {
+  set_call_js_prefix(kJsScreenPath);
 }
 
 EulaScreenHandler::~EulaScreenHandler() {
@@ -121,13 +121,19 @@ void EulaScreenHandler::DeclareLocalizedValues(
   builder->Add("eulaScreenAccessibleTitle", IDS_EULA_SCREEN_ACCESSIBLE_TITLE);
   builder->Add("checkboxLogging", IDS_EULA_CHECKBOX_ENABLE_LOGGING);
   builder->Add("back", IDS_EULA_BACK_BUTTON);
+  builder->Add("next", IDS_EULA_NEXT_BUTTON);
   builder->Add("acceptAgreement", IDS_EULA_ACCEPT_AND_CONTINUE_BUTTON);
   builder->Add("eulaSystemInstallationSettings",
                IDS_EULA_SYSTEM_SECURITY_SETTING);
-  builder->Add("eulaTpmDesc", IDS_EULA_TPM_DESCRIPTION);
-  builder->Add("eulaTpmKeyDesc", IDS_EULA_TPM_KEY_DESCRIPTION);
-  builder->Add("eulaTpmDescPowerwash", IDS_EULA_TPM_KEY_DESCRIPTION_POWERWASH);
-  builder->Add("eulaTpmBusy", IDS_EULA_TPM_BUSY);
+
+  builder->Add("eulaTpmDesc", IDS_EULA_SECURE_MODULE_DESCRIPTION);
+  builder->Add("eulaTpmKeyDesc", IDS_EULA_SECURE_MODULE_KEY_DESCRIPTION);
+  builder->Add("eulaTpmDescPowerwash",
+               IDS_EULA_SECURE_MODULE_KEY_DESCRIPTION_POWERWASH);
+  builder->Add("eulaTpmBusy", IDS_EULA_SECURE_MODULE_BUSY);
+  ::login::GetSecureModuleUsed(base::Bind(
+      &EulaScreenHandler::UpdateLocalizedValues, weak_factory_.GetWeakPtr()));
+
   builder->Add("eulaSystemInstallationSettingsOkButton", IDS_OK);
   builder->Add("termsOfServiceLoading", IDS_TERMS_OF_SERVICE_SCREEN_LOADING);
 #if BUILDFLAG(ENABLE_RLZ)
@@ -145,6 +151,7 @@ void EulaScreenHandler::DeclareLocalizedValues(
 
   /* MD-OOBE */
   builder->Add("oobeEulaSectionTitle", IDS_OOBE_EULA_SECTION_TITLE);
+  builder->Add("oobeEulaIframeLabel", IDS_OOBE_EULA_IFRAME_LABEL);
   builder->Add("oobeEulaAcceptAndContinueButtonText",
                IDS_OOBE_EULA_ACCEPT_AND_CONTINUE_BUTTON_TEXT);
 }
@@ -171,12 +178,12 @@ void EulaScreenHandler::Initialize() {
   if (!page_is_ready() || !screen_)
     return;
 
-  core_oobe_actor_->SetUsageStats(screen_->IsUsageStatsEnabled());
+  core_oobe_view_->SetUsageStats(screen_->IsUsageStatsEnabled());
 
   // This OEM EULA is a file:// URL which we're unable to load in iframe.
   // Instead if it's defined we use chrome://terms/oem that will load same file.
   if (!screen_->GetOemEulaUrl().is_empty())
-    core_oobe_actor_->SetOemEulaUrl(chrome::kChromeUITermsOemURL);
+    core_oobe_view_->SetOemEulaUrl(chrome::kChromeUITermsOemURL);
 
   if (show_on_init_) {
     Show();
@@ -185,7 +192,7 @@ void EulaScreenHandler::Initialize() {
 }
 
 void EulaScreenHandler::OnPasswordFetched(const std::string& tpm_password) {
-  core_oobe_actor_->SetTpmPassword(tpm_password);
+  core_oobe_view_->SetTpmPassword(tpm_password);
 }
 
 void EulaScreenHandler::HandleOnLearnMore() {
@@ -215,6 +222,21 @@ void EulaScreenHandler::HandleOnChromeCredits() {
 void EulaScreenHandler::HandleOnInstallationSettingsPopupOpened() {
   if (screen_)
     screen_->InitiatePasswordFetch();
+}
+
+void EulaScreenHandler::UpdateLocalizedValues(
+    ::login::SecureModuleUsed secure_module_used) {
+  base::DictionaryValue updated_secure_module_strings;
+  auto builder = base::MakeUnique<::login::LocalizedValuesBuilder>(
+      &updated_secure_module_strings);
+  if (secure_module_used == ::login::SecureModuleUsed::TPM) {
+    builder->Add("eulaTpmDesc", IDS_EULA_TPM_DESCRIPTION);
+    builder->Add("eulaTpmKeyDesc", IDS_EULA_TPM_KEY_DESCRIPTION);
+    builder->Add("eulaTpmDescPowerwash",
+                 IDS_EULA_TPM_KEY_DESCRIPTION_POWERWASH);
+    builder->Add("eulaTpmBusy", IDS_EULA_TPM_BUSY);
+    core_oobe_view_->ReloadEulaContent(updated_secure_module_strings);
+  }
 }
 
 }  // namespace chromeos

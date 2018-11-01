@@ -90,7 +90,7 @@ static_library("common") {
     "descriptors_android.h",
     "ini_parser.cc",
     "ini_parser.h",
-    "instant_type_traits.h",
+    "instant_struct_traits.h",
     "logging_chrome.cc",
     "logging_chrome.h",
     "mac/app_shim_launch.h",
@@ -150,8 +150,6 @@ static_library("common") {
     "url_constants.h",
     "web_application_info.cc",
     "web_application_info.h",
-    "widevine_cdm_constants.cc",
-    "widevine_cdm_constants.h",
   ]
   defines = []
 
@@ -211,7 +209,6 @@ static_library("common") {
     "//crypto",
     "//extensions/common:common_constants",
     "//extensions/features",
-    "//gin",
     "//google_apis",
     "//gpu/command_buffer/service",
     "//gpu/config",
@@ -225,7 +222,6 @@ static_library("common") {
     "//printing/features",
     "//skia",
     "//third_party/icu",
-    "//third_party/kasko:kasko_features",
     "//third_party/libxml",
     "//third_party/re2",
     "//third_party/widevine/cdm:headers",
@@ -481,6 +477,12 @@ static_library("common") {
       "pepper_permission_util.h",
     ]
   }
+  if (enable_pepper_cdms) {
+    sources += [
+      "widevine_cdm_constants.cc",
+      "widevine_cdm_constants.h",
+    ]
+  }
   if (!enable_webrtc) {
     sources -= [ "media/webrtc_logging_messages.h" ]
   }
@@ -519,14 +521,18 @@ static_library("common") {
     }
   }
 
-  if (enable_vr_shell) {
-    defines += [ "ENABLE_VR_SHELL" ]
-  }
-
   if (is_linux) {
     deps = [
       "//sandbox/linux:sandbox_services",
     ]
+  }
+
+  if (enable_pepper_cdms) {
+    sources += [
+      "media/cdm_host_file_path.cc",
+      "media/cdm_host_file_path.h",
+    ]
+    public_deps += [ "//chrome/common:version_header" ]
   }
 }
 
@@ -576,6 +582,7 @@ static_library("constants") {
     "//content/public/common:result_codes",
     "//extensions/features",
     "//printing/features",
+    "//rlz/features",
   ]
   deps = [
     ":version_header",
@@ -677,6 +684,8 @@ mojom("mojo_bindings") {
   sources = [
     "conflicts/module_event_sink_win.mojom",
     "field_trial_recorder.mojom",
+    "file_patcher.mojom",
+    "insecure_content_renderer.mojom",
     "net_benchmarking.mojom",
     "network_diagnostics.mojom",
     "prerender.mojom",
@@ -685,8 +694,13 @@ mojom("mojo_bindings") {
     "shell_handler_win.mojom",
   ]
 
+  if (is_chromeos) {
+    sources += [ "zip_file_creator.mojom" ]
+  }
+
   public_deps = [
     "//components/content_settings/core/common:mojo_bindings",
+    "//mojo/common:common_custom_types",
     "//url/mojo:url_mojom_gurl",
   ]
 }

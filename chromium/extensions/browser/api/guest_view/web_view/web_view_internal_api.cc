@@ -44,6 +44,8 @@ namespace {
 const char kAppCacheKey[] = "appcache";
 const char kCacheKey[] = "cache";
 const char kCookiesKey[] = "cookies";
+const char kSessionCookiesKey[] = "sessionCookies";
+const char kPersistentCookiesKey[] = "persistentCookies";
 const char kFileSystemsKey[] = "fileSystems";
 const char kIndexedDBKey[] = "indexedDB";
 const char kLocalStorageKey[] = "localStorage";
@@ -61,6 +63,10 @@ uint32_t MaskForKey(const char* key) {
     return webview::WEB_VIEW_REMOVE_DATA_MASK_APPCACHE;
   if (strcmp(key, kCacheKey) == 0)
     return webview::WEB_VIEW_REMOVE_DATA_MASK_CACHE;
+  if (strcmp(key, kSessionCookiesKey) == 0)
+    return webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES;
+  if (strcmp(key, kPersistentCookiesKey) == 0)
+    return webview::WEB_VIEW_REMOVE_DATA_MASK_PERSISTENT_COOKIES;
   if (strcmp(key, kCookiesKey) == 0)
     return webview::WEB_VIEW_REMOVE_DATA_MASK_COOKIES;
   if (strcmp(key, kFileSystemsKey) == 0)
@@ -309,10 +315,11 @@ bool WebViewInternalCaptureVisibleRegionFunction::RunAsyncSafe(
   }
 
   is_guest_transparent_ = guest->allow_transparency();
-  return CaptureAsync(guest->web_contents(), image_details.get(),
-                      base::Bind(&WebViewInternalCaptureVisibleRegionFunction::
-                                     CopyFromBackingStoreComplete,
-                                 this));
+  return CaptureAsync(
+      guest->web_contents(), image_details.get(),
+      base::Bind(
+          &WebViewInternalCaptureVisibleRegionFunction::CopyFromSurfaceComplete,
+          this));
 }
 bool WebViewInternalCaptureVisibleRegionFunction::IsScreenshotEnabled() {
   // TODO(wjmaclean): Is it ok to always return true here?
@@ -370,19 +377,16 @@ WebViewInternalExecuteCodeFunction::WebViewInternalExecuteCodeFunction()
 WebViewInternalExecuteCodeFunction::~WebViewInternalExecuteCodeFunction() {
 }
 
-bool WebViewInternalExecuteCodeFunction::Init() {
-  if (details_.get())
-    return true;
+ExecuteCodeFunction::InitResult WebViewInternalExecuteCodeFunction::Init() {
+  if (init_result_)
+    return init_result_.value();
 
-  if (!args_->GetInteger(0, &guest_instance_id_))
-    return false;
-
-  if (!guest_instance_id_)
-    return false;
+  if (!args_->GetInteger(0, &guest_instance_id_) || !guest_instance_id_)
+    return set_init_result(VALIDATION_FAILURE);
 
   std::string src;
   if (!args_->GetString(1, &src))
-    return false;
+    return set_init_result(VALIDATION_FAILURE);
 
   // Set |guest_src_| here, but do not return false if it is invalid.
   // Instead, let it continue with the normal page load sequence,
@@ -394,25 +398,25 @@ bool WebViewInternalExecuteCodeFunction::Init() {
 
   base::DictionaryValue* details_value = NULL;
   if (!args_->GetDictionary(2, &details_value))
-    return false;
+    return set_init_result(VALIDATION_FAILURE);
   std::unique_ptr<InjectDetails> details(new InjectDetails());
   if (!InjectDetails::Populate(*details_value, details.get()))
-    return false;
+    return set_init_result(VALIDATION_FAILURE);
 
   details_ = std::move(details);
 
   if (extension()) {
     set_host_id(HostID(HostID::EXTENSIONS, extension()->id()));
-    return true;
+    return set_init_result(SUCCESS);
   }
 
   WebContents* web_contents = GetSenderWebContents();
   if (web_contents && web_contents->GetWebUI()) {
     const GURL& url = render_frame_host()->GetSiteInstance()->GetSiteURL();
     set_host_id(HostID(HostID::WEBUI, url.spec()));
-    return true;
+    return set_init_result(SUCCESS);
   }
-  return false;
+  return set_init_result_error("");  // TODO(lazyboy): error?
 }
 
 bool WebViewInternalExecuteCodeFunction::ShouldInsertCSS() const {
@@ -647,8 +651,7 @@ ExtensionFunction::ResponseAction WebViewInternalGetZoomFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   double zoom_factor = guest_->GetZoom();
-  return RespondNow(
-      OneArgument(base::MakeUnique<base::FundamentalValue>(zoom_factor)));
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(zoom_factor)));
 }
 
 WebViewInternalSetZoomModeFunction::WebViewInternalSetZoomModeFunction() {
@@ -810,8 +813,7 @@ ExtensionFunction::ResponseAction WebViewInternalGoFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool successful = guest_->Go(params->relative_index);
-  return RespondNow(
-      OneArgument(base::MakeUnique<base::FundamentalValue>(successful)));
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(successful)));
 }
 
 WebViewInternalReloadFunction::WebViewInternalReloadFunction() {
@@ -865,7 +867,7 @@ ExtensionFunction::ResponseAction WebViewInternalSetPermissionFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(result !=
                               WebViewPermissionHelper::SET_PERMISSION_INVALID);
 
-  return RespondNow(OneArgument(base::MakeUnique<base::FundamentalValue>(
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
       result == WebViewPermissionHelper::SET_PERMISSION_ALLOWED)));
 }
 

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_POLICY_ARC_POLICY_BRIDGE_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_POLICY_ARC_POLICY_BRIDGE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -44,8 +45,6 @@ class ArcPolicyBridge : public ArcService,
   ArcPolicyBridge(ArcBridgeService* bridge_service,
                   policy::PolicyService* policy_service);
   ~ArcPolicyBridge() override;
-
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   void OverrideIsManagedForTesting(bool is_managed);
 

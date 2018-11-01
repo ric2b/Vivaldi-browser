@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/vr_shell/ui_elements.h"
 
+#include <limits>
+
 #include "base/logging.h"
 #include "chrome/browser/android/vr_shell/animation.h"
 #include "chrome/browser/android/vr_shell/easing.h"
@@ -31,7 +33,9 @@ float GetRayPlaneIntersection(gvr::Vec3f ray_origin,
 
 }  // namespace
 
-ReversibleTransform::ReversibleTransform() { MakeIdentity(); }
+ReversibleTransform::ReversibleTransform() {
+  MakeIdentity();
+}
 
 void ReversibleTransform::MakeIdentity() {
   SetIdentityM(to_world);
@@ -137,7 +141,7 @@ void ContentRectangle::Animate(int64_t time) {
         continue;
       }
       double value = animation.easing->CalculateValue(
-          (double)(time - animation.start) / (double)animation.duration);
+          static_cast<double>(time - animation.start) / animation.duration);
       values[i] =
           animation.from[i] + (value * (animation.to[i] - animation.from[i]));
     }
@@ -198,4 +202,3 @@ bool ContentRectangle::IsHitTestable() const {
 }
 
 }  // namespace vr_shell
-

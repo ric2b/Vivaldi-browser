@@ -16,4 +16,5 @@ if __name__ == '__main__':
     sys.exit(1)
 
   with open(sys.argv[1], 'w') as fp:
-    sys.exit(subprocess.check_call(sys.argv[2:], stdout=fp))
+    sys.exit(subprocess.check_call(sys.argv[2:], stdout=fp,
+        stderr=open("/dev/null", "w")))

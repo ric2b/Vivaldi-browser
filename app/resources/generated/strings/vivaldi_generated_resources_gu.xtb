@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">આ એક્સટેન્શનને કોઈ વિશિષ્ટ પરવાનગીઓની જરૂર નથી.</translation>
 <translation id="1620510694547887537">કૅમેરો</translation>
 <translation id="1635033183663317347">તમારા સંરક્ષક દ્વારા ઇન્સ્ટોલ કરાયું</translation>
-<translation id="1652965563555864525">&amp;અવાજ બંધ</translation>
 <translation id="1723824996674794290">&amp;નવી વિંડો</translation>
 <translation id="1729533290416704613">જ્યારે તમે ઑમ્નિબૉક્સ પરથી શોધ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
 <translation id="1789575671122666129">પૉપઅપ્સ</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">&amp;બધા પસંદ કરો</translation>
 <translation id="1965328510789761112">ખાનગી મેમરી</translation>
 <translation id="1992397118740194946">સેટ નથી</translation>
-<translation id="2011110593081822050">વેબ કાર્યકર્તા: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">આ પ્લગિન છુપાવો </translation>
 <translation id="2087822576218954668">છાપો: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">પ્લગ-ઇન અપડેટ કરો</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">સૂચનાઓ</translation>
 <translation id="2501797496290880632">એક શૉર્ટકટ લખો</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ઇન્સ્ટોલ કરો</translation>
-<translation id="253434972992662860">&amp;થોભો</translation>
 <translation id="2550212893339833758">સ્વૅપ કરેલ મેમરી</translation>
 <translation id="2662876636500006917">Vivaldi વેબ બજાર</translation>
 <translation id="2678063897982469759">ફરી સક્ષમ કરો</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">નકારો</translation>
 <translation id="3936390757709632190">નવા ટૅબમાં ઑડિયો &amp;ખોલો</translation>
 <translation id="3943582379552582368">&amp;પાછળ</translation>
-<translation id="3954582159466790312">અવાજ&amp; ચાલુ કરો</translation>
 <translation id="3979395879372752341">નવું એક્સ્ટેંશન ઉમેરાયું (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">એક્સ્ટેંશન બનાવ્યું:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968"><ph name="URL" /> &amp;ના પર જાઓ</translation>
 <translation id="4595560905247879544">ઍપ્લિકેશન્સ અને એક્સટેન્શન્સને માત્ર સંચાલક (<ph name="CUSTODIAN_NAME" />) દ્વારા જ સંશોધિત કરી શકાય છે.</translation>
 <translation id="4613271546271159013">જ્યારે તમે કોઈ નવું ટેબ ખોલો છો ત્યારે જે પૃષ્ઠ બતાવવામાં આવે છે તેને એક્સ્ટેન્શને બદલ્યું છે.</translation>
-<translation id="4623537843784569564">આ એક્સ્ટેન્શન ખોટી રીતે અપડેટ કરેલ હોઈ શકે છે. ફરીથી ઇન્સ્ટોલ કરવાનો પ્રયાસ કરો.</translation>
 <translation id="4677772697204437347">GPU મેમરી</translation>
 <translation id="4711638718396952945">સેટિંગ્સ પુનઃસ્થાપિત કરો</translation>
 <translation id="4839303808932127586">વિડિઓને આ રૂપે સા&amp;ચવો...</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> ઇન્સ્ટૉલ કરીએ? તમને જેના પર વિશ્વાસ હોય તે જ પ્લગ-ઇન્સ ઇન્સ્ટૉલ કરો.</translation>
-<translation id="4861833787540810454">&amp;ચલાવો</translation>
-<translation id="4883993111890464517">આ એક્સ્ટેન્શન દૂષિત થયેલ હોઈ શકે છે. ફરીથી ઇન્સ્ટોલ કરવાનો પ્રયાસ કરો.</translation>
 <translation id="488785315393301722">વિગતો બતાવો</translation>
 <translation id="4911714727432509308">કોઈ એક્સટેન્શનને કીબોર્ડ શૉર્ટકટ્સ અસાઇન કરેલા નથી.</translation>
-<translation id="4919987486109157213">એક્સ્ટેન્શન દૂષિત છે. ફરીથી ઇન્સ્ટોલ કરવાનો પ્રયાસ કરો.</translation>
 <translation id="4927301649992043040">પૅક એક્સ્ટેંશન</translation>
 <translation id="49896407730300355">ઘ&amp;ડિયાળની વિપરિત દિશામાં ફેરવો</translation>
 <translation id="4989966318180235467">&amp;પૃષ્ઠભૂમિ પૃષ્ઠની તપાસ કરો</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">કીબોર્ડ શોર્ટકટ્સ</translation>
 <translation id="6798954102094737107">પ્લગિન: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">ફેરફારો રાખો</translation>
-<translation id="6844537474943985871">આ એક્સ્ટેન્શન દૂષિત થઈ ગયું હોઈ શકે છે. કૃપા કરીને અનઇન્સ્ટોલ કરીને ફરીથી ઇન્સ્ટોલ કરવાનો પ્રયાસ કરો.</translation>
 <translation id="6863910145616405334">પ્લગ-ઇન મળ્યું નથી</translation>
 <translation id="6886871292305414135">લિંક નવા &amp;ટૅબમાં ખોલો</translation>
 <translation id="6900284862687837908">પૃષ્ઠભૂમિ ઍપ્લિકેશન: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">નવું ટૅબ</translation>
 <translation id="7564847347806291057">પ્રક્રિયાનો અંત કરો</translation>
-<translation id="7618337809041914424">ફ્રેમ &amp;છાપો...</translation>
 <translation id="7629827748548208700">ટૅબ: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">રદ કરો</translation>
 <translation id="7663719505383602579">પ્રાપ્તકર્તા: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -255,7 +245,6 @@
 <translation id="8916476537757519021">છુપો મોડ સબફ્રેમ: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">વિગતો છુપાવો</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" />, એન્ટરપ્રાઇઝ નીતિ દ્વારા અવરોધિત કરેલ છે</translation>
-<translation id="9101691533782776290">ઍપ્લિકેશન લોન્ચ કરો</translation>
 <translation id="9170848237812810038">&amp;પૂર્વવત્ કરો</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ઉમેરાયું</translation>
 <translation id="9219103736887031265">છબીઓ</translation>

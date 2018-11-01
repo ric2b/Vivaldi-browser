@@ -5,13 +5,10 @@
 #include "content/public/test/test_navigation_observer.h"
 
 #include "base/bind.h"
-#include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/run_loop.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
 
@@ -47,29 +44,19 @@ class TestNavigationObserver::TestWebContentsObserver
     parent_->OnDidStopLoading(web_contents());
   }
 
-  void DidStartProvisionalLoadForFrame(RenderFrameHost* render_frame_host,
-                                       const GURL& validated_url,
-                                       bool is_error_page) override {
-    parent_->OnDidStartProvisionalLoad(render_frame_host, validated_url,
-                                       is_error_page);
+  void DidStartNavigation(NavigationHandle* navigation_handle) override {
+    if (navigation_handle->IsSamePage())
+      return;
+
+    parent_->OnDidStartNavigation();
   }
 
-  void DidFailProvisionalLoad(
-      RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      int error_code,
-      const base::string16& error_description,
-      bool was_ignored_by_handler) override {
-    parent_->OnDidFailProvisionalLoad(render_frame_host, validated_url,
-                                      error_code, error_description);
-  }
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted())
+      return;
 
-  void DidCommitProvisionalLoadForFrame(
-      RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override {
-    parent_->OnDidCommitProvisionalLoadForFrame(
-        render_frame_host, url, transition_type);
+    parent_->OnDidFinishNavigation(navigation_handle->IsErrorPage(),
+                                   navigation_handle->GetURL());
   }
 
   TestNavigationObserver* parent_;
@@ -79,32 +66,23 @@ class TestNavigationObserver::TestWebContentsObserver
 
 TestNavigationObserver::TestNavigationObserver(
     WebContents* web_contents,
-    int number_of_navigations)
+    int number_of_navigations,
+    MessageLoopRunner::QuitMode quit_mode)
     : navigation_started_(false),
       navigations_completed_(0),
       number_of_navigations_(number_of_navigations),
-      message_loop_runner_(new MessageLoopRunner),
+      message_loop_runner_(new MessageLoopRunner(quit_mode)),
       web_contents_created_callback_(
-          base::Bind(
-              &TestNavigationObserver::OnWebContentsCreated,
-              base::Unretained(this))) {
+          base::Bind(&TestNavigationObserver::OnWebContentsCreated,
+                     base::Unretained(this))) {
   if (web_contents)
     RegisterAsObserver(web_contents);
 }
 
 TestNavigationObserver::TestNavigationObserver(
-    WebContents* web_contents)
-    : navigation_started_(false),
-      navigations_completed_(0),
-      number_of_navigations_(1),
-      message_loop_runner_(new MessageLoopRunner),
-      web_contents_created_callback_(
-          base::Bind(
-              &TestNavigationObserver::OnWebContentsCreated,
-              base::Unretained(this))) {
-  if (web_contents)
-    RegisterAsObserver(web_contents);
-}
+    WebContents* web_contents,
+    MessageLoopRunner::QuitMode quit_mode)
+    : TestNavigationObserver(web_contents, 1, quit_mode) {}
 
 TestNavigationObserver::~TestNavigationObserver() {
   StopWatchingNewWebContents();
@@ -172,28 +150,14 @@ void TestNavigationObserver::OnDidStopLoading(WebContents* web_contents) {
   }
 }
 
-void TestNavigationObserver::OnDidStartProvisionalLoad(
-    RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    bool is_error_page) {
+void TestNavigationObserver::OnDidStartNavigation() {
   last_navigation_succeeded_ = false;
 }
 
-void TestNavigationObserver::OnDidFailProvisionalLoad(
-    RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    int error_code,
-    const base::string16& error_description) {
-  last_navigation_url_ = validated_url;
-  last_navigation_succeeded_ = false;
-}
-
-void TestNavigationObserver::OnDidCommitProvisionalLoadForFrame(
-    RenderFrameHost* render_frame_host,
-    const GURL& url,
-    ui::PageTransition transition_type) {
+void TestNavigationObserver::OnDidFinishNavigation(bool is_error_page,
+                                                   const GURL& url) {
   last_navigation_url_ = url;
-  last_navigation_succeeded_ = true;
+  last_navigation_succeeded_ = !is_error_page;
 }
 
 }  // namespace content

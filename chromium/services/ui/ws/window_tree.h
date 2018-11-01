@@ -264,7 +264,8 @@ class WindowTree : public mojom::WindowTree,
   // |target_window| is the target of the event, and may be null or not known
   // to this tree.
   void SendToPointerWatcher(const ui::Event& event,
-                            ServerWindow* target_window);
+                            ServerWindow* target_window,
+                            int64_t display_id);
 
  private:
   friend class test::WindowTreeTestApi;
@@ -425,8 +426,8 @@ class WindowTree : public mojom::WindowTree,
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t change_id, Id transport_window_id) override;
   void SetCanFocus(Id transport_window_id, bool can_focus) override;
-  void SetCanAcceptEvents(Id transport_window_id,
-                          bool can_accept_events) override;
+  void SetEventTargetingPolicy(Id transport_window_id,
+                               mojom::EventTargetingPolicy policy) override;
   void SetPredefinedCursor(uint32_t change_id,
                            Id transport_window_id,
                            ui::mojom::Cursor cursor_id) override;
@@ -445,6 +446,8 @@ class WindowTree : public mojom::WindowTree,
   void SetCanAcceptDrops(Id window_id, bool accepts_drops) override;
   void SetHitTestMask(Id transport_window_id,
                       const base::Optional<gfx::Rect>& mask) override;
+  void StackAbove(uint32_t change_id, Id above_id, Id below_id) override;
+  void StackAtTop(uint32_t change_id, Id window_id) override;
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
       override;
@@ -469,11 +472,7 @@ class WindowTree : public mojom::WindowTree,
   void AddActivationParent(Id transport_window_id) override;
   void RemoveActivationParent(Id transport_window_id) override;
   void ActivateNextWindow() override;
-  void SetUnderlaySurfaceOffsetAndExtendedHitArea(
-      Id window_id,
-      int32_t x_offset,
-      int32_t y_offset,
-      const gfx::Insets& hit_area) override;
+  void SetExtendedHitArea(Id window_id, const gfx::Insets& hit_area) override;
   void WmResponse(uint32_t change_id, bool response) override;
   void WmRequestClose(Id transport_window_id) override;
   void WmSetFrameDecorationValues(
@@ -488,6 +487,8 @@ class WindowTree : public mojom::WindowTree,
   bool HasRootForAccessPolicy(const ServerWindow* window) const override;
   bool IsWindowKnownForAccessPolicy(const ServerWindow* window) const override;
   bool IsWindowRootOfAnotherTreeForAccessPolicy(
+      const ServerWindow* window) const override;
+  bool IsWindowCreatedByWindowManager(
       const ServerWindow* window) const override;
 
   // DragSource:

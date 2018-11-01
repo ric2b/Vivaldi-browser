@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/views/location_bar/bubble_icon_view.h"
 
 #include "chrome/browser/command_updater.h"
+#include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/events/event.h"
@@ -15,18 +17,20 @@
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 
+void BubbleIconView::Init() {
+  AddChildView(image_);
+  image_->set_can_process_events_within_subtree(false);
+  image_->EnableCanvasFlippingForRTLUI(true);
+  SetInkDropMode(InkDropMode::ON);
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+}
+
 BubbleIconView::BubbleIconView(CommandUpdater* command_updater, int command_id)
     : image_(new views::ImageView()),
       command_updater_(command_updater),
       command_id_(command_id),
       active_(false),
-      suppress_mouse_released_action_(false) {
-  AddChildView(image_);
-  image_->set_interactive(false);
-  image_->EnableCanvasFlippingForRTLUI(true);
-  SetInkDropMode(InkDropMode::ON);
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
-}
+      suppress_mouse_released_action_(false) {}
 
 BubbleIconView::~BubbleIconView() {}
 
@@ -59,7 +63,13 @@ bool BubbleIconView::GetTooltipText(const gfx::Point& p,
 }
 
 gfx::Size BubbleIconView::GetPreferredSize() const {
-  return image_->GetPreferredSize();
+  gfx::Rect image_rect(image_->GetPreferredSize());
+  image_rect.Inset(-gfx::Insets(LocationBarView::kIconInteriorPadding));
+  DCHECK_EQ(image_rect.height(),
+            GetLayoutConstant(LOCATION_BAR_HEIGHT) -
+                2 * (GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
+                     BackgroundWith1PxBorder::kLocationBarBorderThicknessDip));
+  return image_rect.size();
 }
 
 void BubbleIconView::Layout() {
@@ -131,14 +141,14 @@ void BubbleIconView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 }
 
 void BubbleIconView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
-  image_->SetPaintToLayer(true);
+  image_->SetPaintToLayer();
   image_->layer()->SetFillsBoundsOpaquely(false);
   views::InkDropHostView::AddInkDropLayer(ink_drop_layer);
 }
 
 void BubbleIconView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   views::InkDropHostView::RemoveInkDropLayer(ink_drop_layer);
-  image_->SetPaintToLayer(false);
+  image_->DestroyLayer();
 }
 
 std::unique_ptr<views::InkDrop> BubbleIconView::CreateInkDrop() {
@@ -175,10 +185,6 @@ void BubbleIconView::ExecuteCommand(ExecuteSource source) {
   OnExecuting(source);
   if (command_updater_)
     command_updater_->ExecuteCommand(command_id_);
-}
-
-gfx::VectorIconId BubbleIconView::GetVectorIcon() const {
-  return gfx::VectorIconId::VECTOR_ICON_NONE;
 }
 
 void BubbleIconView::OnBoundsChanged(const gfx::Rect& previous_bounds) {

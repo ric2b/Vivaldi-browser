@@ -7,9 +7,10 @@
 #include "core/dom/Element.h"
 #include "core/html/HTMLImageElement.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebCache.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebLocalFrame.h"
@@ -26,15 +27,17 @@ class TestDocumentSubresourceFilter : public WebDocumentSubresourceFilter {
   explicit TestDocumentSubresourceFilter(bool allowLoads)
       : m_allowLoads(allowLoads) {}
 
-  bool allowLoad(const WebURL& resourceUrl,
-                 WebURLRequest::RequestContext) override {
+  LoadPolicy getLoadPolicy(const WebURL& resourceUrl,
+                           WebURLRequest::RequestContext) override {
     std::string resourcePath = WebString(KURL(resourceUrl).path()).utf8();
     if (std::find(m_queriedSubresourcePaths.begin(),
                   m_queriedSubresourcePaths.end(),
                   resourcePath) == m_queriedSubresourcePaths.end())
       m_queriedSubresourcePaths.push_back(resourcePath);
-    return m_allowLoads;
+    return m_allowLoads ? Allow : Disallow;
   }
+
+  void reportDisallowedLoad() override {}
 
   const std::vector<std::string>& queriedSubresourcePaths() const {
     return m_queriedSubresourcePaths;
@@ -48,14 +51,13 @@ class TestDocumentSubresourceFilter : public WebDocumentSubresourceFilter {
 class SubresourceFilteringWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  void didStartProvisionalLoad(WebLocalFrame* localFrame) override {
+  void didStartProvisionalLoad(WebDataSource* dataSource) override {
     // Normally, the filter should be set when the load is committed. For
     // the sake of this test, however, inject it earlier to verify that it
     // is not consulted for the main resource load.
     m_subresourceFilter =
         new TestDocumentSubresourceFilter(m_allowSubresourcesFromNextLoad);
-    localFrame->provisionalDataSource()->setSubresourceFilter(
-        m_subresourceFilter);
+    dataSource->setSubresourceFilter(m_subresourceFilter);
   }
 
   void setAllowSubresourcesFromNextLoad(bool allow) {
@@ -101,15 +103,16 @@ class WebDocumentSubresourceFilterTest : public ::testing::Test {
 
  private:
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(m_baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
   }
 
   // ::testing::Test:
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   SubresourceFilteringWebFrameClient m_client;
@@ -122,7 +125,7 @@ TEST_F(WebDocumentSubresourceFilterTest, AllowedSubresource) {
   expectSubresourceWasLoaded(true);
   // The filter should not be consulted for the main document resource.
   EXPECT_THAT(queriedSubresourcePaths(),
-              testing::ElementsAre("/white-1x1.png"));
+              ::testing::ElementsAre("/white-1x1.png"));
 }
 
 TEST_F(WebDocumentSubresourceFilterTest, DisallowedSubresource) {
@@ -132,8 +135,8 @@ TEST_F(WebDocumentSubresourceFilterTest, DisallowedSubresource) {
 
 TEST_F(WebDocumentSubresourceFilterTest, FilteringDecisionIsMadeLoadByLoad) {
   for (const bool allowSubresources : {false, true}) {
-    SCOPED_TRACE(testing::Message() << "First load allows subresources = "
-                                    << allowSubresources);
+    SCOPED_TRACE(::testing::Message() << "First load allows subresources = "
+                                      << allowSubresources);
 
     loadDocument(allowSubresources);
     expectSubresourceWasLoaded(allowSubresources);
@@ -141,7 +144,7 @@ TEST_F(WebDocumentSubresourceFilterTest, FilteringDecisionIsMadeLoadByLoad) {
     loadDocument(!allowSubresources);
     expectSubresourceWasLoaded(!allowSubresources);
     EXPECT_THAT(queriedSubresourcePaths(),
-                testing::ElementsAre("/white-1x1.png"));
+                ::testing::ElementsAre("/white-1x1.png"));
 
     WebCache::clear();
   }

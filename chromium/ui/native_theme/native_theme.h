@@ -8,11 +8,13 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_canvas.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/models/menu_separator_types.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_export.h"
-
-class SkCanvas;
 
 namespace gfx {
 class Rect;
@@ -45,6 +47,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // The part to be painted / sized.
   enum Part {
     kCheckbox,
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    kFrameTopArea,
+#endif
     kInnerSpinButton,
     kMenuList,
     kMenuPopupBackground,
@@ -53,8 +58,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kMenuCheckBackground,
     kMenuPopupArrow,
     kMenuPopupGutter,
-    kMenuPopupSeparator,
 #endif
+    kMenuPopupSeparator,
     kMenuItemBackground,
     kProgressBar,
     kPushButton,
@@ -109,6 +114,19 @@ class NATIVE_THEME_EXPORT NativeTheme {
     SkColor background_color;
   };
 
+  struct FrameTopAreaExtraParams {
+    // Distinguishes between active (foreground) and inactive
+    // (background) window frame styles.
+    bool is_active;
+    bool incognito;
+    // True when Chromium renders the titlebar.  False when the window
+    // manager renders the titlebar.
+    bool use_custom_frame;
+    // If the NativeTheme will paint a solid color, it should use
+    // |default_background_color|.
+    SkColor default_background_color;
+  };
+
   struct InnerSpinButtonExtraParams {
     bool spin_up;
     bool read_only;
@@ -127,6 +145,11 @@ class NATIVE_THEME_EXPORT NativeTheme {
     // Used for the disabled state to indicate if the item is both disabled and
     // selected.
     bool is_selected;
+  };
+
+  struct MenuSeparatorExtraParams {
+    const gfx::Rect* paint_rect;
+    MenuSeparatorType type;
   };
 
   struct MenuItemExtraParams {
@@ -207,10 +230,12 @@ class NATIVE_THEME_EXPORT NativeTheme {
     ExtraParams(const ExtraParams& other);
 
     ButtonExtraParams button;
+    FrameTopAreaExtraParams frame_top_area;
     InnerSpinButtonExtraParams inner_spin;
     MenuArrowExtraParams menu_arrow;
     MenuCheckExtraParams menu_check;
     MenuItemExtraParams menu_item;
+    MenuSeparatorExtraParams menu_separator;
     MenuListExtraParams menu_list;
     MenuBackgroundExtraParams menu_background;
     ProgressBarExtraParams progress_bar;
@@ -228,7 +253,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
                                 const ExtraParams& extra) const = 0;
 
   // Paint the part to the canvas.
-  virtual void Paint(SkCanvas* canvas,
+  virtual void Paint(cc::PaintCanvas* canvas,
                      Part part,
                      State state,
                      const gfx::Rect& rect,
@@ -236,13 +261,27 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   // Paint part during state transition, used for overlay scrollbar state
   // transition animation.
-  virtual void PaintStateTransition(SkCanvas* canvas,
+  virtual void PaintStateTransition(cc::PaintCanvas* canvas,
                                     Part part,
                                     State startState,
                                     State endState,
                                     double progress,
                                     const gfx::Rect& rect,
                                     ScrollbarOverlayColorTheme theme) const {}
+
+  // Returns whether the theme uses a nine-patch resource for the given part.
+  // If true, calling code should always paint into a canvas the size of which
+  // can be gotten from GetNinePatchCanvasSize.
+  virtual bool SupportsNinePatch(Part part) const = 0;
+
+  // If the part paints into a nine-patch resource, the size of the canvas
+  // which should be painted into.
+  virtual gfx::Size GetNinePatchCanvasSize(Part part) const = 0;
+
+  // If the part paints into a nine-patch resource, the rect in the canvas
+  // which defines the center tile. This is the tile that should be resized out
+  // when the part is resized.
+  virtual gfx::Rect GetNinePatchAperture(Part part) const = 0;
 
   // Supports theme specific colors.
   void SetScrollbarColors(unsigned inactive_color,
@@ -312,7 +351,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_TreeSelectedTextUnfocused,
     kColorId_TreeSelectionBackgroundFocused,
     kColorId_TreeSelectionBackgroundUnfocused,
-    kColorId_TreeArrow,
     // Table
     kColorId_TableBackground,
     kColorId_TableText,
@@ -321,6 +359,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_TableSelectionBackgroundFocused,
     kColorId_TableSelectionBackgroundUnfocused,
     kColorId_TableGroupingIndicatorColor,
+    // Table Header
+    kColorId_TableHeaderText,
+    kColorId_TableHeaderBackground,
+    kColorId_TableHeaderSeparator,
     // Results Tables, such as the omnibox.
     kColorId_ResultsTableNormalBackground,
     kColorId_ResultsTableHoveredBackground,

@@ -38,6 +38,7 @@ namespace content {
 class GinJavaBridgeDispatcherHost;
 class RenderFrameHost;
 class RenderWidgetHostViewAndroid;
+struct ContextMenuParams;
 struct MenuItem;
 
 class ContentViewCoreImpl : public ContentViewCore,
@@ -55,7 +56,7 @@ class ContentViewCoreImpl : public ContentViewCore,
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
   WebContents* GetWebContents() const override;
   ui::WindowAndroid* GetWindowAndroid() const override;
-  void ShowPastePopup(int x, int y) override;
+  bool ShowPastePopup(const ContextMenuParams& params) override;
 
   void AddObserver(ContentViewCoreImplObserver* observer);
   void RemoveObserver(ContentViewCoreImplObserver* observer);
@@ -130,7 +131,7 @@ class ContentViewCoreImpl : public ContentViewCore,
                           jfloat pressure,
                           jfloat orientation,
                           jfloat tilt,
-                          jint android_changed_button,
+                          jint android_action_button,
                           jint android_button_state,
                           jint android_meta_state,
                           jint tool_type);
@@ -259,13 +260,6 @@ class ContentViewCoreImpl : public ContentViewCore,
       const base::android::JavaParamRef<jstring>& textTrackTextShadow,
       const base::android::JavaParamRef<jstring>& textTrackTextSize);
 
-  void ExtractSmartClipData(JNIEnv* env,
-                            const base::android::JavaParamRef<jobject>& obj,
-                            jint x,
-                            jint y,
-                            jint width,
-                            jint height);
-
   void SetBackgroundOpaque(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& jobj,
                            jboolean opaque);
@@ -293,10 +287,6 @@ class ContentViewCoreImpl : public ContentViewCore,
 
   void HidePopupsAndPreserveSelection();
 
-  void OnSmartClipDataExtracted(const base::string16& text,
-                                const base::string16& html,
-                                const gfx::Rect& clip_rect);
-
   // Creates a popup menu with |items|.
   // |multiple| defines if it should support multi-select.
   // If not |multiple|, |selected_item| sets the initially selected item.
@@ -318,8 +308,6 @@ class ContentViewCoreImpl : public ContentViewCore,
                        const gfx::SizeF& viewport_size,
                        const float top_controls_height,
                        const float top_controls_shown_ratio,
-                       const float bottom_controls_height,
-                       const float bottom_controls_shown_ratio,
                        bool is_mobile_optimized_hint,
                        const gfx::SelectionBound& selection_start);
 
@@ -335,7 +323,6 @@ class ContentViewCoreImpl : public ContentViewCore,
                         int composition_end,
                         bool show_ime_if_needed,
                         bool reply_to_request);
-  void OnBackgroundColorChanged(SkColor color);
 
   bool HasFocus();
   void RequestDisallowInterceptTouchEvent();
@@ -346,8 +333,6 @@ class ContentViewCoreImpl : public ContentViewCore,
   void OnSelectionEvent(ui::SelectionEventType event,
                         const gfx::PointF& selection_anchor,
                         const gfx::RectF& selection_rect);
-
-  void StartContentIntent(const GURL& content_url, bool is_main_frame);
 
   // Shows the disambiguation popup
   // |rect_pixels|   --> window coordinates which |zoomed_bitmap| represents

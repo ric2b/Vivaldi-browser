@@ -129,6 +129,7 @@ class WEB_EXPORT WebViewImpl final
   void didEnterFullscreen() override;
   void didExitFullscreen() override;
 
+  void setSuppressFrameRequestsWorkaroundFor704763Only(bool) override;
   void beginFrame(double lastFrameTimeMonotonic) override;
 
   void updateAllLifecyclePhases() override;
@@ -140,7 +141,7 @@ class WEB_EXPORT WebViewImpl final
   void compositeAndReadbackAsync(
       WebCompositeAndReadbackAsyncCallback*) override;
   void themeChanged() override;
-  WebInputEventResult handleInputEvent(const WebInputEvent&) override;
+  WebInputEventResult handleInputEvent(const WebCoalescedInputEvent&) override;
   void setCursorVisibilityState(bool isVisible) override;
   bool hasTouchEventHandlersAt(const WebPoint&) override;
 
@@ -229,7 +230,7 @@ class WEB_EXPORT WebViewImpl final
   void setDeviceScaleFactor(float) override;
   void setZoomFactorForDeviceScaleFactor(float) override;
 
-  void setDeviceColorProfile(const WebVector<char>&) override;
+  void setDeviceColorProfile(const gfx::ICCProfile&) override;
 
   void enableAutoResizeMode(const WebSize& minSize,
                             const WebSize& maxSize) override;
@@ -241,7 +242,7 @@ class WEB_EXPORT WebViewImpl final
   WebHitTestResult hitTestResultAt(const WebPoint&) override;
   WebHitTestResult hitTestResultForTap(const WebPoint&,
                                        const WebSize&) override;
-  void spellingMarkers(WebVector<uint32_t>* markers) override;
+  void spellingMarkerOffsetsForTest(WebVector<unsigned>* offsets) override;
   void removeSpellingMarkersUnderWords(
       const WebVector<WebString>& words) override;
   unsigned long createUniqueIdentifierForRequest() override;
@@ -255,7 +256,6 @@ class WEB_EXPORT WebViewImpl final
   void performCustomContextMenuAction(unsigned action) override;
   void showContextMenu() override;
   void didCloseContextMenu() override;
-  void extractSmartClipData(WebRect, WebString&, WebString&, WebRect&) override;
   void hidePopups() override;
   void setPageOverlayColor(WebColor) override;
   WebPageImportanceSignals* pageImportanceSignals() override;
@@ -291,14 +291,15 @@ class WEB_EXPORT WebViewImpl final
   void invalidateRect(const IntRect&);
 
   void setBaseBackgroundColor(WebColor);
+  void setBaseBackgroundColorOverride(WebColor);
+  void clearBaseBackgroundColorOverride();
   void setBackgroundColorOverride(WebColor);
   void setZoomFactorOverride(float);
   void setCompositorDeviceScaleFactorOverride(float);
   void setDeviceEmulationTransform(const TransformationMatrix&);
   TransformationMatrix getDeviceEmulationTransformForTesting() const;
 
-  Color baseBackgroundColor() const { return m_baseBackgroundColor; }
-
+  Color baseBackgroundColor() const;
   WebColor backgroundColorOverride() const { return m_backgroundColorOverride; }
 
   Frame* focusedCoreFrame() const;
@@ -336,8 +337,6 @@ class WEB_EXPORT WebViewImpl final
                                bool useAnchor,
                                float newScale,
                                double durationInSeconds);
-
-  void hasTouchEventHandlers(bool);
 
   // WebGestureCurveTarget implementation for fling.
   bool scrollBy(const WebFloatSize& delta,
@@ -491,7 +490,9 @@ class WEB_EXPORT WebViewImpl final
   void forceNextWebGLContextCreationToFail() override;
   void forceNextDrawingBufferCreationToFail() override;
 
-  CompositorProxyClient* createCompositorProxyClient();
+  CompositorWorkerProxyClient* createCompositorWorkerProxyClient();
+  AnimationWorkletProxyClient* createAnimationWorkletProxyClient();
+
   IntSize mainFrameSize();
   WebDisplayMode displayMode() const { return m_displayMode; }
 
@@ -537,7 +538,8 @@ class WEB_EXPORT WebViewImpl final
   // TODO(lfg): Remove once WebViewFrameWidget is deleted.
   void scheduleAnimationForWidget();
   bool getCompositionCharacterBounds(WebVector<WebRect>&) override;
-  void applyReplacementRange(const WebRange&) override;
+
+  void updateBaseBackgroundColor();
 
   friend class WebView;  // So WebView::Create can call our constructor
   friend class WebViewFrameWidget;
@@ -569,8 +571,6 @@ class WEB_EXPORT WebViewImpl final
   WebRect widenRectWithinPageBounds(const WebRect& source,
                                     int targetMargin,
                                     int minimumMargin);
-
-  void pointerLockMouseEvent(const WebInputEvent&);
 
   // PageWidgetEventHandler functions
   void handleMouseLeave(LocalFrame&, const WebMouseEvent&) override;
@@ -605,6 +605,8 @@ class WEB_EXPORT WebViewImpl final
 
   LocalFrame* focusedLocalFrameInWidget() const;
   LocalFrame* focusedLocalFrameAvailableForIme() const;
+
+  CompositorMutatorImpl& mutator();
 
   WebViewClient* m_client;  // Can be 0 (e.g. unittests, shared workers, etc.)
   WebSpellCheckClient* m_spellCheckClient;
@@ -691,8 +693,6 @@ class WEB_EXPORT WebViewImpl final
   Persistent<Node> m_mouseCaptureNode;
   RefPtr<UserGestureToken> m_mouseCaptureGestureToken;
 
-  RefPtr<UserGestureToken> m_pointerLockGestureToken;
-
   WebLayerTreeView* m_layerTreeView;
   std::unique_ptr<CompositorAnimationHost> m_animationHost;
 
@@ -713,6 +713,8 @@ class WEB_EXPORT WebViewImpl final
   std::unique_ptr<FullscreenController> m_fullscreenController;
 
   WebColor m_baseBackgroundColor;
+  bool m_baseBackgroundColorOverrideEnabled;
+  WebColor m_baseBackgroundColorOverride;
   WebColor m_backgroundColorOverride;
   float m_zoomFactorOverride;
 

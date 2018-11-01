@@ -21,7 +21,6 @@
 #include "headless/public/util/black_hole_protocol_handler.h"
 #include "headless/public/util/in_memory_protocol_handler.h"
 #include "net/url_request/url_request_context.h"
-#include "ui/aura/window_tree_host.h"
 
 namespace headless {
 
@@ -249,8 +248,7 @@ HeadlessWebContents* HeadlessBrowserContextImpl::CreateWebContents(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   std::unique_ptr<HeadlessWebContentsImpl> headless_web_contents =
-      HeadlessWebContentsImpl::Create(builder,
-                                      browser()->window_tree_host()->window());
+      HeadlessWebContentsImpl::Create(builder);
 
   if (!headless_web_contents) {
     return nullptr;
@@ -318,6 +316,13 @@ HeadlessBrowserContext::Builder::SetProtocolHandlers(
 HeadlessBrowserContext::Builder& HeadlessBrowserContext::Builder::SetUserAgent(
     const std::string& user_agent) {
   options_->user_agent_ = user_agent;
+  return *this;
+}
+
+HeadlessBrowserContext::Builder&
+HeadlessBrowserContext::Builder::SetProductNameAndVersion(
+    const std::string& product_name_and_version) {
+  options_->product_name_and_version_ = product_name_and_version;
   return *this;
 }
 

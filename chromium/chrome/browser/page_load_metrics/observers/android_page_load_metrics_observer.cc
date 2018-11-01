@@ -20,15 +20,6 @@ AndroidPageLoadMetricsObserver::AndroidPageLoadMetricsObserver(
     content::WebContents* web_contents)
     : web_contents_(web_contents) {}
 
-page_load_metrics::PageLoadMetricsObserver::ObservePolicy
-AndroidPageLoadMetricsObserver::OnStart(
-    content::NavigationHandle* navigation_handle,
-    const GURL& currently_committed_url,
-    bool started_in_foreground) {
-  navigation_start_ = navigation_handle->NavigationStart();
-  return CONTINUE_OBSERVING;
-}
-
 void AndroidPageLoadMetricsObserver::OnFirstContentfulPaint(
     const page_load_metrics::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& extra_info) {
@@ -41,6 +32,21 @@ void AndroidPageLoadMetricsObserver::OnFirstContentfulPaint(
   Java_PageLoadMetrics_onFirstContentfulPaint(
       env, java_web_contents,
       static_cast<jlong>(
-          (navigation_start_ - base::TimeTicks()).InMicroseconds()),
+          (extra_info.navigation_start - base::TimeTicks()).InMicroseconds()),
       static_cast<jlong>(first_contentful_paint_ms));
+}
+
+void AndroidPageLoadMetricsObserver::OnLoadEventStart(
+    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::PageLoadExtraInfo& info) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  int64_t load_event_start_ms = timing.load_event_start->InMilliseconds();
+  base::android::ScopedJavaLocalRef<jobject> java_web_contents =
+      web_contents_->GetJavaWebContents();
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_PageLoadMetrics_onLoadEventStart(
+      env, java_web_contents,
+      static_cast<jlong>(
+          (info.navigation_start - base::TimeTicks()).InMicroseconds()),
+      static_cast<jlong>(load_event_start_ms));
 }

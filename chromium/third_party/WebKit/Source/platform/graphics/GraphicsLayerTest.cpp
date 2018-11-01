@@ -45,6 +45,8 @@
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerTreeView.h"
+#include "public/platform/WebScheduler.h"
+#include "public/platform/WebThread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -163,9 +165,6 @@ class FakeScrollableArea : public GarbageCollectedFinalized<FakeScrollableArea>,
  public:
   static FakeScrollableArea* create() { return new FakeScrollableArea; }
 
-  LayoutRect visualRectForScrollbarParts() const override {
-    return LayoutRect();
-  }
   bool isActive() const override { return false; }
   int scrollSize(ScrollbarOrientation) const override { return 100; }
   bool isScrollCornerVisible() const override { return false; }
@@ -192,22 +191,14 @@ class FakeScrollableArea : public GarbageCollectedFinalized<FakeScrollableArea>,
     return flooredIntSize(m_scrollOffset);
   }
 
+  RefPtr<WebTaskRunner> getTimerTaskRunner() const final {
+    return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
+  }
+
   DEFINE_INLINE_VIRTUAL_TRACE() { ScrollableArea::trace(visitor); }
 
  private:
   ScrollOffset m_scrollOffset;
 };
-
-TEST_F(GraphicsLayerTest, applyScrollToScrollableArea) {
-  FakeScrollableArea* scrollableArea = FakeScrollableArea::create();
-  m_graphicsLayer->setScrollableArea(scrollableArea, false);
-
-  WebDoublePoint scrollPosition(7, 9);
-  m_platformLayer->setScrollPositionDouble(scrollPosition);
-  m_graphicsLayer->didScroll();
-
-  EXPECT_FLOAT_EQ(scrollPosition.x, scrollableArea->getScrollOffset().width());
-  EXPECT_FLOAT_EQ(scrollPosition.y, scrollableArea->getScrollOffset().height());
-}
 
 }  // namespace blink

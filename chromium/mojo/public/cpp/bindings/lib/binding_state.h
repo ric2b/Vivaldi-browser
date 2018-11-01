@@ -16,7 +16,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
-#include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/connection_error_callback.h"
 #include "mojo/public/cpp/bindings/filter_chain.h"
@@ -69,10 +68,6 @@ class MOJO_CPP_BINDINGS_EXPORT BindingStateBase {
     return router_->handle();
   }
 
-  AssociatedGroup* associated_group() {
-    return endpoint_client_ ? endpoint_client_->associated_group() : nullptr;
-  }
-
   void FlushForTesting();
 
   void EnableTestingMode();
@@ -109,8 +104,6 @@ class BindingState : public BindingStateBase {
         base::MakeUnique<typename Interface::RequestValidator_>(),
         Interface::PassesAssociatedKinds_, Interface::HasSyncMethods_, &stub_,
         Interface::Version_);
-    if (Interface::PassesAssociatedKinds_)
-      stub_.serialization_context()->group_controller = router_;
   }
 
   InterfaceRequest<Interface> Unbind() {

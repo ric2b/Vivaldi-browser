@@ -203,6 +203,8 @@ bool CSSPropertyEquality::propertiesEqual(CSSPropertyID prop,
       return a.offsetRotation() == b.offsetRotation();
     case CSSPropertyOpacity:
       return a.opacity() == b.opacity();
+    case CSSPropertyOrder:
+      return a.order() == b.order();
     case CSSPropertyOrphans:
       return a.orphans() == b.orphans();
     case CSSPropertyOutlineColor:
@@ -268,7 +270,7 @@ bool CSSPropertyEquality::propertiesEqual(CSSPropertyID prop,
       return a.top() == b.top();
     case CSSPropertyVerticalAlign:
       return a.verticalAlign() == b.verticalAlign() &&
-             (a.verticalAlign() != EVerticalAlign::Length ||
+             (a.verticalAlign() != EVerticalAlign::kLength ||
               a.getVerticalAlignLength() == b.getVerticalAlignLength());
     case CSSPropertyVisibility:
       return a.visibility() == b.visibility();

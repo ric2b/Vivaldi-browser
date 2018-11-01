@@ -24,10 +24,29 @@ public class WebApkUma {
     public static final int UPDATE_REQUEST_QUEUED_THREE_TIMES = 2;
     public static final int UPDATE_REQUEST_QUEUED_MAX = 3;
 
+    // This enum is used to back UMA histograms, and should therefore be treated as append-only.
+    public static final int GOOGLE_PLAY_INSTALL_SUCCESS = 0;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_NO_DELEGATE = 1;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_TO_CONNECT_TO_SERVICE = 2;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_CALLER_VERIFICATION_FAILURE = 3;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_POLICY_VIOLATION = 4;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_API_DISABLED = 5;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_REQUEST_FAILED = 6;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_DOWNLOAD_CANCELLED = 7;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_DOWNLOAD_ERROR = 8;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_INSTALL_ERROR = 9;
+    public static final int GOOGLE_PLAY_INSTALL_FAILED_INSTALL_TIMEOUT = 10;
+    public static final int GOOGLE_PLAY_INSTALL_RESULT_MAX = 11;
+
     public static final String HISTOGRAM_UPDATE_REQUEST_SENT =
             "WebApk.Update.RequestSent";
 
     public static final String HISTOGRAM_UPDATE_REQUEST_QUEUED = "WebApk.Update.RequestQueued";
+
+    private static final int WEBAPK_OPEN_MAX = 3;
+    public static final int WEBAPK_OPEN_LAUNCH_SUCCESS = 0;
+    public static final int WEBAPK_OPEN_NO_LAUNCH_INTENT = 1;
+    public static final int WEBAPK_OPEN_ACTIVITY_NOT_FOUND = 2;
 
     /**
      * Records the time point when a request to update a WebAPK is sent to the WebAPK Server.
@@ -47,5 +66,25 @@ public class WebApkUma {
     public static void recordUpdateRequestQueued(int times) {
         RecordHistogram.recordEnumeratedHistogram(HISTOGRAM_UPDATE_REQUEST_QUEUED, times,
                 UPDATE_REQUEST_QUEUED_MAX);
+    }
+
+    /**
+     * When a user presses on the "Open WebAPK" menu item, this records whether the WebAPK was
+     * opened successfully.
+     * @param type Result of trying to open WebAPK.
+     */
+    public static void recordWebApkOpenAttempt(int type) {
+        assert type >= 0 && type < WEBAPK_OPEN_MAX;
+        RecordHistogram.recordEnumeratedHistogram("WebApk.OpenFromMenu", type, WEBAPK_OPEN_MAX);
+    }
+
+    /**
+     * Records whether installing a WebAPK from Google Play succeeded. If not, records the reason
+     * that the install failed.
+     */
+    public static void recordGooglePlayInstallResult(int result) {
+        assert result >= 0 && result < GOOGLE_PLAY_INSTALL_RESULT_MAX;
+        RecordHistogram.recordEnumeratedHistogram(
+                "WebApk.Install.GooglePlayInstallResult", result, GOOGLE_PLAY_INSTALL_RESULT_MAX);
     }
 }

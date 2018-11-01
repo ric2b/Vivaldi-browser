@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "device/geolocation/geolocation_service_impl.h"
 
 namespace device {
@@ -15,11 +16,10 @@ GeolocationServiceContext::GeolocationServiceContext() {}
 GeolocationServiceContext::~GeolocationServiceContext() {}
 
 void GeolocationServiceContext::CreateService(
-    const base::Closure& update_callback,
     mojo::InterfaceRequest<mojom::GeolocationService> request) {
   GeolocationServiceImpl* service =
-      new GeolocationServiceImpl(std::move(request), this, update_callback);
-  services_.push_back(service);
+      new GeolocationServiceImpl(std::move(request), this);
+  services_.push_back(base::WrapUnique<GeolocationServiceImpl>(service));
   if (geoposition_override_)
     service->SetOverride(*geoposition_override_.get());
   else
@@ -28,7 +28,11 @@ void GeolocationServiceContext::CreateService(
 
 void GeolocationServiceContext::ServiceHadConnectionError(
     GeolocationServiceImpl* service) {
-  auto it = std::find(services_.begin(), services_.end(), service);
+  auto it =
+      std::find_if(services_.begin(), services_.end(),
+                   [service](const std::unique_ptr<GeolocationServiceImpl>& s) {
+                     return service == s.get();
+                   });
   DCHECK(it != services_.end());
   services_.erase(it);
 }
@@ -36,13 +40,13 @@ void GeolocationServiceContext::ServiceHadConnectionError(
 void GeolocationServiceContext::SetOverride(
     std::unique_ptr<Geoposition> geoposition) {
   geoposition_override_.swap(geoposition);
-  for (auto* service : services_) {
+  for (auto& service : services_) {
     service->SetOverride(*geoposition_override_.get());
   }
 }
 
 void GeolocationServiceContext::ClearOverride() {
-  for (auto* service : services_) {
+  for (auto& service : services_) {
     service->ClearOverride();
   }
 }

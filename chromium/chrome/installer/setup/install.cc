@@ -21,6 +21,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/shortcut.h"
+#include "chrome/install_static/install_details.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_crash_reporting.h"
 #include "chrome/installer/setup/installer_state.h"
@@ -319,11 +320,11 @@ bool CreateVisualElementsManifest(const base::FilePath& src_path,
     EscapeXmlAttributeValueInSingleQuotes(&display_name);
 
     // Fill the manifest with the desired values.
-    const base::char16* canary_str =
-        InstallUtil::IsChromeSxSProcess() ? L"Canary" : L"";
+    const base::char16* logo_suffix =
+        install_static::InstallDetails::Get().logo_suffix();
     base::string16 manifest16(base::StringPrintf(
-        manifest_template.c_str(), elements_dir.c_str(), canary_str,
-        elements_dir.c_str(), canary_str, elements_dir.c_str(), canary_str));
+        manifest_template.c_str(), elements_dir.c_str(), logo_suffix,
+        elements_dir.c_str(), logo_suffix, elements_dir.c_str(), logo_suffix));
 
     // Write the manifest to |src_path|.
     const std::string manifest(base::UTF16ToUTF8(manifest16));
@@ -661,7 +662,7 @@ InstallStatus InstallOrUpdateProduct(
 void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
                                     const InstallerState& installer_state) {
   base::CommandLine command_line(setup_path);
-  installer_state.product().AppendProductFlags(&command_line);
+  InstallUtil::AppendModeSwitch(&command_line);
   command_line.AppendSwitch(switches::kDeleteOldVersions);
 
   if (installer_state.system_install())

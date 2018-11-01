@@ -22,6 +22,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/cursor/cursor.h"
@@ -185,7 +186,7 @@ ContentSettingBubbleContents::~ContentSettingBubbleContents() {
 gfx::Size ContentSettingBubbleContents::GetPreferredSize() const {
   gfx::Size preferred_size(views::View::GetPreferredSize());
   int preferred_width = LayoutDelegate::Get()->GetDialogPreferredWidth(
-      LayoutDelegate::DialogWidthType::SMALL);
+      LayoutDelegate::DialogWidth::SMALL);
   if (!preferred_width)
     preferred_width = (!content_setting_bubble_model_->bubble_content()
                             .domain_lists.empty() &&
@@ -209,17 +210,12 @@ void ContentSettingBubbleContents::Init() {
   GridLayout* layout = new views::GridLayout(this);
   SetLayoutManager(layout);
   const LayoutDelegate* layout_delegate = LayoutDelegate::Get();
-  const int related_control_horizontal_spacing =
-      layout_delegate->GetLayoutDistance(
-          LayoutDelegate::LayoutDistanceType::
-              RELATED_CONTROL_HORIZONTAL_SPACING);
-  const int related_control_vertical_spacing =
-      layout_delegate->GetLayoutDistance(
-          LayoutDelegate::LayoutDistanceType::RELATED_CONTROL_VERTICAL_SPACING);
-  const int unrelated_control_vertical_spacing =
-      layout_delegate->GetLayoutDistance(
-          LayoutDelegate::LayoutDistanceType::
-              UNRELATED_CONTROL_VERTICAL_SPACING);
+  const int related_control_horizontal_spacing = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::RELATED_CONTROL_HORIZONTAL_SPACING);
+  const int related_control_vertical_spacing = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::RELATED_CONTROL_VERTICAL_SPACING);
+  const int unrelated_control_vertical_spacing = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::UNRELATED_CONTROL_VERTICAL_SPACING);
 
   const int kSingleColumnSetId = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(kSingleColumnSetId);
@@ -307,8 +303,9 @@ void ContentSettingBubbleContents::Init() {
   views::ColumnSet* indented_single_column_set =
       layout->AddColumnSet(indented_kSingleColumnSetId);
   indented_single_column_set->AddPaddingColumn(
-      0, layout_delegate->GetLayoutDistance(
-             LayoutDelegate::LayoutDistanceType::CHECKBOX_INDENT));
+      0,
+      layout_delegate->GetMetric(
+          LayoutDelegate::Metric::SUBSECTION_HORIZONTAL_INDENT));
   indented_single_column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL,
                                         1, GridLayout::USE_PREF, 0, 0);
 
@@ -349,8 +346,9 @@ void ContentSettingBubbleContents::Init() {
     views::ColumnSet* menu_column_set =
         layout->AddColumnSet(kMediaMenuColumnSetId);
     menu_column_set->AddPaddingColumn(
-        0, layout_delegate->GetLayoutDistance(
-               LayoutDelegate::LayoutDistanceType::CHECKBOX_INDENT));
+        0,
+        layout_delegate->GetMetric(
+            LayoutDelegate::Metric::SUBSECTION_HORIZONTAL_INDENT));
     menu_column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL, 0,
                                GridLayout::USE_PREF, 0, 0);
     menu_column_set->AddPaddingColumn(0, related_control_horizontal_spacing);
@@ -422,8 +420,8 @@ void ContentSettingBubbleContents::Init() {
     if (!layout_delegate->IsHarmonyMode()) {
       layout->AddPaddingRow(0, related_control_vertical_spacing);
       layout->StartRow(0, kSingleColumnSetId);
-      layout->AddView(new views::Separator(views::Separator::HORIZONTAL), 1, 1,
-                      GridLayout::FILL, GridLayout::FILL);
+      layout->AddView(new views::Separator(), 1, 1, GridLayout::FILL,
+                      GridLayout::FILL);
     }
     layout->AddPaddingRow(0, related_control_vertical_spacing);
   }
@@ -462,9 +460,11 @@ base::string16 ContentSettingBubbleContents::GetDialogButtonLabel(
   return l10n_util::GetStringUTF16(IDS_DONE);
 }
 
-void ContentSettingBubbleContents::DidNavigateMainFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
+void ContentSettingBubbleContents::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
+    return;
+
   // Content settings are based on the main frame, so if it switches then
   // close up shop.
   GetWidget()->Close();

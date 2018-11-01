@@ -539,6 +539,11 @@ void InterstitialPageImpl::DidNavigate(
   }
 }
 
+WebContents* InterstitialPageImpl::OpenURL(const OpenURLParams& params) {
+  NOTREACHED();
+  return nullptr;
+}
+
 RendererPreferences InterstitialPageImpl::GetRendererPrefs(
     BrowserContext* browser_context) const {
   delegate_->OverrideRendererPrefs(&renderer_preferences_);
@@ -604,7 +609,8 @@ WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
   RenderWidgetHostViewBase* view =
       wcv->CreateViewForWidget(render_view_host_->GetWidget(), false);
   RenderWidgetHostImpl::From(render_view_host_->GetWidget())->SetView(view);
-  render_view_host_->AllowBindings(BINDINGS_POLICY_DOM_AUTOMATION);
+  render_view_host_->GetMainFrame()->AllowBindings(
+      BINDINGS_POLICY_DOM_AUTOMATION);
 
   render_view_host_->CreateRenderView(MSG_ROUTING_NONE,
                                       MSG_ROUTING_NONE,
@@ -752,6 +758,11 @@ void InterstitialPageImpl::CreateNewWindow(
     const mojom::CreateNewWindowParams& params,
     SessionStorageNamespace* session_storage_namespace) {
   NOTREACHED() << "InterstitialPage does not support showing popups.";
+}
+
+void InterstitialPageImpl::SetFocusedFrame(FrameTreeNode* node,
+                                           SiteInstance* source) {
+  frame_tree_.SetFocusedFrame(node, source);
 }
 
 void InterstitialPageImpl::CreateNewWidget(int32_t render_process_id,

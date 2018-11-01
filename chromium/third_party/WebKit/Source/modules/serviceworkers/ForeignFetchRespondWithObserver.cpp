@@ -4,9 +4,9 @@
 
 #include "modules/serviceworkers/ForeignFetchRespondWithObserver.h"
 
-#include "core/fetch/CrossOriginAccessControl.h"
 #include "modules/fetch/Response.h"
 #include "modules/serviceworkers/ForeignFetchResponse.h"
+#include "platform/loader/fetch/CrossOriginAccessControl.h"
 
 namespace blink {
 
@@ -69,7 +69,7 @@ void ForeignFetchRespondWithObserver::responseWasFulfilled(
     HTTPHeaderSet headers;
     if (foreignFetchResponse.hasHeaders()) {
       for (const String& header : foreignFetchResponse.headers())
-        headers.add(header);
+        headers.insert(header);
       if (response->response()->getType() == FetchResponseData::CORSType) {
         const HTTPHeaderSet& existingHeaders =
             response->response()->corsExposedHeaderNames();
@@ -77,7 +77,7 @@ void ForeignFetchRespondWithObserver::responseWasFulfilled(
         for (HTTPHeaderSet::iterator it = headers.begin(); it != headers.end();
              ++it) {
           if (!existingHeaders.contains(*it))
-            headersToRemove.add(*it);
+            headersToRemove.insert(*it);
         }
         headers.removeAll(headersToRemove);
       }

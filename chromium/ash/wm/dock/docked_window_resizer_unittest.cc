@@ -17,13 +17,13 @@
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
 #include "ash/wm/drag_window_resizer.h"
-#include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -653,9 +653,6 @@ TEST_P(DockedWindowResizerTest, RevertDockedDragRevertsAttachment) {
 
 // Move a docked window to the second display
 TEST_P(DockedWindowResizerTest, DragAcrossDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("800x800,800x800");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ(2, static_cast<int>(root_windows.size()));

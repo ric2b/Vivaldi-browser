@@ -3,29 +3,35 @@
 // found in the LICENSE file.
 
 /**
- * @implements {SDK.TargetManager.Observer}
+ * @implements {SDK.SDKModelObserver<!SDK.CPUProfilerModel>}
  * @implements {SDK.TracingManagerClient}
  * @unrestricted
  */
 Timeline.TimelineController = class {
   /**
-   * @param {!SDK.Target} target
-   * @param {!Timeline.TimelineLifecycleDelegate} delegate
-   * @param {!SDK.TracingModel} tracingModel
+   * @param {!SDK.TracingManager} tracingManager
+   * @param {!Timeline.PerformanceModel} performanceModel
+   * @param {!Timeline.TimelineController.Client} client
    */
-  constructor(target, delegate, tracingModel) {
-    this._delegate = delegate;
-    this._target = target;
-    this._tracingModel = tracingModel;
-    this._targets = [];
+  constructor(tracingManager, performanceModel, client) {
+    this._tracingManager = tracingManager;
+    this._performanceModel = performanceModel;
+    this._client = client;
+
+    this._tracingModelBackingStorage = new Bindings.TempFileBackingStorage('tracing');
+    this._tracingModel = new SDK.TracingModel(this._tracingModelBackingStorage);
+
+    this._performanceModel.setMainTarget(tracingManager.target());
+
     /** @type {!Array<!Timeline.ExtensionTracingSession>} */
     this._extensionSessions = [];
-    SDK.targetManager.observeTargets(this);
+    SDK.targetManager.observeModels(SDK.CPUProfilerModel, this);
   }
 
   /**
    * @param {!Timeline.TimelineController.RecordingOptions} options
    * @param {!Array<!Extensions.ExtensionTraceProvider>} providers
+   * @return {!Promise}
    */
   startRecording(options, providers) {
     this._extensionTraceProviders = Extensions.extensionServer.traceProviders().slice();
@@ -62,20 +68,22 @@ Timeline.TimelineController = class {
     if (options.captureFilmStrip)
       categoriesArray.push(disabledByDefault('devtools.screenshot'));
 
-    this._extensionSessions = providers.map(provider => new Timeline.ExtensionTracingSession(provider, this._delegate));
+    this._extensionSessions =
+        providers.map(provider => new Timeline.ExtensionTracingSession(provider, this._performanceModel));
     this._extensionSessions.forEach(session => session.start());
-    this._startRecordingWithCategories(categoriesArray.join(','), options.enableJSSampling);
+    var startPromise = this._startRecordingWithCategories(categoriesArray.join(','), options.enableJSSampling);
+    this._performanceModel.setRecordStartTime(Date.now());
+    return startPromise;
   }
 
   stopRecording() {
     var tracingStoppedPromises = [];
     tracingStoppedPromises.push(new Promise(resolve => this._tracingCompleteCallback = resolve));
-    tracingStoppedPromises.push(this._stopProfilingOnAllTargets());
-    this._target.tracingManager.stop();
-
+    tracingStoppedPromises.push(this._stopProfilingOnAllModels());
+    this._tracingManager.stop();
     tracingStoppedPromises.push(SDK.targetManager.resumeAllTargets());
 
-    this._delegate.loadingStarted();
+    this._client.loadingStarted();
 
     var extensionCompletionPromises = this._extensionSessions.map(session => session.stop());
     if (extensionCompletionPromises.length) {
@@ -89,59 +97,38 @@ Timeline.TimelineController = class {
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.CPUProfilerModel} cpuProfilerModel
    */
-  targetAdded(target) {
-    this._targets.push(target);
+  modelAdded(cpuProfilerModel) {
     if (this._profiling)
-      this._startProfilingOnTarget(target);
+      cpuProfilerModel.startRecording();
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.CPUProfilerModel} cpuProfilerModel
    */
-  targetRemoved(target) {
-    this._targets.remove(target, true);
+  modelRemoved(cpuProfilerModel) {
     // FIXME: We'd like to stop profiling on the target and retrieve a profile
     // but it's too late. Backend connection is closed.
   }
 
   /**
-   * @param {!SDK.Target} target
    * @return {!Promise}
    */
-  _startProfilingOnTarget(target) {
-    return target.hasJSCapability() ? target.profilerAgent().start() : Promise.resolve();
-  }
-
-  /**
-   * @return {!Promise}
-   */
-  _startProfilingOnAllTargets() {
-    var intervalUs = Common.moduleSetting('highResolutionCpuProfiling').get() ? 100 : 1000;
-    this._target.profilerAgent().setSamplingInterval(intervalUs);
+  _startProfilingOnAllModels() {
     this._profiling = true;
-    return Promise.all(this._targets.map(this._startProfilingOnTarget));
+    var models = SDK.targetManager.models(SDK.CPUProfilerModel);
+    return Promise.all(models.map(model => model.startRecording()));
   }
 
   /**
-   * @param {!SDK.Target} target
-   * @return {!Promise}
-   */
-  _stopProfilingOnTarget(target) {
-    return target.hasJSCapability() ? target.profilerAgent().stop(this._addCpuProfile.bind(this, target.id())) :
-                                      Promise.resolve();
-  }
-
-  /**
-   * @param {number} targetId
-   * @param {?Protocol.Error} error
+   * @param {string} targetId
    * @param {?Protocol.Profiler.Profile} cpuProfile
    */
-  _addCpuProfile(targetId, error, cpuProfile) {
+  _addCpuProfile(targetId, cpuProfile) {
     if (!cpuProfile) {
-      Common.console.warn(Common.UIString('CPU profile for a target is not available. %s', error || ''));
+      Common.console.warn(Common.UIString('CPU profile for a target is not available.'));
       return;
     }
     if (!this._cpuProfiles)
@@ -152,44 +139,31 @@ Timeline.TimelineController = class {
   /**
    * @return {!Promise}
    */
-  _stopProfilingOnAllTargets() {
-    var targets = this._profiling ? this._targets : [];
+  _stopProfilingOnAllModels() {
+    var models = this._profiling ? SDK.targetManager.models(SDK.CPUProfilerModel) : [];
     this._profiling = false;
-    return Promise.all(targets.map(this._stopProfilingOnTarget, this));
+    var promises = [];
+    for (var model of models) {
+      var targetId = model.target().id();
+      var modelPromise = model.stopRecording().then(this._addCpuProfile.bind(this, targetId));
+      promises.push(modelPromise);
+    }
+    return Promise.all(promises);
   }
 
   /**
    * @param {string} categories
    * @param {boolean=} enableJSSampling
-   * @param {function(?string)=} callback
+   * @return {!Promise}
    */
-  _startRecordingWithCategories(categories, enableJSSampling, callback) {
+  _startRecordingWithCategories(categories, enableJSSampling) {
     SDK.targetManager.suspendAllTargets();
     var profilingStartedPromise = enableJSSampling && !Runtime.experiments.isEnabled('timelineTracingJSProfile') ?
-        this._startProfilingOnAllTargets() :
+        this._startProfilingOnAllModels() :
         Promise.resolve();
     var samplingFrequencyHz = Common.moduleSetting('highResolutionCpuProfiling').get() ? 10000 : 1000;
     var options = 'sampling-frequency=' + samplingFrequencyHz;
-    var target = this._target;
-    var tracingManager = target.tracingManager;
-    SDK.targetManager.suspendReload(target);
-    profilingStartedPromise.then(tracingManager.start.bind(tracingManager, this, categories, options, onTraceStarted));
-    /**
-     * @param {?string} error
-     */
-    function onTraceStarted(error) {
-      SDK.targetManager.resumeReload(target);
-      if (callback)
-        callback(error);
-    }
-  }
-
-  /**
-   * @override
-   */
-  tracingStarted() {
-    this._tracingModel.reset();
-    this._delegate.recordingStarted();
+    return profilingStartedPromise.then(() => this._tracingManager.start(this, categories, options));
   }
 
   /**
@@ -209,9 +183,14 @@ Timeline.TimelineController = class {
   }
 
   _allSourcesFinished() {
+    this._client.processingStarted();
+    setTimeout(() => this._finalizeTrace(), 0);
+  }
+
+  _finalizeTrace() {
     this._injectCpuProfileEvents();
     this._tracingModel.tracingComplete();
-    this._delegate.loadingComplete(true);
+    this._client.loadingComplete(this._tracingModel, this._tracingModelBackingStorage);
   }
 
   /**
@@ -246,17 +225,15 @@ Timeline.TimelineController = class {
       return;
 
     var pid = mainMetaEvent.thread.process().id();
-    var mainCpuProfile = this._cpuProfiles.get(this._target.id());
+    var mainCpuProfile = this._cpuProfiles.get(this._tracingManager.target().id());
     this._injectCpuProfileEvent(pid, mainMetaEvent.thread.id(), mainCpuProfile);
 
     var workerMetaEvents = metadataEvents.filter(event => event.name === metadataEventTypes.TracingSessionIdForWorker);
     for (var metaEvent of workerMetaEvents) {
       var workerId = metaEvent.args['data']['workerId'];
-      var workerTarget = this._target.subTargetsManager ? this._target.subTargetsManager.targetForId(workerId) : null;
-      if (!workerTarget)
-        continue;
-      var cpuProfile = this._cpuProfiles.get(workerTarget.id());
-      this._injectCpuProfileEvent(pid, metaEvent.args['data']['workerThreadId'], cpuProfile);
+      var cpuProfile = this._cpuProfiles.get(workerId);
+      this._injectCpuProfileEvent(
+          metaEvent.thread.process().id(), metaEvent.args['data']['workerThreadId'], cpuProfile);
     }
     this._cpuProfiles = null;
   }
@@ -266,7 +243,7 @@ Timeline.TimelineController = class {
    * @override
    */
   tracingBufferUsage(usage) {
-    this._delegate.recordingProgress(usage);
+    this._client.recordingProgress(usage);
   }
 
   /**
@@ -274,8 +251,21 @@ Timeline.TimelineController = class {
    * @override
    */
   eventsRetrievalProgress(progress) {
-    this._delegate.loadingProgress(progress);
+    this._client.loadingProgress(progress);
   }
+};
+
+/**
+ * @interface
+ * @extends {Timeline.TimelineLoader.Client}
+ */
+Timeline.TimelineController.Client = function() {};
+
+Timeline.TimelineController.Client.prototype = {
+  /**
+   * @param {number} usage
+   */
+  recordingProgress(usage) {},
 };
 
 /**

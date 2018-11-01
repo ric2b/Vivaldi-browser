@@ -7,9 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "components/reading_list/ios/offline_url_utils.h"
 #include "components/reading_list/ios/reading_list_entry.h"
 #include "components/reading_list/ios/reading_list_model.h"
@@ -40,21 +43,22 @@ const int kNumberOfFailsBeforeStop = 7;
 
 ReadingListDownloadService::ReadingListDownloadService(
     ReadingListModel* reading_list_model,
-    dom_distiller::DomDistillerService* distiller_service,
     PrefService* prefs,
     base::FilePath chrome_profile_path,
     net::URLRequestContextGetter* url_request_context_getter,
+    std::unique_ptr<dom_distiller::DistillerFactory> distiller_factory,
     std::unique_ptr<reading_list::ReadingListDistillerPageFactory>
         distiller_page_factory)
     : reading_list_model_(reading_list_model),
       chrome_profile_path_(chrome_profile_path),
       had_connection_(!net::NetworkChangeNotifier::IsOffline()),
       distiller_page_factory_(std::move(distiller_page_factory)),
+      distiller_factory_(std::move(distiller_factory)),
       weak_ptr_factory_(this) {
   DCHECK(reading_list_model);
 
   url_downloader_ = base::MakeUnique<URLDownloader>(
-      distiller_service, distiller_page_factory_.get(), prefs,
+      distiller_factory_.get(), distiller_page_factory_.get(), prefs,
       chrome_profile_path, url_request_context_getter,
       base::Bind(&ReadingListDownloadService::OnDownloadEnd,
                  base::Unretained(this)),
@@ -82,7 +86,7 @@ void ReadingListDownloadService::Shutdown() {
 void ReadingListDownloadService::ReadingListModelLoaded(
     const ReadingListModel* model) {
   DCHECK_EQ(reading_list_model_, model);
-  DownloadAllEntries();
+  SyncWithModel();
 }
 
 void ReadingListDownloadService::ReadingListWillRemoveEntry(
@@ -108,6 +112,10 @@ void ReadingListDownloadService::ReadingListDidMoveEntry(
   ProcessNewEntry(url);
 }
 
+void ReadingListDownloadService::Clear() {
+  distiller_page_factory_->ReleaseAllRetainedWebState();
+}
+
 void ReadingListDownloadService::ProcessNewEntry(const GURL& url) {
   const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
   if (!entry || entry->IsRead()) {
@@ -117,9 +125,49 @@ void ReadingListDownloadService::ProcessNewEntry(const GURL& url) {
   }
 }
 
-void ReadingListDownloadService::DownloadAllEntries() {
+void ReadingListDownloadService::SyncWithModel() {
   DCHECK(reading_list_model_->loaded());
+  std::set<std::string> processed_directories;
+  std::set<GURL> unprocessed_entries;
   for (const auto& url : reading_list_model_->Keys()) {
+    const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+    switch (entry->DistilledState()) {
+      case ReadingListEntry::PROCESSED:
+        processed_directories.insert(reading_list::OfflineURLDirectoryID(url));
+        break;
+      case ReadingListEntry::WAITING:
+      case ReadingListEntry::PROCESSING:
+      case ReadingListEntry::WILL_RETRY:
+        unprocessed_entries.insert(url);
+        break;
+      case ReadingListEntry::ERROR:
+        break;
+    }
+  }
+  web::WebThread::PostTaskAndReply(
+      web::WebThread::FILE, FROM_HERE,
+      base::Bind(&ReadingListDownloadService::CleanUpFiles,
+                 base::Unretained(this), processed_directories),
+      base::Bind(&ReadingListDownloadService::DownloadUnprocessedEntries,
+                 base::Unretained(this), unprocessed_entries));
+}
+
+void ReadingListDownloadService::CleanUpFiles(
+    const std::set<std::string>& processed_directories) {
+  base::FileEnumerator file_enumerator(OfflineRoot(), false,
+                                       base::FileEnumerator::DIRECTORIES);
+  for (base::FilePath sub_directory = file_enumerator.Next();
+       !sub_directory.empty(); sub_directory = file_enumerator.Next()) {
+    std::string directory_name = sub_directory.BaseName().value();
+    if (!processed_directories.count(directory_name)) {
+      base::DeleteFile(sub_directory, true);
+    }
+  }
+}
+
+void ReadingListDownloadService::DownloadUnprocessedEntries(
+    const std::set<GURL>& unprocessed_entries) {
+  for (const GURL& url : unprocessed_entries) {
     this->ScheduleDownloadEntry(url);
   }
 }
@@ -189,43 +237,51 @@ void ReadingListDownloadService::OnDownloadEnd(
     const GURL& distilled_url,
     URLDownloader::SuccessState success,
     const base::FilePath& distilled_path,
+    int64_t size,
     const std::string& title) {
   DCHECK(reading_list_model_->loaded());
-  if ((success == URLDownloader::DOWNLOAD_SUCCESS ||
-       success == URLDownloader::DOWNLOAD_EXISTS) &&
-      !distilled_path.empty()) {
-    reading_list_model_->SetEntryDistilledInfo(url, distilled_path,
-                                               distilled_url);
-    if (!title.empty())
-      reading_list_model_->SetEntryTitle(url, title);
+  URLDownloader::SuccessState real_success_value = success;
+  if (distilled_path.empty()) {
+    real_success_value = URLDownloader::ERROR;
+  }
+  switch (real_success_value) {
+    case URLDownloader::DOWNLOAD_SUCCESS:
+    case URLDownloader::DOWNLOAD_EXISTS: {
+      int64_t now =
+          (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds();
+      reading_list_model_->SetEntryDistilledInfo(url, distilled_path,
+                                                 distilled_url, size, now);
 
-    const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
-    if (entry)
-      UMA_HISTOGRAM_COUNTS_100("ReadingList.Download.Failures",
-                               entry->FailedDownloadCounter());
-    UMA_HISTOGRAM_ENUMERATION("ReadingList.Download.Status", SUCCESS,
-                              STATUS_MAX);
+      std::string trimmed_title = base::CollapseWhitespaceASCII(title, false);
+      if (!trimmed_title.empty())
+        reading_list_model_->SetEntryTitle(url, trimmed_title);
 
-  } else if (success == URLDownloader::ERROR_RETRY) {
-    reading_list_model_->SetEntryDistilledState(url,
-                                                ReadingListEntry::WILL_RETRY);
-    ScheduleDownloadEntry(url);
-
-    const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
-    if (entry) {
-      if (entry->FailedDownloadCounter() < kNumberOfFailsBeforeStop) {
+      const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+      if (entry)
+        UMA_HISTOGRAM_COUNTS_100("ReadingList.Download.Failures",
+                                 entry->FailedDownloadCounter());
+      UMA_HISTOGRAM_ENUMERATION("ReadingList.Download.Status", SUCCESS,
+                                STATUS_MAX);
+      break;
+    }
+    case URLDownloader::ERROR: {
+      const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+      // Add this failure to the total failure count.
+      if (entry &&
+          entry->FailedDownloadCounter() + 1 < kNumberOfFailsBeforeStop) {
+        reading_list_model_->SetEntryDistilledState(
+            url, ReadingListEntry::WILL_RETRY);
+        ScheduleDownloadEntry(url);
         UMA_HISTOGRAM_ENUMERATION("ReadingList.Download.Status", RETRY,
                                   STATUS_MAX);
       } else {
         UMA_HISTOGRAM_ENUMERATION("ReadingList.Download.Status", FAILURE,
                                   STATUS_MAX);
+        reading_list_model_->SetEntryDistilledState(url,
+                                                    ReadingListEntry::ERROR);
       }
+      break;
     }
-
-  } else if (success == URLDownloader::ERROR_PERMANENT) {
-    reading_list_model_->SetEntryDistilledState(url, ReadingListEntry::ERROR);
-    UMA_HISTOGRAM_ENUMERATION("ReadingList.Download.Status", FAILURE,
-                              STATUS_MAX);
   }
 }
 

@@ -20,9 +20,8 @@ class WebState;
 // additional UI components such as a toolbar.
 @interface TabCoordinator : BrowserCoordinator
 
-// The webState representing the web page that will be displayed in this tab.
+// The WebState representing the web page that will be displayed in this tab.
 // Calling code should assign this before starting this coordinator.
-// This coordinator doesn't assume ownersip of |webState|.
 @property(nonatomic, assign) web::WebState* webState;
 
 // An opaque key provided by this coordinator's parent which can be passed in

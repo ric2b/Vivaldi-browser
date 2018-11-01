@@ -94,9 +94,7 @@ def _ExtractClassFiles(jar_path, dest_dir, java_files):
 
 
 def _ConvertToJMakeArgs(javac_cmd, pdb_path):
-  new_args = ['bin/jmake', '-pdb', pdb_path]
-  if javac_cmd[0] != 'javac':
-    new_args.extend(('-jcexec', new_args[0]))
+  new_args = ['bin/jmake', '-pdb', pdb_path, '-jcexec', javac_cmd[0]]
   if md5_check.PRINT_EXPLANATIONS:
     new_args.append('-Xtiming')
 
@@ -121,7 +119,54 @@ def _FixTempPathsInIncrementalMetadata(pdb_path, temp_dir):
       fileobj.write(re.sub(r'/tmp/[^/]*', temp_dir, pdb_data))
 
 
+def _CheckPathMatchesClassName(java_file):
+  package_name = ''
+  class_name = None
+  with open(java_file) as f:
+    for l in f:
+      # Strip unindented comments.
+      # Considers a leading * as a continuation of a multi-line comment (our
+      # linter doesn't enforce a space before it like there should be).
+      l = re.sub(r'^(?://.*|/?\*.*?(?:\*/\s*|$))', '', l)
+
+      m = re.match(r'package\s+(.*?);', l)
+      if m and not package_name:
+        package_name = m.group(1)
+
+      # Not exactly a proper parser, but works for sources that Chrome uses.
+      # In order to not match nested classes, it just checks for lack of indent.
+      m = re.match(r'(?:\S.*?)?(?:class|@?interface|enum)\s+(.+?)\b', l)
+      if m:
+        if class_name:
+          raise Exception(('File defines multiple top-level classes:\n    %s\n'
+                           'This confuses compiles with '
+                           'enable_incremental_javac=true.\n'
+                           'classes=%s,%s\n') %
+                          (java_file, class_name, m.groups(1)))
+        class_name = m.group(1)
+
+  if class_name is None:
+    raise Exception('Unable to find a class within %s' % java_file)
+
+  parts = package_name.split('.') + [class_name + '.java']
+  expected_path_suffix = os.path.sep.join(parts)
+  if not java_file.endswith(expected_path_suffix):
+    raise Exception(('Java package+class name do not match its path.\n'
+                     'Actual path: %s\nExpected path: %s') %
+                    (java_file, expected_path_suffix))
+
+
 def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
+  incremental = options.incremental
+  # Don't bother enabling incremental compilation for third_party code, since
+  # _CheckPathMatchesClassName() fails on some of it, and it's not really much
+  # benefit.
+  for java_file in java_files:
+    if 'third_party' in java_file:
+      incremental = False
+    else:
+      _CheckPathMatchesClassName(java_file)
+
   with build_utils.TempDir() as temp_dir:
     srcjars = options.java_srcjars
     # The .excluded.jar contains .class files excluded from the main jar.
@@ -134,7 +179,7 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
     changed_paths = None
     # jmake can handle deleted files, but it's a rare case and it would
     # complicate this script's logic.
-    if options.incremental and changes.AddedOrModifiedOnly():
+    if incremental and changes.AddedOrModifiedOnly():
       changed_paths = set(changes.IterChangedPaths())
       # Do a full compile if classpath has changed.
       # jmake doesn't seem to do this on its own... Might be that ijars mess up
@@ -143,6 +188,9 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
         changed_paths = None
 
     if options.incremental:
+      pdb_path = options.jar_path + '.pdb'
+
+    if incremental:
       # jmake is a compiler wrapper that figures out the minimal set of .java
       # files that need to be rebuilt given a set of .java files that have
       # changed.
@@ -153,7 +201,6 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
       # .class files are newer than their .java files, and convey to jmake which
       # sources are stale by having their .class files be missing entirely
       # (by not extracting them).
-      pdb_path = options.jar_path + '.pdb'
       javac_cmd = _ConvertToJMakeArgs(javac_cmd, pdb_path)
       if srcjars:
         _FixTempPathsInIncrementalMetadata(pdb_path, temp_dir)
@@ -190,7 +237,7 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
 
       # Can happen when a target goes from having no sources, to having sources.
       # It's created by the call to build_utils.Touch() below.
-      if options.incremental:
+      if incremental:
         if os.path.exists(pdb_path) and not os.path.getsize(pdb_path):
           os.unlink(pdb_path)
 
@@ -219,7 +266,8 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
                '(http://crbug.com/551449).')
         os.unlink(pdb_path)
         attempt_build()
-    elif options.incremental:
+
+    if options.incremental and (not java_files or not incremental):
       # Make sure output exists.
       build_utils.Touch(pdb_path)
 
@@ -373,9 +421,12 @@ def main(argv):
 
   java_files = _FilterJavaFiles(java_files, options.javac_includes)
 
-  javac_cmd = ['javac']
   if options.use_errorprone_path:
-    javac_cmd = [options.use_errorprone_path] + ERRORPRONE_OPTIONS
+    javac_path = options.use_errorprone_path
+    javac_cmd = [javac_path] + ERRORPRONE_OPTIONS
+  else:
+    javac_path = distutils.spawn.find_executable('javac')
+    javac_cmd = [javac_path]
 
   javac_cmd.extend((
       '-g',
@@ -426,8 +477,10 @@ def main(argv):
         else:
           classpath_inputs.append(path)
 
-  # Compute the list of paths that when changed, we need to rebuild.
-  input_paths = classpath_inputs + options.java_srcjars + java_files
+  # GN already knows of java_files, so listing them just make things worse when
+  # they change.
+  depfile_deps = [javac_path] + classpath_inputs + options.java_srcjars
+  input_paths = depfile_deps + java_files
 
   output_paths = [
       options.jar_path,
@@ -446,6 +499,7 @@ def main(argv):
       lambda changes: _OnStaleMd5(changes, options, javac_cmd, java_files,
                                   classpath_inputs),
       options,
+      depfile_deps=depfile_deps,
       input_paths=input_paths,
       input_strings=javac_cmd,
       output_paths=output_paths,

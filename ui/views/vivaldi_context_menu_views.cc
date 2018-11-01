@@ -7,8 +7,6 @@
 
 #include "ui/views/vivaldi_context_menu_views.h"
 
-#include "components/renderer_context_menu/views/toolkit_delegate_views.h"
-
 #include "base/command_line.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 #include "chrome/common/chrome_switches.h"
@@ -35,21 +33,20 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
     content::RenderFrameHost* render_frame_host,
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params)
-  :render_frame_host_(render_frame_host),
-   menu_model_(menu_model),
-   params_(params) {
+    : render_frame_host_(render_frame_host),
+      menu_model_(menu_model),
+      params_(params) {
   toolkit_delegate_.reset(new ToolkitDelegateViews);
   menu_view_ = toolkit_delegate_->VivaldiInit(menu_model_);
 }
 
-VivaldiContextMenuViews::~VivaldiContextMenuViews() {
-}
+VivaldiContextMenuViews::~VivaldiContextMenuViews() {}
 
 void VivaldiContextMenuViews::RunMenuAt(views::Widget* parent,
                                         const gfx::Point& point,
                                         ui::MenuSourceType type) {
-  static_cast<ToolkitDelegateViews*>(toolkit_delegate_.get())->
-      RunMenuAt(parent, point, type);
+  static_cast<ToolkitDelegateViews*>(toolkit_delegate_.get())
+      ->RunMenuAt(parent, point, type);
 }
 
 void VivaldiContextMenuViews::Show() {

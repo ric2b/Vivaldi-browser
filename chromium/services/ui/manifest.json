@@ -28,6 +28,15 @@
         "discardable_memory": [
           "discardable_memory::mojom::DiscardableSharedMemoryManager"
         ],
+        "display_controller": [
+          "display::mojom::DisplayController"
+        ],
+        "display_output_protection": [
+          "display::mojom::OutputProtection"
+        ],
+        "display_test": [
+          "display::mojom::TestDisplayController"
+        ],
         "gpu_client": [
           "ui::mojom::Gpu"
         ],
@@ -40,7 +49,6 @@
         "window_manager": [
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "display::mojom::DisplayController",
-          "display::mojom::TestDisplayController",
           "ui::mojom::AccessibilityManager",
           "ui::mojom::Clipboard",
           "ui::mojom::DisplayCompositor",
@@ -48,6 +56,7 @@
           "ui::mojom::Gpu",
           "ui::mojom::IMEServer",
           "ui::mojom::InputDeviceServer",
+          "ui::mojom::UserActivityMonitor",
           "ui::mojom::WindowManagerWindowTreeFactory"
         ],
         "window_tree_host_factory": [
@@ -56,7 +65,7 @@
       },
       "requires": {
         "*": [ "app" ],
-        "catalog": [ "catalog:catalog" ],
+        "catalog": [ "app" ],
         "service_manager": [ "service_manager:all_users" ],
         "ui": [ "ozone" ]
       }

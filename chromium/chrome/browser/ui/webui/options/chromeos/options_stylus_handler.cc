@@ -51,7 +51,7 @@ void OptionsStylusHandler::GetLocalizedValues(
       l10n_util::GetStringUTF16(IDS_SETTINGS_STYLUS_ENABLE_STYLUS_TOOLS));
   localized_strings->SetString(
       "stylusFindMoreApps",
-      l10n_util::GetStringUTF16(IDS_SETTINGS_STYLUS_FIND_MORE_APPS));
+      l10n_util::GetStringUTF16(IDS_SETTINGS_STYLUS_FIND_MORE_APPS_PRIMARY));
   localized_strings->SetString(
       "stylusNoteTakingApp",
       l10n_util::GetStringUTF16(IDS_OPTIONS_STYLUS_NOTE_TAKING_APP_LABEL));
@@ -99,7 +99,7 @@ void OptionsStylusHandler::SendHasStylus() {
 
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setStylusInputStatus",
-      base::FundamentalValue(ash::palette_utils::HasStylusInput()));
+      base::Value(ash::palette_utils::HasStylusInput()));
 }
 
 void OptionsStylusHandler::UpdateNoteTakingApps() {
@@ -127,9 +127,9 @@ void OptionsStylusHandler::UpdateNoteTakingApps() {
     }
   }
 
-  web_ui()->CallJavascriptFunctionUnsafe(
-      "StylusOverlay.updateNoteTakingApps", apps_list,
-      base::FundamentalValue(waiting_for_android));
+  web_ui()->CallJavascriptFunctionUnsafe("StylusOverlay.updateNoteTakingApps",
+                                         apps_list,
+                                         base::Value(waiting_for_android));
 }
 
 void OptionsStylusHandler::SetPreferredNoteTakingApp(

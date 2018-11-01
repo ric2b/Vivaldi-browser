@@ -5,6 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_PRINTING_CUPS_PRINT_JOB_NOTIFICATION_H_
 #define CHROME_BROWSER_CHROMEOS_PRINTING_CUPS_PRINT_JOB_NOTIFICATION_H_
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_delegate.h"
 
@@ -13,6 +17,7 @@ class Profile;
 namespace chromeos {
 
 class CupsPrintJob;
+class CupsPrintJobNotificationManager;
 
 // CupsPrintJobNotification is used to update the notification of a print job
 // according to its state and respond to the user's action.
@@ -25,7 +30,9 @@ class CupsPrintJobNotification {
     GET_HELP,
   };
 
-  CupsPrintJobNotification(CupsPrintJob* print_job, Profile* profile);
+  CupsPrintJobNotification(CupsPrintJobNotificationManager* manager,
+                           CupsPrintJob* print_job,
+                           Profile* profile);
   ~CupsPrintJobNotification();
 
   void OnPrintJobStatusUpdated();
@@ -48,6 +55,7 @@ class CupsPrintJobNotification {
   base::string16 GetButtonLabel(ButtonCommand button) const;
   gfx::Image GetButtonIcon(ButtonCommand button) const;
 
+  CupsPrintJobNotificationManager* notification_manager_;
   std::unique_ptr<Notification> notification_;
   std::string notification_id_;
   CupsPrintJob* print_job_;
@@ -58,6 +66,10 @@ class CupsPrintJobNotification {
   // is true, then prevent the following print job progress update after close,
   // and only show the print job done or failed notification.
   bool closed_in_middle_ = false;
+
+  // If this is true, the user cancelled the job using the cancel button and
+  // should not be notified of events.
+  bool cancelled_by_user_ = false;
 
   // Maintains a list of button actions according to the print job's current
   // status.

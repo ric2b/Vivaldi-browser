@@ -33,14 +33,11 @@ const char* kProxyPolicies[] = {
   key::kProxyBypassList,
 };
 
-void FixDeprecatedPolicies(PolicyMap* policies) {
-  // Proxy settings have been configured by 5 policies that didn't mix well
-  // together, and maps of policies had to take this into account when merging
-  // policy sources. The proxy settings will eventually be configured by a
-  // single Dictionary policy when all providers have support for that. For
-  // now, the individual policies are mapped here to a single Dictionary policy
-  // that the rest of the policy machinery uses.
-
+// Maps the separate policies for proxy settings into a single Dictionary
+// policy. This allows to keep the logic of merging policies from different
+// sources simple, as all separate proxy policies should be considered as a
+// single whole during merging.
+void RemapProxyPolicies(PolicyMap* policies) {
   // The highest (level, scope) pair for an existing proxy policy is determined
   // first, and then only policies with those exact attributes are merged.
   PolicyMap::Entry current_priority;  // Defaults to the lowest priority.
@@ -81,7 +78,7 @@ PolicyServiceImpl::PolicyServiceImpl(const Providers& providers)
   for (int domain = 0; domain < POLICY_DOMAIN_SIZE; ++domain)
     initialization_complete_[domain] = true;
   providers_ = providers;
-  for (auto provider : providers) {
+  for (auto* provider : providers) {
     provider->AddObserver(this);
     for (int domain = 0; domain < POLICY_DOMAIN_SIZE; ++domain) {
       initialization_complete_[domain] &=
@@ -95,7 +92,7 @@ PolicyServiceImpl::PolicyServiceImpl(const Providers& providers)
 
 PolicyServiceImpl::~PolicyServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  for (auto provider : providers_)
+  for (auto* provider : providers_)
     provider->RemoveObserver(this);
 }
 
@@ -150,9 +147,9 @@ void PolicyServiceImpl::RefreshPolicies(const base::Closure& callback) {
   } else {
     // Some providers might invoke OnUpdatePolicy synchronously while handling
     // RefreshPolicies. Mark all as pending before refreshing.
-    for (auto provider : providers_)
+    for (auto* provider : providers_)
       refresh_pending_.insert(provider);
-    for (auto provider : providers_)
+    for (auto* provider : providers_)
       provider->RefreshPolicies();
   }
 }
@@ -191,10 +188,10 @@ void PolicyServiceImpl::MergeAndTriggerUpdates() {
   // Merge from each provider in their order of priority.
   const PolicyNamespace chrome_namespace(POLICY_DOMAIN_CHROME, std::string());
   PolicyBundle bundle;
-  for (auto provider : providers_) {
+  for (auto* provider : providers_) {
     PolicyBundle provided_bundle;
     provided_bundle.CopyFrom(provider->policies());
-    FixDeprecatedPolicies(&provided_bundle.Get(chrome_namespace));
+    RemapProxyPolicies(&provided_bundle.Get(chrome_namespace));
     bundle.MergeFrom(provided_bundle);
   }
 
@@ -251,7 +248,7 @@ void PolicyServiceImpl::CheckInitializationComplete() {
     PolicyDomain policy_domain = static_cast<PolicyDomain>(domain);
 
     bool all_complete = true;
-    for (auto provider : providers_) {
+    for (auto* provider : providers_) {
       if (!provider->IsInitializationComplete(policy_domain)) {
         all_complete = false;
         break;

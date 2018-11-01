@@ -31,7 +31,6 @@
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
-#include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shelf_view_test_api.h"
@@ -71,6 +70,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_delegate.h"
 
@@ -199,8 +199,9 @@ class WindowSelectorTest : public test::AshTestBase {
   }
 
   gfx::Rect GetTransformedBounds(aura::Window* window) {
-    gfx::RectF bounds(ScreenUtil::ConvertRectToScreen(
-        window->parent(), window->layer()->bounds()));
+    gfx::Rect bounds_in_screen = window->layer()->bounds();
+    ::wm::ConvertRectToScreen(window->parent(), &bounds_in_screen);
+    gfx::RectF bounds(bounds_in_screen);
     gfx::Transform transform(gfx::TransformAboutPivot(
         gfx::ToFlooredPoint(bounds.origin()), window->layer()->transform()));
     transform.TransformRect(&bounds);
@@ -208,8 +209,9 @@ class WindowSelectorTest : public test::AshTestBase {
   }
 
   gfx::Rect GetTransformedTargetBounds(aura::Window* window) {
-    gfx::RectF bounds(ScreenUtil::ConvertRectToScreen(
-        window->parent(), window->layer()->GetTargetBounds()));
+    gfx::Rect bounds_in_screen = window->layer()->GetTargetBounds();
+    ::wm::ConvertRectToScreen(window->parent(), &bounds_in_screen);
+    gfx::RectF bounds(bounds_in_screen);
     gfx::Transform transform(
         gfx::TransformAboutPivot(gfx::ToFlooredPoint(bounds.origin()),
                                  window->layer()->GetTargetTransform()));
@@ -1110,9 +1112,6 @@ TEST_F(WindowSelectorTest, MinimizeUnminimizei) {
 // Tests that clicking on the close button on a secondary display effectively
 // closes the window.
 TEST_F(WindowSelectorTest, CloseButtonOnMultipleDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -1437,9 +1436,6 @@ TEST_F(WindowSelectorTest, ClickModalWindowParent) {
 // Tests that windows remain on the display they are currently on in overview
 // mode, and that the close buttons are on matching displays.
 TEST_F(WindowSelectorTest, MultipleDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   gfx::Rect bounds1(0, 0, 400, 400);
@@ -1514,9 +1510,6 @@ TEST_F(WindowSelectorTest, Shutdown) {
 
 // Tests removing a display during overview.
 TEST_F(WindowSelectorTest, RemoveDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x400,400x400");
   gfx::Rect bounds1(0, 0, 100, 100);
   gfx::Rect bounds2(450, 0, 100, 100);
@@ -1562,8 +1555,7 @@ TEST_F(WindowSelectorTest, DISABLED_DragDropInProgress) {
   data.SetString(base::UTF8ToUTF16("I am being dragged"));
   drag_drop_controller->StartDragAndDrop(
       data, window->GetRootWindow(), window.get(), gfx::Point(5, 5),
-      ui::DragDropTypes::DRAG_MOVE, ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
-      drag_canceled_by_test);
+      ui::DragDropTypes::DRAG_MOVE, ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
   RunAllPendingInMessageLoop();
   EXPECT_FALSE(drag_canceled_by_test);
   ASSERT_TRUE(IsSelecting());
@@ -1698,9 +1690,6 @@ TEST_F(WindowSelectorTest, BasicArrowKeyNavigation) {
 
 // Tests basic selection across multiple monitors.
 TEST_F(WindowSelectorTest, BasicMultiMonitorArrowKeyNavigation) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x400,400x400");
   gfx::Rect bounds1(0, 0, 100, 100);
   gfx::Rect bounds2(450, 0, 100, 100);
@@ -1732,9 +1721,6 @@ TEST_F(WindowSelectorTest, BasicMultiMonitorArrowKeyNavigation) {
 // Tests first monitor when display order doesn't match left to right screen
 // positions.
 TEST_F(WindowSelectorTest, MultiMonitorReversedOrder) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x400,400x400");
   Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
       display::test::CreateDisplayLayout(display_manager(),
@@ -1765,9 +1751,6 @@ TEST_F(WindowSelectorTest, MultiMonitorReversedOrder) {
 
 // Tests three monitors where the grid becomes empty on one of the monitors.
 TEST_F(WindowSelectorTest, ThreeMonitor) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x400,400x400,400x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   gfx::Rect bounds1(0, 0, 100, 100);

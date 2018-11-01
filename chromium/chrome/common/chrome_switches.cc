@@ -28,10 +28,6 @@ namespace switches {
 // auth username/password pair.
 const char kAllowCrossOriginAuthPrompt[]    = "allow-cross-origin-auth-prompt";
 
-// On ChromeOS, file:// access is disabled except for certain whitelisted
-// directories. This switch re-enables file:// for testing.
-const char kAllowFileAccess[]               = "allow-file-access";
-
 // Allow non-secure origins to use the screen capture API and the desktopCapture
 // extension API.
 const char kAllowHttpScreenCapture[] = "allow-http-screen-capture";
@@ -167,10 +163,6 @@ const char kDiagnosticsFormat[]             = "diagnostics-format";
 // Tells the diagnostics mode to do the requested recovery step(s).
 const char kDiagnosticsRecovery[]           = "diagnostics-recovery";
 
-// When kEnableSettingsWindow is used, About is shown as an overlay in Settings
-// instead of as a separate page, unless this flag is specified.
-const char kDisableAboutInSettings[]        = "disable-about-in-settings";
-
 // Disables the display of a banner allowing the user to add a web
 // app to their shelf (or platform-specific equivalent)
 const char kDisableAddToShelf[] = "disable-add-to-shelf";
@@ -271,6 +263,10 @@ const char kDisablePushApiBackgroundMode[] = "disable-push-api-background-mode";
 
 // Disables the QUIC protocol.
 const char kDisableQuic[] = "disable-quic";
+
+// Disables showing the search geolocation disclosure UI. Used for perf testing.
+const char kDisableSearchGeolocationDisclosure[] =
+    "disable-search-geolocation-disclosure";
 
 // Disable settings in a separate browser window per profile
 // (see SettingsWindowEnabled() below).
@@ -486,6 +482,10 @@ const char kForceAndroidAppMode[] = "force-android-app-mode";
 // the app to be installed if it hasn't been already.
 const char kForceAppMode[]                  = "force-app-mode";
 
+// Forces Desktop to iOS promotion to appear in windows whenever an entrypoint
+// is triggered.
+const char kForceDesktopIOSPromotion[] = "force-desktop-ios-promotion";
+
 // Displays the First Run experience when the browser is started, regardless of
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
 const char kForceFirstRun[]                 = "force-first-run";
@@ -553,11 +553,10 @@ const char kInterestsURL[]                  = "interests-url";
 // Used for testing - keeps browser alive after last browser window closes.
 const char kKeepAliveForTest[]              = "keep-alive-for-test";
 
-// Enable Kiosk mode.
+// Enable kiosk mode. Please note this is not Chrome OS kiosk mode.
 const char kKioskMode[]                     = "kiosk";
 
-// Print automatically in kiosk mode. |kKioskMode| must be set as well.
-// See http://crbug.com/31395.
+// Enable automatically pressing the print button in print preview.
 const char kKioskModePrinting[]             = "kiosk-printing";
 
 // Loads an extension from the specified directory.
@@ -650,6 +649,10 @@ const char kOriginalProcessStartTime[]      = "original-process-start-time";
 // Contains a list of feature names for which origin trial experiments should
 // be disabled. Names should be separated by "|" characters.
 const char kOriginTrialDisabledFeatures[] = "origin-trial-disabled-features";
+
+// Contains a list of token signatures for which origin trial experiments should
+// be disabled. Tokens should be separated by "|" characters.
+const char kOriginTrialDisabledTokens[] = "origin-trial-disabled-tokens";
 
 // Overrides the default public key for checking origin trial tokens.
 const char kOriginTrialPublicKey[] = "origin-trial-public-key";
@@ -786,24 +789,6 @@ const char kSimulateOutdatedNoAU[]          = "simulate-outdated-no-au";
 // Simulates an update being available.
 const char kSimulateUpgrade[]               = "simulate-upgrade";
 
-// Speculative resource prefetching.
-const char kSpeculativeResourcePrefetching[] =
-    "speculative-resource-prefetching";
-
-// Speculative resource prefetching is disabled.
-const char kSpeculativeResourcePrefetchingDisabled[] = "disabled";
-
-// Speculative resource prefetching is enabled.
-const char kSpeculativeResourcePrefetchingEnabled[] = "enabled";
-
-// Speculative resource prefetching is enabled for external requests.
-const char kSpeculativeResourcePrefetchingEnabledExternal[] =
-    "enabled-external-only";
-
-// Speculative resource prefetching will only learn about resources that need to
-// be prefetched but will not prefetch them.
-const char kSpeculativeResourcePrefetchingLearning[] = "learning";
-
 // Causes SSL key material to be logged to the specified file for debugging
 // purposes. See
 // https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
@@ -902,9 +887,6 @@ const char kLocalNtpReload[]                = "local-ntp-reload";
 // Android authentication account type for SPNEGO authentication
 const char kAuthAndroidNegotiateAccountType[] = "auth-spnego-account-type";
 
-// Disable App Link.
-const char kDisableAppLink[] = "disable-app-link";
-
 // Disables Contextual Search.
 const char kDisableContextualSearch[] = "disable-contextual-search";
 
@@ -912,15 +894,8 @@ const char kDisableContextualSearch[] = "disable-contextual-search";
 const char kEnableAccessibilityTabSwitcher[] =
     "enable-accessibility-tab-switcher";
 
-// Enable App Link.
-const char kEnableAppLink[] = "enable-app-link";
-
 // Enables Contextual Search.
 const char kEnableContextualSearch[] = "enable-contextual-search";
-
-// Enables Contextual Search UI integration with Contextual Cards data.
-const char kEnableContextualSearchContextualCardsBarIntegration[] =
-    "cs-contextual-cards-bar-integration";
 
 // Enables chrome hosted mode for Android.
 const char kEnableHostedMode[] = "enable-hosted-mode";
@@ -1080,19 +1055,12 @@ const char kMakeChromeDefault[] = "make-chrome-default";
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
-// Disables using GDI to print text as simply text. Fallback to printing text
-// as paths. Overrides --enable-gdi-text-printing.
-const char kDisableGDITextPrinting[] = "disable-gdi-text-printing";
-
 // Disables per monitor DPI for supported Windows versions.
 // This flag overrides kEnablePerMonitorDpi.
 const char kDisablePerMonitorDpi[]          = "disable-per-monitor-dpi";
 
 // Fallback to XPS. By default connector uses CDD.
 const char kEnableCloudPrintXps[]           = "enable-cloud-print-xps";
-
-// Enables using GDI to print text as simply text.
-const char kEnableGDITextPrinting[] = "enable-gdi-text-printing";
 
 // Enables per monitor DPI for supported Windows versions.
 const char kEnablePerMonitorDpi[]           = "enable-per-monitor-dpi";
@@ -1141,6 +1109,11 @@ const char kWindows10CustomTitlebar[]       = "windows10-custom-titlebar";
 const char kWindows8Search[]                = "windows8-search";
 #endif  // defined(OS_WIN)
 
+#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+// Used to enable Mus+ash.
+const char kMash[]                          = "mash";
+#endif
+
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 // Enables support to debug printing subsystem.
 const char kDebugPrint[] = "debug-print";
@@ -1169,12 +1142,6 @@ const char kEnableWaylandServer[] = "enable-wayland-server";
 extern const char kDisableInputImeAPI[] = "disable-input-ime-api";
 extern const char kEnableInputImeAPI[] = "enable-input-ime-api";
 #endif
-
-bool AboutInSettingsEnabled() {
-  return SettingsWindowEnabled() &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             ::switches::kDisableAboutInSettings);
-}
 
 bool ExtensionsDisabled(const base::CommandLine& command_line) {
   return command_line.HasSwitch(switches::kDisableExtensions) ||
@@ -1205,15 +1172,6 @@ bool SettingsWindowEnabled() {
 bool PowerOverlayEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnablePowerOverlay);
-}
-#endif
-
-#if defined(OS_WIN)
-bool GDITextPrintingEnabled() {
-  const auto& command_line = *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(kDisableGDITextPrinting))
-    return false;
-  return command_line.HasSwitch(kEnableGDITextPrinting);
 }
 #endif
 

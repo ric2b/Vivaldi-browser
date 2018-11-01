@@ -112,13 +112,12 @@ Sources.SourcesPanel = class extends UI.Panel {
         SDK.DebuggerModel, SDK.DebuggerModel.Events.DebuggerPaused, this._debuggerPaused, this);
     SDK.targetManager.addModelListener(
         SDK.DebuggerModel, SDK.DebuggerModel.Events.DebuggerResumed,
-        (event) => this._debuggerResumed(/** @type {!SDK.DebuggerModel} */ (event.data)));
+        event => this._debuggerResumed(/** @type {!SDK.DebuggerModel} */ (event.data)));
     SDK.targetManager.addModelListener(
         SDK.DebuggerModel, SDK.DebuggerModel.Events.GlobalObjectCleared,
-        (event) => this._debuggerResumed(/** @type {!SDK.DebuggerModel} */ (event.data)));
-    SDK.targetManager.addModelListener(
-        SDK.SubTargetsManager, SDK.SubTargetsManager.Events.AvailableNodeTargetsChanged,
-        this._availableNodeTargetsChanged, this);
+        event => this._debuggerResumed(/** @type {!SDK.DebuggerModel} */ (event.data)));
+    SDK.targetManager.addEventListener(
+        SDK.TargetManager.Events.AvailableNodeTargetsChanged, this._availableNodeTargetsChanged, this);
     new Sources.WorkspaceMappingTip(this, this._workspace);
     Extensions.extensionServer.addEventListener(
         Extensions.ExtensionServer.Events.SidebarPaneAdded, this._extensionSidebarPaneAdded, this);
@@ -296,10 +295,10 @@ Sources.SourcesPanel = class extends UI.Panel {
     if (!this._paused)
       this._setAsCurrentPanel();
 
-    if (UI.context.flavor(SDK.Target) === details.target())
-      this._showDebuggerPausedDetails(details);
+    if (UI.context.flavor(SDK.Target) === debuggerModel.target())
+      this._showDebuggerPausedDetails(/** @type {!SDK.DebuggerPausedDetails} */ (details));
     else if (!this._paused)
-      UI.context.setFlavor(SDK.Target, details.target());
+      UI.context.setFlavor(SDK.Target, debuggerModel.target());
   }
 
   /**
@@ -514,7 +513,7 @@ Sources.SourcesPanel = class extends UI.Panel {
       return;
     if (debuggerModel.isPaused())
       return;
-    var debuggerModels = SDK.DebuggerModel.instances();
+    var debuggerModels = SDK.targetManager.models(SDK.DebuggerModel);
     for (var i = 0; i < debuggerModels.length; ++i) {
       if (debuggerModels[i].isPaused()) {
         UI.context.setFlavor(SDK.Target, debuggerModels[i].target());
@@ -650,7 +649,7 @@ Sources.SourcesPanel = class extends UI.Panel {
 
     // Always use 0 column.
     var rawLocation = Bindings.debuggerWorkspaceBinding.uiLocationToRawLocation(
-        executionContext.target(), uiLocation.uiSourceCode, uiLocation.lineNumber, 0);
+        SDK.DebuggerModel.fromTarget(executionContext.target()), uiLocation.uiSourceCode, uiLocation.lineNumber, 0);
     if (!rawLocation)
       return;
 
@@ -692,9 +691,9 @@ Sources.SourcesPanel = class extends UI.Panel {
     debugToolbar.appendToolbarItem(this._pauseOnExceptionButton);
 
     debugToolbar.appendSeparator();
-    debugToolbar.appendToolbarItem(new UI.ToolbarCheckbox(
-        Common.UIString('Async'), Common.UIString('Capture async stack traces'),
-        Common.moduleSetting('enableAsyncStackTraces')));
+    debugToolbar.appendToolbarItem(new UI.ToolbarSettingCheckbox(
+        Common.moduleSetting('enableAsyncStackTraces'), Common.UIString('Capture async stack traces'),
+        Common.UIString('Async')));
 
     return debugToolbar;
   }

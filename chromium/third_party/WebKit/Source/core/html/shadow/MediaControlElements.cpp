@@ -32,11 +32,13 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/ClientRect.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLMediaSource.h"
@@ -134,8 +136,10 @@ MediaControlPanelElement::MediaControlPanelElement(MediaControls& mediaControls)
     : MediaControlDivElement(mediaControls, MediaControlsPanel),
       m_isDisplayed(false),
       m_opaque(true),
-      m_transitionTimer(this, &MediaControlPanelElement::transitionTimerFired) {
-}
+      m_transitionTimer(TaskRunnerHelper::get(TaskType::UnspecedTimer,
+                                              &mediaControls.document()),
+                        this,
+                        &MediaControlPanelElement::transitionTimerFired) {}
 
 MediaControlPanelElement* MediaControlPanelElement::create(
     MediaControls& mediaControls) {
@@ -676,7 +680,7 @@ bool MediaControlDownloadButtonElement::shouldDisplayDownloadButton() {
   if (url.isNull() || url.isEmpty())
     return false;
 
-  // Local files and blobs should not have a download button.
+  // Local files and blobs (including MSE) should not have a download button.
   if (url.isLocalFile() || url.protocolIs("blob"))
     return false;
 
@@ -692,7 +696,32 @@ bool MediaControlDownloadButtonElement::shouldDisplayDownloadButton() {
   if (HTMLMediaElement::isHLSURL(url))
     return false;
 
+  // Infinite streams don't have a clear end at which to finish the download
+  // (would require adding UI to prompt for the duration to download).
+  if (mediaElement().duration() == std::numeric_limits<double>::infinity())
+    return false;
+
+  // The attribute disables the download button.
+  if (mediaElement().controlsList()->shouldHideDownload()) {
+    UseCounter::count(mediaElement().document(),
+                      UseCounter::HTMLMediaElementControlsListNoDownload);
+    return false;
+  }
+
   return true;
+}
+
+void MediaControlDownloadButtonElement::setIsWanted(bool wanted) {
+  MediaControlElement::setIsWanted(wanted);
+
+  if (!isWanted())
+    return;
+
+  DCHECK(isWanted());
+  if (!m_showUseCounted) {
+    m_showUseCounted = true;
+    recordMetrics(DownloadActionMetrics::Shown);
+  }
 }
 
 void MediaControlDownloadButtonElement::defaultEventHandler(Event* event) {
@@ -701,6 +730,10 @@ void MediaControlDownloadButtonElement::defaultEventHandler(Event* event) {
       !(url.isNull() || url.isEmpty())) {
     Platform::current()->recordAction(
         UserMetricsAction("Media.Controls.Download"));
+    if (!m_clickUseCounted) {
+      m_clickUseCounted = true;
+      recordMetrics(DownloadActionMetrics::Clicked);
+    }
     if (!m_anchor) {
       HTMLAnchorElement* anchor = HTMLAnchorElement::create(document());
       anchor->setAttribute(HTMLNames::downloadAttr, "");
@@ -715,6 +748,14 @@ void MediaControlDownloadButtonElement::defaultEventHandler(Event* event) {
 DEFINE_TRACE(MediaControlDownloadButtonElement) {
   visitor->trace(m_anchor);
   MediaControlInputElement::trace(visitor);
+}
+
+void MediaControlDownloadButtonElement::recordMetrics(
+    DownloadActionMetrics metric) {
+  DEFINE_STATIC_LOCAL(EnumerationHistogram, downloadActionHistogram,
+                      ("Media.Controls.Download",
+                       static_cast<int>(DownloadActionMetrics::Count)));
+  downloadActionHistogram.count(static_cast<int>(metric));
 }
 
 // ----------------------------
@@ -761,6 +802,13 @@ void MediaControlTimelineElement::defaultEventHandler(Event* event) {
     return;
 
   double time = value().toDouble();
+
+  double duration = mediaElement().duration();
+  // Workaround for floating point error - it's possible for this element's max
+  // attribute to be rounded to a value slightly higher than the duration. If
+  // this happens and scrubber is dragged near the max, seek to duration.
+  if (time > duration)
+    time = duration;
 
   // FIXME: This will need to take the timeline offset into consideration
   // once that concept is supported, see https://crbug.com/312699

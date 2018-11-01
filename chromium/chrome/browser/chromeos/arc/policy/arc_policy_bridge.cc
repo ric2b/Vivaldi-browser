@@ -39,14 +39,8 @@ namespace arc {
 
 namespace {
 
-constexpr char kArcGlobalAppRestrictions[] = "globalAppRestrictions";
 constexpr char kArcCaCerts[] = "caCerts";
-constexpr char kNonComplianceDetails[] = "nonComplianceDetails";
-constexpr char kNonComplianceReason[] = "nonComplianceReason";
 constexpr char kPolicyCompliantJson[] = "{ \"policyCompliant\": true }";
-constexpr char kPolicyNonCompliantJson[] = "{ \"policyCompliant\": false }";
-// Value from CloudDPS NonComplianceDetail.NonComplianceReason enum.
-constexpr int kAppNotInstalled = 5;
 
 // invert_bool_value: If the Chrome policy and the ARC policy with boolean value
 // have opposite semantics, set this to true so the bool is inverted before
@@ -60,7 +54,7 @@ void MapBoolToBool(const std::string& arc_policy_name,
   if (!policy_value)
     return;
   if (!policy_value->IsType(base::Value::Type::BOOLEAN)) {
-    LOG(ERROR) << "Policy " << policy_name << " is not a boolean.";
+    NOTREACHED() << "Policy " << policy_name << " is not a boolean.";
     return;
   }
   bool bool_value;
@@ -80,7 +74,7 @@ void MapIntToBool(const std::string& arc_policy_name,
   if (!policy_value)
     return;
   if (!policy_value->IsType(base::Value::Type::INTEGER)) {
-    LOG(ERROR) << "Policy " << policy_name << " is not an integer.";
+    NOTREACHED() << "Policy " << policy_name << " is not an integer.";
     return;
   }
   int int_value;
@@ -88,22 +82,26 @@ void MapIntToBool(const std::string& arc_policy_name,
   filtered_policies->SetBoolean(arc_policy_name, int_value == int_true);
 }
 
-void AddGlobalAppRestriction(const std::string& arc_app_restriction_name,
+// Checks whether |policy_name| is present as an object and has all |fields|,
+// Sets |arc_policy_name| to true only if the condition above is satisfied.
+void MapObjectToPresenceBool(const std::string& arc_policy_name,
                              const std::string& policy_name,
                              const policy::PolicyMap& policy_map,
-                             base::DictionaryValue* filtered_policies) {
+                             base::DictionaryValue* filtered_policies,
+                             const std::vector<std::string>& fields) {
   const base::Value* const policy_value = policy_map.GetValue(policy_name);
-  if (policy_value) {
-    base::DictionaryValue* global_app_restrictions = nullptr;
-    if (!filtered_policies->GetDictionary(kArcGlobalAppRestrictions,
-                                          &global_app_restrictions)) {
-      global_app_restrictions = new base::DictionaryValue();
-      filtered_policies->Set(kArcGlobalAppRestrictions,
-                             global_app_restrictions);
-    }
-    global_app_restrictions->SetWithoutPathExpansion(
-        arc_app_restriction_name, policy_value->CreateDeepCopy());
+  if (!policy_value)
+    return;
+  const base::DictionaryValue* dict = nullptr;
+  if (!policy_value->GetAsDictionary(&dict)) {
+    NOTREACHED() << "Policy " << policy_name << " is not an object.";
+    return;
   }
+  for (const auto& field : fields) {
+    if (!dict->HasKey(field))
+      return;
+  }
+  filtered_policies->SetBoolean(arc_policy_name, true);
 }
 
 void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
@@ -233,14 +231,8 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map) {
   MapBoolToBool("mountPhysicalMediaDisabled",
                 policy::key::kExternalStorageDisabled, policy_map, false,
                 &filtered_policies);
-
-  // Add global app restrictions.
-  AddGlobalAppRestriction("com.android.browser:URLBlacklist",
-                          policy::key::kURLBlacklist, policy_map,
-                          &filtered_policies);
-  AddGlobalAppRestriction("com.android.browser:URLWhitelist",
-                          policy::key::kURLWhitelist, policy_map,
-                          &filtered_policies);
+  MapObjectToPresenceBool("setWallpaperDisabled", policy::key::kWallpaperImage,
+                          policy_map, &filtered_policies, {"url", "hash"});
 
   // Add CA certificates.
   AddOncCaCertsToPolicies(policy_map, &filtered_policies);
@@ -260,7 +252,9 @@ Profile* GetProfile() {
 void OnReportComplianceParseFailure(
     const ArcPolicyBridge::ReportComplianceCallback& callback,
     const std::string& error) {
-  callback.Run(kPolicyNonCompliantJson);
+  // TODO(poromov@): Report to histogram.
+  DLOG(ERROR) << "Can't parse policy compliance report";
+  callback.Run(kPolicyCompliantJson);
 }
 
 void UpdateFirstComplianceSinceSignInTiming(
@@ -315,12 +309,6 @@ ArcPolicyBridge::ArcPolicyBridge(ArcBridgeService* bridge_service,
 ArcPolicyBridge::~ArcPolicyBridge() {
   VLOG(2) << "ArcPolicyBridge::~ArcPolicyBridge";
   arc_bridge_service()->policy()->RemoveObserver(this);
-}
-
-// static
-void ArcPolicyBridge::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(prefs::kArcPolicyCompliant, false);
 }
 
 void ArcPolicyBridge::OverrideIsManagedForTesting(bool is_managed) {
@@ -402,35 +390,12 @@ std::string ArcPolicyBridge::GetCurrentJSONPolicies() const {
 void ArcPolicyBridge::OnReportComplianceParseSuccess(
     const ArcPolicyBridge::ReportComplianceCallback& callback,
     std::unique_ptr<base::Value> parsed_json) {
-  const base::DictionaryValue* dict;
-  Profile* const profile = GetProfile();
-  if (!profile || !parsed_json || !parsed_json->GetAsDictionary(&dict) ||
-      !dict) {
-    callback.Run(kPolicyNonCompliantJson);
-    return;
-  }
+  // Always returns "compliant".
+  callback.Run(kPolicyCompliantJson);
 
-  // ChromeOS is 'compliant' with the report if all "nonComplianceDetails"
-  // entries have APP_NOT_INSTALLED reason.
-  bool compliant = true;
-  const base::ListValue* value = nullptr;
-  dict->GetList(kNonComplianceDetails, &value);
-  if (!dict->empty() && value && !value->empty()) {
-    for (const auto& entry : *value) {
-      const base::DictionaryValue* entry_dict;
-      int reason = 0;
-      if (entry->GetAsDictionary(&entry_dict) &&
-          entry_dict->GetInteger(kNonComplianceReason, &reason) &&
-          reason != kAppNotInstalled) {
-        compliant = false;
-        break;
-      }
-    }
-  }
-  profile->GetPrefs()->SetBoolean(prefs::kArcPolicyCompliant, compliant);
-  callback.Run(compliant ? kPolicyCompliantJson : kPolicyNonCompliantJson);
-
-  UpdateComplianceReportMetrics(dict);
+  const base::DictionaryValue* dict = nullptr;
+  if (parsed_json->GetAsDictionary(&dict))
+    UpdateComplianceReportMetrics(dict);
 }
 
 void ArcPolicyBridge::UpdateComplianceReportMetrics(

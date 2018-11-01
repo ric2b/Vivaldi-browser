@@ -35,27 +35,27 @@
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
-#include "core/fetch/CrossOriginAccessControl.h"
-#include "core/fetch/FetchContext.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchUtils.h"
-#include "core/fetch/ResourceFetcher.h"
-#include "core/fetch/UniqueIdentifier.h"
 #include "core/fileapi/File.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/FormData.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/Page.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
+#include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "platform/loader/fetch/FetchContext.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchUtils.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/UniqueIdentifier.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/network/ParsedContentType.h"
 #include "platform/network/ResourceError.h"
@@ -110,7 +110,7 @@ class BeaconBlob final : public Beacon {
  public:
   explicit BeaconBlob(Blob* data) : m_data(data) {
     const String& blobType = m_data->type();
-    if (!blobType.isEmpty() && isValidContentType(blobType))
+    if (!blobType.isEmpty() && ParsedContentType(blobType).isValid())
       m_contentType = AtomicString(blobType);
   }
 
@@ -253,8 +253,9 @@ PingLoaderImpl::PingLoaderImpl(LocalFrame* frame,
 
   FetchContext& fetchContext = frame->document()->fetcher()->context();
 
-  fetchContext.willStartLoadingResource(m_identifier, request, Resource::Image,
-                                        initiator, false);
+  fetchContext.willStartLoadingResource(
+      m_identifier, request, Resource::Image, initiator,
+      FetchContext::V8ActivityLoggingPolicy::Log);
 
   FetchInitiatorInfo initiatorInfo;
   initiatorInfo.name = initiator;
@@ -341,11 +342,12 @@ bool PingLoaderImpl::willFollowRedirect(
 
 void PingLoaderImpl::didReceiveResponse(const WebURLResponse& response) {
   if (frame()) {
-    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
-                 InspectorResourceFinishEvent::data(m_identifier, 0, true, 0));
+    TRACE_EVENT1(
+        "devtools.timeline", "ResourceFinish", "data",
+        InspectorResourceFinishEvent::data(m_identifier, 0, true, 0, 0));
     const ResourceResponse& resourceResponse = response.toResourceResponse();
-    InspectorInstrumentation::didReceiveResourceResponse(
-        frame(), m_identifier, 0, resourceResponse, 0);
+    probe::didReceiveResourceResponse(frame(), m_identifier, 0,
+                                      resourceResponse, 0);
     didFailLoading(frame());
   }
   dispose();
@@ -353,9 +355,9 @@ void PingLoaderImpl::didReceiveResponse(const WebURLResponse& response) {
 
 void PingLoaderImpl::didReceiveData(const char*, int dataLength) {
   if (frame()) {
-    TRACE_EVENT1(
-        "devtools.timeline", "ResourceFinish", "data",
-        InspectorResourceFinishEvent::data(m_identifier, 0, true, dataLength));
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
+                 InspectorResourceFinishEvent::data(m_identifier, 0, true,
+                                                    dataLength, 0));
     didFailLoading(frame());
   }
   dispose();
@@ -367,7 +369,7 @@ void PingLoaderImpl::didFinishLoading(double,
   if (frame()) {
     TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
                  InspectorResourceFinishEvent::data(m_identifier, 0, true,
-                                                    encodedDataLength));
+                                                    encodedDataLength, 0));
     didFailLoading(frame());
   }
   dispose();
@@ -379,7 +381,7 @@ void PingLoaderImpl::didFail(const WebURLError& resourceError,
   if (frame()) {
     TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
                  InspectorResourceFinishEvent::data(m_identifier, 0, true,
-                                                    encodedDataLength));
+                                                    encodedDataLength, 0));
     didFailLoading(frame());
   }
   dispose();
@@ -387,16 +389,17 @@ void PingLoaderImpl::didFail(const WebURLError& resourceError,
 
 void PingLoaderImpl::timeout(TimerBase*) {
   if (frame()) {
-    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
-                 InspectorResourceFinishEvent::data(m_identifier, 0, true, 0));
+    TRACE_EVENT1(
+        "devtools.timeline", "ResourceFinish", "data",
+        InspectorResourceFinishEvent::data(m_identifier, 0, true, 0, 0));
     didFailLoading(frame());
   }
   dispose();
 }
 
 void PingLoaderImpl::didFailLoading(LocalFrame* frame) {
-  InspectorInstrumentation::didFailLoading(
-      frame, m_identifier, ResourceError::cancelledError(m_url));
+  probe::didFailLoading(frame, m_identifier,
+                        ResourceError::cancelledError(m_url));
   frame->console().didFailLoading(m_identifier,
                                   ResourceError::cancelledError(m_url));
 }
@@ -522,12 +525,17 @@ void PingLoader::sendViolationReport(LocalFrame* frame,
                                      ViolationReportType type) {
   ResourceRequest request(reportURL);
   request.setHTTPMethod(HTTPNames::POST);
-  request.setHTTPContentType(type == ContentSecurityPolicyViolationReport
-                                 ? "application/csp-report"
-                                 : "application/json");
+  switch (type) {
+    case ContentSecurityPolicyViolationReport:
+      request.setHTTPContentType("application/csp-report");
+      break;
+    case XSSAuditorViolationReport:
+      request.setHTTPContentType("application/xss-auditor-report");
+      break;
+  }
   request.setHTTPBody(std::move(report));
   finishPingRequestInitialization(request, frame,
-                                  WebURLRequest::RequestContextPing);
+                                  WebURLRequest::RequestContextCSPReport);
 
   StoredCredentials credentialsAllowed =
       SecurityOrigin::create(reportURL)->isSameSchemeHostPort(

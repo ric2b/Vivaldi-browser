@@ -287,7 +287,7 @@ SDK.CSSMatchedStyles = class {
    * @return {boolean}
    */
   _containsInherited(style) {
-    var properties = style.allProperties;
+    var properties = style.allProperties();
     for (var i = 0; i < properties.length; ++i) {
       var property = properties[i];
       // Does this style contain non-overridden inherited property?
@@ -303,6 +303,20 @@ SDK.CSSMatchedStyles = class {
    */
   nodeForStyle(style) {
     return this._nodeForStyle.get(style) || null;
+  }
+
+  /**
+   * @return {!Array<string>}
+   */
+  cssVariables() {
+    var cssVariables = [];
+    for (var style of this.nodeStyles()) {
+      for (var property of style.allProperties()) {
+        if (property.name.startsWith('--'))
+          cssVariables.push(property.name);
+      }
+    }
+    return cssVariables;
   }
 
   /**
@@ -355,7 +369,7 @@ SDK.CSSMatchedStyles = class {
 
       /** @type {!Map<string, !SDK.CSSProperty>} */
       var styleActiveProperties = new Map();
-      var allProperties = style.allProperties;
+      var allProperties = style.allProperties();
       for (var j = 0; j < allProperties.length; ++j) {
         var property = allProperties[j];
 

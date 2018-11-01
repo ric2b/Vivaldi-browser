@@ -8,10 +8,16 @@
 #include "base/memory/ref_counted.h"
 #include "testing/platform_test.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 // This test verifies assumptions about the murky world of interaction between
 // C++ objects and blocks. Just to make sure.
 
 namespace {
+
+using BlockTest = PlatformTest;
 
 class RefCountedObject : public base::RefCounted<RefCountedObject> {
  public:
@@ -37,7 +43,7 @@ class RefCountedObject : public base::RefCounted<RefCountedObject> {
   virtual ~RefCountedObject() {}
 };
 
-TEST_F(PlatformTest, BlockAndCPlusPlus) {
+TEST_F(BlockTest, BlockAndCPlusPlus) {
   RefCountedObject* object = new RefCountedObject();
   object->AddRef();
   EXPECT_TRUE(object->HasOneRef());
@@ -49,22 +55,23 @@ TEST_F(PlatformTest, BlockAndCPlusPlus) {
   }
   EXPECT_TRUE(object->HasOneRef());
 
-  void (^heap_block)(int) = 0;
-  {
-    scoped_refptr<RefCountedObject> object_ptr(object);
-    EXPECT_EQ(2, object->refcount());
-    void* object_void_ptr = (void*)object;
+  @autoreleasepool {
+    void (^heap_block)(int) = nil;
+    {
+      scoped_refptr<RefCountedObject> object_ptr(object);
+      EXPECT_EQ(2, object->refcount());
+      void* object_void_ptr = (void*)object;
 
-    void (^stack_block)(int) = ^(int expected) {
-      EXPECT_EQ(object_void_ptr, object_ptr.get());
-      EXPECT_EQ(expected, object_ptr.get()->refcount());
-    };
-    stack_block(3);
-    heap_block = [stack_block copy];
-    stack_block(4);
+      void (^stack_block)(int) = ^(int expected) {
+        EXPECT_EQ(object_void_ptr, object_ptr.get());
+        EXPECT_EQ(expected, object_ptr.get()->refcount());
+      };
+      stack_block(4);
+      heap_block = [stack_block copy];
+      stack_block(4);
+    }
+    heap_block(2);
   }
-  heap_block(2);
-  [heap_block release];
   EXPECT_TRUE(object->HasOneRef());
   {
     scoped_refptr<RefCountedObject> object_test2_ptr(object);
@@ -74,8 +81,8 @@ TEST_F(PlatformTest, BlockAndCPlusPlus) {
   object->Release();
 }
 
-TEST_F(PlatformTest, BlockAndVectors) {
-  void (^heap_block)(void) = 0;
+TEST_F(BlockTest, BlockAndVectors) {
+  void (^heap_block)(void) = nil;
   {
     std::vector<int> vector;
     vector.push_back(0);
@@ -94,7 +101,6 @@ TEST_F(PlatformTest, BlockAndVectors) {
     stack_block();
   }
   heap_block();
-  [heap_block release];
 }
 
 }  // namespace

@@ -15,7 +15,6 @@
 #include "cc/playback/skip_image_canvas.h"
 #include "skia/ext/analysis_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkClipStack.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
@@ -90,15 +89,14 @@ void RasterSource::PlaybackToCanvas(SkCanvas* raster_canvas,
     RasterCommon(&canvas, nullptr);
   } else if (settings.use_image_hijack_canvas) {
     const SkImageInfo& info = raster_canvas->imageInfo();
-
-    ImageHijackCanvas canvas(info.width(), info.height(), image_decode_cache_);
+    ImageHijackCanvas canvas(info.width(), info.height(), image_decode_cache_,
+                             &settings.images_to_skip);
     // Before adding the canvas, make sure that the ImageHijackCanvas is aware
     // of the current transform and clip, which may affect the clip bounds.
     // Since we query the clip bounds of the current canvas to get the list of
     // draw commands to process, this is important to produce correct content.
-    SkIRect raster_bounds;
-    raster_canvas->getClipDeviceBounds(&raster_bounds);
-    canvas.clipRect(SkRect::MakeFromIRect(raster_bounds));
+    canvas.clipRect(
+        SkRect::MakeFromIRect(raster_canvas->getDeviceClipBounds()));
     canvas.setMatrix(raster_canvas->getTotalMatrix());
     canvas.addCanvas(raster_canvas);
 
@@ -115,7 +113,7 @@ bool CanvasIsUnclipped(const SkCanvas* canvas) {
     return false;
 
   SkIRect bounds;
-  if (!canvas->getClipDeviceBounds(&bounds))
+  if (!canvas->getDeviceClipBounds(&bounds))
     return false;
 
   SkISize size = canvas->getBaseLayerSize();
@@ -160,10 +158,7 @@ void RasterSource::PrepareForPlaybackToCanvas(SkCanvas* canvas) const {
   SkIRect opaque_rect;
   content_device_rect.roundIn(&opaque_rect);
 
-  SkIRect raster_bounds;
-  canvas->getClipDeviceBounds(&raster_bounds);
-
-  if (opaque_rect.contains(raster_bounds))
+  if (opaque_rect.contains(canvas->getDeviceClipBounds()))
     return;
 
   // Even if completely covered, for rasterizations that touch the edge of the
@@ -221,7 +216,7 @@ sk_sp<SkPicture> RasterSource::GetFlattenedPicture() {
   return recorder.finishRecordingAsPicture();
 }
 
-size_t RasterSource::GetPictureMemoryUsage() const {
+size_t RasterSource::GetMemoryUsage() const {
   if (!display_list_)
     return 0;
   return display_list_->ApproximateMemoryUsage() +
@@ -251,6 +246,12 @@ void RasterSource::GetDiscardableImagesInRect(
   display_list_->GetDiscardableImagesInRect(layer_rect, contents_scale, images);
 }
 
+gfx::Rect RasterSource::GetRectForImage(ImageId image_id) const {
+  if (!display_list_)
+    return gfx::Rect();
+  return display_list_->GetRectForImage(image_id);
+}
+
 bool RasterSource::CoversRect(const gfx::Rect& layer_rect) const {
   if (size_.IsEmpty())
     return false;
@@ -261,14 +262,6 @@ bool RasterSource::CoversRect(const gfx::Rect& layer_rect) const {
 
 gfx::Size RasterSource::GetSize() const {
   return size_;
-}
-
-bool RasterSource::HasImpliedColorSpace() const {
-  return display_list_->HasImpliedColorSpace();
-}
-
-const gfx::ColorSpace& RasterSource::GetImpliedColorSpace() const {
-  return display_list_->GetImpliedColorSpace();
 }
 
 bool RasterSource::IsSolidColor() const {
@@ -311,5 +304,12 @@ RasterSource::PlaybackSettings::PlaybackSettings()
     : playback_to_shared_canvas(false),
       skip_images(false),
       use_image_hijack_canvas(true) {}
+
+RasterSource::PlaybackSettings::PlaybackSettings(const PlaybackSettings&) =
+    default;
+
+RasterSource::PlaybackSettings::PlaybackSettings(PlaybackSettings&&) = default;
+
+RasterSource::PlaybackSettings::~PlaybackSettings() = default;
 
 }  // namespace cc

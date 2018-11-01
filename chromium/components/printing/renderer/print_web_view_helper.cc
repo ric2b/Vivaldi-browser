@@ -25,12 +25,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/grit/components_resources.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
-#include "grit/components_resources.h"
 #include "net/base/escape.h"
 #include "printing/features/features.h"
 #include "printing/metafile_skia_wrapper.h"
@@ -101,7 +101,7 @@ void ExecuteScript(blink::WebFrame* frame,
   std::string json;
   base::JSONWriter::Write(parameters, &json);
   std::string script = base::StringPrintf(script_format, json.c_str());
-  frame->executeScript(blink::WebString(base::UTF8ToUTF16(script)));
+  frame->executeScript(blink::WebString::fromUTF8(script));
 }
 #else
 bool g_is_preview_enabled = false;
@@ -573,7 +573,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
     float webkit_scale_factor,
     const PageSizeMargins& page_layout,
     const PrintMsg_Print_Params& params) {
-  SkAutoCanvasRestore auto_restore(canvas, true);
+  cc::PaintCanvasAutoRestore auto_restore(canvas, true);
   canvas->scale(1 / webkit_scale_factor, 1 / webkit_scale_factor);
 
   blink::WebSize page_size(page_layout.margin_left + page_layout.margin_right +
@@ -587,7 +587,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
 
   blink::WebFrameClient frame_client;
   blink::WebLocalFrame* frame = blink::WebLocalFrame::create(
-      blink::WebTreeScopeType::Document, &frame_client);
+      blink::WebTreeScopeType::Document, &frame_client, nullptr, nullptr);
   web_view->setMainFrame(frame);
   blink::WebFrameWidget::create(nullptr, web_view, frame);
 
@@ -607,7 +607,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
                      base::StringPrintf("%d/%d", page_number, total_pages));
 
   options->SetString("url", params.url);
-  base::string16 title = source_frame.document().title();
+  base::string16 title = source_frame.document().title().utf16();
   options->SetString("title", title.empty() ? params.title : title);
 
   ExecuteScript(frame, kPageSetupScriptFormat, *options);
@@ -630,7 +630,7 @@ float PrintWebViewHelper::RenderPageContent(blink::WebFrame* frame,
                                             const gfx::Rect& content_area,
                                             double scale_factor,
                                             blink::WebCanvas* canvas) {
-  SkAutoCanvasRestore auto_restore(canvas, true);
+  cc::PaintCanvasAutoRestore auto_restore(canvas, true);
   canvas->translate((content_area.x() - canvas_area.x()) / scale_factor,
                     (content_area.y() - canvas_area.y()) / scale_factor);
   return frame->printPage(page_number, canvas);
@@ -809,8 +809,8 @@ void PrepareFrameAndViewForPrint::CopySelection(
       blink::WebView::create(this, blink::WebPageVisibilityStateVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
-  blink::WebLocalFrame* main_frame =
-      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this);
+  blink::WebLocalFrame* main_frame = blink::WebLocalFrame::create(
+      blink::WebTreeScopeType::Document, this, nullptr, nullptr);
   web_view->setMainFrame(main_frame);
   blink::WebFrameWidget::create(this, web_view, main_frame);
   frame_.Reset(web_view->mainFrame()->toWebLocalFrame());
@@ -842,7 +842,8 @@ blink::WebLocalFrame* PrepareFrameAndViewForPrint::createChildFrame(
     const blink::WebString& unique_name,
     blink::WebSandboxFlags sandbox_flags,
     const blink::WebFrameOwnerProperties& frame_owner_properties) {
-  blink::WebLocalFrame* frame = blink::WebLocalFrame::create(scope, this);
+  blink::WebLocalFrame* frame =
+      blink::WebLocalFrame::create(scope, this, nullptr, nullptr);
   parent->appendChild(frame);
   return frame;
 }
@@ -936,7 +937,8 @@ bool PrintWebViewHelper::IsScriptInitiatedPrintAllowed(
          scripting_throttler_.IsAllowed(frame);
 }
 
-void PrintWebViewHelper::DidStartProvisionalLoad() {
+void PrintWebViewHelper::DidStartProvisionalLoad(
+    blink::WebDataSource* data_source) {
   is_loading_ = true;
 }
 
@@ -1099,6 +1101,7 @@ void PrintWebViewHelper::OnPrintForPrintPreview(
   // printing and it expects real printable_area value.
   // See http://crbug.com/123408
   PrintMsg_Print_Params& print_params = print_pages_params_->params;
+  printer_printable_area_ = print_params.printable_area;
   print_params.printable_area = gfx::Rect(print_params.page_size);
 
   // Render Pages for printing.
@@ -1257,11 +1260,22 @@ bool PrintWebViewHelper::CreatePreviewDocument() {
     if (source_frame->getPrintPresetOptionsForPlugin(source_node,
                                                      &preset_options)) {
       if (preset_options.isPageSizeUniform) {
+        // Figure out if the sizes have the same orientation
+        bool is_printable_area_landscape = printable_area_in_points.width() >
+                                           printable_area_in_points.height();
+        bool is_preset_landscape = preset_options.uniformPageSize.width >
+                                   preset_options.uniformPageSize.height;
+        bool rotate = is_printable_area_landscape != is_preset_landscape;
+        // Match orientation for computing scaling
+        double printable_width = rotate ? printable_area_in_points.height()
+                                        : printable_area_in_points.width();
+        double printable_height = rotate ? printable_area_in_points.width()
+                                         : printable_area_in_points.height();
         double scale_width =
-            static_cast<double>(printable_area_in_points.width()) /
+            printable_width /
             static_cast<double>(preset_options.uniformPageSize.width);
         double scale_height =
-            static_cast<double>(printable_area_in_points.height()) /
+            printable_height /
             static_cast<double>(preset_options.uniformPageSize.height);
         fit_to_page_scale_factor = std::min(scale_width, scale_height);
       } else {
@@ -1333,7 +1347,7 @@ bool PrintWebViewHelper::RenderPreviewPage(
 
   base::TimeTicks begin_time = base::TimeTicks::Now();
   PrintPageInternal(page_params, print_preview_context_.prepared_frame(),
-                    initial_render_metafile, nullptr, nullptr);
+                    initial_render_metafile, nullptr, nullptr, nullptr);
   print_preview_context_.RenderedPreviewPage(
       base::TimeTicks::Now() - begin_time);
   if (draft_metafile.get()) {
@@ -1834,14 +1848,21 @@ void PrintWebViewHelper::PrintPageInternal(
     blink::WebLocalFrame* frame,
     PdfMetafileSkia* metafile,
     gfx::Size* page_size_in_dpi,
-    gfx::Rect* content_area_in_dpi) {
+    gfx::Rect* content_area_in_dpi,
+    gfx::Rect* printable_area_in_dpi) {
   PageSizeMargins page_layout_in_points;
 
   double css_scale_factor = 1.0f;
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-    if (params.params.scale_factor >= kEpsilon)
-      css_scale_factor = params.params.scale_factor;
+  if (params.params.scale_factor >= kEpsilon)
+    css_scale_factor = params.params.scale_factor;
 #endif
+
+  // Save the original page size here to avoid rounding errors incurred by
+  // converting to pixels and back and by scaling the page for reflow and
+  // scaling back. Windows uses |page_size_in_dpi| for the actual page size
+  // so requires an accurate value.
+  gfx::Size original_page_size = params.params.page_size;
   ComputePageLayoutInPointsForCss(frame, params.page_number, params.params,
                                   ignore_css_margins_, &css_scale_factor,
                                   &page_layout_in_points);
@@ -1849,25 +1870,19 @@ void PrintWebViewHelper::PrintPageInternal(
   gfx::Rect content_area;
   GetPageSizeAndContentAreaFromPageLayout(page_layout_in_points, &page_size,
                                           &content_area);
-  int dpi = static_cast<int>(params.params.dpi);
+
   // Calculate the actual page size and content area in dpi.
   if (page_size_in_dpi) {
-    // Windows uses this for the actual page size. We have scaled page size
-    // to get blink to reflow the page, so scale it back to the real size
-    // before returning it.
-    *page_size_in_dpi =
-        gfx::Size(static_cast<int>(ConvertUnitDouble(page_size.width(),
-                                                     kPointsPerInch, dpi) *
-                                   css_scale_factor),
-                  static_cast<int>(ConvertUnitDouble(page_size.height(),
-                                                     kPointsPerInch, dpi) *
-                                   css_scale_factor));
+    *page_size_in_dpi = original_page_size;
   }
 
   if (content_area_in_dpi) {
     // Output PDF matches paper size and should be printer edge to edge.
     *content_area_in_dpi =
         gfx::Rect(0, 0, page_size_in_dpi->width(), page_size_in_dpi->height());
+  }
+  if (printable_area_in_dpi) {
+    *printable_area_in_dpi = printer_printable_area_;
   }
 
   gfx::Rect canvas_area =
@@ -1882,12 +1897,12 @@ void PrintWebViewHelper::PrintPageInternal(
   float scale_factor = css_scale_factor;
 #endif
 
-  SkCanvas* canvas = metafile->GetVectorCanvasForNewPage(
-      page_size, canvas_area, scale_factor);
+  cc::PaintCanvas* canvas =
+      metafile->GetVectorCanvasForNewPage(page_size, canvas_area, scale_factor);
   if (!canvas)
     return;
 
-  MetafileSkiaWrapper::SetMetafileOnCanvas(*canvas, metafile);
+  MetafileSkiaWrapper::SetMetafileOnCanvas(canvas, metafile);
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   if (params.params.display_header_footer) {

@@ -7,22 +7,25 @@ package org.chromium.chrome.browser.ntp.cards;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.Adapter;
-import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.ContextMenuManager;
-import org.chromium.chrome.browser.ntp.UiConfig;
+import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.suggestions.TileGrid;
+import org.chromium.chrome.browser.suggestions.TileGroup;
+import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 
-import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A class that handles merging above the fold elements and below the fold cards into an adapter
@@ -43,6 +46,8 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
     @Nullable
     private final AboveTheFoldItem mAboveTheFold;
+    @Nullable
+    private final TileGrid mTileGrid;
     private final SectionList mSections;
     private final SignInPromo mSigninPromo;
     private final AllDismissedItem mAllDismissed;
@@ -58,10 +63,11 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
      * @param uiConfig the NTP UI configuration, to be passed to created views.
      * @param offlinePageBridge used to determine if articles are available.
      * @param contextMenuManager used to build context menus.
+     * @param tileGroupDelegate if not null this is used to build a {@link TileGrid}.
      */
     public NewTabPageAdapter(SuggestionsUiDelegate uiDelegate, @Nullable View aboveTheFoldView,
             UiConfig uiConfig, OfflinePageBridge offlinePageBridge,
-            ContextMenuManager contextMenuManager) {
+            ContextMenuManager contextMenuManager, @Nullable TileGroup.Delegate tileGroupDelegate) {
         mUiDelegate = uiDelegate;
         mContextMenuManager = contextMenuManager;
 
@@ -80,8 +86,16 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
             mAboveTheFold = new AboveTheFoldItem();
             mRoot.addChild(mAboveTheFold);
         }
+        if (tileGroupDelegate == null) {
+            mTileGrid = null;
+        } else {
+            mTileGrid = new TileGrid(
+                    uiDelegate, mContextMenuManager, tileGroupDelegate, offlinePageBridge);
+            mRoot.addChild(mTileGrid);
+        }
         mRoot.addChildren(mSections, mSigninPromo, mAllDismissed, mFooter);
-        if (mAboveTheFoldView == null) {
+        if (mAboveTheFoldView == null
+                || ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_CONDENSED_LAYOUT)) {
             mBottomSpacer = null;
         } else {
             mBottomSpacer = new SpacingItem();
@@ -105,6 +119,9 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         switch (viewType) {
             case ItemViewType.ABOVE_THE_FOLD:
                 return new NewTabPageViewHolder(mAboveTheFoldView);
+
+            case ItemViewType.TILE_GRID:
+                return new TileGrid.ViewHolder(mRecyclerView);
 
             case ItemViewType.HEADER:
                 return new SectionHeaderViewHolder(mRecyclerView, mUiConfig);
@@ -142,17 +159,33 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
     @Override
     public void onBindViewHolder(NewTabPageViewHolder holder, int position, List<Object> payloads) {
-        mRoot.onBindViewHolder(holder, position, payloads);
+        if (payloads.isEmpty()) {
+            mRoot.onBindViewHolder(holder, position);
+            return;
+        }
+
+        for (Object payload : payloads) {
+            assert payload instanceof PartialBindCallback;
+            ((PartialBindCallback) payload).onResult(holder);
+        }
     }
 
     @Override
     public void onBindViewHolder(NewTabPageViewHolder holder, final int position) {
-        mRoot.onBindViewHolder(holder, position, Collections.emptyList());
+        mRoot.onBindViewHolder(holder, position);
     }
 
     @Override
     public int getItemCount() {
         return mRoot.getItemCount();
+    }
+
+    /** Resets suggestions, pulling the current state as known by the backend. */
+    public void refreshSuggestions() {
+        // The NTP Tiles already update when changes occurs, they don't need to be explicitly reset,
+        // unlike the cards.
+        mSections.refreshSuggestions();
+        if (mTileGrid != null) mTileGrid.getTileGroup().onSwitchToForeground();
     }
 
     public int getAboveTheFoldPosition() {
@@ -189,10 +222,10 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     }
 
     @Override
-    public void onItemRangeChanged(
-            TreeNode child, int itemPosition, int itemCount, Object payload) {
+    public void onItemRangeChanged(TreeNode child, int itemPosition, int itemCount,
+            @Nullable PartialBindCallback callback) {
         assert child == mRoot;
-        notifyItemRangeChanged(itemPosition, itemCount, payload);
+        notifyItemRangeChanged(itemPosition, itemCount, callback);
     }
 
     @Override
@@ -228,23 +261,22 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     }
 
     /**
-     * Dismisses the item at the provided adapter position. Can also cause the dismissal of other
-     * items or even entire sections.
+     * @return the set of item positions that should be dismissed simultaneously when dismissing the
+     *         item at the given {@code position} (including the position itself), or an empty set
+     *         if the item can't be dismissed.
      */
-    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
-        mRoot.dismissItem(position, itemRemovedCallback);
+    public Set<Integer> getItemDismissalGroup(int position) {
+        return mRoot.getItemDismissalGroup(position);
     }
 
     /**
-     * Returns another view holder that should be dismissed at the same time as the provided one.
+     * Dismisses the item at the provided adapter position. Can also cause the dismissal of other
+     * items or even entire sections.
+     * @param position the position of an item to be dismissed.
+     * @param itemRemovedCallback
      */
-    public NewTabPageViewHolder getDismissSibling(ViewHolder viewHolder) {
-        int swipePos = viewHolder.getAdapterPosition();
-        int siblingPosDelta = mRoot.getDismissSiblingPosDelta(swipePos);
-        if (siblingPosDelta == 0) return null;
-
-        return (NewTabPageViewHolder) mRecyclerView.findViewHolderForAdapterPosition(
-                siblingPosDelta + swipePos);
+    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
+        mRoot.dismissItem(position, itemRemovedCallback);
     }
 
     private boolean hasAllBeenDismissed() {

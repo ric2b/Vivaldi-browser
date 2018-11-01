@@ -24,6 +24,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -114,10 +115,9 @@ content::WebUIDataSource* CreateUberFrameHTMLSource(
   bool overrides_history =
       HasExtensionType(browser_context, chrome::kChromeUIHistoryHost);
   source->AddString("overridesHistory", overrides_history ? "yes" : "no");
-  source->AddBoolean(
-      "hideHistory",
-      MdHistoryUI::IsEnabled(profile)
-      && !overrides_history);
+  source->AddBoolean("hideHistory", base::FeatureList::IsEnabled(
+                                        features::kMaterialDesignHistory) &&
+                                        !overrides_history);
 
   source->DisableDenyXFrameOptions();
   source->OverrideContentSecurityPolicyChildSrc("child-src chrome:;");
@@ -144,10 +144,12 @@ SubframeLogger::SubframeLogger(content::WebContents* contents)
 
 SubframeLogger::~SubframeLogger() {}
 
-void SubframeLogger::DidCommitProvisionalLoadForFrame(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& url,
-    ui::PageTransition transition_type) {
+void SubframeLogger::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->HasCommitted())
+    return;
+
+  const GURL& url = navigation_handle->GetURL();
   if (url == chrome::kChromeUIExtensionsFrameURL ||
       url == chrome::kChromeUIHelpFrameURL ||
       url == chrome::kChromeUIHistoryFrameURL ||

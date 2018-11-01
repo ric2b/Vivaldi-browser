@@ -34,7 +34,6 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
-#include "core/fetch/CachedMetadataHandler.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -42,6 +41,7 @@
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerSettings.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/CachedMetadataHandler.h"
 #include "wtf/ListHashSet.h"
 #include <memory>
 
@@ -148,7 +148,8 @@ class CORE_EXPORT WorkerGlobalScope
   WorkerOrWorkletScriptController* scriptController() final {
     return m_scriptController.get();
   }
-  WorkerClients* clients() { return m_workerClients.get(); }
+
+  WorkerClients* clients() const { return m_workerClients.get(); }
 
   DECLARE_VIRTUAL_TRACE();
 

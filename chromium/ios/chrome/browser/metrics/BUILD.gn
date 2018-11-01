@@ -25,7 +25,9 @@ source_set("metrics") {
   ]
   deps = [
     "//base",
+    "//components/browser_sync",
     "//components/crash/core/common",
+    "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/metrics",
     "//components/metrics:net",
@@ -39,6 +41,8 @@ source_set("metrics") {
     "//components/signin/core/browser",
     "//components/sync",
     "//components/translate/core/browser",
+    "//components/ukm",
+    "//components/ukm:observers",
     "//components/variations",
     "//components/variations/service",
     "//components/version_info",
@@ -46,6 +50,7 @@ source_set("metrics") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/browser/google",
+    "//ios/chrome/browser/history:history",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
@@ -104,7 +109,24 @@ source_set("metrics_internal") {
     "//ui/base",
     "//url",
   ]
+  public_deps = [
+    ":metrics_internal_arc",
+  ]
+  allow_circular_includes_from = [ ":metrics_internal_arc" ]
   libs = [ "UIKit.framework" ]
+}
+
+source_set("metrics_internal_arc") {
+  sources = [
+    "tab_usage_recorder_web_state_list_observer.h",
+    "tab_usage_recorder_web_state_list_observer.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/browser/tabs",
+    "//ios/shared/chrome/browser/tabs",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("unit_tests_internal") {
@@ -130,6 +152,7 @@ source_set("unit_tests_internal") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "tab_usage_recorder_egtest.mm",
@@ -149,6 +172,7 @@ source_set("eg_tests") {
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing:ios_test_support",
     "//ios/third_party/earl_grey",
+    "//ios/web:earl_grey_test_support",
     "//ios/web:test_support",
     "//ui/base",
   ]

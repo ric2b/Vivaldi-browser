@@ -23,6 +23,10 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_with_source.h"
+#include "net/spdy/hpack/hpack_constants.h"
+#include "net/spdy/hpack/hpack_huffman_table.h"
+#include "net/spdy/hpack/hpack_static_table.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 #include "net/spdy/spdy_session.h"
 
 namespace net {
@@ -364,33 +368,35 @@ void SpdySessionPool::OnSSLConfigChanged() {
   CloseCurrentSessions(ERR_NETWORK_CHANGED);
 }
 
-void SpdySessionPool::OnCertDBChanged(const X509Certificate* cert) {
+void SpdySessionPool::OnCertDBChanged() {
   CloseCurrentSessions(ERR_CERT_DATABASE_CHANGED);
 }
 
 void SpdySessionPool::DumpMemoryStats(
     base::trace_event::ProcessMemoryDump* pmd,
     const std::string& parent_dump_absolute_name) const {
-  std::string dump_name = base::StringPrintf("%s/spdy_session_pool",
-                                             parent_dump_absolute_name.c_str());
-  base::trace_event::MemoryAllocatorDump* dump =
-      pmd->CreateAllocatorDump(dump_name);
+  if (sessions_.empty())
+    return;
   size_t total_size = 0;
   size_t buffer_size = 0;
   size_t cert_count = 0;
-  size_t serialized_cert_size = 0;
+  size_t cert_size = 0;
   size_t num_active_sessions = 0;
-  for (const auto& session : sessions_) {
+  for (auto* session : sessions_) {
     StreamSocket::SocketMemoryStats stats;
     bool is_session_active = false;
-    session->DumpMemoryStats(&stats, &is_session_active);
-    total_size += stats.total_size;
+    total_size += session->DumpMemoryStats(&stats, &is_session_active);
     buffer_size += stats.buffer_size;
     cert_count += stats.cert_count;
-    serialized_cert_size += stats.serialized_cert_size;
+    cert_size += stats.cert_size;
     if (is_session_active)
       num_active_sessions++;
   }
+  total_size += SpdyEstimateMemoryUsage(ObtainHpackHuffmanTable()) +
+                SpdyEstimateMemoryUsage(ObtainHpackStaticTable());
+  base::trace_event::MemoryAllocatorDump* dump =
+      pmd->CreateAllocatorDump(base::StringPrintf(
+          "%s/spdy_session_pool", parent_dump_absolute_name.c_str()));
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                   total_size);
@@ -406,9 +412,9 @@ void SpdySessionPool::DumpMemoryStats(
   dump->AddScalar("cert_count",
                   base::trace_event::MemoryAllocatorDump::kUnitsObjects,
                   cert_count);
-  dump->AddScalar("serialized_cert_size",
+  dump->AddScalar("cert_size",
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                  serialized_cert_size);
+                  cert_size);
 }
 
 bool SpdySessionPool::IsSessionAvailable(

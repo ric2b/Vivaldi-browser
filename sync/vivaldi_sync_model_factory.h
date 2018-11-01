@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_SYNC_MODEL_FACTORY_H_
-#define VIVALDI_SYNC_MODEL_FACTORY_H_
+#ifndef SYNC_VIVALDI_SYNC_MODEL_FACTORY_H_
+#define SYNC_VIVALDI_SYNC_MODEL_FACTORY_H_
 
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -40,4 +40,4 @@ class SyncModelFactory : public BrowserContextKeyedServiceFactory {
   DISALLOW_COPY_AND_ASSIGN(SyncModelFactory);
 };
 
-#endif  // VIVALDI_SYNC_MODEL_FACTORY_H_
+#endif  // SYNC_VIVALDI_SYNC_MODEL_FACTORY_H_

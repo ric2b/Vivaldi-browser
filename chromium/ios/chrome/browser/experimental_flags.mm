@@ -85,25 +85,6 @@ bool IsAlertOnBackgroundUploadEnabled() {
       boolForKey:kEnableAlertOnBackgroundUpload];
 }
 
-bool IsAllBookmarksEnabled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableAllBookmarksView)) {
-    return true;
-  } else if (command_line->HasSwitch(switches::kDisableAllBookmarksView)) {
-    return false;
-  }
-
-  // Check if the finch experiment exists.
-  std::string group_name =
-      base::FieldTrialList::FindFullName("RemoveAllBookmarks");
-
-  if (group_name.empty()) {
-    return false;  // If no finch experiment, all bookmarks is disabled.
-  }
-  return base::StartsWith(group_name, "Enabled",
-                          base::CompareCase::INSENSITIVE_ASCII);
-}
-
 bool IsAutoReloadEnabled() {
   std::string group_name = base::FieldTrialList::FindFullName("IOSAutoReload");
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -113,11 +94,6 @@ bool IsAutoReloadEnabled() {
     return false;
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
-}
-
-bool IsCredentialManagementEnabled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(switches::kEnableCredentialManagerAPI);
 }
 
 bool IsDownloadRenamingEnabled() {
@@ -259,11 +235,6 @@ bool IsSafariVCSignInEnabled() {
       boolForKey:kSafariVCSignInDisabled];
 }
 
-bool IsSpotlightActionsEnabled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return !command_line->HasSwitch(switches::kDisableSpotlightActions);
-}
-
 bool IsStartupCrashEnabled() {
   return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableStartupCrash];
 }
@@ -271,19 +242,6 @@ bool IsStartupCrashEnabled() {
 bool IsTabStripAutoScrollNewTabsEnabled() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   return !command_line->HasSwitch(switches::kDisableTabStripAutoScrollNewTabs);
-}
-
-bool IsTabSwitcherEnabled() {
-  // Check if the experimental flag is forced off.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kDisableTabSwitcher)) {
-    return false;
-  }
-
-  // Check if the finch experiment is turned off.
-  std::string group_name = base::FieldTrialList::FindFullName("IOSTabSwitcher");
-  return !base::StartsWith(group_name, "Disabled",
-                           base::CompareCase::INSENSITIVE_ASCII);
 }
 
 bool IsViewCopyPasswordsEnabled() {
@@ -302,6 +260,19 @@ bool UseOnlyLocalHeuristicsForPasswordGeneration() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   return command_line->HasSwitch(
       autofill::switches::kLocalHeuristicsOnlyForPasswordGeneration);
+}
+
+bool IsSuggestionsUIEnabled() {
+  // Check if the experimental flag is forced on or off.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableSuggestionsUI))
+    return true;
+
+  if (command_line->HasSwitch(switches::kDisableSuggestionsUI))
+    return false;
+
+  // By default, disable it.
+  return false;
 }
 
 }  // namespace experimental_flags

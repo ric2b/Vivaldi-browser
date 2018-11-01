@@ -48,10 +48,6 @@ test::TestSystemTrayDelegate* AshTest::GetSystemTrayDelegate() {
       WmShell::Get()->system_tray_delegate());
 }
 
-bool AshTest::SupportsMultipleDisplays() const {
-  return test_impl_->SupportsMultipleDisplays();
-}
-
 void AshTest::UpdateDisplay(const std::string& display_spec) {
   return test_impl_->UpdateDisplay(display_spec);
 }
@@ -109,6 +105,10 @@ display::Display AshTest::GetSecondaryDisplay() {
 bool AshTest::SetSecondaryDisplayPlacement(
     display::DisplayPlacement::Position position,
     int offset) {
+  if (WmShell::Get()->IsRunningInMash()) {
+    NOTIMPLEMENTED();
+    return false;
+  }
   return test_impl_->SetSecondaryDisplayPlacement(position, offset);
 }
 

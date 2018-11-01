@@ -51,7 +51,7 @@ class UIOverridesHandler::ManifestPermissionImpl : public ManifestPermission {
 
   std::unique_ptr<base::Value> ToValue() const override {
     return std::unique_ptr<base::Value>(
-        new base::FundamentalValue(override_bookmarks_ui_permission_));
+        new base::Value(override_bookmarks_ui_permission_));
   }
 
   ManifestPermission* Diff(const ManifestPermission* rhs) const override {
@@ -143,7 +143,7 @@ bool UIOverridesHandler::Parse(Extension* extension, base::string16* error) {
   }
   info->manifest_permission.reset(new ManifestPermissionImpl(
       info->bookmarks_ui.get() != NULL));
-  extension->SetManifestData(manifest_keys::kUIOverride, info.release());
+  extension->SetManifestData(manifest_keys::kUIOverride, std::move(info));
   return true;
 }
 

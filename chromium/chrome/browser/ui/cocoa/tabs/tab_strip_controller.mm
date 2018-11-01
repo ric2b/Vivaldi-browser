@@ -1127,6 +1127,10 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     }
     isLastTabPinned = isPinned;
 
+    // Flip if in RTL mode.
+    tabFrame.origin.x =
+        FlipXInView(tabStripView_, tabFrame.size.width, tabFrame.origin.x);
+
     if (laidOutNonPinnedTabs > numberOfNonPinnedTabs) {
       // There is not enough space to fit this tab.
       tabFrame.size.width = 0;
@@ -1144,9 +1148,6 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
         droppedTabFrame_ = NSZeroRect;
       }
     }
-
-    tabFrame.origin.x =
-        FlipXInView(tabStripView_, tabFrame.size.width, tabFrame.origin.x);
 
     // Check the frame by identifier to avoid redundant calls to animator.
     id frameTarget = visible && animate ? [[tab view] animator] : [tab view];
@@ -2205,13 +2206,21 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     DCHECK(disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB);
     NSInteger lastIndex = [tabArray_ count] - 1;
     NSRect overRect = [[[tabArray_ objectAtIndex:lastIndex] view] frame];
-    arrowPos.x = overRect.origin.x + overRect.size.width - kTabOverlap / 2.0;
+    if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+      arrowPos.x = NSMinX(overRect) + kTabOverlap / 2.0;
+    } else {
+      arrowPos.x = NSMaxX(overRect) - kTabOverlap / 2.0;
+    }
   } else {
     NSRect overRect = [[[tabArray_ objectAtIndex:index] view] frame];
     switch (disposition) {
       case WindowOpenDisposition::NEW_FOREGROUND_TAB:
-        // Insert tab (to the left of the given tab).
-        arrowPos.x = overRect.origin.x + kTabOverlap / 2.0;
+        // Insert tab (before the given tab).
+        if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+          arrowPos.x = NSMaxX(overRect) - kTabOverlap / 2.0;
+        } else {
+          arrowPos.x = NSMinX(overRect) + kTabOverlap / 2.0;
+        }
         break;
       case WindowOpenDisposition::CURRENT_TAB:
         // Overwrite the given tab.

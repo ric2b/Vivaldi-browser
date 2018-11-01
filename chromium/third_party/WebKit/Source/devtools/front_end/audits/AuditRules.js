@@ -352,8 +352,8 @@ Audits.AuditRules.UnusedCssRule = class extends Audits.AuditRule {
    * @param {!Common.Progress} progress
    */
   doRun(target, requests, result, callback, progress) {
-    var domModel = SDK.DOMModel.fromTarget(target);
-    var cssModel = SDK.CSSModel.fromTarget(target);
+    var domModel = target.model(SDK.DOMModel);
+    var cssModel = target.model(SDK.CSSModel);
     if (!domModel || !cssModel) {
       callback(null);
       return;
@@ -813,8 +813,8 @@ Audits.AuditRules.ImageDimensionsRule = class extends Audits.AuditRule {
    * @param {!Common.Progress} progress
    */
   doRun(target, requests, result, callback, progress) {
-    var domModel = SDK.DOMModel.fromTarget(target);
-    var cssModel = SDK.CSSModel.fromTarget(target);
+    var domModel = target.model(SDK.DOMModel);
+    var cssModel = target.model(SDK.CSSModel);
     if (!domModel || !cssModel) {
       callback(null);
       return;
@@ -1181,7 +1181,7 @@ Audits.AuditRules.CSSRuleBase = class extends Audits.AuditRule {
    * @param {!Common.Progress} progress
    */
   doRun(target, requests, result, callback, progress) {
-    var cssModel = SDK.CSSModel.fromTarget(target);
+    var cssModel = target.model(SDK.CSSModel);
     if (!cssModel) {
       callback(null);
       return;
@@ -1314,13 +1314,14 @@ Audits.AuditRules.CookieRuleBase = class extends Audits.AuditRule {
       callback(result);
     }
 
-    SDK.Cookies.getCookiesAsync(resultCallback);
+    const nonDataUrls = requests.map(r => r.url()).filter(url => url && url.asParsedURL());
+    SDK.CookieModel.fromTarget(target).getCookiesAsync(nonDataUrls, resultCallback);
   }
 
   mapResourceCookies(requestsByDomain, allCookies, callback) {
     for (var i = 0; i < allCookies.length; ++i) {
       for (var requestDomain in requestsByDomain) {
-        if (SDK.Cookies.cookieDomainMatchesResourceDomain(allCookies[i].domain(), requestDomain))
+        if (SDK.CookieModel.cookieDomainMatchesResourceDomain(allCookies[i].domain(), requestDomain))
           this._callbackForResourceCookiePairs(requestsByDomain[requestDomain], allCookies[i], callback);
       }
     }
@@ -1330,7 +1331,7 @@ Audits.AuditRules.CookieRuleBase = class extends Audits.AuditRule {
     if (!requests)
       return;
     for (var i = 0; i < requests.length; ++i) {
-      if (SDK.Cookies.cookieMatchesResourceURL(cookie, requests[i].url()))
+      if (SDK.CookieModel.cookieMatchesResourceURL(cookie, requests[i].url()))
         callback(requests[i], cookie);
     }
   }

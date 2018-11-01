@@ -11,6 +11,8 @@ Polymer({
 
     /** @type {Array<BookmarkTreeNode>} */
     displayedList: Array,
+
+    searchTerm: String,
   },
 
   listeners: {
@@ -28,12 +30,10 @@ Polymer({
     menu.showAt(/** @type {!Element} */ (e.detail.target));
   },
 
-  // TODO(jiaxi): change these dummy click event handlers later.
   /** @private */
   onEditTap_: function() {
     this.closeDropdownMenu_();
-    if (this.menuItem_.url)
-      this.$.editBookmark.showModal();
+    this.$.editBookmark.showModal();
   },
 
   /** @private */
@@ -61,10 +61,11 @@ Polymer({
 
   /** @private */
   onSaveEditTap_: function() {
-    chrome.bookmarks.update(this.menuItem_.id, {
-      'title': this.menuItem_.title,
-      'url': this.menuItem_.url,
-    });
+    var edit = {'title': this.menuItem_.title};
+    if (this.menuItem_.url)
+      edit['url'] = this.menuItem_.url;
+
+    chrome.bookmarks.update(this.menuItem_.id, edit);
     this.$.editBookmark.close();
   },
 
@@ -81,7 +82,25 @@ Polymer({
   },
 
   /** @private */
-  isListEmpty_: function() {
+  getEditActionLabel_: function() {
+    var label = this.menuItem_.url ? 'menuEdit' : 'menuRename';
+    return loadTimeData.getString(label);
+  },
+
+  /** @private */
+  getEditorTitle_: function() {
+    var title = this.menuItem_.url ? 'editBookmarkTitle' : 'renameFolderTitle';
+    return loadTimeData.getString(title);
+  },
+
+  /** @private */
+  emptyListMessage_: function() {
+    var emptyListMessage = this.searchTerm ? 'noSearchResults' : 'emptyList';
+    return loadTimeData.getString(emptyListMessage);
+  },
+
+  /** @private */
+  isEmptyList_: function() {
     return this.displayedList.length == 0;
-  }
+  },
 });

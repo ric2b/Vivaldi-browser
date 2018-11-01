@@ -10,10 +10,10 @@
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "grit/ash_strings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -184,10 +184,10 @@ ToastOverlayView::ToastOverlayView(
 ToastOverlayView::~ToastOverlayView() {}
 
 void ToastOverlayView::OnPaint(gfx::Canvas* canvas) {
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(kButtonBackgroundColor);
-  canvas->DrawRoundRect(GetLocalBounds(), 2, paint);
+  cc::PaintFlags flags;
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setColor(kButtonBackgroundColor);
+  canvas->DrawRoundRect(GetLocalBounds(), 2, flags);
   views::View::OnPaint(canvas);
 }
 

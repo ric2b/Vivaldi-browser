@@ -38,6 +38,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/drive/auth_service.h"
 #include "google_apis/drive/drive_api_url_generator.h"
+#include "google_apis/drive/drive_switches.h"
 #include "storage/common/fileapi/file_system_info.h"
 #include "storage/common/fileapi/file_system_util.h"
 #include "url/gurl.h"
@@ -100,7 +101,8 @@ void FillEntryPropertiesValueForDrive(const drive::ResourceEntry& entry_proto,
     DriveApiUrlGenerator url_generator(
         (GURL(google_apis::DriveApiUrlGenerator::kBaseUrlForProduction)),
         (GURL(google_apis::DriveApiUrlGenerator::
-                  kBaseThumbnailUrlForProduction)));
+                  kBaseThumbnailUrlForProduction)),
+        google_apis::GetTeamDrivesIntegrationSwitch());
     properties->thumbnail_url.reset(new std::string(
         url_generator.GetThumbnailUrl(entry_proto.resource_id(),
                                       500 /* width */, 500 /* height */,
@@ -357,7 +359,8 @@ class SingleEntryPropertiesGetterForDrive {
       for (size_t i = 0; i < drive_apps.size(); ++i) {
         const drive::DriveAppInfo& app_info = drive_apps[i];
         if (default_task.app_id == app_info.app_id) {
-          // The drive app is set as default. Files.app should use the doc icon.
+          // The drive app is set as default. The Files app should use the doc
+          // icon.
           const GURL doc_icon = drive::util::FindPreferredIcon(
               app_info.document_icons, drive::util::kPreferredIconSize);
           properties_->custom_icon_url.reset(new std::string(doc_icon.spec()));
@@ -1113,7 +1116,8 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnGetResourceEntry(
   DriveApiUrlGenerator url_generator(
       (GURL(google_apis::DriveApiUrlGenerator::kBaseUrlForProduction)),
       (GURL(
-          google_apis::DriveApiUrlGenerator::kBaseThumbnailUrlForProduction)));
+          google_apis::DriveApiUrlGenerator::kBaseThumbnailUrlForProduction)),
+      google_apis::GetTeamDrivesIntegrationSwitch());
   download_url_ = url_generator.GenerateDownloadFileUrl(entry->resource_id());
 
   ProfileOAuth2TokenService* oauth2_token_service =

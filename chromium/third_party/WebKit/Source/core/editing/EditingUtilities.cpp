@@ -79,9 +79,30 @@ std::ostream& operator<<(std::ostream& os, PositionMoveType type) {
   return os << *it;
 }
 
+InputEvent::EventCancelable inputTypeIsCancelable(
+    InputEvent::InputType inputType) {
+  using InputType = InputEvent::InputType;
+  switch (inputType) {
+    case InputType::InsertText:
+    case InputType::InsertLineBreak:
+    case InputType::InsertParagraph:
+    case InputType::InsertCompositionText:
+    case InputType::InsertReplacementText:
+    case InputType::DeleteWordBackward:
+    case InputType::DeleteWordForward:
+    case InputType::DeleteLineBackward:
+    case InputType::DeleteLineForward:
+    case InputType::DeleteContentBackward:
+    case InputType::DeleteContentForward:
+      return InputEvent::EventCancelable::NotCancelable;
+    default:
+      return InputEvent::EventCancelable::IsCancelable;
+  }
+}
+
 }  // namespace
 
-bool needsLayoutTreeUpdate(const Node& node) {
+static bool needsLayoutTreeUpdate(const Node& node) {
   const Document& document = node.document();
   if (document.needsLayoutTreeUpdate())
     return true;
@@ -270,6 +291,15 @@ int comparePositions(const VisiblePosition& a, const VisiblePosition& b) {
   return comparePositions(a.deepEquivalent(), b.deepEquivalent());
 }
 
+// TODO(editing-dev): We should implement real version which refers
+// "user-select" CSS property.
+// TODO(editing-dev): We should make |SelectionAdjuster| to use this funciton
+// instead of |isSelectionBondary()|.
+bool isUserSelectContain(const Node& node) {
+  return isHTMLTextAreaElement(node) || isHTMLInputElement(node) ||
+         isHTMLSelectElement(node);
+}
+
 enum EditableLevel { Editable, RichlyEditable };
 static bool hasEditableLevel(const Node& node, EditableLevel editableLevel) {
   DCHECK(node.document().isActive());
@@ -379,9 +409,9 @@ bool isEditablePosition(const Position& position) {
   DCHECK(node->document().isActive());
   if (node->document().lifecycle().state() >=
       DocumentLifecycle::InStyleRecalc) {
-    // TODO(yosin): Once we change |LayoutObject::adjustStyleDifference()|
-    // not to call |FrameSelection::hasCaret()|, we should not assume
-    // calling |isEditablePosition()| in |InStyleRecalc| is safe.
+    // TODO(yosin): Update the condition and DCHECK here given that
+    // https://codereview.chromium.org/2665823002/ avoided this function from
+    // being called during InStyleRecalc.
   } else {
     DCHECK(!needsLayoutTreeUpdate(position)) << position;
   }
@@ -927,12 +957,6 @@ Element* enclosingBlockFlowElement(const Node& node) {
       return toElement(&runner);
   }
   return nullptr;
-}
-
-bool nodeIsUserSelectAll(const Node* node) {
-  return RuntimeEnabledFeatures::userSelectAllEnabled() && node &&
-         node->layoutObject() &&
-         node->layoutObject()->style()->userSelect() == SELECT_ALL;
 }
 
 EUserSelect usedValueOfUserSelect(const Node& node) {
@@ -1724,39 +1748,45 @@ PositionWithAffinity positionRespectingEditingBoundary(
   return targetNode->layoutObject()->positionForPoint(selectionEndPoint);
 }
 
-void updatePositionForNodeRemoval(Position& position, Node& node) {
+Position computePositionForNodeRemoval(const Position& position, Node& node) {
   if (position.isNull())
-    return;
+    return position;
   switch (position.anchorType()) {
     case PositionAnchorType::BeforeChildren:
-      if (node.isShadowIncludingInclusiveAncestorOf(
-              position.computeContainerNode()))
-        position = Position::inParentBeforeNode(node);
-      break;
+      if (!node.isShadowIncludingInclusiveAncestorOf(
+              position.computeContainerNode())) {
+        return position;
+      }
+      return Position::inParentBeforeNode(node);
     case PositionAnchorType::AfterChildren:
-      if (node.isShadowIncludingInclusiveAncestorOf(
-              position.computeContainerNode()))
-        position = Position::inParentAfterNode(node);
-      break;
+      if (!node.isShadowIncludingInclusiveAncestorOf(
+              position.computeContainerNode())) {
+        return position;
+      }
+      return Position::inParentAfterNode(node);
     case PositionAnchorType::OffsetInAnchor:
       if (position.computeContainerNode() == node.parentNode() &&
           static_cast<unsigned>(position.offsetInContainerNode()) >
-              node.nodeIndex())
-        position = Position(position.computeContainerNode(),
-                            position.offsetInContainerNode() - 1);
-      else if (node.isShadowIncludingInclusiveAncestorOf(
-                   position.computeContainerNode()))
-        position = Position::inParentBeforeNode(node);
-      break;
+              node.nodeIndex()) {
+        return Position(position.computeContainerNode(),
+                        position.offsetInContainerNode() - 1);
+      }
+      if (!node.isShadowIncludingInclusiveAncestorOf(
+              position.computeContainerNode())) {
+        return position;
+      }
+      return Position::inParentBeforeNode(node);
     case PositionAnchorType::AfterAnchor:
-      if (node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
-        position = Position::inParentAfterNode(node);
-      break;
+      if (!node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
+        return position;
+      return Position::inParentAfterNode(node);
     case PositionAnchorType::BeforeAnchor:
-      if (node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
-        position = Position::inParentBeforeNode(node);
-      break;
+      if (!node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
+        return position;
+      return Position::inParentBeforeNode(node);
   }
+  NOTREACHED() << "We should handle all PositionAnchorType";
+  return position;
 }
 
 bool isMailHTMLBlockquoteElement(const Node* node) {
@@ -2048,7 +2078,20 @@ bool isTextSecurityNode(const Node* node) {
          node->layoutObject()->style()->textSecurity() != TSNONE;
 }
 
-DispatchEventResult dispatchBeforeInputInsertText(EventTarget* target,
+const StaticRangeVector* targetRangesForInputEvent(const Node& node) {
+  if (!hasRichlyEditableStyle(node))
+    return nullptr;
+  Range* range = createRange(
+      firstEphemeralRangeOf(node.document()
+                                .frame()
+                                ->selection()
+                                .computeVisibleSelectionInDOMTreeDeprecated()));
+  if (!range)
+    return nullptr;
+  return new StaticRangeVector(1, StaticRange::create(range));
+}
+
+DispatchEventResult dispatchBeforeInputInsertText(Node* target,
                                                   const String& data) {
   if (!RuntimeEnabledFeatures::inputEventEnabled())
     return DispatchEventResult::NotCanceled;
@@ -2058,47 +2101,30 @@ DispatchEventResult dispatchBeforeInputInsertText(EventTarget* target,
   // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
   InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
       InputEvent::InputType::InsertText, data,
-      InputEvent::EventCancelable::IsCancelable,
-      InputEvent::EventIsComposing::NotComposing, nullptr);
-  return target->dispatchEvent(beforeInputEvent);
-}
-
-DispatchEventResult dispatchBeforeInputFromComposition(
-    EventTarget* target,
-    InputEvent::InputType inputType,
-    const String& data,
-    InputEvent::EventCancelable cancelable) {
-  if (!RuntimeEnabledFeatures::inputEventEnabled())
-    return DispatchEventResult::NotCanceled;
-  if (!target)
-    return DispatchEventResult::NotCanceled;
-  // TODO(chongz): Pass appropriate |ranges| after it's defined on spec.
-  // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
-  InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
-      inputType, data, cancelable, InputEvent::EventIsComposing::IsComposing,
-      nullptr);
+      inputTypeIsCancelable(InputEvent::InputType::InsertText),
+      InputEvent::EventIsComposing::NotComposing,
+      targetRangesForInputEvent(*target));
   return target->dispatchEvent(beforeInputEvent);
 }
 
 DispatchEventResult dispatchBeforeInputEditorCommand(
-    EventTarget* target,
+    Node* target,
     InputEvent::InputType inputType,
-    const RangeVector* ranges) {
+    const StaticRangeVector* ranges) {
   if (!RuntimeEnabledFeatures::inputEventEnabled())
     return DispatchEventResult::NotCanceled;
   if (!target)
     return DispatchEventResult::NotCanceled;
   InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
-      inputType, nullAtom, InputEvent::EventCancelable::IsCancelable,
+      inputType, nullAtom, inputTypeIsCancelable(inputType),
       InputEvent::EventIsComposing::NotComposing, ranges);
   return target->dispatchEvent(beforeInputEvent);
 }
 
 DispatchEventResult dispatchBeforeInputDataTransfer(
-    EventTarget* target,
+    Node* target,
     InputEvent::InputType inputType,
-    DataTransfer* dataTransfer,
-    const RangeVector* ranges) {
+    DataTransfer* dataTransfer) {
   if (!RuntimeEnabledFeatures::inputEventEnabled())
     return DispatchEventResult::NotCanceled;
   if (!target)
@@ -2114,15 +2140,17 @@ DispatchEventResult dispatchBeforeInputDataTransfer(
 
   if (hasRichlyEditableStyle(*(target->toNode())) || !dataTransfer) {
     beforeInputEvent = InputEvent::createBeforeInput(
-        inputType, dataTransfer, InputEvent::EventCancelable::IsCancelable,
-        InputEvent::EventIsComposing::NotComposing, ranges);
+        inputType, dataTransfer, inputTypeIsCancelable(inputType),
+        InputEvent::EventIsComposing::NotComposing,
+        targetRangesForInputEvent(*target));
   } else {
     const String& data = dataTransfer->getData(mimeTypeTextPlain);
     // TODO(chongz): Pass appropriate |ranges| after it's defined on spec.
     // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
     beforeInputEvent = InputEvent::createBeforeInput(
-        inputType, data, InputEvent::EventCancelable::IsCancelable,
-        InputEvent::EventIsComposing::NotComposing, nullptr);
+        inputType, data, inputTypeIsCancelable(inputType),
+        InputEvent::EventIsComposing::NotComposing,
+        targetRangesForInputEvent(*target));
   }
   return target->dispatchEvent(beforeInputEvent);
 }

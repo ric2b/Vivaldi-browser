@@ -51,7 +51,8 @@ GpuChannelManager::GpuChannelManager(
     base::SingleThreadTaskRunner* io_task_runner,
     base::WaitableEvent* shutdown_event,
     SyncPointManager* sync_point_manager,
-    GpuMemoryBufferFactory* gpu_memory_buffer_factory)
+    GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    const GpuFeatureInfo& gpu_feature_info)
     : task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       gpu_preferences_(gpu_preferences),
@@ -63,9 +64,8 @@ GpuChannelManager::GpuChannelManager(
       mailbox_manager_(gles2::MailboxManager::Create(gpu_preferences)),
       gpu_memory_manager_(this),
       sync_point_manager_(sync_point_manager),
-      sync_point_client_waiter_(
-          sync_point_manager->CreateSyncPointClientWaiter()),
       gpu_memory_buffer_factory_(gpu_memory_buffer_factory),
+      gpu_feature_info_(gpu_feature_info),
       exiting_for_lost_context_(false),
       weak_factory_(this) {
   DCHECK(task_runner);
@@ -85,8 +85,6 @@ GpuChannelManager::~GpuChannelManager() {
 
 gles2::ProgramCache* GpuChannelManager::program_cache() {
   if (!program_cache_.get() &&
-      (gl::g_driver_gl.ext.b_GL_ARB_get_program_binary ||
-       gl::g_driver_gl.ext.b_GL_OES_get_program_binary) &&
       !gpu_preferences_.disable_gpu_program_cache) {
     const GpuDriverBugWorkarounds& workarounds = gpu_driver_bug_workarounds_;
     bool disable_disk_cache =
@@ -174,21 +172,13 @@ void GpuChannelManager::DestroyGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
     int client_id,
     const SyncToken& sync_token) {
-  if (sync_token.HasData()) {
-    scoped_refptr<SyncPointClientState> release_state =
-        sync_point_manager()->GetSyncPointClientState(
-            sync_token.namespace_id(), sync_token.command_buffer_id());
-    if (release_state) {
-      sync_point_client_waiter_->WaitOutOfOrder(
-          release_state.get(), sync_token.release_count(),
+  if (!sync_point_manager_->WaitOutOfOrder(
+          sync_token,
           base::Bind(&GpuChannelManager::InternalDestroyGpuMemoryBuffer,
-                     base::Unretained(this), id, client_id));
-      return;
-    }
+                     base::Unretained(this), id, client_id))) {
+    // No sync token or invalid sync token, destroy immediately.
+    InternalDestroyGpuMemoryBuffer(id, client_id);
   }
-
-  // No sync token or invalid sync token, destroy immediately.
-  InternalDestroyGpuMemoryBuffer(id, client_id);
 }
 
 void GpuChannelManager::PopulateShaderCache(const std::string& program_proto) {

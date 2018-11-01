@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/net/file_downloader.h"
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/net/file_downloader.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -61,7 +64,8 @@ class FileDownloaderTest : public testing::Test {
     FileDownloader downloader(
         GURL(kURL), path_, overwrite, request_context_.get(),
         base::Bind(&FileDownloaderTest::OnDownloadFinished,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        TRAFFIC_ANNOTATION_FOR_TESTS);
     EXPECT_CALL(*this, OnDownloadFinished(expected_result));
     // Wait for the FileExists check to happen if necessary.
     if (!overwrite)

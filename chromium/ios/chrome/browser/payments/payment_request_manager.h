@@ -28,6 +28,9 @@ class WebState;
 // The current web state being observed for PaymentRequest invocations.
 @property(nonatomic, assign) web::WebState* webState;
 
+// The ios::ChromeBrowserState instance passed to the initializer.
+@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
+
 // Designated initializer.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                               browserState:
@@ -37,7 +40,7 @@ class WebState;
 - (instancetype)init NS_UNAVAILABLE;
 
 // Sets the WebState to be observed for invocations of the Payment Request API.
-// |webState|'s lifetime should be greater than the reciever's. |webState| can
+// |webState|'s lifetime should be greater than the receiver's. |webState| can
 // be nil.
 - (void)setWebState:(web::WebState*)webState;
 

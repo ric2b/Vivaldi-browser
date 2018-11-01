@@ -92,7 +92,8 @@ class MODULES_EXPORT ServiceWorkerContainer final
                      bool shouldNotifyControllerChange) override;
   void dispatchMessageEvent(std::unique_ptr<WebServiceWorker::Handle>,
                             const WebString& message,
-                            const WebMessagePortChannelArray&) override;
+                            WebMessagePortChannelArray) override;
+  void countFeature(uint32_t feature) override;
 
   // EventTarget overrides.
   ExecutionContext* getExecutionContext() const override {

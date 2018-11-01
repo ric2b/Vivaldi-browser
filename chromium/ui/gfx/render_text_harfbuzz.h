@@ -9,9 +9,9 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "third_party/harfbuzz-ng/src/hb.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
@@ -109,10 +109,14 @@ class TextRunList {
     return logical_to_visual_[index];
   }
 
-  const ScopedVector<TextRunHarfBuzz>& runs() const { return runs_; }
+  const std::vector<std::unique_ptr<TextRunHarfBuzz>>& runs() const {
+    return runs_;
+  }
 
   // Adds the new |run| to the run list.
-  void add(TextRunHarfBuzz* run) { runs_.push_back(run); }
+  void Add(std::unique_ptr<TextRunHarfBuzz> run) {
+    runs_.push_back(std::move(run));
+  }
 
   // Reset the run list.
   void Reset();
@@ -132,7 +136,7 @@ class TextRunList {
 
  private:
   // Text runs in logical order.
-  ScopedVector<TextRunHarfBuzz> runs_;
+  std::vector<std::unique_ptr<TextRunHarfBuzz>> runs_;
 
   // Maps visual run indices to logical run indices and vice versa.
   std::vector<int32_t> visual_to_logical_;
@@ -196,20 +200,6 @@ class GFX_EXPORT RenderTextHarfBuzz : public RenderText {
   // Return the run index that contains the argument; or the length of the
   // |runs_| vector if argument exceeds the text length or width.
   size_t GetRunContainingCaret(const SelectionModel& caret);
-
-  // Returns the line index for the given argument. |text_y| is relative to
-  // the text bounds. Returns -1 if |text_y| is above the text and
-  // lines().size() if |text_y| is below it.
-  int GetLineContainingYCoord(float text_y);
-
-  // Returns the line segment index for the |line|, |text_x| pair. |text_x| is
-  // relative to text in the given line. Returns -1 if |text_x| is to the left
-  // of text in the line and |line|.segments.size() if it's to the right.
-  // |offset_relative_segment| will contain the offset of |text_x| relative to
-  // the start of the segment it is contained in.
-  int GetLineSegmentContainingXCoord(const internal::Line& line,
-                                     float text_x,
-                                     float* offset_relative_segment);
 
   // Given a |run|, returns the SelectionModel that contains the logical first
   // or last caret position inside (not at a boundary of) the run.

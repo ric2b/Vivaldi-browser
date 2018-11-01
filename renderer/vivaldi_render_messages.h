@@ -25,8 +25,11 @@ IPC_MESSAGE_ROUTED3(VivaldiMsg_SetPinchZoom,
                     int /* x */,
                     int /* y */)
 
-IPC_MESSAGE_ROUTED4(VivaldiMsg_DidUpdateFocusedElementInfo, std::string,
-  std::string, bool, std::string)
+IPC_MESSAGE_ROUTED4(VivaldiMsg_DidUpdateFocusedElementInfo,
+                    std::string,
+                    std::string,
+                    bool,
+                    std::string)
 
 // Asks the renderer for a snapshot of web page. If |full_page| is true,
 // the full page is captured and not scaled down, |size|

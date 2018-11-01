@@ -68,8 +68,8 @@ class AccessibilityWinBrowserTest : public ContentBrowserTest {
       base::win::ScopedComPtr<IAccessibleText>* input_text);
   void SetUpTextareaField(
       base::win::ScopedComPtr<IAccessibleText>* textarea_text);
-  void SetUpSampleParagraph(
-      base::win::ScopedComPtr<IAccessibleText>* paragraph_text);
+  template <typename Interface>
+  void SetUpSampleParagraph(base::win::ScopedComPtr<Interface>* com_interface);
 
   static base::win::ScopedComPtr<IAccessible> GetAccessibleFromVariant(
       IAccessible* parent,
@@ -227,11 +227,13 @@ void AccessibilityWinBrowserTest::SetUpTextareaField(
 }
 
 // Loads a page with  a paragraph of sample text.
+template <typename Interface>
 void AccessibilityWinBrowserTest::SetUpSampleParagraph(
-    base::win::ScopedComPtr<IAccessibleText>* paragraph_text) {
-  ASSERT_NE(nullptr, paragraph_text);
+    base::win::ScopedComPtr<Interface>* com_interface) {
+  ASSERT_NE(nullptr, com_interface);
   LoadInitialAccessibilityTreeFromHtml(
-      "<!DOCTYPE html><html><body>"
+      "<!DOCTYPE html><html>"
+      "<body style=\"overflow: scroll; margin-top: 100vh\">"
       "<p><b>Game theory</b> is \"the study of "
       "<a href=\"#\" title=\"Mathematical model\">mathematical models</a> "
       "of conflict and<br>cooperation between intelligent rational "
@@ -251,7 +253,7 @@ void AccessibilityWinBrowserTest::SetUpSampleParagraph(
   LONG paragraph_role = 0;
   ASSERT_HRESULT_SUCCEEDED(paragraph->role(&paragraph_role));
   ASSERT_EQ(IA2_ROLE_PARAGRAPH, paragraph_role);
-  ASSERT_HRESULT_SUCCEEDED(paragraph.QueryInterface(paragraph_text->Receive()));
+  ASSERT_HRESULT_SUCCEEDED(paragraph.QueryInterface(com_interface->Receive()));
 }
 
 // Static helpers ------------------------------------------------
@@ -1082,6 +1084,37 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestCharacterExtents) {
   }
 }
 
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollToPoint) {
+  base::win::ScopedComPtr<IAccessible2> paragraph;
+  SetUpSampleParagraph(&paragraph);
+
+  LONG prev_x, prev_y, x, y, width, height;
+  base::win::ScopedVariant childid_self(CHILDID_SELF);
+  ASSERT_HRESULT_SUCCEEDED(
+      paragraph->accLocation(&prev_x, &prev_y, &width, &height, childid_self));
+  AccessibilityNotificationWaiter location_changed_waiter(
+      shell()->web_contents(), ACCESSIBILITY_MODE_COMPLETE,
+      ui::AX_EVENT_LOCATION_CHANGED);
+  EXPECT_HRESULT_SUCCEEDED(
+      paragraph->scrollToPoint(IA2_COORDTYPE_PARENT_RELATIVE, 0, 0));
+  location_changed_waiter.WaitForNotification();
+
+  ASSERT_HRESULT_SUCCEEDED(
+      paragraph->accLocation(&x, &y, &width, &height, childid_self));
+  EXPECT_EQ(prev_x, x);
+  EXPECT_GT(prev_y, y);
+
+  prev_x = x;
+  prev_y = y;
+  EXPECT_HRESULT_SUCCEEDED(
+      paragraph->scrollToPoint(IA2_COORDTYPE_SCREEN_RELATIVE, 0, 0));
+  location_changed_waiter.WaitForNotification();
+  ASSERT_HRESULT_SUCCEEDED(
+      paragraph->accLocation(&x, &y, &width, &height, childid_self));
+  EXPECT_EQ(prev_x, x);
+  EXPECT_EQ(prev_y, y);
+}
+
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetCaretOffset) {
   base::win::ScopedComPtr<IAccessibleText> input_text;
   SetUpInputField(&input_text);
@@ -1127,6 +1160,123 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   hr = textarea_text->get_caretOffset(&caret_offset);
   EXPECT_EQ(S_OK, hr);
   EXPECT_EQ(0, caret_offset);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetSelection) {
+  base::win::ScopedComPtr<IAccessibleText> input_text;
+  SetUpInputField(&input_text);
+
+  LONG start_offset, end_offset;
+  EXPECT_HRESULT_FAILED(
+      input_text->get_selection(1, &start_offset, &end_offset));
+  HRESULT hr = input_text->get_selection(0, &start_offset, &end_offset);
+  // There is no selection, just a caret.
+  EXPECT_EQ(E_INVALIDARG, hr);
+
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ACCESSIBILITY_MODE_COMPLETE,
+                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
+  start_offset = 0;
+  end_offset = CONTENTS_LENGTH;
+  EXPECT_HRESULT_FAILED(input_text->setSelection(1, start_offset, end_offset));
+  EXPECT_HRESULT_SUCCEEDED(
+      input_text->setSelection(0, start_offset, end_offset));
+  waiter.WaitForNotification();
+
+  hr = input_text->get_selection(0, &start_offset, &end_offset);
+  EXPECT_EQ(S_OK, hr);
+  EXPECT_EQ(0, start_offset);
+  EXPECT_EQ(CONTENTS_LENGTH, end_offset);
+
+  start_offset = CONTENTS_LENGTH;
+  end_offset = 1;
+  EXPECT_HRESULT_SUCCEEDED(
+      input_text->setSelection(0, start_offset, end_offset));
+  waiter.WaitForNotification();
+
+  hr = input_text->get_selection(0, &start_offset, &end_offset);
+  EXPECT_EQ(S_OK, hr);
+  // Start and end offsets are always swapped to be in ascending order.
+  EXPECT_EQ(1, start_offset);
+  EXPECT_EQ(CONTENTS_LENGTH, end_offset);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestMultiLineSetSelection) {
+  base::win::ScopedComPtr<IAccessibleText> textarea_text;
+  SetUpTextareaField(&textarea_text);
+
+  LONG start_offset, end_offset;
+  EXPECT_HRESULT_FAILED(
+      textarea_text->get_selection(1, &start_offset, &end_offset));
+  HRESULT hr = textarea_text->get_selection(0, &start_offset, &end_offset);
+  // There is no selection, just a caret.
+  EXPECT_EQ(E_INVALIDARG, hr);
+
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ACCESSIBILITY_MODE_COMPLETE,
+                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
+  start_offset = 0;
+  end_offset = CONTENTS_LENGTH;
+  EXPECT_HRESULT_FAILED(
+      textarea_text->setSelection(1, start_offset, end_offset));
+  EXPECT_HRESULT_SUCCEEDED(
+      textarea_text->setSelection(0, start_offset, end_offset));
+  waiter.WaitForNotification();
+
+  hr = textarea_text->get_selection(0, &start_offset, &end_offset);
+  EXPECT_EQ(S_OK, hr);
+  EXPECT_EQ(0, start_offset);
+  EXPECT_EQ(CONTENTS_LENGTH, end_offset);
+
+  start_offset = CONTENTS_LENGTH - 1;
+  end_offset = 0;
+  EXPECT_HRESULT_SUCCEEDED(
+      textarea_text->setSelection(0, start_offset, end_offset));
+  waiter.WaitForNotification();
+
+  hr = textarea_text->get_selection(0, &start_offset, &end_offset);
+  EXPECT_EQ(S_OK, hr);
+  // Start and end offsets are always swapped to be in ascending order.
+  EXPECT_EQ(0, start_offset);
+  EXPECT_EQ(CONTENTS_LENGTH - 1, end_offset);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       TestStaticTextSetSelection) {
+  base::win::ScopedComPtr<IAccessibleText> paragraph_text;
+  SetUpSampleParagraph(&paragraph_text);
+
+  LONG n_characters;
+  ASSERT_HRESULT_SUCCEEDED(paragraph_text->get_nCharacters(&n_characters));
+  ASSERT_LT(0, n_characters);
+
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ACCESSIBILITY_MODE_COMPLETE,
+      ui::AX_EVENT_DOCUMENT_SELECTION_CHANGED);
+  LONG start_offset = 0;
+  LONG end_offset = n_characters;
+  EXPECT_HRESULT_FAILED(
+      paragraph_text->setSelection(1, start_offset, end_offset));
+  EXPECT_HRESULT_SUCCEEDED(
+      paragraph_text->setSelection(0, start_offset, end_offset));
+  waiter.WaitForNotification();
+
+  HRESULT hr = paragraph_text->get_selection(0, &start_offset, &end_offset);
+  EXPECT_EQ(S_OK, hr);
+  EXPECT_EQ(0, start_offset);
+  EXPECT_EQ(n_characters, end_offset);
+
+  start_offset = n_characters - 1;
+  end_offset = 0;
+  EXPECT_HRESULT_SUCCEEDED(
+      paragraph_text->setSelection(0, start_offset, end_offset));
+  waiter.WaitForNotification();
+
+  hr = paragraph_text->get_selection(0, &start_offset, &end_offset);
+  EXPECT_EQ(S_OK, hr);
+  // Start and end offsets are always swapped to be in ascending order.
+  EXPECT_EQ(0, start_offset);
+  EXPECT_EQ(n_characters - 1, end_offset);
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,

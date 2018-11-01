@@ -60,8 +60,8 @@ void runCallback(ExecutionContext* executionContext,
   if (!executionContext)
     return;
   DCHECK(executionContext->isContextThread());
-  InspectorInstrumentation::AsyncTask asyncTask(executionContext, task.get(),
-                                                true /* isInstrumented */);
+  probe::AsyncTask asyncTask(executionContext, task.get(),
+                             true /* isInstrumented */);
   (*task)();
 }
 
@@ -108,7 +108,7 @@ DOMFileSystem::DOMFileSystem(ExecutionContext* context,
                              FileSystemType type,
                              const KURL& rootURL)
     : DOMFileSystemBase(context, name, type, rootURL),
-      ContextLifecycleObserver(context),
+      ContextClient(context),
       m_numberOfPendingCallbacks(0),
       m_rootEntry(DirectoryEntry::create(this, DOMFilePath::root)) {}
 
@@ -208,8 +208,8 @@ void DOMFileSystem::createFile(const FileEntry* fileEntry,
 void DOMFileSystem::scheduleCallback(ExecutionContext* executionContext,
                                      std::unique_ptr<WTF::Closure> task) {
   DCHECK(executionContext->isContextThread());
-  InspectorInstrumentation::asyncTaskScheduled(
-      executionContext, taskNameForInstrumentation(), task.get());
+  probe::asyncTaskScheduled(executionContext, taskNameForInstrumentation(),
+                            task.get());
   TaskRunnerHelper::get(TaskType::FileReading, executionContext)
       ->postTask(BLINK_FROM_HERE,
                  WTF::bind(&runCallback, wrapWeakPersistent(executionContext),
@@ -217,9 +217,9 @@ void DOMFileSystem::scheduleCallback(ExecutionContext* executionContext,
 }
 
 DEFINE_TRACE(DOMFileSystem) {
-  DOMFileSystemBase::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
   visitor->trace(m_rootEntry);
+  DOMFileSystemBase::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 }  // namespace blink

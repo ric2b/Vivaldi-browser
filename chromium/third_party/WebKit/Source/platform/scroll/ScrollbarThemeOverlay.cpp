@@ -25,7 +25,6 @@
 
 #include "platform/scroll/ScrollbarThemeOverlay.h"
 
-#include "platform/PlatformMouseEvent.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/scroll/Scrollbar.h"
@@ -235,6 +234,40 @@ ScrollbarThemeOverlay& ScrollbarThemeOverlay::mobileTheme() {
         ScrollbarThemeOverlay::DisallowHitTest, Color(style.color));
   }
   return *theme;
+}
+
+bool ScrollbarThemeOverlay::usesNinePatchThumbResource() const {
+  WebThemeEngine* engine = Platform::current()->themeEngine();
+  if (!engine)
+    return false;
+
+  // Thumb orientation doesn't matter here.
+  return engine->supportsNinePatch(WebThemeEngine::PartScrollbarVerticalThumb);
+}
+
+IntSize ScrollbarThemeOverlay::ninePatchThumbCanvasSize(
+    const ScrollbarThemeClient& scrollbar) const {
+  DCHECK(usesNinePatchThumbResource());
+
+  WebThemeEngine::Part part =
+      scrollbar.orientation() == VerticalScrollbar
+          ? WebThemeEngine::PartScrollbarVerticalThumb
+          : WebThemeEngine::PartScrollbarHorizontalThumb;
+
+  DCHECK(Platform::current()->themeEngine());
+  return Platform::current()->themeEngine()->ninePatchCanvasSize(part);
+}
+
+IntRect ScrollbarThemeOverlay::ninePatchThumbAperture(
+    const ScrollbarThemeClient& scrollbar) const {
+  DCHECK(usesNinePatchThumbResource());
+
+  WebThemeEngine::Part part = WebThemeEngine::PartScrollbarHorizontalThumb;
+  if (scrollbar.orientation() == VerticalScrollbar)
+    part = WebThemeEngine::PartScrollbarVerticalThumb;
+
+  DCHECK(Platform::current()->themeEngine());
+  return Platform::current()->themeEngine()->ninePatchAperture(part);
 }
 
 }  // namespace blink

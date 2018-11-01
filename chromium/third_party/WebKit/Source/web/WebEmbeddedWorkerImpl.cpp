@@ -30,15 +30,16 @@
 
 #include "web/WebEmbeddedWorkerImpl.h"
 
+#include <memory>
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SecurityContext.h"
-#include "core/fetch/SubstituteData.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoadRequest.h"
+#include "core/loader/ThreadableLoadingContext.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -51,6 +52,7 @@
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/SubstituteData.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/NetworkUtils.h"
@@ -73,7 +75,6 @@
 #include "web/WorkerContentSettingsClient.h"
 #include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -101,7 +102,7 @@ WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(
       m_askedToTerminate(false),
       m_pauseAfterDownloadState(DontPauseAfterDownload),
       m_waitingForDebuggerState(NotWaitingForDebugger) {
-  runningWorkerInstances().add(this);
+  runningWorkerInstances().insert(this);
 }
 
 WebEmbeddedWorkerImpl::~WebEmbeddedWorkerImpl() {
@@ -112,7 +113,7 @@ WebEmbeddedWorkerImpl::~WebEmbeddedWorkerImpl() {
     m_workerThread->terminateAndWait();
 
   DCHECK(runningWorkerInstances().contains(this));
-  runningWorkerInstances().remove(this);
+  runningWorkerInstances().erase(this);
   DCHECK(m_webView);
 
   // Detach the client before closing the view to avoid getting called back.
@@ -233,11 +234,11 @@ void WebEmbeddedWorkerImpl::addMessageToConsole(
     const WebConsoleMessage& message) {
   MessageLevel webCoreMessageLevel;
   switch (message.level) {
-    case WebConsoleMessage::LevelDebug:
-      webCoreMessageLevel = DebugMessageLevel;
+    case WebConsoleMessage::LevelVerbose:
+      webCoreMessageLevel = VerboseMessageLevel;
       break;
-    case WebConsoleMessage::LevelLog:
-      webCoreMessageLevel = LogMessageLevel;
+    case WebConsoleMessage::LevelInfo:
+      webCoreMessageLevel = InfoMessageLevel;
       break;
     case WebConsoleMessage::LevelWarning:
       webCoreMessageLevel = WarningMessageLevel;
@@ -262,14 +263,9 @@ void WebEmbeddedWorkerImpl::postMessageToPageInspector(const String& message) {
 
 void WebEmbeddedWorkerImpl::postTaskToLoader(
     const WebTraceLocation& location,
-    std::unique_ptr<ExecutionContextTask> task) {
+    std::unique_ptr<WTF::CrossThreadClosure> task) {
   m_mainThreadTaskRunners->get(TaskType::Networking)
-      ->postTask(
-          BLINK_FROM_HERE,
-          crossThreadBind(
-              &ExecutionContextTask::performTaskIfContextIsValid,
-              WTF::passed(std::move(task)),
-              wrapCrossThreadWeakPersistent(m_mainFrame->frame()->document())));
+      ->postTask(BLINK_FROM_HERE, std::move(task));
 }
 
 void WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(
@@ -278,6 +274,14 @@ void WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(
   if (m_askedToTerminate || !m_workerThread)
     return;
   m_workerThread->postTask(location, std::move(task));
+}
+
+ThreadableLoadingContext* WebEmbeddedWorkerImpl::getThreadableLoadingContext() {
+  if (!m_loadingContext) {
+    m_loadingContext =
+        ThreadableLoadingContext::create(*m_mainFrame->frame()->document());
+  }
+  return m_loadingContext;
 }
 
 void WebEmbeddedWorkerImpl::prepareShadowPageForLoader() {
@@ -299,8 +303,8 @@ void WebEmbeddedWorkerImpl::prepareShadowPageForLoader() {
   settings->setStrictMixedContentChecking(true);
   settings->setAllowRunningOfInsecureContent(false);
   settings->setDataSaverEnabled(m_workerStartData.dataSaverEnabled);
-  m_mainFrame = toWebLocalFrameImpl(
-      WebLocalFrame::create(WebTreeScopeType::Document, this));
+  m_mainFrame = toWebLocalFrameImpl(WebLocalFrame::create(
+      WebTreeScopeType::Document, this, nullptr, nullptr));
   m_webView->setMainFrame(m_mainFrame.get());
   m_mainFrame->setDevToolsAgentClient(this);
 
@@ -476,7 +480,7 @@ void WebEmbeddedWorkerImpl::startWorkerThread() {
   m_loaderProxy = WorkerLoaderProxy::create(this);
   m_workerThread =
       ServiceWorkerThread::create(m_loaderProxy, *m_workerGlobalScopeProxy);
-  m_workerThread->start(std::move(startupData));
+  m_workerThread->start(std::move(startupData), m_mainThreadTaskRunners.get());
   m_workerInspectorProxy->workerThreadCreated(document, m_workerThread.get(),
                                               scriptURL);
 }

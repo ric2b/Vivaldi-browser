@@ -654,10 +654,6 @@ GLuint CreateImageCHROMIUM(ClientBuffer buffer,
                            GLsizei height,
                            GLenum internalformat) override;
 void DestroyImageCHROMIUM(GLuint image_id) override;
-GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
-                                          GLsizei height,
-                                          GLenum internalformat,
-                                          GLenum usage) override;
 void DescheduleUntilFinishedCHROMIUM() override;
 void GetTranslatedShaderSourceANGLE(GLuint shader,
                                     GLsizei bufsize,
@@ -669,6 +665,7 @@ void PostSubBufferCHROMIUM(GLint x,
                            GLint height) override;
 void CopyTextureCHROMIUM(GLenum source_id,
                          GLint source_level,
+                         GLenum dest_target,
                          GLenum dest_id,
                          GLint dest_level,
                          GLint internalformat,
@@ -678,6 +675,7 @@ void CopyTextureCHROMIUM(GLenum source_id,
                          GLboolean unpack_unmultiply_alpha) override;
 void CopySubTextureCHROMIUM(GLenum source_id,
                             GLint source_level,
+                            GLenum dest_target,
                             GLenum dest_id,
                             GLint dest_level,
                             GLint xoffset,
@@ -868,8 +866,9 @@ void OverlayPromotionHintCHROMIUM(GLuint texture,
                                   GLboolean promotion_hint,
                                   GLint display_x,
                                   GLint display_y) override;
-void SwapBuffersWithDamageCHROMIUM(GLint x,
-                                   GLint y,
-                                   GLint width,
-                                   GLint height) override;
+void SwapBuffersWithBoundsCHROMIUM(GLsizei count, const GLint* rects) override;
+void SetDrawRectangleCHROMIUM(GLint x,
+                              GLint y,
+                              GLint width,
+                              GLint height) override;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_TRACE_IMPLEMENTATION_AUTOGEN_H_

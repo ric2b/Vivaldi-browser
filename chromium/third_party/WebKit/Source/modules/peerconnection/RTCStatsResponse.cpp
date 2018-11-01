@@ -34,14 +34,14 @@ RTCStatsResponse::RTCStatsResponse() {}
 
 RTCLegacyStatsReport* RTCStatsResponse::namedItem(const AtomicString& name) {
   if (m_idmap.find(name) != m_idmap.end())
-    return m_result[m_idmap.get(name)];
+    return m_result[m_idmap.at(name)];
   return nullptr;
 }
 
 void RTCStatsResponse::addStats(const WebRTCLegacyStats& stats) {
   m_result.push_back(RTCLegacyStatsReport::create(stats.id(), stats.type(),
                                                   stats.timestamp()));
-  m_idmap.add(stats.id(), m_result.size() - 1);
+  m_idmap.insert(stats.id(), m_result.size() - 1);
   RTCLegacyStatsReport* report = m_result[m_result.size() - 1].get();
 
   for (std::unique_ptr<WebRTCLegacyStatsMemberIterator> member(

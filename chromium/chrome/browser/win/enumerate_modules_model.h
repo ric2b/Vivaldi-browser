@@ -15,6 +15,7 @@
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/conflicts/module_info_util_win.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
@@ -65,31 +66,6 @@ class ModuleEnumerator {
     UPDATE        = 1 << 3,
     SEE_LINK      = 1 << 4,
     NOTIFY_USER   = 1 << 5,
-  };
-
-  // Which Windows OS is affected.
-  enum OperatingSystem {
-    ALL          = -1,
-    XP           = 1 << 0,
-  };
-
-  // The type of certificate found for the module.
-  enum CertificateType {
-    NO_CERTIFICATE,
-    CERTIFICATE_IN_FILE,
-    CERTIFICATE_IN_CATALOG,
-  };
-
-  // Information about the certificate of a file.
-  struct CertificateInfo {
-    CertificateInfo();
-
-    // The type of signature encountered.
-    CertificateType type;
-    // Path to the file containing the certificate. Empty if NO_CERTIFICATE.
-    base::FilePath path;
-    // The "Subject" name of the certificate.
-    base::string16 subject;
   };
 
   // The structure we populate when enumerating modules.
@@ -159,17 +135,10 @@ class ModuleEnumerator {
  private:
   FRIEND_TEST_ALL_PREFIXES(EnumerateModulesTest, CollapsePath);
 
-  // This function enumerates all modules in the blocking pool. Once the list of
-  // module filenames is populated it posts a delayed task to call
-  // ScanImplDelay for the first module.
+  // This function posts a task to enumerate all modules asynchronously. Once
+  // the list of module filenames is populated, a delayed task is posted to scan
+  // the first module.
   void ScanImplStart();
-
-  // Immediately posts a CONTINUE_ON_SHUTDOWN task to ScanImplModule for the
-  // given module. This ping-ponging is because the blocking pool does not
-  // offer a delayed CONTINUE_ON_SHUTDOWN task.
-  // TODO(chrisha): When the new scheduler enables delayed CONTINUE_ON_SHUTDOWN
-  // tasks, simplify this logic.
-  void ScanImplDelay(size_t index);
 
   // Inspects the module in |enumerated_modules_| at the given |index|. Gets
   // module information, normalizes it, and collapses the path. This is an
@@ -228,6 +197,9 @@ class ModuleEnumerator {
   // The typedef for the vector that maps a regular file path to %env_var%.
   typedef std::vector<std::pair<base::string16, base::string16>> PathMapping;
 
+  // The TaskRunner to perform work in the background.
+  const scoped_refptr<base::TaskRunner> background_task_runner_;
+
   // The vector of paths to %env_var%, used to account for differences in
   // where people keep there files, c:\windows vs. d:\windows, etc.
   PathMapping path_mapping_;
@@ -266,7 +238,7 @@ class ModuleEnumerator {
 // ready.
 //
 // The member functions of this class may only be used from the UI thread. The
-// bulk of the work is actually performed in the blocking pool with
+// bulk of the work is actually performed asynchronously in TaskScheduler with
 // CONTINUE_ON_SHUTDOWN semantics, as the WinCrypt functions can effectively
 // block arbitrarily during shutdown.
 //
@@ -280,7 +252,7 @@ class EnumerateModulesModel {
     ACTION_BUBBLE_SHOWN = 0,
     ACTION_BUBBLE_LEARN_MORE,
     ACTION_MENU_LEARN_MORE,
-    ACTION_BOUNDARY, // Must be the last value.
+    ACTION_BOUNDARY,  // Must be the last value.
   };
 
   // Observer class used to determine when a scan has completed and when any
@@ -359,13 +331,12 @@ class EnumerateModulesModel {
   void DoneScanning();
 
   // The vector containing all the modules enumerated. Will be normalized and
-  // any bad modules will be marked. Written to from the blocking pool by the
-  // |module_enumerator_|, read from on the UI thread by this class.
+  // any bad modules will be marked. Written to from the background TaskRunner
+  // by the |module_enumerator_|, read from on the UI thread by this class.
   ModuleEnumerator::ModulesVector enumerated_modules_;
 
-  // The object responsible for enumerating the modules in the blocking pool.
-  // Only used from the UI thread. This ends up internally doing its work in the
-  // blocking pool.
+  // The object responsible for enumerating the modules on a background
+  // TaskRunner. Only accessed from the UI thread.
   std::unique_ptr<ModuleEnumerator> module_enumerator_;
 
   // Whether the conflict notification has been acknowledged by the user. Only

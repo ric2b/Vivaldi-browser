@@ -94,7 +94,7 @@ InterpolationValue CSSShadowListInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSShadowListInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   if (value.isIdentifierValue() &&
       toCSSIdentifierValue(value).getValueID() == CSSValueNone)
@@ -121,12 +121,10 @@ PairwiseInterpolationValue CSSShadowListInterpolationType::maybeMergeSingles(
 
 InterpolationValue
 CSSShadowListInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  if (!state.style())
-    return nullptr;
+    const ComputedStyle& style) const {
   return convertShadowList(
-      ShadowListPropertyFunctions::getShadowList(cssProperty(), *state.style()),
-      state.style()->effectiveZoom());
+      ShadowListPropertyFunctions::getShadowList(cssProperty(), style),
+      style.effectiveZoom());
 }
 
 void CSSShadowListInterpolationType::composite(

@@ -295,6 +295,9 @@ void UnloadController::TabDetachedImpl(content::WebContents* contents) {
 }
 
 void UnloadController::ProcessPendingTabs() {
+  // Cancel posted/queued ProcessPendingTabs task if there is any.
+  weak_factory_.InvalidateWeakPtrs();
+
   if (!is_attempting_to_close_browser_) {
     // Because we might invoke this after a delay it's possible for the value of
     // is_attempting_to_close_browser_ to have changed since we scheduled the
@@ -302,7 +305,7 @@ void UnloadController::ProcessPendingTabs() {
     return;
   }
 
-  if (HasCompletedUnloadProcessing()) {
+  if (HasCompletedUnloadProcessing() && !TabsNeedBeforeUnloadFired()) {
     // We've finished all the unload events and can proceed to close the
     // browser.
     browser_->OnWindowClosing();
@@ -383,6 +386,9 @@ void UnloadController::ClearUnloadState(content::WebContents* web_contents,
     if (process_now) {
       ProcessPendingTabs();
     } else {
+      // Do not post a new task if there is already any.
+      if (weak_factory_.HasWeakPtrs())
+        return;
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::Bind(&UnloadController::ProcessPendingTabs,
                                 weak_factory_.GetWeakPtr()));

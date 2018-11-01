@@ -202,7 +202,7 @@ class HttpStreamFactoryImpl::Job {
   // appropriate ClientSocketPool.
   int Preconnect(int num_streams);
 
-  int RestartTunnelWithProxyAuth(const AuthCredentials& credentials);
+  int RestartTunnelWithProxyAuth();
   LoadState GetLoadState() const;
 
   // Tells |this| that |delegate_| has determined it still needs to continue
@@ -229,6 +229,9 @@ class HttpStreamFactoryImpl::Job {
   std::unique_ptr<BidirectionalStreamImpl> ReleaseBidirectionalStream() {
     return std::move(bidirectional_stream_impl_);
   }
+
+  // Returns the estimated memory usage in bytes.
+  size_t EstimateMemoryUsage() const;
 
   bool is_waiting() const { return next_state_ == STATE_WAIT_COMPLETE; }
   const SSLConfig& server_ssl_config() const;
@@ -471,6 +474,8 @@ class HttpStreamFactoryImpl::Job {
 
   // Only used if |new_spdy_session_| is non-NULL.
   bool spdy_session_direct_;
+
+  base::TimeTicks job_stream_ready_start_time_;
 
   // Type of stream that is requested.
   HttpStreamRequest::StreamType stream_type_;

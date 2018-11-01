@@ -34,6 +34,16 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
       webrtc::MediaStreamInterface* local_stream) override;
   void RemoveStream(
       webrtc::MediaStreamInterface* local_stream) override;
+  rtc::scoped_refptr<webrtc::RtpSenderInterface> AddTrack(
+      webrtc::MediaStreamTrackInterface* track,
+      std::vector<webrtc::MediaStreamInterface*> streams) override {
+    NOTIMPLEMENTED();
+    return nullptr;
+  }
+  bool RemoveTrack(webrtc::RtpSenderInterface* sender) override {
+    NOTIMPLEMENTED();
+    return false;
+  }
   rtc::scoped_refptr<webrtc::DtmfSenderInterface>
       CreateDtmfSender(webrtc::AudioTrackInterface* track) override;
   rtc::scoped_refptr<webrtc::DataChannelInterface>
@@ -92,7 +102,8 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
   void SetRemoteDescriptionWorker(
       webrtc::SetSessionDescriptionObserver* observer,
       webrtc::SessionDescriptionInterface* desc);
-  bool SetConfiguration(const RTCConfiguration& configuration) override;
+  bool SetConfiguration(const RTCConfiguration& configuration,
+                        webrtc::RTCError* error) override;
   bool AddIceCandidate(const webrtc::IceCandidateInterface* candidate) override;
   void RegisterUMAObserver(webrtc::UMAObserver* observer) override;
 
@@ -110,6 +121,9 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
   }
   webrtc::PeerConnectionObserver* observer() {
     return observer_;
+  }
+  void set_setconfiguration_error_type(webrtc::RTCErrorType error_type) {
+    setconfiguration_error_type_ = error_type;
   }
   static const char kDummyOffer[];
   static const char kDummyAnswer[];
@@ -136,6 +150,8 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
   int sdp_mline_index_;
   std::string ice_sdp_;
   webrtc::PeerConnectionObserver* observer_;
+  webrtc::RTCErrorType setconfiguration_error_type_ =
+      webrtc::RTCErrorType::NONE;
   rtc::scoped_refptr<webrtc::RTCStatsReport> stats_report_;
 
   DISALLOW_COPY_AND_ASSIGN(MockPeerConnectionImpl);

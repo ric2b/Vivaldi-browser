@@ -38,9 +38,9 @@ declare_args() {
   override_build_date = "N/A"
 
   # Turn on memory profiling in the task profiler when the heap shim is
-  # available, except for official builds for now.
-  enable_memory_task_profiler =
-      use_experimental_allocator_shim && (!is_official_build || is_syzyasan)
+  # available. Profiling can then be enabled at runtime by passing the command
+  # line flag --enable-heap-profiling=task-profiler.
+  enable_memory_task_profiler = use_experimental_allocator_shim
 
   # Partition alloc is included by default except iOS.
   use_partition_alloc = !is_ios
@@ -149,8 +149,11 @@ component("base") {
     "allocator/allocator_check.h",
     "allocator/allocator_extension.cc",
     "allocator/allocator_extension.h",
+    "allocator/allocator_interception_mac.h",
+    "allocator/allocator_interception_mac.mm",
     "allocator/allocator_shim.h",
-    "allocator/oom.h",
+    "allocator/malloc_zone_functions_mac.cc",
+    "allocator/malloc_zone_functions_mac.h",
     "android/animation_frame_time_histogram.cc",
     "android/animation_frame_time_histogram.h",
     "android/apk_assets.cc",
@@ -182,6 +185,8 @@ component("base") {
     "android/field_trial_list.h",
     "android/important_file_writer_android.cc",
     "android/important_file_writer_android.h",
+    "android/java_exception_reporter.cc",
+    "android/java_exception_reporter.h",
     "android/java_handler_thread.cc",
     "android/java_handler_thread.h",
     "android/java_message_handler_factory.h",
@@ -224,6 +229,8 @@ component("base") {
     "android/statistics_recorder_android.h",
     "android/sys_utils.cc",
     "android/sys_utils.h",
+    "android/throw_uncaught_exception.cc",
+    "android/throw_uncaught_exception.h",
     "android/time_utils.cc",
     "android/time_utils.h",
     "android/trace_event_binding.cc",
@@ -269,6 +276,7 @@ component("base") {
     "command_line.h",
     "compiler_specific.h",
     "containers/adapters.h",
+    "containers/flat_set.h",
     "containers/hash_tables.h",
     "containers/linked_list.h",
     "containers/mru_cache.h",
@@ -324,6 +332,8 @@ component("base") {
     "feature_list.cc",
     "feature_list.h",
     "file_descriptor_posix.h",
+    "file_descriptor_store.cc",
+    "file_descriptor_store.h",
     "file_version_info.h",
     "file_version_info_mac.h",
     "file_version_info_mac.mm",
@@ -375,6 +385,10 @@ component("base") {
     "files/memory_mapped_file_win.cc",
     "files/scoped_file.cc",
     "files/scoped_file.h",
+    "files/scoped_platform_handle.cc",
+    "files/scoped_platform_handle.h",
+    "files/scoped_platform_handle_posix.cc",
+    "files/scoped_platform_handle_win.cc",
     "files/scoped_temp_dir.cc",
     "files/scoped_temp_dir.h",
     "format_macros.h",
@@ -451,6 +465,8 @@ component("base") {
     "mac/mach_port_util.h",
     "mac/objc_property_releaser.h",
     "mac/objc_property_releaser.mm",
+    "mac/objc_release_properties.h",
+    "mac/objc_release_properties.mm",
     "mac/os_crash_dumps.cc",
     "mac/os_crash_dumps.h",
     "mac/scoped_aedesc.h",
@@ -559,6 +575,8 @@ component("base") {
     "metrics/field_trial.h",
     "metrics/field_trial_param_associator.cc",
     "metrics/field_trial_param_associator.h",
+    "metrics/field_trial_params.cc",
+    "metrics/field_trial_params.h",
     "metrics/histogram.cc",
     "metrics/histogram.h",
     "metrics/histogram_base.cc",
@@ -975,6 +993,8 @@ component("base") {
     "trace_event/memory_dump_provider.h",
     "trace_event/memory_dump_request_args.cc",
     "trace_event/memory_dump_request_args.h",
+    "trace_event/memory_dump_scheduler.cc",
+    "trace_event/memory_dump_scheduler.h",
     "trace_event/memory_dump_session_state.cc",
     "trace_event/memory_dump_session_state.h",
     "trace_event/memory_infra_background_whitelist.cc",
@@ -1081,6 +1101,7 @@ component("base") {
     "win/wrapped_window_proc.h",
   ]
 
+  all_dependent_configs = []
   defines = []
   data = []
 
@@ -1111,9 +1132,43 @@ component("base") {
   }
 
   if (use_experimental_allocator_shim) {
-    # The allocator shim is part of the base API. This is to allow clients of
-    # base should to install hooks into the allocator path.
-    public_deps += [ "//base/allocator:unified_allocator_shim" ]
+    # TODO(primiano): support other platforms, currently this works only on
+    # Linux/CrOS/Android. http://crbug.com/550886 .
+    sources += [
+      "allocator/allocator_shim.cc",
+      "allocator/allocator_shim.h",
+      "allocator/allocator_shim_internals.h",
+      "allocator/allocator_shim_override_cpp_symbols.h",
+      "allocator/allocator_shim_override_libc_symbols.h",
+    ]
+    if (is_win) {
+      sources += [
+        "allocator/allocator_shim_default_dispatch_to_winheap.cc",
+        "allocator/allocator_shim_override_ucrt_symbols_win.h",
+        "allocator/winheap_stubs_win.cc",
+        "allocator/winheap_stubs_win.h",
+      ]
+    } else if (is_linux && use_allocator == "tcmalloc") {
+      sources += [
+        "allocator/allocator_shim_default_dispatch_to_tcmalloc.cc",
+        "allocator/allocator_shim_override_glibc_weak_symbols.h",
+      ]
+      deps += [ "//base/allocator:tcmalloc" ]
+    } else if (is_linux && use_allocator == "none") {
+      sources += [ "allocator/allocator_shim_default_dispatch_to_glibc.cc" ]
+    } else if (is_android && use_allocator == "none") {
+      sources += [
+        "allocator/allocator_shim_default_dispatch_to_linker_wrapped_symbols.cc",
+        "allocator/allocator_shim_override_linker_wrapped_symbols.h",
+      ]
+      all_dependent_configs += [ "//base/allocator:wrap_malloc_symbols" ]
+    } else if (is_mac) {
+      sources += [
+        "allocator/allocator_shim_default_dispatch_to_mac_zoned_malloc.cc",
+        "allocator/allocator_shim_default_dispatch_to_mac_zoned_malloc.h",
+        "allocator/allocator_shim_override_mac_symbols.h",
+      ]
+    }
   }
 
   # Allow more direct string conversions on platforms with native utf8
@@ -1257,21 +1312,15 @@ component("base") {
         # PartitionAlloc uses SpinLock, which doesn't work in NaCl (see below).
         "allocator/partition_allocator/address_space_randomization.cc",
         "allocator/partition_allocator/address_space_randomization.h",
+        "allocator/partition_allocator/oom.h",
         "allocator/partition_allocator/page_allocator.cc",
         "allocator/partition_allocator/page_allocator.h",
         "allocator/partition_allocator/partition_alloc.cc",
         "allocator/partition_allocator/partition_alloc.h",
+        "allocator/partition_allocator/spin_lock.cc",
+        "allocator/partition_allocator/spin_lock.h",
       ]
     }
-  }
-
-  # SpinLock uses inline assembly that doesn't work on NaCl, and for which there
-  # is no code for ARMv6.
-  if (!is_nacl && (current_cpu != "arm" || arm_version >= 7)) {
-    sources += [
-      "synchronization/spin_lock.cc",
-      "synchronization/spin_lock.h",
-    ]
   }
 
   # Windows.
@@ -1283,6 +1332,8 @@ component("base") {
     ]
 
     sources -= [
+      "file_descriptor_store.cc",
+      "file_descriptor_store.h",
       "memory/shared_memory_helper.cc",
       "memory/shared_memory_helper.h",
       "message_loop/message_pump_libevent.cc",
@@ -1374,7 +1425,7 @@ component("base") {
       "userenv.lib",
       "winmm.lib",
     ]
-    all_dependent_configs = [ ":base_win_linker_flags" ]
+    all_dependent_configs += [ ":base_win_linker_flags" ]
   } else if (!is_nacl || is_nacl_nonsfi) {
     # Non-Windows.
     deps += [ "//base/third_party/libevent" ]
@@ -1431,7 +1482,7 @@ component("base") {
     defines += [ "USE_SYMBOLIZE" ]
 
     configs += linux_configs
-    all_dependent_configs = linux_configs
+    all_dependent_configs += linux_configs
 
     # These dependencies are not required on Android, and in the case
     # of xdg_mime must be excluded due to licensing restrictions.
@@ -1505,6 +1556,8 @@ component("base") {
       "mac/mach_logging.h",
       "mac/objc_property_releaser.h",
       "mac/objc_property_releaser.mm",
+      "mac/objc_release_properties.h",
+      "mac/objc_release_properties.mm",
       "mac/scoped_block.h",
       "mac/scoped_mach_port.cc",
       "mac/scoped_mach_port.h",
@@ -1670,6 +1723,7 @@ test("base_perftests") {
     "message_loop/message_pump_perftest.cc",
 
     # "test/run_all_unittests.cc",
+    "json/json_perftest.cc",
     "threading/thread_perftest.cc",
   ]
   deps = [
@@ -1830,6 +1884,7 @@ if (is_ios || is_mac) {
 
 test("base_unittests") {
   sources = [
+    "allocator/malloc_zone_functions_mac_unittest.cc",
     "allocator/tcmalloc_unittest.cc",
     "android/application_status_listener_unittest.cc",
     "android/content_uri_utils_unittest.cc",
@@ -1858,6 +1913,7 @@ test("base_unittests") {
     "cancelable_callback_unittest.cc",
     "command_line_unittest.cc",
     "containers/adapters_unittest.cc",
+    "containers/flat_set_unittest.cc",
     "containers/hash_tables_unittest.cc",
     "containers/linked_list_unittest.cc",
     "containers/mru_cache_unittest.cc",
@@ -1888,6 +1944,7 @@ test("base_unittests") {
     "files/file_util_unittest.cc",
     "files/important_file_writer_unittest.cc",
     "files/memory_mapped_file_unittest.cc",
+    "files/scoped_platform_handle_unittest.cc",
     "files/scoped_temp_dir_unittest.cc",
     "gmock_unittest.cc",
     "guid_unittest.cc",
@@ -1923,6 +1980,7 @@ test("base_unittests") {
     "mac/mac_util_unittest.mm",
     "mac/mach_port_broker_unittest.cc",
     "mac/objc_property_releaser_unittest.mm",
+    "mac/objc_release_properties_unittest.mm",
     "mac/scoped_nsobject_unittest.mm",
     "mac/scoped_objc_class_swizzler_unittest.mm",
     "mac/scoped_sending_event_unittest.mm",
@@ -1930,6 +1988,7 @@ test("base_unittests") {
     "memory/aligned_memory_unittest.cc",
     "memory/discardable_shared_memory_unittest.cc",
     "memory/linked_ptr_unittest.cc",
+    "memory/memory_coordinator_client_registry_unittest.cc",
     "memory/memory_pressure_listener_unittest.cc",
     "memory/memory_pressure_monitor_chromeos_unittest.cc",
     "memory/memory_pressure_monitor_mac_unittest.cc",
@@ -1948,7 +2007,9 @@ test("base_unittests") {
     "message_loop/message_loop_unittest.cc",
     "message_loop/message_pump_glib_unittest.cc",
     "message_loop/message_pump_io_ios_unittest.cc",
+    "message_loop/message_pump_mac_unittest.cc",
     "metrics/bucket_ranges_unittest.cc",
+    "metrics/field_trial_params_unittest.cc",
     "metrics/field_trial_unittest.cc",
     "metrics/histogram_base_unittest.cc",
     "metrics/histogram_delta_serialization_unittest.cc",
@@ -1971,6 +2032,7 @@ test("base_unittests") {
     "optional_unittest.cc",
     "os_compat_android_unittest.cc",
     "path_service_unittest.cc",
+    "pending_task_unittest.cc",
     "pickle_unittest.cc",
     "posix/file_descriptor_shuffle_unittest.cc",
     "posix/unix_domain_socket_linux_unittest.cc",
@@ -2060,6 +2122,7 @@ test("base_unittests") {
     "threading/thread_id_name_manager_unittest.cc",
     "threading/thread_local_storage_unittest.cc",
     "threading/thread_local_unittest.cc",
+    "threading/thread_task_runner_handle_unittest.cc",
     "threading/thread_unittest.cc",
     "threading/watchdog_unittest.cc",
     "threading/worker_pool_posix_unittest.cc",
@@ -2194,6 +2257,7 @@ test("base_unittests") {
       "mac/bind_objc_block_unittest.mm",
       "mac/foundation_util_unittest.mm",
       "mac/objc_property_releaser_unittest.mm",
+      "mac/objc_release_properties_unittest.mm",
       "mac/scoped_nsobject_unittest.mm",
       "strings/sys_string_conversions_mac_unittest.mm",
     ]
@@ -2336,6 +2400,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/FieldTrialList.java",
       "android/java/src/org/chromium/base/ImportantFileWriterAndroid.java",
       "android/java/src/org/chromium/base/JNIUtils.java",
+      "android/java/src/org/chromium/base/JavaExceptionReporter.java",
       "android/java/src/org/chromium/base/JavaHandlerThread.java",
       "android/java/src/org/chromium/base/LocaleUtils.java",
       "android/java/src/org/chromium/base/MemoryPressureListener.java",
@@ -2345,6 +2410,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/SysUtils.java",
       "android/java/src/org/chromium/base/SystemMessageHandler.java",
       "android/java/src/org/chromium/base/ThreadUtils.java",
+      "android/java/src/org/chromium/base/ThrowUncaughtException.java",
       "android/java/src/org/chromium/base/TimeUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
       "android/java/src/org/chromium/base/UnguessableToken.java",
@@ -2401,6 +2467,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/FileUtils.java",
       "android/java/src/org/chromium/base/ImportantFileWriterAndroid.java",
       "android/java/src/org/chromium/base/JNIUtils.java",
+      "android/java/src/org/chromium/base/JavaExceptionReporter.java",
       "android/java/src/org/chromium/base/JavaHandlerThread.java",
       "android/java/src/org/chromium/base/LocaleUtils.java",
       "android/java/src/org/chromium/base/Log.java",
@@ -2412,7 +2479,6 @@ if (is_android) {
       "android/java/src/org/chromium/base/PathUtils.java",
       "android/java/src/org/chromium/base/PerfTraceEvent.java",
       "android/java/src/org/chromium/base/PowerMonitor.java",
-      "android/java/src/org/chromium/base/PowerStatusReceiver.java",
       "android/java/src/org/chromium/base/Promise.java",
       "android/java/src/org/chromium/base/ResourceExtractor.java",
       "android/java/src/org/chromium/base/SecureRandomInitializer.java",
@@ -2420,6 +2486,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/SysUtils.java",
       "android/java/src/org/chromium/base/SystemMessageHandler.java",
       "android/java/src/org/chromium/base/ThreadUtils.java",
+      "android/java/src/org/chromium/base/ThrowUncaughtException.java",
       "android/java/src/org/chromium/base/TimeUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
       "android/java/src/org/chromium/base/UnguessableToken.java",

@@ -16,7 +16,6 @@
 #include "services/ui/ws/accelerator.h"
 #include "services/ui/ws/event_dispatcher_delegate.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_compositor_frame_sink_manager_test_api.h"
 #include "services/ui/ws/test_server_window_delegate.h"
 #include "services/ui/ws/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -286,7 +285,6 @@ std::unique_ptr<ServerWindow> EventDispatcherTest::CreateChildWindowWithParent(
       new ServerWindow(window_delegate_.get(), id));
   parent->Add(child.get());
   child->SetVisible(true);
-  EnableHitTest(child.get());
   return child;
 }
 
@@ -323,7 +321,6 @@ void EventDispatcherTest::SetUp() {
   window_delegate_ = base::MakeUnique<TestServerWindowDelegate>();
   root_window_ =
       base::MakeUnique<ServerWindow>(window_delegate_.get(), WindowId(1, 2));
-  EnableHitTest(root_window_.get());
   window_delegate_->set_root_window(root_window_.get());
   root_window_->SetVisible(true);
 
@@ -1326,7 +1323,7 @@ TEST_F(EventDispatcherTest, ProcessPointerEvents) {
     ui::PointerEvent* dispatched_event = details->event->AsPointerEvent();
     EXPECT_EQ(gfx::Point(25, 20), dispatched_event->root_location());
     EXPECT_EQ(gfx::Point(15, 10), dispatched_event->location());
-    EXPECT_EQ(touch_id, dispatched_event->pointer_id());
+    EXPECT_EQ(touch_id, dispatched_event->pointer_details().id);
   }
 }
 
@@ -1663,11 +1660,11 @@ TEST_F(EventDispatcherTest, ModalWindowMultipleSystemModals) {
 
 TEST_F(EventDispatcherTest, CaptureNotResetOnParentChange) {
   std::unique_ptr<ServerWindow> w1 = CreateChildWindow(WindowId(1, 3));
-  DisableHitTest(w1.get());
+  w1->set_event_targeting_policy(mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   std::unique_ptr<ServerWindow> w11 =
       CreateChildWindowWithParent(WindowId(1, 4), w1.get());
   std::unique_ptr<ServerWindow> w2 = CreateChildWindow(WindowId(1, 5));
-  DisableHitTest(w2.get());
+  w2->set_event_targeting_policy(mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
 
   root_window()->SetBounds(gfx::Rect(0, 0, 100, 100));
   w1->SetBounds(gfx::Rect(0, 0, 100, 100));
@@ -1713,7 +1710,8 @@ TEST_F(EventDispatcherTest, ChangeCaptureFromClientToNonclient) {
 
 TEST_F(EventDispatcherTest, MoveMouseFromNoTargetToValidTarget) {
   ServerWindow* root = root_window();
-  DisableHitTest(root);
+  root->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   std::unique_ptr<ServerWindow> child = CreateChildWindow(WindowId(1, 3));
 
   root->SetBounds(gfx::Rect(0, 0, 100, 100));
@@ -1738,7 +1736,8 @@ TEST_F(EventDispatcherTest, MoveMouseFromNoTargetToValidTarget) {
 
 TEST_F(EventDispatcherTest, NoTargetToTargetWithMouseDown) {
   ServerWindow* root = root_window();
-  DisableHitTest(root);
+  root->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   std::unique_ptr<ServerWindow> child = CreateChildWindow(WindowId(1, 3));
 
   root->SetBounds(gfx::Rect(0, 0, 100, 100));
@@ -1770,7 +1769,8 @@ TEST_F(EventDispatcherTest, NoTargetToTargetWithMouseDown) {
 
 TEST_F(EventDispatcherTest, DontSendExitToSameClientWhenCaptureChanges) {
   ServerWindow* root = root_window();
-  DisableHitTest(root);
+  root->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   std::unique_ptr<ServerWindow> c1 = CreateChildWindow(WindowId(1, 3));
   std::unique_ptr<ServerWindow> c2 = CreateChildWindow(WindowId(1, 4));
 
@@ -1798,6 +1798,20 @@ TEST_F(EventDispatcherTest, DontSendExitToSameClientWhenCaptureChanges) {
   // client.
   event_dispatcher()->SetCaptureWindow(c1.get(), kClientAreaId);
   EXPECT_FALSE(test_event_dispatcher_delegate()->has_queued_events());
+}
+
+TEST_F(EventDispatcherTest, MousePointerClearedOnDestroy) {
+  root_window()->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+  std::unique_ptr<ServerWindow> c1 = CreateChildWindow(WindowId(1, 3));
+
+  root_window()->SetBounds(gfx::Rect(0, 0, 100, 100));
+  c1->SetBounds(gfx::Rect(10, 10, 20, 20));
+
+  event_dispatcher()->SetMousePointerScreenLocation(gfx::Point(15, 15));
+  EXPECT_EQ(c1.get(), event_dispatcher()->mouse_cursor_source_window());
+  c1.reset();
+  EXPECT_EQ(nullptr, event_dispatcher()->mouse_cursor_source_window());
 }
 
 }  // namespace test

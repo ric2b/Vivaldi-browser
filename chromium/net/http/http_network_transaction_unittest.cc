@@ -23,9 +23,11 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_scheduler.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/auth.h"
@@ -134,7 +136,7 @@ class TestNetworkStreamThrottler : public NetworkThrottleManager {
 
   void UnthrottleAllRequests() {
     std::set<TestThrottle*> outstanding_throttles_copy(outstanding_throttles_);
-    for (auto& throttle : outstanding_throttles_copy) {
+    for (auto* throttle : outstanding_throttles_copy) {
       if (throttle->IsBlocked())
         throttle->Unthrottle();
     }
@@ -5027,7 +5029,7 @@ TEST_F(HttpNetworkTransactionTest, HttpsProxySpdyConnectFailure) {
   SpdySerializedFrame connect(spdy_util_.ConstructSpdyConnect(
       NULL, 0, 1, LOWEST, HostPortPair("www.example.org", 443)));
   SpdySerializedFrame get(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_CANCEL));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_CANCEL));
 
   MockWrite spdy_writes[] = {
       CreateMockWrite(connect, 0), CreateMockWrite(get, 2),
@@ -7862,7 +7864,7 @@ TEST_F(HttpNetworkTransactionTest, RedirectOfHttpsConnectViaSpdyProxy) {
   SpdySerializedFrame conn(spdy_util_.ConstructSpdyConnect(
       NULL, 0, 1, LOWEST, HostPortPair("www.example.org", 443)));
   SpdySerializedFrame goaway(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_CANCEL));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_CANCEL));
   MockWrite data_writes[] = {
       CreateMockWrite(conn, 0, SYNCHRONOUS),
       CreateMockWrite(goaway, 2, SYNCHRONOUS),
@@ -7959,7 +7961,7 @@ TEST_F(HttpNetworkTransactionTest, ErrorResponseToHttpsConnectViaSpdyProxy) {
   SpdySerializedFrame conn(spdy_util_.ConstructSpdyConnect(
       NULL, 0, 1, LOWEST, HostPortPair("www.example.org", 443)));
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_CANCEL));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_CANCEL));
   MockWrite data_writes[] = {
       CreateMockWrite(conn, 0), CreateMockWrite(rst, 3),
   };
@@ -8019,7 +8021,7 @@ TEST_F(HttpNetworkTransactionTest, BasicAuthSpdyProxy) {
   SpdySerializedFrame req(spdy_util_.ConstructSpdyConnect(
       NULL, 0, 1, LOWEST, HostPortPair("www.example.org", 443)));
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_CANCEL));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_CANCEL));
   spdy_util_.UpdateWithStreamDestruction(1);
 
   // After calling trans.RestartWithAuth(), this is the request we should
@@ -8279,7 +8281,7 @@ TEST_F(HttpNetworkTransactionTest, CrossOriginProxyPushCorrectness) {
       spdy_util_.ConstructSpdyGet("http://www.example.org/", 1, LOWEST));
 
   SpdySerializedFrame push_rst(
-      spdy_util_.ConstructSpdyRstStream(2, RST_STREAM_REFUSED_STREAM));
+      spdy_util_.ConstructSpdyRstStream(2, ERROR_CODE_REFUSED_STREAM));
 
   MockWrite spdy_writes[] = {
       CreateMockWrite(stream1_syn, 0, ASYNC), CreateMockWrite(push_rst, 3),
@@ -14902,7 +14904,7 @@ class FakeStreamRequest : public HttpStreamRequest,
     return weak_stream;
   }
 
-  int RestartTunnelWithProxyAuth(const AuthCredentials& credentials) override {
+  int RestartTunnelWithProxyAuth() override {
     ADD_FAILURE();
     return ERR_UNEXPECTED;
   }
@@ -14989,6 +14991,11 @@ class FakeStreamFactory : public HttpStreamFactory {
   const HostMappingRules* GetHostMappingRules() const override {
     ADD_FAILURE();
     return NULL;
+  }
+
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_absolute_name) const override {
+    ADD_FAILURE();
   }
 
  private:
@@ -16479,6 +16486,10 @@ TEST_F(HttpNetworkTransactionTest, ThrottlingPrioritySetDestroy) {
 
 #if !defined(OS_IOS)
 TEST_F(HttpNetworkTransactionTest, TokenBindingSpdy) {
+  // Required by ChannelIDService.
+  base::test::ScopedTaskScheduler scoped_task_scheduler(
+      base::MessageLoop::current());
+
   const std::string https_url = "https://www.example.com";
   HttpRequestInfo request;
   request.url = GURL(https_url);
@@ -16496,8 +16507,8 @@ TEST_F(HttpNetworkTransactionTest, TokenBindingSpdy) {
                       MockRead(ASYNC, ERR_IO_PENDING)};
   StaticSocketDataProvider data(reads, arraysize(reads), nullptr, 0);
   session_deps_.socket_factory->AddSocketDataProvider(&data);
-  session_deps_.channel_id_service.reset(new ChannelIDService(
-      new DefaultChannelIDStore(nullptr), base::ThreadTaskRunnerHandle::Get()));
+  session_deps_.channel_id_service.reset(
+      new ChannelIDService(new DefaultChannelIDStore(nullptr)));
   std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
 
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, session.get());

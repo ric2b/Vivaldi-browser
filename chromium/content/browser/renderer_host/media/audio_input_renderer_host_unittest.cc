@@ -24,7 +24,6 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/audio/audio_device_description.h"
-#include "media/audio/audio_file_writer.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/fake_audio_manager.h"
 #include "media/base/media_switches.h"
@@ -53,11 +52,13 @@ const int kRendererPid = 21718;
 const int kRenderFrameId = 31415;
 const int kSharedMemoryCount = 11;
 const char kSecurityOrigin[] = "http://localhost";
+#if BUILDFLAG(ENABLE_WEBRTC)
 #if defined(OS_WIN)
 const wchar_t kBaseFileName[] = L"some_file_name";
 #else
 const char kBaseFileName[] = "some_file_name";
-#endif
+#endif  // defined(OS_WIN)
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 url::Origin SecurityOrigin() {
   return url::Origin(GURL(kSecurityOrigin));
@@ -161,13 +162,17 @@ class MockAudioInputController : public AudioInputController {
       AudioInputController::SyncWriter* writer,
       media::AudioManager* audio_manager,
       AudioInputController::EventHandler* event_handler,
-      media::UserInputMonitor* user_input_monitor)
+      media::UserInputMonitor* user_input_monitor,
+      const media::AudioParameters& params,
+      StreamType type,
+      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner)
       : AudioInputController(std::move(task_runner),
                              event_handler,
                              writer,
-                             /*debug_writer*/ nullptr,
                              user_input_monitor,
-                             /*agc*/ false) {
+                             params,
+                             type,
+                             std::move(file_task_runner)) {
     GetTaskRunnerForTesting()->PostTask(
         FROM_HERE,
         base::Bind(&AudioInputController::EventHandler::OnCreated,
@@ -221,18 +226,19 @@ class MockControllerFactory : public AudioInputController::Factory {
     AudioInputController::set_factory_for_testing(nullptr);
   }
 
-  // AudioInputController::Factory implementaion:
+  // AudioInputController::Factory implementation:
   AudioInputController* Create(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       AudioInputController::SyncWriter* sync_writer,
       media::AudioManager* audio_manager,
       AudioInputController::EventHandler* event_handler,
       media::AudioParameters params,
-      media::UserInputMonitor* user_input_monitor) override {
+      media::UserInputMonitor* user_input_monitor,
+      AudioInputController::StreamType type) override {
     ControllerCreated();
-    scoped_refptr<MockController> controller =
-        new MockController(std::move(task_runner), sync_writer, audio_manager,
-                           event_handler, user_input_monitor);
+    scoped_refptr<MockController> controller = new MockController(
+        task_runner, sync_writer, audio_manager, event_handler,
+        user_input_monitor, params, type, task_runner);
     controller_list_.push_back(controller);
     return controller.get();
   }

@@ -43,7 +43,7 @@ class WebDataConsumerHandle;
 class WebServiceWorkerRequest;
 class WebString;
 struct WebNotificationData;
-struct WebPaymentAppRequestData;
+struct WebPaymentAppRequest;
 struct WebServiceWorkerClientInfo;
 struct WebServiceWorkerError;
 class WebURLResponse;
@@ -62,13 +62,13 @@ class WebServiceWorkerContextProxy {
       int eventID,
       const WebString& message,
       const WebSecurityOrigin& sourceOrigin,
-      const WebMessagePortChannelArray&,
+      WebMessagePortChannelArray,
       const WebServiceWorkerClientInfo&) = 0;
   virtual void dispatchExtendableMessageEvent(
       int eventID,
       const WebString& message,
       const WebSecurityOrigin& sourceOrigin,
-      const WebMessagePortChannelArray&,
+      WebMessagePortChannelArray,
       std::unique_ptr<WebServiceWorker::Handle>) = 0;
   virtual void dispatchInstallEvent(int eventID) = 0;
   virtual void dispatchFetchEvent(int fetchEventID,
@@ -98,7 +98,7 @@ class WebServiceWorkerContextProxy {
                                  LastChanceOption) = 0;
 
   virtual void dispatchPaymentRequestEvent(int eventID,
-                                           const WebPaymentAppRequestData&) = 0;
+                                           const WebPaymentAppRequest&) = 0;
 
   virtual void onNavigationPreloadResponse(
       int fetchEventID,

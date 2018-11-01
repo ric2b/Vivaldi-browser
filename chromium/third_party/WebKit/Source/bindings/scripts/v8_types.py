@@ -504,7 +504,6 @@ V8_VALUE_TO_CPP_VALUE = {
     'unsigned long long': 'toUInt64({isolate}, {arguments})',
     # Interface types
     'Dictionary': 'Dictionary({isolate}, {v8_value}, exceptionState)',
-    'EventTarget': 'toEventTarget({isolate}, {v8_value})',
     'FlexibleArrayBufferView': 'toFlexibleArrayBufferView({isolate}, {v8_value}, {variable_name}, allocateFlexibleArrayBufferViewStorage({v8_value}))',
     'NodeFilter': 'toNodeFilter({v8_value}, info.Holder(), ScriptState::current({isolate}))',
     'Promise': 'ScriptPromise::cast(ScriptState::current({isolate}), {v8_value})',
@@ -546,7 +545,7 @@ def v8_conversion_is_trivial(idl_type):
 IdlType.v8_conversion_is_trivial = property(v8_conversion_is_trivial)
 
 
-def v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index, isolate, restricted_float=False):
+def v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index, isolate):
     if idl_type.name == 'void':
         return ''
 
@@ -606,28 +605,28 @@ def v8_value_to_cpp_value_array_or_sequence(native_array_element_type, v8_value,
     if (native_array_element_type.is_interface_type and
         native_array_element_type.name != 'Dictionary'):
         this_cpp_type = None
-        ref_ptr_type = 'Member'
-        expression_format = '(to{ref_ptr_type}NativeArray<{native_array_element_type}>({v8_value}, {index}, {isolate}, exceptionState))'
+        expression_format = 'toMemberNativeArray<{native_array_element_type}>({v8_value}, {index}, {isolate}, exceptionState)'
     else:
-        ref_ptr_type = None
         this_cpp_type = native_array_element_type.cpp_type
         if native_array_element_type.is_dictionary or native_array_element_type.is_union_type:
             vector_type = 'HeapVector'
         else:
             vector_type = 'Vector'
         expression_format = 'toImplArray<%s<{cpp_type}>>({v8_value}, {index}, {isolate}, exceptionState)' % vector_type
-    expression = expression_format.format(native_array_element_type=native_array_element_type.name, cpp_type=this_cpp_type, index=index, ref_ptr_type=ref_ptr_type, v8_value=v8_value, isolate=isolate)
+    expression = expression_format.format(native_array_element_type=native_array_element_type.name, cpp_type=this_cpp_type,
+                                          index=index, v8_value=v8_value, isolate=isolate)
     return expression
 
 
 # FIXME: this function should be refactored, as this takes too many flags.
-def v8_value_to_local_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index=None, declare_variable=True, isolate='info.GetIsolate()', bailout_return_value=None, use_exception_state=False, restricted_float=False):
+def v8_value_to_local_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index=None, declare_variable=True,
+                                isolate='info.GetIsolate()', bailout_return_value=None, use_exception_state=False):
     """Returns an expression that converts a V8 value to a C++ value and stores it as a local value."""
 
     this_cpp_type = idl_type.cpp_type_args(extended_attributes=extended_attributes, raw_type=True)
     idl_type = idl_type.preprocessed_type
 
-    cpp_value = v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index, isolate, restricted_float=restricted_float)
+    cpp_value = v8_value_to_cpp_value(idl_type, extended_attributes, v8_value, variable_name, index, isolate)
 
     # Optional expression that returns a value to be assigned to the local variable.
     assign_expression = None
@@ -838,10 +837,10 @@ V8_SET_RETURN_VALUE = {
     'DictionaryStatic': '#error not implemented yet',
     # Nullable dictionaries
     'NullableDictionary': 'v8SetReturnValue(info, result.get())',
-    'NullableDictionaryStatic': '#error not implemented yet',
+    'NullableDictionaryStatic': 'v8SetReturnValue(info, result.get(), info.GetIsolate()->GetCurrentContext()->Global())',
     # Union types or dictionaries
     'DictionaryOrUnion': 'v8SetReturnValue(info, result)',
-    'DictionaryOrUnionStatic': '#error not implemented yet',
+    'DictionaryOrUnionStatic': 'v8SetReturnValue(info, result, info.GetIsolate()->GetCurrentContext()->Global())',
 }
 
 

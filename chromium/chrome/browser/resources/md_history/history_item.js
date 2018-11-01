@@ -100,13 +100,6 @@ cr.define('md_history', function() {
         reflectToAttribute: true,
       },
 
-      // True if the item is being displayed embedded in another element and
-      // should not manage its own borders or size.
-      embedded: {
-        type: Boolean,
-        reflectToAttribute: true,
-      },
-
       /** @type {Element} */
       lastFocused: {
         type: Object,
@@ -118,14 +111,16 @@ cr.define('md_history', function() {
         observer: 'ironListTabIndexChanged_',
       },
 
+      selectionNotAllowed_: {
+        type: Boolean,
+        value: !loadTimeData.getBoolean('allowDeletingHistory'),
+      },
+
       hasTimeGap: Boolean,
 
       index: Number,
 
       numberOfItems: Number,
-
-      // The path of this history item inside its parent.
-      path: String,
 
       // Search term used to obtain this history-item.
       searchTerm: String,
@@ -196,12 +191,12 @@ cr.define('md_history', function() {
         }
       }
 
-      if (this.selectionNotAllowed_())
+      if (this.selectionNotAllowed_)
         return;
 
       this.$.checkbox.focus();
       this.fire('history-checkbox-select', {
-        element: this,
+        index: this.index,
         shiftKey: e.shiftKey,
       });
     },
@@ -264,7 +259,6 @@ cr.define('md_history', function() {
         target: Polymer.dom(e).localTarget,
         index: this.index,
         item: this.item,
-        path: this.path,
       });
 
       // Stops the 'tap' event from closing the menu when it opens.
@@ -309,10 +303,6 @@ cr.define('md_history', function() {
       this.$.icon.style.backgroundImage = cr.icon.getFavicon(this.item.url);
     },
 
-    selectionNotAllowed_: function() {
-      return !loadTimeData.getBoolean('allowDeletingHistory');
-    },
-
     /**
      * @param {number} numberOfItems The number of items in the card.
      * @param {string} historyDate Date of the current result.
@@ -333,28 +323,6 @@ cr.define('md_history', function() {
       this.unlisten(el, 'mouseover', 'addTimeTitle_');
     },
   });
-
-  /**
-   * Check whether the time difference between the given history item and the
-   * next one is large enough for a spacer to be required.
-   * @param {Array<HistoryEntry>} visits
-   * @param {number} currentIndex
-   * @param {string} searchedTerm
-   * @return {boolean} Whether or not time gap separator is required.
-   */
-  HistoryItem.needsTimeGap = function(visits, currentIndex, searchedTerm) {
-    if (currentIndex >= visits.length - 1 || visits.length == 0)
-      return false;
-
-    var currentItem = visits[currentIndex];
-    var nextItem = visits[currentIndex + 1];
-
-    if (searchedTerm)
-      return currentItem.dateShort != nextItem.dateShort;
-
-    return currentItem.time - nextItem.time > BROWSING_GAP_TIME &&
-        currentItem.dateRelativeDay == nextItem.dateRelativeDay;
-  };
 
   /**
    * @param {number} numberOfResults

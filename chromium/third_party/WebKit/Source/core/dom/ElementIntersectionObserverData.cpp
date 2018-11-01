@@ -23,25 +23,25 @@ IntersectionObservation* ElementIntersectionObserverData::getObservationFor(
 
 void ElementIntersectionObserverData::addObserver(
     IntersectionObserver& observer) {
-  m_intersectionObservers.add(&observer);
+  m_intersectionObservers.insert(&observer);
 }
 
 void ElementIntersectionObserverData::removeObserver(
     IntersectionObserver& observer) {
-  m_intersectionObservers.remove(&observer);
+  m_intersectionObservers.erase(&observer);
 }
 
 void ElementIntersectionObserverData::addObservation(
     IntersectionObservation& observation) {
   DCHECK(observation.observer());
-  m_intersectionObservations.add(
+  m_intersectionObservations.insert(
       TraceWrapperMember<IntersectionObserver>(this, observation.observer()),
       &observation);
 }
 
 void ElementIntersectionObserverData::removeObservation(
     IntersectionObserver& observer) {
-  m_intersectionObservations.remove(&observer);
+  m_intersectionObservations.erase(&observer);
 }
 
 void ElementIntersectionObserverData::activateValidIntersectionObservers(

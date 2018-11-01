@@ -16,8 +16,8 @@
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
+#include "ash/resources/grit/ash_resources.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -94,25 +94,19 @@ class ImeListItemView : public ActionableView {
     SetLayoutManager(new views::FillLayout);
 
     // The id button shows the IME short name.
-    views::Label* id_label = new views::Label(id);
+    views::Label* id_label = TrayPopupUtils::CreateDefaultLabel();
+    id_label->SetText(id);
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     const gfx::FontList& base_font_list =
         rb.GetFontList(ui::ResourceBundle::MediumBoldFont);
     id_label->SetFontList(base_font_list);
 
-    // TODO(bruthig): Fix this so that |label| uses the kBackgroundColor to
-    // perform subpixel rendering instead of disabling subpixel rendering.
-    //
-    // Text rendered on a non-opaque background looks ugly and it is possible
-    // for labels to given a a clear canvas at paint time when an ink drop is
-    // visible. See http://crbug.com/661714.
-    id_label->SetSubpixelRenderingEnabled(false);
-
     // For IMEs whose short name are more than 2 characters (INTL, EXTD, etc.),
     // |kMenuIconSize| is not enough. The label will trigger eliding as "I..."
     // or "...". So we shrink the font size until it fits within the bounds.
     int size_delta = -1;
-    while (id_label->GetPreferredSize().width() > kMenuIconSize &&
+    while ((id_label->GetPreferredSize().width() -
+            id_label->GetInsets().width()) > kMenuIconSize &&
            size_delta >= kMinFontSizeDelta) {
       id_label->SetFontList(base_font_list.DeriveWithSizeDelta(size_delta));
       --size_delta;
@@ -120,11 +114,14 @@ class ImeListItemView : public ActionableView {
     tri_view->AddView(TriView::Container::START, id_label);
 
     // The label shows the IME name.
-    label_ = TrayPopupUtils::CreateDefaultLabel();
-    label_->SetText(label);
-    UpdateStyle();
-    label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    tri_view->AddView(TriView::Container::CENTER, label_);
+    auto* label_view = TrayPopupUtils::CreateDefaultLabel();
+    label_view->SetText(label);
+    TrayPopupItemStyle style(
+        TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
+    style.SetupLabel(label_view);
+
+    label_view->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    tri_view->AddView(TriView::Container::CENTER, label_view);
 
     if (selected) {
       // The checked button indicates the IME is selected.
@@ -133,7 +130,7 @@ class ImeListItemView : public ActionableView {
           gfx::VectorIconId::CHECK_CIRCLE, kMenuIconSize, button_color));
       tri_view->AddView(TriView::Container::END, checked_image);
     }
-    SetAccessibleName(label_->text());
+    SetAccessibleName(label_view->text());
   }
 
   ~ImeListItemView() override {}
@@ -157,11 +154,6 @@ class ImeListItemView : public ActionableView {
       ime_list_view_->scroll_content()->ScrollRectToVisible(bounds());
   }
 
-  // views::View:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    UpdateStyle();
-  }
-
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     ActionableView::GetAccessibleNodeData(node_data);
     node_data->role = ui::AX_ROLE_CHECK_BOX;
@@ -170,15 +162,6 @@ class ImeListItemView : public ActionableView {
   }
 
  private:
-  // Updates the style of |label_| based on the current native theme.
-  void UpdateStyle() {
-    TrayPopupItemStyle style(
-        GetNativeTheme(), TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
-    style.SetupLabel(label_);
-  }
-
-  // The label shows the IME name.
-  views::Label* label_;
   ImeListView* ime_list_view_;
   bool selected_;
 
@@ -191,24 +174,20 @@ class ImeListItemView : public ActionableView {
 class MaterialKeyboardStatusRowView : public views::View {
  public:
   MaterialKeyboardStatusRowView(views::ButtonListener* listener, bool enabled)
-      : listener_(listener), label_(nullptr), toggle_(nullptr) {
+      : listener_(listener), toggle_(nullptr) {
     Init();
     toggle_->SetIsOn(enabled, false);
   }
 
   ~MaterialKeyboardStatusRowView() override {}
 
-  const views::Button* toggle() const { return toggle_; }
+  views::Button* toggle() const { return toggle_; }
   bool is_toggled() const { return toggle_->is_on(); }
 
  protected:
   // views::View:
   int GetHeightForWidth(int w) const override {
     return GetPreferredSize().height();
-  }
-
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    UpdateStyle();
   }
 
  private:
@@ -225,12 +204,14 @@ class MaterialKeyboardStatusRowView : public views::View {
         kImeMenuOnScreenKeyboardIcon, kMenuIconSize, kMenuIconColor));
     tri_view->AddView(TriView::Container::START, keyboard_image);
 
-    // The on-screen keyboard label.
-    label_ = TrayPopupUtils::CreateDefaultLabel();
-    label_->SetText(ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
+    // The on-screen keyboard label ('On-screen keyboard').
+    auto* label = TrayPopupUtils::CreateDefaultLabel();
+    label->SetText(ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
         IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD));
-    UpdateStyle();
-    tri_view->AddView(TriView::Container::CENTER, label_);
+    TrayPopupItemStyle style(
+        TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
+    style.SetupLabel(label);
+    tri_view->AddView(TriView::Container::CENTER, label);
 
     // The on-screen keyboard toggle button.
     toggle_ = TrayPopupUtils::CreateToggleButton(
@@ -238,18 +219,8 @@ class MaterialKeyboardStatusRowView : public views::View {
     tri_view->AddView(TriView::Container::END, toggle_);
   }
 
-  // Updates the style of |label_| based on the current native theme.
-  void UpdateStyle() {
-    TrayPopupItemStyle style(
-        GetNativeTheme(), TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
-    style.SetupLabel(label_);
-  }
-
   // ButtonListener to notify when |toggle_| is clicked.
   views::ButtonListener* listener_;
-
-  // Label to with text 'On-screen keyboard'.
-  views::Label* label_;
 
   // ToggleButton to toggle keyboard on or off.
   views::ToggleButton* toggle_;
@@ -257,12 +228,16 @@ class MaterialKeyboardStatusRowView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(MaterialKeyboardStatusRowView);
 };
 
-ImeListView::ImeListView(SystemTrayItem* owner,
-                         bool show_keyboard_toggle,
-                         SingleImeBehavior single_ime_behavior)
+ImeListView::ImeListView(SystemTrayItem* owner)
     : TrayDetailsView(owner),
       last_item_selected_with_keyboard_(false),
-      should_focus_ime_after_selection_with_keyboard_(false) {
+      should_focus_ime_after_selection_with_keyboard_(false),
+      current_ime_view_(nullptr) {}
+
+ImeListView::~ImeListView() {}
+
+void ImeListView::Init(bool show_keyboard_toggle,
+                       SingleImeBehavior single_ime_behavior) {
   SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
   IMEInfoList list;
   delegate->GetAvailableIMEList(&list);
@@ -270,8 +245,6 @@ ImeListView::ImeListView(SystemTrayItem* owner,
   delegate->GetCurrentIMEProperties(&property_list);
   Update(list, property_list, show_keyboard_toggle, single_ime_behavior);
 }
-
-ImeListView::~ImeListView() {}
 
 void ImeListView::Update(const IMEInfoList& list,
                          const IMEPropertyInfoList& property_list,
@@ -307,8 +280,11 @@ void ImeListView::Update(const IMEInfoList& list,
   SchedulePaint();
 
   if (should_focus_ime_after_selection_with_keyboard_ &&
-      last_item_selected_with_keyboard_)
+      last_item_selected_with_keyboard_) {
     FocusCurrentImeIfNeeded();
+  } else if (current_ime_view_) {
+    scroll_content()->ScrollRectToVisible(current_ime_view_->bounds());
+  }
 }
 
 void ImeListView::ResetImeListView() {
@@ -316,10 +292,12 @@ void ImeListView::ResetImeListView() {
   Reset();
   material_keyboard_status_view_ = nullptr;
   keyboard_status_ = nullptr;
+  current_ime_view_ = nullptr;
 }
 
 void ImeListView::CloseImeListView() {
   last_selected_item_id_.clear();
+  current_ime_view_ = nullptr;
   last_item_selected_with_keyboard_ = false;
   GetWidget()->Close();
 }
@@ -358,6 +336,9 @@ void ImeListView::AppendImeListAndProperties(
                             list[i].selected, gfx::kGoogleGreen700);
     scroll_content()->AddChildView(ime_view);
     ime_map_[ime_view] = list[i].id;
+
+    if (list[i].selected)
+      current_ime_view_ = ime_view;
 
     // In material design, the property items will be added after the current
     // selected IME item.
@@ -446,6 +427,16 @@ void ImeListView::HandleButtonPressed(views::Button* sender,
   }
 }
 
+void ImeListView::VisibilityChanged(View* starting_from, bool is_visible) {
+  if (!is_visible || (should_focus_ime_after_selection_with_keyboard_ &&
+                      last_item_selected_with_keyboard_) ||
+      !current_ime_view_) {
+    return;
+  }
+
+  scroll_content()->ScrollRectToVisible(current_ime_view_->bounds());
+}
+
 void ImeListView::FocusCurrentImeIfNeeded() {
   views::FocusManager* manager = GetFocusManager();
   if (!manager || manager->GetFocusedView() || last_selected_item_id_.empty())
@@ -464,6 +455,15 @@ void ImeListView::FocusCurrentImeIfNeeded() {
       return;
     }
   }
+}
+
+ImeListViewTestApi::ImeListViewTestApi(ImeListView* ime_list_view)
+    : ime_list_view_(ime_list_view) {}
+
+ImeListViewTestApi::~ImeListViewTestApi() {}
+
+views::View* ImeListViewTestApi::GetToggleView() const {
+  return ime_list_view_->material_keyboard_status_view_->toggle();
 }
 
 }  // namespace ash

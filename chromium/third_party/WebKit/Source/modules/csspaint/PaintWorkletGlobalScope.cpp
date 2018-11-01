@@ -126,7 +126,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
           exceptionState.throwTypeError("Invalid argument types.");
           return;
         }
-        inputArgumentTypes.append(syntaxDescriptor);
+        inputArgumentTypes.push_back(syntaxDescriptor);
       }
     }
   }
@@ -189,7 +189,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
   m_paintDefinitions.set(name, definition);
 
   // Set the definition on any pending generators.
-  GeneratorHashSet* set = m_pendingGenerators.get(name);
+  GeneratorHashSet* set = m_pendingGenerators.at(name);
   if (set) {
     for (const auto& generator : *set) {
       if (generator) {
@@ -197,22 +197,22 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
       }
     }
   }
-  m_pendingGenerators.remove(name);
+  m_pendingGenerators.erase(name);
 }
 
 CSSPaintDefinition* PaintWorkletGlobalScope::findDefinition(
     const String& name) {
-  return m_paintDefinitions.get(name);
+  return m_paintDefinitions.at(name);
 }
 
 void PaintWorkletGlobalScope::addPendingGenerator(
     const String& name,
     CSSPaintImageGeneratorImpl* generator) {
   Member<GeneratorHashSet>& set =
-      m_pendingGenerators.add(name, nullptr).storedValue->value;
+      m_pendingGenerators.insert(name, nullptr).storedValue->value;
   if (!set)
     set = new GeneratorHashSet;
-  set->add(generator);
+  set->insert(generator);
 }
 
 DEFINE_TRACE(PaintWorkletGlobalScope) {

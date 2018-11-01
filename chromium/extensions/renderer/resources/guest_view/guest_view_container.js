@@ -24,6 +24,16 @@ function GuestViewContainer(element, viewType) {
   this.setupAttributes();
 
   privates(this).internalElement = this.createInternalElement$();
+  // NOTE(andre@vivaldi.com) : This was proposed by WillyYu.
+  // See https://github.com/WillyYu/vivaldi_1.7/
+  // Attach attributes to internal element, used to determine if this element
+  // is present in a tabstrip.
+  var attrs = element.attributes;
+  for (var i = 0; i < attrs.length; ++i) {
+    var att = attrs[i];
+    privates(this).internalElement.setAttribute(att.nodeName, att.nodeValue);
+  }
+
   this.setupFocusPropagation();
   var shadowRoot = this.element.createShadowRoot();
   shadowRoot.appendChild(privates(this).internalElement);
@@ -33,6 +43,8 @@ function GuestViewContainer(element, viewType) {
 
 // Prevent GuestViewContainer inadvertently inheriting code from the global
 // Object, allowing a pathway for executing unintended user code execution.
+// TODO(wjmaclean): Use utils.expose() here instead? Track down other issues
+// of Object inheritance. https://crbug.com/701034
 GuestViewContainer.prototype.__proto__ = null;
 
 // Forward public API methods from |proto| to their internal implementations.
@@ -66,15 +78,15 @@ GuestViewContainer.registerElement = function(guestViewContainerType) {
 // their resizes.
 GuestViewContainer.prototype.setupGuestProperty = function() {
   $Object.defineProperty(this, 'guest', {
-    get: function() {
+    get: $Function.bind(function() {
       return privates(this).guest;
-    }.bind(this),
-    set: function(value) {
+    }, this),
+    set: $Function.bind(function(value) {
       privates(this).guest = value;
       if (!value) {
         return;
       }
-      privates(this).guest.onresize = function(e) {
+      privates(this).guest.onresize = $Function.bind(function(e) {
         // Dispatch the 'contentresize' event.
         var contentResizeEvent = new Event('contentresize', { bubbles: true });
         contentResizeEvent.oldWidth = e.oldWidth;
@@ -82,8 +94,8 @@ GuestViewContainer.prototype.setupGuestProperty = function() {
         contentResizeEvent.newWidth = e.newWidth;
         contentResizeEvent.newHeight = e.newHeight;
         this.dispatchEvent(contentResizeEvent);
-      }.bind(this);
-    }.bind(this),
+      }, this);
+    }, this),
     enumerable: true
   });
 };

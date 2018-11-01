@@ -4,31 +4,55 @@
 
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 
+#include "platform/graphics/paint/PropertyTreeState.h"
+
 namespace blink {
 
 ScrollPaintPropertyNode* ScrollPaintPropertyNode::root() {
-  DEFINE_STATIC_REF(ScrollPaintPropertyNode, root,
-                    (ScrollPaintPropertyNode::create(
-                        nullptr, TransformPaintPropertyNode::root(), IntSize(),
-                        IntSize(), false, false, 0)));
+  DEFINE_STATIC_REF(
+      ScrollPaintPropertyNode, root,
+      (ScrollPaintPropertyNode::create(nullptr, IntSize(), IntSize(), false,
+                                       false, 0, nullptr)));
   return root;
 }
 
 String ScrollPaintPropertyNode::toString() const {
-  FloatSize scrollOffset =
-      m_scrollOffsetTranslation->matrix().to2DTranslation();
-  std::string mainThreadScrollingReasonsAsText =
-      MainThreadScrollingReason::mainThreadScrollingReasonsAsText(
-          m_mainThreadScrollingReasons);
-  return String::format(
-      "parent=%p scrollOffsetTranslation=%s clip=%s bounds=%s "
-      "userScrollableHorizontal=%s"
-      " userScrollableVertical=%s mainThreadScrollingReasons=%s",
-      m_parent.get(), scrollOffset.toString().ascii().data(),
-      m_clip.toString().ascii().data(), m_bounds.toString().ascii().data(),
-      m_userScrollableHorizontal ? "yes" : "no",
-      m_userScrollableVertical ? "yes" : "no",
-      mainThreadScrollingReasonsAsText.c_str());
+  StringBuilder text;
+  text.append("parent=");
+  text.append(String::format("%p", m_parent.get()));
+  text.append(" clip=");
+  text.append(m_clip.toString());
+  text.append(" bounds=");
+  text.append(m_bounds.toString());
+
+  text.append(" userScrollable=");
+  if (m_userScrollableHorizontal && m_userScrollableVertical)
+    text.append("both");
+  else if (!m_userScrollableHorizontal && !m_userScrollableVertical)
+    text.append("none");
+  else
+    text.append(m_userScrollableHorizontal ? "horizontal" : "vertical");
+
+  text.append(" mainThreadReasons=");
+  if (m_mainThreadScrollingReasons) {
+    text.append(MainThreadScrollingReason::mainThreadScrollingReasonsAsText(
+                    m_mainThreadScrollingReasons)
+                    .c_str());
+  } else {
+    text.append("none");
+  }
+  if (m_scrollClient)
+    text.append(String::format(" scrollClient=%p", m_scrollClient));
+  return text.toString();
 }
+
+#if DCHECK_IS_ON()
+
+String ScrollPaintPropertyNode::toTreeString() const {
+  return blink::PropertyTreeStatePrinter<blink::ScrollPaintPropertyNode>()
+      .pathAsString(this);
+}
+
+#endif
 
 }  // namespace blink

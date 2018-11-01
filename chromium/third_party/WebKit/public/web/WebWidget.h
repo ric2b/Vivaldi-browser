@@ -47,7 +47,7 @@
 namespace blink {
 
 class WebCompositeAndReadbackAsyncCallback;
-class WebInputEvent;
+class WebCoalescedInputEvent;
 class WebLayoutAndPaintAsyncCallback;
 class WebPagePopup;
 struct WebPoint;
@@ -75,6 +75,9 @@ class WebWidget {
   // Called to notify the WebWidget of entering/exiting fullscreen mode.
   virtual void didEnterFullscreen() {}
   virtual void didExitFullscreen() {}
+
+  // TODO(crbug.com/704763): Remove the need for this.
+  virtual void setSuppressFrameRequestsWorkaroundFor704763Only(bool) {}
 
   // Called to update imperative animation state. This should be called before
   // paint, although the client can rate-limit these calls.
@@ -116,7 +119,7 @@ class WebWidget {
   virtual void themeChanged() {}
 
   // Called to inform the WebWidget of an input event.
-  virtual WebInputEventResult handleInputEvent(const WebInputEvent&) {
+  virtual WebInputEventResult handleInputEvent(const WebCoalescedInputEvent&) {
     return WebInputEventResult::NotHandled;
   }
 
@@ -217,10 +220,6 @@ class WebWidget {
   virtual bool getCompositionCharacterBounds(WebVector<WebRect>& bounds) {
     return false;
   }
-
-  // Applies the range on the focused frame so that the text will later be
-  // replaced.
-  virtual void applyReplacementRange(const WebRange&) {}
 
  protected:
   ~WebWidget() {}

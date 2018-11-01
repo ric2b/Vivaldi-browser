@@ -17,18 +17,23 @@ MediaUrlDemuxer::MediaUrlDemuxer(
 
 MediaUrlDemuxer::~MediaUrlDemuxer() {}
 
-// Should never be called since DemuxerStreamProvider::Type is URL.
-DemuxerStream* MediaUrlDemuxer::GetStream(DemuxerStream::Type type) {
+// Should never be called since MediaResource::Type is URL.
+std::vector<DemuxerStream*> MediaUrlDemuxer::GetAllStreams() {
   NOTREACHED();
-  return nullptr;
+  return std::vector<DemuxerStream*>();
+}
+
+// Should never be called since MediaResource::Type is URL.
+void MediaUrlDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
+  NOTREACHED();
 }
 
 MediaUrlParams MediaUrlDemuxer::GetMediaUrlParams() const {
   return params_;
 }
 
-DemuxerStreamProvider::Type MediaUrlDemuxer::GetType() const {
-  return DemuxerStreamProvider::Type::URL;
+MediaResource::Type MediaUrlDemuxer::GetType() const {
+  return MediaResource::Type::URL;
 }
 
 std::string MediaUrlDemuxer::GetDisplayName() const {
@@ -70,12 +75,12 @@ int64_t MediaUrlDemuxer::GetMemoryUsage() const {
 
 void MediaUrlDemuxer::OnEnabledAudioTracksChanged(
     const std::vector<MediaTrack::Id>& track_ids,
-    base::TimeDelta currTime) {
+    base::TimeDelta curr_time) {
   NOTIMPLEMENTED();
 }
 void MediaUrlDemuxer::OnSelectedVideoTrackChanged(
-    const std::vector<MediaTrack::Id>& track_ids,
-    base::TimeDelta currTime) {
+    base::Optional<MediaTrack::Id> selected_track_id,
+    base::TimeDelta curr_time) {
   NOTIMPLEMENTED();
 }
 

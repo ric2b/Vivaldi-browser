@@ -89,6 +89,10 @@ class PrerenderContents : public content::NotificationObserver,
     // destroyed.
     virtual void OnPrerenderStop(PrerenderContents* contents) {}
 
+    // Signals that a resource finished loading and altered the running byte
+    // count.
+    virtual void OnPrerenderNetworkBytesChanged(PrerenderContents* contents) {}
+
    protected:
     Observer() {}
     virtual ~Observer() = 0;
@@ -170,15 +174,12 @@ class PrerenderContents : public content::NotificationObserver,
   void DidStopLoading() override;
   void DocumentLoadedInFrame(
       content::RenderFrameHost* render_frame_host) override;
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidGetRedirectForResourceRequest(
       const content::ResourceRedirectDetails& details) override;
 
@@ -240,6 +241,9 @@ class PrerenderContents : public content::NotificationObserver,
   bool prerendering_has_been_cancelled() const {
     return prerendering_has_been_cancelled_;
   }
+
+  // Running byte count. Increased when each resource completes loading.
+  int64_t network_bytes() { return network_bytes_; }
 
  protected:
   PrerenderContents(PrerenderManager* prerender_manager,

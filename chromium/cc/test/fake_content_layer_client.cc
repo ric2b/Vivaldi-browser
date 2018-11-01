@@ -6,12 +6,11 @@
 
 #include <stddef.h>
 
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_recorder.h"
 #include "cc/playback/clip_display_item.h"
-#include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
 #include "cc/playback/transform_display_item.h"
-#include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
 
@@ -19,21 +18,20 @@ namespace cc {
 
 FakeContentLayerClient::ImageData::ImageData(sk_sp<const SkImage> img,
                                              const gfx::Point& point,
-                                             const SkPaint& paint)
-    : image(std::move(img)), point(point), paint(paint) {}
+                                             const PaintFlags& flags)
+    : image(std::move(img)), point(point), flags(flags) {}
 
 FakeContentLayerClient::ImageData::ImageData(sk_sp<const SkImage> img,
                                              const gfx::Transform& transform,
-                                             const SkPaint& paint)
-    : image(std::move(img)), transform(transform), paint(paint) {}
+                                             const PaintFlags& flags)
+    : image(std::move(img)), transform(transform), flags(flags) {}
 
 FakeContentLayerClient::ImageData::ImageData(const ImageData& other) = default;
 
 FakeContentLayerClient::ImageData::~ImageData() {}
 
 FakeContentLayerClient::FakeContentLayerClient()
-    : display_list_use_cached_picture_(true),
-      fill_with_nonsolid_color_(false),
+    : fill_with_nonsolid_color_(false),
       last_canvas_(nullptr),
       last_painting_control_(PAINTING_BEHAVIOR_NORMAL),
       reported_memory_usage_(0),
@@ -50,21 +48,17 @@ gfx::Rect FakeContentLayerClient::PaintableRegion() {
 scoped_refptr<DisplayItemList>
 FakeContentLayerClient::PaintContentsToDisplayList(
     PaintingControlSetting painting_control) {
-  // Cached picture is used because unit tests expect to be able to
-  // use GatherPixelRefs.
-  DisplayItemListSettings settings;
-  settings.use_cached_picture = display_list_use_cached_picture_;
-  scoped_refptr<DisplayItemList> display_list =
-      DisplayItemList::Create(settings);
+  auto display_list = make_scoped_refptr(new DisplayItemList);
   display_list->SetRetainVisualRectsForTesting(true);
-  SkPictureRecorder recorder;
+  PaintRecorder recorder;
 
   for (RectPaintVector::const_iterator it = draw_rects_.begin();
        it != draw_rects_.end(); ++it) {
     const gfx::RectF& draw_rect = it->first;
-    const SkPaint& paint = it->second;
-    SkCanvas* canvas = recorder.beginRecording(gfx::RectFToSkRect(draw_rect));
-    canvas->drawRect(gfx::RectFToSkRect(draw_rect), paint);
+    const PaintFlags& flags = it->second;
+    PaintCanvas* canvas =
+        recorder.beginRecording(gfx::RectFToSkRect(draw_rect));
+    canvas->drawRect(gfx::RectFToSkRect(draw_rect), flags);
     display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         ToEnclosingRect(draw_rect), recorder.finishRecordingAsPicture());
   }
@@ -75,10 +69,10 @@ FakeContentLayerClient::PaintContentsToDisplayList(
       display_list->CreateAndAppendPairedBeginItem<TransformDisplayItem>(
           it->transform);
     }
-    SkCanvas* canvas =
+    PaintCanvas* canvas =
         recorder.beginRecording(it->image->width(), it->image->height());
     canvas->drawImage(it->image.get(), it->point.x(), it->point.y(),
-                      &it->paint);
+                      &it->flags);
     display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         PaintableRegion(), recorder.finishRecordingAsPicture());
     if (!it->transform.IsIdentity()) {
@@ -90,10 +84,11 @@ FakeContentLayerClient::PaintContentsToDisplayList(
     gfx::Rect draw_rect = PaintableRegion();
     bool red = true;
     while (!draw_rect.IsEmpty()) {
-      SkPaint paint;
-      paint.setColor(red ? SK_ColorRED : SK_ColorBLUE);
-      SkCanvas* canvas = recorder.beginRecording(gfx::RectToSkRect(draw_rect));
-      canvas->drawIRect(gfx::RectToSkIRect(draw_rect), paint);
+      PaintFlags flags;
+      flags.setColor(red ? SK_ColorRED : SK_ColorBLUE);
+      PaintCanvas* canvas =
+          recorder.beginRecording(gfx::RectToSkRect(draw_rect));
+      canvas->drawIRect(gfx::RectToSkIRect(draw_rect), flags);
       display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
           draw_rect, recorder.finishRecordingAsPicture());
       draw_rect.Inset(1, 1);

@@ -78,6 +78,12 @@ class PostmortemReportCollector {
   FRIEND_TEST_ALL_PREFIXES(
       PostmortemReportCollectorCollectionFromGlobalTrackerTest,
       GlobalUserDataCollection);
+  FRIEND_TEST_ALL_PREFIXES(
+      PostmortemReportCollectorCollectionFromGlobalTrackerTest,
+      FieldTrialCollection);
+  FRIEND_TEST_ALL_PREFIXES(
+      PostmortemReportCollectorCollectionFromGlobalTrackerTest,
+      ModuleCollection);
 
   // Virtual for unittesting.
   virtual std::vector<base::FilePath> GetDebugStateFilePaths(
@@ -98,7 +104,7 @@ class PostmortemReportCollector {
       const base::debug::ThreadActivityAnalyzer::Snapshot& snapshot,
       ThreadState* thread_state);
 
-  virtual bool WriteReportToMinidump(const StabilityReport& report,
+  virtual bool WriteReportToMinidump(StabilityReport* report,
                                      const crashpad::UUID& client_id,
                                      const crashpad::UUID& report_id,
                                      base::PlatformFile minidump_file);

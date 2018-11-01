@@ -20,6 +20,50 @@ static int computeNumberOfTracks(const CSSValueList* valueList) {
   return numberOfTracks;
 }
 
+TEST(CSSPropertyParserTest, CSSPaint_Functions) {
+  const CSSValue* value = CSSParser::parseSingleValue(
+      CSSPropertyBackgroundImage, "paint(foo, func1(1px, 3px), red)");
+  ASSERT_TRUE(value);
+  ASSERT_TRUE(value->isImageGeneratorValue());
+  EXPECT_EQ(value->cssText(), "paint(foo, func1(1px, 3px), red)");
+}
+
+TEST(CSSPropertyParserTest, CSSPaint_NoArguments) {
+  const CSSValue* value =
+      CSSParser::parseSingleValue(CSSPropertyBackgroundImage, "paint(foo)");
+  ASSERT_TRUE(value);
+  ASSERT_TRUE(value->isImageGeneratorValue());
+  EXPECT_EQ(value->cssText(), "paint(foo)");
+}
+
+TEST(CSSPropertyParserTest, CSSPaint_ValidArguments) {
+  const CSSValue* value = CSSParser::parseSingleValue(
+      CSSPropertyBackgroundImage, "paint(bar, 10px, red)");
+  ASSERT_TRUE(value);
+  ASSERT_TRUE(value->isImageGeneratorValue());
+  EXPECT_EQ(value->cssText(), "paint(bar, 10px, red)");
+}
+
+TEST(CSSPropertyParserTest, CSSPaint_InvalidFormat) {
+  const CSSValue* value =
+      CSSParser::parseSingleValue(CSSPropertyBackgroundImage, "paint(foo bar)");
+  // Illegal format should not be parsed.
+  ASSERT_FALSE(value);
+}
+
+TEST(CSSPropertyParserTest, CSSPaint_TrailingComma) {
+  const CSSValue* value = CSSParser::parseSingleValue(
+      CSSPropertyBackgroundImage, "paint(bar, 10px, red,)");
+  ASSERT_FALSE(value);
+}
+
+TEST(CSSPropertyParserTest, CSSPaint_PaintArgumentsDiabled) {
+  RuntimeEnabledFeatures::setCSSPaintAPIArgumentsEnabled(false);
+  const CSSValue* value = CSSParser::parseSingleValue(
+      CSSPropertyBackgroundImage, "paint(bar, 10px, red)");
+  ASSERT_FALSE(value);
+}
+
 TEST(CSSPropertyParserTest, GridTrackLimit1) {
   const CSSValue* value = CSSParser::parseSingleValue(
       CSSPropertyGridTemplateColumns, "repeat(999, 20px)");

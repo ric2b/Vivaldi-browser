@@ -6,56 +6,46 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-  DISABLE(DumpAccessibilityTreeTest, AccessibilityInputTime)
+DISABLE(DumpAccessibilityTreeTest, AccessibilityInputTime)
 
-  //DISABLE(SearchProviderTest, TestIsSearchProviderInstalled)
+DISABLE(ExtensionApiTest, Bookmarks)
 
-  DISABLE(ExtensionApiTest, Bookmarks)
+// Broke in v52
+DISABLE(BrowserWindowControllerTest, FullscreenResizeFlags)
+DISABLE(ExtensionInstallUIBrowserTest, TestInstallThemeInFullScreen)
+DISABLE(FullscreenControllerTest, FullscreenOnFileURL)
 
-  //DISABLE(ExtensionLoadingTest, RuntimeValidWhileDevToolsOpen)
+// Broke in v53
+DISABLE(BrowserWindowControllerTest, FullscreenToolbarExposedForTabstripChanges)
 
-  //DISABLE(FullscreenControllerTest, PermissionContentSettings)
+// DISABLE(ExtensionWindowCreateTest,AcceptState)
+DISABLE_MULTI(SavePageOriginalVsSavedComparisonTest, ObjectElementsViaFile)
 
-  //DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, Minimize)
-  //DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, MinimizeMaximize)
+// Broke in v55
+DISABLE(ServiceProcessControlBrowserTest, LaunchAndReconnect)
+DISABLE(FindBarBrowserTest, EscapeKey)
 
-  //DISABLE(PlatformAppBrowserTest, WindowsApiProperties)
+// Broke in v56
+DISABLE(WebstoreInlineInstallerTest, BlockInlineInstallFromFullscreenForBrowser)
+DISABLE(WebstoreInlineInstallerTest, BlockInlineInstallFromFullscreenForTab)
 
-  //DISABLE(SpeechViewTest, ClickMicButton)
+// Broke in v57
+DISABLE(WebstoreInlineInstallerTest, AllowInlineInstallFromFullscreenForBrowser)
 
-  // Broke in v52
-  DISABLE(BrowserWindowControllerTest, FullscreenResizeFlags)
-  DISABLE(ExtensionInstallUIBrowserTest, TestInstallThemeInFullScreen)
-  DISABLE(FullscreenControllerTest, FullscreenOnFileURL)
+// Broke due to features::kNativeNotifications being enabled by us
+DISABLE_ALL(NotificationsTest)
+DISABLE(PlatformNotificationServiceTest, DisplayPageNotificationMatches)
+DISABLE(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches)
+DISABLE(PlatformNotificationServiceTest, PersistentNotificationDisplay)
 
-  // Broke in v53
-  DISABLE(BrowserWindowControllerTest,
-          FullscreenToolbarExposedForTabstripChanges)
+// Broke in v57
+DISABLE(BrowserWindowControllerTest, FullscreenToolbarIsVisibleAccordingToPrefs)
+DISABLE(SessionRestoreTest, TabWithDownloadDoesNotGetRestored)
+DISABLE(SBNavigationObserverBrowserTest, DownloadViaHTML5FileApiWithUserGesture)
 
-  //DISABLE(ExtensionWindowCreateTest,AcceptState)
-  DISABLE_MULTI(SavePageOriginalVsSavedComparisonTest, ObjectElementsViaFile)
+// Broke in v58 for some Macs (depends on OS Root certificate configuration)
+DISABLE(TrustStoreMacTest, SystemCerts)
 
-  // Broke in v55
-  DISABLE(ServiceProcessControlBrowserTest, LaunchAndReconnect)
-  DISABLE(FindBarBrowserTest, EscapeKey)
-
-  // Broke in v56
-  DISABLE(WebstoreInlineInstallerTest,
-          BlockInlineInstallFromFullscreenForBrowser)
-  DISABLE(WebstoreInlineInstallerTest, BlockInlineInstallFromFullscreenForTab)
-
-  // Broke due to features::kNativeNotifications being enabled by us
-  DISABLE_ALL(NotificationsTest)
-  DISABLE(PlatformNotificationServiceTest, DisplayPageNotificationMatches)
-  DISABLE(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches)
-  DISABLE(PlatformNotificationServiceTest, PersistentNotificationDisplay)
-
-  // Flaky in v56?
-  //DISABLE(AppShimMenuControllerUITest, WindowCycling)
-
-  // Broke in v57
-  DISABLE(BrowserWindowControllerTest,
-          FullscreenToolbarIsVisibleAccordingToPrefs)
-  DISABLE(SessionRestoreTest, TabWithDownloadDoesNotGetRestored)
-  DISABLE(SBNavigationObserverBrowserTest,
-          DownloadViaHTML5FileApiWithUserGesture)
+// Seems to have broken in v58
+DISABLE(BrowserActionButtonUiTest, MediaRouterActionContextMenuInOverflow)
+DISABLE(BrowserActionButtonUiTest, OpenMenuOnDisabledActionWithMouseOrKeyboard)

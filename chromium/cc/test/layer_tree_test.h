@@ -12,8 +12,8 @@
 #include "cc/test/test_hooks.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/compositor_mode.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_impl.h"
-#include "cc/trees/layer_tree_host_in_process.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
@@ -122,8 +122,6 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   bool TestEnded() const { return ended_; }
 
   LayerTreeHost* layer_tree_host();
-  LayerTreeHostInProcess* layer_tree_host_in_process();
-  LayerTree* layer_tree() { return layer_tree_host()->GetLayerTree(); }
   SharedBitmapManager* shared_bitmap_manager() const {
     return shared_bitmap_manager_.get();
   }
@@ -149,9 +147,11 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<ContextProvider> compositor_context_provider) override;
 
-  bool IsRemoteTest() const;
-
   gfx::Vector2dF ScrollDelta(LayerImpl* layer_impl);
+
+  base::SingleThreadTaskRunner* image_worker_task_runner() const {
+    return image_worker_->task_runner().get();
+  }
 
  private:
   virtual void DispatchAddAnimationToPlayer(
@@ -175,7 +175,6 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   std::unique_ptr<LayerTreeHostClientForTesting> client_;
   std::unique_ptr<LayerTreeHost> layer_tree_host_;
   std::unique_ptr<AnimationHost> animation_host_;
-  LayerTreeHostInProcess* layer_tree_host_in_process_;
 
   bool beginning_ = false;
   bool end_when_begin_returns_ = false;
@@ -191,6 +190,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner_;
   std::unique_ptr<base::Thread> impl_thread_;
+  std::unique_ptr<base::Thread> image_worker_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<TestGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   std::unique_ptr<TestTaskGraphRunner> task_graph_runner_;
@@ -214,22 +214,12 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   }                                                              \
   class MultiThreadDelegatingImplNeedsSemicolon##TEST_FIXTURE_NAME {}
 
-#define REMOTE_TEST_F(TEST_FIXTURE_NAME)                    \
-  TEST_F(TEST_FIXTURE_NAME, RunRemote_DelegatingRenderer) { \
-    RunTest(CompositorMode::REMOTE);                        \
-  }                                                         \
-  class RemoteDelegatingImplNeedsSemicolon##TEST_FIXTURE_NAME {}
-
 #define SINGLE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME) \
   SINGLE_THREAD_TEST_F(TEST_FIXTURE_NAME);                \
   MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME)
 
 #define REMOTE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME) \
   MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME);                 \
-  REMOTE_TEST_F(TEST_FIXTURE_NAME)
-
-#define SINGLE_MULTI_AND_REMOTE_TEST_F(TEST_FIXTURE_NAME) \
-  SINGLE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME);      \
   REMOTE_TEST_F(TEST_FIXTURE_NAME)
 
 // Some tests want to control when notify ready for activation occurs,

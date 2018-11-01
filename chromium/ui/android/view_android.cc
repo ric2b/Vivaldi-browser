@@ -7,14 +7,17 @@
 #include <algorithm>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
 #include "cc/layers/layer.h"
 #include "jni/ViewAndroidDelegate_jni.h"
 #include "ui/android/window_android.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "url/gurl.h"
 
 namespace ui {
 
+using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -69,9 +72,8 @@ ViewAndroid::ScopedAnchorView::view() const {
 }
 
 ViewAndroid::ViewAndroid(const JavaRef<jobject>& delegate)
-    : parent_(nullptr)
-    , delegate_(base::android::AttachCurrentThread(),
-                delegate.obj()) {}
+    : parent_(nullptr),
+      delegate_(base::android::AttachCurrentThread(), delegate.obj()) {}
 
 ViewAndroid::ViewAndroid() : parent_(nullptr) {}
 
@@ -123,14 +125,23 @@ void ViewAndroid::SetAnchorRect(const JavaRef<jobject>& anchor,
     return;
 
   float scale = display::Screen::GetScreen()
-      ->GetDisplayNearestWindow(this)
-      .device_scale_factor();
+                    ->GetDisplayNearestWindow(this)
+                    .device_scale_factor();
   int left_margin = std::round(bounds.x() * scale);
   int top_margin = std::round((content_offset().y() + bounds.y()) * scale);
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ViewAndroidDelegate_setViewPosition(
       env, delegate, anchor, bounds.x(), bounds.y(), bounds.width(),
       bounds.height(), scale, left_margin, top_margin);
+}
+
+ScopedJavaLocalRef<jobject> ViewAndroid::GetContainerView() {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return nullptr;
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_ViewAndroidDelegate_getContainerView(env, delegate);
 }
 
 void ViewAndroid::RemoveChild(ViewAndroid* child) {
@@ -174,6 +185,46 @@ bool ViewAndroid::StartDragAndDrop(const JavaRef<jstring>& jtext,
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_ViewAndroidDelegate_startDragAndDrop(env, delegate, jtext,
                                                    jimage);
+}
+
+void ViewAndroid::OnBackgroundColorChanged(unsigned int color) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ViewAndroidDelegate_onBackgroundColorChanged(env, delegate, color);
+}
+
+void ViewAndroid::OnTopControlsChanged(float top_controls_offset,
+                                       float top_content_offset) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ViewAndroidDelegate_onTopControlsChanged(
+      env, delegate, top_controls_offset, top_content_offset);
+}
+
+void ViewAndroid::OnBottomControlsChanged(float bottom_controls_offset,
+                                          float bottom_content_offset) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ViewAndroidDelegate_onBottomControlsChanged(
+      env, delegate, bottom_controls_offset, bottom_content_offset);
+}
+
+void ViewAndroid::StartContentIntent(const GURL& content_url,
+                                     bool is_main_frame) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> jcontent_url =
+      ConvertUTF8ToJavaString(env, content_url.spec());
+  Java_ViewAndroidDelegate_onStartContentIntent(env, delegate, jcontent_url,
+                                                is_main_frame);
 }
 
 }  // namespace ui

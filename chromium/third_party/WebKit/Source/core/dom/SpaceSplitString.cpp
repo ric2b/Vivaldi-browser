@@ -162,12 +162,12 @@ void SpaceSplitString::set(const AtomicString& inputString,
 
 SpaceSplitString::Data::~Data() {
   if (!m_keyString.isNull())
-    sharedDataMap().remove(m_keyString);
+    sharedDataMap().erase(m_keyString);
 }
 
 PassRefPtr<SpaceSplitString::Data> SpaceSplitString::Data::create(
     const AtomicString& string) {
-  Data*& data = sharedDataMap().add(string, nullptr).storedValue->value;
+  Data*& data = sharedDataMap().insert(string, nullptr).storedValue->value;
   if (!data) {
     data = new Data(string);
     return adoptRef(data);

@@ -21,6 +21,7 @@
 
 #include "core/layout/LayoutView.h"
 
+#include <inttypes.h>
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/editing/FrameSelection.h"
@@ -38,6 +39,7 @@
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/ViewPaintInvalidator.h"
 #include "core/paint/ViewPainter.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/Histogram.h"
@@ -48,7 +50,6 @@
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "public/platform/Platform.h"
 #include "wtf/PtrUtil.h"
-#include <inttypes.h>
 
 namespace blink {
 
@@ -103,7 +104,7 @@ LayoutView::LayoutView(Document* document)
 
   setPreferredLogicalWidthsDirty(MarkOnlyThis);
 
-  setPositionState(AbsolutePosition);  // to 0,0 :)
+  setPositionState(EPosition::kAbsolute);  // to 0,0 :)
 }
 
 LayoutView::~LayoutView() {}
@@ -226,6 +227,8 @@ void LayoutView::layout() {
   if (!document().paginated())
     setPageLogicalHeight(LayoutUnit());
 
+  // TODO(wangxianzhu): Move this into ViewPaintInvalidator when
+  // rootLayerScrolling is permanently enabled.
   IncludeScrollbarsInRect includeScrollbars =
       RuntimeEnabledFeatures::rootLayerScrollingEnabled() ? IncludeScrollbars
                                                           : ExcludeScrollbars;
@@ -246,8 +249,6 @@ void LayoutView::layout() {
   }
 
   SubtreeLayoutScope layoutScope(*this);
-
-  LayoutRect oldLayoutOverflowRect = layoutOverflowRect();
 
   // Use calcWidth/Height to get the new width/height, since this will take the
   // full page zoom factor into account.
@@ -282,17 +283,6 @@ void LayoutView::layout() {
   LayoutState rootLayoutState(*this);
 
   layoutContent();
-
-  if (layoutOverflowRect() != oldLayoutOverflowRect) {
-    // The document element paints the viewport background, so we need to
-    // invalidate it when layout overflow changes.
-    // FIXME: Improve viewport background styling/invalidation/painting.
-    // crbug.com/475115
-    if (Element* documentElement = document().documentElement()) {
-      if (LayoutObject* rootObject = documentElement->layoutObject())
-        rootObject->setShouldDoFullPaintInvalidation();
-    }
-  }
 
 #if DCHECK_IS_ON()
   checkLayoutState();
@@ -425,6 +415,16 @@ void LayoutView::computeSelfHitTestRects(Vector<LayoutRect>& rects,
       LayoutRect(LayoutPoint::zero(), LayoutSize(frameView()->contentsSize())));
 }
 
+PaintInvalidationReason LayoutView::invalidatePaintIfNeeded(
+    const PaintInvalidationState& paintInvalidationState) {
+  return LayoutBlockFlow::invalidatePaintIfNeeded(paintInvalidationState);
+}
+
+PaintInvalidationReason LayoutView::invalidatePaintIfNeeded(
+    const PaintInvalidatorContext& context) const {
+  return ViewPaintInvalidator(*this, context).invalidatePaintIfNeeded();
+}
+
 void LayoutView::paint(const PaintInfo& paintInfo,
                        const LayoutPoint& paintOffset) const {
   ViewPainter(*this).paint(paintInfo, paintOffset);
@@ -465,36 +465,62 @@ void LayoutView::invalidatePaintForViewAndCompositedLayers() {
 bool LayoutView::mapToVisualRectInAncestorSpace(
     const LayoutBoxModelObject* ancestor,
     LayoutRect& rect,
+    MapCoordinatesFlags mode,
     VisualRectFlags visualRectFlags) const {
-  return mapToVisualRectInAncestorSpace(ancestor, rect, 0, visualRectFlags);
+  TransformState transformState(TransformState::ApplyTransformDirection,
+                                FloatQuad(FloatRect(rect)));
+  bool retval = mapToVisualRectInAncestorSpaceInternal(ancestor, transformState,
+                                                       mode, visualRectFlags);
+  transformState.flatten();
+  rect = LayoutRect(transformState.lastPlanarQuad().boundingBox());
+  return retval;
 }
 
-bool LayoutView::mapToVisualRectInAncestorSpace(
+bool LayoutView::mapToVisualRectInAncestorSpaceInternal(
     const LayoutBoxModelObject* ancestor,
-    LayoutRect& rect,
+    TransformState& transformState,
+    VisualRectFlags visualRectFlags) const {
+  return mapToVisualRectInAncestorSpaceInternal(ancestor, transformState, 0,
+                                                visualRectFlags);
+}
+
+bool LayoutView::mapToVisualRectInAncestorSpaceInternal(
+    const LayoutBoxModelObject* ancestor,
+    TransformState& transformState,
     MapCoordinatesFlags mode,
     VisualRectFlags visualRectFlags) const {
   if (mode & IsFixed)
-    rect.move(offsetForFixedPosition(true));
+    transformState.move(offsetForFixedPosition(true));
 
   // Apply our transform if we have one (because of full page zooming).
-  if (layer() && layer()->transform())
-    rect = layer()->transform()->mapRect(rect);
+  if (layer() && layer()->transform()) {
+    transformState.applyTransform(layer()->currentTransform(),
+                                  TransformState::FlattenTransform);
+  }
+
+  transformState.flatten();
 
   if (ancestor == this)
     return true;
 
   Element* owner = document().localOwner();
-  if (!owner)
-    return frameView()->mapToVisualRectInTopFrameSpace(rect);
+  if (!owner) {
+    LayoutRect rect(transformState.lastPlanarQuad().boundingBox());
+    bool retval = frameView()->mapToVisualRectInTopFrameSpace(rect);
+    transformState.setQuad(FloatQuad(FloatRect(rect)));
+    return retval;
+  }
 
   if (LayoutBox* obj = owner->layoutBox()) {
+    LayoutRect rect(transformState.lastPlanarQuad().boundingBox());
     if (!(mode & InputIsInFrameCoordinates)) {
       // Intersect the viewport with the visual rect.
       LayoutRect viewRectangle = viewRect();
       if (visualRectFlags & EdgeInclusive) {
-        if (!rect.inclusiveIntersect(viewRectangle))
+        if (!rect.inclusiveIntersect(viewRectangle)) {
+          transformState.setQuad(FloatQuad(FloatRect(rect)));
           return false;
+        }
       } else {
         rect.intersect(viewRectangle);
       }
@@ -510,11 +536,14 @@ bool LayoutView::mapToVisualRectInAncestorSpace(
 
     // Adjust for frame border.
     rect.move(obj->contentBoxOffset());
-    return obj->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
+    transformState.setQuad(FloatQuad(FloatRect(rect)));
+
+    return obj->mapToVisualRectInAncestorSpaceInternal(ancestor, transformState,
+                                                       visualRectFlags);
   }
 
   // This can happen, e.g., if the iframe element has display:none.
-  rect = LayoutRect();
+  transformState.setQuad(FloatQuad(FloatRect()));
   return false;
 }
 
@@ -592,7 +621,7 @@ IntRect LayoutView::selectionBounds() {
       while (cb && !cb->isLayoutView()) {
         selRect.unite(selectionRectForLayoutObject(cb));
         VisitedContainingBlockSet::AddResult addResult =
-            visitedContainingBlocks.add(cb);
+            visitedContainingBlocks.insert(cb);
         if (!addResult.isNewEntry)
           break;
         cb = cb->containingBlock();
@@ -606,8 +635,6 @@ IntRect LayoutView::selectionBounds() {
 }
 
 void LayoutView::invalidatePaintForSelection() {
-  HashSet<LayoutBlock*> processedBlocks;
-
   LayoutObject* end =
       layoutObjectAfterPosition(m_selectionEnd, m_selectionEndPos);
   for (LayoutObject* o = m_selectionStart; o && o != end;
@@ -710,7 +737,7 @@ void LayoutView::setSelection(
         LayoutBlock* cb = os->containingBlock();
         while (cb && !cb->isLayoutView()) {
           SelectedBlockMap::AddResult result =
-              oldSelectedBlocks.add(cb, cb->getSelectionState());
+              oldSelectedBlocks.insert(cb, cb->getSelectionState());
           if (!result.isNewEntry)
             break;
           cb = cb->containingBlock();
@@ -766,7 +793,7 @@ void LayoutView::setSelection(
       LayoutBlock* cb = o->containingBlock();
       while (cb && !cb->isLayoutView()) {
         SelectedBlockMap::AddResult result =
-            newSelectedBlocks.add(cb, cb->getSelectionState());
+            newSelectedBlocks.insert(cb, cb->getSelectionState());
         if (!result.isNewEntry)
           break;
         cb = cb->containingBlock();
@@ -790,7 +817,7 @@ void LayoutView::setSelection(
         (m_selectionStart == obj && oldStartPos != m_selectionStartPos) ||
         (m_selectionEnd == obj && oldEndPos != m_selectionEndPos)) {
       obj->setShouldInvalidateSelection();
-      newSelectedObjects.remove(obj);
+      newSelectedObjects.erase(obj);
     }
   }
 
@@ -810,7 +837,7 @@ void LayoutView::setSelection(
     SelectionState oldSelectionState = i->value;
     if (newSelectionState != oldSelectionState) {
       block->setShouldInvalidateSelection();
-      newSelectedBlocks.remove(block);
+      newSelectedBlocks.erase(block);
     }
   }
 

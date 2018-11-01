@@ -31,13 +31,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/plugins/renderer/plugin_placeholder.h"
-#include "components/test_runner/app_banner_service.h"
-#include "components/test_runner/gamepad_controller.h"
-#include "components/test_runner/layout_and_paint_async_then.h"
-#include "components/test_runner/pixel_dump.h"
-#include "components/test_runner/web_test_interfaces.h"
-#include "components/test_runner/web_test_runner.h"
-#include "components/test_runner/web_view_test_proxy.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -54,6 +47,13 @@
 #include "content/shell/renderer/layout_test/blink_test_helpers.h"
 #include "content/shell/renderer/layout_test/layout_test_render_thread_observer.h"
 #include "content/shell/renderer/layout_test/leak_detector.h"
+#include "content/shell/test_runner/app_banner_service.h"
+#include "content/shell/test_runner/gamepad_controller.h"
+#include "content/shell/test_runner/layout_and_paint_async_then.h"
+#include "content/shell/test_runner/pixel_dump.h"
+#include "content/shell/test_runner/web_test_interfaces.h"
+#include "content/shell/test_runner/web_test_runner.h"
+#include "content/shell/test_runner/web_view_test_proxy.h"
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_parameters.h"
 #include "media/capture/video_capturer_source.h"
@@ -218,12 +218,15 @@ class MockAudioCapturerSource : public media::AudioCapturerSource {
   ~MockAudioCapturerSource() override {}
 };
 
-// Tests in web-platform-tests use absolute path links such as
+// Tests in csswg-test use absolute path links such as
 //   <script src="/resources/testharness.js">.
 // Because we load the tests as local files, such links don't work.
 // This function fixes this issue by rewriting file: URLs which were produced
-// from such links so that they point actual files in wpt/.
-WebURL RewriteAbsolutePathInWPT(const std::string& utf8_url) {
+// from such links so that they point actual files in LayoutTests/resources/.
+//
+// Note that this isn't applied to external/wpt because tests in external/wpt
+// are accessed via http.
+WebURL RewriteAbsolutePathInCsswgTest(const std::string& utf8_url) {
   const char kFileScheme[] = "file:///";
   const int kFileSchemeLen = arraysize(kFileScheme) - 1;
   if (utf8_url.compare(0, kFileSchemeLen, kFileScheme, kFileSchemeLen) != 0)
@@ -242,7 +245,7 @@ WebURL RewriteAbsolutePathInWPT(const std::string& utf8_url) {
   base::FilePath new_path =
       LayoutTestRenderThreadObserver::GetInstance()
           ->webkit_source_dir()
-          .Append(FILE_PATH_LITERAL("LayoutTests/external/wpt/"))
+          .Append(FILE_PATH_LITERAL("LayoutTests/"))
           .AppendASCII(path);
   return WebURL(net::FilePathToFileURL(new_path));
 }
@@ -329,11 +332,11 @@ WebString BlinkTestRunner::GetAbsoluteWebStringFromUTF8Path(
   base::FilePath path = base::FilePath::FromUTF8Unsafe(utf8_path);
   if (!path.IsAbsolute()) {
     GURL base_url =
-        net::FilePathToFileURL(test_config_.current_working_directory.Append(
+        net::FilePathToFileURL(test_config_->current_working_directory.Append(
             FILE_PATH_LITERAL("foo")));
     net::FileURLToFilePath(base_url.Resolve(utf8_path), &path);
   }
-  return path.AsUTF16Unsafe();
+  return blink::FilePathToWebString(path);
 }
 
 WebURL BlinkTestRunner::LocalFileToDataURL(const WebURL& file_url) {
@@ -355,7 +358,7 @@ WebURL BlinkTestRunner::LocalFileToDataURL(const WebURL& file_url) {
 WebURL BlinkTestRunner::RewriteLayoutTestsURL(const std::string& utf8_url,
                                               bool is_wpt_mode) {
   if (is_wpt_mode) {
-    WebURL rewritten_url = RewriteAbsolutePathInWPT(utf8_url);
+    WebURL rewritten_url = RewriteAbsolutePathInCsswgTest(utf8_url);
     if (!rewritten_url.isEmpty())
       return rewritten_url;
     return WebURL(GURL(utf8_url));
@@ -370,12 +373,7 @@ WebURL BlinkTestRunner::RewriteLayoutTestsURL(const std::string& utf8_url,
   base::FilePath replace_path =
       LayoutTestRenderThreadObserver::GetInstance()->webkit_source_dir()
           .Append(FILE_PATH_LITERAL("LayoutTests/"));
-#if defined(OS_WIN)
-  std::string utf8_path = base::WideToUTF8(replace_path.value());
-#else
-  std::string utf8_path =
-      base::WideToUTF8(base::SysNativeMBToWide(replace_path.value()));
-#endif
+  std::string utf8_path = replace_path.AsUTF8Unsafe();
   std::string new_url =
       std::string("file://") + utf8_path + utf8_url.substr(kPrefixLen);
   return WebURL(GURL(new_url));
@@ -565,7 +563,7 @@ std::string BlinkTestRunner::PathToLocalResource(const std::string& resource) {
 #if defined(OS_WIN)
   if (base::StartsWith(resource, "/tmp/", base::CompareCase::SENSITIVE)) {
     // We want a temp file.
-    GURL base_url = net::FilePathToFileURL(test_config_.temp_path);
+    GURL base_url = net::FilePathToFileURL(test_config_->temp_path);
     return base_url.Resolve(resource.substr(sizeof("/tmp/") - 1)).spec();
   }
 #endif
@@ -645,7 +643,7 @@ void BlinkTestRunner::LoadURLForFrame(const WebURL& url,
 }
 
 bool BlinkTestRunner::AllowExternalPages() {
-  return test_config_.allow_external_pages;
+  return test_config_->allow_external_pages;
 }
 
 std::string BlinkTestRunner::DumpHistoryForWindow(blink::WebView* web_view) {
@@ -747,6 +745,11 @@ void BlinkTestRunner::RunIdleTasks(const base::Closure& callback) {
 
 void BlinkTestRunner::ForceTextInputStateUpdate(WebFrame* frame) {
   ForceTextInputStateUpdateForRenderFrame(RenderFrame::FromWebFrame(frame));
+}
+
+bool BlinkTestRunner::IsNavigationInitiatedByRenderer(
+    const WebURLRequest& request) {
+  return content::IsNavigationInitiatedByRenderer(request);
 }
 
 bool BlinkTestRunner::AddMediaStreamVideoSourceAndTrack(
@@ -893,7 +896,7 @@ void BlinkTestRunner::OnLayoutDumpCompleted(std::string completed_layout_dump) {
 void BlinkTestRunner::CaptureDumpContinued() {
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
-  if (test_config_.enable_pixel_dumping &&
+  if (test_config_->enable_pixel_dumping &&
       interfaces->TestRunner()->ShouldGeneratePixelResults() &&
       !interfaces->TestRunner()->ShouldDumpAsAudio()) {
     CHECK(render_view()->GetWebView()->isAcceleratedCompositingActive());
@@ -920,7 +923,7 @@ void BlinkTestRunner::OnPixelsDumpCompleted(const SkBitmap& snapshot) {
   base::MD5Sum(snapshot.getPixels(), snapshot.getSize(), &digest);
   std::string actual_pixel_hash = base::MD5DigestToBase16(digest);
 
-  if (actual_pixel_hash == test_config_.expected_pixel_hash) {
+  if (actual_pixel_hash == test_config_->expected_pixel_hash) {
     SkBitmap empty_image;
     Send(new ShellViewHostMsg_ImageDump(
         routing_id(), actual_pixel_hash, empty_image));
@@ -958,27 +961,28 @@ void BlinkTestRunner::OnSetupSecondaryRenderer() {
 }
 
 void BlinkTestRunner::OnReplicateTestConfiguration(
-    const ShellTestConfiguration& params) {
+    mojom::ShellTestConfigurationPtr params) {
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
 
-  test_config_ = params;
+  test_config_ = params.Clone();
 
   is_main_window_ = true;
   interfaces->SetMainView(render_view()->GetWebView());
 
   interfaces->SetTestIsRunning(true);
-  interfaces->ConfigureForTestWithURL(params.test_url,
-                                      params.enable_pixel_dumping);
+  interfaces->ConfigureForTestWithURL(params->test_url,
+                                      params->enable_pixel_dumping);
 }
 
 void BlinkTestRunner::OnSetTestConfiguration(
-    const ShellTestConfiguration& params) {
-  OnReplicateTestConfiguration(params);
+    mojom::ShellTestConfigurationPtr params) {
+  mojom::ShellTestConfigurationPtr local_params = params.Clone();
+  OnReplicateTestConfiguration(std::move(params));
 
-  ForceResizeRenderView(
-      render_view(),
-      WebSize(params.initial_size.width(), params.initial_size.height()));
+  ForceResizeRenderView(render_view(),
+                        WebSize(local_params->initial_size.width(),
+                                local_params->initial_size.height()));
   LayoutTestRenderThreadObserver::GetInstance()
       ->test_interfaces()
       ->TestRunner()

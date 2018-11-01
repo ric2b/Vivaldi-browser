@@ -168,10 +168,6 @@ class CORE_EXPORT VisualViewport final
   void setScrollOffset(const ScrollOffset&,
                        ScrollType,
                        ScrollBehavior = ScrollBehaviorInstant) override;
-  LayoutRect visualRectForScrollbarParts() const override {
-    ASSERT_NOT_REACHED();
-    return LayoutRect();
-  }
   bool isActive() const override { return false; }
   int scrollSize(ScrollbarOrientation) const override;
   bool isScrollCornerVisible() const override { return false; }
@@ -195,11 +191,12 @@ class CORE_EXPORT VisualViewport final
   GraphicsLayer* layerForScrolling() const override;
   GraphicsLayer* layerForHorizontalScrollbar() const override;
   GraphicsLayer* layerForVerticalScrollbar() const override;
-  Widget* getWidget() override;
+  FrameViewBase* getWidget() override;
   CompositorAnimationHost* compositorAnimationHost() const override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
   IntRect visibleContentRect(
       IncludeScrollbarsInRect = ExcludeScrollbars) const override;
+  RefPtr<WebTaskRunner> getTimerTaskRunner() const final;
 
   // Visual Viewport API implementation.
   double scrollLeft();

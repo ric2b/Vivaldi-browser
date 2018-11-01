@@ -57,6 +57,7 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   bool IsIdle(int player_id) override;
   void ClearStaleFlag(int player_id) override;
   bool IsStale(int player_id) override;
+  void SetIsEffectivelyFullscreen(int player_id, bool is_fullscreen) override;
 
   // content::RenderFrameObserver overrides.
   void WasHidden() override;
@@ -82,6 +83,7 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   void OnMediaDelegatePlay(int player_id);
   void OnMediaDelegateSuspendAllMediaPlayers();
   void OnMediaDelegateVolumeMultiplierUpdate(int player_id, double multiplier);
+  void OnMediaDelegateBecamePersistentVideo(int player_id, bool value);
 
   // Schedules UpdateTask() to run soon.
   void ScheduleUpdateTask();

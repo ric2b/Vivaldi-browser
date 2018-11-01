@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_WEBSTORE_INLINE_INSTALLER_H_
 #define CHROME_BROWSER_EXTENSIONS_WEBSTORE_INLINE_INSTALLER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -49,6 +50,7 @@ class WebstoreInlineInstaller : public WebstoreStandaloneInstaller,
   ~WebstoreInlineInstaller() override;
 
   // Implementations WebstoreStandaloneInstaller Template Method's hooks.
+  std::string GetJsonPostData() override;
   bool CheckRequestorAlive() const override;
   const GURL& GetRequestorURL() const override;
   bool ShouldShowPostInstallUI() const override;
@@ -63,9 +65,8 @@ class WebstoreInlineInstaller : public WebstoreStandaloneInstaller,
 
  private:
   // content::WebContentsObserver interface implementation.
-  void DidNavigateAnyFrame(content::RenderFrameHost* render_frame_host,
-                           const content::LoadCommittedDetails& details,
-                           const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void WebContentsDestroyed() override;
 
   // Checks whether the install is initiated by a page in a verified site

@@ -251,7 +251,8 @@
             {
                 "name": "navigate",
                 "parameters": [
-                    { "name": "url", "type": "string", "description": "URL to navigate the page to." }
+                    { "name": "url", "type": "string", "description": "URL to navigate the page to." },
+                    { "name": "referrer", "type": "string", "optional": true, "experimental": true, "description": "Referrer URL." }
                 ],
                 "returns": [
                     { "name": "frameId", "$ref": "FrameId", "experimental": true, "description": "Frame id that will be navigated." }
@@ -416,8 +417,20 @@
             {
                 "name": "captureScreenshot",
                 "description": "Capture page screenshot.",
+                "parameters": [
+                    { "name": "format", "type": "string", "optional": true, "enum": ["jpeg", "png"], "description": "Image compression format (defaults to png)." },
+                    { "name": "quality", "type": "integer", "optional": true, "description": "Compression quality from range [0..100] (jpeg only)." }
+                ],
                 "returns": [
-                    { "name": "data", "type": "string", "description": "Base64-encoded image data (PNG)." }
+                    { "name": "data", "type": "string", "description": "Base64-encoded image data." }
+                ],
+                "experimental": true
+            },
+            {
+                "name": "printToPDF",
+                "description": "Print page as pdf.",
+                "returns": [
+                    { "name": "data", "type": "string", "description": "Base64-encoded pdf data." }
                 ],
                 "experimental": true
             },
@@ -507,7 +520,8 @@
                 "experimental": true,
                 "returns": [
                     { "name": "layoutViewport", "$ref": "LayoutViewport", "description": "Metrics relating to the layout viewport." },
-                    { "name": "visualViewport", "$ref": "VisualViewport", "description": "Metrics relating to the visual viewport." }
+                    { "name": "visualViewport", "$ref": "VisualViewport", "description": "Metrics relating to the visual viewport." },
+                    { "name": "contentSize", "$ref": "DOM.Rect", "description": "Size of scrollable area."}
                 ]
             }
         ],
@@ -689,6 +703,7 @@
     {
         "domain": "Emulation",
         "description": "This domain emulates different environments for the page.",
+        "dependencies": ["DOM"],
         "types": [
             {
                 "id": "ScreenOrientation",
@@ -832,6 +847,14 @@
                 "parameters": [
                     { "name": "policy", "$ref": "VirtualTimePolicy" },
                     { "name": "budget", "type": "integer", "optional": true, "description": "If set, after this many virtual milliseconds have elapsed virtual time will be paused and a virtualTimeBudgetExpired event is sent." }
+                ],
+                "experimental": true
+            },
+            {
+                "name": "setDefaultBackgroundColorOverride",
+                "description": "Sets or clears an override of the default background color of the frame. This override is used if the content does not specify one.",
+                "parameters": [
+                    { "name": "color", "$ref": "DOM.RGBA", "optional": true, "description": "RGBA of the default background color. If not specified, any existing override will be cleared." }
                 ],
                 "experimental": true
             }
@@ -1110,7 +1133,7 @@
                 "type": "object",
                 "description": "Information about the request initiator.",
                 "properties": [
-                    { "name": "type", "type": "string", "enum": ["parser", "script", "other"], "description": "Type of this initiator." },
+                    { "name": "type", "type": "string", "enum": ["parser", "script", "preload", "other"], "description": "Type of this initiator." },
                     { "name": "stack", "$ref": "Runtime.StackTrace", "optional": true, "description": "Initiator JavaScript stack trace, set for Script only." },
                     { "name": "url", "type": "string", "optional": true, "description": "Initiator URL, set for Parser type only." },
                     { "name": "lineNumber", "type": "number", "optional": true, "description": "Initiator line number, set for Parser type only (0-based)." }
@@ -1229,6 +1252,9 @@
             },
             {
                 "name": "getCookies",
+                "parameters": [
+                    { "name": "urls", "type": "array", "items": { "type": "string" }, "optional": true, "description": "The list of URLs for which applicable cookies will be fetched" }
+                ],
                 "returns": [
                     { "name": "cookies", "type": "array", "items": { "$ref": "Cookie" }, "description": "Array of cookie objects." }
                 ],
@@ -1697,6 +1723,16 @@
                 "returns": [
                 ],
                 "description": "Clears all entries from an object store."
+            },
+            {
+                "name": "deleteDatabase",
+                "parameters": [
+                    { "name": "securityOrigin", "type": "string", "description": "Security origin." },
+                    { "name": "databaseName", "type": "string", "description": "Database name." }
+                ],
+                "returns": [
+                ],
+                "description": "Deletes a database."
             }
         ]
     },
@@ -1801,6 +1837,12 @@
             {
                 "name": "disable",
                 "description": "Disables storage tracking, prevents storage events from being sent to the client."
+            },
+            {
+                "name": "clear",
+                "parameters": [
+                    { "name": "storageId", "$ref": "StorageId" }
+                ]
             },
             {
                 "name": "getDOMStorageItems",
@@ -2007,6 +2049,7 @@
                 "type": "object",
                 "properties": [
                     { "name": "nodeId", "$ref": "NodeId", "description": "Node identifier that is passed into the rest of the DOM messages as the <code>nodeId</code>. Backend will only push node with given <code>id</code> once. It is aware of all requested nodes and will only fire DOM events for nodes known to the client." },
+                    { "name": "parentId", "$ref": "NodeId", "optional": true, "description": "The id of the parent node if any.", "experimental": true },
                     { "name": "backendNodeId", "$ref": "BackendNodeId", "description": "The BackendNodeId for this node.", "experimental": true },
                     { "name": "nodeType", "type": "integer", "description": "<code>Node</code>'s nodeType." },
                     { "name": "nodeName", "type": "string", "description": "<code>Node</code>'s nodeName." },
@@ -2141,6 +2184,17 @@
                 ],
                 "returns": [
                     { "name": "root", "$ref": "Node", "description": "Resulting node." }
+                ],
+                "description": "Returns the root DOM node (and optionally the subtree) to the caller."
+            },
+            {
+                "name": "getFlattenedDocument",
+                "parameters": [
+                    { "name": "depth", "type": "integer", "optional": true, "description": "The maximum depth at which children should be retrieved, defaults to 1. Use -1 for the entire subtree or provide an integer larger than 0.", "experimental": true },
+                    { "name": "pierce", "type": "boolean", "optional": true, "description": "Whether or not iframes and shadow roots should be traversed when returning the subtree (default is false).", "experimental": true }
+                ],
+                "returns": [
+                    { "name": "nodes", "type": "array", "items": { "$ref": "Node" }, "description": "Resulting node." }
                 ],
                 "description": "Returns the root DOM node (and optionally the subtree) to the caller."
             },
@@ -3219,7 +3273,7 @@
                     { "name": "columnNumber", "type": "integer", "description": "Column number in the script (0-based)." },
                     { "name": "handler", "$ref": "Runtime.RemoteObject", "optional": true, "description": "Event handler function value." },
                     { "name": "originalHandler", "$ref": "Runtime.RemoteObject", "optional": true, "description": "Event original handler function value." },
-                    { "name": "removeFunction", "$ref": "Runtime.RemoteObject", "optional": true, "description": "Event listener remove function." }
+                    { "name": "backendNodeId", "$ref": "DOM.BackendNodeId", "optional": true, "description": "Node the listener is added to (if any)." }
                 ],
                 "experimental": true
             }
@@ -3291,7 +3345,9 @@
                 "name": "getEventListeners",
                 "experimental": true,
                 "parameters": [
-                    { "name": "objectId", "$ref": "Runtime.RemoteObjectId", "description": "Identifier of the object to return listeners for." }
+                    { "name": "objectId", "$ref": "Runtime.RemoteObjectId", "description": "Identifier of the object to return listeners for." },
+                    { "name": "depth", "type": "integer", "optional": true, "description": "The maximum depth at which Node children should be retrieved, defaults to 1. Use -1 for the entire subtree or provide an integer larger than 0.", "experimental": true },
+                    { "name": "pierce", "type": "boolean", "optional": true, "description": "Whether or not iframes and shadow roots should be traversed when returning the subtree (default is false). Reports listeners for all contexts if pierce is enabled.", "experimental": true }
                 ],
                 "returns": [
                     { "name": "listeners", "type": "array", "items": { "$ref": "EventListener" }, "description": "Array of relevant listeners." }
@@ -4270,7 +4326,7 @@
             {
                 "id": "AXGlobalStates",
                 "type": "string",
-                "enum": [ "disabled", "hidden", "hiddenRoot", "invalid" ],
+                "enum": [ "disabled", "hidden", "hiddenRoot", "invalid", "keyshortcuts", "roledescription" ],
                 "description": "States which apply to every AX node."
             },
             {
@@ -4288,13 +4344,13 @@
             {
                 "id": "AXWidgetStates",
                 "type": "string",
-                "enum": [ "checked", "expanded", "pressed", "selected" ],
+                "enum": [ "checked", "expanded", "modal", "pressed", "selected" ],
                 "description": "States which apply to widgets."
             },
             {
                 "id": "AXRelationshipAttributes",
                 "type": "string",
-                "enum": [ "activedescendant", "flowto", "controls", "describedby", "labelledby", "owns" ],
+                "enum": [ "activedescendant", "controls", "describedby", "details", "errormessage", "flowto", "labelledby", "owns" ],
                 "description": "Relationships between elements other than parent/child/sibling."
             },
             {
@@ -4375,7 +4431,7 @@
                 "description": "Log entry.",
                 "properties": [
                     { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "storage", "appcache", "rendering", "security", "deprecation", "worker", "violation", "intervention", "other"], "description": "Log entry source." },
-                    { "name": "level", "type": "string", "enum": ["log", "warning", "error", "debug", "info"], "description": "Log entry severity." },
+                    { "name": "level", "type": "string", "enum": ["verbose", "info", "warning", "error"], "description": "Log entry severity." },
                     { "name": "text", "type": "string", "description": "Logged text." },
                     { "name": "timestamp", "$ref": "Runtime.Timestamp", "description": "Timestamp when this entry was added." },
                     { "name": "url", "type": "string", "optional": true, "description": "URL of the resource if known." },
@@ -4390,7 +4446,7 @@
                 "type": "object",
                 "description": "Violation configuration setting.",
                 "properties": [
-                    { "name": "name", "type": "string", "enum": ["longTask", "longLayout", "blockedEvent", "blockedParser", "handler", "recurringHandler"], "description": "Violation type." },
+                    { "name": "name", "type": "string", "enum": ["longTask", "longLayout", "blockedEvent", "blockedParser", "discouragedAPIUse", "handler", "recurringHandler"], "description": "Violation type." },
                     { "name": "threshold", "type": "number", "description": "Time threshold to trigger upon." }
                 ]
             }

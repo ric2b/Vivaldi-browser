@@ -156,7 +156,7 @@ public class VideoFullscreenOrientationLockTest extends ContentShellTestBase {
         DOMUtils.waitForMediaPlay(getWebContents(), VIDEO_ID);
 
         // Trigger requestFullscreen() via a click on a button.
-        assertTrue(DOMUtils.clickNode(this, getContentViewCore(), "fullscreen"));
+        assertTrue(DOMUtils.clickNode(getContentViewCore(), "fullscreen"));
         waitForContentsFullscreenState(true);
 
         // Should be locked to landscape now, `waitUntilLockedToLandscape` will throw otherwise.

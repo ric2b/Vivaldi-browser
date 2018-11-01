@@ -119,7 +119,7 @@ class APIPermission {
     kFirstRunPrivate,
     kFontSettings,
     kFullscreen,
-    kGcdPrivate,
+    kDeleted_GcdPrivate,
     kGcm,
     kGeolocation,
     kHid,
@@ -149,7 +149,7 @@ class APIPermission {
     kNativeMessaging,
     kNetworkingConfig,
     kNetworkingPrivate,
-    kNotificationProvider,
+    kDeleted_NotificationProvider,
     kNotifications,
     kOverrideEscFullscreen,
     kPageCapture,
@@ -243,6 +243,7 @@ class APIPermission {
     kDisplaySource,
     kClipboard,
     kNetworkingOnc,
+    kVirtualKeyboard,
 
     // vivaldi permissions
 

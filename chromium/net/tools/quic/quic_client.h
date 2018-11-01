@@ -14,10 +14,10 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "net/quic/core/quic_client_push_promise_index.h"
 #include "net/quic/core/quic_config.h"
 #include "net/quic/core/quic_spdy_stream.h"
+#include "net/quic/platform/api/quic_containers.h"
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client_base.h"
 #include "net/tools/quic/quic_client_session.h"
@@ -90,12 +90,12 @@ class QuicClient : public QuicClientBase,
 
   EpollServer* epoll_server() { return epoll_server_; }
 
-  const linked_hash_map<int, QuicSocketAddress>& fd_address_map() const {
+  const QuicLinkedHashMap<int, QuicSocketAddress>& fd_address_map() const {
     return fd_address_map_;
   }
 
  private:
-  friend class net::test::QuicClientPeer;
+  friend class test::QuicClientPeer;
 
   // Actually clean up |fd|.
   void CleanUpUDPSocketImpl(int fd);
@@ -105,7 +105,7 @@ class QuicClient : public QuicClientBase,
 
   // Map mapping created UDP sockets to their addresses. By using linked hash
   // map, the order of socket creation can be recorded.
-  linked_hash_map<int, QuicSocketAddress> fd_address_map_;
+  QuicLinkedHashMap<int, QuicSocketAddress> fd_address_map_;
 
   // If overflow_supported_ is true, this will be the number of packets dropped
   // during the lifetime of the server.

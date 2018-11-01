@@ -130,13 +130,12 @@ class SchedulerSequencedTaskRunner : public SequencedTaskRunner {
 };
 
 // Only used in DCHECKs.
-bool ContainsWorker(
-    const std::vector<std::unique_ptr<SchedulerWorker>>& workers,
-    const SchedulerWorker* worker) {
+bool ContainsWorker(const std::vector<scoped_refptr<SchedulerWorker>>& workers,
+                    const SchedulerWorker* worker) {
   auto it = std::find_if(workers.begin(), workers.end(),
-      [worker](const std::unique_ptr<SchedulerWorker>& i) {
-        return i.get() == worker;
-      });
+                         [worker](const scoped_refptr<SchedulerWorker>& i) {
+                           return i.get() == worker;
+                         });
   return it != workers.end();
 }
 
@@ -349,8 +348,15 @@ bool SchedulerWorkerPoolImpl::PostTaskWithSequence(
   if (task->delayed_run_time.is_null()) {
     PostTaskWithSequenceNow(std::move(task), std::move(sequence), worker);
   } else {
-    delayed_task_manager_->AddDelayedTask(std::move(task), std::move(sequence),
-                                          worker, this);
+    delayed_task_manager_->AddDelayedTask(
+        std::move(task),
+        Bind(
+            [](scoped_refptr<Sequence> sequence, SchedulerWorker* worker,
+               SchedulerWorkerPool* worker_pool, std::unique_ptr<Task> task) {
+              worker_pool->PostTaskWithSequenceNow(std::move(task),
+                                                   std::move(sequence), worker);
+            },
+            std::move(sequence), Unretained(worker), Unretained(this)));
   }
 
   return true;
@@ -401,6 +407,10 @@ void SchedulerWorkerPoolImpl::GetHistograms(
     std::vector<const HistogramBase*>* histograms) const {
   histograms->push_back(detach_duration_histogram_);
   histograms->push_back(num_tasks_between_waits_histogram_);
+}
+
+int SchedulerWorkerPoolImpl::GetMaxConcurrentTasksDeprecated() const {
+  return workers_.size();
 }
 
 void SchedulerWorkerPoolImpl::WaitForAllWorkersIdleForTesting() {
@@ -686,7 +696,7 @@ bool SchedulerWorkerPoolImpl::Initialize(
         (index == 0 && !is_standby_lazy)
             ? SchedulerWorker::InitialState::ALIVE
             : SchedulerWorker::InitialState::DETACHED;
-    std::unique_ptr<SchedulerWorker> worker = SchedulerWorker::Create(
+    scoped_refptr<SchedulerWorker> worker = SchedulerWorker::Create(
         params.priority_hint(),
         MakeUnique<SchedulerWorkerDelegateImpl>(
             this, re_enqueue_sequence_callback, &shared_priority_queue_, index),

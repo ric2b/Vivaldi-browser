@@ -163,17 +163,20 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(readystatechange);
 
-  // (Also) eagerly finalized so as to prevent access to the eagerly finalized
-  // progress event throttle.
-  EAGERLY_FINALIZE();
   DECLARE_VIRTUAL_TRACE();
   DECLARE_TRACE_WRAPPERS();
 
  private:
   class BlobLoader;
-  XMLHttpRequest(ExecutionContext*, PassRefPtr<SecurityOrigin>);
+  XMLHttpRequest(ExecutionContext*,
+                 bool isIsolatedWorld,
+                 PassRefPtr<SecurityOrigin>);
 
   Document* document() const;
+
+  // Returns the SecurityOrigin of the isolated world if the XMLHttpRequest was
+  // created in an isolated world. Otherwise, returns the SecurityOrigin of the
+  // execution context.
   SecurityOrigin* getSecurityOrigin() const;
 
   void didSendData(unsigned long long bytesSent,
@@ -317,6 +320,10 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   // An enum corresponding to the allowed string values for the responseType
   // attribute.
   ResponseTypeCode m_responseTypeCode;
+
+  // Set to true if the XMLHttpRequest was created in an isolated world.
+  bool m_isIsolatedWorld;
+  // Stores the SecurityOrigin associated with the isolated world if any.
   RefPtr<SecurityOrigin> m_isolatedWorldSecurityOrigin;
 
   // This blob loader will be used if |m_downloadingToFile| is true and
@@ -342,6 +349,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   bool m_downloadingToFile;
   bool m_responseTextOverflow;
   bool m_sendFlag;
+  bool m_responseArrayBufferFailure;
 };
 
 std::ostream& operator<<(std::ostream&, const XMLHttpRequest*);

@@ -39,7 +39,7 @@ static NSString* gSearchTerm;
 }
 
 @interface FindInPageController () <DOMAltering, CRWWebStateObserver>
-// The find in page controller delegate.
+// The find in page controller delegate.  Can be nil.
 @property(nonatomic, readonly) id<FindInPageControllerDelegate> delegate;
 
 // The web view's scroll view.
@@ -73,10 +73,9 @@ static NSString* gSearchTerm;
 @end
 
 @implementation FindInPageController {
- @private
   // Object that manages find_in_page.js injection into the web view.
-  __unsafe_unretained JsFindinpageManager* _findInPageJsManager;
-  __unsafe_unretained id<FindInPageControllerDelegate> _delegate;
+  __weak JsFindinpageManager* _findInPageJsManager;
+  __weak id<FindInPageControllerDelegate> _delegate;
 
   // Access to the web view from the web state.
   id<CRWWebViewProxy> _webViewProxy;
@@ -90,6 +89,7 @@ static NSString* gSearchTerm;
 }
 
 @synthesize delegate = _delegate;
+@synthesize findInPageModel = _findInPageModel;
 
 + (void)setSearchTerm:(NSString*)string {
   gSearchTerm = [string copy];
@@ -103,10 +103,11 @@ static NSString* gSearchTerm;
               delegate:(id<FindInPageControllerDelegate>)delegate {
   self = [super init];
   if (self) {
-    DCHECK(delegate);
+    _findInPageModel = [[FindInPageModel alloc] init];
     _findInPageJsManager = base::mac::ObjCCastStrict<JsFindinpageManager>(
         [webState->GetJSInjectionReceiver()
             instanceOfClass:[JsFindinpageManager class]]);
+    _findInPageJsManager.findInPageModel = _findInPageModel;
     _delegate = delegate;
     _webStateObserverBridge.reset(
         new web::WebStateObserverBridge(webState, self));
@@ -128,10 +129,6 @@ static NSString* gSearchTerm;
 
 - (void)dealloc {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
-- (FindInPageModel*)findInPageModel {
-  return [_findInPageJsManager findInPageModel];
 }
 
 - (BOOL)canFindInPage {

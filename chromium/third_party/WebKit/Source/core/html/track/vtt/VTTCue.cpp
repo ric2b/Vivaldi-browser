@@ -44,7 +44,7 @@
 #include "core/html/track/TextTrackCueList.h"
 #include "core/html/track/vtt/VTTElement.h"
 #include "core/html/track/vtt/VTTParser.h"
-#include "core/html/track/vtt/VTTRegionList.h"
+#include "core/html/track/vtt/VTTRegion.h"
 #include "core/html/track/vtt/VTTScanner.h"
 #include "core/layout/LayoutVTTCue.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -79,9 +79,9 @@ static const String& startKeyword() {
   return start;
 }
 
-static const String& middleKeyword() {
-  DEFINE_STATIC_LOCAL(const String, middle, ("middle"));
-  return middle;
+static const String& centerKeyword() {
+  DEFINE_STATIC_LOCAL(const String, center, ("center"));
+  return center;
 }
 
 static const String& endKeyword() {
@@ -100,7 +100,7 @@ static const String& rightKeyword() {
 }
 
 static const String& horizontalKeyword() {
-  return emptyString();
+  return emptyString;
 }
 
 static const String& verticalGrowingLeftKeyword() {
@@ -223,7 +223,7 @@ LayoutObject* VTTCueBox::createLayoutObject(const ComputedStyle& style) {
   // longer necessary, since cues having the region parameter set do not have
   // any positioning parameters. Also, in this case, the regions themselves
   // have positioning information.
-  if (style.position() == RelativePosition)
+  if (style.position() == EPosition::kRelative)
     return HTMLDivElement::createLayoutObject(style);
 
   return new LayoutVTTCue(this, m_snapToLinesPosition);
@@ -239,7 +239,7 @@ VTTCue::VTTCue(Document& document,
       m_textPosition(std::numeric_limits<float>::quiet_NaN()),
       m_cueSize(100),
       m_writingDirection(Horizontal),
-      m_cueAlignment(Middle),
+      m_cueAlignment(Center),
       m_vttNodeTree(nullptr),
       m_cueBackgroundBox(HTMLDivElement::create(document)),
       m_snapToLines(true),
@@ -273,7 +273,7 @@ const String& VTTCue::vertical() const {
       return verticalGrowingRightKeyword();
     default:
       NOTREACHED();
-      return emptyString();
+      return emptyString;
   }
 }
 
@@ -396,8 +396,8 @@ const String& VTTCue::align() const {
   switch (m_cueAlignment) {
     case Start:
       return startKeyword();
-    case Middle:
-      return middleKeyword();
+    case Center:
+      return centerKeyword();
     case End:
       return endKeyword();
     case Left:
@@ -406,7 +406,7 @@ const String& VTTCue::align() const {
       return rightKeyword();
     default:
       NOTREACHED();
-      return emptyString();
+      return emptyString;
   }
 }
 
@@ -414,8 +414,8 @@ void VTTCue::setAlign(const String& value) {
   CueAlignment alignment = m_cueAlignment;
   if (value == startKeyword())
     alignment = Start;
-  else if (value == middleKeyword())
-    alignment = Middle;
+  else if (value == centerKeyword())
+    alignment = Center;
   else if (value == endKeyword())
     alignment = End;
   else if (value == leftKeyword())
@@ -472,12 +472,11 @@ DocumentFragment* VTTCue::getCueAsHTML() {
   return clonedFragment;
 }
 
-void VTTCue::setRegionId(const String& regionId) {
-  if (m_regionId == regionId)
+void VTTCue::setRegion(VTTRegion* region) {
+  if (m_region == region)
     return;
-
   cueWillChange();
-  m_regionId = regionId;
+  m_region = region;
   cueDidChange();
 }
 
@@ -600,8 +599,8 @@ float VTTCue::calculateComputedTextPosition() const {
     case End:
     case Right:
       return 100;
-    // 4. If the cue text alignment is middle, return 50 and abort these steps.
-    case Middle:
+    // 4. If the cue text alignment is center, return 50 and abort these steps.
+    case Center:
       return 50;
     default:
       NOTREACHED();
@@ -648,7 +647,7 @@ VTTDisplayParameters VTTCue::calculateDisplayParameters() const {
   // vertical growing right; let block-flow be 'rl'.
   displayParameters.writingMode = displayWritingModeMap[m_writingDirection];
 
-  // Resolve the cue alignment to one of the values {start, end, middle}.
+  // Resolve the cue alignment to one of the values {start, end, center}.
   CueAlignment computedCueAlignment = calculateComputedCueAlignment();
 
   // 4. Determine the value of maximum size for cue as per the appropriate
@@ -659,7 +658,7 @@ VTTDisplayParameters VTTCue::calculateDisplayParameters() const {
     maximumSize = 100 - computedTextPosition;
   } else if (computedCueAlignment == End) {
     maximumSize = computedTextPosition;
-  } else if (computedCueAlignment == Middle) {
+  } else if (computedCueAlignment == Center) {
     maximumSize = computedTextPosition <= 50 ? computedTextPosition
                                              : (100 - computedTextPosition);
     maximumSize = maximumSize * 2;
@@ -688,7 +687,7 @@ VTTDisplayParameters VTTCue::calculateDisplayParameters() const {
         displayParameters.position.setX(computedTextPosition -
                                         displayParameters.size);
         break;
-      case Middle:
+      case Center:
         displayParameters.position.setX(computedTextPosition -
                                         displayParameters.size / 2);
         break;
@@ -705,7 +704,7 @@ VTTDisplayParameters VTTCue::calculateDisplayParameters() const {
         displayParameters.position.setY(computedTextPosition -
                                         displayParameters.size);
         break;
-      case Middle:
+      case Center:
         displayParameters.position.setY(computedTextPosition -
                                         displayParameters.size / 2);
         break;
@@ -812,10 +811,7 @@ VTTCueBox* VTTCue::getDisplayTree() {
   m_cueBackgroundBox->removeChildren();
   m_vttNodeTree->cloneChildNodes(m_cueBackgroundBox.get());
 
-  // TODO(foolip): The region identifier may be non-empty without there being
-  // a corresponding region, in which case this VTTCueBox will be added
-  // directly to the text track container in updateDisplay().
-  if (regionId().isEmpty()) {
+  if (!region()) {
     VTTDisplayParameters displayParameters = calculateDisplayParameters();
     m_displayTree->applyCSSProperties(displayParameters);
   } else {
@@ -832,11 +828,9 @@ VTTCueBox* VTTCue::getDisplayTree() {
 }
 
 void VTTCue::removeDisplayTree(RemovalNotification removalNotification) {
-  if (removalNotification == NotifyRegion && track()->regions()) {
+  if (region() && removalNotification == NotifyRegion) {
     // The region needs to be informed about the cue removal.
-    VTTRegion* region = track()->regions()->getRegionById(m_regionId);
-    if (region)
-      region->willRemoveVTTCueBox(m_displayTree.get());
+    region()->willRemoveVTTCueBox(m_displayTree);
   }
 
   if (m_displayTree)
@@ -863,33 +857,24 @@ void VTTCue::updateDisplay(HTMLDivElement& container) {
   if (m_cueSize != 100)
     UseCounter::count(document(), UseCounter::VTTCueRenderSizeNot100);
 
-  if (m_cueAlignment != Middle)
-    UseCounter::count(document(), UseCounter::VTTCueRenderAlignNotMiddle);
+  if (m_cueAlignment != Center)
+    UseCounter::count(document(), UseCounter::VTTCueRenderAlignNotCenter);
 
   VTTCueBox* displayBox = getDisplayTree();
-  VTTRegion* region = 0;
-  if (track()->regions())
-    region = track()->regions()->getRegionById(regionId());
-
-  if (!region) {
-    // If cue has an empty region identifier or there is no WebVTT region
-    // whose region identifier is identical to cue's region identifier, run
-    // the following substeps:
+  if (!region()) {
     if (displayBox->hasChildren() && !container.contains(displayBox)) {
       // Note: the display tree of a cue is removed when the active flag of the
       // cue is unset.
       container.appendChild(displayBox);
     }
   } else {
-    // Let region be the WebVTT region whose region identifier matches the
-    // region identifier of cue.
-    HTMLDivElement* regionNode = region->getDisplayTree(document());
+    HTMLDivElement* regionNode = region()->getDisplayTree(document());
 
     // Append the region to the viewport, if it was not already.
     if (!container.contains(regionNode))
       container.appendChild(regionNode);
 
-    region->appendVTTCueBox(displayBox);
+    region()->appendVTTCueBox(displayBox);
   }
 }
 
@@ -934,7 +919,8 @@ static bool scanPercentage(VTTScanner& input, float& number) {
   return input.scanPercentage(number) && !isInvalidPercentage(number);
 }
 
-void VTTCue::parseSettings(const String& inputString) {
+void VTTCue::parseSettings(const VTTRegionMap* regionMap,
+                           const String& inputString) {
   VTTScanner input(inputString);
 
   while (!input.isAtEnd()) {
@@ -1064,10 +1050,10 @@ void VTTCue::parseSettings(const String& inputString) {
         if (input.scanRun(valueRun, startKeyword()))
           m_cueAlignment = Start;
 
-        // 2. If value is a case-sensitive match for the string "middle",
-        //    then let cue's WebVTT cue text alignment be middle alignment.
-        else if (input.scanRun(valueRun, middleKeyword()))
-          m_cueAlignment = Middle;
+        // 2. If value is a case-sensitive match for the string "center",
+        //    then let cue's WebVTT cue text alignment be center alignment.
+        else if (input.scanRun(valueRun, centerKeyword()))
+          m_cueAlignment = Center;
 
         // 3. If value is a case-sensitive match for the string "end", then
         //    let cue's WebVTT cue text alignment be end alignment.
@@ -1086,7 +1072,8 @@ void VTTCue::parseSettings(const String& inputString) {
         break;
       }
       case RegionId:
-        m_regionId = input.extractString(valueRun);
+        if (regionMap)
+          m_region = regionMap->at(input.extractString(valueRun));
         break;
       case None:
         break;
@@ -1095,15 +1082,6 @@ void VTTCue::parseSettings(const String& inputString) {
     // Make sure the entire run is consumed.
     input.skipRun(valueRun);
   }
-
-  // If cue's line position is not auto or cue's size is not 100 or cue's
-  // writing direction is not horizontal, but cue's region identifier is not
-  // the empty string, let cue's region identifier be the empty string.
-  if (m_regionId.isEmpty())
-    return;
-
-  if (!lineIsAuto() || m_cueSize != 100 || m_writingDirection != Horizontal)
-    m_regionId = emptyString();
 }
 
 void VTTCue::applyUserOverrideCSSProperties() {
@@ -1139,6 +1117,7 @@ Document& VTTCue::document() const {
 }
 
 DEFINE_TRACE(VTTCue) {
+  visitor->trace(m_region);
   visitor->trace(m_vttNodeTree);
   visitor->trace(m_cueBackgroundBox);
   visitor->trace(m_displayTree);

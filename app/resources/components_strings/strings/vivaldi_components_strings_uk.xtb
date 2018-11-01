@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Показати стару збережену копію цієї сторінки.</translation>
 <translation id="1559528461873125649">Такого файла або каталогу немає</translation>
 <translation id="1710259589646384581">ОС</translation>
-<translation id="1838667051080421715">Ви бачите джерело веб-сторінки.</translation>
 <translation id="194030505837763158">Перейдіть за адресою <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Можливо, ви мали на увазі <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Менше</translation>
 <translation id="2166378884831602661">Цей сайт не може забезпечити захищене з’єднання</translation>
 <translation id="2292556288342944218">Ваш доступ до Інтернету заблоковано</translation>
 <translation id="255002559098805027">Хост <ph name="HOST_NAME" /> надіслав недійсну відповідь.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">У доступі до файлу відмовлено</translation>
 <translation id="2705137772291741111">Не вдається прочитати збережену (кешовану) копію цього сайту.</translation>
 <translation id="2784949926578158345">З’єднання було скинуто.</translation>
-<translation id="284702764277384724">Схоже, сертифікат сервера на хості <ph name="HOST_NAME" /> підроблено.</translation>
 <translation id="2909946352844186028">Виявлено зміну в мережі.</translation>
 <translation id="3005723025932146533">Показати збережену копію</translation>
 <translation id="3109728660330352905">У вас немає дозволу переглядати цю сторінку.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS – це мережева служба, яка перетворює назву веб-сайту на його інтернет-адресу.</translation>
 <translation id="4432688616882109544">Хост <ph name="HOST_NAME" /> не прийняв ваш сертифікат входу або ви не надали цей сертифікат.</translation>
 <translation id="4522570452068850558">Деталі</translation>
-<translation id="4670097147947922288">Ви переглядаєте сторінку розширень.</translation>
 <translation id="4708268264240856090">З’єднання розірвано</translation>
 <translation id="4744603770635761495">Виконуваний шлях</translation>
 <translation id="4764776831041365478">Веб-сторінка за адресою <ph name="URL" /> може бути тимчасово недоступною або її назавжди переміщено на нову веб-адресу.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">Сторінка не працює</translation>
 <translation id="5869405914158311789">Немає зв’язку із сайтом</translation>
 <translation id="5990559369517809815">Надсилання запитів на сервер заблоковано розширенням.</translation>
-<translation id="6042308850641462728">Більше</translation>
 <translation id="6146055958333702838">Перевірте всі кабелі та перезавантажте всі маршрутизатори, модеми чи інші мережеві
     пристрої, які ви використовуєте.</translation>
 <translation id="6165508094623778733">Докладніше</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">Спробуйте вимкнути прогнозування мережі.</translation>
 <translation id="6433595998831338502">Хост <ph name="HOST_NAME" /> відхилив запит на з’єднання.</translation>
 <translation id="6711464428925977395">Помилка проксі-сервера або неправильна адреса.</translation>
-<translation id="6830600606572693159">Веб-сторінка за адресою <ph name="URL" /> наразі недоступна. Можливо, вона перевантажена або перебуває на стадії технічного обслуговування.</translation>
 <translation id="6897140037006041989">Агент користувача</translation>
 <translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не відповідає стандартам безпеки.</translation>
-<translation id="7269802741830436641">Ця веб-сторінка має цикл перенаправлень</translation>
 <translation id="7353601530677266744">Командний рядок</translation>
 <translation id="7419106976560586862">Шлях до профілю</translation>
 <translation id="7518003948725431193">Не знайдено веб-сторінок для веб-адреси <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187">Хост <ph name="HOST_NAME" /> зараз не може обробити цей запит.</translation>
 <translation id="7716424297397655342">Не вдається завантажити цей сайт із кешу</translation>
 <translation id="7758069387465995638">Можливо, брандмауер або антивірусна програма заблокували з’єднання.</translation>
-<translation id="778579833039460630">Дані не отримано</translation>
 <translation id="7951415247503192394">(32-розрядна версія)</translation>
 <translation id="8134994873729925007">Не вдалося знайти <ph name="BEGIN_ABBR" />адресу DNS-сервера<ph name="END_ABBR" /> хосту <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Перейдіть на сторінку &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, щоб переглянути список URL-адрес із "чорного" списку й інші правила, що примусово застосовується системним адміністратором.</translation>

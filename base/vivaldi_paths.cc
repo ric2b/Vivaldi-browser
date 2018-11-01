@@ -12,18 +12,18 @@ using base::PathService;
 namespace vivaldi {
 
 bool PathProvider(int key, base::FilePath* result) {
-  switch(key) {
-  case DIR_VIVALDI_TEST_DATA:
-    if (!PathService::Get(base::DIR_SOURCE_ROOT, result))
+  switch (key) {
+    case DIR_VIVALDI_TEST_DATA:
+      if (!PathService::Get(base::DIR_SOURCE_ROOT, result))
+        return false;
+      *result = result->DirName();  // Src dir is in the vivaldi chromium folder
+      *result = result->Append(FILE_PATH_LITERAL("testdata"));
+      *result = result->Append(FILE_PATH_LITERAL("data"));
+      if (!PathExists(*result))  // We don't want to create this.
+        return false;
+      return true;
+    default:
       return false;
-    *result = result->DirName(); // Src dir is in the vivaldi chromium folder
-    *result = result->Append(FILE_PATH_LITERAL("testdata"));
-    *result = result->Append(FILE_PATH_LITERAL("data"));
-    if (!PathExists(*result))  // We don't want to create this.
-      return false;
-    return true;
-  default:
-    return false;
   }
 }
 
@@ -31,4 +31,4 @@ void RegisterVivaldiPaths() {
   PathService::RegisterProvider(PathProvider, PATH_START, PATH_END);
 }
 
-} //  namespace vivaldi
+}  //  namespace vivaldi

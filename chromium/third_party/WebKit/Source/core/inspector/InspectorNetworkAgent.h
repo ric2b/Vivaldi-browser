@@ -36,7 +36,6 @@
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/protocol/Network.h"
-#include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
@@ -153,17 +152,16 @@ class CORE_EXPORT InspectorNetworkAgent final
                                     const String& data);
   void didFinishEventSourceRequest(ThreadableLoaderClient*);
 
+  // Detach and remove all references to the given client.
+  void detachClientRequest(ThreadableLoaderClient*);
+
   void willDestroyResource(Resource*);
 
   void applyUserAgentOverride(String* userAgent);
-
-  // FIXME: InspectorNetworkAgent should not be aware of style recalculation.
-  void willRecalculateStyle(Document*);
-  void didRecalculateStyle();
-  void didScheduleStyleRecalculation(Document*);
-
   void frameScheduledNavigation(LocalFrame*, double);
   void frameClearedScheduledNavigation(LocalFrame*);
+  void frameScheduledClientNavigation(LocalFrame*);
+  void frameClearedScheduledClientNavigation(LocalFrame*);
 
   std::unique_ptr<protocol::Network::Initiator> buildInitiatorObject(
       Document*,
@@ -254,7 +252,6 @@ class CORE_EXPORT InspectorNetworkAgent final
   void clearPendingRequestData();
 
   Member<InspectedFrames> m_inspectedFrames;
-  String m_userAgentOverride;
   String m_hostId;
   Member<NetworkResourcesData> m_resourcesData;
 
@@ -273,14 +270,12 @@ class CORE_EXPORT InspectorNetworkAgent final
   typedef HashMap<String, std::unique_ptr<protocol::Network::Initiator>>
       FrameNavigationInitiatorMap;
   FrameNavigationInitiatorMap m_frameNavigationInitiatorMap;
-
-  // FIXME: InspectorNetworkAgent should now be aware of style recalculation.
-  std::unique_ptr<protocol::Network::Initiator> m_styleRecalculationInitiator;
-  bool m_isRecalculatingStyle;
+  HashSet<String> m_framesWithScheduledNavigation;
+  HashSet<String> m_framesWithScheduledClientNavigation;
 
   HeapHashSet<Member<XMLHttpRequest>> m_replayXHRs;
   HeapHashSet<Member<XMLHttpRequest>> m_replayXHRsToBeDeleted;
-  Timer<InspectorNetworkAgent> m_removeFinishedReplayXHRTimer;
+  TaskRunnerTimer<InspectorNetworkAgent> m_removeFinishedReplayXHRTimer;
 };
 
 }  // namespace blink

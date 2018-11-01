@@ -10,7 +10,8 @@
 #include "base/strings/string16.h"
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
-#include "ios/web/public/web_state/page_display_state.h"
+#import "ios/web/public/user_agent.h"
+#import "ios/web/public/web_state/page_display_state.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -37,6 +38,11 @@ class NavigationItem : public base::SupportsUserData {
   // creating a committed entry to correspond to a to-be-deleted pending entry,
   // the pending entry's ID must be copied).
   virtual int GetUniqueID() const = 0;
+
+  // The original URL for the navigation request.  This may differ from GetURL()
+  // if a redirect occurs after attempting to load this original URL.
+  virtual void SetOriginalRequestURL(const GURL& url) = 0;
+  virtual const GURL& GetOriginalRequestURL() const = 0;
 
   // The actual URL of the page. For some about pages, this may be a scary
   // data: URL or something like that. Use GetVirtualURL() below for showing to
@@ -103,10 +109,10 @@ class NavigationItem : public base::SupportsUserData {
   virtual void SetTimestamp(base::Time timestamp) = 0;
   virtual base::Time GetTimestamp() const = 0;
 
-  // |true| if this item uses a desktop user agent in HTTP requests and
-  // UIWebView.
-  virtual void SetIsOverridingUserAgent(bool is_overriding_user_agent) = 0;
-  virtual bool IsOverridingUserAgent() const = 0;
+  // The type of user agent requested for the navigation.
+  // TODO(crbug.com/697512): Create equivalent enum type for WebContents.
+  virtual void SetUserAgentType(UserAgentType type) = 0;
+  virtual UserAgentType GetUserAgentType() const = 0;
 
   // |true| if this item is the result of a POST request with data.
   virtual bool HasPostData() const = 0;

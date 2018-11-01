@@ -3,9 +3,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_BUILDER_H_
-#define VIVALDI_SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_BUILDER_H_
+#ifndef SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_BUILDER_H_
+#define SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_BUILDER_H_
 
+#include <memory>
 #include <string>
 
 #include "components/sync/base/model_type.h"
@@ -39,4 +40,4 @@ class NotesEntityBuilder {
 
 }  // namespace fake_server
 
-#endif  // VIVALDI_SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_BUILDER_H_
+#endif  // SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_BUILDER_H_

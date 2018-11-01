@@ -259,6 +259,7 @@ message SystemTimezoneProto {
     DISABLED = 1;
     IP_ONLY = 2;
     SEND_WIFI_ACCESS_POINTS = 3;
+    SEND_ALL_LOCATION_INFO = 4;
   };
 
   optional AutomaticTimezoneDetectionType timezone_detection_type = 2;
@@ -308,6 +309,12 @@ message AndroidKioskAppInfoProto {
   // If package and action are specified, but not the class name, runtime may
   // use PackageManager.queryIntentActivity() to find out the class name.
   optional string action = 3;
+
+  // Display name (optional).
+  // User-friendly app name that should be used in Chrome UI where kiosk app
+  // name is shown. Chrome side could override the string with an updated
+  // value that it will get from Google Play when the app will be installed.
+  optional string display_name = 4;
 }
 
 // Describes a single device-local account.
@@ -749,9 +756,21 @@ message NetworkThrottlingEnabledProto {
   optional int32 download_rate_kbits = 3 [default = 0];
 }
 
-// A list of app-ids to install from the webstore on the login page.
-message LoginAppsProto {
-  repeated string login_apps = 1;
+// A list of apps to install from the webstore on the login page. It is a list
+// of strings, each string contains an extension ID and an update URL, delimited
+// by a semicolon.
+message DeviceLoginScreenAppInstallListProto {
+  repeated string device_login_screen_app_install_list = 1;
+}
+
+// A list of allowed locales on the login screen.
+message LoginScreenLocalesProto {
+  repeated string login_screen_locales = 1;
+}
+
+// A list of allowed input methods on the login screen.
+message LoginScreenInputMethodsProto {
+  repeated string login_screen_input_methods = 1;
 }
 
 // The url and hash that specified in JSON format that can be used to set the
@@ -812,7 +831,10 @@ message ChromeDeviceSettingsProto {
   optional DeviceQuirksDownloadEnabledProto quirks_download_enabled = 44;
   optional LoginVideoCaptureAllowedUrlsProto login_video_capture_allowed_urls =
       45;
-  optional LoginAppsProto login_apps = 46;
+  optional DeviceLoginScreenAppInstallListProto
+      device_login_screen_app_install_list = 46;
   optional NetworkThrottlingEnabledProto network_throttling = 47;
   optional DeviceWallpaperImageProto device_wallpaper_image = 48;
+  optional LoginScreenLocalesProto login_screen_locales = 49;
+  optional LoginScreenInputMethodsProto login_screen_input_methods = 50;
 }

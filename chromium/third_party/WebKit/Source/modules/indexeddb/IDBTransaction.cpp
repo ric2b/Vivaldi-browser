@@ -108,7 +108,7 @@ IDBTransaction::IDBTransaction(ExecutionContext* executionContext,
                                int64_t id,
                                const HashSet<String>& scope,
                                IDBDatabase* db)
-    : ContextLifecycleObserver(executionContext),
+    : ContextClient(executionContext),
       m_id(id),
       m_database(db),
       m_mode(WebIDBTransactionModeReadOnly),
@@ -125,7 +125,7 @@ IDBTransaction::IDBTransaction(ScriptState* scriptState,
                                const HashSet<String>& scope,
                                WebIDBTransactionMode mode,
                                IDBDatabase* db)
-    : ContextLifecycleObserver(scriptState->getExecutionContext()),
+    : ContextClient(scriptState->getExecutionContext()),
       m_id(id),
       m_database(db),
       m_mode(mode),
@@ -149,7 +149,7 @@ IDBTransaction::IDBTransaction(ExecutionContext* executionContext,
                                IDBDatabase* db,
                                IDBOpenDBRequest* openDBRequest,
                                const IDBDatabaseMetadata& oldMetadata)
-    : ContextLifecycleObserver(executionContext),
+    : ContextClient(executionContext),
       m_id(id),
       m_database(db),
       m_openDBRequest(openDBRequest),
@@ -177,7 +177,7 @@ DEFINE_TRACE(IDBTransaction) {
   visitor->trace(m_oldStoreMetadata);
   visitor->trace(m_deletedIndexes);
   EventTargetWithInlineData::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 void IDBTransaction::setError(DOMException* error) {
@@ -218,7 +218,7 @@ IDBObjectStore* IDBTransaction::objectStore(const String& name,
 
   DCHECK(m_database->metadata().objectStores.contains(objectStoreId));
   RefPtr<IDBObjectStoreMetadata> objectStoreMetadata =
-      m_database->metadata().objectStores.get(objectStoreId);
+      m_database->metadata().objectStores.at(objectStoreId);
   DCHECK(objectStoreMetadata.get());
 
   IDBObjectStore* objectStore =
@@ -264,13 +264,13 @@ void IDBTransaction::objectStoreDeleted(const int64_t objectStoreId,
     // correct values from IDB{Database, Transaction}.objectStoreNames.
     DCHECK(m_database->metadata().objectStores.contains(objectStoreId));
     RefPtr<IDBObjectStoreMetadata> metadata =
-        m_database->metadata().objectStores.get(objectStoreId);
+        m_database->metadata().objectStores.at(objectStoreId);
     DCHECK(metadata.get());
     DCHECK_EQ(metadata->name, name);
     m_deletedObjectStores.push_back(std::move(metadata));
   } else {
     IDBObjectStore* objectStore = it->value;
-    m_objectStoreMap.remove(name);
+    m_objectStoreMap.erase(name);
     objectStore->markDeleted();
     if (objectStore->id() > m_oldDatabaseMetadata.maxObjectStoreId) {
       // The store was created and deleted in this transaction, so it will
@@ -371,7 +371,7 @@ void IDBTransaction::abort(ExceptionState& exceptionState) {
 void IDBTransaction::registerRequest(IDBRequest* request) {
   DCHECK(request);
   DCHECK_EQ(m_state, Active);
-  m_requestList.add(request);
+  m_requestList.insert(request);
 }
 
 void IDBTransaction::unregisterRequest(IDBRequest* request) {
@@ -479,7 +479,7 @@ const AtomicString& IDBTransaction::interfaceName() const {
 }
 
 ExecutionContext* IDBTransaction::getExecutionContext() const {
-  return ContextLifecycleObserver::getExecutionContext();
+  return ContextClient::getExecutionContext();
 }
 
 DispatchEventResult IDBTransaction::dispatchEventInternal(Event* event) {

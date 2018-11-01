@@ -195,6 +195,12 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   void FlushAndSignBootAttributes(
       const cryptohome::FlushAndSignBootAttributesRequest& request,
       const ProtobufMethodCallback& callback) override;
+  void RemoveFirmwareManagementParametersFromTpm(
+      const cryptohome::RemoveFirmwareManagementParametersRequest& request,
+      const ProtobufMethodCallback& callback) override;
+  void SetFirmwareManagementParametersInTpm(
+      const cryptohome::SetFirmwareManagementParametersRequest& request,
+      const ProtobufMethodCallback& callback) override;
 
   // Changes the behavior of WaitForServiceToBeAvailable(). This method runs
   // pending callbacks if is_available is true.

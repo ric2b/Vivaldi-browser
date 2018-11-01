@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">顯示這個網頁的儲存複本 (亦即現已不再使用的版本)。</translation>
 <translation id="1559528461873125649">找不到您所指定的檔案或目錄</translation>
 <translation id="1710259589646384581">作業系統</translation>
-<translation id="1838667051080421715">目前顯示的是網頁原始碼。</translation>
+<translation id="1728677426644403582">目前顯示的是網頁原始碼</translation>
 <translation id="194030505837763158">前往 <ph name="LINK" /></translation>
 <translation id="2030481566774242610">您要找的是 <ph name="LINK" /> 嗎？</translation>
-<translation id="2089090684895656482">摘要資訊</translation>
 <translation id="2166378884831602661">這個網站無法提供安全連線</translation>
 <translation id="2292556288342944218">您的網際網路存取權限遭到封鎖</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 傳送的回應無效。</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">存取檔案遭拒</translation>
 <translation id="2705137772291741111">已儲存 (快取) 這個網站的複本，但無法讀取。</translation>
 <translation id="2784949926578158345">連線已重設。</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" /> 疑似使用偽造的伺服器憑證。</translation>
 <translation id="2909946352844186028">系統偵測到網路變更。</translation>
 <translation id="3005723025932146533">顯示儲存的複本</translation>
 <translation id="3093245981617870298">您已離線。</translation>
@@ -35,7 +33,6 @@
 <translation id="4021036232240155012">DNS 服務會將網站的名稱轉譯成網址。</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> 不接受你的登入憑證，或是你可能未提供登入憑證。</translation>
 <translation id="4522570452068850558">詳細資訊</translation>
-<translation id="4670097147947922288">您正在瀏覽擴充功能頁面。</translation>
 <translation id="4708268264240856090">您的連線已中斷</translation>
 <translation id="4744603770635761495">可執行檔路徑</translation>
 <translation id="4764776831041365478"><ph name="URL" /> 的網頁可能暫時無法使用或被永久移至新網址。</translation>
@@ -52,7 +49,6 @@
 <translation id="5675650730144413517">這個網頁無法正常運作</translation>
 <translation id="5869405914158311789">無法訪問這個網站</translation>
 <translation id="5990559369517809815">擴充功能已封鎖要傳送至伺服器的要求。</translation>
-<translation id="6042308850641462728">詳細資訊</translation>
 <translation id="6146055958333702838">檢查您的網路線是否穩固連接。重新啟動您可能正在使用的任何路由器、數據機或其他網路裝置。</translation>
 <translation id="6165508094623778733">瞭解詳情</translation>
 <translation id="6203231073485539293">檢查網際網路連線</translation>
@@ -60,12 +56,11 @@
 <translation id="6321917430147971392">檢查 DNS 設定</translation>
 <translation id="6328639280570009161">建議停用網路預測功能</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
+<translation id="6569060085658103619">目前顯示的是擴充功能頁面</translation>
 <translation id="6711464428925977395">代理伺服器發生錯誤，或是網址不正確。</translation>
 <translation id="6757797048963528358">您的裝置已進入睡眠模式。</translation>
-<translation id="6830600606572693159">位於 <ph name="URL" /> 的網頁目前無法使用，可能因為超載或為了維護而關閉中。</translation>
 <translation id="6897140037006041989">使用者代理</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
-<translation id="7269802741830436641">這個網頁含有重新導向迴圈</translation>
 <translation id="7353601530677266744">命令列</translation>
 <translation id="7419106976560586862">設定檔路徑</translation>
 <translation id="7518003948725431193">找不到此網址的網頁：<ph name="URL" /></translation>
@@ -73,8 +68,8 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> 目前無法處理這項要求。</translation>
 <translation id="7716424297397655342">無法從快取載入這個網站</translation>
 <translation id="7758069387465995638">防火牆或防毒軟體可能封鎖了連線。</translation>
-<translation id="778579833039460630">沒有收到資料</translation>
 <translation id="7951415247503192394">(32 位元)</translation>
+<translation id="8089520772729574115">少於 1 MB</translation>
 <translation id="8134994873729925007">找不到 <ph name="HOST_NAME" /> 的伺服器 <ph name="BEGIN_ABBR" />DNS 位址<ph name="END_ABBR" />。</translation>
 <translation id="8142868475871995937">請前往 &lt;strong&gt;vivaldi://policy&lt;/strong&gt; 查看列入黑名單的網址清單，以及其他系統管理員強制執行的策略。</translation>
 <translation id="8149426793427495338">您的電腦已進入睡眠模式。</translation>

@@ -184,18 +184,27 @@ WebVector<WebString> WebHistoryItem::getReferencedFilePaths() const {
     for (size_t i = 0; i < formData->elements().size(); ++i) {
       const FormDataElement& element = formData->elements()[i];
       if (element.m_type == FormDataElement::encodedFile)
-        filePaths.add(element.m_filename);
+        filePaths.insert(element.m_filename);
     }
   }
 
   const Vector<String>& referencedFilePaths =
       m_private->getReferencedFilePaths();
   for (size_t i = 0; i < referencedFilePaths.size(); ++i)
-    filePaths.add(referencedFilePaths[i]);
+    filePaths.insert(referencedFilePaths[i]);
 
   Vector<String> results;
   copyToVector(filePaths, results);
   return results;
+}
+
+bool WebHistoryItem::didSaveScrollOrScaleState() const {
+  return m_private->didSaveScrollOrScaleState();
+}
+
+void WebHistoryItem::setDidSaveScrollOrScaleState(
+    bool hasSaveScrollOrScaleState) {
+  m_private->setDidSaveScrollOrScaleState(hasSaveScrollOrScaleState);
 }
 
 WebHistoryItem::WebHistoryItem(HistoryItem* item) : m_private(item) {}

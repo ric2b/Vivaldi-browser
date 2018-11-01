@@ -33,6 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/DocumentThreadableLoader.h"
+#include "core/loader/ThreadableLoadingContext.h"
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/workers/WorkerGlobalScope.h"
 
@@ -42,8 +43,7 @@ ThreadableLoader* ThreadableLoader::create(
     ExecutionContext& context,
     ThreadableLoaderClient* client,
     const ThreadableLoaderOptions& options,
-    const ResourceLoaderOptions& resourceLoaderOptions,
-    ClientSpec clientSpec) {
+    const ResourceLoaderOptions& resourceLoaderOptions) {
   DCHECK(client);
 
   if (context.isWorkerGlobalScope()) {
@@ -51,8 +51,9 @@ ThreadableLoader* ThreadableLoader::create(
                                           options, resourceLoaderOptions);
   }
 
-  return DocumentThreadableLoader::create(toDocument(context), client, options,
-                                          resourceLoaderOptions, clientSpec);
+  return DocumentThreadableLoader::create(
+      *ThreadableLoadingContext::create(*toDocument(&context)), client, options,
+      resourceLoaderOptions);
 }
 
 void ThreadableLoader::loadResourceSynchronously(
@@ -60,8 +61,7 @@ void ThreadableLoader::loadResourceSynchronously(
     const ResourceRequest& request,
     ThreadableLoaderClient& client,
     const ThreadableLoaderOptions& options,
-    const ResourceLoaderOptions& resourceLoaderOptions,
-    ClientSpec clientSpec) {
+    const ResourceLoaderOptions& resourceLoaderOptions) {
   if (context.isWorkerGlobalScope()) {
     WorkerThreadableLoader::loadResourceSynchronously(
         toWorkerGlobalScope(context), request, client, options,
@@ -70,8 +70,7 @@ void ThreadableLoader::loadResourceSynchronously(
   }
 
   DocumentThreadableLoader::loadResourceSynchronously(
-      toDocument(context), request, client, options, resourceLoaderOptions,
-      clientSpec);
+      toDocument(context), request, client, options, resourceLoaderOptions);
 }
 
 }  // namespace blink

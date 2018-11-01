@@ -2,7 +2,9 @@
 # OWNERS own content/common/.
 jln@chromium.org
 
-# For security review of sandboxes
+# For security review of Windows sandbox.
+per-file sandbox_init_win.cc=set noparent
+per-file sandbox_init_win.cc=file://sandbox/win/OWNERS
 per-file sandbox_win.*=set noparent
 per-file sandbox_win.*=file://sandbox/win/OWNERS
 
@@ -22,6 +24,9 @@ per-file *_messages*.h=file://ipc/SECURITY_OWNERS
 
 per-file *_messages.cc=set noparent
 per-file *_messages.cc=file://ipc/SECURITY_OWNERS
+
+per-file *.typemap=set noparent
+per-file *.typemap=file://ipc/SECURITY_OWNERS
 
 per-file *_param_traits*.*=set noparent
 per-file *_param_traits*.*=file://ipc/SECURITY_OWNERS

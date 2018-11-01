@@ -25,17 +25,13 @@ cr.define('settings', function() {
 
   FakeBluetooth.prototype = {
     // Public testing methods.
-    /**
-     * @param {boolean} enabled
-     */
+    /** @param {boolean} enabled */
     setEnabled: function(enabled) {
       this.adapterState.powered = enabled;
       this.onAdapterStateChanged.callListeners(this.adapterState);
     },
 
-    /**
-     * @param {!Array<!chrome.bluetooth.Device>} devices
-     */
+    /** @param {!Array<!chrome.bluetooth.Device>} devices */
     setDevicesForTest: function(devices) {
       for (var d of this.devices)
         this.onDeviceRemoved.callListeners(d);
@@ -44,12 +40,34 @@ cr.define('settings', function() {
         this.onDeviceAdded.callListeners(d);
     },
 
+    /**
+     * @param {string}
+     * @return {!chrome.bluetooth.Device}
+     */
+    getDeviceForTest: function(address) {
+      return this.devices.find(function(d) {
+        return d.address == address;
+      });
+    },
+
+    /** @param {!chrome.bluetooth.Device} device */
+    updateDeviceForTest: function(device, opt_callback) {
+      var index = this.devices.findIndex(function(d) {
+        return d.address == device.address;
+      });
+      if (index == -1) {
+        this.devices.push(device);
+        this.onDeviceAdded.callListeners(device);
+        return;
+      }
+      this.devices[index] = device;
+      this.onDeviceChanged.callListeners(device);
+    },
+
     // Bluetooth overrides.
     /** @override */
     getAdapterState: function(callback) {
-      setTimeout(function() {
-        callback(this.adapterState);
-      }.bind(this));
+      callback(this.adapterState);
     },
 
     /** @override */
@@ -57,9 +75,7 @@ cr.define('settings', function() {
 
     /** @override */
     getDevices: function(callback) {
-      setTimeout(function() {
-        callback(this.devices);
-      }.bind(this));
+      callback(this.devices);
     },
 
     /** @override */

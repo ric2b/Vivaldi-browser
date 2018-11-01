@@ -12,7 +12,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/common/features.h"
-#include "chrome/common/instant_type_traits.h"
+#include "chrome/common/instant_struct_traits.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/common/web_application_info.h"
@@ -28,7 +28,7 @@
 #include "ipc/ipc_platform_file.h"
 #include "ppapi/features/features.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebWindowFeatures.h"
+#include "third_party/WebKit/public/web/window_features.mojom.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
@@ -124,18 +124,6 @@ IPC_MESSAGE_ROUTED1(ChromeViewMsg_WebUIJavaScript,
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_LoadBlockedPlugins,
                     std::string /* identifier */)
 
-// Tells the renderer to create a FieldTrial, and by using a 100% probability
-// for the FieldTrial, forces the FieldTrial to have assigned group name.
-IPC_MESSAGE_CONTROL2(ChromeViewMsg_SetFieldTrialGroup,
-                     std::string /* field trial name */,
-                     std::string /* group name that was assigned. */)
-
-// Sent to allow or forbid the running of insecure mixed-content.
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetAllowRunningInsecureContent,
-                    bool /* allowed */)
-
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_ReloadFrame)
-
 // Tells the renderer whether or not a file system access has been allowed.
 IPC_MESSAGE_ROUTED2(ChromeViewMsg_RequestFileSystemAccessAsyncResponse,
                     int  /* request_id */,
@@ -169,7 +157,7 @@ IPC_MESSAGE_ROUTED3(ChromeViewMsg_UpdateBrowserControlsState,
 
 // Updates the window features of the render view.
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetWindowFeatures,
-                    blink::WebWindowFeatures /* window_features */)
+                    blink::mojom::WindowFeatures /* window_features */)
 
 // Responds to the request for a thumbnail.
 // Thumbnail data will be empty is a thumbnail could not be produced.

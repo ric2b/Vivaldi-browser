@@ -699,21 +699,21 @@
 
     function step1() {
       testPreset(
-          Components.NetworkConditionsSelector._presets[0],
+          NetworkConditions.NetworkConditionsSelector.presets[0],
           ['offline event: online = false', 'connection change event: type = none; downlinkMax = 0'], step2);
     }
 
     function step2() {
       testPreset(
-          Components.NetworkConditionsSelector._presets[2],
+          NetworkConditions.NetworkConditionsSelector.presets[2],
           ['online event: online = true', 'connection change event: type = cellular; downlinkMax = 0.244140625'],
           step3);
     }
 
     function step3() {
       testPreset(
-          Components.NetworkConditionsSelector._presets[8], ['connection change event: type = wifi; downlinkMax = 30'],
-          test.releaseControl.bind(test));
+          NetworkConditions.NetworkConditionsSelector.presets[8],
+          ['connection change event: type = wifi; downlinkMax = 30'], test.releaseControl.bind(test));
     }
   };
 
@@ -744,7 +744,7 @@
 
     function onTimelineDone() {
       captureFilmStripSetting.set(false);
-      var filmStripModel = new SDK.FilmStripModel(UI.panels.timeline._tracingModel);
+      var filmStripModel = UI.panels.timeline._performanceModel.filmStripModel();
       var frames = filmStripModel.frames();
       test.assertTrue(frames.length > 4 && typeof frames.length === 'number');
       loadFrameImages(frames);
@@ -866,8 +866,7 @@
 
   TestSuite.prototype.testTempFile = function() {
     this.takeControl();
-    Bindings.TempFile.create('test-file', 'test')
-        .then(() => this.releaseControl(), (error) => this.fail(String(error)));
+    Bindings.TempFile.create('test-file', 'test').then(() => this.releaseControl(), error => this.fail(String(error)));
   };
 
   TestSuite.prototype.waitForTestResultsInConsole = function() {
@@ -913,7 +912,7 @@
     var test = this;
     this.showPanel('timeline').then(function() {
       var timeline = UI.panels.timeline;
-      test._overrideMethod(timeline, 'recordingStarted', callback);
+      test._overrideMethod(timeline, '_recordingStarted', callback);
       timeline._toggleRecording();
     });
   };
@@ -963,7 +962,7 @@
 
   TestSuite.prototype.checkInputEventsPresent = function() {
     var expectedEvents = new Set(arguments);
-    var model = UI.panels.timeline._model;
+    var model = UI.panels.timeline._performanceModel.timelineModel();
     var asyncEvents = model.mainThreadAsyncEvents();
     var input = asyncEvents.get(TimelineModel.TimelineModel.AsyncEventGroup.input) || [];
     var prefix = 'InputLatency::';

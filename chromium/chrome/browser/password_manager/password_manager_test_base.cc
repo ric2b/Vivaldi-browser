@@ -18,8 +18,8 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -59,6 +59,9 @@ NavigationObserver::~NavigationObserver() {
 
 void NavigationObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->HasCommitted())
+    return;
+
   if (quit_on_entry_committed_)
     message_loop_runner_->Quit();
 }
@@ -95,10 +98,6 @@ bool BubbleObserver::IsShowingUpdatePrompt() const {
 
 void BubbleObserver::Dismiss() const  {
   passwords_ui_controller_->OnBubbleHidden();
-  // Navigate away to reset the state to inactive.
-  static_cast<content::WebContentsObserver*>(passwords_ui_controller_)
-      ->DidNavigateMainFrame(content::LoadCommittedDetails(),
-                             content::FrameNavigateParams());
   ASSERT_EQ(password_manager::ui::INACTIVE_STATE,
             passwords_ui_controller_->GetState());
 }
@@ -132,8 +131,6 @@ void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
       password_manager::BuildPasswordStore<
           content::BrowserContext, password_manager::TestPasswordStore>);
   ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_FALSE(base::FeatureList::IsEnabled(
-      password_manager::features::kEnableAutomaticPasswordSaving));
 }
 
 void PasswordManagerBrowserTestBase::TearDownOnMainThread() {

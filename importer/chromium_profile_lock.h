@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef  VIVALDI_CHROMIUM_PROFILE_LOCK_H_
-#define VIVALDI_CHROMIUM_PROFILE_LOCK_H_
+#ifndef IMPORTER_CHROMIUM_PROFILE_LOCK_H_
+#define IMPORTER_CHROMIUM_PROFILE_LOCK_H_
 
 #include "build/build_config.h"
 
@@ -14,8 +14,8 @@
 
 class ChromiumProfileLock {
  public:
-   explicit ChromiumProfileLock(const base::FilePath& path);
-   ~ChromiumProfileLock();
+  explicit ChromiumProfileLock(const base::FilePath& path);
+  ~ChromiumProfileLock();
 
   // Locks and releases the profile.
   void Lock();
@@ -25,7 +25,6 @@ class ChromiumProfileLock {
   bool HasAcquired();
 
  private:
-
   static const base::FilePath::CharType* kLockFileName;
 
   void Init();
@@ -33,7 +32,7 @@ class ChromiumProfileLock {
   // Full path of the lock file in the profile folder.
   base::FilePath lock_file_;
 
-  // The handle of the lock file.
+// The handle of the lock file.
 #if defined(OS_WIN)
   HANDLE lock_handle_;
 #elif defined(OS_POSIX)
@@ -48,4 +47,4 @@ class ChromiumProfileLock {
   DISALLOW_COPY_AND_ASSIGN(ChromiumProfileLock);
 };
 
-#endif  // VIVALDI_CHROMIUM_PROFILE_LOCK_H_
+#endif  // IMPORTER_CHROMIUM_PROFILE_LOCK_H_

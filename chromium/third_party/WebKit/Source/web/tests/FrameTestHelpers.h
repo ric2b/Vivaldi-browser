@@ -141,6 +141,10 @@ class TestWebWidgetClient : public WebWidgetClient {
  public:
   virtual ~TestWebWidgetClient() {}
   bool allowsBrokenNullLayerTreeView() const override { return true; }
+  WebLayerTreeView* initializeLayerTreeView() override;
+
+ private:
+  std::unique_ptr<WebLayerTreeView> m_layerTreeView;
 };
 
 class TestWebViewWidgetClient : public TestWebWidgetClient {
@@ -248,6 +252,9 @@ class TestWebFrameClient : public WebFrameClient {
   void didStopLoading() override;
 
   bool isLoading() { return m_loadsInProgress > 0; }
+
+  // Tests can override the virtual method below to mock the interface provider.
+  virtual blink::InterfaceProvider* interfaceProvider() { return nullptr; }
 
  private:
   int m_loadsInProgress = 0;

@@ -27,6 +27,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "platform/graphics/StrokeData.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "third_party/skia/include/effects/SkDashPathEffect.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -56,55 +57,48 @@ void StrokeData::setLineDash(const DashArray& dashes, float dashOffset) {
   m_dash = SkDashPathEffect::Make(intervals.get(), count, dashOffset);
 }
 
-void StrokeData::setupPaint(SkPaint* paint, int length) const {
-  paint->setStyle(SkPaint::kStroke_Style);
-  paint->setStrokeWidth(SkFloatToScalar(m_thickness));
-  paint->setStrokeCap(m_lineCap);
-  paint->setStrokeJoin(m_lineJoin);
-  paint->setStrokeMiter(SkFloatToScalar(m_miterLimit));
+void StrokeData::setupPaint(PaintFlags* flags, int length) const {
+  flags->setStyle(PaintFlags::kStroke_Style);
+  flags->setStrokeWidth(SkFloatToScalar(m_thickness));
+  flags->setStrokeCap(m_lineCap);
+  flags->setStrokeJoin(m_lineJoin);
+  flags->setStrokeMiter(SkFloatToScalar(m_miterLimit));
 
-  setupPaintDashPathEffect(paint, length);
+  setupPaintDashPathEffect(flags, length);
 }
 
-void StrokeData::setupPaintDashPathEffect(SkPaint* paint, int length) const {
-  float width = m_thickness;
+void StrokeData::setupPaintDashPathEffect(PaintFlags* flags, int length) const {
   if (m_dash) {
-    paint->setPathEffect(m_dash);
-  } else {
-    switch (m_style) {
-      case NoStroke:
-      case SolidStroke:
-      case DoubleStroke:
-      case WavyStroke:  // FIXME: https://crbug.com/229574
-        paint->setPathEffect(0);
-        return;
-      case DashedStroke:
-        width = dashRatio * width;
-      // Fall through.
-      case DottedStroke:
-        // Truncate the width, since we don't want fuzzy dots or dashes.
-        int dashLength = static_cast<int>(width);
-        // Subtract off the endcaps, since they're rendered separately.
-        int distance = length - 2 * static_cast<int>(m_thickness);
-        int phase = 1;
-        if (dashLength > 1) {
-          // Determine how many dashes or dots we should have.
-          int numDashes = distance / dashLength;
-          int remainder = distance % dashLength;
-          // Adjust the phase to center the dashes within the line.
-          if (numDashes % 2) {
-            // Odd: shift right a full dash, minus half the remainder.
-            phase = dashLength - remainder / 2;
-          } else {
-            // Even: shift right half a dash, minus half the remainder.
-            phase = (dashLength - remainder) / 2;
-          }
-        }
-        SkScalar dashLengthSk = SkIntToScalar(dashLength);
-        SkScalar intervals[2] = {dashLengthSk, dashLengthSk};
-        paint->setPathEffect(
-            SkDashPathEffect::Make(intervals, 2, SkIntToScalar(phase)));
+    flags->setPathEffect(m_dash);
+  } else if (m_style == DashedStroke || m_style == DottedStroke) {
+    float width =
+        m_style == DashedStroke ? dashRatio * m_thickness : m_thickness;
+
+    // Truncate the width, since we don't want fuzzy dots or dashes.
+    int dashLength = static_cast<int>(width);
+    // Subtract off the endcaps, since they're rendered separately.
+    int distance = length - 2 * static_cast<int>(m_thickness);
+    int phase = 1;
+    if (dashLength > 1) {
+      // Determine how many dashes or dots we should have.
+      int numDashes = distance / dashLength;
+      int remainder = distance % dashLength;
+      // Adjust the phase to center the dashes within the line.
+      if (numDashes % 2) {
+        // Odd: shift right a full dash, minus half the remainder.
+        phase = dashLength - remainder / 2;
+      } else {
+        // Even: shift right half a dash, minus half the remainder.
+        phase = (dashLength - remainder) / 2;
+      }
     }
+    SkScalar dashLengthSk = SkIntToScalar(dashLength);
+    SkScalar intervals[2] = {dashLengthSk, dashLengthSk};
+    flags->setPathEffect(
+        SkDashPathEffect::Make(intervals, 2, SkIntToScalar(phase)));
+  } else {
+    // TODO(schenney): WavyStroke:  https://crbug.com/229574
+    flags->setPathEffect(0);
   }
 }
 

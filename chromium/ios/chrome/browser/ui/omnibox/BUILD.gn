@@ -63,10 +63,12 @@ source_set("omnibox_internal") {
     "//base",
     "//base:i18n",
     "//components/favicon/ios",
+    "//components/image_fetcher/ios",
     "//components/keyed_service/core",
     "//components/open_from_clipboard",
     "//components/resources",
     "//components/search_engines",
+    "//components/security_state/core",
     "//components/ssl_errors",
     "//components/strings",
     "//components/toolbar",
@@ -89,7 +91,6 @@ source_set("omnibox_internal") {
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
-    "//ios/web/public/image_fetcher",
     "//net",
     "//skia",
     "//third_party/google_toolbox_for_mac",
@@ -110,6 +111,7 @@ source_set("omnibox_internal") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "omnibox_text_field_ios_unittest.mm",

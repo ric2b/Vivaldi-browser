@@ -32,9 +32,9 @@
 #define ThreadableLoader_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourceLoaderOptions.h"
 #include "platform/CrossThreadCopier.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include <memory>
@@ -131,26 +131,11 @@ class CORE_EXPORT ThreadableLoader
   WTF_MAKE_NONCOPYABLE(ThreadableLoader);
 
  public:
-  // TODO(yhirano): Remove this enum once https://crbug.com/667254 is fixed.
-  enum class ClientSpec {
-    kBlobBytesConsumer,
-    kEventSource,
-    kFetchManager,
-    kFileReaderLoader,
-    kMainThreadLoaderHolder,
-    kNotificationImageLoader,
-    kWebAssociatedURLLoader,
-    kWorkerScriptLoader,
-    kXHR,
-    kTesting,
-  };
-
   static void loadResourceSynchronously(ExecutionContext&,
                                         const ResourceRequest&,
                                         ThreadableLoaderClient&,
                                         const ThreadableLoaderOptions&,
-                                        const ResourceLoaderOptions&,
-                                        ClientSpec);
+                                        const ResourceLoaderOptions&);
 
   // This method never returns nullptr.
   //
@@ -186,8 +171,7 @@ class CORE_EXPORT ThreadableLoader
   static ThreadableLoader* create(ExecutionContext&,
                                   ThreadableLoaderClient*,
                                   const ThreadableLoaderOptions&,
-                                  const ResourceLoaderOptions&,
-                                  ClientSpec);
+                                  const ResourceLoaderOptions&);
 
   // The methods on the ThreadableLoaderClient passed on create() call
   // may be called synchronous to start() call.

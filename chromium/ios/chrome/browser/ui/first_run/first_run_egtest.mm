@@ -5,7 +5,6 @@
 #import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -30,6 +29,10 @@
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 // Returns a fake identity.
@@ -41,7 +44,7 @@ ChromeIdentity* GetFakeIdentity() {
 
 // Taps the button with accessibility labelId |message_id|.
 void TapButtonWithLabelId(int message_id) {
-  id<GREYMatcher> matcher = chrome_test_util::buttonWithAccessibilityLabel(
+  id<GREYMatcher> matcher = chrome_test_util::ButtonWithAccessibilityLabel(
       l10n_util::GetNSString(message_id));
   [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
 }
@@ -85,8 +88,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
                         GetApplicationContext()->GetLocalState());
   defaultOptInPref.SetValue(metrics::EnableMetricsDefault::DEFAULT_UNKNOWN);
 
-  base::scoped_nsobject<TestLocationManager> locationManager(
-      [[TestLocationManager alloc] init]);
+  TestLocationManager* locationManager = [[TestLocationManager alloc] init];
   [locationManager setLocationServicesEnabled:NO];
   [[OmniboxGeolocationController sharedInstance]
       setLocationManager:locationManager];
@@ -131,7 +133,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
       grey_accessibilityID(kUMAMetricsButtonAccessibilityIdentifier);
   [[EarlGrey selectElementWithMatcher:metrics] performAction:grey_tap()];
 
-  id<GREYMatcher> optInAccept = chrome_test_util::buttonWithAccessibilityLabel(
+  id<GREYMatcher> optInAccept = chrome_test_util::ButtonWithAccessibilityLabel(
       l10n_util::GetNSString(IDS_IOS_FIRSTRUN_OPT_IN_ACCEPT_BUTTON));
   [[EarlGrey selectElementWithMatcher:optInAccept] performAction:grey_tap()];
 
@@ -146,7 +148,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 - (void)testDismissFirstRun {
   [chrome_test_util::GetMainController() showFirstRunUI];
 
-  id<GREYMatcher> optInAccept = chrome_test_util::buttonWithAccessibilityLabel(
+  id<GREYMatcher> optInAccept = chrome_test_util::ButtonWithAccessibilityLabel(
       l10n_util::GetNSString(IDS_IOS_FIRSTRUN_OPT_IN_ACCEPT_BUTTON));
   [[EarlGrey selectElementWithMatcher:optInAccept] performAction:grey_tap()];
 

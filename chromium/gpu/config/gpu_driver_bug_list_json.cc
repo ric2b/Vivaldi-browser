@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "9.29",
+  "version": "9.36",
   "entries": [
     {
       "id": 1,
@@ -84,10 +84,8 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
     {
       "id": 19,
       "description": "Disable depth textures on Android with Qualcomm GPUs",
-      "os": {
-        "type": "android"
-      },
-      "gl_vendor": "Qualcomm.*",
+      "cr_bugs": [682075],
+      "gl_renderer": "Adreno \\(TM\\) [23].*",
       "features": [
         "disable_depth_texture"
       ],
@@ -419,12 +417,16 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
     },
     {
       "id": 52,
-      "cr_bugs": [449116, 471200, 612474],
+      "cr_bugs": [449116, 471200, 612474, 682075],
       "description": "ES3 MSAA is broken on Qualcomm",
       "os": {
-        "type": "android"
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "6.0"
+        }
       },
-      "gl_vendor": "Qualcomm.*",
+      "gl_renderer": "Adreno \\(TM\\) 4.*",
       "features": [
         "disable_chromium_framebuffer_multisample"
       ]
@@ -516,7 +518,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       "gl_type": "gl",
       "gl_renderer": ".*Mesa.*",
       "features": [
-        "disable_post_sub_buffers_for_onscreen_surfaces"
+        "disable_non_empty_post_sub_buffers_for_onscreen_surfaces"
       ]
     },
     {
@@ -1176,22 +1178,6 @@ LONG_STRING_CONST(
       "disabled_extensions": ["GL_NV_path_rendering"]
     },
     {
-      "id": 124,
-      "description": "Certain Adreno 4xx and 5xx drivers often crash in glProgramBinary.",
-      "cr_bugs": [486117, 598060],
-      "os": {
-        "type": "android"
-      },
-      "driver_version": {
-        "op": ">=",
-        "value": "103.0"
-      },
-      "gl_renderer": "Adreno \\(TM\\) [45].*",
-      "features": [
-        "disable_program_disk_cache"
-      ]
-    },
-    {
       "id": 125,
       "description": "glFinish doesn't clear caches on Android",
       "cr_bugs": [509727],
@@ -1695,7 +1681,7 @@ LONG_STRING_CONST(
         "type": "macosx"
       },
       "vendor_id": "0x1002",
-      "device_id": ["0x68b8", "0x6720", "0x6741"],
+      "device_id": ["0x6720", "0x6740", "0x6741", "0x68b8"],
       "features": [
         "disable_multisampling_color_mask_usage"
       ]
@@ -2324,14 +2310,70 @@ LONG_STRING_CONST(
         "use_virtualized_gl_contexts"
       ]
     },
+)  // LONG_STRING_CONST macro
+// Avoid C2026 (string too big) error on VisualStudio.
+LONG_STRING_CONST(
     {
+      // Corresponds to software rendering list #140.
       "id": 214,
       "description": "Certain versions of Qualcomm driver don't setup scissor state correctly when FBO0 is bound.",
-      "cr_bugs": [670607],
-      "gl_vendor": "Qualcomm.*",
-      "machine_model_name": ["Nexus 7"],
+      "cr_bugs": [670607, 696627, 698197],
+      "gl_renderer": "Adreno \\(TM\\) 3.*",
       "features": [
-        "force_update_scissor_state_when_binding_fbo0"
+        "force_update_scissor_state_when_binding_fbo0",
+        // Somehow the main workaround above won't work without the one below.
+        // See https://crbug.com/698197 for details.
+        "disable_chromium_framebuffer_multisample"
+      ]
+    },
+    {
+      "id": 215,
+      "description": "Fake no-op GPU driver bug workaround for testing",
+      "cr_bugs": [682912],
+      "vendor_id": "0xbad9",
+      "device_id": ["0xbad9"],
+      "features": [
+        "use_gpu_driver_workaround_for_testing"
+      ]
+    },
+    {
+      "id": 216,
+      "cr_bugs": [698926],
+      "description": "Pack parameters work incorrectly with pack buffer bound",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "pack_parameters_workaround_with_pack_buffer"
+      ]
+    },
+    {
+      "id": 217,
+      "cr_bugs": [698926],
+      "description": "Alignment works incorrectly with unpack buffer bound",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "unpack_alignment_workaround_with_unpack_buffer"
+      ]
+    },
+    {
+      "id": 218,
+      "description": "Certain Adreno 4xx and 5xx drivers often crash in glProgramBinary.",
+      "cr_bugs": [699122],
+      "os": {
+        "type": "android"
+      },
+      "driver_version": {
+        "op": ">=",
+        "value": "103.0"
+      },
+      "gl_renderer": "Adreno \\(TM\\) [45].*",
+      "features": [
+        "disable_program_disk_cache"
       ]
     }
   ]

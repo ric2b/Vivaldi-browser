@@ -298,6 +298,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   static const int kContentsRootNodeId = 1;
 
+  int Insert(const EffectNode& tree_node, int parent_id);
+
   void clear();
 
   float EffectiveOpacity(const EffectNode* node) const;
@@ -326,16 +328,28 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   void AddMaskLayerId(int id);
   const std::vector<int>& mask_layer_ids() const { return mask_layer_ids_; }
 
+  RenderSurfaceImpl* GetRenderSurface(int id) {
+    return render_surfaces_[id].get();
+  }
+
+  const RenderSurfaceImpl* GetRenderSurface(int id) const {
+    return render_surfaces_[id].get();
+  }
+
+  void UpdateRenderSurfaces(LayerTreeImpl* layer_tree_impl,
+                            bool non_root_surfaces_enabled);
+
   bool ContributesToDrawnSurface(int id);
 
   void ResetChangeTracking();
 
-  // A list of pairs of stable id and render surface, sorted by stable id.
-  using StableIdRenderSurfaceList =
-      std::vector<std::pair<int, RenderSurfaceImpl*>>;
-  StableIdRenderSurfaceList CreateStableIdRenderSurfaceList() const;
-  void UpdateRenderSurfaceEffectIds(
-      const StableIdRenderSurfaceList& stable_id_render_surface_list,
+  void TakeRenderSurfaces(
+      std::vector<std::unique_ptr<RenderSurfaceImpl>>* render_surfaces);
+
+  // Returns true if render surfaces changed (that is, if any render surfaces
+  // were created or destroyed).
+  bool CreateOrReuseRenderSurfaces(
+      std::vector<std::unique_ptr<RenderSurfaceImpl>>* old_render_surfaces,
       LayerTreeImpl* layer_tree_impl);
 
  private:
@@ -349,6 +363,9 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   // Unsorted list of all mask layer ids that effect nodes refer to.
   std::vector<int> mask_layer_ids_;
+
+  // Indexed by node id.
+  std::vector<std::unique_ptr<RenderSurfaceImpl>> render_surfaces_;
 };
 
 class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
@@ -360,8 +377,6 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   bool operator==(const ScrollTree& other) const;
 
   void clear();
-
-  typedef std::unordered_map<int, bool> ScrollbarsEnabledMap;
 
   gfx::ScrollOffset MaxScrollOffset(int scroll_node_id) const;
   void OnScrollOffsetAnimated(int layer_id,
@@ -435,7 +450,6 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
       std::unordered_map<int, scoped_refptr<SyncedScrollOffset>>;
 
   int currently_scrolling_node_id_;
-  ScrollbarsEnabledMap layer_id_to_scrollbars_enabled_map_;
 
   // On the main thread we store the scroll offsets directly since the main
   // thread only needs to keep track of the current main thread state. The impl
@@ -535,7 +549,7 @@ struct DrawTransformData {
 };
 
 struct PropertyTreesCachedData {
-  int property_tree_update_number;
+  int transform_tree_update_number;
   std::vector<AnimationScaleData> animation_scales;
   mutable std::vector<std::vector<DrawTransformData>> draw_transforms;
 
@@ -635,7 +649,7 @@ class CC_EXPORT PropertyTrees final {
                      gfx::Transform* from_target) const;
 
   void ResetCachedData();
-  void UpdateCachedNumber();
+  void UpdateTransformTreeUpdateNumber();
   gfx::Transform ToScreenSpaceTransformWithoutSurfaceContentsScale(
       int transform_id,
       int effect_id) const;

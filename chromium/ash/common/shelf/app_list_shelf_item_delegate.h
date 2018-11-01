@@ -22,9 +22,12 @@ class AppListShelfItemDelegate : public ShelfItemDelegate {
   ~AppListShelfItemDelegate() override;
 
   // ShelfItemDelegate:
-  ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
+  ShelfAction ItemSelected(ui::EventType event_type,
+                           int event_flags,
+                           int64_t display_id,
+                           ShelfLaunchSource source) override;
+  ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
+  void ExecuteCommand(uint32_t command_id, int event_flags) override;
   void Close() override;
 
  private:

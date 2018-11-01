@@ -119,29 +119,8 @@ class GtkUi : public views::LinuxUI {
   // ThemeService interface and the colors we send to webkit.
   void LoadGtkValues();
 
-  // Initialize the Xcursor theme and size with the GTK theme and size.
-  void LoadCursorTheme();
-
-  // Reads in explicit theme frame colors from the ChromeGtkFrame style class
-  // or generates them per our fallback algorithm.
-  void BuildFrameColors();
-
-  // Gets a tint which depends on the default for |id| as well as |color|.
-  color_utils::HSL ColorToTint(int id, SkColor color);
-
-  // Returns the tint for buttons that contrasts with the normal window
-  // background color.
-  void GetNormalButtonTintHSL(color_utils::HSL* tint) const;
-
-  // Returns a tint that's the color of the current normal text in an entry.
-  void GetNormalEntryForegroundHSL(color_utils::HSL* tint) const;
-
-  // Returns a tint that's the color of the current highlighted text in an
-  // entry.
-  void GetSelectedEntryForegroundHSL(color_utils::HSL* tint) const;
-
-  // Gets a color for the background of the prominent button.
-  SkColor GetProminentButtonBgColor(int gtk_state) const;
+  // Sets the Xcursor theme and size with the GTK theme and size.
+  void UpdateCursorTheme();
 
   // Updates |default_font_*|.
   void UpdateDefaultFont();
@@ -158,11 +137,6 @@ class GtkUi : public views::LinuxUI {
   // Colors calculated by LoadGtkValues() that are given to the
   // caller while |use_gtk_| is true.
   ColorMap colors_;
-
-  // Colors used to tint certain icons.
-  color_utils::HSL button_tint_;
-  color_utils::HSL entry_tint_;
-  color_utils::HSL selected_entry_tint_;
 
   // Colors that we pass to WebKit. These are generated each time the theme
   // changes.
@@ -204,7 +178,7 @@ class GtkUi : public views::LinuxUI {
   NonClientMiddleClickAction middle_click_action_;
 
   // Used to override the native theme for a window. If no override is provided
-  // or the callback returns NULL, GtkUi will default to a NativeThemeGtk2
+  // or the callback returns nullptr, GtkUi will default to a NativeThemeGtk2
   // instance.
   NativeThemeGetter native_theme_overrider_;
 

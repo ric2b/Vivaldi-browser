@@ -16,6 +16,7 @@
 // <include src="gaia_input_form.js">
 // <include src="gaia_input.js">
 // <include src="gaia_password_changed.js">
+// <include src="hd-iron-icon.js">
 // <include src="host-pairing-screen.js">
 // <include src="html-echo.js">
 // <include src="notification_card.js">
@@ -35,3 +36,4 @@
 // <include src="oobe_welcome.js">
 // <include src="offline_ad_login.js">
 // <include src="active_directory_password_change.js">
+// <include src="arc_terms_of_service.js">

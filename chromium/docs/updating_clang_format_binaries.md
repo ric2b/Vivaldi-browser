@@ -28,7 +28,7 @@ Windows step-by-step:
 # [double check you have the tools you need]
 where cmake.exe  # You need to install this.
 where svn.exe  # Maybe fix with: set PATH=%PATH%;D:\src\depot_tools\svn_bin
-"c:\Program Files (x86)\Microsoft Visual Studio 12.0\vc\vcvarsall.bat" amd64_x86
+"c:\Program Files (x86)\Microsoft Visual Studio 14.0\vc\vcvarsall.bat" amd64_x86
 
 set CLANG_REV=198831  # You must change this value (see above)
 
@@ -43,8 +43,8 @@ svn co http://llvm.org/svn/llvm-project/cfe/trunk@%CLANG_REV% clang
 cd ..\..\llvm-build
 set CC=cl
 set CXX=cl
-cmake -G Ninja ..\llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_CRT_RELEASE=MT \
-    -DLLVM_ENABLE_ASSERTIONS=NO -DLLVM_ENABLE_THREADS=NO \
+cmake -G Ninja ..\llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_CRT_RELEASE=MT ^
+    -DLLVM_ENABLE_ASSERTIONS=NO -DLLVM_ENABLE_THREADS=NO ^
     -DPYTHON_EXECUTABLE=d:\src\depot_tools\python276_bin\python.exe
 ninja clang-format
 bin\clang-format.exe --version
@@ -65,7 +65,7 @@ svn co http://llvm.org/svn/llvm-project/cfe/trunk@$CLANG_REV clang
 cd ../../llvm-build
 
 # Option 1: with cmake
-MACOSX_DEPLOYMENT_TARGET=10.9 cmake -G Ninja  -DCMAKE_BUILD_TYPE=Release \
+MACOSX_DEPLOYMENT_TARGET=10.9 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=NO -DLLVM_ENABLE_THREADS=NO ../llvm/
 time caffeinate ninja clang-format
 strip bin/clang-format
@@ -91,11 +91,11 @@ Platform specific notes:
 Copy the binaries into your chromium checkout (under
 `src/buildtools/(win|linux64|mac)/clang-format(.exe?)`). For each binary, you'll
 need to run upload_to_google_storage.py according to the instructions in
-[README.txt](/buildtools/clang_format/README.txt). This will upload the binary
-into a publicly accessible google storage bucket, and update `.sha1` file in
-your Chrome checkout. You'll check in the `.sha1` file (but NOT the clang-format
-binary) into source control. In order to be able to upload, you'll need write
-permission to the bucket -- see the prerequisites.
+[README.txt](https://chromium.googlesource.com/chromium/buildtools/+/master/clang_format/README.txt).
+This will upload the binary into a publicly accessible google storage bucket,
+and update `.sha1` file in your Chrome checkout. You'll check in the `.sha1`
+file (but NOT the clang-format binary) into source control. In order to be able
+to upload, you'll need write permission to the bucket -- see the prerequisites.
 
 ## Copy the helper scripts and update README.chromium
 

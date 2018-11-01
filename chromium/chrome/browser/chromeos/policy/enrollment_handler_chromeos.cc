@@ -15,6 +15,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
+#include "chrome/browser/chromeos/policy/active_directory_join_delegate.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/dm_token_storage.h"
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
@@ -24,10 +25,14 @@
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/channel_info.h"
 #include "chromeos/attestation/attestation_flow.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/auth_policy_client.h"
+#include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/upstart_client.h"
+#include "components/version_info/version_info.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
@@ -72,6 +77,33 @@ em::DeviceRegisterRequest::Flavor EnrollmentModeToRegistrationFlavor(
   return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_MANUAL;
 }
 
+// Returns whether block_devmode is set.
+bool GetBlockdevmodeFromPolicy(
+    const enterprise_management::PolicyFetchResponse* policy) {
+  DCHECK(policy);
+  em::PolicyData policy_data;
+  if (!policy_data.ParseFromString(policy->policy_data())) {
+    LOG(ERROR) << "Failed to parse policy data";
+    return false;
+  }
+
+  em::ChromeDeviceSettingsProto payload;
+  if (!payload.ParseFromString(policy_data.policy_value())) {
+    LOG(ERROR) << "Failed to parse policy value";
+    return false;
+  }
+
+  bool block_devmode = false;
+  if (payload.has_system_settings()) {
+    const em::SystemSettingsProto& container = payload.system_settings();
+    if (container.has_block_devmode()) {
+      block_devmode = container.block_devmode();
+    }
+  }
+
+  return block_devmode;
+}
+
 }  // namespace
 
 EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
@@ -81,6 +113,7 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
     chromeos::attestation::AttestationFlow* attestation_flow,
     std::unique_ptr<CloudPolicyClient> client,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+    chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
     const std::string& auth_token,
     const std::string& client_id,
@@ -92,15 +125,13 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
       attestation_flow_(attestation_flow),
       client_(std::move(client)),
       background_task_runner_(background_task_runner),
+      ad_join_delegate_(ad_join_delegate),
       enrollment_config_(enrollment_config),
       auth_token_(auth_token),
       client_id_(client_id),
       requisition_(requisition),
       completion_callback_(completion_callback),
-      device_mode_(DEVICE_MODE_NOT_SET),
-      skip_robot_auth_(false),
       enrollment_step_(STEP_PENDING),
-      lockbox_init_duration_(0),
       weak_ptr_factory_(this) {
   CHECK(!client_->is_registered());
   CHECK_EQ(DM_STATUS_SUCCESS, client_->status());
@@ -200,17 +231,31 @@ void EnrollmentHandlerChromeOS::OnRegistrationStateChanged(
   DCHECK_EQ(client_.get(), client);
 
   if (enrollment_step_ == STEP_REGISTRATION && client_->is_registered()) {
-    SetStep(STEP_POLICY_FETCH);
     device_mode_ = client_->device_mode();
-    if (!((device_mode_ == DEVICE_MODE_ENTERPRISE &&
-           enrollment_config_.management_realm.empty()) ||
-          (device_mode_ == DEVICE_MODE_ENTERPRISE_AD &&
-           !enrollment_config_.management_realm.empty()))) {
-      LOG(ERROR) << "Bad device mode " << device_mode_;
-      ReportResult(
-          EnrollmentStatus::ForStatus(EnrollmentStatus::REGISTRATION_BAD_MODE));
-      return;
+    switch (device_mode_) {
+      case DEVICE_MODE_ENTERPRISE:
+        // Do nothing.
+        break;
+      case DEVICE_MODE_ENTERPRISE_AD:
+        if (chrome::GetChannel() == version_info::Channel::BETA ||
+            chrome::GetChannel() == version_info::Channel::STABLE) {
+          LOG(ERROR) << "Active Directory management is not enabled on the "
+                        "current channel";
+          ReportResult(EnrollmentStatus::ForStatus(
+              EnrollmentStatus::REGISTRATION_BAD_MODE));
+          return;
+        }
+        chromeos::DBusThreadManager::Get()
+            ->GetUpstartClient()
+            ->StartAuthPolicyService();
+        break;
+      default:
+        LOG(ERROR) << "Supplied device mode is not supported:" << device_mode_;
+        ReportResult(EnrollmentStatus::ForStatus(
+            EnrollmentStatus::REGISTRATION_BAD_MODE));
+        return;
     }
+    SetStep(STEP_POLICY_FETCH);
     client_->FetchPolicy();
   } else {
     LOG(FATAL) << "Registration state changed to " << client_->is_registered()
@@ -324,8 +369,8 @@ void EnrollmentHandlerChromeOS::HandlePolicyValidationResult(
     if (device_mode_ == DEVICE_MODE_ENTERPRISE_AD) {
       // Don't use robot account for the Active Directory managed devices.
       skip_robot_auth_ = true;
-      SetStep(STEP_LOCK_DEVICE);
-      StartLockDevice();
+      SetStep(STEP_AD_DOMAIN_JOIN);
+      StartJoinAdDomain();
     } else {
       domain_ = gaia::ExtractDomainName(gaia::CanonicalizeEmail(username));
       SetStep(STEP_ROBOT_AUTH_FETCH);
@@ -346,8 +391,8 @@ void EnrollmentHandlerChromeOS::OnRobotAuthCodesFetched(
     // This allows clients running against the test server to transparently skip
     // robot auth.
     skip_robot_auth_ = true;
-    SetStep(STEP_LOCK_DEVICE);
-    StartLockDevice();
+    SetStep(STEP_AD_DOMAIN_JOIN);
+    StartJoinAdDomain();
     return;
   }
 
@@ -375,6 +420,40 @@ void EnrollmentHandlerChromeOS::OnGetTokensResponse(
   CHECK_EQ(STEP_ROBOT_AUTH_REFRESH, enrollment_step_);
 
   robot_refresh_token_ = refresh_token;
+
+  SetStep(STEP_AD_DOMAIN_JOIN);
+  StartJoinAdDomain();
+}
+
+void EnrollmentHandlerChromeOS::SetFirmwareManagementParametersData() {
+  DCHECK_EQ(STEP_SET_FWMP_DATA, enrollment_step_);
+
+  // In case of reenrollment, the device has the TPM locked and nothing has to
+  // change in install attributes. No need to update firmware parameters in this
+  // case.
+  if (install_attributes_->IsDeviceLocked()) {
+    SetStep(STEP_LOCK_DEVICE);
+    StartLockDevice();
+    return;
+  }
+
+  install_attributes_->SetBlockDevmodeInTpm(
+      GetBlockdevmodeFromPolicy(policy_.get()),
+      base::Bind(
+          &EnrollmentHandlerChromeOS::OnFirmwareManagementParametersDataSet,
+          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void EnrollmentHandlerChromeOS::OnFirmwareManagementParametersDataSet(
+    chromeos::DBusMethodCallStatus call_status,
+    bool result,
+    const cryptohome::BaseReply& reply) {
+  DCHECK_EQ(STEP_SET_FWMP_DATA, enrollment_step_);
+  if (!result) {
+    LOG(ERROR)
+        << "Failed to update firmware management parameters in TPM, error: "
+        << reply.error();
+  }
 
   SetStep(STEP_LOCK_DEVICE);
   StartLockDevice();
@@ -407,13 +486,34 @@ void EnrollmentHandlerChromeOS::OnNetworkError(int response_code) {
       EnrollmentStatus::ForRobotRefreshFetchError(response_code));
 }
 
+void EnrollmentHandlerChromeOS::StartJoinAdDomain() {
+  DCHECK_EQ(STEP_AD_DOMAIN_JOIN, enrollment_step_);
+  if (device_mode_ != DEVICE_MODE_ENTERPRISE_AD) {
+    SetStep(STEP_SET_FWMP_DATA);
+    SetFirmwareManagementParametersData();
+    return;
+  }
+  DCHECK(ad_join_delegate_);
+  ad_join_delegate_->JoinDomain(
+      base::BindOnce(&EnrollmentHandlerChromeOS::OnAdDomainJoined,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void EnrollmentHandlerChromeOS::OnAdDomainJoined(const std::string& realm) {
+  DCHECK_EQ(STEP_AD_DOMAIN_JOIN, enrollment_step_);
+  CHECK(!realm.empty());
+  realm_ = realm;
+  SetStep(STEP_SET_FWMP_DATA);
+  SetFirmwareManagementParametersData();
+}
+
 void EnrollmentHandlerChromeOS::StartLockDevice() {
   DCHECK_EQ(STEP_LOCK_DEVICE, enrollment_step_);
   // Since this method is also called directly.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
   install_attributes_->LockDevice(
-      device_mode_, domain_, enrollment_config_.management_realm, device_id_,
+      device_mode_, domain_, realm_, device_id_,
       base::Bind(&EnrollmentHandlerChromeOS::HandleLockDeviceResult,
                  weak_ptr_factory_.GetWeakPtr()));
 }

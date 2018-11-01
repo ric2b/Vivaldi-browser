@@ -3,8 +3,10 @@
 # found in the LICENSE file.
 
 import("//media/media_options.gni")
+import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
 config("mojo_media_config") {
@@ -16,9 +18,11 @@ config("mojo_media_config") {
     defines = [ "ENABLE_MOJO_MEDIA" ]
 
     assert(mojo_media_services != [], "No mojo media service specified")
+    mojo_renderer_enabled = false
     foreach(service, mojo_media_services) {
       if (service == "renderer") {
         defines += [ "ENABLE_MOJO_RENDERER" ]
+        mojo_renderer_enabled = true
       } else if (service == "cdm") {
         defines += [ "ENABLE_MOJO_CDM" ]
       } else if (service == "audio_decoder") {
@@ -29,6 +33,9 @@ config("mojo_media_config") {
         assert(false, "Invalid mojo media service: $service")
       }
     }
+    assert(
+        mojo_renderer_enabled || !enable_runtime_media_renderer_selection,
+        "The mojo renderer must be enabled to use runtime media renderer selection.")
 
     if (mojo_media_host == "browser") {
       defines += [ "ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS" ]
@@ -59,13 +66,13 @@ component("services") {
 # See http://crbug.com/670094
 source_set("lib") {
   sources = [
-    "demuxer_stream_provider_shim.cc",
-    "demuxer_stream_provider_shim.h",
     "gpu_mojo_media_client.cc",
     "gpu_mojo_media_client.h",
     "interface_factory_impl.cc",
     "interface_factory_impl.h",
     "media_mojo_export.h",
+    "media_resource_shim.cc",
+    "media_resource_shim.h",
     "media_service.cc",
     "media_service.h",
     "media_service_factory.cc",
@@ -92,7 +99,6 @@ source_set("lib") {
     "mojo_renderer_service.h",
     "mojo_video_decoder_service.cc",
     "mojo_video_decoder_service.h",
-    "strong_binding_set.h",
     "test_mojo_media_client.cc",
     "test_mojo_media_client.h",
   ]
@@ -151,38 +157,35 @@ service("media") {
     "//mojo/public/c/system",
     "//services/service_manager/public/cpp",
   ]
-
-  data_deps = [
-    ":media_manifest",
-  ]
 }
 
 # crbug.com/676055: media_service_unittests currently fails to link in Windows
 # component builds, so don't declare it, otherwise the "all" target will still
 # try to build it.
 if (!(is_win && is_component_build)) {
-  test("media_service_unittests") {
+  service_test("media_service_unittests") {
     testonly = true
 
     sources = [
       "media_service_unittest.cc",
     ]
 
+    catalog = ":media_service_unittests_catalog"
+
     deps = [
+      "//base",
       "//media",
       "//media/base:test_support",
       "//media/mojo/clients",
       "//media/mojo/common",
       "//media/mojo/interfaces",
       "//services/service_manager/public/cpp:service_test_support",
-      "//services/service_manager/public/cpp/test:run_all_service_tests",
       "//testing/gmock",
       "//testing/gtest",
     ]
 
     data_deps = [
       ":media",
-      ":test_manifest",
     ]
   }
 }  # !(is_win && is_component_build)
@@ -197,21 +200,31 @@ service_manifest("test_manifest") {
   source = "test_manifest.json"
 }
 
-test("media_pipeline_integration_unittests") {
+service_test("media_pipeline_integration_unittests") {
   testonly = true
+
+  catalog = ":media_pipeline_integration_unittests_catalog"
 
   deps = [
     "//media/test:mojo_pipeline_integration_tests",
-    "//services/service_manager/public/cpp/test:run_all_service_tests",
   ]
 
   data_deps = [
     ":media",
-    ":pipeline_test_manifest",
   ]
 }
 
 service_manifest("pipeline_test_manifest") {
   name = "media_pipeline_integration_unittests"
   source = "pipeline_test_manifest.json"
+}
+
+catalog("media_service_unittests_catalog") {
+  embedded_services = [ ":test_manifest" ]
+  standalone_services = [ ":media_manifest" ]
+}
+
+catalog("media_pipeline_integration_unittests_catalog") {
+  embedded_services = [ ":pipeline_test_manifest" ]
+  standalone_services = [ ":media_manifest" ]
 }

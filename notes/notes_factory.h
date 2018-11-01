@@ -9,7 +9,8 @@
 
 class Profile;
 
-template <typename T> struct DefaultSingletonTraits;
+template <typename T>
+struct DefaultSingletonTraits;
 
 namespace vivaldi {
 
@@ -32,12 +33,12 @@ class NotesModelFactory : public BrowserContextKeyedServiceFactory {
   ~NotesModelFactory() override;
 
   // BrowserContextKeyedServiceFactory:
-  KeyedService * BuildServiceInstanceFor(
-      content::BrowserContext *context) const override;
+  KeyedService* BuildServiceInstanceFor(
+      content::BrowserContext* context) const override;
   void RegisterProfilePrefs(
-      user_prefs::PrefRegistrySyncable *registry) override;
-  content::BrowserContext *GetBrowserContextToUse(
-      content::BrowserContext *context) const override;
+      user_prefs::PrefRegistrySyncable* registry) override;
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override;
   bool ServiceIsNULLWhileTesting() const override;
 
   int64_t current_max_id_;

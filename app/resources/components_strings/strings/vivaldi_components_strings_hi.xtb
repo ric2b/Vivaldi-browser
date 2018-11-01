@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">इस पृष्‍ठ की सहेजी गई (अर्थात जिसे पुराना माना जाता है) कॉपी दिखाएं.</translation>
 <translation id="1559528461873125649">कोई ऐसी फ़ाइल या निर्देशिका नहीं है</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">आप एक वेब पेज का स्रोत देख रहे हैं.</translation>
 <translation id="194030505837763158"><ph name="LINK" /> पर जाएं</translation>
 <translation id="2030481566774242610">क्या आप मतलब <ph name="LINK" /> से है?</translation>
-<translation id="2089090684895656482">कम</translation>
 <translation id="2166378884831602661">यह साइट सुरक्षित कनेक्शन प्रदान नहीं कर सकती</translation>
 <translation id="2292556288342944218">आपका इंटरनेट कनेक्शन अवरुद्ध है</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ने एक अमान्य प्रतिसाद भेजा है.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">फ़ाइल तक पहुंच अस्वीकृत थी</translation>
 <translation id="2705137772291741111">इस साइट की सहेजी गई (संचित) कॉपी पढ़ने योग्य नहीं थी.</translation>
 <translation id="2784949926578158345">कनेक्‍शन रीसेट किया गया था.</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" /> पर सर्वर प्रमाणपत्र फर्जी दिखाई देता है.</translation>
 <translation id="2909946352844186028">नेटवर्क में बदलाव का पता चला.</translation>
 <translation id="3005723025932146533">सहेजी गई प्रतिलिपि दिखाएं</translation>
 <translation id="3109728660330352905">आपके पास इस पेज को देखने के लिए प्राधिकरण नहीं है.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS एक नेटवर्क सेवा है जो किसी वेबसाइट के नाम को उसके इंटरनेट पते में बदलती है.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ने आपका लॉगिन प्रमाणपत्र स्वीकार नहीं किया है या हो सकता है कि प्रमाणपत्र उपलब्ध नहीं कराया गया हो.</translation>
 <translation id="4522570452068850558">विवरण</translation>
-<translation id="4670097147947922288">आप एक एक्सटेंशन पेज देख रहे हैं.</translation>
 <translation id="4708268264240856090">आपका कनेक्शन बाधित था</translation>
 <translation id="4744603770635761495">निष्पादन-योग्य पथ</translation>
 <translation id="4764776831041365478"><ph name="URL" /> पर मौजूद वेबपेज संभवतः अस्थायी रूप से बंद है या उसे स्थायी रूप से किसी नए वेब पते पर ले जाया गया है.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">यह पेज काम नहीं कर रहा है</translation>
 <translation id="5869405914158311789">इस साइट तक नहीं पहुंचा जा सकता</translation>
 <translation id="5990559369517809815">सर्वर से किए गए अनुरोधों को एक्‍सटेंशन द्वारा अवरुद्ध कर दिया गया है.</translation>
-<translation id="6042308850641462728">अधिक</translation>
 <translation id="6146055958333702838">सभी केबल जांचें और आपके द्वारा उपयोग किए जा रहे सभी राउटर, मॉडेम या अन्य नेटवर्क
     डिवाइस को रीबूट करें.</translation>
 <translation id="6165508094623778733">अधिक जानें</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">नेटवर्क पूर्वानुमान को अक्षम करके देखें</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> ने कनेक्ट करने से मना कर दिया है.</translation>
 <translation id="6711464428925977395">प्रॉक्सी सर्वर के साथ कुछ गलत है या पता गलत है.</translation>
-<translation id="6830600606572693159"><ph name="URL" /> पर वेबपेज वर्तमान में अनुपलब्ध है. संभवतः यह ओवरलोड हो गया है या रखरखाव के लिए बंद कर दिया है.</translation>
 <translation id="6897140037006041989">उपयोगकर्ता एजेंट</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> सुरक्षा मानकों का पालन नहीं करता.</translation>
-<translation id="7269802741830436641">इस वेबपेज में एक रीडायरेक्ट लूप है</translation>
 <translation id="7353601530677266744">आदेश पंक्ति</translation>
 <translation id="7419106976560586862">प्रोफ़ाइल पथ</translation>
 <translation id="7518003948725431193">इस वेब पते के लिए कोई वेब पेज नहीं मिला था: <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> वर्तमान में इस अनुरोध का प्रबंधन कर पाने में असमर्थ है.</translation>
 <translation id="7716424297397655342">इस साइट को संचय से लोड नहीं किया जा सकता</translation>
 <translation id="7758069387465995638">हो सकता है कि फायरवॉल या एंटीवायरस द्वारा कनेक्शन अवरुद्ध हो.</translation>
-<translation id="778579833039460630">कोई डेटा नहीं मिला</translation>
 <translation id="7951415247503192394">(32-बिट)</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" /> का सर्वर <ph name="BEGIN_ABBR" />DNS पता<ph name="END_ABBR" /> नहीं ढूंढ़ा जा सका.</translation>
 <translation id="8142868475871995937">काली सूची में डाले गए URL तथा आपके सिस्टम व्यवस्थापक द्वारा लागू की गई अन्य नीतियों को देखने के लिए &lt;strong&gt;vivaldi://policy&lt;/strong&gt; पर जाएं.</translation>

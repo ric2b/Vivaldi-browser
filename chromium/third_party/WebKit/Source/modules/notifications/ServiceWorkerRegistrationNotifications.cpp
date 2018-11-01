@@ -176,7 +176,7 @@ void ServiceWorkerRegistrationNotifications::prepareShow(
       WTF::bind(&ServiceWorkerRegistrationNotifications::didLoadResources,
                 wrapWeakPersistent(this), origin.release(), data,
                 WTF::passed(std::move(callbacks))));
-  m_loaders.add(loader);
+  m_loaders.insert(loader);
   loader->start(getExecutionContext(), data);
 }
 
@@ -194,7 +194,7 @@ void ServiceWorkerRegistrationNotifications::didLoadResources(
   notificationManager->showPersistent(
       WebSecurityOrigin(origin.get()), data, loader->getResources(),
       m_registration->webRegistration(), std::move(callbacks));
-  m_loaders.remove(loader);
+  m_loaders.erase(loader);
 }
 
 }  // namespace blink

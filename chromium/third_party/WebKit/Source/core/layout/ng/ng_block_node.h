@@ -6,19 +6,19 @@
 #define NGBlockNode_h
 
 #include "core/CoreExport.h"
+#include "core/layout/LayoutBox.h"
 #include "core/layout/ng/ng_layout_input_node.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class ComputedStyle;
-class LayoutBox;
 class LayoutObject;
 class NGBreakToken;
 class NGConstraintSpace;
-class NGFragment;
-class NGLayoutCoordinator;
+class NGLayoutResult;
 struct NGLogicalOffset;
 struct MinAndMaxContentSizes;
 
@@ -29,47 +29,30 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
  public:
   explicit NGBlockNode(LayoutObject*);
 
-  // TODO(layout-ng): make it private and declare a friend class to use in tests
-  explicit NGBlockNode(ComputedStyle*);
-
   ~NGBlockNode() override;
 
-  bool Layout(NGConstraintSpace*, NGFragment**) override;
-  void LayoutSync(NGConstraintSpace*, NGFragment**);
-
-  NGBlockNode* NextSibling() override;
+  RefPtr<NGLayoutResult> Layout(NGConstraintSpace* constraint_space,
+                                NGBreakToken* break_token = nullptr) override;
+  NGLayoutInputNode* NextSibling() override;
+  LayoutObject* GetLayoutObject() override;
 
   // Computes the value of min-content and max-content for this box.
-  // The return value has the same meaning as for Layout.
-  // If the underlying layout algorithm returns NotImplemented from
-  // ComputeMinAndMaxContentSizes, this function will synthesize these sizes
-  // using Layout with special constraint spaces.
-  // It is not legal to interleave a pending Layout() with a pending
-  // ComputeOrSynthesizeMinAndMaxContentSizes (i.e. you have to call Layout
-  // often enough that it returns true before calling
-  // ComputeOrSynthesizeMinAndMaxContentSizes)
-  bool ComputeMinAndMaxContentSizes(MinAndMaxContentSizes*);
-  MinAndMaxContentSizes ComputeMinAndMaxContentSizesSync();
+  // If the underlying layout algorithm's ComputeMinAndMaxContentSizes returns
+  // no value, this function will synthesize these sizes using Layout with
+  // special constraint spaces -- infinite available size for max content, zero
+  // available size for min content, and percentage resolution size zero for
+  // both.
+  MinAndMaxContentSizes ComputeMinAndMaxContentSizes();
 
-  const ComputedStyle* Style() const;
-  ComputedStyle* MutableStyle();
+  const ComputedStyle& Style() const;
 
   NGLayoutInputNode* FirstChild();
-
-  void SetNextSibling(NGBlockNode*);
-  void SetFirstChild(NGLayoutInputNode*);
-
-  void SetFragment(NGPhysicalBoxFragment* fragment) { fragment_ = fragment; }
-  NGBreakToken* CurrentBreakToken() const;
-  bool IsLayoutFinished() const {
-    return fragment_ && !fragment_->BreakToken();
-  }
 
   DECLARE_VIRTUAL_TRACE();
 
   // Runs layout on layout_box_ and creates a fragment for the resulting
   // geometry.
-  NGPhysicalBoxFragment* RunOldLayout(const NGConstraintSpace&);
+  RefPtr<NGLayoutResult> RunOldLayout(const NGConstraintSpace&);
 
   // Called if this is an out-of-flow block which needs to be
   // positioned with legacy layout.
@@ -77,15 +60,7 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
 
   // Save static position for legacy AbsPos layout.
   void SaveStaticOffsetForLegacy(const NGLogicalOffset&);
-
-  void UpdateLayoutBox(NGPhysicalBoxFragment* fragment,
-                       const NGConstraintSpace* constraint_space);
-
  private:
-  // This is necessary for interop between old and new trees -- after our parent
-  // positions us, it calls this function so we can store the position on the
-  // underlying LayoutBox.
-  void PositionUpdated();
 
   bool CanUseNewLayout();
   bool HasInlineChildren();
@@ -98,13 +73,12 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   // combination.
   LayoutBox* layout_box_;
   RefPtr<ComputedStyle> style_;
-  Member<NGBlockNode> next_sibling_;
+  Member<NGLayoutInputNode> next_sibling_;
   Member<NGLayoutInputNode> first_child_;
-  Member<NGLayoutCoordinator> layout_coordinator_;
   // TODO(mstensho): An input node may produce multiple fragments, so this
-  // should probably be renamed to last_fragment_ or something like that, since
+  // should probably be renamed to last_result_ or something like that, since
   // the last fragment is all we care about when resuming layout.
-  Member<NGPhysicalBoxFragment> fragment_;
+  RefPtr<NGLayoutResult> layout_result_;
 };
 
 DEFINE_TYPE_CASTS(NGBlockNode,

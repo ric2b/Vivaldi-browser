@@ -7,16 +7,16 @@
 
 namespace password_manager {
 
-bool PasswordManagerClient::IsAutomaticPasswordSavingEnabled() const {
-  return false;
-}
-
 bool PasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage() const {
   return true;
 }
 
 bool PasswordManagerClient::IsFillingEnabledForCurrentPage() const {
   return true;
+}
+
+bool PasswordManagerClient::IsHSTSActiveForHost(const GURL& origin) const {
+  return false;
 }
 
 bool PasswordManagerClient::OnCredentialManagerUsed() {

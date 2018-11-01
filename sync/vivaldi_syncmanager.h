@@ -1,7 +1,10 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_SYNC_VIVALDI_SYNCMANAGER_H_
-#define VIVALDI_SYNC_VIVALDI_SYNCMANAGER_H_
+#ifndef SYNC_VIVALDI_SYNCMANAGER_H_
+#define SYNC_VIVALDI_SYNCMANAGER_H_
+
+#include <memory>
+#include <string>
 
 #include "chrome/browser/sync/sync_startup_tracker.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -23,7 +26,7 @@ class VivaldiSyncManager : public ProfileSyncService,
   // invalidation_service as parameter to work around possible effects of
   // immedatiate move of init_params
   VivaldiSyncManager(
-      ProfileSyncService::InitParams& init_params,
+      ProfileSyncService::InitParams* init_params,
       std::shared_ptr<VivaldiInvalidationService> invalidation_service);
   ~VivaldiSyncManager() override;
 
@@ -67,10 +70,6 @@ class VivaldiSyncManager : public ProfileSyncService,
   void SyncStartupCompleted() override;
   void SyncStartupFailed() override;
 
-  void OnPassphraseRequired(
-      syncer::PassphraseRequiredReason reason,
-      const sync_pb::EncryptedData& pending_keys) override;
-
  protected:
   bool DisableNotifications() const override;
 
@@ -103,4 +102,4 @@ class VivaldiSyncManager : public ProfileSyncService,
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_VIVALDI_SYNCMANAGER_H_
+#endif  // SYNC_VIVALDI_SYNCMANAGER_H_

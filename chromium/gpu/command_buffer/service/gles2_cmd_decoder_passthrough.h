@@ -12,6 +12,7 @@
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/client_service_map.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
@@ -134,7 +135,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // returns true if the channel is still scheduled.
   void SetFenceSyncReleaseCallback(
       const FenceSyncReleaseCallback& callback) override;
-  void SetWaitFenceSyncCallback(const WaitFenceSyncCallback& callback) override;
+  void SetWaitSyncTokenCallback(const WaitSyncTokenCallback& callback) override;
   void SetDescheduleUntilFinishedCallback(
       const NoParamCallback& callback) override;
   void SetRescheduleAfterFinishedCallback(
@@ -316,6 +317,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // The GL context this decoder renders to on behalf of the client.
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
+  bool offscreen_;
 
   // Managers
   std::unique_ptr<ImageManager> image_manager_;
@@ -326,7 +328,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Callbacks
   FenceSyncReleaseCallback fence_sync_release_callback_;
-  WaitFenceSyncCallback wait_fence_sync_callback_;
+  WaitSyncTokenCallback wait_sync_token_callback_;
 
   // Some objects may generate resources when they are bound even if they were
   // not generated yet: texture, buffer, renderbuffer, framebuffer, transform

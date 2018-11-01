@@ -221,7 +221,7 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
 
     if (!m_createImageChromiumFail) {
       ASSERT_TRUE(m_textureSizes.contains(texture));
-      m_mostRecentlyProducedSize = m_textureSizes.get(texture);
+      m_mostRecentlyProducedSize = m_textureSizes.at(texture);
     }
   }
 
@@ -239,10 +239,10 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
     }
   }
 
-  GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
-                                            GLsizei height,
-                                            GLenum internalformat,
-                                            GLenum usage) override {
+  GLuint CreateImageCHROMIUM(ClientBuffer buffer,
+                             GLsizei width,
+                             GLsizei height,
+                             GLenum internalformat) override {
     if (m_createImageChromiumFail)
       return 0;
     m_imageSizes.set(m_currentImageId, IntSize(width, height));
@@ -251,10 +251,10 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
 
   MOCK_METHOD1(DestroyImageMock, void(GLuint imageId));
   void DestroyImageCHROMIUM(GLuint imageId) {
-    m_imageSizes.remove(imageId);
+    m_imageSizes.erase(imageId);
     // No textures should be bound to this.
     CHECK(m_imageToTextureMap.find(imageId) == m_imageToTextureMap.end());
-    m_imageSizes.remove(imageId);
+    m_imageSizes.erase(imageId);
     DestroyImageMock(imageId);
   }
 
@@ -272,7 +272,7 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
   void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) {
     if (target == imageCHROMIUMTextureTarget()) {
       m_imageSizes.set(m_currentImageId, IntSize());
-      m_imageToTextureMap.remove(imageId);
+      m_imageToTextureMap.erase(imageId);
       ReleaseTexImage2DMock(imageId);
     }
   }

@@ -27,6 +27,10 @@
 #import "ios/testing/earl_grey/disabled_test_macros.h"
 #import "ios/testing/wait_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 // Returns a fake identity.
@@ -69,14 +73,14 @@ void TapViewWithAccessibilityId(NSString* accessiblity_id) {
 // Taps the button with accessibility label |label|.
 void TapButtonWithAccessibilityLabel(NSString* label) {
   id<GREYMatcher> matcher =
-      chrome_test_util::buttonWithAccessibilityLabel(label);
+      chrome_test_util::ButtonWithAccessibilityLabel(label);
   [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
 }
 
 // Taps the button with accessibility labelId |message_id|.
 void TapButtonWithLabelId(int message_id) {
   id<GREYMatcher> matcher =
-      chrome_test_util::buttonWithAccessibilityLabelId(message_id);
+      chrome_test_util::ButtonWithAccessibilityLabelId(message_id);
   [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
 }
 
@@ -104,10 +108,9 @@ void WaitForMatcher(id<GREYMatcher> matcher) {
                                                              error:&error];
     return error == nil;
   };
-  GREYAssert(
-      testing::WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout,
-                                           condition),
-      [NSString stringWithFormat:@"Waiting for matcher %@ failed.", matcher]);
+  GREYAssert(testing::WaitUntilConditionOrTimeout(
+                 testing::kWaitForUIElementTimeout, condition),
+             @"Waiting for matcher %@ failed.", matcher);
 }
 
 // Asserts that |identity| is actually signed in to the active profile.
@@ -258,7 +261,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Accept warning for signing into a managed identity, with synchronization
   // off due to an infinite spinner.
   SetEarlGreySynchronizationEnabled(NO);
-  WaitForMatcher(chrome_test_util::buttonWithAccessibilityLabelId(
+  WaitForMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON));
   TapButtonWithLabelId(IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON);
   SetEarlGreySynchronizationEnabled(YES);
@@ -274,7 +277,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   // Accept warning for signout out of a managed identity, with synchronization
   // off due to an infinite spinner.
   SetEarlGreySynchronizationEnabled(NO);
-  WaitForMatcher(chrome_test_util::buttonWithAccessibilityLabelId(
+  WaitForMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_MANAGED_SWITCH_ACCEPT_BUTTON));
   TapButtonWithLabelId(IDS_IOS_MANAGED_SWITCH_ACCEPT_BUTTON);
   SetEarlGreySynchronizationEnabled(YES);
@@ -336,7 +339,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
   // Synchronization off due to an infinite spinner.
   SetEarlGreySynchronizationEnabled(NO);
-  WaitForMatcher(chrome_test_util::buttonWithAccessibilityLabelId(
+  WaitForMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON));
   TapButtonWithLabelId(IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON);
   SetEarlGreySynchronizationEnabled(YES);
@@ -388,7 +391,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
   // All Settings should be gone and user signed in.
   id<GREYMatcher> settings_matcher =
-      chrome_test_util::staticTextWithAccessibilityLabelId(
+      chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_SETTINGS_TITLE);
   [[EarlGrey selectElementWithMatcher:settings_matcher]
       assertWithMatcher:grey_notVisible()];
@@ -407,15 +410,15 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   OpenSignInFromSettings();
 
   // Open new tab to cancel sign-in.
-  base::scoped_nsobject<OpenUrlCommand> command(
-      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")]);
+  OpenUrlCommand* command =
+      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
   chrome_test_util::RunCommandWithActiveViewController(command);
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   OpenSignInFromSettings();
   id<GREYMatcher> signin_matcher =
-      chrome_test_util::staticTextWithAccessibilityLabelId(
+      chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
   [[EarlGrey selectElementWithMatcher:signin_matcher]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -438,22 +441,22 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
   // Open Add Account screen.
   id<GREYMatcher> add_account_matcher =
-      chrome_test_util::staticTextWithAccessibilityLabelId(
+      chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_ADD_ACCOUNT_BUTTON);
   [[EarlGrey selectElementWithMatcher:add_account_matcher]
       performAction:grey_tap()];
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
   // Open new tab to cancel sign-in.
-  base::scoped_nsobject<OpenUrlCommand> command(
-      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")]);
+  OpenUrlCommand* command =
+      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
   chrome_test_util::RunCommandWithActiveViewController(command);
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   OpenSignInFromSettings();
   id<GREYMatcher> signin_matcher =
-      chrome_test_util::staticTextWithAccessibilityLabelId(
+      chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
   [[EarlGrey selectElementWithMatcher:signin_matcher]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -504,15 +507,15 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON);
 
   // Open new tab to cancel sign-in.
-  base::scoped_nsobject<OpenUrlCommand> command(
-      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")]);
+  OpenUrlCommand* command =
+      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
   chrome_test_util::RunCommandWithActiveViewController(command);
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   OpenSignInFromSettings();
   id<GREYMatcher> signin_matcher =
-      chrome_test_util::staticTextWithAccessibilityLabelId(
+      chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
   [[EarlGrey selectElementWithMatcher:signin_matcher]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -548,9 +551,7 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
   }
 
   // Selects the top level folder (Sign In promo is only shown there).
-  NSString* topLevelFolderTitle = experimental_flags::IsAllBookmarksEnabled()
-                                      ? @"All Bookmarks"
-                                      : @"Mobile Bookmarks";
+  NSString* topLevelFolderTitle = @"Mobile Bookmarks";
   id<GREYMatcher> all_bookmarks_matcher =
       grey_allOf(grey_kindOfClass(NSClassFromString(@"BookmarkMenuCell")),
                  grey_descendant(grey_text(topLevelFolderTitle)), nil);
@@ -561,14 +562,14 @@ void AssertAuthenticatedIdentityInActiveProfile(ChromeIdentity* identity) {
 
   // Assert sign-in screen was shown.
   id<GREYMatcher> signin_matcher =
-      chrome_test_util::staticTextWithAccessibilityLabelId(
+      chrome_test_util::StaticTextWithAccessibilityLabelId(
           IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_DESCRIPTION);
   [[EarlGrey selectElementWithMatcher:signin_matcher]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Open new tab to cancel sign-in.
-  base::scoped_nsobject<OpenUrlCommand> command(
-      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")]);
+  OpenUrlCommand* command =
+      [[OpenUrlCommand alloc] initWithURLFromChrome:GURL("about:blank")];
   chrome_test_util::RunCommandWithActiveViewController(command);
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,

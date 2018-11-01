@@ -18,7 +18,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
@@ -93,9 +92,12 @@ class WebHitTestResult;
 #endif
 }  // namespace blink
 
+namespace gfx {
+class ICCProfile;
+}
+
 namespace content {
 
-class HistoryController;
 class RendererDateTimePicker;
 class RenderViewImplTest;
 class RenderViewObserver;
@@ -122,8 +124,7 @@ class CONTENT_EXPORT RenderViewImpl
     : public RenderWidget,
       NON_EXPORTED_BASE(public blink::WebViewClient),
       public RenderWidgetOwnerDelegate,
-      public RenderView,
-      public base::SupportsWeakPtr<RenderViewImpl> {
+      public RenderView {
  public:
   // Creates a new RenderView. Note that if the original opener has been closed,
   // |params.window_was_created_with_opener| will be true and
@@ -165,10 +166,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   void set_send_content_state_immediately(bool value) {
     send_content_state_immediately_ = value;
-  }
-
-  HistoryController* history_controller() {
-    return history_controller_.get();
   }
 
   // Functions to add and remove observers for this object.
@@ -213,15 +210,12 @@ class CONTENT_EXPORT RenderViewImpl
   void AttachWebFrameWidget(blink::WebFrameWidget* frame_widget);
 
   void TransferActiveWheelFlingAnimation(
-      const blink::WebActiveWheelFlingParameters& params);
+      const blink::WebActiveWheelFlingParameters& params) override;
 
   // Starts a timer to send an UpdateState message on behalf of |frame|, if the
   // timer isn't already running. This allows multiple state changing events to
   // be coalesced into one update.
   void StartNavStateSyncTimerIfNecessary(RenderFrameImpl* frame);
-
-  // Synchronously sends the current navigation state to the browser.
-  void SendUpdateState();
 
   // A popup widget opened by this view needs to be shown.
   void ShowCreatedPopupWidget(RenderWidget* popup_widget,
@@ -244,6 +238,9 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Change the device scale factor and force the compositor to resize.
   void SetDeviceScaleFactorForTesting(float factor);
+
+  // Change the device ICC color profile while running a layout test.
+  void SetDeviceColorProfileForTesting(const gfx::ICCProfile& icc_profile);
 
   // Used to force the size of a window when running layout tests.
   void ForceResizeForTesting(const gfx::Size& new_size);
@@ -278,12 +275,11 @@ class CONTENT_EXPORT RenderViewImpl
                      const blink::WebFloatPoint& positionInViewport,
                      const blink::WebFloatSize& velocityInViewport) override;
   void hasTouchEventHandlers(bool has_handlers) override;
-  void resetInputMethod() override;
   blink::WebScreenInfo screenInfo() override;
   void setToolTipText(const blink::WebString&,
                       blink::WebTextDirection hint) override;
   void setTouchAction(blink::WebTouchAction touchAction) override;
-  void showVirtualKeyboard() override;
+  void showVirtualKeyboardOnElementFocus() override;
   void showUnhandledTapUIIfNeeded(const blink::WebPoint& tappedPosition,
                                   const blink::WebNode& tappedNode,
                                   bool pageChanged) override;
@@ -303,7 +299,6 @@ class CONTENT_EXPORT RenderViewImpl
   bool enumerateChosenDirectory(
       const blink::WebString& path,
       blink::WebFileChooserCompletion* chooser_completion) override;
-  void didCancelCompositionOnSelectionChange() override;
   void SetValidationMessageDirection(base::string16* main_text,
                                      blink::WebTextDirection main_text_hint,
                                      base::string16* sub_text,
@@ -372,7 +367,6 @@ class CONTENT_EXPORT RenderViewImpl
   blink::WebView* GetWebView() override;
   blink::WebFrameWidget* GetWebFrameWidget() override;
   bool ShouldDisplayScrollbars(int width, int height) const override;
-  int GetEnabledBindings() const override;
   bool GetContentStateImmediately() const override;
   void Repaint(const gfx::Size& size) override;
   void SetEditCommandForNextKeyEvent(const std::string& name,
@@ -393,6 +387,10 @@ class CONTENT_EXPORT RenderViewImpl
   // Please do not add your stuff randomly to the end here. If there is an
   // appropriate section, add it there. If not, there are some random functions
   // nearer to the top you can add it to.
+
+  base::WeakPtr<RenderViewImpl> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
 
  protected:
   // RenderWidget overrides:
@@ -490,8 +488,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   // RenderWidgetOwnerDelegate implementation ----------------------------------
 
-  void RenderWidgetDidSetColorProfile(
-      const std::vector<char>& color_profile) override;
   void RenderWidgetFocusChangeComplete() override;
   bool DoesRenderWidgetHaveTouchEventHandlersAt(
       const gfx::Point& point) const override;
@@ -525,7 +521,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnExecuteEditCommand(const std::string& name, const std::string& value);
   void OnMoveCaret(const gfx::Point& point);
   void OnScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
-  void OnAllowBindings(int enabled_bindings_flags);
   void OnAllowScriptToClose(bool script_can_close);
   void OnCancelDownload(int32_t download_id);
   void OnClosePage();
@@ -567,7 +562,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnUpdateBrowserControlsState(bool enable_hiding,
                                     bool enable_showing,
                                     bool animate);
-  void OnExtractSmartClipData(const gfx::Rect& rect);
 #elif defined(OS_MACOSX)
   void OnGetRenderedText();
 #endif
@@ -643,9 +637,11 @@ class CONTENT_EXPORT RenderViewImpl
   void UpdateWebViewWithDeviceScaleFactor();
 
   // Send the appropriate ack to be able discard this input event message.
-  void OnDiscardInputEvent(const blink::WebInputEvent* input_event,
-                           const ui::LatencyInfo& latency_info,
-                           InputEventDispatchType dispatch_type);
+  void OnDiscardInputEvent(
+      const blink::WebInputEvent* input_event,
+      const std::vector<const blink::WebInputEvent*>& coalesced_events,
+      const ui::LatencyInfo& latency_info,
+      InputEventDispatchType dispatch_type);
 
   // ---------------------------------------------------------------------------
   // ADDING NEW FUNCTIONS? Please keep private functions alphabetized and put
@@ -795,8 +791,6 @@ class CONTENT_EXPORT RenderViewImpl
   // initialized.
   SpeechRecognitionDispatcher* speech_recognition_dispatcher_;
 
-  std::unique_ptr<HistoryController> history_controller_;
-
 #if defined(OS_ANDROID)
   // Android Specific ---------------------------------------------------------
 
@@ -836,8 +830,6 @@ class CONTENT_EXPORT RenderViewImpl
   typedef std::map<cc::SharedBitmapId, cc::SharedBitmap*> BitmapMap;
   BitmapMap disambiguation_bitmaps_;
 
-  bool has_added_input_handler_;
-
   // ---------------------------------------------------------------------------
   // ADDING NEW DATA? Please see if it fits appropriately in one of the above
   // sections rather than throwing it randomly at the end. If you're adding a
@@ -846,6 +838,8 @@ class CONTENT_EXPORT RenderViewImpl
   // use the Observer interface to filter IPC messages and receive frame change
   // notifications.
   // ---------------------------------------------------------------------------
+
+  base::WeakPtrFactory<RenderViewImpl> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewImpl);
 };

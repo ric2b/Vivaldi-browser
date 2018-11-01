@@ -43,6 +43,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "gpu/config/gpu_info.h"
+#include "media/media_features.h"
 #include "net/http/http_util.h"
 #include "pdf/features.h"
 #include "ppapi/features/features.h"
@@ -76,7 +77,7 @@
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/common/pepper_plugin_info.h"
 #include "flapper_version.h"  // nogncheck  In SHARED_INTERMEDIATE_DIR.
-#include "ppapi/shared_impl/ppapi_permissions.h"
+#include "ppapi/shared_impl/ppapi_permissions.h"  // nogncheck
 #endif
 
 #if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_PEPPER_CDMS) && \
@@ -85,11 +86,17 @@
 #include "chrome/common/widevine_cdm_constants.h"
 #endif
 
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#include "chrome/common/media/cdm_host_file_path.h"
+#endif
+
 #if defined(OS_ANDROID)
 #include "chrome/common/chrome_media_client_android.h"
 #endif
 
 #include "base/file_version_info.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -138,9 +145,9 @@ bool IsWidevineAvailable(base::FilePath* adapter_path,
       // This list must match the CDM that is being bundled with Chrome.
       codecs_supported->push_back(kCdmSupportedCodecVp8);
       codecs_supported->push_back(kCdmSupportedCodecVp9);
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
       codecs_supported->push_back(kCdmSupportedCodecAvc1);
-#endif  // defined(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
       return true;
     }
   }
@@ -513,6 +520,11 @@ void ChromeContentClient::AddPepperPlugins(
 #if BUILDFLAG(ENABLE_PLUGINS)
   ComputeBuiltInPlugins(plugins);
 
+  // If flash is disabled, do not try to add any flash plugin.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kDisableBundledPpapiFlash))
+    return;
+
   std::vector<std::unique_ptr<content::PepperPluginInfo>> flash_versions;
 
 // Get component updated flash for desktop Linux and Chrome OS.
@@ -590,26 +602,35 @@ void ChromeContentClient::AddPepperPlugins(
 }
 
 void ChromeContentClient::AddContentDecryptionModules(
-    std::vector<content::CdmInfo>* cdms) {
+    std::vector<content::CdmInfo>* cdms,
+    std::vector<content::CdmHostFilePath>* cdm_host_file_paths) {
+  if (cdms) {
 // TODO(jrummell): Need to have a better flag to indicate systems Widevine
 // is available on. For now we continue to use ENABLE_PEPPER_CDMS so that
 // we can experiment between pepper and mojo.
 #if defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
-  base::FilePath adapter_path;
-  base::FilePath cdm_path;
-  std::vector<std::string> codecs_supported;
-  if (IsWidevineAvailable(&adapter_path, &cdm_path, &codecs_supported)) {
-    // CdmInfo needs |path| to be the actual Widevine library,
-    // not the adapter, so adjust as necessary. It will be in the
-    // same directory as the installed adapter.
-    const base::Version version(WIDEVINE_CDM_VERSION_STRING);
-    DCHECK(version.IsValid());
-    cdms->push_back(content::CdmInfo(kWidevineCdmType, version, cdm_path,
-                                     codecs_supported));
-  }
+    base::FilePath adapter_path;
+    base::FilePath cdm_path;
+    std::vector<std::string> codecs_supported;
+    if (IsWidevineAvailable(&adapter_path, &cdm_path, &codecs_supported)) {
+      // CdmInfo needs |path| to be the actual Widevine library,
+      // not the adapter, so adjust as necessary. It will be in the
+      // same directory as the installed adapter.
+      const base::Version version(WIDEVINE_CDM_VERSION_STRING);
+      DCHECK(version.IsValid());
+      cdms->push_back(content::CdmInfo(kWidevineCdmType, version, cdm_path,
+                                       codecs_supported));
+    }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
 
-  // TODO(jrummell): Add External Clear Key CDM for testing, if it's available.
+    // TODO(jrummell): Add External Clear Key CDM for testing, if it's
+    // available.
+  }
+
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+  if (cdm_host_file_paths)
+    chrome::AddCdmHostFilePaths(cdm_host_file_paths);
+#endif
 }
 
 static const char* const kChromeStandardURLSchemes[] = {
@@ -623,7 +644,7 @@ static const char* const kChromeStandardURLSchemes[] = {
 };
 
 void ChromeContentClient::AddAdditionalSchemes(Schemes* schemes) {
-  for (auto& standard_scheme : kChromeStandardURLSchemes)
+  for (auto* standard_scheme : kChromeStandardURLSchemes)
     schemes->standard_schemes.push_back(standard_scheme);
 
 #if defined(OS_ANDROID)
@@ -655,6 +676,8 @@ void ChromeContentClient::AddAdditionalSchemes(Schemes* schemes) {
   // overridden by the web_accessible_resources manifest key.
   // TODO(kalman): See what happens with a service worker.
   schemes->cors_enabled_schemes.push_back(extensions::kExtensionScheme);
+
+  schemes->csp_bypassing_schemes.push_back(extensions::kExtensionScheme);
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -733,6 +756,11 @@ bool ChromeContentClient::AllowScriptExtensionForServiceWorker(
 }
 
 bool ChromeContentClient::IsSupplementarySiteIsolationModeEnabled() {
+  // This would break script-insertions from extensions into webviews. VB-27648
+  // and friends.
+  if (vivaldi::IsVivaldiRunning()) {
+    return false;
+  }
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   return extensions::IsIsolateExtensionsEnabled();
 #else

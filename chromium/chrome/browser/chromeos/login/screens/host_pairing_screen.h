@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
-#include "chrome/browser/chromeos/login/screens/host_pairing_screen_actor.h"
+#include "chrome/browser/chromeos/login/screens/host_pairing_screen_view.h"
 #include "components/login/screens/screen_context.h"
 #include "components/pairing/host_pairing_controller.h"
 
@@ -17,7 +17,7 @@ namespace chromeos {
 class HostPairingScreen
     : public BaseScreen,
       public pairing_chromeos::HostPairingController::Observer,
-      public HostPairingScreenActor::Delegate,
+      public HostPairingScreenView::Delegate,
       public EnterpriseEnrollmentHelper::EnrollmentStatusConsumer {
  public:
   class Delegate {
@@ -39,7 +39,7 @@ class HostPairingScreen
 
   HostPairingScreen(BaseScreenDelegate* base_screen_delegate,
                     Delegate* delegate,
-                    HostPairingScreenActor* actor,
+                    HostPairingScreenView* view,
                     pairing_chromeos::HostPairingController* remora_controller);
   ~HostPairingScreen() override;
 
@@ -63,7 +63,7 @@ class HostPairingScreen
   void EnrollHostRequested(const std::string& auth_token) override;
 
   // Overridden from ControllerPairingView::Delegate:
-  void OnActorDestroyed(HostPairingScreenActor* actor) override;
+  void OnViewDestroyed(HostPairingScreenView* view) override;
 
   // Overridden from EnterpriseEnrollmentHelper::EnrollmentStatusConsumer:
   void OnAuthError(const GoogleServiceAuthError& error) override;
@@ -77,17 +77,17 @@ class HostPairingScreen
   void OnAuthCleared();
   void OnAnyEnrollmentError();
 
-  Delegate* delegate_;
+  Delegate* delegate_ = nullptr;
 
-  HostPairingScreenActor* actor_;
+  HostPairingScreenView* view_ = nullptr;
 
   // Controller performing pairing. Owned by the wizard controller.
-  pairing_chromeos::HostPairingController* remora_controller_;
+  pairing_chromeos::HostPairingController* remora_controller_ = nullptr;
 
   std::unique_ptr<EnterpriseEnrollmentHelper> enrollment_helper_;
 
   // Current stage of pairing process.
-  Stage current_stage_;
+  Stage current_stage_ = pairing_chromeos::HostPairingController::STAGE_NONE;
 
   base::WeakPtrFactory<HostPairingScreen> weak_ptr_factory_;
 

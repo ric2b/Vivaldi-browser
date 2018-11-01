@@ -660,6 +660,7 @@ void AppendPublicKeyHashes(CERTCertList* cert_list,
 bool IsEVCandidate(EVRootCAMetadata* metadata,
                    CERTCertificate* cert_handle,
                    SECOidTag* ev_policy_oid) {
+  *ev_policy_oid = SEC_OID_UNKNOWN;
   DCHECK(cert_handle);
   ScopedCERTCertificatePolicies policies(DecodeCertPolicies(cert_handle));
   if (!policies.get())
@@ -674,11 +675,15 @@ bool IsEVCandidate(EVRootCAMetadata* metadata,
       continue;
     if (metadata->IsEVPolicyOID(policy_info->oid)) {
       *ev_policy_oid = policy_info->oid;
-      return true;
+
+      // De-prioritize the CA/Browser forum Extended Validation policy
+      // (2.23.140.1.1). See crbug.com/705285.
+      if (!EVRootCAMetadata::IsCaBrowserForumEvOid(policy_info->oid))
+        break;
     }
   }
 
-  return false;
+  return *ev_policy_oid != SEC_OID_UNKNOWN;
 }
 
 // Studied Mozilla's code (esp. security/manager/ssl/src/nsIdentityChecking.cpp
@@ -796,11 +801,6 @@ int CertVerifyProcNSS::VerifyInternalImpl(
     cache_ocsp_response_from_side_channel_(CERT_GetDefaultCertDB(), cert_handle,
                                            PR_Now(), &ocsp_response_item,
                                            nullptr);
-  }
-
-  if (!cert->VerifyNameMatch(hostname,
-                             &verify_result->common_name_fallback_used)) {
-    verify_result->cert_status |= CERT_STATUS_COMMON_NAME_INVALID;
   }
 
   // Setup a callback to call into CheckChainRevocationWithCRLSet with the

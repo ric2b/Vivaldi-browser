@@ -35,15 +35,13 @@ const char kJsScreenPath[] = "login.EnableDebuggingScreen";
 namespace chromeos {
 
 EnableDebuggingScreenHandler::EnableDebuggingScreenHandler()
-    : BaseScreenHandler(kJsScreenPath),
-      delegate_(NULL),
-      show_on_init_(false),
-      weak_ptr_factory_(this) {
+    : weak_ptr_factory_(this) {
+  set_call_js_prefix(kJsScreenPath);
 }
 
 EnableDebuggingScreenHandler::~EnableDebuggingScreenHandler() {
   if (delegate_)
-    delegate_->OnActorDestroyed(this);
+    delegate_->OnViewDestroyed(this);
 }
 
 void EnableDebuggingScreenHandler::ShowWithParams() {
@@ -272,7 +270,7 @@ void EnableDebuggingScreenHandler::UpdateUIState(
 
   web_ui()->CallJavascriptFunctionUnsafe(
       "login.EnableDebuggingScreen.updateState",
-      base::FundamentalValue(static_cast<int>(state)));
+      base::Value(static_cast<int>(state)));
 }
 
 void EnableDebuggingScreenHandler::HandleOnLearnMore() {

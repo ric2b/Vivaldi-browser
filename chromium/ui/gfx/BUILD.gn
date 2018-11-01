@@ -91,6 +91,8 @@ component("gfx") {
     "gdi_util.h",
     "gfx_paths.cc",
     "gfx_paths.h",
+    "half_float.cc",
+    "half_float.h",
     "icc_profile.cc",
     "icc_profile.h",
     "icc_profile_mac.mm",
@@ -119,6 +121,7 @@ component("gfx") {
     "image/image_util.cc",
     "image/image_util.h",
     "image/image_util_ios.mm",
+    "image/image_util_mac.mm",
     "interpolated_transform.cc",
     "interpolated_transform.h",
     "ios/NSString+CrStringDrawing.h",
@@ -163,12 +166,12 @@ component("gfx") {
     "selection_model.h",
     "sequential_id_generator.cc",
     "sequential_id_generator.h",
-    "shadow_util.cc",
-    "shadow_util.h",
     "shadow_value.cc",
     "shadow_value.h",
     "skbitmap_operations.cc",
     "skbitmap_operations.h",
+    "skia_color_space_util.cc",
+    "skia_color_space_util.h",
     "skia_util.cc",
     "skia_util.h",
     "switches.cc",
@@ -230,6 +233,10 @@ component("gfx") {
       "paint_throbber.h",
       "scoped_canvas.cc",
       "scoped_canvas.h",
+      "shadow_util.cc",
+      "shadow_util.h",
+      "skia_paint_util.cc",
+      "skia_paint_util.h",
     ]
   }
 
@@ -310,6 +317,7 @@ component("gfx") {
     set_sources_assignment_filter(sources_assignment_filter)
   } else {
     deps += [
+      "//cc/paint",
       "//third_party:jpeg",
       "//third_party/harfbuzz-ng",
     ]
@@ -399,13 +407,11 @@ component("gfx") {
     ]
   }
 
-  if (!use_aura) {
-    if (!toolkit_views) {
-      sources -= [
-        "nine_image_painter.cc",
-        "nine_image_painter.h",
-      ]
-    }
+  if ((!use_aura && !toolkit_views) || is_ios) {
+    sources -= [
+      "nine_image_painter.cc",
+      "nine_image_painter.h",
+    ]
   }
 
   if (use_x11) {
@@ -435,6 +441,20 @@ source_set("color_space") {
     ":gfx_export",
     "//base",
     "//skia",
+  ]
+}
+
+# Depend on this to use half_float.h without pulling in all of gfx.
+source_set("half_float") {
+  sources = [
+    "half_float.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":gfx_export",
+    "//base",
   ]
 }
 
@@ -537,6 +557,8 @@ source_set("memory_buffer_sources") {
 static_library("test_support") {
   testonly = true
   sources = [
+    "geometry/test/rect_test_util.cc",
+    "geometry/test/rect_test_util.h",
     "image/image_unittest_util.cc",
     "image/image_unittest_util.h",
     "image/image_unittest_util_ios.mm",
@@ -612,6 +634,7 @@ test("gfx_unittests") {
       "codec/jpeg_codec_unittest.cc",
       "codec/png_codec_unittest.cc",
       "color_analysis_unittest.cc",
+      "color_space_unittest.cc",
       "color_transform_unittest.cc",
       "color_utils_unittest.cc",
       "font_fallback_mac_unittest.cc",
@@ -629,6 +652,7 @@ test("gfx_unittests") {
       "geometry/size_unittest.cc",
       "geometry/vector2d_unittest.cc",
       "geometry/vector3d_unittest.cc",
+      "half_float_unittest.cc",
       "icc_profile_unittest.cc",
       "image/image_mac_unittest.mm",
       "image/image_util_unittest.cc",
@@ -722,6 +746,7 @@ test("gfx_unittests") {
 
   if (!is_ios) {
     deps += [
+      "//cc/paint",
       "//mojo/edk/system",
       "//mojo/public/cpp/bindings",
       "//ui/gfx/geometry/mojo:unit_test",

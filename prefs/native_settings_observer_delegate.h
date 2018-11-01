@@ -1,7 +1,9 @@
 // Copyright (c) 2015 Vivaldi Technologies
 
-#ifndef VIVALDI_NATIVE_SETTINGS_OBSERVER_DELEGATE_H_
-#define VIVALDI_NATIVE_SETTINGS_OBSERVER_DELEGATE_H_
+#ifndef PREFS_NATIVE_SETTINGS_OBSERVER_DELEGATE_H_
+#define PREFS_NATIVE_SETTINGS_OBSERVER_DELEGATE_H_
+
+#include <string>
 
 #include "extensions/schema/settings.h"
 
@@ -18,4 +20,4 @@ class NativeSettingsObserverDelegate {
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_NATIVE_SETTINGS_OBSERVER_DELEGATE_H_
+#endif  // PREFS_NATIVE_SETTINGS_OBSERVER_DELEGATE_H_

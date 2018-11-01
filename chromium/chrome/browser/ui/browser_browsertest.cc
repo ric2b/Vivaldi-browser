@@ -283,11 +283,23 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
         render_view_host->GetWidget()->GetView()->GetViewBounds().size();
   }
 
-  // Enlarge WebContentsView by |wcv_resize_insets_| while the navigation entry
-  // is pending.
   void DidStartNavigationToPendingEntry(
       const GURL& url,
       content::ReloadType reload_type) override {
+    // TODO: remove this method when PlzNavigate is turned on by default.
+    if (!content::IsBrowserSideNavigationEnabled())
+      Resize();
+  }
+
+  // Enlarge WebContentsView by |wcv_resize_insets_| while the navigation entry
+  // is pending.
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (content::IsBrowserSideNavigationEnabled())
+      Resize();
+  }
+
+  void Resize() {
     if (wcv_resize_insets_.IsEmpty())
       return;
     // Resizing the main browser window by |wcv_resize_insets_| will
@@ -327,7 +339,7 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
   typedef std::map<content::RenderViewHost*, Sizes> RenderViewSizes;
   RenderViewSizes render_view_sizes_;
   // Enlarge WebContentsView by this size insets in
-  // DidStartNavigationToPendingEntry.
+  // DidStartNavigation.
   gfx::Size wcv_resize_insets_;
   BrowserWindow* browser_window_;  // Weak ptr.
 
@@ -709,14 +721,16 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ReloadThenCancelBeforeUnload) {
 class RedirectObserver : public content::WebContentsObserver {
  public:
   explicit RedirectObserver(content::WebContents* web_contents)
-      : WebContentsObserver(web_contents) {
+      : WebContentsObserver(web_contents),
+        transition_(ui::PageTransition::PAGE_TRANSITION_LINK) {
   }
 
-  void DidNavigateAnyFrame(
-      content::RenderFrameHost* render_frame_host,
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override {
-    params_ = params;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted())
+      return;
+    transition_ = navigation_handle->GetPageTransition();
+    redirects_ = navigation_handle->GetRedirectChain();
   }
 
   void WebContentsDestroyed() override {
@@ -725,12 +739,12 @@ class RedirectObserver : public content::WebContentsObserver {
     FAIL() << "WebContents closed during navigation (http://crbug.com/314036).";
   }
 
-  const content::FrameNavigateParams& params() const {
-    return params_;
-  }
+  ui::PageTransition transition() const { return transition_; }
+  const std::vector<GURL> redirects() const { return redirects_; }
 
  private:
-  content::FrameNavigateParams params_;
+  ui::PageTransition transition_;
+  std::vector<GURL> redirects_;
 
   DISALLOW_COPY_AND_ASSIGN(RedirectObserver);
 };
@@ -777,11 +791,11 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoStopDuringTransferUntilCommit) {
     // history autocomplete to work.
     EXPECT_EQ(redirect_url, contents->GetController().GetLastCommittedEntry()->
                   GetOriginalRequestURL());
-    EXPECT_EQ(2U, redirect_observer.params().redirects.size());
-    EXPECT_EQ(redirect_url, redirect_observer.params().redirects.at(0));
-    EXPECT_EQ(dest_url, redirect_observer.params().redirects.at(1));
+    EXPECT_EQ(2U, redirect_observer.redirects().size());
+    EXPECT_EQ(redirect_url, redirect_observer.redirects().at(0));
+    EXPECT_EQ(dest_url, redirect_observer.redirects().at(1));
     EXPECT_TRUE(ui::PageTransitionCoreTypeIs(
-        redirect_observer.params().transition, ui::PAGE_TRANSITION_TYPED));
+        redirect_observer.transition(), ui::PAGE_TRANSITION_TYPED));
   }
 
   // Restore previous browser client.
@@ -1622,24 +1636,18 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
 IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
   Browser::Type types[] = { Browser::TYPE_TABBED, Browser::TYPE_POPUP };
   for (size_t i = 0; i < arraysize(types); ++i) {
-    Browser::CreateParams params(types[i], browser()->profile());
+    Browser::CreateParams params(types[i], browser()->profile(), true);
     params.initial_show_state = ui::SHOW_STATE_MAXIMIZED;
     AddBlankTabAndShow(new Browser(params));
   }
 }
 
-// Aura doesn't support minimized window. crbug.com/104571.
-#if defined(USE_AURA)
-#define MAYBE_StartMinimized DISABLED_StartMinimized
-#else
-#define MAYBE_StartMinimized StartMinimized
-#endif
 // Makes sure the browser doesn't crash when
 // set_show_state(ui::SHOW_STATE_MINIMIZED) has been invoked.
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_StartMinimized) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, StartMinimized) {
   Browser::Type types[] = { Browser::TYPE_TABBED, Browser::TYPE_POPUP };
   for (size_t i = 0; i < arraysize(types); ++i) {
-    Browser::CreateParams params(types[i], browser()->profile());
+    Browser::CreateParams params(types[i], browser()->profile(), true);
     params.initial_show_state = ui::SHOW_STATE_MINIMIZED;
     AddBlankTabAndShow(new Browser(params));
   }
@@ -1704,8 +1712,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DisableMenuItemsWhenIncognitoIsForced) {
   EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_NEW_INCOGNITO_WINDOW));
 
   // Create a new browser.
-  Browser* new_browser = new Browser(
-      Browser::CreateParams(browser()->profile()->GetOffTheRecordProfile()));
+  Browser* new_browser = new Browser(Browser::CreateParams(
+      browser()->profile()->GetOffTheRecordProfile(), true));
   CommandUpdater* new_command_updater =
       new_browser->command_controller()->command_updater();
   // It should have Bookmarks & Settings commands disabled by default.
@@ -1738,7 +1746,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
 
   // Create a new browser.
   Browser* new_browser =
-      new Browser(Browser::CreateParams(browser()->profile()));
+      new Browser(Browser::CreateParams(browser()->profile(), true));
   CommandUpdater* new_command_updater =
       new_browser->command_controller()->command_updater();
   EXPECT_FALSE(new_command_updater->IsCommandEnabled(IDC_NEW_INCOGNITO_WINDOW));
@@ -1771,7 +1779,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
   // Create a popup (non-main-UI-type) browser. Settings command as well
   // as Extensions should be disabled.
   Browser* popup_browser = new Browser(
-      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile()));
+      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile(), true));
   CommandUpdater* popup_command_updater =
       popup_browser->command_controller()->command_updater();
   EXPECT_FALSE(popup_command_updater->IsCommandEnabled(IDC_MANAGE_EXTENSIONS));
@@ -1787,7 +1795,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
                        DisableOptionsAndImportMenuItemsConsistently) {
   // Create a popup browser.
   Browser* popup_browser = new Browser(
-      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile()));
+      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile(), true));
   CommandUpdater* command_updater =
       popup_browser->command_controller()->command_updater();
   // OPTIONS and IMPORT_SETTINGS are disabled for a non-normal UI.
@@ -2743,6 +2751,37 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, CanDuplicateTab) {
   EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 1));
 }
 
+IN_PROC_BROWSER_TEST_F(BrowserTest, DefaultMediaDevices) {
+  const std::string kDefaultAudioCapture1 = "test_default_audio_capture";
+  const std::string kDefaultVideoCapture1 = "test_default_video_capture";
+  auto SetString = [this](const std::string& path, const std::string& value) {
+    browser()->profile()->GetPrefs()->SetString(path, value);
+  };
+  SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture1);
+  SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture1);
+
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab"));
+  WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  auto GetDeviceID = [web_contents](content::MediaStreamType type) {
+    return web_contents->GetDelegate()->GetDefaultMediaDeviceID(web_contents,
+                                                                type);
+  };
+  EXPECT_EQ(kDefaultAudioCapture1,
+            GetDeviceID(content::MEDIA_DEVICE_AUDIO_CAPTURE));
+  EXPECT_EQ(kDefaultVideoCapture1,
+            GetDeviceID(content::MEDIA_DEVICE_VIDEO_CAPTURE));
+
+  const std::string kDefaultAudioCapture2 = "test_default_audio_capture_2";
+  const std::string kDefaultVideoCapture2 = "test_default_video_capture_2";
+  SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture2);
+  SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture2);
+  EXPECT_EQ(kDefaultAudioCapture2,
+            GetDeviceID(content::MEDIA_DEVICE_AUDIO_CAPTURE));
+  EXPECT_EQ(kDefaultVideoCapture2,
+            GetDeviceID(content::MEDIA_DEVICE_VIDEO_CAPTURE));
+}
+
 namespace {
 class JSBooleanResultGetter {
  public:
@@ -2821,7 +2860,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     // Creates an untrusted popup window and asserts that the eventual height is
     // padded with the toolbar and title bar height (initial height is content
     // height).
-    Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile());
+    Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile(),
+                                 true);
     params.initial_bounds = gfx::Rect(0, 0, 100, 122);
     Browser* browser = new Browser(params);
     gfx::Rect bounds = browser->window()->GetBounds();
@@ -2838,7 +2878,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
   {
     // Creates a trusted popup window and asserts that the eventual height
     // doesn't change (initial height is window height).
-    Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile());
+    Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile(),
+                                 true);
     params.initial_bounds = gfx::Rect(0, 0, 100, 122);
     params.trusted_source = true;
     Browser* browser = new Browser(params);
@@ -2855,7 +2896,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     // Creates an untrusted app window and asserts that the eventual height
     // doesn't change.
     Browser::CreateParams params = Browser::CreateParams::CreateForApp(
-        "app-name", false, gfx::Rect(0, 0, 100, 122), browser()->profile());
+        "app-name", false, gfx::Rect(0, 0, 100, 122), browser()->profile(),
+        true);
     Browser* browser = new Browser(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 
@@ -2870,7 +2912,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     // Creates a trusted app window and asserts that the eventual height
     // doesn't change.
     Browser::CreateParams params = Browser::CreateParams::CreateForApp(
-        "app-name", true, gfx::Rect(0, 0, 100, 122), browser()->profile());
+        "app-name", true, gfx::Rect(0, 0, 100, 122), browser()->profile(),
+        true);
     Browser* browser = new Browser(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 

@@ -4,11 +4,14 @@
 
 #include "chrome/browser/android/vr_shell/vr_input_manager.h"
 
+#include <memory>
+
 #include "base/task_runner_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 
 using blink::WebGestureEvent;
 using blink::WebMouseEvent;
@@ -30,23 +33,35 @@ WebGestureEvent MakeGestureEvent(WebInputEvent::Type type,
 }  // namespace
 
 VrInputManager::VrInputManager(content::WebContents* web_contents)
-    : web_contents_(web_contents),
-      weak_ptr_factory_(this) {
-}
+    : web_contents_(web_contents) {}
 
 VrInputManager::~VrInputManager() = default;
 
-base::WeakPtr<VrInputManager> VrInputManager::GetWeakPtr() {
-  return weak_ptr_factory_.GetWeakPtr();
-}
-
 void VrInputManager::ProcessUpdatedGesture(
     std::unique_ptr<blink::WebInputEvent> event) {
-  if (WebInputEvent::isMouseEventType(event->type())) {
+  if (WebInputEvent::isMouseEventType(event->type()))
     ForwardMouseEvent(static_cast<const blink::WebMouseEvent&>(*event));
-  } else {
+  else if (WebInputEvent::isGestureEventType(event->type()))
     SendGesture(static_cast<const blink::WebGestureEvent&>(*event));
-  }
+}
+
+void VrInputManager::GenerateKeyboardEvent(int char_value, int modifiers) {
+  content::NativeWebKeyboardEvent event(
+      blink::WebInputEvent::Type::KeyDown, modifiers,
+      (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF());
+  event.domKey = ui::DomKey::FromCharacter(char_value);
+  event.nativeKeyCode = char_value;
+  event.windowsKeyCode = char_value;
+  ForwardKeyboardEvent(event);
+
+  event.setType(blink::WebInputEvent::Type::Char);
+  event.text[0] = char_value;
+  event.unmodifiedText[0] = char_value;
+  event.domCode = char_value;
+  ForwardKeyboardEvent(event);
+
+  event.setType(blink::WebInputEvent::Type::KeyUp);
+  ForwardKeyboardEvent(event);
 }
 
 void VrInputManager::SendGesture(const WebGestureEvent& gesture) {
@@ -77,11 +92,22 @@ void VrInputManager::ForwardGestureEvent(
 void VrInputManager::ForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
   if (!web_contents_->GetRenderWidgetHostView())
-      return;
+    return;
   content::RenderWidgetHost* rwh =
       web_contents_->GetRenderWidgetHostView()->GetRenderWidgetHost();
   if (rwh)
     rwh->ForwardMouseEvent(mouse_event);
+}
+
+void VrInputManager::ForwardKeyboardEvent(
+    const content::NativeWebKeyboardEvent& keyboard_event) {
+  content::RenderWidgetHostView* rwhv =
+      web_contents_->GetRenderWidgetHostView();
+  if (rwhv == nullptr)
+    return;
+  content::RenderWidgetHost* rwh = rwhv->GetRenderWidgetHost();
+  if (rwh)
+    rwh->ForwardKeyboardEvent(keyboard_event);
 }
 
 }  // namespace vr_shell

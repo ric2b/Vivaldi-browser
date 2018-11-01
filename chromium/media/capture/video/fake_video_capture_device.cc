@@ -10,18 +10,25 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "media/audio/fake_audio_input_stream.h"
 #include "media/base/video_frame.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkPaint.h"
+#include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 
 namespace media {
+
+namespace {
 
 // Sweep at 600 deg/sec.
 static const float kPacmanAngularVelocity = 600;
@@ -34,17 +41,212 @@ static const double kMinZoom = 100.0;
 static const double kMaxZoom = 400.0;
 static const double kZoomStep = 1.0;
 
+// Larger int means better.
+enum class PixelFormatMatchType : int {
+  INCOMPATIBLE = 0,
+  SUPPORTED_THROUGH_CONVERSION = 1,
+  EXACT = 2
+};
+
+PixelFormatMatchType DetermineFormatMatchType(
+    media::VideoPixelFormat supported_format,
+    media::VideoPixelFormat requested_format) {
+  if (requested_format == media::PIXEL_FORMAT_I420 &&
+      supported_format == media::PIXEL_FORMAT_MJPEG) {
+    return PixelFormatMatchType::SUPPORTED_THROUGH_CONVERSION;
+  }
+  return (requested_format == supported_format)
+             ? PixelFormatMatchType::EXACT
+             : PixelFormatMatchType::INCOMPATIBLE;
+}
+
+const media::VideoCaptureFormat& FindClosestSupportedFormat(
+    const VideoCaptureFormat& requested_format,
+    const VideoCaptureFormats& supported_formats) {
+  DCHECK(!supported_formats.empty());
+  int best_index = 0;
+  PixelFormatMatchType best_format_match = PixelFormatMatchType::INCOMPATIBLE;
+  int best_width_mismatch = std::numeric_limits<int>::max();
+  float best_frame_rate_mismatch = std::numeric_limits<float>::max();
+  for (int i = 0; i < static_cast<int>(supported_formats.size()); i++) {
+    const auto& supported_format = supported_formats[i];
+    PixelFormatMatchType current_format_match = DetermineFormatMatchType(
+        supported_format.pixel_format, requested_format.pixel_format);
+    if (current_format_match < best_format_match) {
+      continue;
+    }
+    if (supported_format.frame_size.width() <
+        requested_format.frame_size.width())
+      continue;
+    const int current_width_mismatch = supported_format.frame_size.width() -
+                                       requested_format.frame_size.width();
+    if (current_width_mismatch > best_width_mismatch)
+      continue;
+    const float current_frame_rate_mismatch =
+        std::abs(supported_format.frame_rate - requested_format.frame_rate);
+    if (current_width_mismatch < best_width_mismatch) {
+      best_width_mismatch = current_width_mismatch;
+      best_frame_rate_mismatch = current_frame_rate_mismatch;
+      best_index = i;
+      continue;
+    }
+    DCHECK_EQ(best_frame_rate_mismatch, current_frame_rate_mismatch);
+    if (current_frame_rate_mismatch < best_frame_rate_mismatch) {
+      best_frame_rate_mismatch = current_frame_rate_mismatch;
+      best_index = i;
+    }
+  }
+  return supported_formats[best_index];
+}
+
+}  // anonymous namespace
+
+// Paints and delivers frames to a client, which is set via Initialize().
+class FrameDeliverer {
+ public:
+  FrameDeliverer(std::unique_ptr<PacmanFramePainter> frame_painter)
+      : frame_painter_(std::move(frame_painter)) {}
+  virtual ~FrameDeliverer() {}
+  virtual void Initialize(VideoPixelFormat pixel_format,
+                          std::unique_ptr<VideoCaptureDevice::Client> client,
+                          const FakeDeviceState* device_state) {
+    client_ = std::move(client);
+    device_state_ = device_state;
+    client_->OnStarted();
+  }
+  virtual void PaintAndDeliverNextFrame(base::TimeDelta timestamp_to_paint) = 0;
+
+ protected:
+  base::TimeDelta CalculateTimeSinceFirstInvocation(base::TimeTicks now) {
+    if (first_ref_time_.is_null())
+      first_ref_time_ = now;
+    return now - first_ref_time_;
+  }
+
+  PacmanFramePainter* frame_painter() { return frame_painter_.get(); }
+  const FakeDeviceState* device_state() { return device_state_; }
+  VideoCaptureDevice::Client* client() { return client_.get(); }
+
+ private:
+  const std::unique_ptr<PacmanFramePainter> frame_painter_;
+  const FakeDeviceState* device_state_ = nullptr;
+  std::unique_ptr<VideoCaptureDevice::Client> client_;
+  base::TimeTicks first_ref_time_;
+};
+
+// Delivers frames using its own buffers via OnIncomingCapturedData().
+class OwnBufferFrameDeliverer : public FrameDeliverer {
+ public:
+  OwnBufferFrameDeliverer(std::unique_ptr<PacmanFramePainter> frame_painter);
+  ~OwnBufferFrameDeliverer() override;
+
+  // Implementation of FrameDeliverer
+  void Initialize(VideoPixelFormat pixel_format,
+                  std::unique_ptr<VideoCaptureDevice::Client> client,
+                  const FakeDeviceState* device_state) override;
+  void PaintAndDeliverNextFrame(base::TimeDelta timestamp_to_paint) override;
+
+ private:
+  std::unique_ptr<uint8_t[]> buffer_;
+};
+
+// Delivers frames using buffers provided by the client via
+// OnIncomingCapturedBuffer().
+class ClientBufferFrameDeliverer : public FrameDeliverer {
+ public:
+  ClientBufferFrameDeliverer(std::unique_ptr<PacmanFramePainter> frame_painter);
+  ~ClientBufferFrameDeliverer() override;
+
+  // Implementation of FrameDeliverer
+  void PaintAndDeliverNextFrame(base::TimeDelta timestamp_to_paint) override;
+};
+
+class JpegEncodingFrameDeliverer : public FrameDeliverer {
+ public:
+  JpegEncodingFrameDeliverer(std::unique_ptr<PacmanFramePainter> frame_painter);
+  ~JpegEncodingFrameDeliverer() override;
+
+  // Implementation of FrameDeliveryStrategy
+  void PaintAndDeliverNextFrame(base::TimeDelta timestamp_to_paint) override;
+
+ private:
+  std::vector<uint8_t> sk_n32_buffer_;
+  std::vector<unsigned char> jpeg_buffer_;
+};
+
+FrameDelivererFactory::FrameDelivererFactory(
+    FakeVideoCaptureDevice::DeliveryMode delivery_mode,
+    const FakeDeviceState* device_state)
+    : delivery_mode_(delivery_mode), device_state_(device_state) {}
+
+std::unique_ptr<FrameDeliverer> FrameDelivererFactory::CreateFrameDeliverer(
+    const VideoCaptureFormat& format) {
+  PacmanFramePainter::Format painter_format;
+  switch (format.pixel_format) {
+    case PIXEL_FORMAT_I420:
+      painter_format = PacmanFramePainter::Format::I420;
+      break;
+    case PIXEL_FORMAT_Y16:
+      painter_format = PacmanFramePainter::Format::Y16;
+      break;
+    case PIXEL_FORMAT_MJPEG:
+      painter_format = PacmanFramePainter::Format::SK_N32;
+      break;
+    default:
+      NOTREACHED();
+      painter_format = PacmanFramePainter::Format::I420;
+  }
+  auto frame_painter =
+      base::MakeUnique<PacmanFramePainter>(painter_format, device_state_);
+
+  FakeVideoCaptureDevice::DeliveryMode delivery_mode = delivery_mode_;
+  if (format.pixel_format == PIXEL_FORMAT_MJPEG &&
+      delivery_mode_ ==
+          FakeVideoCaptureDevice::DeliveryMode::USE_CLIENT_PROVIDED_BUFFERS) {
+    DLOG(WARNING) << "PIXEL_FORMAT_MJPEG cannot be used in combination with "
+                  << "USE_CLIENT_PROVIDED_BUFFERS. Switching to "
+                     "USE_DEVICE_INTERNAL_BUFFERS.";
+    delivery_mode =
+        FakeVideoCaptureDevice::DeliveryMode::USE_DEVICE_INTERNAL_BUFFERS;
+  }
+
+  switch (delivery_mode) {
+    case FakeVideoCaptureDevice::DeliveryMode::USE_DEVICE_INTERNAL_BUFFERS:
+      if (format.pixel_format == PIXEL_FORMAT_MJPEG) {
+        return base::MakeUnique<JpegEncodingFrameDeliverer>(
+            std::move(frame_painter));
+      } else {
+        return base::MakeUnique<OwnBufferFrameDeliverer>(
+            std::move(frame_painter));
+      }
+    case FakeVideoCaptureDevice::DeliveryMode::USE_CLIENT_PROVIDED_BUFFERS:
+      return base::MakeUnique<ClientBufferFrameDeliverer>(
+          std::move(frame_painter));
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
+PacmanFramePainter::PacmanFramePainter(Format pixel_format,
+                                       const FakeDeviceState* fake_device_state)
+    : pixel_format_(pixel_format), fake_device_state_(fake_device_state) {}
+
+void PacmanFramePainter::PaintFrame(base::TimeDelta elapsed_time,
+                                    uint8_t* target_buffer) {
+  DrawPacman(elapsed_time, target_buffer);
+  DrawGradientSquares(elapsed_time, target_buffer);
+}
+
 // Starting from top left, -45 deg gradient.  Value at point (row, column) is
 // calculated as (top_left_value + (row + column) * step) % MAX_VALUE, where
 // step is MAX_VALUE / (width + height).  MAX_VALUE is 255 (for 8 bit per
 // component) or 65535 for Y16.
 // This is handy for pixel tests where we use the squares to verify rendering.
-void DrawGradientSquares(VideoPixelFormat frame_format,
-                         uint8_t* const pixels,
-                         base::TimeDelta elapsed_time,
-                         const gfx::Size& frame_size) {
-  const int width = frame_size.width();
-  const int height = frame_size.height();
+void PacmanFramePainter::DrawGradientSquares(base::TimeDelta elapsed_time,
+                                             uint8_t* target_buffer) {
+  const int width = fake_device_state_->format.frame_size.width();
+  const int height = fake_device_state_->format.frame_size.height();
+
   const int side = width / 16;  // square side length.
   DCHECK(side);
   const gfx::Point squares[] = {{0, 0},
@@ -60,18 +262,18 @@ void DrawGradientSquares(VideoPixelFormat frame_format,
         const unsigned int value =
             static_cast<unsigned int>(start + (x + y) * color_step) & 0xFFFF;
         size_t offset = (y * width) + x;
-        switch (frame_format) {
-          case PIXEL_FORMAT_Y16:
-            pixels[offset * sizeof(uint16_t)] = value & 0xFF;
-            pixels[offset * sizeof(uint16_t) + 1] = value >> 8;
+        switch (pixel_format_) {
+          case Format::Y16:
+            target_buffer[offset * sizeof(uint16_t)] = value & 0xFF;
+            target_buffer[offset * sizeof(uint16_t) + 1] = value >> 8;
             break;
-          case PIXEL_FORMAT_ARGB:
-            pixels[offset * sizeof(uint32_t) + 1] = value >> 8;
-            pixels[offset * sizeof(uint32_t) + 2] = value >> 8;
-            pixels[offset * sizeof(uint32_t) + 3] = value >> 8;
+          case Format::SK_N32:
+            target_buffer[offset * sizeof(uint32_t) + 1] = value >> 8;
+            target_buffer[offset * sizeof(uint32_t) + 2] = value >> 8;
+            target_buffer[offset * sizeof(uint32_t) + 3] = value >> 8;
             break;
-          default:
-            pixels[offset] = value >> 8;
+          case Format::I420:
+            target_buffer[offset] = value >> 8;
             break;
         }
       }
@@ -79,48 +281,63 @@ void DrawGradientSquares(VideoPixelFormat frame_format,
   }
 }
 
-void DrawPacman(VideoPixelFormat frame_format,
-                uint8_t* const data,
-                base::TimeDelta elapsed_time,
-                float frame_rate,
-                const gfx::Size& frame_size,
-                double zoom) {
-  // |kN32_SkColorType| stands for the appropriate RGBA/BGRA format.
-  const SkColorType colorspace = (frame_format == PIXEL_FORMAT_ARGB)
-                                     ? kN32_SkColorType
-                                     : kAlpha_8_SkColorType;
-  // Skia doesn't support 16 bit alpha rendering, so we 8 bit alpha and then use
-  // this as high byte values in 16 bit pixels.
-  const SkImageInfo info = SkImageInfo::Make(
-      frame_size.width(), frame_size.height(), colorspace, kOpaque_SkAlphaType);
+void PacmanFramePainter::DrawPacman(base::TimeDelta elapsed_time,
+                                    uint8_t* target_buffer) {
+  const int width = fake_device_state_->format.frame_size.width();
+  const int height = fake_device_state_->format.frame_size.height();
+
+  SkColorType colorspace = kAlpha_8_SkColorType;
+  switch (pixel_format_) {
+    case Format::I420:
+      // Skia doesn't support painting in I420. Instead, paint an 8bpp
+      // monochrome image to the beginning of |target_buffer|. This section of
+      // |target_buffer| corresponds to the Y-plane of the YUV image. Do not
+      // touch the U or V planes of |target_buffer|. Assuming they have been
+      // initialized to 0, which corresponds to a green color tone, the result
+      // will be an green-ish monochrome frame.
+      colorspace = kAlpha_8_SkColorType;
+      break;
+    case Format::SK_N32:
+      // SkColorType is RGBA on some platforms and BGRA on others.
+      colorspace = kN32_SkColorType;
+      break;
+    case Format::Y16:
+      // Skia doesn't support painting in Y16. Instead, paint an 8bpp monochrome
+      // image to the beginning of |target_buffer|. Later, move the 8bit pixel
+      // values to a position corresponding to the high byte values of 16bit
+      // pixel values (assuming the byte order is little-endian).
+      colorspace = kAlpha_8_SkColorType;
+      break;
+  }
+
+  const SkImageInfo info =
+      SkImageInfo::Make(width, height, colorspace, kOpaque_SkAlphaType);
   SkBitmap bitmap;
   bitmap.setInfo(info);
-  bitmap.setPixels(data);
+  bitmap.setPixels(target_buffer);
   SkPaint paint;
   paint.setStyle(SkPaint::kFill_Style);
   SkCanvas canvas(bitmap);
 
-  const SkScalar unscaled_zoom = zoom / 100.f;
+  const SkScalar unscaled_zoom = fake_device_state_->zoom / 100.f;
   SkMatrix matrix;
-  matrix.setScale(unscaled_zoom, unscaled_zoom, frame_size.width() / 2,
-                  frame_size.height() / 2);
+  matrix.setScale(unscaled_zoom, unscaled_zoom, width / 2, height / 2);
   canvas.setMatrix(matrix);
 
-  // Equalize Alpha_8 that has light green background while RGBA has white.
-  if (frame_format == PIXEL_FORMAT_ARGB) {
-    const SkRect full_frame =
-        SkRect::MakeWH(frame_size.width(), frame_size.height());
+  // For the SK_N32 case, match the green color tone produced by the
+  // I420 case.
+  if (pixel_format_ == Format::SK_N32) {
+    const SkRect full_frame = SkRect::MakeWH(width, height);
     paint.setARGB(255, 0, 127, 0);
     canvas.drawRect(full_frame, paint);
+    paint.setColor(SK_ColorGREEN);
   }
-  paint.setColor(SK_ColorGREEN);
 
   // Draw a sweeping circle to show an animation.
   const float end_angle =
       fmod(kPacmanAngularVelocity * elapsed_time.InSecondsF(), 361);
-  const int radius = std::min(frame_size.width(), frame_size.height()) / 4;
-  const SkRect rect = SkRect::MakeXYWH(frame_size.width() / 2 - radius,
-                                       frame_size.height() / 2 - radius,
+  const int radius = std::min(width, height) / 4;
+  const SkRect rect = SkRect::MakeXYWH(width / 2 - radius, height / 2 - radius,
                                        2 * radius, 2 * radius);
   canvas.drawArc(rect, 0, end_angle, true, paint);
 
@@ -129,7 +346,8 @@ void DrawPacman(VideoPixelFormat frame_format,
   const int seconds = elapsed_time.InSeconds() % 60;
   const int minutes = elapsed_time.InMinutes() % 60;
   const int hours = elapsed_time.InHours();
-  const int frame_count = elapsed_time.InMilliseconds() * frame_rate / 1000;
+  const int frame_count = elapsed_time.InMilliseconds() *
+                          fake_device_state_->format.frame_rate / 1000;
 
   const std::string time_string =
       base::StringPrintf("%d:%02d:%02d:%03d %d", hours, minutes, seconds,
@@ -137,46 +355,56 @@ void DrawPacman(VideoPixelFormat frame_format,
   canvas.scale(3, 3);
   canvas.drawText(time_string.data(), time_string.length(), 30, 20, paint);
 
-  if (frame_format == PIXEL_FORMAT_Y16) {
+  if (pixel_format_ == Format::Y16) {
     // Use 8 bit bitmap rendered to first half of the buffer as high byte values
     // for the whole buffer. Low byte values are not important.
-    for (int i = frame_size.GetArea() - 1; i >= 0; --i)
-      data[i * 2 + 1] = data[i];
+    for (int i = (width * height) - 1; i >= 0; --i)
+      target_buffer[i * 2 + 1] = target_buffer[i];
   }
-  DrawGradientSquares(frame_format, data, elapsed_time, frame_size);
 }
 
-// Creates a PNG-encoded frame and sends it back to |callback|. The other
-// parameters are used to replicate the PacMan rendering.
-void DoTakeFakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
-                     const VideoCaptureFormat& capture_format,
-                     base::TimeDelta elapsed_time,
-                     float fake_capture_rate,
-                     uint32_t zoom) {
-  std::unique_ptr<uint8_t[]> buffer(new uint8_t[VideoFrame::AllocationSize(
-      PIXEL_FORMAT_ARGB, capture_format.frame_size)]);
+FakePhotoDevice::FakePhotoDevice(
+    std::unique_ptr<PacmanFramePainter> sk_n32_painter,
+    const FakeDeviceState* fake_device_state)
+    : sk_n32_painter_(std::move(sk_n32_painter)),
+      fake_device_state_(fake_device_state) {}
 
-  DrawPacman(PIXEL_FORMAT_ARGB, buffer.get(), elapsed_time, fake_capture_rate,
-             capture_format.frame_size, zoom);
+FakePhotoDevice::~FakePhotoDevice() = default;
 
+void FakePhotoDevice::TakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
+                                base::TimeDelta elapsed_time) {
+  // Create a PNG-encoded frame and send it back to |callback|.
+  auto required_sk_n32_buffer_size = VideoFrame::AllocationSize(
+      PIXEL_FORMAT_ARGB, fake_device_state_->format.frame_size);
+  std::unique_ptr<uint8_t[]> buffer(new uint8_t[required_sk_n32_buffer_size]);
+  memset(buffer.get(), 0, required_sk_n32_buffer_size);
+  sk_n32_painter_->PaintFrame(elapsed_time, buffer.get());
   mojom::BlobPtr blob = mojom::Blob::New();
+  const gfx::PNGCodec::ColorFormat encoding_source_format =
+      (kN32_SkColorType == kRGBA_8888_SkColorType) ? gfx::PNGCodec::FORMAT_RGBA
+                                                   : gfx::PNGCodec::FORMAT_BGRA;
   const bool result = gfx::PNGCodec::Encode(
-      buffer.get(), gfx::PNGCodec::FORMAT_RGBA, capture_format.frame_size,
-      capture_format.frame_size.width() * 4, true /* discard_transparency */,
-      std::vector<gfx::PNGCodec::Comment>(), &blob->data);
+      buffer.get(), encoding_source_format,
+      fake_device_state_->format.frame_size,
+      VideoFrame::RowBytes(0 /* plane */, PIXEL_FORMAT_ARGB,
+                           fake_device_state_->format.frame_size.width()),
+      true /* discard_transparency */, std::vector<gfx::PNGCodec::Comment>(),
+      &blob->data);
   DCHECK(result);
 
   blob->mime_type = "image/png";
   callback.Run(std::move(blob));
 }
 
-FakeVideoCaptureDevice::FakeVideoCaptureDevice(BufferOwnership buffer_ownership,
-                                               float fake_capture_rate,
-                                               VideoPixelFormat pixel_format)
-    : buffer_ownership_(buffer_ownership),
-      fake_capture_rate_(fake_capture_rate),
-      pixel_format_(pixel_format),
-      current_zoom_(kMinZoom),
+FakeVideoCaptureDevice::FakeVideoCaptureDevice(
+    const VideoCaptureFormats& supported_formats,
+    std::unique_ptr<FrameDelivererFactory> frame_deliverer_factory,
+    std::unique_ptr<FakePhotoDevice> photo_device,
+    std::unique_ptr<FakeDeviceState> device_state)
+    : supported_formats_(supported_formats),
+      frame_deliverer_factory_(std::move(frame_deliverer_factory)),
+      photo_device_(std::move(photo_device)),
+      device_state_(std::move(device_state)),
       weak_factory_(this) {}
 
 FakeVideoCaptureDevice::~FakeVideoCaptureDevice() {
@@ -188,61 +416,36 @@ void FakeVideoCaptureDevice::AllocateAndStart(
     std::unique_ptr<VideoCaptureDevice::Client> client) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  client_ = std::move(client);
-
-  // Incoming |params| can be none of the supported formats, so we get the
-  // closest thing rounded up. TODO(mcasas): Use the |params|, if they belong to
-  // the supported ones, when http://crbug.com/309554 is verified.
-  capture_format_.frame_rate = fake_capture_rate_;
-  if (params.requested_format.frame_size.width() > 1280)
-    capture_format_.frame_size.SetSize(1920, 1080);
-  else if (params.requested_format.frame_size.width() > 640)
-    capture_format_.frame_size.SetSize(1280, 720);
-  else if (params.requested_format.frame_size.width() > 320)
-    capture_format_.frame_size.SetSize(640, 480);
-  else if (params.requested_format.frame_size.width() > 96)
-    capture_format_.frame_size.SetSize(320, 240);
-  else
-    capture_format_.frame_size.SetSize(96, 96);
-
-  capture_format_.pixel_format = pixel_format_;
-  if (buffer_ownership_ == BufferOwnership::CLIENT_BUFFERS) {
-    capture_format_.pixel_storage = PIXEL_STORAGE_CPU;
-    capture_format_.pixel_format = PIXEL_FORMAT_ARGB;
-    DVLOG(1) << "starting with client argb buffers";
-  } else if (buffer_ownership_ == BufferOwnership::OWN_BUFFERS) {
-    capture_format_.pixel_storage = PIXEL_STORAGE_CPU;
-    DVLOG(1) << "starting with own " << VideoPixelFormatToString(pixel_format_)
-             << " buffers";
-  }
-
-  if (buffer_ownership_ == BufferOwnership::OWN_BUFFERS) {
-    fake_frame_.reset(new uint8_t[VideoFrame::AllocationSize(
-        pixel_format_, capture_format_.frame_size)]);
-  }
+  const VideoCaptureFormat& selected_format =
+      FindClosestSupportedFormat(params.requested_format, supported_formats_);
 
   beep_time_ = base::TimeDelta();
   elapsed_time_ = base::TimeDelta();
-
-  if (buffer_ownership_ == BufferOwnership::CLIENT_BUFFERS)
-    BeepAndScheduleNextCapture(
-        base::TimeTicks::Now(),
-        base::Bind(&FakeVideoCaptureDevice::CaptureUsingClientBuffers,
-                   weak_factory_.GetWeakPtr()));
-  else if (buffer_ownership_ == BufferOwnership::OWN_BUFFERS)
-    BeepAndScheduleNextCapture(
-        base::TimeTicks::Now(),
-        base::Bind(&FakeVideoCaptureDevice::CaptureUsingOwnBuffers,
-                   weak_factory_.GetWeakPtr()));
+  frame_deliverer_ =
+      frame_deliverer_factory_->CreateFrameDeliverer(selected_format);
+  device_state_->format.frame_size = selected_format.frame_size;
+  frame_deliverer_->Initialize(device_state_->format.pixel_format,
+                               std::move(client), device_state_.get());
+  current_session_id_++;
+  BeepAndScheduleNextCapture(base::TimeTicks::Now());
 }
 
 void FakeVideoCaptureDevice::StopAndDeAllocate() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  client_.reset();
+
+  // Invalidate WeakPtr to stop the perpetual scheduling of tasks.
+  weak_factory_.InvalidateWeakPtrs();
+  frame_deliverer_.reset();
 }
 
 void FakeVideoCaptureDevice::GetPhotoCapabilities(
     GetPhotoCapabilitiesCallback callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  photo_device_->GetPhotoCapabilities(std::move(callback));
+}
+
+void FakePhotoDevice::GetPhotoCapabilities(
+    VideoCaptureDevice::GetPhotoCapabilitiesCallback callback) {
   mojom::PhotoCapabilitiesPtr photo_capabilities =
       mojom::PhotoCapabilities::New();
   photo_capabilities->iso = mojom::Range::New();
@@ -251,17 +454,19 @@ void FakeVideoCaptureDevice::GetPhotoCapabilities(
   photo_capabilities->iso->min = 100.0;
   photo_capabilities->iso->step = 0.0;
   photo_capabilities->height = mojom::Range::New();
-  photo_capabilities->height->current = capture_format_.frame_size.height();
+  photo_capabilities->height->current =
+      fake_device_state_->format.frame_size.height();
   photo_capabilities->height->max = 1080.0;
   photo_capabilities->height->min = 96.0;
   photo_capabilities->height->step = 1.0;
   photo_capabilities->width = mojom::Range::New();
-  photo_capabilities->width->current = capture_format_.frame_size.width();
+  photo_capabilities->width->current =
+      fake_device_state_->format.frame_size.width();
   photo_capabilities->width->max = 1920.0;
   photo_capabilities->width->min = 96.0;
-  photo_capabilities->width->step = 1;
+  photo_capabilities->width->step = 1.0;
   photo_capabilities->zoom = mojom::Range::New();
-  photo_capabilities->zoom->current = current_zoom_;
+  photo_capabilities->zoom->current = fake_device_state_->zoom;
   photo_capabilities->zoom->max = kMaxZoom;
   photo_capabilities->zoom->min = kMinZoom;
   photo_capabilities->zoom->step = kZoomStep;
@@ -281,80 +486,133 @@ void FakeVideoCaptureDevice::GetPhotoCapabilities(
 
 void FakeVideoCaptureDevice::SetPhotoOptions(mojom::PhotoSettingsPtr settings,
                                              SetPhotoOptionsCallback callback) {
-  if (settings->has_zoom)
-    current_zoom_ = std::max(kMinZoom, std::min(settings->zoom, kMaxZoom));
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (settings->has_zoom) {
+    device_state_->zoom =
+        std::max(kMinZoom, std::min(settings->zoom, kMaxZoom));
+  }
+
   callback.Run(true);
 }
 
 void FakeVideoCaptureDevice::TakePhoto(TakePhotoCallback callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&DoTakeFakePhoto, base::Passed(&callback), capture_format_,
-                 elapsed_time_, fake_capture_rate_, current_zoom_));
+      FROM_HERE, base::Bind(&FakePhotoDevice::TakePhoto,
+                            base::Unretained(photo_device_.get()),
+                            base::Passed(&callback), elapsed_time_));
 }
 
-void FakeVideoCaptureDevice::CaptureUsingOwnBuffers(
-    base::TimeTicks expected_execution_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  const size_t frame_size = capture_format_.ImageAllocationSize();
+OwnBufferFrameDeliverer::OwnBufferFrameDeliverer(
+    std::unique_ptr<PacmanFramePainter> frame_painter)
+    : FrameDeliverer(std::move(frame_painter)) {}
 
-  memset(fake_frame_.get(), 0, frame_size);
-  DrawPacman(capture_format_.pixel_format, fake_frame_.get(), elapsed_time_,
-             fake_capture_rate_, capture_format_.frame_size, current_zoom_);
-  // Give the captured frame to the client.
+OwnBufferFrameDeliverer::~OwnBufferFrameDeliverer() = default;
+
+void OwnBufferFrameDeliverer::Initialize(
+    VideoPixelFormat pixel_format,
+    std::unique_ptr<VideoCaptureDevice::Client> client,
+    const FakeDeviceState* device_state) {
+  FrameDeliverer::Initialize(pixel_format, std::move(client), device_state);
+  buffer_.reset(new uint8_t[VideoFrame::AllocationSize(
+      pixel_format, device_state->format.frame_size)]);
+}
+
+void OwnBufferFrameDeliverer::PaintAndDeliverNextFrame(
+    base::TimeDelta timestamp_to_paint) {
+  if (!client())
+    return;
+  const size_t frame_size = device_state()->format.ImageAllocationSize();
+  memset(buffer_.get(), 0, frame_size);
+  frame_painter()->PaintFrame(timestamp_to_paint, buffer_.get());
   base::TimeTicks now = base::TimeTicks::Now();
-  if (first_ref_time_.is_null())
-    first_ref_time_ = now;
-  client_->OnIncomingCapturedData(fake_frame_.get(), frame_size,
-                                  capture_format_, 0 /* rotation */, now,
-                                  now - first_ref_time_);
-  BeepAndScheduleNextCapture(
-      expected_execution_time,
-      base::Bind(&FakeVideoCaptureDevice::CaptureUsingOwnBuffers,
-                 weak_factory_.GetWeakPtr()));
+  client()->OnIncomingCapturedData(buffer_.get(), frame_size,
+                                   device_state()->format, 0 /* rotation */,
+                                   now, CalculateTimeSinceFirstInvocation(now));
 }
 
-void FakeVideoCaptureDevice::CaptureUsingClientBuffers(
-    base::TimeTicks expected_execution_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+ClientBufferFrameDeliverer::ClientBufferFrameDeliverer(
+    std::unique_ptr<PacmanFramePainter> frame_painter)
+    : FrameDeliverer(std::move(frame_painter)) {}
+
+ClientBufferFrameDeliverer::~ClientBufferFrameDeliverer() = default;
+
+void ClientBufferFrameDeliverer::PaintAndDeliverNextFrame(
+    base::TimeDelta timestamp_to_paint) {
+  if (!client())
+    return;
 
   const int arbitrary_frame_feedback_id = 0;
-  VideoCaptureDevice::Client::Buffer capture_buffer =
-      client_->ReserveOutputBuffer(
-          capture_format_.frame_size, capture_format_.pixel_format,
-          capture_format_.pixel_storage, arbitrary_frame_feedback_id);
+  auto capture_buffer = client()->ReserveOutputBuffer(
+      device_state()->format.frame_size, device_state()->format.pixel_format,
+      device_state()->format.pixel_storage, arbitrary_frame_feedback_id);
   DLOG_IF(ERROR, !capture_buffer.is_valid())
       << "Couldn't allocate Capture Buffer";
   auto buffer_access =
-      capture_buffer.handle_provider()->GetHandleForInProcessAccess();
+      capture_buffer.handle_provider->GetHandleForInProcessAccess();
   DCHECK(buffer_access->data()) << "Buffer has NO backing memory";
 
-  DCHECK_EQ(PIXEL_STORAGE_CPU, capture_format_.pixel_storage);
+  DCHECK_EQ(PIXEL_STORAGE_CPU, device_state()->format.pixel_storage);
+
   uint8_t* data_ptr = buffer_access->data();
   memset(data_ptr, 0, buffer_access->mapped_size());
-  DrawPacman(capture_format_.pixel_format, data_ptr, elapsed_time_,
-             fake_capture_rate_, capture_format_.frame_size, current_zoom_);
+  frame_painter()->PaintFrame(timestamp_to_paint, data_ptr);
 
-  // Give the captured frame to the client.
   base::TimeTicks now = base::TimeTicks::Now();
-  if (first_ref_time_.is_null())
-    first_ref_time_ = now;
-  client_->OnIncomingCapturedBuffer(std::move(capture_buffer), capture_format_,
-                                    now, now - first_ref_time_);
+  client()->OnIncomingCapturedBuffer(std::move(capture_buffer),
+                                     device_state()->format, now,
+                                     CalculateTimeSinceFirstInvocation(now));
+}
 
-  BeepAndScheduleNextCapture(
-      expected_execution_time,
-      base::Bind(&FakeVideoCaptureDevice::CaptureUsingClientBuffers,
-                 weak_factory_.GetWeakPtr()));
+JpegEncodingFrameDeliverer::JpegEncodingFrameDeliverer(
+    std::unique_ptr<PacmanFramePainter> frame_painter)
+    : FrameDeliverer(std::move(frame_painter)) {}
+
+JpegEncodingFrameDeliverer::~JpegEncodingFrameDeliverer() = default;
+
+void JpegEncodingFrameDeliverer::PaintAndDeliverNextFrame(
+    base::TimeDelta timestamp_to_paint) {
+  if (!client())
+    return;
+
+  auto required_sk_n32_buffer_size = VideoFrame::AllocationSize(
+      PIXEL_FORMAT_ARGB, device_state()->format.frame_size);
+  sk_n32_buffer_.resize(required_sk_n32_buffer_size);
+  memset(&sk_n32_buffer_[0], 0, required_sk_n32_buffer_size);
+
+  frame_painter()->PaintFrame(timestamp_to_paint, &sk_n32_buffer_[0]);
+
+  static const int kQuality = 75;
+  const gfx::JPEGCodec::ColorFormat encoding_source_format =
+      (kN32_SkColorType == kRGBA_8888_SkColorType)
+          ? gfx::JPEGCodec::FORMAT_RGBA
+          : gfx::JPEGCodec::FORMAT_BGRA;
+  bool success = gfx::JPEGCodec::Encode(
+      &sk_n32_buffer_[0], encoding_source_format,
+      device_state()->format.frame_size.width(),
+      device_state()->format.frame_size.height(),
+      VideoFrame::RowBytes(0 /* plane */, PIXEL_FORMAT_ARGB,
+                           device_state()->format.frame_size.width()),
+      kQuality, &jpeg_buffer_);
+  if (!success) {
+    DLOG(ERROR) << "Jpeg encoding failed";
+    return;
+  }
+
+  const size_t frame_size = jpeg_buffer_.size();
+  base::TimeTicks now = base::TimeTicks::Now();
+  client()->OnIncomingCapturedData(&jpeg_buffer_[0], frame_size,
+                                   device_state()->format, 0 /* rotation */,
+                                   now, CalculateTimeSinceFirstInvocation(now));
 }
 
 void FakeVideoCaptureDevice::BeepAndScheduleNextCapture(
-    base::TimeTicks expected_execution_time,
-    const base::Callback<void(base::TimeTicks)>& next_capture) {
+    base::TimeTicks expected_execution_time) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   const base::TimeDelta beep_interval =
       base::TimeDelta::FromMilliseconds(kBeepInterval);
   const base::TimeDelta frame_interval =
-      base::TimeDelta::FromMicroseconds(1e6 / fake_capture_rate_);
+      base::TimeDelta::FromMicroseconds(1e6 / device_state_->format.frame_rate);
   beep_time_ += frame_interval;
   elapsed_time_ += frame_interval;
 
@@ -372,7 +630,22 @@ void FakeVideoCaptureDevice::BeepAndScheduleNextCapture(
       std::max(current_time, expected_execution_time + frame_interval);
   const base::TimeDelta delay = next_execution_time - current_time;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(next_capture, next_execution_time), delay);
+      FROM_HERE,
+      base::Bind(&FakeVideoCaptureDevice::OnNextFrameDue,
+                 weak_factory_.GetWeakPtr(), next_execution_time,
+                 current_session_id_),
+      delay);
+}
+
+void FakeVideoCaptureDevice::OnNextFrameDue(
+    base::TimeTicks expected_execution_time,
+    int session_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (session_id != current_session_id_)
+    return;
+
+  frame_deliverer_->PaintAndDeliverNextFrame(elapsed_time_);
+  BeepAndScheduleNextCapture(expected_execution_time);
 }
 
 }  // namespace media

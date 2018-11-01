@@ -19,7 +19,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "components/payments/payment_app.mojom.h"
+#include "components/payments/content/payment_app.mojom.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
@@ -123,6 +123,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void didInitializeWorkerContext(v8::Local<v8::Context> context) override;
   void willDestroyWorkerContext(v8::Local<v8::Context> context) override;
   void workerContextDestroyed() override;
+  void countFeature(uint32_t feature) override;
   void reportException(const blink::WebString& error_message,
                        int line_number,
                        int column_number,
@@ -170,16 +171,18 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void didHandleSyncEvent(int request_id,
                           blink::WebServiceWorkerEventResult result,
                           double dispatch_event_time) override;
+  void didHandlePaymentRequestEvent(int request_id,
+                                    blink::WebServiceWorkerEventResult result,
+                                    double dispatch_event_time) override;
 
   // Called on the main thread.
   blink::WebServiceWorkerNetworkProvider* createServiceWorkerNetworkProvider(
       blink::WebDataSource* data_source) override;
   blink::WebServiceWorkerProvider* createServiceWorkerProvider() override;
 
-  void postMessageToClient(
-      const blink::WebString& uuid,
-      const blink::WebString& message,
-      blink::WebMessagePortChannelArray* channels) override;
+  void postMessageToClient(const blink::WebString& uuid,
+                           const blink::WebString& message,
+                           blink::WebMessagePortChannelArray channels) override;
   void focus(const blink::WebString& uuid,
              std::unique_ptr<blink::WebServiceWorkerClientCallbacks>) override;
   void navigate(
@@ -209,6 +212,8 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       const ServiceWorkerVersionAttributes& attrs);
 
   // mojom::ServiceWorkerEventDispatcher
+  void DispatchActivateEvent(
+      const DispatchActivateEventCallback& callback) override;
   void DispatchExtendableMessageEvent(
       mojom::ExtendableMessageEventPtr event,
       const DispatchExtendableMessageEventCallback& callback) override;
@@ -216,6 +221,16 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                           const ServiceWorkerFetchRequest& request,
                           mojom::FetchEventPreloadHandlePtr preload_handle,
                           const DispatchFetchEventCallback& callback) override;
+  void DispatchNotificationClickEvent(
+      const std::string& notification_id,
+      const PlatformNotificationData& notification_data,
+      int action_index,
+      const base::Optional<base::string16>& reply,
+      const DispatchNotificationClickEventCallback& callback) override;
+  void DispatchNotificationCloseEvent(
+      const std::string& notification_id,
+      const PlatformNotificationData& notification_data,
+      const DispatchNotificationCloseEventCallback& callback) override;
   void DispatchPushEvent(const PushEventPayload& payload,
                          const DispatchPushEventCallback& callback) override;
   void DispatchSyncEvent(
@@ -223,10 +238,9 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       blink::mojom::BackgroundSyncEventLastChance last_chance,
       const DispatchSyncEventCallback& callback) override;
   void DispatchPaymentRequestEvent(
-      payments::mojom::PaymentAppRequestDataPtr data,
+      payments::mojom::PaymentAppRequestPtr app_request,
       const DispatchPaymentRequestEventCallback& callback) override;
 
-  void OnActivateEvent(int request_id);
   void OnInstallEvent(int request_id);
   void OnNotificationClickEvent(
       int request_id,

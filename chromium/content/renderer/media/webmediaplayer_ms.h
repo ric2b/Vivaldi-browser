@@ -68,10 +68,11 @@ class CONTENT_EXPORT WebMediaPlayerMS
  public:
   // Construct a WebMediaPlayerMS with reference to the client, and
   // a MediaStreamClient which provides MediaStreamVideoRenderer.
+  // |delegate| must not be null.
   WebMediaPlayerMS(
       blink::WebFrame* frame,
       blink::WebMediaPlayerClient* client,
-      base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
+      media::WebMediaPlayerDelegate* delegate,
       media::MediaLog* media_log,
       std::unique_ptr<MediaStreamRendererFactory> factory,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_,
@@ -105,7 +106,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // Methods for painting.
   void paint(blink::WebCanvas* canvas,
              const blink::WebRect& rect,
-             SkPaint& paint) override;
+             cc::PaintFlags& flags) override;
   media::SkCanvasVideoRenderer* GetSkCanvasVideoRenderer();
   void ResetCanvasCache();
 
@@ -150,9 +151,12 @@ class CONTENT_EXPORT WebMediaPlayerMS
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
+  void OnBecamePersistentVideo(bool value) override;
 
   bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
                                          unsigned int texture,
+                                         unsigned int internal_format,
+                                         unsigned int type,
                                          bool premultiply_alpha,
                                          bool flip_y) override;
 
@@ -204,7 +208,13 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // |delegate_id_|; an id provided after registering with the delegate.  The
   // WebMediaPlayer may also receive directives (play, pause) from the delegate
   // via the WebMediaPlayerDelegate::Observer interface after registration.
-  const base::WeakPtr<media::WebMediaPlayerDelegate> delegate_;
+  //
+  // NOTE: HTMLMediaElement is a Blink::SuspendableObject, and will receive a
+  // call to contextDestroyed() when Blink::Document::shutdown() is called.
+  // Document::shutdown() is called before the frame detaches (and before the
+  // frame is destroyed). RenderFrameImpl owns of |delegate_|, and is guaranteed
+  // to outlive |this|. It is therefore safe use a raw pointer directly.
+  media::WebMediaPlayerDelegate* delegate_;
   int delegate_id_;
 
   // Inner class used for transfering frames on compositor thread to

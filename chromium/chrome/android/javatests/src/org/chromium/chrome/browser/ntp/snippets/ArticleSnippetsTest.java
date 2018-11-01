@@ -11,7 +11,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -20,24 +19,25 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
-import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
-import org.chromium.chrome.browser.ntp.UiConfig;
-import org.chromium.chrome.browser.ntp.cards.ActionItem;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetricsReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
-import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
+import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.widget.displaystyle.VerticalDisplayStyle;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.RenderUtils.ViewRenderer;
+import org.chromium.chrome.test.util.browser.suggestions.DummySuggestionsMetricsReporter;
+import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Set;
 
 /**
  * Tests for the appearance of Article Snippets.
@@ -80,7 +80,8 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 mRecyclerView.setAboveTheFoldView(aboveTheFold);
                 mAdapter = new NewTabPageAdapter(mUiDelegate, aboveTheFold, mUiConfig,
                         OfflinePageBridge.getForProfile(Profile.getLastUsedProfile()),
-                        /* contextMenuManager = */null);
+                        /* contextMenuManager = */ null, /* tileGroupDelegate = */ null);
+                mAdapter.refreshSuggestions();
                 mRecyclerView.setAdapter(mAdapter);
             }
         });
@@ -109,7 +110,8 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                         mRecyclerView.getResources().getDisplayMetrics());
                 mContentView.setLayoutParams(params);
 
-                mUiConfig.setDisplayStyleForTesting(UiConfig.DISPLAY_STYLE_NARROW);
+                mUiConfig.setDisplayStyleForTesting(new UiConfig.DisplayStyle(
+                        HorizontalDisplayStyle.NARROW, VerticalDisplayStyle.REGULAR));
             }
         });
 
@@ -131,8 +133,9 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         int minimalCategory = 1;
         SnippetArticle shortSnippet = new SnippetArticle(fullCategory, "id1", "Snippet",
                 "Publisher", "Preview Text", "www.google.com",
-                1466614774, // Timestamp
-                10f); // Score
+                1466614774, // Publish timestamp
+                10f, // Score
+                1466634774); // Fetch timestamp
         shortSnippet.setThumbnailBitmap(BitmapFactory.decodeResource(getActivity().getResources(),
                 R.drawable.signin_promo_illustration));
 
@@ -140,32 +143,39 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 new String(new char[20]).replace("\0", "Snippet "),
                 new String(new char[20]).replace("\0", "Publisher "),
                 new String(new char[80]).replace("\0", "Preview Text "), "www.google.com",
-                1466614074, // Timestamp
-                20f); // Score
+                1466614074, // Publish timestamp
+                20f, // Score
+                1466634774); // Fetch timestamp
 
         SnippetArticle minimalSnippet = new SnippetArticle(minimalCategory, "id3",
                 new String(new char[20]).replace("\0", "Bookmark "), "Publisher",
                 "This should not be displayed", "www.google.com",
-                1466614774, // Timestamp
-                10f); // Score
+                1466614774, // Publish timestamp
+                10f, // Score
+                1466634774); // Fetch timestamp
 
         SnippetArticle minimalSnippet2 = new SnippetArticle(minimalCategory, "id4", "Bookmark",
                 "Publisher", "This should not be displayed", "www.google.com",
-                1466614774, // Timestamp
-                10f); // Score
+                1466614774, // Publish timestamp
+                10f, // Score
+                1466634774); // Fetch timestamp
 
         mSnippetsSource.setInfoForCategory(
                 fullCategory, new SuggestionsCategoryInfo(fullCategory, "Section Title",
-                                      ContentSuggestionsCardLayout.FULL_CARD, false, false, false,
-                                      true, "No suggestions"));
+                                      ContentSuggestionsCardLayout.FULL_CARD,
+                                      /*has_fetch_action=*/false,
+                                      /*has_view_all_action=*/false,
+                                      /*show_if_empty=*/true, "No suggestions"));
         mSnippetsSource.setStatusForCategory(fullCategory, CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(
                 fullCategory, Arrays.asList(shortSnippet, longSnippet));
 
         mSnippetsSource.setInfoForCategory(
                 minimalCategory, new SuggestionsCategoryInfo(minimalCategory, "Section Title",
-                                         ContentSuggestionsCardLayout.MINIMAL_CARD, false, false,
-                                         false, true, "No suggestions"));
+                                         ContentSuggestionsCardLayout.MINIMAL_CARD,
+                                         /* has_fetch_action = */ false,
+                                         /* has_view_all_action = */ false,
+                                         /* show_if_empty = */ true, "No suggestions"));
         mSnippetsSource.setStatusForCategory(minimalCategory, CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(
                 minimalCategory, Arrays.asList(minimalSnippet, minimalSnippet2));
@@ -220,17 +230,17 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void getUrlsAvailableOffline(Set<String> pageUrls, Callback<Set<String>> callback) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public SuggestionsSource getSuggestionsSource() {
             return mSnippetsSource;
         }
 
         @Override
         public void addDestructionObserver(DestructionObserver destructionObserver) {}
+
+        @Override
+        public boolean isVisible() {
+            return true;
+        }
 
         @Override
         public SuggestionsMetricsReporter getMetricsReporter() {
@@ -243,26 +253,4 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
     }
 
-    private static class DummySuggestionsMetricsReporter implements SuggestionsMetricsReporter {
-        @Override
-        public void onPageShown(int[] categories, int[] suggestionsPerCategory) {}
-
-        @Override
-        public void onSuggestionShown(SnippetArticle suggestion) {}
-
-        @Override
-        public void onSuggestionOpened(SnippetArticle suggestion, int windowOpenDisposition) {}
-
-        @Override
-        public void onSuggestionMenuOpened(SnippetArticle suggestion) {}
-
-        @Override
-        public void onMoreButtonShown(@CategoryInt ActionItem category) {}
-
-        @Override
-        public void onMoreButtonClicked(@CategoryInt ActionItem category) {}
-
-        @Override
-        public void setRanker(SuggestionsRanker suggestionsRanker) {}
-    }
 }

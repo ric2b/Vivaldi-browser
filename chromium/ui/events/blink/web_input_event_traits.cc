@@ -7,7 +7,9 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 
 using base::StringAppendF;
 using base::SStringPrintf;
@@ -106,6 +108,17 @@ void ApppendEventDetails(const WebTouchEvent& event, std::string* result) {
   result->append(" ]\n}");
 }
 
+struct WebInputEventDelete {
+  template <class EventType>
+  bool Execute(WebInputEvent* event, void*) const {
+    if (!event)
+      return false;
+    DCHECK_EQ(sizeof(EventType), event->size());
+    delete static_cast<EventType*>(event);
+    return true;
+  }
+};
+
 struct WebInputEventToString {
   template <class EventType>
   bool Execute(const WebInputEvent& event, std::string* result) const {
@@ -129,9 +142,9 @@ struct WebInputEventSize {
 struct WebInputEventClone {
   template <class EventType>
   bool Execute(const WebInputEvent& event,
-               blink::WebScopedInputEvent* scoped_event) const {
+               WebScopedInputEvent* scoped_event) const {
     DCHECK_EQ(sizeof(EventType), event.size());
-    *scoped_event = blink::WebScopedInputEvent(
+    *scoped_event = WebScopedInputEvent(
         new EventType(static_cast<const EventType&>(event)));
     return true;
   }
@@ -159,6 +172,13 @@ bool Apply(Operator op,
 
 }  // namespace
 
+void WebInputEventDeleter::operator()(WebInputEvent* event) const {
+  if (!event)
+    return;
+  void* temp = nullptr;
+  Apply(WebInputEventDelete(), event->type(), event, temp);
+}
+
 std::string WebInputEventTraits::ToString(const WebInputEvent& event) {
   std::string result;
   Apply(WebInputEventToString(), event.type(), event, &result);
@@ -171,9 +191,8 @@ size_t WebInputEventTraits::GetSize(WebInputEvent::Type type) {
   return size;
 }
 
-blink::WebScopedInputEvent WebInputEventTraits::Clone(
-    const WebInputEvent& event) {
-  blink::WebScopedInputEvent scoped_event;
+WebScopedInputEvent WebInputEventTraits::Clone(const WebInputEvent& event) {
+  WebScopedInputEvent scoped_event;
   Apply(WebInputEventClone(), event.type(), event, &scoped_event);
   return scoped_event;
 }

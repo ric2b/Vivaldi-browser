@@ -6,6 +6,8 @@
 
 #include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameSelection.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/Settings.h"
 #include "core/input/EventHandler.h"
 
 namespace blink {
@@ -15,7 +17,7 @@ class SelectionControllerTest : public EditingTestBase {
   SelectionControllerTest() = default;
 
   const VisibleSelection& visibleSelectionInDOMTree() const {
-    return selection().selection();
+    return selection().computeVisibleSelectionInDOMTreeDeprecated();
   }
 
   const VisibleSelectionInFlatTree& visibleSelectionInFlatTree() const {
@@ -36,7 +38,8 @@ void SelectionControllerTest::setNonDirectionalSelectionIfNeeded(
       .eventHandler()
       .selectionController()
       .setNonDirectionalSelectionIfNeeded(
-          newSelection, granularity, SelectionController::DoNotAdjustEndpoints);
+          newSelection, granularity, SelectionController::DoNotAdjustEndpoints,
+          HandleVisibility::NotVisible);
 }
 
 TEST_F(SelectionControllerTest, setNonDirectionalSelectionIfNeeded) {
@@ -84,6 +87,22 @@ TEST_F(SelectionControllerTest, setNonDirectionalSelectionIfNeeded) {
   EXPECT_EQ(PositionInFlatTree(top, 1), visibleSelectionInFlatTree().extent());
   EXPECT_EQ(PositionInFlatTree(top, 1), visibleSelectionInFlatTree().start());
   EXPECT_EQ(PositionInFlatTree(bottom, 3), visibleSelectionInFlatTree().end());
+}
+
+TEST_F(SelectionControllerTest, setCaretAtHitTestResult) {
+  const char* bodyContent = "<div id='sample' contenteditable>sample</div>";
+  setBodyContent(bodyContent);
+  document().settings()->setScriptEnabled(true);
+  Element* script = document().createElement("script");
+  script->setInnerHTML(
+      "var sample = document.getElementById('sample');"
+      "sample.addEventListener('onselectstart', "
+      "  event => elem.parentNode.removeChild(elem));");
+  document().body()->appendChild(script);
+  document().view()->updateAllLifecyclePhases();
+  frame().eventHandler().selectionController().handleGestureLongPress(
+      WebGestureEvent(),
+      frame().eventHandler().hitTestResultAtPoint(IntPoint(8, 8)));
 }
 
 }  // namespace blink

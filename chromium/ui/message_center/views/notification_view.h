@@ -16,6 +16,7 @@
 #include "ui/views/view_targeter_delegate.h"
 
 namespace views {
+class ImageView;
 class ProgressBar;
 }
 
@@ -45,6 +46,8 @@ class MESSAGE_CENTER_EXPORT NotificationView
   void OnFocus() override;
   void ScrollRectToVisible(const gfx::Rect& rect) override;
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
 
   // Overridden from MessageView:
   void UpdateWithNotification(const Notification& notification) override;
@@ -52,6 +55,7 @@ class MESSAGE_CENTER_EXPORT NotificationView
   bool IsCloseButtonFocused() const override;
   void RequestFocusOnCloseButton() override;
   bool IsPinned() const override;
+  void UpdateControlButtonsVisibility() override;
 
  protected:
   views::ImageButton* close_button() { return close_button_.get(); }
@@ -82,6 +86,7 @@ class MESSAGE_CENTER_EXPORT NotificationView
   void CreateOrUpdateProgressBarView(const Notification& notification);
   void CreateOrUpdateListItemViews(const Notification& notification);
   void CreateOrUpdateIconView(const Notification& notification);
+  void CreateOrUpdateSmallIconView(const Notification& notification);
   void CreateOrUpdateImageView(const Notification& notification);
   void CreateOrUpdateActionButtonViews(const Notification& notification);
   void CreateOrUpdateCloseButtonView(const Notification& notification);
@@ -113,6 +118,7 @@ class MESSAGE_CENTER_EXPORT NotificationView
   std::vector<NotificationButton*> action_buttons_;
   std::vector<views::View*> separators_;
   std::unique_ptr<views::ImageButton> close_button_ = nullptr;
+  std::unique_ptr<views::ImageView> small_image_view_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationView);
 };

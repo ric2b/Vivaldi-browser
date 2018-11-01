@@ -98,7 +98,7 @@ QualifiedName::QualifiedName(const AtomicString& p,
 QualifiedName::~QualifiedName() {}
 
 QualifiedName::QualifiedNameImpl::~QualifiedNameImpl() {
-  qualifiedNameCache().remove(this);
+  qualifiedNameCache().erase(this);
 }
 
 String QualifiedName::toString() const {
@@ -109,8 +109,8 @@ String QualifiedName::toString() const {
 }
 
 // Global init routines
-DEFINE_GLOBAL(QualifiedName, anyName, nullAtom, starAtom, starAtom);
-DEFINE_GLOBAL(QualifiedName, nullName, nullAtom, nullAtom, nullAtom);
+DEFINE_GLOBAL(QualifiedName, anyName);
+DEFINE_GLOBAL(QualifiedName, nullName);
 
 void QualifiedName::initAndReserveCapacityForSize(unsigned size) {
   DCHECK(starAtom.impl());
@@ -126,7 +126,7 @@ const QualifiedName& QualifiedName::null() {
 
 const AtomicString& QualifiedName::localNameUpper() const {
   if (!m_impl->m_localNameUpper)
-    m_impl->m_localNameUpper = m_impl->m_localName.upper();
+    m_impl->m_localNameUpper = m_impl->m_localName.upperASCII();
   return m_impl->m_localNameUpper;
 }
 

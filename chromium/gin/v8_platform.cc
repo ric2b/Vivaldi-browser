@@ -204,25 +204,31 @@ class EnabledStateObserverImpl final
 
   void OnTraceLogEnabled() final {
     base::AutoLock lock(mutex_);
-    for (auto o : observers_) {
+    for (auto* o : observers_) {
       o->OnTraceEnabled();
     }
   }
 
   void OnTraceLogDisabled() final {
     base::AutoLock lock(mutex_);
-    for (auto o : observers_) {
+    for (auto* o : observers_) {
       o->OnTraceDisabled();
     }
   }
 
   void AddObserver(v8::Platform::TraceStateObserver* observer) {
-    base::AutoLock lock(mutex_);
-    DCHECK(!observers_.count(observer));
-    observers_.insert(observer);
-    if (observers_.size() == 1) {
-      base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(this);
+    {
+      base::AutoLock lock(mutex_);
+      DCHECK(!observers_.count(observer));
+      if (observers_.empty()) {
+        base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(
+            this);
+      }
+      observers_.insert(observer);
     }
+    // Fire the observer if recording is already in progress.
+    if (base::trace_event::TraceLog::GetInstance()->IsEnabled())
+      observer->OnTraceEnabled();
   }
 
   void RemoveObserver(v8::Platform::TraceStateObserver* observer) {

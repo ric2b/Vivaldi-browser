@@ -102,10 +102,10 @@ SupervisedUserCreationScreen* SupervisedUserCreationScreen::Get(
 
 SupervisedUserCreationScreen::SupervisedUserCreationScreen(
     BaseScreenDelegate* base_screen_delegate,
-    SupervisedUserCreationScreenHandler* actor)
+    SupervisedUserCreationScreenHandler* view)
     : BaseScreen(base_screen_delegate,
                  OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW),
-      actor_(actor),
+      view_(view),
       on_error_screen_(false),
       manager_signin_in_progress_(false),
       last_page_(kNameOfIntroScreen),
@@ -114,30 +114,30 @@ SupervisedUserCreationScreen::SupervisedUserCreationScreen(
       selected_image_(0),
       histogram_helper_(new ErrorScreensHistogramHelper("Supervised")),
       weak_factory_(this) {
-  DCHECK(actor_);
-  if (actor_)
-    actor_->SetDelegate(this);
+  DCHECK(view_);
+  if (view_)
+    view_->SetDelegate(this);
 }
 
 SupervisedUserCreationScreen::~SupervisedUserCreationScreen() {
   CameraPresenceNotifier::GetInstance()->RemoveObserver(this);
   if (sync_service_)
     sync_service_->RemoveObserver(this);
-  if (actor_)
-    actor_->SetDelegate(NULL);
+  if (view_)
+    view_->SetDelegate(NULL);
   network_portal_detector::GetInstance()->RemoveObserver(this);
 }
 
 void SupervisedUserCreationScreen::Show() {
   CameraPresenceNotifier::GetInstance()->AddObserver(this);
-  if (actor_) {
-    actor_->Show();
+  if (view_) {
+    view_->Show();
     // TODO(antrim) : temorary hack (until upcoming hackaton). Should be
     // removed once we have screens reworked.
     if (on_error_screen_)
-      actor_->ShowPage(last_page_);
+      view_->ShowPage(last_page_);
     else
-      actor_->ShowIntroPage();
+      view_->ShowIntroPage();
   }
 
   if (!on_error_screen_)
@@ -169,9 +169,9 @@ void SupervisedUserCreationScreen::OnPortalDetectionCompleted(
 
 void SupervisedUserCreationScreen::ShowManagerInconsistentStateErrorScreen() {
   manager_signin_in_progress_ = false;
-  if (!actor_)
+  if (!view_)
     return;
-  actor_->ShowErrorPage(
+  view_->ShowErrorPage(
       l10n_util::GetStringUTF16(
           IDS_CREATE_SUPERVISED_USER_MANAGER_INCONSISTENT_STATE_TITLE),
       l10n_util::GetStringUTF16(
@@ -181,14 +181,14 @@ void SupervisedUserCreationScreen::ShowManagerInconsistentStateErrorScreen() {
 }
 
 void SupervisedUserCreationScreen::ShowInitialScreen() {
-  if (actor_)
-    actor_->ShowIntroPage();
+  if (view_)
+    view_->ShowIntroPage();
 }
 
 void SupervisedUserCreationScreen::Hide() {
   CameraPresenceNotifier::GetInstance()->RemoveObserver(this);
-  if (actor_)
-    actor_->Hide();
+  if (view_)
+    view_->Hide();
   if (!on_error_screen_)
     network_portal_detector::GetInstance()->RemoveObserver(this);
 }
@@ -273,11 +273,10 @@ void SupervisedUserCreationScreen::ImportSupervisedUser(
 
   // We should not get here with existing user selected, so just display error.
   if (exists) {
-    actor_->ShowErrorPage(
+    view_->ShowErrorPage(
         l10n_util::GetStringUTF16(
             IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_TITLE),
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR),
+        l10n_util::GetStringUTF16(IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR),
         l10n_util::GetStringUTF16(
             IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_BUTTON));
     return;
@@ -333,11 +332,10 @@ void SupervisedUserCreationScreen::ImportSupervisedUserWithPassword(
 
   // We should not get here with existing user selected, so just display error.
   if (exists) {
-    actor_->ShowErrorPage(
+    view_->ShowErrorPage(
         l10n_util::GetStringUTF16(
             IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_TITLE),
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR),
+        l10n_util::GetStringUTF16(IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR),
         l10n_util::GetStringUTF16(
             IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_BUTTON));
     return;
@@ -354,8 +352,8 @@ void SupervisedUserCreationScreen::ImportSupervisedUserWithPassword(
 
 void SupervisedUserCreationScreen::OnManagerLoginFailure() {
   manager_signin_in_progress_ = false;
-  if (actor_)
-    actor_->ShowManagerPasswordError();
+  if (view_)
+    view_->ShowManagerPasswordError();
 }
 
 void SupervisedUserCreationScreen::OnManagerFullyAuthenticated(
@@ -370,8 +368,8 @@ void SupervisedUserCreationScreen::OnManagerFullyAuthenticated(
   ash::WmShell::Get()->wallpaper_controller()->MoveToLockedContainer();
 
   controller_->SetManagerProfile(manager_profile);
-  if (actor_)
-    actor_->ShowUsernamePage();
+  if (view_)
+    view_->ShowUsernamePage();
 
   last_page_ = kNameOfNewUserParametersScreen;
   CHECK(!sync_service_);
@@ -389,16 +387,18 @@ void SupervisedUserCreationScreen::OnSupervisedUsersChanged() {
 }
 
 void SupervisedUserCreationScreen::OnManagerCryptohomeAuthenticated() {
-  if (actor_) {
-    actor_->ShowStatusMessage(true /* progress */, l10n_util::GetStringUTF16(
-        IDS_CREATE_SUPERVISED_USER_CREATION_AUTH_PROGRESS_MESSAGE));
+  if (view_) {
+    view_->ShowStatusMessage(
+        true /* progress */,
+        l10n_util::GetStringUTF16(
+            IDS_CREATE_SUPERVISED_USER_CREATION_AUTH_PROGRESS_MESSAGE));
   }
 }
 
-void SupervisedUserCreationScreen::OnActorDestroyed(
-    SupervisedUserCreationScreenHandler* actor) {
-  if (actor_ == actor)
-    actor_ = NULL;
+void SupervisedUserCreationScreen::OnViewDestroyed(
+    SupervisedUserCreationScreenHandler* view) {
+  if (view_ == view)
+    view_ = NULL;
 }
 
 void SupervisedUserCreationScreen::OnCreationError(
@@ -414,13 +414,10 @@ void SupervisedUserCreationScreen::OnCreationError(
     case SupervisedUserCreationController::CRYPTOHOME_NO_MOUNT:
     case SupervisedUserCreationController::CRYPTOHOME_FAILED_MOUNT:
     case SupervisedUserCreationController::CRYPTOHOME_FAILED_TPM:
-      title = l10n_util::GetStringUTF16(
-          IDS_CREATE_SUPERVISED_USER_TPM_ERROR_TITLE);
-      message = l10n_util::GetStringUTF16(
-          IDS_CREATE_SUPERVISED_USER_TPM_ERROR);
-      button = l10n_util::GetStringUTF16(
-          IDS_CREATE_SUPERVISED_USER_TPM_ERROR_BUTTON);
-      break;
+      ::login::GetSecureModuleUsed(
+          base::Bind(&SupervisedUserCreationScreen::UpdateSecureModuleMessages,
+                     weak_factory_.GetWeakPtr()));
+      return;
     case SupervisedUserCreationController::CLOUD_SERVER_ERROR:
     case SupervisedUserCreationController::TOKEN_WRITE_FAILED:
       title = l10n_util::GetStringUTF16(
@@ -433,21 +430,25 @@ void SupervisedUserCreationScreen::OnCreationError(
     case SupervisedUserCreationController::NO_ERROR:
       NOTREACHED();
   }
-  if (actor_)
-    actor_->ShowErrorPage(title, message, button);
+  if (view_)
+    view_->ShowErrorPage(title, message, button);
 }
 
 void SupervisedUserCreationScreen::OnCreationTimeout() {
-  if (actor_) {
-    actor_->ShowStatusMessage(false /* error */, l10n_util::GetStringUTF16(
-        IDS_CREATE_SUPERVISED_USER_CREATION_CREATION_TIMEOUT_MESSAGE));
+  if (view_) {
+    view_->ShowStatusMessage(
+        false /* error */,
+        l10n_util::GetStringUTF16(
+            IDS_CREATE_SUPERVISED_USER_CREATION_CREATION_TIMEOUT_MESSAGE));
   }
 }
 
 void SupervisedUserCreationScreen::OnLongCreationWarning() {
-  if (actor_) {
-    actor_->ShowStatusMessage(true /* progress */, l10n_util::GetStringUTF16(
-        IDS_PROFILES_CREATE_SUPERVISED_JUST_SIGNED_IN));
+  if (view_) {
+    view_->ShowStatusMessage(
+        true /* progress */,
+        l10n_util::GetStringUTF16(
+            IDS_PROFILES_CREATE_SUPERVISED_JUST_SIGNED_IN));
   }
 }
 
@@ -501,7 +502,7 @@ void SupervisedUserCreationScreen::ApplyPicture() {
       break;
   }
   // Proceed to tutorial.
-  actor_->ShowTutorialPage();
+  view_->ShowTutorialPage();
 }
 
 void SupervisedUserCreationScreen::OnCreationSuccess() {
@@ -510,8 +511,8 @@ void SupervisedUserCreationScreen::OnCreationSuccess() {
 
 void SupervisedUserCreationScreen::OnCameraPresenceCheckDone(
     bool is_camera_present) {
-  if (actor_)
-    actor_->SetCameraPresent(is_camera_present);
+  if (view_)
+    view_->SetCameraPresent(is_camera_present);
 }
 
 void SupervisedUserCreationScreen::OnGetSupervisedUsers(
@@ -583,7 +584,37 @@ void SupervisedUserCreationScreen::OnGetSupervisedUsers(
     existing_users_->Set(it.key(), local_copy);
     ui_users->Append(std::move(ui_copy));
   }
-  actor_->ShowExistingSupervisedUsers(ui_users.get());
+  view_->ShowExistingSupervisedUsers(ui_users.get());
+}
+
+void SupervisedUserCreationScreen::UpdateSecureModuleMessages(
+    ::login::SecureModuleUsed secure_module_used) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  base::string16 title;
+  base::string16 message;
+  base::string16 button;
+  switch (secure_module_used) {
+    case ::login::SecureModuleUsed::TPM:
+      title =
+          l10n_util::GetStringUTF16(IDS_CREATE_SUPERVISED_USER_TPM_ERROR_TITLE);
+      message = l10n_util::GetStringUTF16(IDS_CREATE_SUPERVISED_USER_TPM_ERROR);
+      button = l10n_util::GetStringUTF16(
+          IDS_CREATE_SUPERVISED_USER_TPM_ERROR_BUTTON);
+      break;
+    case ::login::SecureModuleUsed::CR50:
+      title = l10n_util::GetStringUTF16(
+          IDS_CREATE_SUPERVISED_USER_SECURE_MODULE_ERROR_TITLE);
+      message = l10n_util::GetStringUTF16(
+          IDS_CREATE_SUPERVISED_USER_SECURE_MODULE_ERROR);
+      button = l10n_util::GetStringUTF16(
+          IDS_CREATE_SUPERVISED_USER_SECURE_MODULE_ERROR_BUTTON);
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+  if (view_)
+    view_->ShowErrorPage(title, message, button);
 }
 
 void SupervisedUserCreationScreen::OnPhotoTaken(

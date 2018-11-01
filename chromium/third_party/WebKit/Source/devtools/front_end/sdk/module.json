@@ -8,7 +8,7 @@
     "extensions": [
         {
             "type": "setting",
-            "settingName": "blockedURLs",
+            "settingName": "networkBlockedURLs",
             "settingType": "array",
             "defaultValue": []
         },
@@ -87,15 +87,23 @@
             "settingName": "showMetricsRulers",
             "settingType": "boolean",
             "defaultValue": false
+        },
+        {
+            "type": "setting",
+            "category": "Console",
+            "title": "Enable custom formatters",
+            "settingName": "customFormatters",
+            "settingType": "boolean",
+            "defaultValue": false
         }
     ],
     "scripts": [
         "Target.js",
         "TargetManager.js",
-        "ApplicationCacheModel.js",
         "Connections.js",
         "ConsoleModel.js",
         "ContentProviders.js",
+        "CookieModel.js",
         "CookieParser.js",
         "ProfileTreeModel.js",
         "ServerTiming.js",
@@ -115,10 +123,10 @@
         "LayerTreeBase.js",
         "NetworkLog.js",
         "ServiceWorkerManager.js",
-        "SubTargetsManager.js",
         "TracingManager.js",
         "TracingModel.js",
         "RuntimeModel.js",
+        "ScreenCaptureModel.js",
         "Script.js",
         "ServiceWorkerCacheModel.js",
         "RemoteObject.js",

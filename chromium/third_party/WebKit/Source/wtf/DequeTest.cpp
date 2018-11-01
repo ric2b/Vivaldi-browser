@@ -288,12 +288,12 @@ HashSet<void*> constructedWrappedInts;
 class WrappedInt {
  public:
   WrappedInt(int i = 0) : m_originalThisPtr(this), m_i(i) {
-    constructedWrappedInts.add(this);
+    constructedWrappedInts.insert(this);
   }
 
   WrappedInt(const WrappedInt& other)
       : m_originalThisPtr(this), m_i(other.m_i) {
-    constructedWrappedInts.add(this);
+    constructedWrappedInts.insert(this);
   }
 
   WrappedInt& operator=(const WrappedInt& other) {
@@ -304,7 +304,7 @@ class WrappedInt {
   ~WrappedInt() {
     EXPECT_EQ(m_originalThisPtr, this);
     EXPECT_TRUE(constructedWrappedInts.contains(this));
-    constructedWrappedInts.remove(this);
+    constructedWrappedInts.erase(this);
   }
 
   int get() const { return m_i; }

@@ -942,7 +942,11 @@ int CertVerifyProcWin::VerifyInternal(
           chain_para.RequestedIssuancePolicy.Usage.cUsageIdentifier = 1;
           chain_para.RequestedIssuancePolicy.Usage.rgpszUsageIdentifier =
               &ev_policy_oid;
-          break;
+
+          // De-prioritize the CA/Browser forum Extended Validation policy
+          // (2.23.140.1.1). See crbug.com/705285.
+          if (!EVRootCAMetadata::IsCaBrowserForumEvOid(ev_policy_oid))
+            break;
         }
       }
     }
@@ -1192,13 +1196,6 @@ int CertVerifyProcWin::VerifyInternal(
   // TODO(wtc): Suppress CERT_STATUS_NO_REVOCATION_MECHANISM for now to be
   // compatible with WinHTTP, which doesn't report this error (bug 3004).
   verify_result->cert_status &= ~CERT_STATUS_NO_REVOCATION_MECHANISM;
-
-  // Perform hostname verification independent of
-  // CertVerifyCertificateChainPolicy.
-  if (!cert->VerifyNameMatch(hostname,
-                             &verify_result->common_name_fallback_used)) {
-    verify_result->cert_status |= CERT_STATUS_COMMON_NAME_INVALID;
-  }
 
   if (!rev_checking_enabled) {
     // If we didn't do online revocation checking then Windows will report

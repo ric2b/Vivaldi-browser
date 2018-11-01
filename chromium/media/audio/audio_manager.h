@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner_helpers.h"
@@ -19,6 +20,7 @@
 #include "media/base/audio_parameters.h"
 
 namespace base {
+class FilePath;
 class SingleThreadTaskRunner;
 }
 
@@ -39,9 +41,7 @@ using ScopedAudioManagerPtr =
 // the need to provide iterators over the existing streams.
 //
 // Except on OSX, a hang monitor for the audio thread is always created. When a
-// thread hang is detected, it is reported to UMA.  Optionally, if called prior,
-// EnableCrashKeyLoggingForAudioThreadHangs() will cause a non-crash dump to be
-// logged on Windows (this allows us to report driver hangs to Microsoft).
+// thread hang is detected, it is reported to UMA.
 class MEDIA_EXPORT AudioManager {
  public:
   // Construct the audio manager; only one instance is allowed.
@@ -60,9 +60,13 @@ class MEDIA_EXPORT AudioManager {
   // The manager will use |worker_task_runner| for heavyweight tasks.
   // The |worker_task_runner| may be the same as |task_runner|. This same
   // task runner is returned by GetWorkerTaskRunner.
+  //
+  // |file_task_runner| is used for audio debug recordings and is the task
+  // runner to do file output operations on.
   static ScopedAudioManagerPtr Create(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
       AudioLogFactory* audio_log_factory);
 
   // A convenience wrapper of AudioManager::Create for testing.
@@ -76,13 +80,6 @@ class MEDIA_EXPORT AudioManager {
   // This must be called only after an AudioManager instance is created.
   static void StartHangMonitorIfNeeded(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
-
-  // Enables non-crash dumps when audio thread hangs are detected.
-  // TODO(dalecurtis): There are no callers to this function at present. A list
-  // of bad drivers has been given to Microsoft. This should be re-enabled in
-  // the future if Microsoft is able to triage third party drivers.
-  // See http://crbug.com/422522
-  static void EnableCrashKeyLoggingForAudioThreadHangs();
 
 #if defined(OS_LINUX)
   // Sets the name of the audio source as seen by external apps. Only actually
@@ -248,6 +245,15 @@ class MEDIA_EXPORT AudioManager {
   virtual std::unique_ptr<AudioLog> CreateAudioLog(
       AudioLogFactory::AudioComponent component) = 0;
 
+  // Enable output debug recording. InitializeOutputDebugRecording() must be
+  // called before this function.
+  // TODO(grunell): Control input debug recording via these functions too.
+  virtual void EnableOutputDebugRecording(
+      const base::FilePath& base_file_name) = 0;
+
+  // Disable output debug recording.
+  virtual void DisableOutputDebugRecording() = 0;
+
   // Gets the name of the audio manager (e.g., Windows, Mac, PulseAudio).
   virtual const char* GetName() = 0;
 
@@ -255,12 +261,20 @@ class MEDIA_EXPORT AudioManager {
   virtual void SetMaxStreamCountForTesting(int max_input, int max_output);
 
  protected:
+  FRIEND_TEST_ALL_PREFIXES(AudioManagerTest, AudioDebugRecording);
+
   AudioManager(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner);
   virtual ~AudioManager();
 
+  // Initializes output debug recording. Can be called on any thread; will post
+  // to the audio thread if not called on it.
+  virtual void InitializeOutputDebugRecording(
+      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) = 0;
+
  private:
   friend class base::DeleteHelper<AudioManager>;
+  friend class AudioManagerDeleter;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner_;

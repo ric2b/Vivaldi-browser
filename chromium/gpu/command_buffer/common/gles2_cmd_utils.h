@@ -243,8 +243,11 @@ class GLES2_UTILS_EXPORT GLES2Util {
   static bool IsIntegerFormat(uint32_t internal_format);
   static bool IsFloatFormat(uint32_t internal_format);
   static uint32_t ConvertToSizedFormat(uint32_t format, uint32_t type);
-
   static bool IsSizedColorFormat(uint32_t internal_format);
+
+  // Infer color encoding from internalformat
+  static int GetColorEncodingFromInternalFormat(uint32_t internalformat);
+
   static void GetColorFormatComponentSizes(
       uint32_t internal_format, uint32_t type, int* r, int* g, int* b, int* a);
 
@@ -305,6 +308,8 @@ enum ContextType {
   CONTEXT_TYPE_LAST = CONTEXT_TYPE_OPENGLES3
 };
 GLES2_UTILS_EXPORT bool IsWebGLContextType(ContextType context_type);
+GLES2_UTILS_EXPORT bool IsWebGL1OrES2ContextType(ContextType context_type);
+GLES2_UTILS_EXPORT bool IsWebGL2OrES3ContextType(ContextType context_type);
 
 struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
   ContextCreationAttribHelper();
@@ -328,6 +333,7 @@ struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
   bool fail_if_major_perf_caveat;
   bool lose_context_when_out_of_memory;
   bool should_use_native_gmb_for_backbuffer;
+  bool own_offscreen_surface;
 
   ContextType context_type;
 };
@@ -336,4 +342,3 @@ struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
 }  // namespace gpu
 
 #endif  // GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_UTILS_H_
-

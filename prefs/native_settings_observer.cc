@@ -6,4 +6,4 @@ namespace vivaldi {
 
 NativeSettingsObserver::~NativeSettingsObserver() {}
 
-}  // namespace autofill
+}  // namespace vivaldi

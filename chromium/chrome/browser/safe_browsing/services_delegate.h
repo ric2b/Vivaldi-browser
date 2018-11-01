@@ -72,7 +72,7 @@ class ServicesDelegate {
   v4_local_database_manager() const = 0;
 
   // Initializes internal state using the ServicesCreator.
-  virtual void Initialize() = 0;
+  virtual void Initialize(bool v4_enabled = false) = 0;
 
   // Creates the CSD service for the given |context_getter|.
   virtual void InitializeCsdService(
@@ -89,8 +89,6 @@ class ServicesDelegate {
   virtual std::unique_ptr<TrackedPreferenceValidationDelegate>
       CreatePreferenceValidationDelegate(Profile* profile) = 0;
   virtual void RegisterDelayedAnalysisCallback(
-      const DelayedAnalysisCallback& callback) = 0;
-  virtual void RegisterExtendedReportingOnlyDelayedAnalysisCallback(
       const DelayedAnalysisCallback& callback) = 0;
   virtual void AddDownloadManager(
       content::DownloadManager* download_manager) = 0;

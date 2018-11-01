@@ -10,10 +10,6 @@
 
 namespace {
 
-bool Init() {
-  return true;
-}
-
 bool NativeInit() {
   JNIEnv* env = base::android::AttachCurrentThread();
   int library_process_type = base::android::GetLibraryProcessType(env);
@@ -24,7 +20,7 @@ bool NativeInit() {
       break;
     case base::android::PROCESS_BROWSER:
     case base::android::PROCESS_CHILD:
-      return android::OnJNIOnLoadInit(base::Bind(&Init));
+      return android::OnJNIOnLoadInit();
       break;
     default:
       NOTREACHED();
@@ -36,8 +32,8 @@ bool NativeInit() {
 
 // This is called by the VM when the shared library is first loaded.
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-  base::android::DisableManualJniRegistration();
   base::android::InitVM(vm);
+  base::android::SetJniRegistrationType(base::android::NO_JNI_REGISTRATION);
   base::android::SetNativeInitializationHook(NativeInit);
   return JNI_VERSION_1_4;
 }

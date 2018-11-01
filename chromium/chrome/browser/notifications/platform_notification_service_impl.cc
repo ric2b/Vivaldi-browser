@@ -17,6 +17,7 @@
 #include "chrome/browser/notifications/notification_object_proxy.h"
 #include "chrome/browser/notifications/persistent_notification_delegate.h"
 #include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_io_data.h"
@@ -28,13 +29,11 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_notification_delegate.h"
 #include "content/public/browser/notification_event_dispatcher.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/notification_resources.h"
 #include "content/public/common/platform_notification_data.h"
@@ -229,8 +228,17 @@ PlatformNotificationServiceImpl::CheckPermissionOnUIThread(
   }
 #endif
 
-  return PermissionManager::Get(profile)->GetPermissionStatus(
-      content::PermissionType::NOTIFICATIONS, origin, origin);
+  ContentSetting setting =
+      PermissionManager::Get(profile)
+          ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, origin,
+                                origin)
+          .content_setting;
+  if (setting == CONTENT_SETTING_ALLOW)
+    return blink::mojom::PermissionStatus::GRANTED;
+  if (setting == CONTENT_SETTING_ASK)
+    return blink::mojom::PermissionStatus::ASK;
+  DCHECK_EQ(CONTENT_SETTING_BLOCK, setting);
+  return blink::mojom::PermissionStatus::DENIED;
 }
 
 blink::mojom::PermissionStatus
@@ -321,11 +329,6 @@ void PlatformNotificationServiceImpl::DisplayNotification(
         base::Bind(&CancelNotification, notification.delegate_id(), profile_id,
                    profile->IsOffTheRecord());
   }
-
-  HostContentSettingsMapFactory::GetForProfile(profile)->
-    UpdateLastUsageByPattern(ContentSettingsPattern::FromURLNoWildcard(origin),
-                             ContentSettingsPattern::Wildcard(),
-                             CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
 }
 
 void PlatformNotificationServiceImpl::DisplayPersistentNotification(
@@ -360,12 +363,6 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
       NotificationCommon::PERSISTENT, notification_id, notification);
   content::RecordAction(
       base::UserMetricsAction("Notifications.Persistent.Shown"));
-
-  HostContentSettingsMapFactory::GetForProfile(profile)->
-    UpdateLastUsageByPattern(
-      ContentSettingsPattern::FromURLNoWildcard(origin),
-      ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS);;
 }
 
 void PlatformNotificationServiceImpl::ClosePersistentNotification(

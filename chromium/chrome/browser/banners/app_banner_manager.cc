@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -34,19 +33,6 @@ int gTimeDeltaInDaysForTesting = 0;
 
 InstallableParams ParamsToGetManifest() {
   return InstallableParams();
-}
-
-// Returns an InstallableParams object that requests all checks necessary for
-// a web app banner.
-InstallableParams ParamsToPerformInstallableCheck(int ideal_icon_size_in_px,
-                                                  int minimum_icon_size_in_px) {
-  InstallableParams params;
-  params.ideal_primary_icon_size_in_px = ideal_icon_size_in_px;
-  params.minimum_primary_icon_size_in_px = minimum_icon_size_in_px;
-  params.check_installable = true;
-  params.fetch_valid_primary_icon = true;
-
-  return params;
 }
 
 }  // anonymous namespace
@@ -92,6 +78,8 @@ void AppBannerManager::RequestAppBanner(const GURL& validated_url,
 
   is_active_ = true;
   is_debug_mode_ = is_debug_mode;
+  was_canceled_by_page_ = false;
+  page_requested_prompt_ = false;
 
   // We only need to call ReportStatus if we aren't in debug mode (this avoids
   // skew from testing).
@@ -151,11 +139,6 @@ void AppBannerManager::SendBannerDismissed(int request_id) {
   event_->BannerDismissed();
 }
 
-base::Closure AppBannerManager::FetchWebappSplashScreenImageCallback(
-    const std::string& webapp_id) {
-  return base::Closure();
-}
-
 AppBannerManager::AppBannerManager(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       SiteEngagementObserver(nullptr),
@@ -197,11 +180,11 @@ std::string AppBannerManager::GetStatusParam(InstallableStatusCode code) {
   return std::string();
 }
 
-int AppBannerManager::GetIdealIconSizeInPx() {
+int AppBannerManager::GetIdealPrimaryIconSizeInPx() {
   return InstallableManager::GetMinimumIconSizeInPx();
 }
 
-int AppBannerManager::GetMinimumIconSizeInPx() {
+int AppBannerManager::GetMinimumPrimaryIconSizeInPx() {
   return InstallableManager::GetMinimumIconSizeInPx();
 }
 
@@ -242,13 +225,22 @@ void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
   PerformInstallableCheck();
 }
 
+InstallableParams AppBannerManager::ParamsToPerformInstallableCheck() {
+  InstallableParams params;
+  params.ideal_primary_icon_size_in_px = GetIdealPrimaryIconSizeInPx();
+  params.minimum_primary_icon_size_in_px = GetMinimumPrimaryIconSizeInPx();
+  params.check_installable = true;
+  params.fetch_valid_primary_icon = true;
+
+  return params;
+}
+
 void AppBannerManager::PerformInstallableCheck() {
   if (!CheckIfShouldShowBanner())
     return;
 
   // Fetch and verify the other required information.
-  manager_->GetData(ParamsToPerformInstallableCheck(GetIdealIconSizeInPx(),
-                                                    GetMinimumIconSizeInPx()),
+  manager_->GetData(ParamsToPerformInstallableCheck(),
                     base::Bind(&AppBannerManager::OnDidPerformInstallableCheck,
                                GetWeakPtr()));
 }
@@ -273,8 +265,8 @@ void AppBannerManager::OnDidPerformInstallableCheck(
   DCHECK(!data.primary_icon_url.is_empty());
   DCHECK(data.primary_icon);
 
-  icon_url_ = data.primary_icon_url;
-  icon_.reset(new SkBitmap(*data.primary_icon));
+  primary_icon_url_ = data.primary_icon_url;
+  primary_icon_.reset(new SkBitmap(*data.primary_icon));
 
   SendBannerPromptRequest();
 }
@@ -332,8 +324,6 @@ void AppBannerManager::Stop() {
   event_.reset();
 
   is_active_ = false;
-  was_canceled_by_page_ = false;
-  page_requested_prompt_ = false;
   need_to_log_status_ = false;
 }
 
@@ -524,8 +514,8 @@ void AppBannerManager::OnBannerPromptReply(
 
   DCHECK(!manifest_url_.is_empty());
   DCHECK(!manifest_.IsEmpty());
-  DCHECK(!icon_url_.is_empty());
-  DCHECK(icon_.get());
+  DCHECK(!primary_icon_url_.is_empty());
+  DCHECK(primary_icon_.get());
 
   TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_COMPLETE);
   ShowBanner();

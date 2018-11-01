@@ -5,9 +5,8 @@
 import unittest
 
 from webkitpy.common.host_mock import MockHost
-from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.system.executive_mock import MockExecutive, mock_git_commands
 from webkitpy.w3c.chromium_commit import ChromiumCommit
-from webkitpy.w3c.test_exporter_unittest import mock_command_exec
 
 CHROMIUM_WPT_DIR = 'third_party/WebKit/LayoutTests/external/wpt/'
 
@@ -15,19 +14,19 @@ CHROMIUM_WPT_DIR = 'third_party/WebKit/LayoutTests/external/wpt/'
 class ChromiumCommitTest(unittest.TestCase):
 
     def test_accepts_sha(self):
-        chromium_commit = ChromiumCommit(MockHost(), sha='deadbeefcafe')
+        chromium_commit = ChromiumCommit(MockHost(), sha='c881563d734a86f7d9cd57ac509653a61c45c240')
 
-        self.assertEqual(chromium_commit.sha, 'deadbeefcafe')
+        self.assertEqual(chromium_commit.sha, 'c881563d734a86f7d9cd57ac509653a61c45c240')
         self.assertIsNone(chromium_commit.position)
 
     def test_derives_sha_from_position(self):
         host = MockHost()
-        host.executive = MockExecutive(output='deadbeefcafe')
+        host.executive = MockExecutive(output='c881563d734a86f7d9cd57ac509653a61c45c240')
         pos = 'Cr-Commit-Position: refs/heads/master@{#789}'
         chromium_commit = ChromiumCommit(host, position=pos)
 
         self.assertEqual(chromium_commit.position, 'refs/heads/master@{#789}')
-        self.assertEqual(chromium_commit.sha, 'deadbeefcafe')
+        self.assertEqual(chromium_commit.sha, 'c881563d734a86f7d9cd57ac509653a61c45c240')
 
     def test_filtered_changed_files_blacklist(self):
         host = MockHost()
@@ -35,9 +34,9 @@ class ChromiumCommitTest(unittest.TestCase):
         fake_files = ['file1', 'MANIFEST.json', 'file3']
         qualified_fake_files = [CHROMIUM_WPT_DIR + f for f in fake_files]
 
-        host.executive = mock_command_exec({
+        host.executive = mock_git_commands({
             'diff-tree': '\n'.join(qualified_fake_files),
-            'crrev-parse': 'fake rev',
+            'crrev-parse': 'c881563d734a86f7d9cd57ac509653a61c45c240',
         })
 
         position_footer = 'Cr-Commit-Position: refs/heads/master@{#789}'

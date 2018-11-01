@@ -47,8 +47,8 @@
 
 namespace blink {
 
-class FreePagePool;
-class OrphanedPagePool;
+class CallbackStack;
+class PagePool;
 
 class PLATFORM_EXPORT HeapAllocHooks {
  public:
@@ -120,7 +120,6 @@ class PLATFORM_EXPORT ProcessHeap {
 
  public:
   static void init();
-  static void shutdown();
 
   static CrossThreadPersistentRegion& crossThreadPersistentRegion();
 
@@ -154,7 +153,6 @@ class PLATFORM_EXPORT ProcessHeap {
   static void resetHeapCounters();
 
  private:
-  static bool s_shutdownComplete;
   static size_t s_totalAllocatedSpace;
   static size_t s_totalAllocatedObjectSize;
   static size_t s_totalMarkedObjectSize;
@@ -222,11 +220,9 @@ class ThreadHeapStats {
   double m_estimatedMarkingTimePerByte;
 };
 
-using ThreadStateSet = HashSet<ThreadState*>;
-
 class PLATFORM_EXPORT ThreadHeap {
  public:
-  ThreadHeap();
+  explicit ThreadHeap(ThreadState*);
   ~ThreadHeap();
 
   // Returns true for main thread's heap.
@@ -235,7 +231,6 @@ class PLATFORM_EXPORT ThreadHeap {
   static ThreadHeap* mainThreadHeap() { return s_mainThreadHeap; }
 
 #if DCHECK_IS_ON()
-  bool isAtSafePoint();
   BasePage* findPageFromAddress(Address);
 #endif
 
@@ -273,45 +268,18 @@ class PLATFORM_EXPORT ThreadHeap {
 
   StackFrameDepth& stackFrameDepth() { return m_stackFrameDepth; }
 
-  RecursiveMutex& threadAttachMutex() { return m_threadAttachMutex; }
-  const ThreadStateSet& threads() const { return m_threads; }
   ThreadHeapStats& heapStats() { return m_stats; }
-  SafePointBarrier* safePointBarrier() { return m_safePointBarrier.get(); }
   CallbackStack* markingStack() const { return m_markingStack.get(); }
   CallbackStack* postMarkingCallbackStack() const {
     return m_postMarkingCallbackStack.get();
   }
-  CallbackStack* globalWeakCallbackStack() const {
-    return m_globalWeakCallbackStack.get();
-  }
+  CallbackStack* weakCallbackStack() const { return m_weakCallbackStack.get(); }
   CallbackStack* ephemeronStack() const { return m_ephemeronStack.get(); }
-
-  void attach(ThreadState*);
-  void detach(ThreadState*);
-  void lockThreadAttachMutex();
-  void unlockThreadAttachMutex();
-  bool park();
-  void resume();
 
   void visitPersistentRoots(Visitor*);
   void visitStackRoots(Visitor*);
-  void checkAndPark(ThreadState*, SafePointAwareMutexLocker*);
   void enterSafePoint(ThreadState*);
-  void leaveSafePoint(ThreadState*, SafePointAwareMutexLocker*);
-
-  // Add a weak pointer callback to the weak callback work list.  General
-  // object pointer callbacks are added to a thread local weak callback work
-  // list and the callback is called on the thread that owns the object, with
-  // the closure pointer as an argument.  Most of the time, the closure and
-  // the containerObject can be the same thing, but the containerObject is
-  // constrained to be on the heap, since the heap is used to identify the
-  // correct thread.
-  void pushThreadLocalWeakCallback(void* closure,
-                                   void* containerObject,
-                                   WeakCallback);
-
-  static RecursiveMutex& allHeapsMutex();
-  static HashSet<ThreadHeap*>& allHeaps();
+  void leaveSafePoint();
 
   // Is the finalizable GC object still alive, but slated for lazy sweeping?
   // If a lazy sweep is in progress, returns true if the object was found
@@ -354,11 +322,9 @@ class PLATFORM_EXPORT ThreadHeap {
   // iteration).
   void pushPostMarkingCallback(void*, TraceCallback);
 
-  // Similar to the more general pushThreadLocalWeakCallback, but cell
-  // pointer callbacks are added to a static callback work list and the weak
-  // callback is performed on the thread performing garbage collection.  This
-  // is OK because cells are just cleared and no deallocation can happen.
-  void pushGlobalWeakCallback(void** cell, WeakCallback);
+  // Push a weak callback. The weak callback is called when the object
+  // doesn't get marked in the current GC.
+  void pushWeakCallback(void*, WeakCallback);
 
   // Pop the top of a marking stack and call the callback with the visitor
   // and the object.  Returns false when there is nothing more to do.
@@ -372,7 +338,7 @@ class PLATFORM_EXPORT ThreadHeap {
   // Remove an item from the weak callback work list and call the callback
   // with the visitor and the closure pointer.  Returns false when there is
   // nothing more to do.
-  bool popAndInvokeGlobalWeakCallback(Visitor*);
+  bool popAndInvokeWeakCallback(Visitor*);
 
   // Register an ephemeron table for fixed-point iteration.
   void registerWeakTable(void* containerObject,
@@ -427,7 +393,7 @@ class PLATFORM_EXPORT ThreadHeap {
 
   void processMarkingStack(Visitor*);
   void postMarkingProcessing(Visitor*);
-  void globalWeakProcessing(Visitor*);
+  void weakProcessing(Visitor*);
 
   void preGC();
   void postGC(BlinkGC::GCType);
@@ -436,13 +402,17 @@ class PLATFORM_EXPORT ThreadHeap {
   // Conservatively checks whether an address is a pointer in any of the
   // thread heaps.  If so marks the object pointed to as live.
   Address checkAndMarkPointer(Visitor*, Address);
+#if DCHECK_IS_ON()
+  Address checkAndMarkPointer(Visitor*,
+                              Address,
+                              MarkedPointerCallbackForTesting);
+#endif
 
   size_t objectPayloadSizeForTesting();
 
   void flushHeapDoesNotContainCache();
 
-  FreePagePool* getFreePagePool() { return m_freePagePool.get(); }
-  OrphanedPagePool* getOrphanedPagePool() { return m_orphanedPagePool.get(); }
+  PagePool* getFreePagePool() { return m_freePagePool.get(); }
 
   // This look-up uses the region search tree and a negative contains cache to
   // provide an efficient mapping from arbitrary addresses to the containing
@@ -473,17 +443,14 @@ class PLATFORM_EXPORT ThreadHeap {
   void commitCallbackStacks();
   void decommitCallbackStacks();
 
-  RecursiveMutex m_threadAttachMutex;
-  ThreadStateSet m_threads;
+  ThreadState* m_threadState;
   ThreadHeapStats m_stats;
   std::unique_ptr<RegionTree> m_regionTree;
   std::unique_ptr<HeapDoesNotContainCache> m_heapDoesNotContainCache;
-  std::unique_ptr<SafePointBarrier> m_safePointBarrier;
-  std::unique_ptr<FreePagePool> m_freePagePool;
-  std::unique_ptr<OrphanedPagePool> m_orphanedPagePool;
+  std::unique_ptr<PagePool> m_freePagePool;
   std::unique_ptr<CallbackStack> m_markingStack;
   std::unique_ptr<CallbackStack> m_postMarkingCallbackStack;
-  std::unique_ptr<CallbackStack> m_globalWeakCallbackStack;
+  std::unique_ptr<CallbackStack> m_weakCallbackStack;
   std::unique_ptr<CallbackStack> m_ephemeronStack;
   BlinkGC::GCReason m_lastGCReason;
   StackFrameDepth m_stackFrameDepth;
@@ -693,14 +660,15 @@ Address ThreadHeap::reallocate(void* previous, size_t size) {
   return address;
 }
 
-template <typename Derived>
 template <typename T>
-void VisitorHelper<Derived>::handleWeakCell(Visitor* self, void* object) {
+void Visitor::handleWeakCell(Visitor* self, void* object) {
   T** cell = reinterpret_cast<T**>(object);
   if (*cell && !ObjectAliveTrait<T>::isHeapObjectAlive(*cell))
     *cell = nullptr;
 }
 
 }  // namespace blink
+
+#include "platform/heap/VisitorImpl.h"
 
 #endif  // Heap_h

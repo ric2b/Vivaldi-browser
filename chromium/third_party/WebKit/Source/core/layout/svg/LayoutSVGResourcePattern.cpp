@@ -21,18 +21,20 @@
 
 #include "core/layout/svg/LayoutSVGResourcePattern.h"
 
+#include <memory>
+
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/SVGResources.h"
+#include "core/layout/svg/SVGResourcesCache.h"
 #include "core/paint/SVGPaintContext.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGFitToViewBox.h"
 #include "core/svg/SVGPatternElement.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
-#include "third_party/skia/include/core/SkPicture.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -60,7 +62,7 @@ void LayoutSVGResourcePattern::removeAllClientsFromCache(
 void LayoutSVGResourcePattern::removeClientFromCache(LayoutObject* client,
                                                      bool markForInvalidation) {
   ASSERT(client);
-  m_patternMap.remove(client);
+  m_patternMap.erase(client);
   markClientForInvalidation(
       client, markForInvalidation ? PaintInvalidation : ParentOnlyInvalidation);
 }
@@ -73,7 +75,7 @@ PatternData* LayoutSVGResourcePattern::patternForLayoutObject(
   // invalidation (painting animated images may trigger layout invals which
   // delete our map entry). Hopefully that will be addressed at some point, and
   // then we can optimize the lookup.
-  if (PatternData* currentData = m_patternMap.get(&object))
+  if (PatternData* currentData = m_patternMap.at(&object))
     return currentData;
 
   return m_patternMap.set(&object, buildPatternData(object))
@@ -116,8 +118,8 @@ std::unique_ptr<PatternData> LayoutSVGResourcePattern::buildPatternData(
   }
 
   std::unique_ptr<PatternData> patternData = WTF::wrapUnique(new PatternData);
-  patternData->pattern =
-      Pattern::createPicturePattern(asPicture(tileBounds, tileTransform));
+  patternData->pattern = Pattern::createPaintRecordPattern(
+      asPaintRecord(tileBounds, tileTransform));
 
   // Compute pattern space transformation.
   patternData->transform.translate(tileBounds.x(), tileBounds.y());
@@ -186,7 +188,7 @@ LayoutSVGResourcePattern::resolveContentElement() const {
   return this;
 }
 
-sk_sp<SkPicture> LayoutSVGResourcePattern::asPicture(
+sk_sp<PaintRecord> LayoutSVGResourcePattern::asPaintRecord(
     const FloatRect& tileBounds,
     const AffineTransform& tileTransform) const {
   ASSERT(!m_shouldCollectPatternAttributes);
@@ -197,7 +199,7 @@ sk_sp<SkPicture> LayoutSVGResourcePattern::asPicture(
     contentTransform = tileTransform;
 
   FloatRect bounds(FloatPoint(), tileBounds.size());
-  SkPictureBuilder pictureBuilder(bounds);
+  PaintRecordBuilder builder(bounds);
 
   const LayoutSVGResourceContainer* patternLayoutObject =
       resolveContentElement();
@@ -206,14 +208,14 @@ sk_sp<SkPicture> LayoutSVGResourcePattern::asPicture(
   SubtreeContentTransformScope contentTransformScope(contentTransform);
 
   {
-    TransformRecorder transformRecorder(pictureBuilder.context(),
-                                        *patternLayoutObject, tileTransform);
+    TransformRecorder transformRecorder(builder.context(), *patternLayoutObject,
+                                        tileTransform);
     for (LayoutObject* child = patternLayoutObject->firstChild(); child;
          child = child->nextSibling())
-      SVGPaintContext::paintSubtree(pictureBuilder.context(), child);
+      SVGPaintContext::paintResourceSubtree(builder.context(), child);
   }
 
-  return pictureBuilder.endRecording();
+  return builder.endRecording();
 }
 
 }  // namespace blink

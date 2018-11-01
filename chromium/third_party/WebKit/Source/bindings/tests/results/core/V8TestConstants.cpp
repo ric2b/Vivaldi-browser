@@ -12,7 +12,6 @@
 #include "V8TestConstants.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
@@ -32,7 +31,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestConstants::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestConstants::domTemplate, V8TestConstants::trace, V8TestConstants::traceWrappers, 0, nullptr, "TestConstants", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestConstants::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestConstants::domTemplate, V8TestConstants::trace, V8TestConstants::traceWrappers, nullptr, "TestConstants", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -57,17 +56,17 @@ static_assert(
 
 namespace TestConstantsV8Internal {
 
-CORE_EXPORT void DEPRECATED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+} // namespace TestConstantsV8Internal
+
+void V8TestConstants::DEPRECATED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
   Deprecation::countDeprecation(currentExecutionContext(info.GetIsolate()), UseCounter::Constant);
   v8SetReturnValueInt(info, 1);
 }
 
-CORE_EXPORT void MEASURED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+void V8TestConstants::MEASURED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
   UseCounter::count(currentExecutionContext(info.GetIsolate()), UseCounter::Constant);
   v8SetReturnValueInt(info, 1);
 }
-
-} // namespace TestConstantsV8Internal
 
 static void installV8TestConstantsTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {
   // Initialize the interface object's template.
@@ -117,8 +116,8 @@ static void installV8TestConstantsTemplate(v8::Isolate* isolate, const DOMWrappe
     const V8DOMConfiguration::ConstantConfiguration constantFeature2EnabledConst2Configuration = {"FEATURE2_ENABLED_CONST2", 4, 0, V8DOMConfiguration::ConstantTypeShort};
     V8DOMConfiguration::installConstant(isolate, interfaceTemplate, prototypeTemplate, constantFeature2EnabledConst2Configuration);
   }
-  V8DOMConfiguration::installConstantWithGetter(isolate, interfaceTemplate, prototypeTemplate, "DEPRECATED_CONSTANT", TestConstantsV8Internal::DEPRECATED_CONSTANTConstantGetterCallback);
-  V8DOMConfiguration::installConstantWithGetter(isolate, interfaceTemplate, prototypeTemplate, "MEASURED_CONSTANT", TestConstantsV8Internal::MEASURED_CONSTANTConstantGetterCallback);
+  V8DOMConfiguration::installConstantWithGetter(isolate, interfaceTemplate, prototypeTemplate, "DEPRECATED_CONSTANT", V8TestConstants::DEPRECATED_CONSTANTConstantGetterCallback);
+  V8DOMConfiguration::installConstantWithGetter(isolate, interfaceTemplate, prototypeTemplate, "MEASURED_CONSTANT", V8TestConstants::MEASURED_CONSTANTConstantGetterCallback);
   static_assert(0 == TestConstants::kConstValueZero, "the value of TestConstants_kConstValueZero does not match with implementation");
   static_assert(1 == TestConstants::kConstValueOne, "the value of TestConstants_kConstValueOne does not match with implementation");
   static_assert(2 == TestConstants::kConstValueTwo, "the value of TestConstants_kConstValueTwo does not match with implementation");

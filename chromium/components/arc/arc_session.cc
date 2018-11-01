@@ -9,6 +9,7 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <string>
 #include <utility>
 
 #include "base/files/file_path.h"
@@ -27,11 +28,11 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/arc/arc_bridge_host_impl.h"
 #include "components/arc/arc_features.h"
-#include "components/arc/arc_session_observer.h"
 #include "components/user_manager/user_manager.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
 #include "mojo/edk/embedder/named_platform_handle_utils.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_utils_posix.h"
 #include "mojo/edk/embedder/platform_handle_vector.h"
@@ -125,7 +126,7 @@ class ArcSessionImpl : public ArcSession,
   //
   // At any state, Stop() can be called. It does not immediately stop the
   // instance, but will eventually stop it.
-  // The actual stop will be notified via ArcSessionObserver::OnStopped().
+  // The actual stop will be notified via ArcSession::Observer::OnStopped().
   //
   // When Stop() is called, it makes various behavior based on the current
   // phase.
@@ -221,10 +222,10 @@ class ArcSessionImpl : public ArcSession,
 
   // Synchronously accepts a connection on |socket_fd| and then processes the
   // connected socket's file descriptor.
-  static mojo::edk::ScopedPlatformHandle ConnectMojo(
+  static mojo::ScopedMessagePipeHandle ConnectMojo(
       mojo::edk::ScopedPlatformHandle socket_fd,
       base::ScopedFD cancel_fd);
-  void OnMojoConnected(mojo::edk::ScopedPlatformHandle fd);
+  void OnMojoConnected(mojo::ScopedMessagePipeHandle server_pipe);
 
   // Request to stop ARC instance via DBus.
   void StopArcInstance();
@@ -233,7 +234,7 @@ class ArcSessionImpl : public ArcSession,
   void ArcInstanceStopped(bool clean) override;
 
   // Completes the termination procedure.
-  void OnStopped(ArcSessionObserver::StopReason reason);
+  void OnStopped(ArcStopReason reason);
 
   // Checks whether a function runs on the thread where the instance is
   // created.
@@ -344,13 +345,13 @@ void ArcSessionImpl::OnSocketCreated(
 
   if (stop_requested_) {
     VLOG(1) << "Stop() called while connecting";
-    OnStopped(ArcSessionObserver::StopReason::SHUTDOWN);
+    OnStopped(ArcStopReason::SHUTDOWN);
     return;
   }
 
   if (!socket_fd.is_valid()) {
     LOG(ERROR) << "ARC: Error creating socket";
-    OnStopped(ArcSessionObserver::StopReason::GENERIC_BOOT_FAILURE);
+    OnStopped(ArcStopReason::GENERIC_BOOT_FAILURE);
     return;
   }
 
@@ -391,15 +392,15 @@ void ArcSessionImpl::OnInstanceStarted(
       StopArcInstance();
       return;
     }
-    OnStopped(ArcSessionObserver::StopReason::SHUTDOWN);
+    OnStopped(ArcStopReason::SHUTDOWN);
     return;
   }
 
   if (result != StartArcInstanceResult::SUCCESS) {
     LOG(ERROR) << "Failed to start ARC instance";
     OnStopped(result == StartArcInstanceResult::LOW_FREE_DISK_SPACE
-                  ? ArcSessionObserver::StopReason::LOW_DISK_SPACE
-                  : ArcSessionObserver::StopReason::GENERIC_BOOT_FAILURE);
+                  ? ArcStopReason::LOW_DISK_SPACE
+                  : ArcStopReason::GENERIC_BOOT_FAILURE);
     return;
   }
 
@@ -410,7 +411,7 @@ void ArcSessionImpl::OnInstanceStarted(
   // Stop().
   base::ScopedFD cancel_fd;
   if (!CreatePipe(&cancel_fd, &accept_cancel_pipe_)) {
-    OnStopped(ArcSessionObserver::StopReason::GENERIC_BOOT_FAILURE);
+    OnStopped(ArcStopReason::GENERIC_BOOT_FAILURE);
     return;
   }
 
@@ -422,44 +423,53 @@ void ArcSessionImpl::OnInstanceStarted(
 }
 
 // static
-mojo::edk::ScopedPlatformHandle ArcSessionImpl::ConnectMojo(
+mojo::ScopedMessagePipeHandle ArcSessionImpl::ConnectMojo(
     mojo::edk::ScopedPlatformHandle socket_fd,
     base::ScopedFD cancel_fd) {
   if (!WaitForSocketReadable(socket_fd.get().handle, cancel_fd.get())) {
     VLOG(1) << "Mojo connection was cancelled.";
-    return mojo::edk::ScopedPlatformHandle();
+    return mojo::ScopedMessagePipeHandle();
   }
 
   mojo::edk::ScopedPlatformHandle scoped_fd;
   if (!mojo::edk::ServerAcceptConnection(socket_fd.get(), &scoped_fd,
                                          /* check_peer_user = */ false) ||
       !scoped_fd.is_valid()) {
-    return mojo::edk::ScopedPlatformHandle();
+    return mojo::ScopedMessagePipeHandle();
   }
 
   // Hardcode pid 0 since it is unused in mojo.
   const base::ProcessHandle kUnusedChildProcessHandle = 0;
   mojo::edk::PlatformChannelPair channel_pair;
-  mojo::edk::ChildProcessLaunched(kUnusedChildProcessHandle,
-                                  channel_pair.PassServerHandle(),
-                                  mojo::edk::GenerateRandomToken());
+  mojo::edk::PendingProcessConnection process;
+  process.Connect(kUnusedChildProcessHandle, channel_pair.PassServerHandle());
 
   mojo::edk::ScopedPlatformHandleVectorPtr handles(
       new mojo::edk::PlatformHandleVector{
           channel_pair.PassClientHandle().release()});
 
-  struct iovec iov = {const_cast<char*>(""), 1};
+  std::string token;
+  mojo::ScopedMessagePipeHandle pipe = process.CreateMessagePipe(&token);
+
+  // We need to send the length of the message as a single byte, so make sure it
+  // fits.
+  DCHECK_LT(token.size(), 256u);
+  uint8_t message_length = static_cast<uint8_t>(token.size());
+  struct iovec iov[] = {{&message_length, sizeof(message_length)},
+                        {const_cast<char*>(token.c_str()), token.size()}};
   ssize_t result = mojo::edk::PlatformChannelSendmsgWithHandles(
-      scoped_fd.get(), &iov, 1, handles->data(), handles->size());
+      scoped_fd.get(), iov, sizeof(iov) / sizeof(iov[0]), handles->data(),
+      handles->size());
   if (result == -1) {
     PLOG(ERROR) << "sendmsg";
-    return mojo::edk::ScopedPlatformHandle();
+    return mojo::ScopedMessagePipeHandle();
   }
 
-  return scoped_fd;
+  return pipe;
 }
 
-void ArcSessionImpl::OnMojoConnected(mojo::edk::ScopedPlatformHandle fd) {
+void ArcSessionImpl::OnMojoConnected(
+    mojo::ScopedMessagePipeHandle server_pipe) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (state_ == State::STOPPED) {
@@ -477,14 +487,6 @@ void ArcSessionImpl::OnMojoConnected(mojo::edk::ScopedPlatformHandle fd) {
     return;
   }
 
-  if (!fd.is_valid()) {
-    LOG(ERROR) << "Invalid handle";
-    StopArcInstance();
-    return;
-  }
-
-  mojo::ScopedMessagePipeHandle server_pipe =
-      mojo::edk::CreateMessagePipe(std::move(fd));
   if (!server_pipe.is_valid()) {
     LOG(ERROR) << "Invalid pipe";
     StopArcInstance();
@@ -516,7 +518,7 @@ void ArcSessionImpl::Stop() {
   arc_bridge_host_.reset();
   switch (state_) {
     case State::NOT_STARTED:
-      OnStopped(ArcSessionObserver::StopReason::SHUTDOWN);
+      OnStopped(ArcStopReason::SHUTDOWN);
       return;
 
     case State::CREATING_SOCKET:
@@ -573,24 +575,24 @@ void ArcSessionImpl::ArcInstanceStopped(bool clean) {
   // unlock the BlockingPool thread.
   accept_cancel_pipe_.reset();
 
-  ArcSessionObserver::StopReason reason;
+  ArcStopReason reason;
   if (stop_requested_) {
     // If the ARC instance is stopped after its explicit request,
     // return SHUTDOWN.
-    reason = ArcSessionObserver::StopReason::SHUTDOWN;
+    reason = ArcStopReason::SHUTDOWN;
   } else if (clean) {
     // If the ARC instance is stopped, but it is not explicitly requested,
     // then this is triggered by some failure during the starting procedure.
     // Return GENERIC_BOOT_FAILURE for the case.
-    reason = ArcSessionObserver::StopReason::GENERIC_BOOT_FAILURE;
+    reason = ArcStopReason::GENERIC_BOOT_FAILURE;
   } else {
     // Otherwise, this is caused by CRASH occured inside of the ARC instance.
-    reason = ArcSessionObserver::StopReason::CRASH;
+    reason = ArcStopReason::CRASH;
   }
   OnStopped(reason);
 }
 
-void ArcSessionImpl::OnStopped(ArcSessionObserver::StopReason reason) {
+void ArcSessionImpl::OnStopped(ArcStopReason reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // OnStopped() should be called once per instance.
   DCHECK_NE(state_, State::STOPPED);
@@ -623,7 +625,7 @@ void ArcSessionImpl::OnShutdown() {
   // Directly set to the STOPPED stateby OnStopped(). Note that calling
   // StopArcInstance() may not work well. At least, because the UI thread is
   // already stopped here, ArcInstanceStopped() callback cannot be invoked.
-  OnStopped(ArcSessionObserver::StopReason::SHUTDOWN);
+  OnStopped(ArcStopReason::SHUTDOWN);
 }
 
 }  // namespace
@@ -631,11 +633,11 @@ void ArcSessionImpl::OnShutdown() {
 ArcSession::ArcSession() = default;
 ArcSession::~ArcSession() = default;
 
-void ArcSession::AddObserver(ArcSessionObserver* observer) {
+void ArcSession::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);
 }
 
-void ArcSession::RemoveObserver(ArcSessionObserver* observer) {
+void ArcSession::RemoveObserver(Observer* observer) {
   observer_list_.RemoveObserver(observer);
 }
 

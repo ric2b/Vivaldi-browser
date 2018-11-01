@@ -26,6 +26,8 @@ BluetoothInternalsUI::BluetoothInternalsUI(content::WebUI* web_ui)
                                IDR_BLUETOOTH_INTERNALS_JS);
   html_source->AddResourcePath("characteristic_list.js",
                                IDR_BLUETOOTH_INTERNALS_CHARACTERISTIC_LIST_JS);
+  html_source->AddResourcePath("descriptor_list.js",
+                               IDR_BLUETOOTH_INTERNALS_DESCRIPTOR_LIST_JS);
   html_source->AddResourcePath("device_broker.js",
                                IDR_BLUETOOTH_INTERNALS_DEVICE_BROKER_JS);
   html_source->AddResourcePath("device_collection.js",
@@ -48,6 +50,8 @@ BluetoothInternalsUI::BluetoothInternalsUI(content::WebUI* web_ui)
                                IDR_BLUETOOTH_INTERNALS_SIDEBAR_JS);
   html_source->AddResourcePath("snackbar.js",
                                IDR_BLUETOOTH_INTERNALS_SNACKBAR_JS);
+  html_source->AddResourcePath("value_control.js",
+                               IDR_BLUETOOTH_INTERNALS_VALUE_CONTROL_JS);
 
   html_source->AddResourcePath(
       "device/bluetooth/public/interfaces/adapter.mojom",

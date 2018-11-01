@@ -299,29 +299,18 @@ bool IsSupportedMediaFormat(const std::string& container_mime_type,
                             const std::string& codecs,
                             bool use_aes_decryptor) {
   std::vector<std::string> codec_vector;
-  ParseCodecString(codecs, &codec_vector, false);
+  SplitCodecsToVector(codecs, &codec_vector, false);
   // AesDecryptor decrypts the stream in the demuxer before it reaches the
   // decoder so check whether the media format is supported when clear.
   SupportsType support_result =
       use_aes_decryptor
           ? IsSupportedMediaFormat(container_mime_type, codec_vector)
           : IsSupportedEncryptedMediaFormat(container_mime_type, codec_vector);
-  switch (support_result) {
-    case IsSupported:
-      return true;
-    case MayBeSupported:
-      // If no codecs were specified, the best possible result is
-      // MayBeSupported, indicating support for the container.
-      return codec_vector.empty();
-    case IsNotSupported:
-      return false;
-  }
-  NOTREACHED();
-  return false;
+  return (support_result == IsSupported);
 }
 
 // TODO(sandersd): Move contentType parsing from Blink to here so that invalid
-// parameters can be rejected. http://crbug.com/417561
+// parameters can be rejected. http://crbug.com/449690, http://crbug.com/690131
 bool KeySystemConfigSelector::IsSupportedContentType(
     const std::string& key_system,
     EmeMediaType media_type,
@@ -334,17 +323,8 @@ bool KeySystemConfigSelector::IsSupportedContentType(
   // contentTypes must provide a codec string unless the container implies a
   // particular codec. For EME, none of the currently supported containers
   // imply a codec, so |codecs| must be provided.
-  if (codecs.empty()) {
-    // Since the spec didn't initially require this, add an exemption for
-    // some existing containers to give clients time to adapt.
-    // TODO(jrummell): Remove this exemption once the number of contentTypes
-    // without codecs drops low enough (UMA added in the blink code).
-    // http://crbug.com/605661.
-    if (container_lower != "audio/webm" && container_lower != "video/webm" &&
-        container_lower != "audio/mp4" && container_lower != "video/mp4") {
-      return false;
-    }
-  }
+  if (codecs.empty())
+    return false;
 
   // Check that |container_mime_type| and |codecs| are supported by Chrome. This
   // is done primarily to validate extended codecs, but it also ensures that the
@@ -359,7 +339,7 @@ bool KeySystemConfigSelector::IsSupportedContentType(
   // This check does not handle extended codecs, so extended codec information
   // is stripped (extended codec information was checked above).
   std::vector<std::string> stripped_codec_vector;
-  ParseCodecString(codecs, &stripped_codec_vector, true);
+  SplitCodecsToVector(codecs, &stripped_codec_vector, true);
   EmeConfigRule codecs_rule = key_systems_->GetContentTypeConfigRule(
       key_system, media_type, container_lower, stripped_codec_vector);
   if (!config_state->IsRuleSupported(codecs_rule))
@@ -670,8 +650,10 @@ KeySystemConfigSelector::GetSupportedConfiguration(
 
   // 15. If the videoCapabilities and audioCapabilities members in candidate
   //     configuration are both empty, return NotSupported.
-  // TODO(jrummell): Enforce this once the deprecation warning is removed.
-  // See http://crbug.com/616233.
+  if (candidate.videoCapabilities.isEmpty() &&
+      candidate.audioCapabilities.isEmpty()) {
+    return CONFIGURATION_NOT_SUPPORTED;
+  }
 
   // 16. If the videoCapabilities member in candidate configuration is
   //     non-empty:

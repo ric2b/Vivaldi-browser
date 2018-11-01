@@ -78,7 +78,7 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   String addressSpaceForBindings() const;
 
   void addInsecureNavigationUpgrade(unsigned hashedHost) {
-    m_insecureNavigationsToUpgrade.add(hashedHost);
+    m_insecureNavigationsToUpgrade.insert(hashedHost);
   }
   InsecureNavigationsSet* insecureNavigationsToUpgrade() {
     return &m_insecureNavigationsToUpgrade;
@@ -97,8 +97,9 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   void setFeaturePolicyForTesting(std::unique_ptr<FeaturePolicy> newPolicy) {
     m_featurePolicy = std::move(newPolicy);
   }
-  void setFeaturePolicyFromHeader(const WebParsedFeaturePolicy& parsedHeader,
-                                  FeaturePolicy* parentFeaturePolicy);
+  void setFeaturePolicyFromHeader(
+      const WebParsedFeaturePolicyHeader& parsedHeader,
+      FeaturePolicy* parentFeaturePolicy);
 
  protected:
   SecurityContext();

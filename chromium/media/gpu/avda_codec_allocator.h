@@ -11,7 +11,6 @@
 
 #include "base/android/build_info.h"
 #include "base/bind.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/optional.h"
 #include "base/synchronization/waitable_event.h"
@@ -20,8 +19,8 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "media/base/android/media_codec_bridge_impl.h"
 #include "media/base/android/media_drm_bridge_cdm_context.h"
-#include "media/base/android/sdk_media_codec_bridge.h"
 #include "media/base/media.h"
 #include "media/base/surface_manager.h"
 #include "media/base/video_codecs.h"
@@ -100,7 +99,7 @@ class AVDACodecAllocatorClient {
   // Called on the main thread when a new MediaCodec is configured.
   // |media_codec| will be null if configuration failed.
   virtual void OnCodecConfigured(
-      std::unique_ptr<VideoCodecBridge> media_codec) = 0;
+      std::unique_ptr<MediaCodecBridge> media_codec) = 0;
 
  protected:
   ~AVDACodecAllocatorClient() {}
@@ -136,18 +135,19 @@ class MEDIA_GPU_EXPORT AVDACodecAllocator {
   void DeallocateSurface(AVDACodecAllocatorClient* client, int surface_id);
 
   // Create and configure a MediaCodec synchronously.
-  std::unique_ptr<VideoCodecBridge> CreateMediaCodecSync(
+  std::unique_ptr<MediaCodecBridge> CreateMediaCodecSync(
       scoped_refptr<CodecConfig> codec_config);
 
   // Create and configure a MediaCodec asynchronously. The result is delivered
   // via OnCodecConfigured().
-  void CreateMediaCodecAsync(base::WeakPtr<AVDACodecAllocatorClient> client,
-                             scoped_refptr<CodecConfig> codec_config);
+  virtual void CreateMediaCodecAsync(
+      base::WeakPtr<AVDACodecAllocatorClient> client,
+      scoped_refptr<CodecConfig> codec_config);
 
   // Asynchronously release |media_codec| with the attached surface.
   // TODO(watk): Bundle the MediaCodec and surface together so you can't get
   // this pairing wrong.
-  void ReleaseMediaCodec(std::unique_ptr<VideoCodecBridge> media_codec,
+  void ReleaseMediaCodec(std::unique_ptr<MediaCodecBridge> media_codec,
                          TaskType task_type,
                          int surface_id);
 
@@ -170,8 +170,13 @@ class MEDIA_GPU_EXPORT AVDACodecAllocator {
   // Return a reference to the thread for unit tests.
   base::Thread& GetThreadForTesting(TaskType task_type);
 
+ protected:
+  // |tick_clock| and |stop_event| are for tests only.
+  AVDACodecAllocator(base::TickClock* tick_clock = nullptr,
+                     base::WaitableEvent* stop_event = nullptr);
+  virtual ~AVDACodecAllocator();
+
  private:
-  friend struct base::DefaultLazyInstanceTraits<AVDACodecAllocator>;
   friend class AVDACodecAllocatorTest;
 
   struct OwnerRecord {
@@ -204,11 +209,6 @@ class MEDIA_GPU_EXPORT AVDACodecAllocator {
     base::Thread thread;
     HangDetector hang_detector;
   };
-
-  // |tick_clock| and |stop_event| are for tests only.
-  AVDACodecAllocator(base::TickClock* tick_clock = nullptr,
-                     base::WaitableEvent* stop_event = nullptr);
-  ~AVDACodecAllocator();
 
   void OnMediaCodecAndSurfaceReleased(int surface_id);
 

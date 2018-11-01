@@ -19,12 +19,12 @@
 #include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/grit/ash_resources.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -129,8 +129,8 @@ class NetworkTrayView : public TrayItemView,
 class NetworkDefaultView : public TrayItemMore,
                            public network_icon::AnimationObserver {
  public:
-  NetworkDefaultView(TrayNetwork* network_tray, bool show_more)
-      : TrayItemMore(network_tray, show_more) {
+  explicit NetworkDefaultView(TrayNetwork* network_tray)
+      : TrayItemMore(network_tray) {
     Update();
   }
 
@@ -161,8 +161,9 @@ class NetworkDefaultView : public TrayItemMore,
 
  protected:
   // TrayItemMore:
-  std::unique_ptr<TrayPopupItemStyle> CreateStyle() const override {
-    std::unique_ptr<TrayPopupItemStyle> style = TrayItemMore::CreateStyle();
+  std::unique_ptr<TrayPopupItemStyle> HandleCreateStyle() const override {
+    std::unique_ptr<TrayPopupItemStyle> style =
+        TrayItemMore::HandleCreateStyle();
     style->set_color_style(GetConnectedNetwork() != nullptr
                                ? TrayPopupItemStyle::ColorStyle::ACTIVE
                                : TrayPopupItemStyle::ColorStyle::INACTIVE);
@@ -268,7 +269,8 @@ views::View* TrayNetwork::CreateDefaultView(LoginStatus status) {
   if (!chromeos::NetworkHandler::IsInitialized())
     return NULL;
   CHECK(tray_ != NULL);
-  default_ = new tray::NetworkDefaultView(this, status != LoginStatus::LOCKED);
+  default_ = new tray::NetworkDefaultView(this);
+  default_->SetEnabled(status != LoginStatus::LOCKED);
   return default_;
 }
 
@@ -323,8 +325,7 @@ void TrayNetwork::RequestToggleWifi() {
                                 chromeos::network_handler::ErrorCallback());
 }
 
-void TrayNetwork::OnCaptivePortalDetected(
-    const std::string& /* service_path */) {
+void TrayNetwork::OnCaptivePortalDetected(const std::string& /* guid */) {
   NetworkStateChanged();
 }
 

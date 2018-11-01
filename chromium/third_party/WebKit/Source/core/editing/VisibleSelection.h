@@ -63,16 +63,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
 
   SelectionType getSelectionType() const { return m_selectionType; }
 
-  void setAffinity(TextAffinity affinity) { m_affinity = affinity; }
   TextAffinity affinity() const { return m_affinity; }
-
-  // TODO(yosin): To make |VisibleSelection| as immutable object, we should
-  // get rid of |setBase()| and |setExtent()| by replacing them with
-  // |createVisibleSelection()|.
-  void setBase(const PositionTemplate<Strategy>&);
-  void setBase(const VisiblePositionTemplate<Strategy>&);
-  void setExtent(const PositionTemplate<Strategy>&);
-  void setExtent(const VisiblePositionTemplate<Strategy>&);
 
   SelectionTemplate<Strategy> asSelection() const;
   PositionTemplate<Strategy> base() const { return m_base; }
@@ -116,9 +107,9 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
     return !isNone() && !start().isOrphan() && !end().isOrphan();
   }
 
+  // True if base() <= extent().
   bool isBaseFirst() const { return m_baseIsFirst; }
   bool isDirectional() const { return m_isDirectional; }
-  void setIsDirectional(bool isDirectional) { m_isDirectional = isDirectional; }
 
   void appendTrailingWhitespace();
 
@@ -137,14 +128,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   void setWithoutValidation(const PositionTemplate<Strategy>&,
                             const PositionTemplate<Strategy>&);
 
-  DEFINE_INLINE_TRACE() {
-    visitor->trace(m_base);
-    visitor->trace(m_extent);
-    visitor->trace(m_start);
-    visitor->trace(m_end);
-  }
-
-  void updateIfNeeded();
+  DECLARE_TRACE();
 
 #ifndef NDEBUG
   void showTreeForThis() const;

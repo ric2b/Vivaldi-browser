@@ -78,7 +78,7 @@ PassRefPtr<FontDataForRangeSet> FontFallbackIterator::uniqueOrNext(
   // We don't want to skip subsetted ranges because HarfBuzzShaper's behavior
   // depends on the subsetting.
   if (candidate->isEntireRange())
-    m_uniqueFontDataForRangeSetsReturned.add(candidateId);
+    m_uniqueFontDataForRangeSetsReturned.insert(candidateId);
   return candidate;
 }
 
@@ -116,7 +116,8 @@ PassRefPtr<FontDataForRangeSet> FontFallbackIterator::next(
     m_fallbackStage = OutOfLuck;
     RefPtr<SimpleFontData> lastResort =
         fontCache->getLastResortFallbackFont(m_fontDescription).get();
-    RELEASE_ASSERT(lastResort);
+    if (!lastResort)
+      FontCache::crashWithFontInfo(&m_fontDescription);
     // Don't skip the LastResort font in uniqueOrNext() since HarfBuzzShaper
     // needs to use this one to place missing glyph boxes.
     return adoptRef(new FontDataForRangeSetFromCache(lastResort));
@@ -234,7 +235,7 @@ PassRefPtr<SimpleFontData> FontFallbackIterator::uniqueSystemFontForHintList(
 
   if (!hint || m_previouslyAskedForHint.contains(hint))
     return nullptr;
-  m_previouslyAskedForHint.add(hint);
+  m_previouslyAskedForHint.insert(hint);
   return fontCache->fallbackFontForCharacter(
       m_fontDescription, hint,
       m_fontFallbackList->primarySimpleFontData(m_fontDescription));

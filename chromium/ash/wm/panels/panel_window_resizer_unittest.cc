@@ -16,12 +16,12 @@
 #include "ash/common/wm_window_property.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
 #include "ash/wm/drag_window_resizer.h"
-#include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/i18n/rtl.h"
 #include "ui/aura/client/aura_constants.h"
@@ -30,10 +30,6 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_util.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 namespace ash {
 
@@ -274,9 +270,6 @@ TEST_F(PanelWindowResizerTest, DetachThenHideShelf) {
 }
 
 TEST_F(PanelWindowResizerTest, PanelDetachReattachMultipleDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(600, 0)));
@@ -285,9 +278,6 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachMultipleDisplays) {
 }
 
 TEST_F(PanelWindowResizerTest, DetachThenDragAcrossDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
@@ -313,9 +303,6 @@ TEST_F(PanelWindowResizerTest, DetachThenDragAcrossDisplays) {
 }
 
 TEST_F(PanelWindowResizerTest, DetachAcrossDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
@@ -332,9 +319,6 @@ TEST_F(PanelWindowResizerTest, DetachAcrossDisplays) {
 }
 
 TEST_F(PanelWindowResizerTest, DetachThenAttachToSecondDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
@@ -364,9 +348,6 @@ TEST_F(PanelWindowResizerTest, DetachThenAttachToSecondDisplay) {
 }
 
 TEST_F(PanelWindowResizerTest, AttachToSecondDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
@@ -389,9 +370,6 @@ TEST_F(PanelWindowResizerTest, AttachToSecondDisplay) {
 }
 
 TEST_F(PanelWindowResizerTest, AttachToSecondFullscreenDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("600x400,600x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));

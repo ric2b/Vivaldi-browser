@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/hpack/hpack_entry.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 #include "net/spdy/spdy_flags.h"
 
 namespace net {
@@ -20,7 +21,10 @@ HpackDecoder::HpackDecoder()
     : handler_(nullptr),
       total_header_bytes_(0),
       total_parsed_bytes_(0),
-      header_block_started_(false) {}
+      header_block_started_(false),
+      size_updates_seen_(0),
+      size_updates_allowed_(true),
+      incremental_decode_(false) {}
 
 HpackDecoder::~HpackDecoder() {}
 
@@ -114,6 +118,14 @@ void HpackDecoder::SetHeaderTableDebugVisitor(
 void HpackDecoder::set_max_decode_buffer_size_bytes(
     size_t max_decode_buffer_size_bytes) {
   max_decode_buffer_size_bytes_ = max_decode_buffer_size_bytes;
+}
+
+size_t HpackDecoder::EstimateMemoryUsage() const {
+  return SpdyEstimateMemoryUsage(header_table_) +
+         SpdyEstimateMemoryUsage(headers_block_buffer_) +
+         SpdyEstimateMemoryUsage(decoded_block_) +
+         SpdyEstimateMemoryUsage(key_buffer_) +
+         SpdyEstimateMemoryUsage(value_buffer_);
 }
 
 bool HpackDecoder::HandleHeaderRepresentation(StringPiece name,

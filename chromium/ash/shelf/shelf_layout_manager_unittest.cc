@@ -7,7 +7,6 @@
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/focus_cycler.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_controller.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_layout_manager_observer.h"
@@ -156,29 +155,18 @@ class ShelfDragCallback {
     if (type == ui::ET_GESTURE_SCROLL_UPDATE)
       scroll_.Add(delta);
 
+    WmShelf* shelf = test::AshTestBase::GetPrimaryShelf();
     gfx::Rect shelf_bounds = GetShelfWidget()->GetWindowBoundsInScreen();
-    if (GetShelfLayoutManager()->IsHorizontalAlignment()) {
+    if (shelf->IsHorizontalAlignment()) {
       EXPECT_EQ(auto_hidden_shelf_widget_bounds_.bottom(),
                 shelf_bounds.bottom());
       EXPECT_EQ(shelf_widget_bounds_.bottom(), shelf_bounds.bottom());
-    } else if (SHELF_ALIGNMENT_RIGHT ==
-               GetShelfLayoutManager()->GetAlignment()) {
+    } else if (SHELF_ALIGNMENT_RIGHT == shelf->GetAlignment()) {
       EXPECT_EQ(auto_hidden_shelf_widget_bounds_.right(), shelf_bounds.right());
       EXPECT_EQ(shelf_widget_bounds_.right(), shelf_bounds.right());
-    } else if (SHELF_ALIGNMENT_LEFT ==
-               GetShelfLayoutManager()->GetAlignment()) {
+    } else if (SHELF_ALIGNMENT_LEFT == shelf->GetAlignment()) {
       EXPECT_EQ(auto_hidden_shelf_widget_bounds_.x(), shelf_bounds.x());
       EXPECT_EQ(shelf_widget_bounds_.x(), shelf_bounds.x());
-    }
-
-    // Auto hidden shelf has a visible height of 0 in MD (where this inequality
-    // does not apply); whereas auto hidden shelf has a visible height of 3 in
-    // non-MD.
-    WmShelf* shelf = test::AshTestBase::GetPrimaryShelf();
-    if (!ash::MaterialDesignController::IsImmersiveModeMaterial() ||
-        shelf->GetAutoHideState() != ash::SHELF_AUTO_HIDE_HIDDEN) {
-      EXPECT_GE(shelf_bounds.height(),
-                auto_hidden_shelf_widget_bounds_.height());
     }
 
     float scroll_delta =
@@ -315,6 +303,10 @@ class ShelfLayoutManagerTest : public test::AshTestBase {
     ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
   }
 
+  int64_t GetPrimaryDisplayId() {
+    return display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(ShelfLayoutManagerTest);
 };
@@ -398,11 +390,11 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
                  base::Unretained(&handler)));
 
   // Swipe down very little. It shouldn't change any state.
-  if (GetShelfLayoutManager()->IsHorizontalAlignment())
+  if (shelf->IsHorizontalAlignment())
     end.set_y(start.y() + shelf_shown.height() * 3 / 10);
-  else if (SHELF_ALIGNMENT_LEFT == GetShelfLayoutManager()->GetAlignment())
+  else if (SHELF_ALIGNMENT_LEFT == shelf->GetAlignment())
     end.set_x(start.x() - shelf_shown.width() * 3 / 10);
-  else if (SHELF_ALIGNMENT_RIGHT == GetShelfLayoutManager()->GetAlignment())
+  else if (SHELF_ALIGNMENT_RIGHT == shelf->GetAlignment())
     end.set_x(start.x() + shelf_shown.width() * 3 / 10);
   generator.GestureScrollSequence(start, end, kTimeDelta, 5);
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
@@ -426,12 +418,12 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
 
   // Swipe up in extended hit region to show it.
   gfx::Point extended_start = start;
-  if (GetShelfLayoutManager()->IsHorizontalAlignment())
+  if (shelf->IsHorizontalAlignment())
     extended_start.set_y(GetShelfWidget()->GetWindowBoundsInScreen().y() - 1);
-  else if (SHELF_ALIGNMENT_LEFT == GetShelfLayoutManager()->GetAlignment())
+  else if (SHELF_ALIGNMENT_LEFT == shelf->GetAlignment())
     extended_start.set_x(GetShelfWidget()->GetWindowBoundsInScreen().right() +
                          1);
-  else if (SHELF_ALIGNMENT_RIGHT == GetShelfLayoutManager()->GetAlignment())
+  else if (SHELF_ALIGNMENT_RIGHT == shelf->GetAlignment())
     extended_start.set_x(GetShelfWidget()->GetWindowBoundsInScreen().x() - 1);
   end = extended_start - delta;
   generator.GestureScrollSequenceWithCallback(
@@ -475,11 +467,11 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   // Swipe up from below the shelf where a bezel would be, this should show the
   // shelf.
   gfx::Point below_start = start;
-  if (GetShelfLayoutManager()->IsHorizontalAlignment())
+  if (shelf->IsHorizontalAlignment())
     below_start.set_y(GetShelfWidget()->GetWindowBoundsInScreen().bottom() + 1);
-  else if (SHELF_ALIGNMENT_LEFT == GetShelfLayoutManager()->GetAlignment())
+  else if (SHELF_ALIGNMENT_LEFT == shelf->GetAlignment())
     below_start.set_x(GetShelfWidget()->GetWindowBoundsInScreen().x() - 1);
-  else if (SHELF_ALIGNMENT_RIGHT == GetShelfLayoutManager()->GetAlignment())
+  else if (SHELF_ALIGNMENT_RIGHT == shelf->GetAlignment())
     below_start.set_x(GetShelfWidget()->GetWindowBoundsInScreen().right() + 1);
   end = below_start - delta;
   generator.GestureScrollSequence(below_start, end, kTimeDelta,
@@ -512,12 +504,7 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   gfx::Rect bounds_fullscreen = window->bounds();
   EXPECT_TRUE(widget->IsFullscreen());
 
-  // Shelf hints are removed in immersive full screen mode in MD; and some shelf
-  // hints are shown in non-MD mode.
-  if (ash::MaterialDesignController::IsImmersiveModeMaterial())
-    EXPECT_EQ(bounds_noshelf.ToString(), bounds_fullscreen.ToString());
-  else
-    EXPECT_NE(bounds_noshelf.ToString(), bounds_fullscreen.ToString());
+  EXPECT_EQ(bounds_noshelf.ToString(), bounds_fullscreen.ToString());
 
   // Swipe up. This should show the shelf.
   end = below_start - delta;
@@ -697,6 +684,10 @@ TEST_F(ShelfLayoutManagerTest, ShelfUpdatedWhenStatusAreaChangesSize) {
 
 // Various assertions around auto-hide.
 TEST_F(ShelfLayoutManagerTest, AutoHide) {
+  // TODO: investigate failure in mash, http://crbug.com/695686.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   ui::test::EventGenerator& generator(GetEventGenerator());
 
   WmShelf* shelf = GetPrimaryShelf();
@@ -756,7 +747,8 @@ TEST_F(ShelfLayoutManagerTest, AutoHide) {
 // Test the behavior of the shelf when it is auto hidden and it is on the
 // boundary between the primary and the secondary display.
 TEST_F(ShelfLayoutManagerTest, AutoHideShelfOnScreenBoundary) {
-  if (!SupportsMultipleDisplays())
+  // TODO: investigate failure in mash, http://crbug.com/695686.
+  if (WmShell::Get()->IsRunningInMash())
     return;
 
   UpdateDisplay("800x600,800x600");
@@ -964,8 +956,12 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfVisibleState) {
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
+  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   // Show the app list and the shelf stays visible.
-  app_list_presenter_impl.Show(display_manager()->first_display_id());
+  app_list_presenter_impl.Show(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
@@ -992,8 +988,12 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
+  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   // Show the app list and the shelf should be temporarily visible.
-  app_list_presenter_impl.Show(display_manager()->first_display_id());
+  app_list_presenter_impl.Show(GetPrimaryDisplayId());
   // The shelf's auto hide state won't be changed until the timer fires, so
   // force it to update now.
   GetShelfLayoutManager()->UpdateVisibilityState();
@@ -1012,9 +1012,6 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
 // to AutoHide, viewing the AppList on one of them doesn't unhide the other
 // hidden shelf.
 TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   // Create two displays.
   UpdateDisplay("0+0-200x200,+200+0-100x100");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -1059,8 +1056,12 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_1->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 
+  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   // Show the app list; only the shelf on the same display should be shown.
-  app_list_presenter_impl.Show(display_manager()->first_display_id());
+  app_list_presenter_impl.Show(GetPrimaryDisplayId());
   Shell::GetInstance()->UpdateShelfVisibility();
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
@@ -1095,8 +1096,12 @@ TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfHiddenState) {
   EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
+  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   // Show the app list and the shelf should be temporarily visible.
-  app_list_presenter_impl.Show(display_manager()->first_display_id());
+  app_list_presenter_impl.Show(GetPrimaryDisplayId());
   EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
@@ -1133,9 +1138,6 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowSingleDisplay) {
 // Tests the correct behavior of the shelf when there is a system modal window
 // open when we have dual display.
 TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowDualDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   // Create two displays.
   UpdateDisplay("200x200,100x100");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -1210,9 +1212,6 @@ TEST_F(ShelfLayoutManagerTest, FullscreenWindowInFrontHidesShelf) {
 // Test the behavior of the shelf when a window on one display is fullscreen
 // but the other display has the active window.
 TEST_F(ShelfLayoutManagerTest, FullscreenWindowOnSecondDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("800x600,800x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   Shell::RootWindowControllerList root_window_controllers =
@@ -1244,6 +1243,10 @@ TEST_F(ShelfLayoutManagerTest, FullscreenWindowOnSecondDisplay) {
 
 // Test for Pinned mode.
 TEST_F(ShelfLayoutManagerTest, PinnedWindowHidesShelf) {
+  // TODO: investigate failure in mash, http://crbug.com/695686.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   WmShelf* shelf = GetPrimaryShelf();
 
   aura::Window* window1 = CreateTestWindow();
@@ -1330,6 +1333,10 @@ TEST_F(ShelfLayoutManagerTest, SetAlignment) {
 }
 
 TEST_F(ShelfLayoutManagerTest, GestureDrag) {
+  // TODO: investigate failure in mash, http://crbug.com/695686.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   // Slop is an implementation detail of gesture recognition, and complicates
   // these tests. Ignore it.
   ui::GestureConfiguration::GetInstance()
@@ -1355,9 +1362,6 @@ TEST_F(ShelfLayoutManagerTest, GestureDrag) {
 }
 
 TEST_F(ShelfLayoutManagerTest, WindowVisibilityDisablesAutoHide) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("800x600,800x600");
   WmShelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
@@ -1479,7 +1483,48 @@ TEST_F(ShelfLayoutManagerTest, ShelfAnimatesWhenGestureComplete) {
   }
 }
 
+TEST_F(ShelfLayoutManagerTest, AutohideShelfForAutohideWhenActiveWindow) {
+  WmShelf* shelf = GetPrimaryShelf();
+
+  views::Widget* widget_one = CreateTestWidget();
+  views::Widget* widget_two = CreateTestWidget();
+  aura::Window* window_two = widget_two->GetNativeWindow();
+
+  // Turn on hide_shelf_when_active behavior for window two - shelf should
+  // still be visible when window two is made active since it is not yet
+  // maximized.
+  widget_one->Activate();
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+  wm::GetWindowState(window_two)
+      ->set_autohide_shelf_when_maximized_or_fullscreen(true);
+  widget_two->Activate();
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+
+  // Now the flag takes effect once window two is maximized.
+  widget_two->Maximize();
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+
+  // The hide_shelf_when_active flag should override the behavior of the
+  // hide_shelf_when_fullscreen flag even if the window is currently fullscreen.
+  wm::GetWindowState(window_two)->set_hide_shelf_when_fullscreen(false);
+  widget_two->SetFullscreen(true);
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  wm::GetWindowState(window_two)->Restore();
+
+  // With the flag off, shelf no longer auto-hides.
+  widget_one->Activate();
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+  wm::GetWindowState(window_two)
+      ->set_autohide_shelf_when_maximized_or_fullscreen(false);
+  widget_two->Activate();
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+}
+
 TEST_F(ShelfLayoutManagerTest, ShelfFlickerOnTrayActivation) {
+  // TODO: investigate failure in mash, http://crbug.com/695686.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   WmShelf* shelf = GetPrimaryShelf();
 
   // Create a visible window so auto-hide behavior is enforced.
@@ -1536,60 +1581,6 @@ TEST_F(ShelfLayoutManagerTest, WorkAreaChangeWorkspace) {
             widget_two->GetNativeWindow()->bounds().ToString());
   EXPECT_EQ(area_when_shelf_shown,
             widget_one->GetNativeWindow()->bounds().size().GetArea());
-}
-
-// Make sure that the shelf will not hide if the mouse is between a bubble and
-// the shelf. This test uses system tray notification bubbles, which needn't
-// exist: see crbug.com/630641
-TEST_F(ShelfLayoutManagerTest, BubbleEnlargesShelfMouseHitArea) {
-  WmShelf* shelf = GetPrimaryShelf();
-  ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
-  StatusAreaWidget* status_area_widget =
-      shelf->shelf_widget()->status_area_widget();
-  SystemTray* tray = GetPrimarySystemTray();
-
-  // Create a visible window so auto-hide behavior is enforced.
-  CreateTestWidget();
-
-  layout_manager->LayoutShelf();
-  ui::test::EventGenerator& generator(GetEventGenerator());
-
-  // Make two iterations - first without a message bubble which should make
-  // the shelf disappear and then with a message bubble which should keep it
-  // visible.
-  for (int i = 0; i < 2; i++) {
-    // Make sure the shelf is visible and position the mouse over it. Then
-    // allow auto hide.
-    shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-    EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
-    gfx::Point center =
-        status_area_widget->GetWindowBoundsInScreen().CenterPoint();
-    generator.MoveMouseTo(center.x(), center.y());
-    shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-    EXPECT_TRUE(layout_manager->IsVisible());
-    if (!i) {
-      // In our first iteration we make sure there is no bubble.
-      tray->CloseSystemBubble();
-      EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
-    } else {
-      // In our second iteration we show a bubble.
-      test::TestSystemTrayItem* item = new test::TestSystemTrayItem();
-      tray->AddTrayItem(base::WrapUnique(item));
-      tray->ShowNotificationView(item);
-      EXPECT_TRUE(status_area_widget->IsMessageBubbleShown());
-    }
-    // Move the pointer over the edge of the shelf.
-    generator.MoveMouseTo(
-        center.x(), status_area_widget->GetWindowBoundsInScreen().y() - 8);
-    layout_manager->UpdateVisibilityState();
-    if (i) {
-      EXPECT_TRUE(layout_manager->IsVisible());
-      EXPECT_TRUE(status_area_widget->IsMessageBubbleShown());
-    } else {
-      EXPECT_FALSE(layout_manager->IsVisible());
-      EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
-    }
-  }
 }
 
 TEST_F(ShelfLayoutManagerTest, BackgroundTypeWhenLockingScreen) {
@@ -1735,7 +1726,8 @@ TEST_F(ShelfLayoutManagerTest, ShutdownHandlesWindowActivation) {
 }
 
 TEST_F(ShelfLayoutManagerTest, ShelfLayoutInUnifiedDesktop) {
-  if (!SupportsMultipleDisplays())
+  // TODO: requires unified desktop mode. http://crbug.com/581462.
+  if (WmShell::Get()->IsRunningInMash())
     return;
 
   Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(true);

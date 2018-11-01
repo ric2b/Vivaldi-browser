@@ -19,6 +19,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
@@ -134,7 +135,7 @@ DOMStorageContextWrapper::DOMStorageContextWrapper(
         connector, context_->task_runner(),
         data_path.empty() ? data_path
                           : data_path.AppendASCII(kLocalStorageDirectory),
-        base::FilePath() /* storage_dir */));
+        storage_dir));
   }
 
   if (base::FeatureList::IsEnabled(features::kMemoryCoordinator)) {
@@ -275,26 +276,8 @@ void DOMStorageContextWrapper::OnMemoryPressure(
   PurgeMemory(purge_option);
 }
 
-void DOMStorageContextWrapper::OnMemoryStateChange(base::MemoryState state) {
-  // TODO(hajimehoshi): As OnMemoryStateChange changes the state, we should
-  // adjust the limitation to the amount of cache, DomStroageContextImpl doesn't
-  // have such limitation so far though.
-  switch (state) {
-    case base::MemoryState::NORMAL:
-      // Don't have to purge memory here.
-      break;
-    case base::MemoryState::THROTTLED:
-      // TOOD(hajimehoshi): We don't have throttling 'level' so far. When we
-      // have such value, let's change the argument accroding to the value.
-      PurgeMemory(DOMStorageContextImpl::PURGE_AGGRESSIVE);
-      break;
-    case base::MemoryState::SUSPENDED:
-      // Note that SUSPENDED never occurs in the main browser process so far.
-      // Fall through.
-    case base::MemoryState::UNKNOWN:
-      NOTREACHED();
-      break;
-  }
+void DOMStorageContextWrapper::OnPurgeMemory() {
+  PurgeMemory(DOMStorageContextImpl::PURGE_AGGRESSIVE);
 }
 
 void DOMStorageContextWrapper::PurgeMemory(DOMStorageContextImpl::PurgeOption
@@ -302,6 +285,8 @@ void DOMStorageContextWrapper::PurgeMemory(DOMStorageContextImpl::PurgeOption
   context_->task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&DOMStorageContextImpl::PurgeMemory, context_, purge_option));
+  if (mojo_state_ && purge_option == DOMStorageContextImpl::PURGE_AGGRESSIVE)
+    mojo_state_->PurgeMemory();
 }
 
 void DOMStorageContextWrapper::GotMojoLocalStorageUsage(

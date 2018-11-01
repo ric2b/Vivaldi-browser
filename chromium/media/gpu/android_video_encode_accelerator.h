@@ -18,7 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
-#include "media/base/android/sdk_media_codec_bridge.h"
+#include "media/base/android/media_codec_bridge_impl.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_encode_accelerator.h"
 
@@ -78,7 +78,7 @@ class MEDIA_GPU_EXPORT AndroidVideoEncodeAccelerator
   // error triggers.
   std::unique_ptr<base::WeakPtrFactory<Client>> client_ptr_factory_;
 
-  std::unique_ptr<VideoCodecBridge> media_codec_;
+  std::unique_ptr<MediaCodecBridge> media_codec_;
 
   // Bitstream buffers waiting to be populated & returned to the client.
   std::vector<BitstreamBuffer> available_bitstream_buffers_;

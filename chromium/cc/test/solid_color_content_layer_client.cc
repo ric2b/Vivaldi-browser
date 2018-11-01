@@ -6,11 +6,10 @@
 
 #include <stddef.h>
 
-#include "cc/playback/display_item_list_settings.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
+#include "cc/paint/paint_recorder.h"
 #include "cc/playback/drawing_display_item.h"
-#include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/skia_util.h"
@@ -24,35 +23,31 @@ gfx::Rect SolidColorContentLayerClient::PaintableRegion() {
 scoped_refptr<DisplayItemList>
 SolidColorContentLayerClient::PaintContentsToDisplayList(
     PaintingControlSetting painting_control) {
-  SkPictureRecorder recorder;
+  PaintRecorder recorder;
   gfx::Rect clip(PaintableRegion());
-  SkCanvas* canvas = recorder.beginRecording(gfx::RectToSkRect(clip));
+  PaintCanvas* canvas = recorder.beginRecording(gfx::RectToSkRect(clip));
 
   canvas->clear(SK_ColorTRANSPARENT);
 
   if (border_size_ != 0) {
-    SkPaint paint;
-    paint.setStyle(SkPaint::kFill_Style);
-    paint.setColor(border_color_);
+    PaintFlags flags;
+    flags.setStyle(PaintFlags::kFill_Style);
+    flags.setColor(border_color_);
     canvas->drawRect(
         SkRect::MakeXYWH(clip.x(), clip.y(), clip.width(), clip.height()),
-        paint);
+        flags);
   }
 
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(color_);
+  PaintFlags flags;
+  flags.setStyle(PaintFlags::kFill_Style);
+  flags.setColor(color_);
   canvas->drawRect(
       SkRect::MakeXYWH(clip.x() + border_size_, clip.y() + border_size_,
                        clip.width() - 2 * border_size_,
                        clip.height() - 2 * border_size_),
-      paint);
+      flags);
 
-  DisplayItemListSettings settings;
-  settings.use_cached_picture = false;
-  scoped_refptr<DisplayItemList> display_list =
-      DisplayItemList::Create(settings);
-
+  auto display_list = make_scoped_refptr(new DisplayItemList);
   display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
       clip, recorder.finishRecordingAsPicture());
 

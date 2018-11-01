@@ -286,9 +286,11 @@ base::string16 PasswordFormManager::PasswordToSave(const PasswordForm& form) {
   return form.new_password_value;
 }
 
-// TODO(timsteele): use a hash of some sort in the future?
+// TODO(crbug.com/700420): Refactor this function, to make comparison more
+// reliable.
 PasswordFormManager::MatchResultMask PasswordFormManager::DoesManage(
-    const PasswordForm& form) const {
+    const PasswordForm& form,
+    const password_manager::PasswordManagerDriver* driver) const {
   // Non-HTML form case.
   if (observed_form_.scheme != PasswordForm::SCHEME_HTML ||
       form.scheme != PasswordForm::SCHEME_HTML) {
@@ -299,6 +301,9 @@ PasswordFormManager::MatchResultMask PasswordFormManager::DoesManage(
 
   // HTML form case.
   MatchResultMask result = RESULT_NO_MATCH;
+
+  if (observed_form_.signon_realm != form.signon_realm)
+    return result;
 
   // Easiest case of matching origins.
   bool origins_match = form.origin == observed_form_.origin;
@@ -321,10 +326,18 @@ PasswordFormManager::MatchResultMask PasswordFormManager::DoesManage(
         base::StartsWith(new_path, old_path, base::CompareCase::SENSITIVE);
   }
 
+  if (driver)
+    origins_match =
+        origins_match ||
+        std::any_of(drivers_.begin(), drivers_.end(),
+                    [driver](const base::WeakPtr<PasswordManagerDriver>& d) {
+                      return d.get() == driver;
+                    });
+
   if (!origins_match)
     return result;
 
-  result |= RESULT_ORIGINS_MATCH;
+  result |= RESULT_ORIGINS_OR_FRAMES_MATCH;
 
   // Autofill predictions can overwrite our default username selection so
   // if this form was parsed with autofill predictions then allow the username
@@ -372,8 +385,6 @@ bool PasswordFormManager::IsPendingCredentialsPublicSuffixMatch() const {
 void PasswordFormManager::ProvisionallySave(
     const PasswordForm& credentials,
     OtherPossibleUsernamesAction action) {
-  DCHECK_NE(RESULT_NO_MATCH, DoesManage(credentials));
-
   std::unique_ptr<autofill::PasswordForm> mutable_submitted_form(
       new PasswordForm(credentials));
   if (credentials.IsPossibleChangePasswordForm() &&
@@ -1288,7 +1299,7 @@ base::Optional<PasswordForm> PasswordFormManager::UpdatePendingAndGetOldKey(
     DCHECK(best_matches_.end() != updated_password_it);
     const base::string16& old_password =
         updated_password_it->second->password_value;
-    for (const auto& not_best_match : not_best_matches_) {
+    for (auto* not_best_match : not_best_matches_) {
       if (not_best_match->username_value ==
               pending_credentials_.username_value &&
           not_best_match->password_value == old_password) {

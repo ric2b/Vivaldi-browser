@@ -102,13 +102,6 @@ bool HasTagName(const WebNode& node, const blink::WebString& tag) {
   return node.isElementNode() && node.toConst<WebElement>().hasHTMLTagName(tag);
 }
 
-bool IsAutofillableElement(const WebFormControlElement& element) {
-  const WebInputElement* input_element = toWebInputElement(&element);
-  return IsAutofillableInputElement(input_element) ||
-         IsSelectElement(element) ||
-         IsTextAreaElement(element);
-}
-
 bool IsElementInControlElementSet(
     const WebElement& element,
     const std::vector<WebFormControlElement>& control_elements) {
@@ -158,7 +151,7 @@ size_t CalculateTableCellColumnSpan(const WebElement& element) {
 
   size_t span = 1;
   if (element.hasAttribute("colspan")) {
-    base::string16 colspan = element.getAttribute("colspan");
+    base::string16 colspan = element.getAttribute("colspan").utf16();
     // Do not check return value to accept imperfect conversions.
     base::StringToSizeT(colspan, &span);
     // Handle overflow.
@@ -237,7 +230,7 @@ base::string16 FindChildTextInner(const WebNode& node,
   }
 
   // Extract the text exactly at this node.
-  base::string16 node_text = node.nodeValue();
+  base::string16 node_text = node.nodeValue().utf16();
 
   // Recursively compute the children's text.
   // Preserve inter-element whitespace separation.
@@ -262,7 +255,7 @@ base::string16 FindChildTextWithIgnoreList(
     const WebNode& node,
     const std::set<WebNode>& divs_to_skip) {
   if (node.isTextNode())
-    return node.nodeValue();
+    return node.nodeValue().utf16();
 
   WebNode child = node.firstChild();
 
@@ -370,7 +363,7 @@ base::string16 InferLabelFromNext(const WebFormControlElement& element) {
 base::string16 InferLabelFromPlaceholder(const WebFormControlElement& element) {
   CR_DEFINE_STATIC_LOCAL(WebString, kPlaceholder, ("placeholder"));
   if (element.hasAttribute(kPlaceholder))
-    return element.getAttribute(kPlaceholder);
+    return element.getAttribute(kPlaceholder).utf16();
 
   return base::string16();
 }
@@ -382,7 +375,7 @@ base::string16 InferLabelFromValueAttr(const WebFormControlElement& element) {
   CR_DEFINE_STATIC_LOCAL(WebString, kValue, ("value"));
   if (element.hasAttribute(kValue) && element.getAttribute(kValue) ==
       element.value()) {
-    return element.getAttribute(kValue);
+    return element.getAttribute(kValue).utf16();
   }
 
   return base::string16();
@@ -766,8 +759,8 @@ void GetOptionStringsFromElement(const WebSelectElement& select_element,
   for (size_t i = 0; i < list_items.size(); ++i) {
     if (IsOptionElement(list_items[i])) {
       const WebOptionElement option = list_items[i].toConst<WebOptionElement>();
-      option_values->push_back(option.value());
-      option_contents->push_back(option.text());
+      option_values->push_back(option.value().utf16());
+      option_contents->push_back(option.text().utf16());
     }
   }
 }
@@ -800,7 +793,7 @@ void ForEachMatchingFormFieldCommon(
   for (size_t i = 0; i < control_elements->size(); ++i) {
     WebFormControlElement* element = &(*control_elements)[i];
 
-    if (base::string16(element->nameForAutofill()) != data.fields[i].name) {
+    if (element->nameForAutofill().utf16() != data.fields[i].name) {
       // This case should be reachable only for pathological websites, which
       // rename form fields while the user is interacting with the Autofill
       // popup.  I (isherman) am not aware of any such websites, and so am
@@ -901,7 +894,7 @@ void FillFormField(const FormFieldData& data,
       // returns the default maxlength value.
       TruncateString(&value, input_element->maxLength());
     }
-    field->setAutofillValue(value);
+    field->setAutofillValue(blink::WebString::fromUTF16(value));
   }
   // Setting the form might trigger JavaScript, which is capable of
   // destroying the frame.
@@ -939,18 +932,19 @@ void PreviewFormField(const FormFieldData& data,
   if (IsTextInput(input_element) || IsMonthInput(input_element)) {
     // If the maxlength attribute contains a negative value, maxLength()
     // returns the default maxlength value.
-    input_element->setSuggestedValue(
-      data.value.substr(0, input_element->maxLength()));
+    input_element->setSuggestedValue(blink::WebString::fromUTF16(
+        data.value.substr(0, input_element->maxLength())));
     input_element->setAutofilled(true);
   } else if (IsTextAreaElement(*field) || IsSelectElement(*field)) {
-    field->setSuggestedValue(data.value);
+    field->setSuggestedValue(blink::WebString::fromUTF16(data.value));
     field->setAutofilled(true);
   }
 
   if (is_initiating_node &&
       (IsTextInput(input_element) || IsTextAreaElement(*field))) {
     // Select the part of the text that the user didn't type.
-    PreviewSuggestion(field->suggestedValue(), field->value(), field);
+    PreviewSuggestion(field->suggestedValue().utf16(), field->value().utf16(),
+                      field);
   }
 }
 
@@ -1017,7 +1011,7 @@ void MatchLabelsAndFields(
     if (control.isNull()) {
       // Sometimes site authors will incorrectly specify the corresponding
       // field element's name rather than its id, so we compensate here.
-      base::string16 element_name = label.getAttribute(kFor);
+      base::string16 element_name = label.getAttribute(kFor).utf16();
       if (element_name.empty())
         continue;
       // Look through the list for elements with this name. There can actually
@@ -1318,11 +1312,17 @@ bool IsAutofillableInputElement(const WebInputElement* element) {
          IsCheckableElement(element);
 }
 
+bool IsAutofillableElement(const WebFormControlElement& element) {
+  const WebInputElement* input_element = toWebInputElement(&element);
+  return IsAutofillableInputElement(input_element) ||
+         IsSelectElement(element) || IsTextAreaElement(element);
+}
+
 const base::string16 GetFormIdentifier(const WebFormElement& form) {
-  base::string16 identifier = form.name();
+  base::string16 identifier = form.name().utf16();
   CR_DEFINE_STATIC_LOCAL(WebString, kId, ("id"));
   if (identifier.empty())
-    identifier = form.getAttribute(kId);
+    identifier = form.getAttribute(kId).utf16();
 
   return identifier;
 }
@@ -1366,14 +1366,18 @@ void WebFormControlElementToFormField(
   DCHECK(field);
   DCHECK(!element.isNull());
   CR_DEFINE_STATIC_LOCAL(WebString, kAutocomplete, ("autocomplete"));
+  CR_DEFINE_STATIC_LOCAL(WebString, kId, ("id"));
   CR_DEFINE_STATIC_LOCAL(WebString, kRole, ("role"));
   CR_DEFINE_STATIC_LOCAL(WebString, kPlaceholder, ("placeholder"));
   CR_DEFINE_STATIC_LOCAL(WebString, kClass, ("class"));
 
-  // The label is not officially part of a WebFormControlElement; however, the
-  // labels for all form control elements are scraped from the DOM and set in
-  // WebFormElementToFormData.
-  field->name = element.nameForAutofill();
+  // Save both id and name attributes, if present. If there is only one of them,
+  // it will be saved to |name|. See HTMLFormControlElement::nameForAutofill.
+  field->name = element.nameForAutofill().utf16();
+  base::string16 id = element.getAttribute(kId).utf16();
+  if (id != field->name)
+    field->id = id;
+
   field->form_control_type = element.formControlType().utf8();
   field->autocomplete_attribute = element.getAttribute(kAutocomplete).utf8();
   if (field->autocomplete_attribute.size() > kMaxDataLength) {
@@ -1382,13 +1386,13 @@ void WebFormControlElementToFormField(
     // attribute was present.
     field->autocomplete_attribute = "x-max-data-length-exceeded";
   }
-  if (base::LowerCaseEqualsASCII(
-          base::StringPiece16(element.getAttribute(kRole)), "presentation"))
+  if (base::LowerCaseEqualsASCII(element.getAttribute(kRole).utf16(),
+                                 "presentation"))
     field->role = FormFieldData::ROLE_ATTRIBUTE_PRESENTATION;
 
-  field->placeholder = element.getAttribute(kPlaceholder);
+  field->placeholder = element.getAttribute(kPlaceholder).utf16();
   if (element.hasAttribute(kClass))
-    field->css_classes = element.getAttribute(kClass);
+    field->css_classes = element.getAttribute(kClass).utf16();
 
   if (field_value_and_properties_map) {
     FieldValueAndPropertiesMaskMap::const_iterator it =
@@ -1439,7 +1443,7 @@ void WebFormControlElementToFormField(
   if (!(extract_mask & EXTRACT_VALUE))
     return;
 
-  base::string16 value = element.value();
+  base::string16 value = element.value().utf16();
 
   if (IsSelectElement(element) && (extract_mask & EXTRACT_OPTION_TEXT)) {
     const WebSelectElement select_element = element.toConst<WebSelectElement>();
@@ -1449,8 +1453,8 @@ void WebFormControlElementToFormField(
       if (IsOptionElement(list_items[i])) {
         const WebOptionElement option_element =
             list_items[i].toConst<WebOptionElement>();
-        if (option_element.value() == value) {
-          value = option_element.text();
+        if (option_element.value().utf16() == value) {
+          value = option_element.text().utf16();
           break;
         }
       }
@@ -1550,7 +1554,7 @@ bool UnownedCheckoutFormElementsAndFieldSetsToFormData(
   // A potential problem is that this only checks document.title(), but should
   // actually check the main frame's title. Thus it may make bad decisions for
   // iframes.
-  base::string16 title(base::ToLowerASCII(base::string16(document.title())));
+  base::string16 title(base::ToLowerASCII(document.title().utf16()));
 
   // Don't check the path for url's without a standard format path component,
   // such as data:.

@@ -7,6 +7,9 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSIdentifierValue.h"
+#include "core/css/CSSInheritedValue.h"
+#include "core/css/CSSInitialValue.h"
+#include "core/css/CSSUnsetValue.h"
 #include "core/css/parser/CSSPropertyParser.h"
 
 namespace blink {
@@ -45,6 +48,11 @@ CSSKeywordValue* CSSKeywordValue::fromCSSValue(const CSSValue& value) {
   return nullptr;
 }
 
+CSSKeywordValue* CSSKeywordValue::create(const AtomicString& keyword) {
+  DCHECK(!keyword.isEmpty());
+  return new CSSKeywordValue(keyword);
+}
+
 const AtomicString& CSSKeywordValue::keywordValue() const {
   return m_keywordValue;
 }
@@ -55,10 +63,18 @@ CSSValueID CSSKeywordValue::keywordValueID() const {
 
 CSSValue* CSSKeywordValue::toCSSValue() const {
   CSSValueID keywordID = keywordValueID();
-  if (keywordID == CSSValueID::CSSValueInvalid) {
-    return CSSCustomIdentValue::create(m_keywordValue);
+  switch (keywordID) {
+    case (CSSValueInherit):
+      return CSSInheritedValue::create();
+    case (CSSValueInitial):
+      return CSSInitialValue::create();
+    case (CSSValueUnset):
+      return CSSUnsetValue::create();
+    case (CSSValueInvalid):
+      return CSSCustomIdentValue::create(m_keywordValue);
+    default:
+      return CSSIdentifierValue::create(keywordID);
   }
-  return CSSIdentifierValue::create(keywordID);
 }
 
 }  // namespace blink

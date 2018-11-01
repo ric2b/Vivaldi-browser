@@ -33,6 +33,8 @@
 
 namespace blink {
 
+// Some enums are automatically generated in ComputedStyleBaseConstants
+
 // TODO(sashab): Change these enums to enum classes with an unsigned underlying
 // type. Enum classes provide better type safety, and forcing an unsigned
 // underlying type prevents msvc from interpreting enums as negative numbers.
@@ -119,15 +121,6 @@ enum EBorderPrecedence {
 
 enum OutlineIsAuto { OutlineIsAutoOff = 0, OutlineIsAutoOn };
 
-enum EPosition {
-  StaticPosition = 0,
-  RelativePosition = 1,
-  AbsolutePosition = 2,
-  StickyPosition = 3,
-  // This value is required to pack our bits efficiently in LayoutObject.
-  FixedPosition = 6
-};
-
 enum EMarginCollapse {
   MarginCollapseCollapse,
   MarginCollapseSeparate,
@@ -144,34 +137,18 @@ enum class EBoxSizing : unsigned { kContentBox, kBorderBox };
 
 // Random visual rendering model attributes. Not inherited.
 
-enum class EOverflowAnchor : unsigned { Visible, None, Auto };
-
-enum class EOverflow : unsigned {
-  Visible,
-  Hidden,
-  Scroll,
-  Auto,
-  Overlay,
-  PagedX,
-  PagedY
-};
-
 enum class EVerticalAlign : unsigned {
-  Baseline,
-  Middle,
-  Sub,
-  Super,
-  TextTop,
-  TextBottom,
-  Top,
-  Bottom,
-  BaselineMiddle,
-  Length
+  kBaseline,
+  kMiddle,
+  kSub,
+  kSuper,
+  kTextTop,
+  kTextBottom,
+  kTop,
+  kBottom,
+  kBaselineMiddle,
+  kLength
 };
-
-enum EClear { ClearNone = 0, ClearLeft = 1, ClearRight = 2, ClearBoth = 3 };
-
-enum ETableLayout { TableLayoutAuto, TableLayoutFixed };
 
 enum TextCombine { TextCombineNone, TextCombineAll };
 
@@ -321,63 +298,43 @@ enum TextUnderlinePosition {
   TextUnderlinePositionUnder
 };
 
-enum EBreak {
-  BreakAuto,
-  BreakAvoid,
-  BreakAvoidColumn,
-  BreakAvoidPage,
-  // Values below are only allowed for break-after and break-before. Values
-  // above are also allowed for break-inside (in addition to break-after and
-  // break-before).
-  BreakValueLastAllowedForBreakInside = BreakAvoidPage,
-  BreakColumn,
-  BreakLeft,
-  BreakPage,
-  BreakRecto,
-  BreakRight,
-  BreakVerso,
-  BreakValueLastAllowedForBreakAfterAndBefore = BreakVerso,
-  BreakAlways  // Only needed by {page,-webkit-column}-break-{after,before}
-               // shorthands.
-};
-
 enum class ECursor : unsigned {
-  Auto,
-  Cross,
-  Default,
-  Pointer,
-  Move,
-  VerticalText,
-  Cell,
-  ContextMenu,
-  Alias,
-  Progress,
-  NoDrop,
-  NotAllowed,
-  ZoomIn,
-  ZoomOut,
-  EResize,
-  NeResize,
-  NwResize,
-  NResize,
-  SeResize,
-  SwResize,
-  SResize,
-  WResize,
-  EwResize,
-  NsResize,
-  NeswResize,
-  NwseResize,
-  ColResize,
-  RowResize,
-  Text,
-  Wait,
-  Help,
-  AllScroll,
-  WebkitGrab,
-  WebkitGrabbing,
-  Copy,
-  None
+  kAuto,
+  kCrosshair,
+  kDefault,
+  kPointer,
+  kMove,
+  kVerticalText,
+  kCell,
+  kContextMenu,
+  kAlias,
+  kProgress,
+  kNoDrop,
+  kNotAllowed,
+  kZoomIn,
+  kZoomOut,
+  kEResize,
+  kNeResize,
+  kNwResize,
+  kNResize,
+  kSeResize,
+  kSwResize,
+  kSResize,
+  kWResize,
+  kEwResize,
+  kNsResize,
+  kNeswResize,
+  kNwseResize,
+  kColResize,
+  kRowResize,
+  kText,
+  kWait,
+  kHelp,
+  kAllScroll,
+  kWebkitGrab,
+  kWebkitGrabbing,
+  kCopy,
+  kNone
 };
 
 enum class EDisplay : unsigned {
@@ -402,6 +359,7 @@ enum class EDisplay : unsigned {
   Grid,
   InlineGrid,
   Contents,
+  FlowRoot,
   None
 };
 

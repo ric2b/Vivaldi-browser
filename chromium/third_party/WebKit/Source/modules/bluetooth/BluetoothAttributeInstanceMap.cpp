@@ -22,12 +22,12 @@ BluetoothAttributeInstanceMap::getOrCreateRemoteGATTService(
     const String& deviceInstanceId) {
   String serviceInstanceId = remoteGATTService->instance_id;
   BluetoothRemoteGATTService* service =
-      m_serviceIdToObject.get(serviceInstanceId);
+      m_serviceIdToObject.at(serviceInstanceId);
 
   if (!service) {
     service = new BluetoothRemoteGATTService(
         std::move(remoteGATTService), isPrimary, deviceInstanceId, m_device);
-    m_serviceIdToObject.add(serviceInstanceId, service);
+    m_serviceIdToObject.insert(serviceInstanceId, service);
   }
 
   return service;
@@ -46,12 +46,12 @@ BluetoothAttributeInstanceMap::getOrCreateRemoteGATTCharacteristic(
     BluetoothRemoteGATTService* service) {
   String instanceId = remoteGATTCharacteristic->instance_id;
   BluetoothRemoteGATTCharacteristic* characteristic =
-      m_characteristicIdToObject.get(instanceId);
+      m_characteristicIdToObject.at(instanceId);
 
   if (!characteristic) {
     characteristic = BluetoothRemoteGATTCharacteristic::create(
         context, std::move(remoteGATTCharacteristic), service, m_device);
-    m_characteristicIdToObject.add(instanceId, characteristic);
+    m_characteristicIdToObject.insert(instanceId, characteristic);
   }
 
   return characteristic;
@@ -67,15 +67,14 @@ BluetoothAttributeInstanceMap::getOrCreateBluetoothRemoteGATTDescriptor(
     mojom::blink::WebBluetoothRemoteGATTDescriptorPtr descriptor,
     BluetoothRemoteGATTCharacteristic* characteristic) {
   String instanceId = descriptor->instance_id;
-  BluetoothRemoteGATTDescriptor* result =
-      m_descriptorIdToObject.get(instanceId);
+  BluetoothRemoteGATTDescriptor* result = m_descriptorIdToObject.at(instanceId);
 
   if (result)
     return result;
 
   result =
       new BluetoothRemoteGATTDescriptor(std::move(descriptor), characteristic);
-  m_descriptorIdToObject.add(instanceId, result);
+  m_descriptorIdToObject.insert(instanceId, result);
   return result;
 }
 

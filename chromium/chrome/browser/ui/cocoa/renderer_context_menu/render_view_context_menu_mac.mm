@@ -285,13 +285,13 @@ bool RenderViewContextMenuMac::IsCommandIdChecked(int command_id) const {
   switch (command_id) {
     case IDC_WRITING_DIRECTION_DEFAULT:
       return params_.writing_direction_default &
-          blink::WebContextMenuData::CheckableMenuItemChecked;
+             blink::WebContextMenuData::CheckableMenuItemChecked;
     case IDC_WRITING_DIRECTION_RTL:
       return params_.writing_direction_right_to_left &
-          blink::WebContextMenuData::CheckableMenuItemChecked;
+             blink::WebContextMenuData::CheckableMenuItemChecked;
     case IDC_WRITING_DIRECTION_LTR:
       return params_.writing_direction_left_to_right &
-          blink::WebContextMenuData::CheckableMenuItemChecked;
+             blink::WebContextMenuData::CheckableMenuItemChecked;
 
     default:
       return RenderViewContextMenu::IsCommandIdChecked(command_id);
@@ -318,13 +318,13 @@ bool RenderViewContextMenuMac::IsCommandIdEnabled(int command_id) const {
 
     case IDC_WRITING_DIRECTION_DEFAULT:  // Provided to match OS defaults.
       return params_.writing_direction_default &
-          blink::WebContextMenuData::CheckableMenuItemEnabled;
+             blink::WebContextMenuData::CheckableMenuItemEnabled;
     case IDC_WRITING_DIRECTION_RTL:
       return params_.writing_direction_right_to_left &
-          blink::WebContextMenuData::CheckableMenuItemEnabled;
+             blink::WebContextMenuData::CheckableMenuItemEnabled;
     case IDC_WRITING_DIRECTION_LTR:
       return params_.writing_direction_left_to_right &
-          blink::WebContextMenuData::CheckableMenuItemEnabled;
+             blink::WebContextMenuData::CheckableMenuItemEnabled;
 
     default:
       return RenderViewContextMenu::IsCommandIdEnabled(command_id);
@@ -346,8 +346,8 @@ void RenderViewContextMenuMac::InitToolkitMenu() {
     // In case the user has selected a word that triggers spelling suggestions,
     // show the dictionary lookup under the group that contains the command to
     // “Add to Dictionary.”
-    int index = menu_model_.GetIndexOfCommandId(
-        IDC_SPELLCHECK_ADD_TO_DICTIONARY);
+    int index =
+        menu_model_.GetIndexOfCommandId(IDC_SPELLCHECK_ADD_TO_DICTIONARY);
     if (index < 0) {
       index = 0;
     } else {
@@ -360,8 +360,7 @@ void RenderViewContextMenuMac::InitToolkitMenu() {
     base::string16 printable_selection_text = PrintableSelectionText();
     EscapeAmpersands(&printable_selection_text);
     menu_model_.InsertItemAt(
-        index++,
-        IDC_CONTENT_CONTEXT_LOOK_UP,
+        index++, IDC_CONTENT_CONTEXT_LOOK_UP,
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP,
                                    printable_selection_text));
     menu_model_.InsertSeparatorAt(index++, ui::NORMAL_SEPARATOR);
@@ -375,12 +374,10 @@ void RenderViewContextMenuMac::InitToolkitMenu() {
         IDC_CONTENT_CONTEXT_SPEECH_START_SPEAKING,
         IDS_SPEECH_START_SPEAKING_MAC);
     speech_submenu_model_.AddItemWithStringId(
-        IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING,
-        IDS_SPEECH_STOP_SPEAKING_MAC);
-    menu_model_.AddSubMenu(
-        IDC_CONTENT_CONTEXT_SPEECH_MENU,
-        l10n_util::GetStringUTF16(IDS_SPEECH_MAC),
-        &speech_submenu_model_);
+        IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING, IDS_SPEECH_STOP_SPEAKING_MAC);
+    menu_model_.AddSubMenu(IDC_CONTENT_CONTEXT_SPEECH_MENU,
+                           l10n_util::GetStringUTF16(IDS_SPEECH_MAC),
+                           &speech_submenu_model_);
   }
 }
 
@@ -406,11 +403,14 @@ void RenderViewContextMenuMac::UpdateToolkitMenuItem(
 }
 
 void RenderViewContextMenuMac::AppendBidiSubMenu() {
-  bidi_submenu_model_.AddCheckItem(IDC_WRITING_DIRECTION_DEFAULT,
+  bidi_submenu_model_.AddCheckItem(
+      IDC_WRITING_DIRECTION_DEFAULT,
       l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_WRITING_DIRECTION_DEFAULT));
-  bidi_submenu_model_.AddCheckItem(IDC_WRITING_DIRECTION_LTR,
+  bidi_submenu_model_.AddCheckItem(
+      IDC_WRITING_DIRECTION_LTR,
       l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_WRITING_DIRECTION_LTR));
-  bidi_submenu_model_.AddCheckItem(IDC_WRITING_DIRECTION_RTL,
+  bidi_submenu_model_.AddCheckItem(
+      IDC_WRITING_DIRECTION_RTL,
       l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_WRITING_DIRECTION_RTL));
 
   menu_model_.AddSubMenu(

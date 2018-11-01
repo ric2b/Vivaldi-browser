@@ -4,6 +4,7 @@
 
 #include "ui/views/round_rect_painter.h"
 
+#include "cc/paint/paint_canvas.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/skia_util.h"
@@ -23,17 +24,17 @@ gfx::Size RoundRectPainter::GetMinimumSize() const {
 }
 
 void RoundRectPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
-  SkPaint paint;
-  paint.setColor(border_color_);
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setStrokeWidth(kBorderWidth);
-  paint.setFlags(SkPaint::kAntiAlias_Flag);
+  cc::PaintFlags flags;
+  flags.setColor(border_color_);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(kBorderWidth);
+  flags.setAntiAlias(true);
   gfx::Rect rect(size);
   rect.Inset(0, 0, kBorderWidth, kBorderWidth);
   SkRect skia_rect = gfx::RectToSkRect(rect);
   skia_rect.offset(kBorderWidth / 2.f, kBorderWidth / 2.f);
   canvas->sk_canvas()->drawRoundRect(skia_rect, SkIntToScalar(corner_radius_),
-                                     SkIntToScalar(corner_radius_), paint);
+                                     SkIntToScalar(corner_radius_), flags);
 }
 
 }  // namespace views

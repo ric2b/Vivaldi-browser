@@ -91,7 +91,7 @@ void GetApplicationDirs(std::vector<base::FilePath>* locations);
 bool FindChrome(base::FilePath* browser_exe) {
   base::FilePath browser_exes_array[] = {
 #if defined(OS_WIN)
-      base::FilePath(L"vivaldi.exe")
+      base::FilePath(L"chrome.exe")
 #elif defined(OS_MACOSX)
       base::FilePath("Google Chrome.app/Contents/MacOS/Google Chrome"),
       base::FilePath("Chromium.app/Contents/MacOS/Chromium")

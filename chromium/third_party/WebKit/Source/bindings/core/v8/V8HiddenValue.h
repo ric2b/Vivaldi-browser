@@ -5,13 +5,14 @@
 #ifndef V8HiddenValue_h
 #define V8HiddenValue_h
 
+#include <memory>
+
 #include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptPromiseProperties.h"
 #include "core/CoreExport.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
@@ -35,7 +36,6 @@ class ScriptWrappable;
   V(internalBodyStream)                      \
   V(port1)                                   \
   V(port2)                                   \
-  V(readableStreamReaderInResponse)          \
   V(requestInFetchEvent)                     \
   V(state)                                   \
   V(testInterfaces)                          \

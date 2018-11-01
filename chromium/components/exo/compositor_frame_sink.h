@@ -27,18 +27,16 @@ class CompositorFrameSink : public cc::CompositorFrameSinkSupportClient,
 
   // Overridden from cc::mojom::MojoCompositorFrameSink:
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
-  void SubmitCompositorFrame(const cc::LocalFrameId& local_frame_id,
+  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void EvictFrame() override;
-  void Require(const cc::LocalFrameId& local_frame_id,
-               const cc::SurfaceSequence& sequence) override;
-  void Satisfy(const cc::SurfaceSequence& sequence) override;
 
   // Overridden from cc::CompositorFrameSinkSupportClient:
   void DidReceiveCompositorFrameAck() override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface() override;
+  void WillDrawSurface(const cc::LocalSurfaceId& local_surface_id,
+                       const gfx::Rect& damage_rect) override;
 
  private:
   cc::CompositorFrameSinkSupport support_;

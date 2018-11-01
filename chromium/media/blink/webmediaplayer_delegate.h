@@ -54,6 +54,10 @@ class WebMediaPlayerDelegate {
     // |player_volume| * |multiplier|. The range of |multiplier| is [0, 1],
     // where 1 indicates normal (non-ducked) playback.
     virtual void OnVolumeMultiplierUpdate(double multiplier) = 0;
+
+    // Called to set as the persistent video. A persistent video should hide its
+    // controls and go fullscreen.
+    virtual void OnBecamePersistentVideo(bool value) = 0;
   };
 
   // Returns true if the host frame is hidden or closed.
@@ -111,6 +115,11 @@ class WebMediaPlayerDelegate {
   // Returns |true| if the player is stale; that is that OnIdleTimeout() was
   // called and returned |true|.
   virtual bool IsStale(int player_id) = 0;
+
+  // Notifies the delegate that the player has entered fullscreen. This does not
+  // differentiate native controls fullscreen and custom controls fullscreen.
+  virtual void SetIsEffectivelyFullscreen(int player_id,
+                                          bool is_fullscreen) = 0;
 
  protected:
   WebMediaPlayerDelegate() = default;

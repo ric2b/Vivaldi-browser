@@ -4,11 +4,15 @@
 
 #include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "ash/common/system/chromeos/devicetype_utils.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/grit/generated_resources.h"
@@ -24,6 +28,8 @@
 
 namespace {
 
+bool g_disabled = false;
+
 // Ids of the notification shown on first run.
 const char kNotifierId[] = "arc_auth";
 const char kDisplaySource[] = "arc_auth_source";
@@ -33,7 +39,7 @@ class ArcAuthNotificationDelegate
     : public message_center::NotificationDelegate,
       public message_center::MessageCenterObserver {
  public:
-  ArcAuthNotificationDelegate() {}
+  explicit ArcAuthNotificationDelegate(Profile* profile) : profile_(profile) {}
 
   // message_center::MessageCenterObserver
   void OnNotificationUpdated(const std::string& notification_id) override {
@@ -60,10 +66,10 @@ class ArcAuthNotificationDelegate
     StopObserving();
     if (button_index == 0) {
       UpdateOptInActionUMA(arc::OptInActionType::NOTIFICATION_ACCEPTED);
-      arc::ArcSessionManager::Get()->EnableArc();
+      arc::SetArcPlayStoreEnabledForProfile(profile_, true);
     } else {
       UpdateOptInActionUMA(arc::OptInActionType::NOTIFICATION_DECLINED);
-      arc::ArcSessionManager::Get()->DisableArc();
+      arc::SetArcPlayStoreEnabledForProfile(profile_, false);
     }
   }
 
@@ -80,6 +86,8 @@ class ArcAuthNotificationDelegate
     message_center::MessageCenter::Get()->RemoveObserver(this);
   }
 
+  Profile* const profile_;
+
   DISALLOW_COPY_AND_ASSIGN(ArcAuthNotificationDelegate);
 };
 
@@ -89,6 +97,9 @@ namespace arc {
 
 // static
 void ArcAuthNotification::Show(Profile* profile) {
+  if (g_disabled)
+    return;
+
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT, kNotifierId);
   notifier_id.profile_id =
@@ -108,15 +119,23 @@ void ArcAuthNotification::Show(Profile* profile) {
                                      ash::GetChromeOSDeviceName()),
           resource_bundle.GetImageNamed(IDR_ARC_PLAY_STORE_NOTIFICATION),
           base::UTF8ToUTF16(kDisplaySource), GURL(), notifier_id, data,
-          new ArcAuthNotificationDelegate()));
+          new ArcAuthNotificationDelegate(profile)));
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 }
 
 // static
 void ArcAuthNotification::Hide() {
+  if (g_disabled)
+    return;
+
   message_center::MessageCenter::Get()->RemoveNotification(
       kFirstRunNotificationId, false);
+}
+
+// static
+void ArcAuthNotification::DisableForTesting() {
+  g_disabled = true;
 }
 
 }  // namespace arc

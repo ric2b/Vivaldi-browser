@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/ref_counted.h"
 #include "base/stl_util.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -37,6 +36,78 @@ bool IsHostAlive(RenderProcessHostImpl* host) {
 }
 
 namespace {
+
+// A helper to request a renderer process allocation for a shared worker to the
+// UI thread from the IO thread.
+class SharedWorkerReserver {
+ public:
+  ~SharedWorkerReserver() = default;
+
+  using ResolverCallback = base::Callback<void(int worker_process_id,
+                                               int worker_route_id,
+                                               bool is_new_worker,
+                                               bool pause_on_start)>;
+
+  // Tries to reserve a renderer process for a shared worker. This should be
+  // called on the IO thread and given callbacks are also invoked on the IO
+  // thread on completion.
+  static void TryReserve(int worker_process_id,
+                         int worker_route_id,
+                         bool is_new_worker,
+                         const SharedWorkerInstance& instance,
+                         const ResolverCallback& success_cb,
+                         const ResolverCallback& failure_cb,
+                         bool (*try_increment_worker_ref_count)(int)) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    std::unique_ptr<SharedWorkerReserver> reserver(new SharedWorkerReserver(
+        worker_process_id, worker_route_id, is_new_worker, instance));
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&SharedWorkerReserver::TryReserveOnUI, std::move(reserver),
+                   success_cb, failure_cb, try_increment_worker_ref_count));
+  }
+
+ private:
+  SharedWorkerReserver(int worker_process_id,
+                       int worker_route_id,
+                       bool is_new_worker,
+                       const SharedWorkerInstance& instance)
+      : worker_process_id_(worker_process_id),
+        worker_route_id_(worker_route_id),
+        is_new_worker_(is_new_worker),
+        instance_(instance) {}
+
+  void TryReserveOnUI(const ResolverCallback& success_cb,
+                      const ResolverCallback& failure_cb,
+                      bool (*try_increment_worker_ref_count)(int)) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    bool pause_on_start = false;
+    if (!try_increment_worker_ref_count(worker_process_id_)) {
+      DidTryReserveOnUI(failure_cb, pause_on_start);
+      return;
+    }
+    if (is_new_worker_) {
+      pause_on_start =
+          SharedWorkerDevToolsManager::GetInstance()->WorkerCreated(
+              worker_process_id_, worker_route_id_, instance_);
+    }
+    DidTryReserveOnUI(success_cb, pause_on_start);
+  }
+
+  void DidTryReserveOnUI(const ResolverCallback& callback,
+                         bool pause_on_start) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(callback, worker_process_id_, worker_route_id_,
+                   is_new_worker_, pause_on_start));
+  }
+
+  const int worker_process_id_;
+  const int worker_route_id_;
+  const bool is_new_worker_;
+  const SharedWorkerInstance instance_;
+};
 
 class ScopedWorkerDependencyChecker {
  public:
@@ -194,47 +265,6 @@ class SharedWorkerServiceImpl::SharedWorkerPendingInstance {
   DISALLOW_COPY_AND_ASSIGN(SharedWorkerPendingInstance);
 };
 
-class SharedWorkerServiceImpl::SharedWorkerReserver
-    : public base::RefCountedThreadSafe<SharedWorkerReserver> {
- public:
-  SharedWorkerReserver(int pending_instance_id,
-                       int worker_process_id,
-                       int worker_route_id,
-                       bool is_new_worker,
-                       const SharedWorkerInstance& instance)
-      : worker_process_id_(worker_process_id),
-        worker_route_id_(worker_route_id),
-        is_new_worker_(is_new_worker),
-        instance_(instance) {}
-
-  void TryReserve(const base::Callback<void(bool)>& success_cb,
-                  const base::Closure& failure_cb,
-                  bool (*try_increment_worker_ref_count)(int)) {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    if (!try_increment_worker_ref_count(worker_process_id_)) {
-      BrowserThread::PostTask(BrowserThread::IO, FROM_HERE, failure_cb);
-      return;
-    }
-    bool pause_on_start = false;
-    if (is_new_worker_) {
-      pause_on_start =
-          SharedWorkerDevToolsManager::GetInstance()->WorkerCreated(
-              worker_process_id_, worker_route_id_, instance_);
-    }
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE, base::Bind(success_cb, pause_on_start));
-  }
-
- private:
-  friend class base::RefCountedThreadSafe<SharedWorkerReserver>;
-  ~SharedWorkerReserver() {}
-
-  const int worker_process_id_;
-  const int worker_route_id_;
-  const bool is_new_worker_;
-  const SharedWorkerInstance instance_;
-};
-
 // static
 bool (*SharedWorkerServiceImpl::s_try_increment_worker_ref_count_)(int) =
     TryIncrementWorkerRefCount;
@@ -324,22 +354,20 @@ blink::WebWorkerCreationError SharedWorkerServiceImpl::CreateWorker(
   return ReserveRenderProcessToCreateWorker(std::move(pending_instance));
 }
 
-void SharedWorkerServiceImpl::ConnectToWorker(
-    int route_id,
-    int sent_message_port_id,
-    SharedWorkerMessageFilter* filter) {
+void SharedWorkerServiceImpl::ConnectToWorker(SharedWorkerMessageFilter* filter,
+                                              int worker_route_id,
+                                              const MessagePort& port) {
   for (WorkerHostMap::const_iterator iter = worker_hosts_.begin();
        iter != worker_hosts_.end();
        ++iter) {
-    if (iter->second->FilterConnectionMessage(route_id, sent_message_port_id,
-                                              filter))
+    if (iter->second->SendConnectToWorker(worker_route_id, port, filter))
       return;
   }
 }
 
 void SharedWorkerServiceImpl::DocumentDetached(
-    unsigned long long document_id,
-    SharedWorkerMessageFilter* filter) {
+    SharedWorkerMessageFilter* filter,
+    unsigned long long document_id) {
   ScopedWorkerDependencyChecker checker(this);
   for (WorkerHostMap::const_iterator iter = worker_hosts_.begin();
        iter != worker_hosts_.end();
@@ -348,9 +376,18 @@ void SharedWorkerServiceImpl::DocumentDetached(
   }
 }
 
+void SharedWorkerServiceImpl::CountFeature(SharedWorkerMessageFilter* filter,
+                                           int worker_route_id,
+                                           uint32_t feature) {
+  if (SharedWorkerHost* host =
+          FindSharedWorkerHost(filter->render_process_id(), worker_route_id)) {
+    host->CountFeature(feature);
+  }
+}
+
 void SharedWorkerServiceImpl::WorkerContextClosed(
-    int worker_route_id,
-    SharedWorkerMessageFilter* filter) {
+    SharedWorkerMessageFilter* filter,
+    int worker_route_id) {
   ScopedWorkerDependencyChecker checker(this);
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
@@ -358,32 +395,36 @@ void SharedWorkerServiceImpl::WorkerContextClosed(
 }
 
 void SharedWorkerServiceImpl::WorkerContextDestroyed(
-    int worker_route_id,
-    SharedWorkerMessageFilter* filter) {
+    SharedWorkerMessageFilter* filter,
+    int worker_route_id) {
   ScopedWorkerDependencyChecker checker(this);
+  if (SharedWorkerHost* host =
+          FindSharedWorkerHost(filter->render_process_id(), worker_route_id)) {
+    host->WorkerContextDestroyed();
+  }
   ProcessRouteIdPair key(filter->render_process_id(), worker_route_id);
   worker_hosts_.erase(key);
 }
 
 void SharedWorkerServiceImpl::WorkerReadyForInspection(
-    int worker_route_id,
-    SharedWorkerMessageFilter* filter) {
+    SharedWorkerMessageFilter* filter,
+    int worker_route_id) {
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
     host->WorkerReadyForInspection();
 }
 
 void SharedWorkerServiceImpl::WorkerScriptLoaded(
-    int worker_route_id,
-    SharedWorkerMessageFilter* filter) {
+    SharedWorkerMessageFilter* filter,
+    int worker_route_id) {
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
     host->WorkerScriptLoaded();
 }
 
 void SharedWorkerServiceImpl::WorkerScriptLoadFailed(
-    int worker_route_id,
-    SharedWorkerMessageFilter* filter) {
+    SharedWorkerMessageFilter* filter,
+    int worker_route_id) {
   ScopedWorkerDependencyChecker checker(this);
   ProcessRouteIdPair key(filter->render_process_id(), worker_route_id);
   if (!base::ContainsKey(worker_hosts_, key))
@@ -393,20 +434,18 @@ void SharedWorkerServiceImpl::WorkerScriptLoadFailed(
   host->WorkerScriptLoadFailed();
 }
 
-void SharedWorkerServiceImpl::WorkerConnected(
-    int message_port_id,
-    int worker_route_id,
-    SharedWorkerMessageFilter* filter) {
+void SharedWorkerServiceImpl::WorkerConnected(SharedWorkerMessageFilter* filter,
+                                              int connection_request_id,
+                                              int worker_route_id) {
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
-    host->WorkerConnected(message_port_id);
+    host->WorkerConnected(connection_request_id);
 }
 
-void SharedWorkerServiceImpl::AllowFileSystem(
-    int worker_route_id,
-    const GURL& url,
-    IPC::Message* reply_msg,
-    SharedWorkerMessageFilter* filter) {
+void SharedWorkerServiceImpl::AllowFileSystem(SharedWorkerMessageFilter* filter,
+                                              int worker_route_id,
+                                              const GURL& url,
+                                              IPC::Message* reply_msg) {
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id)) {
     host->AllowFileSystem(url, base::WrapUnique(reply_msg));
@@ -416,12 +455,11 @@ void SharedWorkerServiceImpl::AllowFileSystem(
   }
 }
 
-void SharedWorkerServiceImpl::AllowIndexedDB(
-    int worker_route_id,
-    const GURL& url,
-    const base::string16& name,
-    bool* result,
-    SharedWorkerMessageFilter* filter) {
+void SharedWorkerServiceImpl::AllowIndexedDB(SharedWorkerMessageFilter* filter,
+                                             int worker_route_id,
+                                             const GURL& url,
+                                             const base::string16& name,
+                                             bool* result) {
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
     host->AllowIndexedDB(url, name, result);
@@ -504,32 +542,14 @@ SharedWorkerServiceImpl::ReserveRenderProcessToCreateWorker(
   }
 
   const int pending_instance_id = next_pending_instance_id_++;
-  scoped_refptr<SharedWorkerReserver> reserver(
-      new SharedWorkerReserver(pending_instance_id,
-                               worker_process_id,
-                               worker_route_id,
-                               is_new_worker,
-                               *pending_instance->instance()));
-  BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(
-          &SharedWorkerReserver::TryReserve,
-          reserver,
-          base::Bind(&SharedWorkerServiceImpl::RenderProcessReservedCallback,
-                     base::Unretained(this),
-                     pending_instance_id,
-                     worker_process_id,
-                     worker_route_id,
-                     is_new_worker),
-          base::Bind(
-              &SharedWorkerServiceImpl::RenderProcessReserveFailedCallback,
-              base::Unretained(this),
-              pending_instance_id,
-              worker_process_id,
-              worker_route_id,
-              is_new_worker),
-          s_try_increment_worker_ref_count_));
+  SharedWorkerReserver::TryReserve(
+      worker_process_id, worker_route_id, is_new_worker,
+      *pending_instance->instance(),
+      base::Bind(&SharedWorkerServiceImpl::RenderProcessReservedCallback,
+                 base::Unretained(this), pending_instance_id),
+      base::Bind(&SharedWorkerServiceImpl::RenderProcessReserveFailedCallback,
+                 base::Unretained(this), pending_instance_id),
+      s_try_increment_worker_ref_count_);
   pending_instances_[pending_instance_id] = std::move(pending_instance);
   return creation_error;
 }
@@ -594,7 +614,9 @@ void SharedWorkerServiceImpl::RenderProcessReserveFailedCallback(
     int pending_instance_id,
     int worker_process_id,
     int worker_route_id,
-    bool is_new_worker) {
+    bool is_new_worker,
+    bool pause_on_start) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   worker_hosts_.erase(std::make_pair(worker_process_id, worker_route_id));
   if (!base::ContainsKey(pending_instances_, pending_instance_id))
     return;

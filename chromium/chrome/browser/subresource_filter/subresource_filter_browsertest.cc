@@ -17,19 +17,23 @@
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
+#include "chrome/browser/page_load_metrics/observers/subresource_filter_metrics_observer.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/subresource_filter/test_ruleset_publisher.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "components/safe_browsing_db/util.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
-#include "components/subresource_filter/core/common/activation_state.h"
+#include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/scoped_timers.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
 #include "content/public/browser/browser_thread.h"
@@ -39,6 +43,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -52,7 +57,7 @@ static constexpr const char kTestFrameSetPath[] =
     "subresource_filter/frame_set.html";
 
 // Names of DocumentLoad histograms.
-constexpr const char kDocumentLoadActivationState[] =
+constexpr const char kDocumentLoadActivationLevel[] =
     "SubresourceFilter.DocumentLoad.ActivationState";
 constexpr const char kSubresourceLoadsTotal[] =
     "SubresourceFilter.DocumentLoad.NumSubresourceLoads.Total";
@@ -186,6 +191,8 @@ using subresource_filter::testing::ScopedSubresourceFilterFeatureToggle;
 using subresource_filter::testing::TestRulesetPublisher;
 using subresource_filter::testing::TestRulesetCreator;
 using subresource_filter::testing::TestRulesetPair;
+using ActivationDecision =
+    ContentSubresourceFilterDriverFactory::ActivationDecision;
 
 // SubresourceFilterDisabledBrowserTest ---------------------------------------
 
@@ -200,8 +207,10 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledBrowserTest,
 
 class SubresourceFilterBrowserTestImpl : public InProcessBrowserTest {
  public:
-  explicit SubresourceFilterBrowserTestImpl(bool measure_performance)
-      : measure_performance_(measure_performance) {}
+  explicit SubresourceFilterBrowserTestImpl(bool measure_performance,
+                                            bool whitelist_site_on_reload)
+      : measure_performance_(measure_performance),
+        whitelist_site_on_reload_(whitelist_site_on_reload) {}
 
   ~SubresourceFilterBrowserTestImpl() override {}
 
@@ -232,9 +241,10 @@ class SubresourceFilterBrowserTestImpl : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     scoped_feature_toggle_.reset(new ScopedSubresourceFilterFeatureToggle(
-        base::FeatureList::OVERRIDE_ENABLE_FEATURE, kActivationStateEnabled,
+        base::FeatureList::OVERRIDE_ENABLE_FEATURE, kActivationLevelEnabled,
         kActivationScopeActivationList, kActivationListPhishingInterstitial,
-        measure_performance_ ? "1" : "0"));
+        measure_performance_ ? "1" : "0", "" /* suppress_notifications */,
+        whitelist_site_on_reload_ ? "true" : "false"));
 
     base::FilePath test_data_dir;
     PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
@@ -326,20 +336,22 @@ class SubresourceFilterBrowserTestImpl : public InProcessBrowserTest {
   }
 
  private:
+  TestRulesetCreator ruleset_creator_;
   safe_browsing::TestSafeBrowsingServiceFactory test_safe_browsing_factory_;
   scoped_refptr<FakeSafeBrowsingDatabaseManager> fake_safe_browsing_database_;
 
   std::unique_ptr<ScopedSubresourceFilterFeatureToggle> scoped_feature_toggle_;
   TestRulesetPublisher test_ruleset_publisher_;
-  bool measure_performance_;
-  TestRulesetCreator ruleset_creator_;
+  const bool measure_performance_;
+  const bool whitelist_site_on_reload_;
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilterBrowserTestImpl);
 };
 
 class SubresourceFilterBrowserTest : public SubresourceFilterBrowserTestImpl {
  public:
-  SubresourceFilterBrowserTest() : SubresourceFilterBrowserTestImpl(false) {}
+  SubresourceFilterBrowserTest()
+      : SubresourceFilterBrowserTestImpl(false, false) {}
 };
 
 // TODO(pkalinnikov): It should be possible to have only one fixture, i.e.,
@@ -351,7 +363,14 @@ class SubresourceFilterWithPerformanceMeasurementBrowserTest
     : public SubresourceFilterBrowserTestImpl {
  public:
   SubresourceFilterWithPerformanceMeasurementBrowserTest()
-      : SubresourceFilterBrowserTestImpl(true) {}
+      : SubresourceFilterBrowserTestImpl(true, false) {}
+};
+
+class SubresourceFilterWhitelistSiteOnReloadBrowserTest
+    : public SubresourceFilterBrowserTestImpl {
+ public:
+  SubresourceFilterWhitelistSiteOnReloadBrowserTest()
+      : SubresourceFilterBrowserTestImpl(false, true) {}
 };
 
 // Tests -----------------------------------------------------------------------
@@ -404,8 +423,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
   base::HistogramTester tester;
   ui_test_utils::NavigateToURL(browser(), url);
 
-  const auto kSubframeNames = {"one", "two", "three"};
-  const auto kExpectScriptInFrameToLoad = {false, true, false};
+  const std::vector<const char*> kSubframeNames{"one", "two", "three"};
+  const std::vector<bool> kExpectScriptInFrameToLoad{false, true, false};
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectScriptInFrameToLoad));
 
@@ -421,9 +440,11 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
 
-  const auto kSubframeNames = {"one", "two", "three"};
-  const auto kExpectScriptInFrameToLoadWithoutActivation = {true, true, true};
-  const auto kExpectScriptInFrameToLoadWithActivation = {false, true, false};
+  const std::vector<const char*> kSubframeNames{"one", "two", "three"};
+  const std::vector<bool> kExpectScriptInFrameToLoadWithoutActivation{
+      true, true, true};
+  const std::vector<bool> kExpectScriptInFrameToLoadWithActivation{false, true,
+                                                                   false};
 
   ui_test_utils::NavigateToURL(browser(), url_without_activation);
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
@@ -470,8 +491,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
 
-  const auto kSubframeNames = {"one", "two", "three"};
-  const auto kExpectScriptInFrameToLoad = {true, true, true};
+  const std::vector<const char*> kSubframeNames{"one", "two", "three"};
+  const std::vector<bool> kExpectScriptInFrameToLoad{true, true, true};
 
   for (const auto& url_with_activation :
        {url_with_activation_but_dns_error,
@@ -545,8 +566,27 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, NoActivationOnAboutBlank) {
   // The only frames where filtering was (even considered to be) activated
   // should be the main frame, and the child that was navigated to an HTTP URL.
   histogram_tester.ExpectUniqueSample(
-      "SubresourceFilter.DocumentLoad.ActivationState",
-      static_cast<base::Histogram::Sample>(ActivationState::ENABLED), 2);
+      kDocumentLoadActivationLevel,
+      static_cast<base::Histogram::Sample>(ActivationLevel::ENABLED), 2);
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, PageLoadMetrics) {
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureAsPhishingURL(url);
+
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+
+  base::HistogramTester histogram_tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  // Force a navigation to another page, which flushes page load metrics for the
+  // previous page load.
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  histogram_tester.ExpectTotalCount(internal::kHistogramSubresourceFilterCount,
+                                    1);
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
@@ -589,8 +629,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
   ui_test_utils::NavigateToURL(browser(), a_url);
-  ExpectParsedScriptElementLoadedStatusInFrames({"b", "c", "d"},
-                                                {false, false, false});
+  ExpectParsedScriptElementLoadedStatusInFrames(
+      std::vector<const char*>{"b", "c", "d"}, {false, false, false});
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
@@ -602,7 +642,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
       SetRulesetWithRules({testing::CreateSuffixRule("included_script.js"),
                            testing::CreateWhitelistRuleForDocument("c.com")}));
   ui_test_utils::NavigateToURL(browser(), a_url);
-  ExpectParsedScriptElementLoadedStatusInFrames({"b", "d"}, {false, true});
+  ExpectParsedScriptElementLoadedStatusInFrames(
+      std::vector<const char*>{"b", "d"}, {false, true});
 }
 
 // Tests checking how histograms are recorded. ---------------------------------
@@ -640,8 +681,8 @@ void ExpectHistogramsAreRecordedForTestFrameSet(
   tester.ExpectTotalCount(kActivationCPUDuration, 6);
 
   tester.ExpectUniqueSample(
-      kDocumentLoadActivationState,
-      static_cast<base::Histogram::Sample>(ActivationState::ENABLED), 6);
+      kDocumentLoadActivationLevel,
+      static_cast<base::Histogram::Sample>(ActivationLevel::ENABLED), 6);
 
   EXPECT_THAT(tester.GetAllSamples(kSubresourceLoadsTotal),
               ::testing::ElementsAre(base::Bucket(0, 3), base::Bucket(2, 3)));
@@ -657,9 +698,12 @@ void ExpectHistogramsAreRecordedForTestFrameSet(
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
-                       ExpectHistogramsAreRecorded) {
+                       ExpectHistogramsAreRecordedForFilteredChildFrames) {
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+
+  // Navigate to a URL which doesn't include any filtered resources in the
+  // top-level document, but which includes filtered resources in child frames.
   const GURL url = GetTestUrl(kTestFrameSetPath);
   ConfigureAsPhishingURL(url);
 
@@ -668,6 +712,14 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
 
   ExpectHistogramsAreRecordedForTestFrameSet(
       tester, false /* expect_performance_measurements */);
+
+  // Force a navigation to another page, which flushes page load metrics for the
+  // previous page load.
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  // Make sure that pages that have subresource filtered in child frames are
+  // also counted.
+  tester.ExpectTotalCount(internal::kHistogramSubresourceFilterCount, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterWithPerformanceMeasurementBrowserTest,
@@ -682,6 +734,185 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterWithPerformanceMeasurementBrowserTest,
 
   ExpectHistogramsAreRecordedForTestFrameSet(
       tester, true /* expect_performance_measurements */);
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       ExpectHistogramsNotRecordedWhenFilteringNotActivated) {
+  ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
+      "suffix-that-does-not-match-anything"));
+  const GURL url = GetTestUrl(kTestFrameSetPath);
+  // Note: The |url| is not configured to be fishing.
+
+  base::HistogramTester tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // The following histograms are generated only when filtering is activated.
+  tester.ExpectTotalCount(kSubresourceLoadsTotalForPage, 0);
+  tester.ExpectTotalCount(kSubresourceLoadsEvaluatedForPage, 0);
+  tester.ExpectTotalCount(kSubresourceLoadsMatchedRulesForPage, 0);
+  tester.ExpectTotalCount(kSubresourceLoadsDisallowedForPage, 0);
+  tester.ExpectTotalCount(kEvaluationTotalWallDurationForPage, 0);
+  tester.ExpectTotalCount(kEvaluationTotalCPUDurationForPage, 0);
+
+  // The rest is produced by renderers, therefore needs to be merged here.
+  content::FetchHistogramsFromChildProcesses();
+  SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+
+  // But they still should not be recorded as the filtering is not activated.
+  tester.ExpectTotalCount(kEvaluationTotalWallDurationForDocument, 0);
+  tester.ExpectTotalCount(kEvaluationTotalCPUDurationForDocument, 0);
+  tester.ExpectTotalCount(kEvaluationWallDuration, 0);
+  tester.ExpectTotalCount(kEvaluationCPUDuration, 0);
+
+  tester.ExpectTotalCount(kActivationWallDuration, 0);
+  tester.ExpectTotalCount(kActivationCPUDuration, 0);
+
+  tester.ExpectTotalCount(kSubresourceLoadsTotal, 0);
+  tester.ExpectTotalCount(kSubresourceLoadsEvaluated, 0);
+  tester.ExpectTotalCount(kSubresourceLoadsMatchedRules, 0);
+  tester.ExpectTotalCount(kSubresourceLoadsDisallowed, 0);
+
+  // Although SubresourceFilterAgents still record the activation decision.
+  tester.ExpectUniqueSample(
+      kDocumentLoadActivationLevel,
+      static_cast<base::Histogram::Sample>(ActivationLevel::DISABLED), 6);
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       ActivationEnabledOnReloadByDefault) {
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureAsPhishingURL(url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+
+  base::HistogramTester tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  content::TestNavigationObserver observer(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      content::MessageLoopRunner::QuitMode::DEFERRED);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  observer.Wait();
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecision, 2);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::ACTIVATED), 2);
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload, 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload,
+      static_cast<int>(ActivationDecision::ACTIVATED), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterWhitelistSiteOnReloadBrowserTest,
+                       ActivationDisabledOnReload) {
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureAsPhishingURL(url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+
+  base::HistogramTester tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  content::TestNavigationObserver observer(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      content::MessageLoopRunner::QuitMode::DEFERRED);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  observer.Wait();
+  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecision, 2);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::ACTIVATED), 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::URL_WHITELISTED), 1);
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload, 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload,
+      static_cast<int>(ActivationDecision::URL_WHITELISTED), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterWhitelistSiteOnReloadBrowserTest,
+                       ActivationDisabledOnReloadFromScript) {
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureAsPhishingURL(url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+
+  base::HistogramTester tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  content::TestNavigationObserver observer(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      content::MessageLoopRunner::QuitMode::DEFERRED);
+  ASSERT_TRUE(content::ExecuteScript(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "location.reload();"));
+  observer.Wait();
+  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecision, 2);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::ACTIVATED), 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::URL_WHITELISTED), 1);
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload, 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload,
+      static_cast<int>(ActivationDecision::URL_WHITELISTED), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterWhitelistSiteOnReloadBrowserTest,
+                       ActivationDisabledOnNavigationToSameURL) {
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureAsPhishingURL(url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+
+  base::HistogramTester tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  content::TestNavigationObserver observer(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      content::MessageLoopRunner::QuitMode::DEFERRED);
+  std::string nav_frame_script = "location.href = '" + url.spec() + "';";
+  ASSERT_TRUE(content::ExecuteScript(
+      browser()->tab_strip_model()->GetActiveWebContents(), nav_frame_script));
+  observer.Wait();
+  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecision, 2);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::ACTIVATED), 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecision,
+      static_cast<int>(ActivationDecision::URL_WHITELISTED), 1);
+
+  tester.ExpectTotalCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload, 1);
+  tester.ExpectBucketCount(
+      internal::kHistogramSubresourceFilterActivationDecisionReload,
+      static_cast<int>(ActivationDecision::URL_WHITELISTED), 1);
 }
 
 }  // namespace subresource_filter

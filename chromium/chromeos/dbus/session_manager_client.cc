@@ -19,6 +19,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/blocking_method_caller.h"
@@ -305,6 +306,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
         callback);
   }
 
+  bool SupportsRestartToApplyUserFlags() const override { return true; }
+
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
@@ -373,18 +376,6 @@ class SessionManagerClientImpl : public SessionManagerClient {
                    login_manager::kSessionManagerStopArcInstance, callback));
   }
 
-  void PrioritizeArcInstance(const ArcCallback& callback) override {
-    dbus::MethodCall method_call(
-        login_manager::kSessionManagerInterface,
-        login_manager::kSessionManagerPrioritizeArcInstance);
-    session_manager_proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&SessionManagerClientImpl::OnArcMethod,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   login_manager::kSessionManagerPrioritizeArcInstance,
-                   callback));
-  }
-
   void SetArcCpuRestriction(
       login_manager::ContainerCpuRestrictionState restriction_state,
       const ArcCallback& callback) override {
@@ -401,9 +392,17 @@ class SessionManagerClientImpl : public SessionManagerClient {
                    callback));
   }
 
-  void EmitArcBooted() override {
-    SimpleMethodCallToSessionManager(
-        login_manager::kSessionManagerEmitArcBooted);
+  void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override {
+    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
+                                 login_manager::kSessionManagerEmitArcBooted);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(cryptohome_id.id());
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnArcMethod,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   login_manager::kSessionManagerEmitArcBooted, callback));
   }
 
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override {
@@ -985,6 +984,9 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     StorePolicyForUser(cryptohome::Identification::FromString(account_id),
                        policy_blob, callback);
   }
+
+  bool SupportsRestartToApplyUserFlags() const override { return false; }
+
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override {}
 
@@ -1007,17 +1009,16 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     callback.Run(StartArcInstanceResult::UNKNOWN_ERROR);
   }
 
-  void PrioritizeArcInstance(const ArcCallback& callback) override {
-    callback.Run(false);
-  }
-
   void SetArcCpuRestriction(
       login_manager::ContainerCpuRestrictionState restriction_state,
       const ArcCallback& callback) override {
     callback.Run(false);
   }
 
-  void EmitArcBooted() override {}
+  void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override {
+    callback.Run(false);
+  }
 
   void StopArcInstance(const ArcCallback& callback) override {
     callback.Run(false);
@@ -1029,8 +1030,10 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override {
-    if (!callback.is_null())
-      callback.Run(false);
+    if (callback.is_null())
+      return;
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  base::Bind(callback, false));
   }
 
  private:

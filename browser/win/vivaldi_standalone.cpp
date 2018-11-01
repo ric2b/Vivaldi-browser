@@ -31,7 +31,8 @@ bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
   // Check if the magic file exists. If so we are standalone.
   base::FilePath exe_file_path;
   PathService::Get(base::DIR_EXE, &exe_file_path);
-  is_standalone = is_standalone ||
+  is_standalone =
+      is_standalone ||
       base::PathExists(exe_file_path.Append(kStandaloneProfileHelper));
 
   if (is_standalone && result) {
@@ -41,7 +42,8 @@ bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
   // Make sure the --vivaldi-standalone switch is set. Code shared with the
   // installer depends on it, i.e. prog-id suffix generation.
   if (is_standalone)
-    command_line.AppendSwitchNoDup(installer::switches::kVivaldiStandalone);
+    vivaldi::CommandLineAppendSwitchNoDup(
+        command_line, installer::switches::kVivaldiStandalone);
 
   return is_standalone;
 }

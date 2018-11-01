@@ -16,6 +16,7 @@
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
 #include "chrome/browser/ui/webui/chromeos/login/supervised_user_creation_screen_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
+#include "components/login/secure_module_util_chromeos.h"
 #include "ui/gfx/image/image_skia.h"
 
 class Profile;
@@ -37,7 +38,7 @@ class SupervisedUserCreationScreen
       public CameraPresenceNotifier::Observer {
  public:
   SupervisedUserCreationScreen(BaseScreenDelegate* base_screen_delegate,
-                               SupervisedUserCreationScreenHandler* actor);
+                               SupervisedUserCreationScreenHandler* view);
   ~SupervisedUserCreationScreen() override;
 
   static SupervisedUserCreationScreen* Get(ScreenManager* manager);
@@ -79,7 +80,7 @@ class SupervisedUserCreationScreen
   void Hide() override;
 
   // SupervisedUserCreationScreenHandler::Delegate implementation:
-  void OnActorDestroyed(SupervisedUserCreationScreenHandler* actor) override;
+  void OnViewDestroyed(SupervisedUserCreationScreenHandler* view) override;
   void CreateSupervisedUser(
       const base::string16& display_name,
       const std::string& supervised_user_password) override;
@@ -122,8 +123,9 @@ class SupervisedUserCreationScreen
  private:
   void ApplyPicture();
   void OnGetSupervisedUsers(const base::DictionaryValue* users);
+  void UpdateSecureModuleMessages(::login::SecureModuleUsed secure_module_used);
 
-  SupervisedUserCreationScreenHandler* actor_;
+  SupervisedUserCreationScreenHandler* view_;
 
   std::unique_ptr<SupervisedUserCreationController> controller_;
   std::unique_ptr<base::DictionaryValue> existing_users_;

@@ -216,6 +216,18 @@ base::TimeDelta GetPasswordRevealDuration() {
              : base::TimeDelta();
 }
 
+bool IsControlKeyModifier(int flags) {
+// XKB layout doesn't natively generate printable characters from a
+// Control-modified key combination, but we cannot extend it to other platforms
+// as Control has different meanings and behaviors.
+// https://crrev.com/2580483002/#msg46
+#if defined(OS_LINUX)
+  return flags & ui::EF_CONTROL_DOWN;
+#else
+  return false;
+#endif
+}
+
 }  // namespace
 
 // static
@@ -262,6 +274,11 @@ Textfield::Textfield()
       weak_ptr_factory_(this) {
   set_context_menu_controller(this);
   set_drag_controller(this);
+  cursor_view_.SetPaintToLayer(ui::LAYER_SOLID_COLOR);
+  cursor_view_.layer()->SetColor(GetTextColor());
+  // |cursor_view_| is owned by Textfield view.
+  cursor_view_.set_owned_by_client();
+  AddChildView(&cursor_view_);
   GetRenderText()->SetFontList(GetDefaultFontList());
   View::SetBorder(std::unique_ptr<Border>(new FocusableBorder()));
   SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -438,7 +455,12 @@ bool Textfield::GetCursorEnabled() const {
 }
 
 void Textfield::SetCursorEnabled(bool enabled) {
+  if (GetRenderText()->cursor_enabled() == enabled)
+    return;
+
   GetRenderText()->SetCursorEnabled(enabled);
+  UpdateCursorViewPosition();
+  UpdateCursorVisibility();
 }
 
 const gfx::FontList& Textfield::GetFontList() const {
@@ -575,19 +597,23 @@ gfx::NativeCursor Textfield::GetCursor(const ui::MouseEvent& event) {
 }
 
 bool Textfield::OnMousePressed(const ui::MouseEvent& event) {
+  const bool had_focus = HasFocus();
   bool handled = controller_ && controller_->HandleMouseEvent(this, event);
   if (!handled &&
       (event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton())) {
-    RequestFocus();
+    if (!had_focus)
+      RequestFocus();
     ShowImeIfNeeded();
   }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  if (!handled && !HasFocus() && event.IsOnlyMiddleMouseButton())
+  if (!handled && !had_focus && event.IsOnlyMiddleMouseButton())
     RequestFocus();
 #endif
 
-  return selection_controller_.OnMousePressed(event, handled);
+  return selection_controller_.OnMousePressed(
+      event, handled, had_focus ? SelectionController::FOCUSED
+                                : SelectionController::UNFOCUSED);
 }
 
 bool Textfield::OnMouseDragged(const ui::MouseEvent& event) {
@@ -897,6 +923,15 @@ void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 }
 
 bool Textfield::HandleAccessibleAction(const ui::AXActionData& action_data) {
+  if (action_data.action == ui::AX_ACTION_SET_SELECTION) {
+    if (action_data.anchor_node_id != action_data.focus_node_id)
+      return false;
+    // TODO(nektar): Check that the focus_node_id matches the ID of this node.
+    const gfx::Range range(action_data.anchor_offset, action_data.focus_offset);
+    return SetSelectionRange(range);
+  }
+
+  // Remaining actions cannot be performed on readonly fields.
   if (read_only())
     return View::HandleAccessibleAction(action_data);
 
@@ -950,8 +985,10 @@ void Textfield::OnPaint(gfx::Canvas* canvas) {
 
 void Textfield::OnFocus() {
   GetRenderText()->set_focused(true);
-  if (ShouldShowCursor())
-    GetRenderText()->set_cursor_visible(true);
+  if (ShouldShowCursor()) {
+    UpdateCursorViewPosition();
+    cursor_view_.SetVisible(true);
+  }
   if (GetInputMethod())
     GetInputMethod()->SetFocusedTextInputClient(this);
   OnCaretBoundsChanged();
@@ -972,10 +1009,7 @@ void Textfield::OnBlur() {
   if (GetInputMethod())
     GetInputMethod()->DetachTextInputClient(this);
   StopBlinkingCursor();
-  if (render_text->cursor_visible()) {
-    render_text->set_cursor_visible(false);
-    RepaintCursor();
-  }
+  cursor_view_.SetVisible(false);
 
   DestroyTouchSelection();
 
@@ -993,10 +1027,10 @@ void Textfield::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   gfx::RenderText* render_text = GetRenderText();
   render_text->SetColor(GetTextColor());
   UpdateBackgroundColor();
-  render_text->set_cursor_color(GetTextColor());
   render_text->set_selection_color(GetSelectionTextColor());
   render_text->set_selection_background_focused_color(
       GetSelectionBackgroundColor());
+  cursor_view_.layer()->SetColor(GetTextColor());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1038,16 +1072,21 @@ void Textfield::WriteDragDataForView(View* sender,
       display::Screen::GetScreen()->GetDisplayNearestWindow(native_view);
   size.SetToMin(gfx::Size(display.size().width(), height()));
   label.SetBoundsRect(gfx::Rect(size));
-  std::unique_ptr<gfx::Canvas> canvas(
-      GetCanvasForDragImage(GetWidget(), label.size()));
   label.SetEnabledColor(GetTextColor());
+
+  SkBitmap bitmap;
+  float raster_scale = ScaleFactorForDragFromWidget(GetWidget());
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // Desktop Linux Aura does not yet support transparency in drag images.
-  canvas->DrawColor(GetBackgroundColor());
+  SkColor color = GetBackgroundColor();
+#else
+  SkColor color = SK_ColorTRANSPARENT;
 #endif
-  label.Paint(ui::CanvasPainter(canvas.get(), 1.f).context());
+  label.Paint(
+      ui::CanvasPainter(&bitmap, label.size(), raster_scale, color).context());
   const gfx::Vector2d kOffset(-15, 0);
-  drag_utils::SetDragImageOnDataObject(*canvas, kOffset, data);
+  gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, raster_scale));
+  drag_utils::SetDragImageOnDataObject(image, kOffset, data);
   if (controller_)
     controller_->OnWriteDragData(data);
 }
@@ -1276,13 +1315,14 @@ void Textfield::InsertChar(const ui::KeyEvent& event) {
   }
 
   // Filter out all control characters, including tab and new line characters,
-  // and all characters with Alt modifier (and Search on ChromeOS). But allow
-  // characters with the AltGr modifier. On Windows AltGr is represented by
-  // Alt+Ctrl or Right Alt, and on Linux it's a different flag that we don't
-  // care about.
+  // and all characters with Alt modifier (and Search on ChromeOS, Ctrl on
+  // Linux). But allow characters with the AltGr modifier. On Windows AltGr is
+  // represented by Alt+Ctrl or Right Alt, and on Linux it's a different flag
+  // that we don't care about.
   const base::char16 ch = event.GetCharacter();
   const bool should_insert_char = ((ch >= 0x20 && ch < 0x7F) || ch > 0x9F) &&
-                                  !ui::IsSystemKeyModifier(event.flags());
+                                  !ui::IsSystemKeyModifier(event.flags()) &&
+                                  !IsControlKeyModifier(event.flags());
   if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE || !should_insert_char)
     return;
 
@@ -1874,17 +1914,9 @@ void Textfield::UpdateAfterChange(bool text_changed, bool cursor_changed) {
     NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
   }
   if (cursor_changed) {
-    GetRenderText()->set_cursor_visible(ShouldShowCursor());
-    RepaintCursor();
-    if (ShouldBlinkCursor())
-      StartBlinkingCursor();
-    else
-      StopBlinkingCursor();
-    if (!text_changed) {
-      // TEXT_CHANGED implies TEXT_SELECTION_CHANGED, so we only need to fire
-      // this if only the selection changed.
-      NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_SELECTION_CHANGED, true);
-    }
+    UpdateCursorViewPosition();
+    UpdateCursorVisibility();
+    NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_SELECTION_CHANGED, true);
   }
   if (text_changed || cursor_changed) {
     OnCaretBoundsChanged();
@@ -1892,10 +1924,18 @@ void Textfield::UpdateAfterChange(bool text_changed, bool cursor_changed) {
   }
 }
 
-void Textfield::RepaintCursor() {
-  gfx::Rect r(GetRenderText()->GetUpdatedCursorBounds());
-  r.Inset(-1, -1, -1, -1);
-  SchedulePaintInRect(r);
+void Textfield::UpdateCursorVisibility() {
+  cursor_view_.SetVisible(ShouldShowCursor());
+  if (ShouldBlinkCursor())
+    StartBlinkingCursor();
+  else
+    StopBlinkingCursor();
+}
+
+void Textfield::UpdateCursorViewPosition() {
+  gfx::Rect location(GetRenderText()->GetUpdatedCursorBounds());
+  location.set_x(GetMirroredXForRect(location));
+  cursor_view_.SetBoundsRect(location);
 }
 
 void Textfield::PaintTextAndCursor(gfx::Canvas* canvas) {
@@ -1915,8 +1955,10 @@ void Textfield::PaintTextAndCursor(gfx::Canvas* canvas) {
   render_text->Draw(canvas);
 
   // Draw the detached drop cursor that marks where the text will be dropped.
-  if (drop_cursor_visible_)
-    render_text->DrawCursor(canvas, drop_cursor_position_);
+  if (drop_cursor_visible_) {
+    canvas->FillRect(render_text->GetCursorBounds(drop_cursor_position_, true),
+                     GetTextColor());
+  }
 
   canvas->Restore();
 }
@@ -2034,7 +2076,7 @@ void Textfield::OnEditFailed() {
 
 bool Textfield::ShouldShowCursor() const {
   return HasFocus() && !HasSelection() && enabled() && !read_only() &&
-         !drop_cursor_visible_;
+         !drop_cursor_visible_ && GetRenderText()->cursor_enabled();
 }
 
 bool Textfield::ShouldBlinkCursor() const {
@@ -2054,9 +2096,8 @@ void Textfield::StopBlinkingCursor() {
 
 void Textfield::OnCursorBlinkTimerFired() {
   DCHECK(ShouldBlinkCursor());
-  gfx::RenderText* render_text = GetRenderText();
-  render_text->set_cursor_visible(!render_text->cursor_visible());
-  RepaintCursor();
+  cursor_view_.SetVisible(!cursor_view_.visible());
+  UpdateCursorViewPosition();
 }
 
 }  // namespace views

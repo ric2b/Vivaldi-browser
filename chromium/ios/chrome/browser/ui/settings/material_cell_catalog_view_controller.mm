@@ -8,6 +8,9 @@
 
 #import "base/mac/foundation_util.h"
 #include "components/grit/components_scaled_resources.h"
+#import "ios/chrome/browser/payments/cells/autofill_profile_item.h"
+#import "ios/chrome/browser/payments/cells/payments_text_item.h"
+#import "ios/chrome/browser/payments/cells/price_item.h"
 #import "ios/chrome/browser/ui/autofill/cells/cvc_item.h"
 #import "ios/chrome/browser/ui/autofill/cells/status_item.h"
 #import "ios/chrome/browser/ui/autofill/cells/storage_switch_item.h"
@@ -40,6 +43,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSwitchCell,
   SectionIdentifierNativeAppCell,
   SectionIdentifierAutofill,
+  SectionIdentifierPayments,
   SectionIdentifierAccountCell,
   SectionIdentifierAccountControlCell,
   SectionIdentifierFooters,
@@ -63,6 +67,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeAccountCheckMark,
   ItemTypeAccountSignIn,
   ItemTypeApp,
+  ItemTypePaymentsSingleLine,
+  ItemTypePaymentsDynamicHeight,
   ItemTypeAutofillDynamicHeight,
   ItemTypeAutofillCVC,
   ItemTypeAutofillStatus,
@@ -217,6 +223,58 @@ const CGFloat kHorizontalImageFixedSize = 40;
   [model addItem:[self storageSwitchItem]
       toSectionWithIdentifier:SectionIdentifierAutofill];
 
+  // Payments cells.
+  [model addSectionWithIdentifier:SectionIdentifierPayments];
+  [model addItem:[self paymentsItemWithWrappingTextandOptionalImage]
+      toSectionWithIdentifier:SectionIdentifierPayments];
+  PriceItem* priceItem1 =
+      [[[PriceItem alloc] initWithType:ItemTypePaymentsSingleLine] autorelease];
+  priceItem1.item = @"Total";
+  priceItem1.notification = @"Updated";
+  priceItem1.price = @"USD $100.00";
+  [model addItem:priceItem1 toSectionWithIdentifier:SectionIdentifierPayments];
+  PriceItem* priceItem2 =
+      [[[PriceItem alloc] initWithType:ItemTypePaymentsSingleLine] autorelease];
+  priceItem2.item = @"Price label is long and should get clipped";
+  priceItem2.notification = @"Updated";
+  priceItem2.price = @"USD $1,000,000.00";
+  [model addItem:priceItem2 toSectionWithIdentifier:SectionIdentifierPayments];
+  PriceItem* priceItem3 =
+      [[[PriceItem alloc] initWithType:ItemTypePaymentsSingleLine] autorelease];
+  priceItem3.item = @"Price label is long and should get clipped";
+  priceItem3.notification = @"Should get clipped too";
+  priceItem3.price = @"USD $1,000,000.00";
+  [model addItem:priceItem3 toSectionWithIdentifier:SectionIdentifierPayments];
+  PriceItem* priceItem4 =
+      [[[PriceItem alloc] initWithType:ItemTypePaymentsSingleLine] autorelease];
+  priceItem4.item = @"Price label is long and should get clipped";
+  priceItem4.notification = @"Should get clipped too";
+  priceItem4.price = @"USD $1,000,000,000.00";
+  [model addItem:priceItem4 toSectionWithIdentifier:SectionIdentifierPayments];
+
+  AutofillProfileItem* profileItem1 = [[[AutofillProfileItem alloc]
+      initWithType:ItemTypePaymentsDynamicHeight] autorelease];
+  profileItem1.name = @"Profile Name gets wrapped if it's too long";
+  profileItem1.address = @"Profile Address also gets wrapped if it's too long";
+  profileItem1.phoneNumber = @"123-456-7890";
+  profileItem1.email = @"foo@bar.com";
+  profileItem1.notification = @"Some fields are missing";
+  [model addItem:profileItem1
+      toSectionWithIdentifier:SectionIdentifierPayments];
+  AutofillProfileItem* profileItem2 = [[[AutofillProfileItem alloc]
+      initWithType:ItemTypePaymentsDynamicHeight] autorelease];
+  profileItem1.name = @"All fields are optional";
+  profileItem2.phoneNumber = @"123-456-7890";
+  profileItem2.notification = @"Some fields are missing";
+  [model addItem:profileItem2
+      toSectionWithIdentifier:SectionIdentifierPayments];
+  AutofillProfileItem* profileItem3 = [[[AutofillProfileItem alloc]
+      initWithType:ItemTypePaymentsDynamicHeight] autorelease];
+  profileItem3.address = @"All fields are optional";
+  profileItem3.email = @"foo@bar.com";
+  [model addItem:profileItem3
+      toSectionWithIdentifier:SectionIdentifierPayments];
+
   // Account cells.
   [model addSectionWithIdentifier:SectionIdentifierAccountCell];
   [model addItem:[self accountItemDetailWithError]
@@ -283,6 +341,7 @@ const CGFloat kHorizontalImageFixedSize = 40;
     case ItemTypeAutofillCVC:
     case ItemTypeAutofillStatus:
     case ItemTypeAutofillStorageSwitch:
+    case ItemTypePaymentsDynamicHeight:
     case ItemTypeAutofillDynamicHeight:
       return [MDCCollectionViewCell
           cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds)
@@ -434,6 +493,15 @@ const CGFloat kHorizontalImageFixedSize = 40;
   item.detailText =
       @"This is a very long text that is intended to overflow to two lines.";
   item.on = NO;
+  return item;
+}
+
+- (CollectionViewItem*)paymentsItemWithWrappingTextandOptionalImage {
+  PaymentsTextItem* item = [[[PaymentsTextItem alloc]
+      initWithType:ItemTypePaymentsDynamicHeight] autorelease];
+  item.text = @"If you want to display a long text that wraps to the next line "
+              @"and may need to feature an image this is the cell to use.";
+  item.image = [UIImage imageNamed:@"app_icon_placeholder"];
   return item;
 }
 

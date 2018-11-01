@@ -7,7 +7,6 @@ package org.chromium.base;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.ActivityManager;
-import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -34,7 +33,6 @@ import android.view.ViewGroup.MarginLayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodSubtype;
-import android.widget.RemoteViews;
 import android.widget.TextView;
 
 import java.io.File;
@@ -608,34 +606,6 @@ public class ApiCompatibilityUtils {
     }
 
     /**
-     * @see android.app.Notification.Builder#setContent(RemoteViews)
-     */
-    @SuppressWarnings("deprecation")
-    public static void setContentViewForNotificationBuilder(
-            Notification.Builder builder, RemoteViews views) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            builder.setCustomContentView(views);
-        } else {
-            builder.setContent(views);
-        }
-    }
-
-    /**
-     * @see android.app.Notification#bigContentView
-     */
-    @SuppressWarnings("deprecation")
-    public static Notification notificationWithBigContentView(
-            Notification.Builder builder, RemoteViews view) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return builder.setCustomBigContentView(view).build();
-        } else {
-            Notification notification = builder.build();
-            notification.bigContentView = view;
-            return notification;
-        }
-    }
-
-    /**
      * @see android.view.inputmethod.InputMethodSubType#getLocate()
      */
     @SuppressWarnings("deprecation")
@@ -658,6 +628,18 @@ public class ApiCompatibilityUtils {
     public static Uri getUriForImageCaptureFile(Context context, File file) {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2
                 ? ContentUriUtils.getContentUriFromFile(context, file)
+                : Uri.fromFile(file);
+    }
+
+    /**
+     * Get the URI for a downloaded file.
+     *
+     * @param file A downloaded file.
+     * @return URI for |file|.
+     */
+    public static Uri getUriForDownloadedFile(File file) {
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.M
+                ? FileUtils.getUriForFile(file)
                 : Uri.fromFile(file);
     }
 

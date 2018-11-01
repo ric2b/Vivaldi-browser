@@ -39,6 +39,8 @@ source_set("browser") {
     "cast_quota_permission_context.h",
     "cast_resource_dispatcher_host_delegate.cc",
     "cast_resource_dispatcher_host_delegate.h",
+    "cast_web_view.cc",
+    "cast_web_view.h",
     "devtools/cast_devtools_manager_delegate.cc",
     "devtools/cast_devtools_manager_delegate.h",
     "devtools/remote_debugging_server.cc",
@@ -47,6 +49,8 @@ source_set("browser") {
     "geolocation/cast_access_token_store.h",
     "media/media_caps_impl.cc",
     "media/media_caps_impl.h",
+    "media/supported_codec_finder.cc",
+    "media/supported_codec_finder.h",
     "metrics/cast_metrics_prefs.cc",
     "metrics/cast_metrics_prefs.h",
     "metrics/cast_metrics_service_client.cc",
@@ -55,6 +59,8 @@ source_set("browser") {
     "metrics/cast_stability_metrics_provider.h",
     "pref_service_helper.cc",
     "pref_service_helper.h",
+    "renderer_prelauncher.cc",
+    "renderer_prelauncher.h",
     "service/cast_service_simple.cc",
     "service/cast_service_simple.h",
     "url_request_context_factory.cc",
@@ -101,6 +107,7 @@ source_set("browser") {
     "//components/metrics:ui",
     "//components/network_hints/browser",
     "//components/prefs",
+    "//components/proxy_config",
     "//content",
     "//content/public/browser",
     "//content/public/common",
@@ -132,7 +139,6 @@ source_set("browser") {
       "//build/linux:fontconfig",
       "//components/metrics:serialization",
       "//ui/aura",
-      "//ui/base/ime",
     ]
   } else if (is_android) {
     sources += [
@@ -183,19 +189,12 @@ source_set("browser") {
 #    for incoming connections. Remember to add the provided interfaces to the
 #    "requires" field in the manifest of the service that needs them.
 #
-service_manifest_overlay("cast_content_browser_manifest_overlay") {
+service_manifest("cast_content_browser_manifest_overlay") {
   source = "cast_content_browser_manifest_overlay.json"
-
-  packaged_services = [ "media" ]
-
-  deps = [
-    "//media/mojo/services:media_manifest",
-  ]
+  packaged_services = [ "//media/mojo/services:media_manifest" ]
 
   if (chromecast_branding != "public") {
-    overlays = [ "${root_gen_dir}/cast_content_browser_internal_manifest_overlay.json" ]
-
-    deps += [ "//chromecast/internal/shell/browser:cast_content_browser_internal_manifest_overlay" ]
+    overlays = [ "//chromecast/internal/shell/browser:cast_content_browser_internal_manifest_overlay" ]
   }
 }
 
@@ -242,6 +241,7 @@ source_set("browsertests") {
   testonly = true
   sources = [
     "cast_media_blocker_browsertest.cc",
+    "renderer_prelauncher_test.cc",
     "test/cast_navigation_browsertest.cc",
   ]
 
@@ -250,6 +250,8 @@ source_set("browsertests") {
   deps = [
     ":test_support",
     "//chromecast:chromecast_features",
+    "//chromecast/base:chromecast_switches",
+    "//chromecast/base/metrics",
     "//media/base:test_support",
   ]
 }

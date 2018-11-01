@@ -4,13 +4,14 @@
 
 #include "platform/testing/PictureMatchers.h"
 
+#include <utility>
+
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/FloatRect.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
-#include <utility>
 
 namespace blink {
 

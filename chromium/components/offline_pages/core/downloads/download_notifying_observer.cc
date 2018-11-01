@@ -64,6 +64,13 @@ void DownloadNotifyingObserver::OnChanged(const SavePageRequest& request) {
   NotifyRequestStateChange(request);
 }
 
+void DownloadNotifyingObserver::OnNetworkProgress(
+    const SavePageRequest& request,
+    int64_t received_bytes) {
+  // TODO(dimich): Enable this back in M59. See bug 704049 for more info and
+  // what was temporarily (for M58) reverted.
+}
+
 void DownloadNotifyingObserver::OnCompleted(
     const SavePageRequest& request,
     RequestCoordinator::BackgroundSavePageResult status) {

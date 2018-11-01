@@ -17,7 +17,7 @@ import time
 import traceback
 import urllib2
 
-from webkitpy.common.net.buildbot import Build
+from webkitpy.common.net.buildbot import Build, current_build_link
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, BASELINE_SUFFIX_LIST
 from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
 
@@ -62,7 +62,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 [^[]*$      # Prevents matching previous [ for version specifiers instead of expectation specifiers
             ''', re.VERBOSE)
 
-    def bot_revision_data(self, scm):
+    def bot_revision_data(self, git):
         revisions = []
         for builder_name in self._release_builders():
             result = self._tool.buildbot.fetch_results(Build(builder_name))
@@ -71,7 +71,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 return []
             revisions.append({
                 "builder": result.builder_name(),
-                "revision": result.chromium_revision(scm),
+                "revision": result.chromium_revision(git),
             })
         return revisions
 
@@ -93,7 +93,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
         bugs = set()
         has_any_needs_rebaseline_lines = False
 
-        for line in tool.scm().blame(expectations_file_path).split("\n"):
+        for line in tool.git().blame(expectations_file_path).split("\n"):
             line = self._strip_comments(line)
             if "NeedsRebaseline" not in line:
                 continue
@@ -109,7 +109,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 continue
 
             commit_hash = parsed_line.group(1)
-            commit_position = tool.scm().commit_position_from_git_commit(commit_hash)
+            commit_position = tool.git().commit_position_from_git_commit(commit_hash)
 
             test = parsed_line.group(3)
             if print_revisions:
@@ -135,21 +135,20 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
         return tests, revision, commit, author, bugs, has_any_needs_rebaseline_lines
 
+    def commit_message(self, author, revision, commit, bugs):
+        message = 'Auto-rebaseline for r%s\n\n' % revision
+        build_link = current_build_link(self._tool)
+        if build_link:
+            message += 'Build: %s\n\n' % build_link
+        message += '%s\n\n' % self.link_to_patch(commit)
+        if bugs:
+            message += 'BUG=%s\n' % ','.join(bugs)
+        message += 'TBR=%s\n' % author
+        return message
+
     @staticmethod
     def link_to_patch(commit):
-        return "https://chromium.googlesource.com/chromium/src/+/" + commit
-
-    def commit_message(self, author, revision, commit, bugs):
-        bug_string = ""
-        if bugs:
-            bug_string = "BUG=%s\n" % ",".join(bugs)
-
-        return """Auto-rebaseline for r%s
-
-%s
-
-%sTBR=%s
-""" % (revision, self.link_to_patch(commit), bug_string, author)
+        return 'https://chromium.googlesource.com/chromium/src/+/' + commit
 
     def get_test_prefix_list(self, tests):
         test_prefix_list = {}
@@ -211,15 +210,15 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
     def execute(self, options, args, tool):
         self._tool = tool
-        if tool.scm().executable_name == "svn":
+        if tool.git().executable_name == "svn":
             _log.error("Auto rebaseline only works with a git checkout.")
             return
 
-        if not options.dry_run and tool.scm().has_working_directory_changes():
+        if not options.dry_run and tool.git().has_working_directory_changes():
             _log.error("Cannot proceed with working directory changes. Clean working directory first.")
             return
 
-        revision_data = self.bot_revision_data(tool.scm())
+        revision_data = self.bot_revision_data(tool.git())
         if not revision_data:
             return
 
@@ -250,12 +249,12 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
         rebaseline_branch_name = self.AUTO_REBASELINE_BRANCH_NAME
         try:
             # Save the current branch name and check out a clean branch for the patch.
-            old_branch_name_or_ref = tool.scm().current_branch_or_ref()
+            old_branch_name_or_ref = tool.git().current_branch_or_ref()
             if old_branch_name_or_ref == self.AUTO_REBASELINE_BRANCH_NAME:
                 rebaseline_branch_name = self.AUTO_REBASELINE_ALT_BRANCH_NAME
             if not options.dry_run:
-                tool.scm().delete_branch(rebaseline_branch_name)
-                tool.scm().create_clean_branch(rebaseline_branch_name)
+                tool.git().delete_branch(rebaseline_branch_name)
+                tool.git().create_clean_branch(rebaseline_branch_name)
                 did_switch_branches = True
 
             if test_prefix_list:
@@ -264,7 +263,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
             if options.dry_run:
                 return
 
-            tool.scm().commit_locally_with_message(
+            tool.git().commit_locally_with_message(
                 self.commit_message(author, revision, commit, bugs))
 
             # FIXME: It would be nice if we could dcommit the patch without uploading, but still
@@ -292,7 +291,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                     if not issue_already_closed:
                         self._run_git_cl_command(options, ['set_close'])
 
-                tool.scm().ensure_cleanly_tracking_remote_master()
+                tool.git().ensure_cleanly_tracking_remote_master()
                 if old_branch_name_or_ref:
-                    tool.scm().checkout_branch(old_branch_name_or_ref)
-                tool.scm().delete_branch(rebaseline_branch_name)
+                    tool.git().checkout_branch(old_branch_name_or_ref)
+                tool.git().delete_branch(rebaseline_branch_name)

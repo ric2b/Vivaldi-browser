@@ -4,8 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "chrome/browser/importer/importer_list.h"
-
+#include "app/vivaldi_resources.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -13,31 +12,30 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/grit/generated_resources.h"
-#include "ui/base/l10n/l10n_util.h"
-
-#include "app/vivaldi_resources.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_opera_reader.h"
+#include "ui/base/l10n/l10n_util.h"
 
 class OperaNotesReader : public OperaAdrFileReader {
  public:
   OperaNotesReader() {}
-  ~OperaNotesReader() override {};
+  ~OperaNotesReader() override{};
 
-  void AddNote(std::vector<base::string16> &current_folder,
-               const base::DictionaryValue &entries, bool is_folder,
-               base::string16 *item_name = NULL);
+  void AddNote(const std::vector<base::string16>& current_folder,
+               const base::DictionaryValue& entries,
+               bool is_folder,
+               base::string16* item_name = NULL);
 
-  const std::vector<ImportedNotesEntry> &Notes() const { return notes; }
+  const std::vector<ImportedNotesEntry>& Notes() const { return notes; }
 
  protected:
-  void HandleEntry(const std::string &category,
-                   const base::DictionaryValue &entries) override;
+  void HandleEntry(const std::string& category,
+                   const base::DictionaryValue& entries) override;
 
  private:
   std::vector<base::string16> current_folder;
@@ -46,8 +44,8 @@ class OperaNotesReader : public OperaAdrFileReader {
   DISALLOW_COPY_AND_ASSIGN(OperaNotesReader);
 };
 
-void OperaNotesReader::HandleEntry(const std::string &category,
-                                   const base::DictionaryValue &entries) {
+void OperaNotesReader::HandleEntry(const std::string& category,
+                                   const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
     base::string16 foldername;
     AddNote(current_folder, entries, true, &foldername);
@@ -59,9 +57,11 @@ void OperaNotesReader::HandleEntry(const std::string &category,
   }
 }
 
-void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
-                               const base::DictionaryValue &entries,
-                               bool is_folder, base::string16 *item_name) {
+void OperaNotesReader::AddNote(
+    const std::vector<base::string16>& current_folder,
+    const base::DictionaryValue& entries,
+    bool is_folder,
+    base::string16* item_name) {
   std::string temp;
   base::string16 wtemp;
   base::string16 title;
@@ -86,7 +86,8 @@ void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
         it = wtemp.erase(it);
       }
       *it = '\n';
-      if (line_end < 0) line_end = it - wtemp.begin();
+      if (line_end < 0)
+        line_end = it - wtemp.begin();
     }
   }
 
@@ -113,20 +114,20 @@ void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
   notes.push_back(entry);
 }
 
-bool OperaImporter::ImportNotes(std::string& error) {
+bool OperaImporter::ImportNotes(std::string* error) {
   if (notesfilename_.empty()) {
-    error = "No notes filename provided.";
+    *error = "No notes filename provided.";
     return false;
   }
   base::FilePath file(notesfilename_);
   OperaNotesReader reader;
 
   if (!reader.LoadFile(file)) {
-    error = "Notes file does not exist.";
+    *error = "Notes file does not exist.";
     return false;
   }
   if (!reader.Notes().empty() && !cancelled()) {
-    const base::string16 &first_folder_name =
+    const base::string16& first_folder_name =
         bridge_->GetLocalizedString(IDS_NOTES_GROUP_FROM_OPERA);
     bridge_->AddNotes(reader.Notes(), first_folder_name);
   }

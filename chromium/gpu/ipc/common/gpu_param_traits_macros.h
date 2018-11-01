@@ -7,6 +7,7 @@
 
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/gpu_stream_constants.h"
@@ -66,10 +67,8 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::GPUInfo)
   IPC_STRUCT_TRAITS_MEMBER(initialization_time)
   IPC_STRUCT_TRAITS_MEMBER(optimus)
   IPC_STRUCT_TRAITS_MEMBER(amd_switchable)
-  IPC_STRUCT_TRAITS_MEMBER(lenovo_dcute)
   IPC_STRUCT_TRAITS_MEMBER(gpu)
   IPC_STRUCT_TRAITS_MEMBER(secondary_gpus)
-  IPC_STRUCT_TRAITS_MEMBER(adapter_luid)
   IPC_STRUCT_TRAITS_MEMBER(driver_vendor)
   IPC_STRUCT_TRAITS_MEMBER(driver_version)
   IPC_STRUCT_TRAITS_MEMBER(driver_date)
@@ -110,6 +109,12 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(gpu::MemoryAllocation)
   IPC_STRUCT_TRAITS_MEMBER(bytes_limit_when_visible)
   IPC_STRUCT_TRAITS_MEMBER(priority_cutoff_when_visible)
+IPC_STRUCT_TRAITS_END()
+
+IPC_ENUM_TRAITS_MAX_VALUE(gpu::GpuFeatureStatus, gpu::kGpuFeatureStatusMax)
+
+IPC_STRUCT_TRAITS_BEGIN(gpu::GpuFeatureInfo)
+  IPC_STRUCT_TRAITS_MEMBER(status_values)
 IPC_STRUCT_TRAITS_END()
 
 #endif  // GPU_IPC_COMMON_GPU_PARAM_TRAITS_MACROS_H_

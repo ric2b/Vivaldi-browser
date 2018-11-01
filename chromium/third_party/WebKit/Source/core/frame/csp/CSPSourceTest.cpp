@@ -139,26 +139,146 @@ TEST_F(CSPSourceTest, InsecureHostSchemeMatchesSecureScheme) {
   EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com:8000/")));
 }
 
+TEST_F(CSPSourceTest, SchemeIsEmpty) {
+  KURL base;
+
+  // Self scheme is http.
+  {
+    Persistent<ContentSecurityPolicy> csp(ContentSecurityPolicy::create());
+    csp->setupSelf(*SecurityOrigin::createFromString("http://a.com/"));
+    CSPSource source(csp.get(), "", "a.com", 0, "/", CSPSource::NoWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_TRUE(source.matches(KURL(base, "http://a.com")));
+    EXPECT_TRUE(source.matches(KURL(base, "https://a.com")));
+    EXPECT_TRUE(source.matches(KURL(base, "http-so://a.com")));
+    EXPECT_TRUE(source.matches(KURL(base, "https-so://a.com")));
+    EXPECT_FALSE(source.matches(KURL(base, "ftp://a.com")));
+  }
+
+  // Self scheme is https.
+  {
+    Persistent<ContentSecurityPolicy> csp(ContentSecurityPolicy::create());
+    csp->setupSelf(*SecurityOrigin::createFromString("https://a.com/"));
+    CSPSource source(csp.get(), "", "a.com", 0, "/", CSPSource::NoWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_FALSE(source.matches(KURL(base, "http://a.com")));
+    EXPECT_TRUE(source.matches(KURL(base, "https://a.com")));
+    EXPECT_FALSE(source.matches(KURL(base, "http-so://a.com")));
+    // TODO(mkwst, arthursonzogni): Maybe it should return true.
+    // See http://crbug.com/692442
+    EXPECT_FALSE(source.matches(KURL(base, "https-so://a.com")));
+    EXPECT_FALSE(source.matches(KURL(base, "ftp://a.com")));
+  }
+
+  // Self scheme is not in the http familly.
+  {
+    Persistent<ContentSecurityPolicy> csp(ContentSecurityPolicy::create());
+    csp->setupSelf(*SecurityOrigin::createFromString("ftp://a.com/"));
+    CSPSource source(csp.get(), "", "a.com", 0, "/", CSPSource::NoWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_FALSE(source.matches(KURL(base, "http://a.com")));
+    EXPECT_TRUE(source.matches(KURL(base, "ftp://a.com")));
+  }
+
+  // Self scheme is unique
+  {
+    Persistent<ContentSecurityPolicy> csp(ContentSecurityPolicy::create());
+    csp->setupSelf(
+        *SecurityOrigin::createFromString("non-standard-scheme://a.com/"));
+    CSPSource source(csp.get(), "", "a.com", 0, "/", CSPSource::NoWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_FALSE(source.matches(KURL(base, "http://a.com")));
+
+    // The reason matching fails is because the host is parsed as "" when
+    // using a non standard scheme even though it should be parsed as "a.com"
+    // After adding it to the list of standard schemes it now gets parsed
+    // correctly. This does not matter in practice though because there is
+    // no way to render/load anything like "non-standard-scheme://a.com"
+    EXPECT_FALSE(source.matches(KURL(base, "non-standard-scheme://a.com")));
+  }
+}
+
 TEST_F(CSPSourceTest, InsecureHostSchemePortMatchesSecurePort) {
   KURL base;
-  CSPSource source(csp.get(), "http", "example.com", 80, "/",
-                   CSPSource::NoWildcard, CSPSource::NoWildcard);
-  EXPECT_TRUE(source.matches(KURL(base, "http://example.com/")));
-  EXPECT_TRUE(source.matches(KURL(base, "http://example.com:80/")));
-  EXPECT_TRUE(source.matches(KURL(base, "http://example.com:443/")));
-  EXPECT_TRUE(source.matches(KURL(base, "https://example.com/")));
-  EXPECT_TRUE(source.matches(KURL(base, "https://example.com:80/")));
-  EXPECT_TRUE(source.matches(KURL(base, "https://example.com:443/")));
 
-  EXPECT_FALSE(source.matches(KURL(base, "http://example.com:8443/")));
-  EXPECT_FALSE(source.matches(KURL(base, "https://example.com:8443/")));
+  // source scheme is "http"
+  {
+    CSPSource source(csp.get(), "http", "example.com", 80, "/",
+                     CSPSource::NoWildcard, CSPSource::NoWildcard);
+    EXPECT_TRUE(source.matches(KURL(base, "http://example.com/")));
+    EXPECT_TRUE(source.matches(KURL(base, "http://example.com:80/")));
+    // TODO(mkwst, arthursonzogni): It is weird to upgrade the port without the
+    // sheme. See http://crbug.com/692499
+    EXPECT_TRUE(source.matches(KURL(base, "http://example.com:443/")));
+    EXPECT_TRUE(source.matches(KURL(base, "https://example.com/")));
+    // TODO(mkwst, arthursonzogni): It is weird to upgrade the scheme without
+    // the port. See http://crbug.com/692499
+    EXPECT_TRUE(source.matches(KURL(base, "https://example.com:80/")));
+    EXPECT_TRUE(source.matches(KURL(base, "https://example.com:443/")));
 
-  EXPECT_FALSE(source.matches(KURL(base, "http://not-example.com/")));
-  EXPECT_FALSE(source.matches(KURL(base, "http://not-example.com:80/")));
-  EXPECT_FALSE(source.matches(KURL(base, "http://not-example.com:443/")));
-  EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com/")));
-  EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com:80/")));
-  EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com:443/")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://example.com:8443/")));
+    EXPECT_FALSE(source.matches(KURL(base, "https://example.com:8443/")));
+
+    EXPECT_FALSE(source.matches(KURL(base, "http://not-example.com/")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://not-example.com:80/")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://not-example.com:443/")));
+    EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com/")));
+    EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com:80/")));
+    EXPECT_FALSE(source.matches(KURL(base, "https://not-example.com:443/")));
+  }
+
+  // source scheme is empty
+  {
+    Persistent<ContentSecurityPolicy> csp(ContentSecurityPolicy::create());
+    csp->setupSelf(*SecurityOrigin::createFromString("http://example.com"));
+    CSPSource source(csp.get(), "", "example.com", 80, "/",
+                     CSPSource::NoWildcard, CSPSource::NoWildcard);
+    EXPECT_TRUE(source.matches(KURL(base, "http://example.com/")));
+    EXPECT_TRUE(source.matches(KURL(base, "https://example.com:443")));
+    // TODO(mkwst, arthursonzogni): It is weird to upgrade the port without the
+    // sheme. See http://crbug.com/692499
+    EXPECT_TRUE(source.matches(KURL(base, "http://example.com:443")));
+  }
+}
+
+TEST_F(CSPSourceTest, HostMatches) {
+  KURL base;
+  Persistent<ContentSecurityPolicy> csp(ContentSecurityPolicy::create());
+  csp->setupSelf(*SecurityOrigin::createFromString("http://a.com"));
+
+  // Host is * (source-expression = "http://*")
+  {
+    CSPSource source(csp.get(), "http", "", 0, "", CSPSource::HasWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_TRUE(source.matches(KURL(base, "http://a.com")));
+    EXPECT_TRUE(source.matches(KURL(base, "http://.")));
+  }
+
+  // Host is *.foo.bar
+  {
+    CSPSource source(csp.get(), "", "foo.bar", 0, "", CSPSource::HasWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_FALSE(source.matches(KURL(base, "http://a.com")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://bar")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://foo.bar")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://o.bar")));
+    EXPECT_TRUE(source.matches(KURL(base, "http://*.foo.bar")));
+    EXPECT_TRUE(source.matches(KURL(base, "http://sub.foo.bar")));
+    EXPECT_TRUE(source.matches(KURL(base, "http://sub.sub.foo.bar")));
+    // Please see http://crbug.com/692505
+    EXPECT_TRUE(source.matches(KURL(base, "http://.foo.bar")));
+  }
+
+  // Host is exact.
+  {
+    CSPSource source(csp.get(), "", "foo.bar", 0, "", CSPSource::NoWildcard,
+                     CSPSource::NoWildcard);
+    EXPECT_TRUE(source.matches(KURL(base, "http://foo.bar")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://sub.foo.bar")));
+    EXPECT_FALSE(source.matches(KURL(base, "http://bar")));
+    // Please see http://crbug.com/692505
+    EXPECT_FALSE(source.matches(KURL(base, "http://.foo.bar")));
+  }
 }
 
 TEST_F(CSPSourceTest, DoesNotSubsume) {

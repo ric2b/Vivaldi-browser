@@ -29,6 +29,7 @@ Polymer({
     advancedToggleExpanded: {
       type: Boolean,
       notify: true,
+      observer: 'advancedToggleExpandedChanged_',
     },
 
     /**
@@ -51,6 +52,18 @@ Polymer({
         return loadTimeData.getBoolean('showResetProfileBanner');
       },
     },
+
+// <if expr="chromeos">
+    /**
+     * Whether the user is a secondary user. Computed so that it is calculated
+     * correctly after loadTimeData is available.
+     * @private
+     */
+    showSecondaryUserBanner_: {
+      type: Boolean,
+      computed: 'computeShowSecondaryUserBanner_(hasExpandedSection_)',
+    },
+// </if>
 
     /** @private {!settings.Route|undefined} */
     currentRoute_: Object,
@@ -101,14 +114,25 @@ Polymer({
 
     if (this.pageVisibility.advancedSettings !== false) {
       assert(whenSearchDone === settings.getSearchManager().search(
-          query, assert(this.$$('#advancedPage'))));
+          query, assert(this.$$('#advancedPageTemplate').get())));
     }
 
     return whenSearchDone;
   },
 
+// <if expr="chromeos">
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeShowSecondaryUserBanner_: function() {
+    return !this.hasExpandedSection_ &&
+        loadTimeData.getBoolean('isSecondaryUser');
+  },
+// </if>
+
   /** @private */
-  onResetDone_: function() {
+  onResetProfileBannerClosed_: function() {
     this.showResetProfileBanner_ = false;
   },
 
@@ -128,6 +152,18 @@ Polymer({
    */
   onSubpageExpanded_: function() {
     this.hasExpandedSection_ = true;
+  },
+
+  /**
+   * Render the advanced page now (don't wait for idle).
+   * @private
+   */
+  advancedToggleExpandedChanged_: function() {
+    if (this.advancedToggleExpanded) {
+      this.async(function() {
+        this.$$('#advancedPageTemplate').get();
+      }.bind(this));
+    }
   },
 
   /**
@@ -161,8 +197,8 @@ Polymer({
    *     both routing and search state.
    * @private
    */
-  showAdvancedPage_: function(currentRoute, inSearchMode, hasExpandedSection,
-                              advancedToggleExpanded) {
+  showAdvancedPage_: function(
+      currentRoute, inSearchMode, hasExpandedSection, advancedToggleExpanded) {
     return hasExpandedSection ?
         settings.Route.ADVANCED.contains(currentRoute) :
         advancedToggleExpanded || inSearchMode;

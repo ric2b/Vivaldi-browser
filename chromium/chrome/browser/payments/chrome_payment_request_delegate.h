@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_PAYMENTS_CHROME_PAYMENT_REQUEST_DELEGATE_H_
 
 #include "base/macros.h"
-#include "components/payments/payment_request_delegate.h"
+#include "components/payments/content/payment_request_delegate.h"
 
 namespace content {
 class WebContents;
@@ -15,14 +15,23 @@ class WebContents;
 namespace payments {
 
 class PaymentRequest;
+class PaymentRequestDialog;
 
 class ChromePaymentRequestDelegate : public PaymentRequestDelegate {
  public:
   explicit ChromePaymentRequestDelegate(content::WebContents* web_contents);
   ~ChromePaymentRequestDelegate() override {}
 
-  void ShowPaymentRequestDialog(PaymentRequest* request) override;
+  void ShowDialog(PaymentRequest* request) override;
+  void CloseDialog() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
+  const std::string& GetApplicationLocale() const override;
+
+ protected:
+  // Reference to the dialog so that we can satisfy calls to CloseDialog(). This
+  // reference is invalid once CloseDialog() has been called on it, because the
+  // dialog will be destroyed. Protected for testing.
+  PaymentRequestDialog* dialog_;
 
  private:
   // Not owned but outlives the PaymentRequest object that owns this.

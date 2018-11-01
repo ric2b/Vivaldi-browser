@@ -24,17 +24,13 @@ const char kJsScreenPath[] = "login.KioskEnableScreen";
 
 namespace chromeos {
 
-KioskEnableScreenHandler::KioskEnableScreenHandler()
-    : BaseScreenHandler(kJsScreenPath),
-      delegate_(NULL),
-      show_on_init_(false),
-      is_configurable_(false),
-      weak_ptr_factory_(this) {
+KioskEnableScreenHandler::KioskEnableScreenHandler() : weak_ptr_factory_(this) {
+  set_call_js_prefix(kJsScreenPath);
 }
 
 KioskEnableScreenHandler::~KioskEnableScreenHandler() {
   if (delegate_)
-    delegate_->OnActorDestroyed(this);
+    delegate_->OnViewDestroyed(this);
 }
 
 void KioskEnableScreenHandler::Show() {

@@ -9,10 +9,10 @@
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "grit/ash_strings.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -40,16 +40,13 @@ const int kVerticalMarginAroundText = 100;
 
 class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
  public:
-  ExitWarningWidgetDelegateView() : text_width_(0), width_(0), height_(0) {
-#ifdef OS_CHROMEOS
-    text_ = l10n_util::GetStringUTF16(IDS_ASH_SIGN_OUT_WARNING_POPUP_TEXT);
-    accessible_name_ = l10n_util::GetStringUTF16(
-        IDS_ASH_SIGN_OUT_WARNING_POPUP_TEXT_ACCESSIBLE);
-#else
-    text_ = l10n_util::GetStringUTF16(IDS_ASH_EXIT_WARNING_POPUP_TEXT);
-    accessible_name_ =
-        l10n_util::GetStringUTF16(IDS_ASH_EXIT_WARNING_POPUP_TEXT_ACCESSIBLE);
-#endif
+  ExitWarningWidgetDelegateView()
+      : text_(l10n_util::GetStringUTF16(IDS_ASH_SIGN_OUT_WARNING_POPUP_TEXT)),
+        accessible_name_(l10n_util::GetStringUTF16(
+            IDS_ASH_SIGN_OUT_WARNING_POPUP_TEXT_ACCESSIBLE)),
+        text_width_(0),
+        width_(0),
+        height_(0) {
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     const gfx::FontList& font_list =
         rb.GetFontList(ui::ResourceBundle::LargeFont);
@@ -73,10 +70,10 @@ class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
-    SkPaint paint;
-    paint.setStyle(SkPaint::kFill_Style);
-    paint.setColor(kWindowBackgroundColor);
-    canvas->DrawRoundRect(GetLocalBounds(), kWindowCornerRadius, paint);
+    cc::PaintFlags flags;
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    flags.setColor(kWindowBackgroundColor);
+    canvas->DrawRoundRect(GetLocalBounds(), kWindowCornerRadius, flags);
     views::WidgetDelegateView::OnPaint(canvas);
   }
 

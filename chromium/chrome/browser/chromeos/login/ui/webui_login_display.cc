@@ -129,7 +129,8 @@ void WebUILoginDisplay::ShowError(int error_msg_id,
   if (error_msg_id != IDS_LOGIN_ERROR_WHITELIST &&
       error_msg_id != IDS_ENTERPRISE_LOGIN_ERROR_WHITELIST &&
       error_msg_id != IDS_LOGIN_ERROR_OWNER_KEY_LOST &&
-      error_msg_id != IDS_LOGIN_ERROR_OWNER_REQUIRED) {
+      error_msg_id != IDS_LOGIN_ERROR_OWNER_REQUIRED &&
+      error_msg_id != IDS_LOGIN_ERROR_GOOGLE_ACCOUNT_NOT_ALLOWED) {
     // Display a warning if Caps Lock is on.
     input_method::InputMethodManager* ime_manager =
         input_method::InputMethodManager::Get();
@@ -325,6 +326,12 @@ bool WebUILoginDisplay::IsUserSigninCompleted() const {
 void WebUILoginDisplay::SetDisplayEmail(const std::string& email) {
   if (delegate_)
     delegate_->SetDisplayEmail(email);
+}
+
+void WebUILoginDisplay::SetDisplayAndGivenName(const std::string& display_name,
+                                               const std::string& given_name) {
+  if (delegate_)
+    delegate_->SetDisplayAndGivenName(display_name, given_name);
 }
 
 void WebUILoginDisplay::Signout() {

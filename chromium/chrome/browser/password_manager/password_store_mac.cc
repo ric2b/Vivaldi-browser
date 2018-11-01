@@ -547,7 +547,7 @@ std::vector<ItemFormPair> ExtractAllKeychainItemAttributesIntoPasswordForms(
   MacKeychainPasswordFormAdapter keychain_adapter(&keychain);
   *keychain_items = keychain_adapter.GetAllPasswordFormKeychainItems();
   std::vector<ItemFormPair> item_form_pairs;
-  for (const auto& keychain_item : *keychain_items) {
+  for (auto* keychain_item : *keychain_items) {
     std::unique_ptr<PasswordForm> form_without_password =
         base::MakeUnique<PasswordForm>();
     internal_keychain_helpers::FillPasswordFormFromKeychainItem(
@@ -1298,6 +1298,14 @@ void PasswordStoreMac::RemoveSiteStatsImpl(const GURL& origin_domain) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   if (login_metadata_db_)
     login_metadata_db_->stats_table().RemoveRow(origin_domain);
+}
+
+std::vector<password_manager::InteractionsStats>
+PasswordStoreMac::GetAllSiteStatsImpl() {
+  DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
+  return login_metadata_db_
+             ? login_metadata_db_->stats_table().GetAllRows()
+             : std::vector<password_manager::InteractionsStats>();
 }
 
 std::vector<password_manager::InteractionsStats>

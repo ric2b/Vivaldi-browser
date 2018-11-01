@@ -17,12 +17,14 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 #include "net/nqe/cached_network_quality.h"
 #include "net/nqe/effective_connection_type.h"
+#include "net/nqe/event_creator.h"
 #include "net/nqe/external_estimate_provider.h"
 #include "net/nqe/network_id.h"
 #include "net/nqe/network_quality.h"
@@ -37,6 +39,8 @@ class TickClock;
 }  // namespace base
 
 namespace net {
+
+class NetLog;
 
 namespace nqe {
 namespace internal {
@@ -176,10 +180,12 @@ class NET_EXPORT NetworkQualityEstimator
   // Creates a new NetworkQualityEstimator.
   // |variation_params| is the map containing all field trial parameters
   // related to NetworkQualityEstimator field trial.
-  // |external_estimates_provider| may be NULL.
+  // |external_estimates_provider| may be NULL. The caller must guarantee that
+  // |net_log| outlives |this|.
   NetworkQualityEstimator(
       std::unique_ptr<ExternalEstimateProvider> external_estimates_provider,
-      const std::map<std::string, std::string>& variation_params);
+      const std::map<std::string, std::string>& variation_params,
+      NetLog* net_log);
 
   // Construct a NetworkQualityEstimator instance allowing for test
   // configuration. Registers for network type change notifications so estimates
@@ -192,12 +198,14 @@ class NET_EXPORT NetworkQualityEstimator
   // used for network quality estimation.
   // |use_smaller_responses_for_tests| should only be true when testing.
   // Allows the responses smaller than |kMinTransferSizeInBits| to be used for
-  // network quality estimation.
+  // network quality estimation. The caller must guarantee that |net_log|
+  // outlives |this|.
   NetworkQualityEstimator(
       std::unique_ptr<ExternalEstimateProvider> external_estimates_provider,
       const std::map<std::string, std::string>& variation_params,
       bool use_local_host_requests_for_tests,
-      bool use_smaller_responses_for_tests);
+      bool use_smaller_responses_for_tests,
+      NetLog* net_log);
 
   ~NetworkQualityEstimator() override;
 
@@ -310,7 +318,17 @@ class NET_EXPORT NetworkQualityEstimator
       const std::map<std::string, std::string>& variation_params,
       bool use_local_host_requests_for_tests,
       bool use_smaller_responses_for_tests,
-      bool add_default_platform_observations);
+      bool add_default_platform_observations,
+      const NetLogWithSource& net_log);
+
+  // Different experimental statistic algorithms that can be used for computing
+  // the predictions.
+  enum Statistic {
+    STATISTIC_WEIGHTED_AVERAGE = 0,
+    STATISTIC_UNWEIGHTED_AVERAGE = 1,
+    // Last statistic. Not to be used.
+    STATISTIC_LAST = 2
+  };
 
   // NetworkChangeNotifier::ConnectionTypeObserver implementation:
   void OnConnectionTypeChanged(
@@ -371,6 +389,32 @@ class NET_EXPORT NetworkQualityEstimator
       base::TimeDelta* http_rtt,
       base::TimeDelta* transport_rtt,
       int32_t* downstream_throughput_kbps) const;
+
+  // Notifies |this| of a new transport layer RTT. Called by socket watchers.
+  // Protected for testing.
+  void OnUpdatedRTTAvailable(SocketPerformanceWatcherFactory::Protocol protocol,
+                             const base::TimeDelta& rtt);
+
+  // Returns an estimate of network quality at the specified |percentile|.
+  // |disallowed_observation_sources| is the list of observation sources that
+  // should be excluded when computing the percentile.
+  // Only the observations later than |start_time| are taken into account.
+  // |percentile| must be between 0 and 100 (both inclusive) with higher
+  // percentiles indicating less performant networks. For example, if
+  // |percentile| is 90, then the network is expected to be faster than the
+  // returned estimate with 0.9 probability. Similarly, network is expected to
+  // be slower than the returned estimate with 0.1 probability. |statistic|
+  // is the statistic that should be used for computing the estimate. If unset,
+  // the default statistic is used. Virtualized for testing.
+  virtual base::TimeDelta GetRTTEstimateInternal(
+      const std::vector<NetworkQualityObservationSource>&
+          disallowed_observation_sources,
+      base::TimeTicks start_time,
+      const base::Optional<Statistic>& statistic,
+      int percentile) const;
+  int32_t GetDownlinkThroughputKbpsEstimateInternal(
+      const base::TimeTicks& start_time,
+      int percentile) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
@@ -459,10 +503,6 @@ class NET_EXPORT NetworkQualityEstimator
   // throughput in kilobits per second.
   void OnNewThroughputObservationAvailable(int32_t downstream_kbps);
 
-  // Notifies |this| of a new transport layer RTT.
-  void OnUpdatedRTTAvailable(SocketPerformanceWatcherFactory::Protocol protocol,
-                             const base::TimeDelta& rtt);
-
   // Obtains the model parameters for different effective connection types from
   // the field trial parameters. For each effective connection type, a model
   // (currently composed of a RTT threshold and a downlink throughput threshold)
@@ -473,24 +513,6 @@ class NET_EXPORT NetworkQualityEstimator
   // Adds the default median RTT and downstream throughput estimate for the
   // current connection type to the observation buffer.
   void AddDefaultEstimates();
-
-  // Returns an estimate of network quality at the specified |percentile|.
-  // |disallowed_observation_sources| is the list of observation sources that
-  // should be excluded when computing the percentile.
-  // Only the observations later than |start_time| are taken into account.
-  // |percentile| must be between 0 and 100 (both inclusive) with higher
-  // percentiles indicating less performant networks. For example, if
-  // |percentile| is 90, then the network is expected to be faster than the
-  // returned estimate with 0.9 probability. Similarly, network is expected to
-  // be slower than the returned estimate with 0.1 probability.
-  base::TimeDelta GetRTTEstimateInternal(
-      const std::vector<NetworkQualityObservationSource>&
-          disallowed_observation_sources,
-      const base::TimeTicks& start_time,
-      int percentile) const;
-  int32_t GetDownlinkThroughputKbpsEstimateInternal(
-      const base::TimeTicks& start_time,
-      int percentile) const;
 
   // Returns the current network ID checking by calling the platform APIs.
   // Virtualized for testing.
@@ -597,6 +619,8 @@ class NET_EXPORT NetworkQualityEstimator
       const nqe::internal::NetworkID& network_id,
       const nqe::internal::CachedNetworkQuality& cached_network_quality);
 
+  const char* GetNameForStatistic(int i) const;
+
   // Determines if the requests to local host can be used in estimating the
   // network quality. Set to true only for tests.
   bool use_localhost_requests_;
@@ -680,6 +704,10 @@ class NET_EXPORT NetworkQualityEstimator
   nqe::internal::NetworkQuality estimated_quality_at_last_main_frame_;
   EffectiveConnectionType effective_connection_type_at_last_main_frame_;
 
+  // Estimated RTT at HTTP layer when the last main frame transaction was
+  // started. Computed using different statistics.
+  base::TimeDelta http_rtt_at_last_main_frame_[STATISTIC_LAST];
+
   // Estimated network quality obtained from external estimate provider when the
   // external estimate provider was last queried.
   nqe::internal::NetworkQuality external_estimate_provider_quality_;
@@ -759,6 +787,19 @@ class NET_EXPORT NetworkQualityEstimator
   const bool persistent_cache_reading_enabled_;
 
   base::ThreadChecker thread_checker_;
+
+  // Manages the writing of events to the net log.
+  nqe::internal::EventCreator event_creator_;
+
+  // Vector that contains observation sources that should not be used when
+  // computing the estimate at HTTP layer.
+  const std::vector<NetworkQualityObservationSource>
+      disallowed_observation_sources_for_http_;
+
+  // Vector that contains observation sources that should not be used when
+  // computing the estimate at transport layer.
+  const std::vector<NetworkQualityObservationSource>
+      disallowed_observation_sources_for_transport_;
 
   base::WeakPtrFactory<NetworkQualityEstimator> weak_ptr_factory_;
 

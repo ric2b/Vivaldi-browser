@@ -61,7 +61,7 @@ bool RenderViewHostDelegate::HideDownloadUI() const {
   return false;
 }
 
-bool RenderViewHostDelegate::IsFocusedElementEditable() {
+bool RenderViewHostDelegate::HasPersistentVideo() const {
   return false;
 }
 

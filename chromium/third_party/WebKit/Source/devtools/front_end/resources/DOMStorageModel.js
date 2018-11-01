@@ -88,6 +88,10 @@ Resources.DOMStorage = class extends Common.Object {
   removeItem(key) {
     this._model._agent.removeDOMStorageItem(this.id, key);
   }
+
+  clear() {
+    this._model._agent.clear(this.id);
+  }
 };
 
 
@@ -105,12 +109,11 @@ Resources.DOMStorage.Events = {
 Resources.DOMStorageModel = class extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} target
-   * @param {!SDK.SecurityOriginManager} securityOriginManager
    */
-  constructor(target, securityOriginManager) {
-    super(Resources.DOMStorageModel, target);
+  constructor(target) {
+    super(target);
 
-    this._securityOriginManager = securityOriginManager;
+    this._securityOriginManager = SDK.SecurityOriginManager.fromTarget(target);
     /** @type {!Object.<string, !Resources.DOMStorage>} */
     this._storages = {};
     this._agent = target.domstorageAgent();
@@ -121,11 +124,7 @@ Resources.DOMStorageModel = class extends SDK.SDKModel {
    * @return {!Resources.DOMStorageModel}
    */
   static fromTarget(target) {
-    var model = target.model(Resources.DOMStorageModel);
-    if (!model)
-      model = new Resources.DOMStorageModel(target, SDK.SecurityOriginManager.fromTarget(target));
-
-    return model;
+    return /** @type {!Resources.DOMStorageModel} */ (target.model(Resources.DOMStorageModel));
   }
 
   enable() {
@@ -284,6 +283,8 @@ Resources.DOMStorageModel = class extends SDK.SDKModel {
     return result;
   }
 };
+
+SDK.SDKModel.register(Resources.DOMStorageModel, SDK.Target.Capability.None);
 
 /** @enum {symbol} */
 Resources.DOMStorageModel.Events = {

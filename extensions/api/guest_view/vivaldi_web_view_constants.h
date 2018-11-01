@@ -1,7 +1,7 @@
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
-#ifndef EXTENSIONS_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H
-#define EXTENSIONS_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H
+#ifndef EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_
+#define EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_
 
 namespace webview {
 
@@ -29,6 +29,6 @@ extern const char kGenCommand[];
 extern const char kGenText[];
 extern const char kGenUrl[];
 
-} //namespace webview
+}  // namespace webview
 
-#endif // EXTENSIONS_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H
+#endif  // EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_

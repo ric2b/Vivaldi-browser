@@ -29,8 +29,8 @@
 #include "core/inspector/NetworkResourcesData.h"
 
 #include "core/dom/DOMImplementation.h"
-#include "core/fetch/Resource.h"
 #include "platform/SharedBuffer.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/network/ResourceResponse.h"
 #include <memory>
 
@@ -315,7 +315,7 @@ NetworkResourcesData::ResourceData const* NetworkResourcesData::data(
 
 XHRReplayData* NetworkResourcesData::xhrReplayData(const String& requestId) {
   if (m_reusedXHRReplayDataRequestIds.contains(requestId))
-    return xhrReplayData(m_reusedXHRReplayDataRequestIds.get(requestId));
+    return xhrReplayData(m_reusedXHRReplayDataRequestIds.at(requestId));
 
   ResourceData* resourceData = resourceDataForRequestId(requestId);
   if (!resourceData)
@@ -406,7 +406,7 @@ NetworkResourcesData::ResourceData*
 NetworkResourcesData::resourceDataForRequestId(const String& requestId) {
   if (requestId.isNull())
     return 0;
-  return m_requestIdToResourceDataMap.get(requestId);
+  return m_requestIdToResourceDataMap.at(requestId);
 }
 
 void NetworkResourcesData::ensureNoDataForRequestId(const String& requestId) {
@@ -415,7 +415,7 @@ void NetworkResourcesData::ensureNoDataForRequestId(const String& requestId) {
     return;
   if (resourceData->hasContent() || resourceData->hasData())
     m_contentSize -= resourceData->evictContent();
-  m_requestIdToResourceDataMap.remove(requestId);
+  m_requestIdToResourceDataMap.erase(requestId);
 }
 
 bool NetworkResourcesData::ensureFreeSpace(size_t size) {

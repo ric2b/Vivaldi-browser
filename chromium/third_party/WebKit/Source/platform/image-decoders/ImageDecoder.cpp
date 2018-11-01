@@ -425,7 +425,7 @@ void ImageDecoder::updateAggressivePurging(size_t index) {
 
 size_t ImageDecoder::findRequiredPreviousFrame(size_t frameIndex,
                                                bool frameRectIsOpaque) {
-  ASSERT(frameIndex <= m_frameBufferCache.size());
+  DCHECK_LT(frameIndex, m_frameBufferCache.size());
   if (!frameIndex) {
     // The first frame doesn't rely on any previous data.
     return kNotFound;
@@ -467,7 +467,7 @@ size_t ImageDecoder::findRequiredPreviousFrame(size_t frameIndex,
                  ? kNotFound
                  : prevFrame;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return kNotFound;
   }
 }
@@ -487,12 +487,14 @@ ImagePlanes::ImagePlanes(void* planes[3], const size_t rowBytes[3]) {
 }
 
 void* ImagePlanes::plane(int i) {
-  ASSERT((i >= 0) && i < 3);
+  DCHECK_GE(i, 0);
+  DCHECK_LT(i, 3);
   return m_planes[i];
 }
 
 size_t ImagePlanes::rowBytes(int i) const {
-  ASSERT((i >= 0) && i < 3);
+  DCHECK_GE(i, 0);
+  DCHECK_LT(i, 3);
   return m_rowBytes[i];
 }
 
@@ -524,18 +526,20 @@ SkColorSpaceXform* ImageDecoder::colorTransform() {
   sk_sp<SkColorSpace> srcColorSpace = m_embeddedColorSpace;
   if (!srcColorSpace) {
     if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled())
-      srcColorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
+      srcColorSpace = SkColorSpace::MakeSRGB();
     else
       return nullptr;
   }
 
-  if (SkColorSpace::Equals(m_embeddedColorSpace.get(),
-                           m_colorBehavior.targetColorSpace().get())) {
+  sk_sp<SkColorSpace> dstColorSpace =
+      m_colorBehavior.targetColorSpace().ToSkColorSpace();
+
+  if (SkColorSpace::Equals(srcColorSpace.get(), dstColorSpace.get())) {
     return nullptr;
   }
 
-  m_sourceToTargetColorTransform = SkColorSpaceXform::New(
-      m_embeddedColorSpace.get(), m_colorBehavior.targetColorSpace().get());
+  m_sourceToTargetColorTransform =
+      SkColorSpaceXform::New(srcColorSpace.get(), dstColorSpace.get());
   return m_sourceToTargetColorTransform.get();
 }
 
@@ -545,7 +549,7 @@ sk_sp<SkColorSpace> ImageDecoder::colorSpaceForSkImages() const {
 
   if (m_embeddedColorSpace)
     return m_embeddedColorSpace;
-  return SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
+  return SkColorSpace::MakeSRGB();
 }
 
 }  // namespace blink

@@ -206,6 +206,7 @@ source_set("ntp_internal") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "centering_scrollview_unittest.mm",
@@ -245,6 +246,7 @@ source_set("unit_tests") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "new_tab_page_egtest.mm",
@@ -266,6 +268,7 @@ source_set("eg_tests") {
 }
 
 source_set("perf_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "new_tab_page_perftest.mm",

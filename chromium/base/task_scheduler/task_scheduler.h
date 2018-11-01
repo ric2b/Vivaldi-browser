@@ -17,6 +17,10 @@
 #include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
 
+namespace gin {
+class V8Platform;
+}
+
 namespace tracked_objects {
 class Location;
 }
@@ -38,6 +42,9 @@ class BASE_EXPORT TaskScheduler {
   using WorkerPoolIndexForTraitsCallback =
       Callback<size_t(const TaskTraits& traits)>;
 
+  // Destroying a TaskScheduler is not allowed in production; it is always
+  // leaked. In tests, it should only be destroyed after JoinForTesting() has
+  // returned.
   virtual ~TaskScheduler() = default;
 
   // Posts |task| with a |delay| and specific |traits|. |delay| can be zero.
@@ -85,6 +92,12 @@ class BASE_EXPORT TaskScheduler {
   // other threads during the call. Returns immediately when shutdown completes.
   virtual void FlushForTesting() = 0;
 
+  // Joins all threads. Tasks that are already running are allowed to complete
+  // their execution. This can only be called once. Using this task scheduler
+  // instance to create task runners or post tasks is not permitted during or
+  // after this call.
+  virtual void JoinForTesting() = 0;
+
   // CreateAndSetSimpleTaskScheduler(), CreateAndSetDefaultTaskScheduler(), and
   // SetInstance() register a TaskScheduler to handle tasks posted through the
   // post_task.h API for this process. The registered TaskScheduler will only be
@@ -95,26 +108,51 @@ class BASE_EXPORT TaskScheduler {
   // new TaskScheduler.
 
   // Creates and sets a task scheduler with one worker pool that can have up to
-  // |max_threads| threads. CHECKs on failure.
+  // |max_threads| threads. CHECKs on failure. For tests, prefer
+  // base::test::ScopedTaskScheduler (ensures isolation).
   static void CreateAndSetSimpleTaskScheduler(int max_threads);
 
   // Creates and sets a task scheduler with custom worker pools. CHECKs on
   // failure. |worker_pool_params_vector| describes the worker pools to create.
   // |worker_pool_index_for_traits_callback| returns the index in |worker_pools|
-  // of the worker pool in which a task with given traits should run.
+  // of the worker pool in which a task with given traits should run. For tests,
+  // prefer base::test::ScopedTaskScheduler (ensures isolation).
   static void CreateAndSetDefaultTaskScheduler(
       const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector,
       const WorkerPoolIndexForTraitsCallback&
           worker_pool_index_for_traits_callback);
 
   // Registers |task_scheduler| to handle tasks posted through the post_task.h
-  // API for this process.
+  // API for this process. For tests, prefer base::test::ScopedTaskScheduler
+  // (ensures isolation).
   static void SetInstance(std::unique_ptr<TaskScheduler> task_scheduler);
 
-  // Retrieve the TaskScheduler set via CreateAndSetDefaultTaskScheduler() or
-  // SetInstance(). This should be used very rarely; most users of TaskScheduler
-  // should use the post_task.h API.
+  // Retrieve the TaskScheduler set via SetInstance() or
+  // CreateAndSet(Simple|Default)TaskScheduler(). This should be used very
+  // rarely; most users of TaskScheduler should use the post_task.h API. In
+  // particular, refrain from doing
+  //   if (!TaskScheduler::GetInstance()) {
+  //     TaskScheduler::SetInstance(...);
+  //     base::PostTask(...);
+  //   }
+  // instead make sure to SetInstance() early in one determinstic place in the
+  // process' initialization phase.
+  // In doubt, consult with //base/task_scheduler/OWNERS.
   static TaskScheduler* GetInstance();
+
+ private:
+  friend class gin::V8Platform;
+
+  // Returns the maximum number of non-single-threaded tasks posted with
+  // |traits| that can run concurrently in this TaskScheduler.
+  //
+  // Do not use this method. To process n items, post n tasks that each process
+  // 1 item rather than GetMaxConcurrentTasksWithTraitsDeprecated() tasks that
+  // each process n/GetMaxConcurrentTasksWithTraitsDeprecated() items.
+  //
+  // TODO(fdoray): Remove this method. https://crbug.com/687264
+  virtual int GetMaxConcurrentTasksWithTraitsDeprecated(
+      const TaskTraits& traits) const = 0;
 };
 
 }  // namespace base

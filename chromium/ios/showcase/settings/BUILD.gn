@@ -4,8 +4,8 @@
 
 source_set("settings") {
   sources = [
-    "settings_coordinator.h",
-    "settings_coordinator.mm",
+    "sc_settings_coordinator.h",
+    "sc_settings_coordinator.mm",
   ]
   deps = [
     "//base",

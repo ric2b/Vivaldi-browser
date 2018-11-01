@@ -11,6 +11,7 @@
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
+#include "ui/aura/mus/capture_synchronizer.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/test/env_test_helper.h"
@@ -25,6 +26,7 @@
 #include "ui/aura/window_port_local.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/ime/input_method_initializer.h"
+#include "ui/base/platform_window_defaults.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -32,12 +34,16 @@
 #include "ui/wm/core/wm_state.h"
 
 #if defined(USE_X11)
-#include "ui/aura/window_tree_host_x11.h"
 #include "ui/base/x/x11_util.h"  // nogncheck
 #endif
 
 namespace aura {
 namespace test {
+namespace {
+
+AuraTestHelper* g_instance = nullptr;
+
+}  // namespace
 
 AuraTestHelper::AuraTestHelper(base::MessageLoopForUI* message_loop)
     : setup_called_(false), teardown_called_(false) {
@@ -45,9 +51,7 @@ AuraTestHelper::AuraTestHelper(base::MessageLoopForUI* message_loop)
   // Disable animations during tests.
   zero_duration_mode_.reset(new ui::ScopedAnimationDurationScaleMode(
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION));
-#if defined(USE_X11)
-  test::SetUseOverrideRedirectWindowByDefault(true);
-#endif
+  ui::test::EnableTestConfigForPlatformWindows();
   InitializeAuraEventGeneratorDelegate();
 }
 
@@ -56,6 +60,11 @@ AuraTestHelper::~AuraTestHelper() {
       << "AuraTestHelper::SetUp() never called.";
   CHECK(teardown_called_)
       << "AuraTestHelper::TearDown() never called.";
+}
+
+// static
+AuraTestHelper* AuraTestHelper::GetInstance() {
+  return g_instance;
 }
 
 void AuraTestHelper::EnableMusWithTestWindowTree(
@@ -99,6 +108,9 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
   // above.
   env_helper.SetMode(env_mode);
   env_helper.SetWindowTreeClient(window_tree_client_);
+  // Tests assume they can set the mouse location on Env() and have it reflected
+  // in tests.
+  env_helper.SetAlwaysUseLastMouseLocation(true);
   Env::GetInstance()->SetActiveFocusClient(focus_client_.get(), nullptr);
   Env::GetInstance()->set_context_factory(context_factory);
   Env::GetInstance()->set_context_factory_private(context_factory_private);
@@ -128,9 +140,12 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
 
   if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT)
     window_tree()->AckAllChanges();
+
+  g_instance = this;
 }
 
 void AuraTestHelper::TearDown() {
+  g_instance = nullptr;
   teardown_called_ = true;
   parenting_client_.reset();
   client::SetFocusClient(root_window(), nullptr);
@@ -179,6 +194,8 @@ void AuraTestHelper::InitWindowTreeClient() {
   window_tree_client_setup_->InitForWindowManager(window_tree_delegate_,
                                                   window_manager_delegate_);
   window_tree_client_ = window_tree_client_setup_->window_tree_client();
+  window_tree_client_->capture_synchronizer()->AttachToCaptureClient(
+      capture_client_.get());
 }
 
 }  // namespace test

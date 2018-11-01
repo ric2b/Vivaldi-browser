@@ -29,6 +29,7 @@
 #include "net/http2/hpack/decoder/hpack_block_decoder.h"
 #include "net/http2/hpack/decoder/hpack_decoder_listener.h"
 #include "net/http2/hpack/decoder/hpack_decoder_state.h"
+#include "net/http2/hpack/decoder/hpack_decoder_tables.h"
 #include "net/http2/hpack/decoder/hpack_whole_entry_buffer.h"
 
 namespace net {
@@ -43,6 +44,11 @@ class NET_EXPORT_PRIVATE Http2HpackDecoder {
 
   void set_listener(HpackDecoderListener* listener);
   HpackDecoderListener* listener() const;
+
+  // Set listener to be notified of insertions into the HPACK dynamic table,
+  // and uses of those entries.
+  void set_tables_debug_listener(
+      HpackDecoderTablesDebugListener* debug_listener);
 
   // max_string_size specifies the maximum size of an on-the-wire string (name
   // or value, plain or Huffman encoded) that will be accepted. See sections
@@ -88,6 +94,9 @@ class NET_EXPORT_PRIVATE Http2HpackDecoder {
 
   // Was an error detected?
   bool error_detected();
+
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
 
  private:
   friend class test::Http2HpackDecoderPeer;

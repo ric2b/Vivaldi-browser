@@ -3,14 +3,16 @@
 #ifndef EXTENSIONS_API_NOTES_NOTES_API_H_
 #define EXTENSIONS_API_NOTES_NOTES_API_H_
 
+#include <memory>
 #include <string>
+
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/notes.h"
-#include "notes/notesnode.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_observer.h"
+#include "notes/notesnode.h"
 
 using vivaldi::Notes_Model;
 using vivaldi::Notes_Node;
@@ -32,8 +34,8 @@ class NotesEventRouter : public NotesModelObserver {
   // vivaldi::NotesModelObserver:
   // TODO(pettern): Wire up the other notifications to send events
   // instead of sending them explicitly.
-  void ExtensiveNotesChangesBeginning(Notes_Model *model) override;
-  void ExtensiveNotesChangesEnded(Notes_Model *model) override;
+  void ExtensiveNotesChangesBeginning(Notes_Model* model) override;
+  void ExtensiveNotesChangesEnded(Notes_Model* model) override;
 
  private:
   // Helper to actually dispatch an event to extension listeners.
@@ -66,21 +68,18 @@ class NotesAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   content::BrowserContext* browser_context_;
 
   // BrowserContextKeyedAPI implementation.
-  static const char* service_name() {
-    return "NotesAPI";
-  }
+  static const char* service_name() { return "NotesAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<NotesEventRouter> notes_event_router_;
 };
 
-
 class NotesAsyncFunction : public ChromeAsyncExtensionFunction {
  public:
   Notes_Node* GetNodeFromId(
       Notes_Node* node,
-      int64_t id);  // TODO: Move to superclass and subclass here.
+      int64_t id);
   Notes_Model* GetNotesModel();
 
  protected:

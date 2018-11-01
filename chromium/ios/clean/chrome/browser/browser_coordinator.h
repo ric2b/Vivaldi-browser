@@ -31,21 +31,15 @@ class ChromeBrowserState;
 // doesn't transfer ownership of the browser state.
 @property(nonatomic, assign) ios::ChromeBrowserState* browserState;
 
-// The view controller that this coordinator will use to present its content, if
-// it is presenting content. This is not the view controller created and managed
-// by this coordinator; it should be supplied by whatever object is creating
-// this coordinator.
-@property(nonatomic, weak) UIViewController* rootViewController;
-
 // The basic lifecycle methods for coordinators are -start and -stop. These
 // are blank template methods; child classes are expected to implement them and
 // do not need to invoke the superclass methods.
 // Starts the user interaction managed by the receiver. Typical implementations
-// will create a view controller and then use |rootViewController| to present
+// will create a view controller and then use |baseViewController| to present
 // it.
 - (void)start;
 
-// Stops the user interaction managed by the receiver. Called on dealloc.
+// Stops the user interaction managed by the receiver.
 - (void)stop;
 
 @end

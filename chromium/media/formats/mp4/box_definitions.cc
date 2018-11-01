@@ -20,6 +20,10 @@
 #include "media/formats/mp4/rcheck.h"
 #include "media/media_features.h"
 
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+#include "media/formats/mp4/dolby_vision.h"
+#endif
+
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
 #include "media/formats/mp4/hevc.h"
 #endif
@@ -610,11 +614,6 @@ bool AVCDecoderConfigurationRecord::ParseInternal(
     RCHECK(reader->Read2(&sps_length) &&
            reader->ReadVec(&sps_list[i], sps_length));
     RCHECK(sps_list[i].size() > 4);
-
-    if (media_log.get()) {
-      MEDIA_LOG(INFO, media_log) << "Video codec: avc1."
-                                 << base::HexEncode(sps_list[i].data() + 1, 3);
-    }
   }
 
   uint8_t num_pps;
@@ -706,8 +705,10 @@ bool VideoSampleEntry::Parse(BoxReader* reader) {
          reader->Read2(&height) &&
          reader->SkipBytes(50));
 
-  RCHECK(reader->ScanChildren() &&
-         reader->MaybeReadChild(&pixel_aspect));
+  RCHECK(reader->ScanChildren());
+  if (reader->HasChild(&pixel_aspect)) {
+    RCHECK(reader->MaybeReadChild(&pixel_aspect));
+  }
 
   if (format == FOURCC_ENCV) {
     // Continue scanning until a recognized protection scheme is found, or until
@@ -732,6 +733,17 @@ bool VideoSampleEntry::Parse(BoxReader* reader) {
           avcConfig->profile_indication);
       frame_bitstream_converter =
           make_scoped_refptr(new AVCBitstreamConverter(std::move(avcConfig)));
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+      // It can be Dolby Vision stream if there is DVCC box.
+      DolbyVisionConfiguration dvccConfig;
+      if (reader->HasChild(&dvccConfig) && reader->ReadChild(&dvccConfig)) {
+        DVLOG(2) << __func__ << " reading DolbyVisionConfiguration (dvcC)";
+        static_cast<AVCBitstreamConverter*>(frame_bitstream_converter.get())
+            ->DisablePostAnnexbValidation();
+        video_codec = kCodecDolbyVision;
+        video_codec_profile = dvccConfig.codec_profile;
+      }
+#endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
       break;
     }
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
@@ -745,9 +757,52 @@ bool VideoSampleEntry::Parse(BoxReader* reader) {
       video_codec_profile = hevcConfig->GetVideoProfile();
       frame_bitstream_converter =
           make_scoped_refptr(new HEVCBitstreamConverter(std::move(hevcConfig)));
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+      // It can be Dolby Vision stream if there is DVCC box.
+      DolbyVisionConfiguration dvccConfig;
+      if (reader->HasChild(&dvccConfig) && reader->ReadChild(&dvccConfig)) {
+        DVLOG(2) << __func__ << " reading DolbyVisionConfiguration (dvcC)";
+        video_codec = kCodecDolbyVision;
+        video_codec_profile = dvccConfig.codec_profile;
+      }
+#endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
       break;
     }
-#endif
+#endif  // BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+    case FOURCC_DVA1:
+    case FOURCC_DVAV: {
+      DVLOG(2) << __func__ << " reading AVCDecoderConfigurationRecord (avcC)";
+      std::unique_ptr<AVCDecoderConfigurationRecord> avcConfig(
+          new AVCDecoderConfigurationRecord());
+      RCHECK(reader->ReadChild(avcConfig.get()));
+      frame_bitstream_converter =
+          make_scoped_refptr(new AVCBitstreamConverter(std::move(avcConfig)));
+      DVLOG(2) << __func__ << " reading DolbyVisionConfiguration (dvcC)";
+      DolbyVisionConfiguration dvccConfig;
+      RCHECK(reader->ReadChild(&dvccConfig));
+      video_codec = kCodecDolbyVision;
+      video_codec_profile = dvccConfig.codec_profile;
+      break;
+    }
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+    case FOURCC_DVH1:
+    case FOURCC_DVHE: {
+      DVLOG(2) << __func__ << " reading HEVCDecoderConfigurationRecord (hvcC)";
+      std::unique_ptr<HEVCDecoderConfigurationRecord> hevcConfig(
+          new HEVCDecoderConfigurationRecord());
+      RCHECK(reader->ReadChild(hevcConfig.get()));
+      frame_bitstream_converter =
+          make_scoped_refptr(new HEVCBitstreamConverter(std::move(hevcConfig)));
+      DVLOG(2) << __func__ << " reading DolbyVisionConfiguration (dvcC)";
+      DolbyVisionConfiguration dvccConfig;
+      RCHECK(reader->ReadChild(&dvccConfig));
+      video_codec = kCodecDolbyVision;
+      video_codec_profile = dvccConfig.codec_profile;
+      break;
+    }
+#endif  // BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
     case FOURCC_VP09:
       if (base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableVp9InMp4)) {
@@ -783,7 +838,15 @@ bool VideoSampleEntry::IsFormatValid() const {
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
     case FOURCC_HEV1:
     case FOURCC_HVC1:
-#endif
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+    case FOURCC_DVH1:
+    case FOURCC_DVHE:
+#endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+#endif  // BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+    case FOURCC_DVA1:
+    case FOURCC_DVAV:
+#endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
       return true;
     case FOURCC_VP09:
       return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -813,11 +876,6 @@ bool ElementaryStreamDescriptor::Parse(BoxReader* reader) {
   RCHECK(es_desc.Parse(data));
 
   object_type = es_desc.object_type();
-
-  if (object_type != 0x40) {
-    MEDIA_LOG(INFO, reader->media_log()) << "Audio codec: mp4a." << std::hex
-                                         << static_cast<int>(object_type);
-  }
 
   if (es_desc.IsAAC(object_type))
     RCHECK(aac.Parse(es_desc.decoder_specific_info(), reader->media_log()));
@@ -1077,7 +1135,10 @@ bool TrackFragmentHeader::Parse(BoxReader* reader) {
   // the wild don't set it.
   //
   //  RCHECK((flags & 0x020000) && !(flags & 0x1));
-  RCHECK(!(reader->flags() & 0x1));
+  RCHECK_MEDIA_LOGGED(!(reader->flags() & 0x1), reader->media_log(),
+                      "TFHD base-data-offset not allowed by MSE. See "
+                      "https://www.w3.org/TR/mse-byte-stream-format-isobmff/"
+                      "#movie-fragment-relative-addressing");
 
   if (reader->flags() & 0x2) {
     RCHECK(reader->Read4(&sample_description_index));

@@ -141,6 +141,24 @@ class BackendSyncClient : public FakeSyncClient {
   }
 };
 
+class NullEncryptionObserver : public SyncEncryptionHandler::Observer {
+ public:
+  void OnPassphraseRequired(
+      PassphraseRequiredReason reason,
+      const sync_pb::EncryptedData& pending_keys) override {}
+  void OnPassphraseAccepted() override {}
+  void OnBootstrapTokenUpdated(const std::string& bootstrap_token,
+                               BootstrapTokenType type) override {}
+  void OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
+                               bool encrypt_everything) override {}
+  void OnEncryptionComplete() override {}
+  void OnCryptographerStateChanged(Cryptographer* cryptographer) override {}
+  void OnPassphraseTypeChanged(PassphraseType type,
+                               base::Time passphrase_time) override {}
+  void OnLocalSetPassphraseEncryption(
+      const SyncEncryptionHandler::NigoriState& nigori_state) override {}
+};
+
 class SyncEngineTest : public testing::Test {
  protected:
   SyncEngineTest()
@@ -209,6 +227,8 @@ class SyncEngineTest : public testing::Test {
     params.registrar = base::MakeUnique<SyncBackendRegistrar>(
         std::string(), base::Bind(&SyncClient::CreateModelWorkerForGroup,
                                   base::Unretained(&sync_client_)));
+    params.encryption_observer_proxy =
+        base::MakeUnique<NullEncryptionObserver>();
     params.http_factory_getter = http_post_provider_factory_getter;
     params.credentials = credentials_;
     params.sync_manager_factory = std::move(fake_manager_factory_);
@@ -323,7 +343,6 @@ TEST_F(SyncEngineTest, FirstTimeSync) {
   EXPECT_TRUE(fake_manager_->GetAndResetDownloadedTypes().HasAll(
       Difference(enabled_types_, ControlTypes())));
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -353,7 +372,6 @@ TEST_F(SyncEngineTest, Restart) {
       Intersection(fake_manager_->GetAndResetPurgedTypes(), enabled_types_)
           .Empty());
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -389,7 +407,6 @@ TEST_F(SyncEngineTest, PartialTypes) {
           .Empty());
   EXPECT_EQ(partial_types, fake_manager_->GetAndResetDownloadedTypes());
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -424,7 +441,6 @@ TEST_F(SyncEngineTest, LostDB) {
       Intersection(fake_manager_->GetAndResetPurgedTypes(), enabled_types_)
           .Empty());
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -459,7 +475,6 @@ TEST_F(SyncEngineTest, DisableTypes) {
   EXPECT_EQ(disabled_types,
             Intersection(fake_manager_->GetAndResetPurgedTypes(), old_types));
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -495,7 +510,6 @@ TEST_F(SyncEngineTest, AddTypes) {
       Intersection(fake_manager_->GetAndResetPurgedTypes(), enabled_types_)
           .Empty());
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -534,7 +548,6 @@ TEST_F(SyncEngineTest, AddDisableTypes) {
   EXPECT_EQ(disabled_types,
             Intersection(fake_manager_->GetAndResetPurgedTypes(), old_types));
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_EQ(disabled_types,
             fake_manager_->GetTypesWithEmptyProgressMarkerToken(old_types));
 }
@@ -570,7 +583,6 @@ TEST_F(SyncEngineTest, NewlySupportedTypes) {
       Intersection(fake_manager_->GetAndResetPurgedTypes(), enabled_types_)
           .Empty());
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());
@@ -612,7 +624,6 @@ TEST_F(SyncEngineTest, NewlySupportedTypesWithPartialTypes) {
       Intersection(fake_manager_->GetAndResetPurgedTypes(), enabled_types_)
           .Empty());
   EXPECT_EQ(enabled_types_, fake_manager_->InitialSyncEndedTypes());
-  EXPECT_EQ(enabled_types_, fake_manager_->GetAndResetEnabledTypes());
   EXPECT_TRUE(
       fake_manager_->GetTypesWithEmptyProgressMarkerToken(enabled_types_)
           .Empty());

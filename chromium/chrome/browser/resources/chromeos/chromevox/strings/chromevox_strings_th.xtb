@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">กลุ่มปุ่มตัวเลือก</translation>
 <translation id="2471138580042810658">ส่วนหัวระดับ 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{เครื่องหมายดอกจัน}other{# เครื่องหมายดอกจัน}}</translation>
+<translation id="2523609930580546572">บทแนะนำ ChromeVox</translation>
 <translation id="2525706221823668172">แป้นพิม์ลัด Chromebook</translation>
 <translation id="2549392850788122959">รีเซ็ต <ph name="KEY" /> แล้ว</translation>
 <translation id="2553108862507765288">ข้อผิดพลาดทางไวยากรณ์</translation>
@@ -221,7 +222,6 @@
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">ลิงก์ที่เคยเข้าชม</translation>
 <translation id="3232388865800379423">ปุ่มป๊อปอัป</translation>
-<translation id="323731244387692321">เปิดความช่วยเหลือเกี่ยวกับแป้นพิมพ์ของ ChromeVox</translation>
 <translation id="3241052487511142956">ลิงก์ที่เคยเข้าชมก่อนหน้า</translation>
 <translation id="3286390186030710347">แถบเลื่อน</translation>
 <translation id="3299925995433437805">ไม่มีลิงก์ที่เคยเข้าชมถัดไป</translation>
@@ -376,6 +376,7 @@
 <translation id="4372435075475052704">ขั้นต่ำ: <ph name="X" /></translation>
 <translation id="4372705107434148843">หยุดการพูด</translation>
 <translation id="4373197658375206385">ไม่มีรายการก่อนหน้าที่ไม่ใช่ลิงก์</translation>
+<translation id="4376316291247992553">ดูภาพเป็นอักษรเบรลล์</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">รีเซ็ต</translation>
 <translation id="4471074325120394300">ไม่มีลิงก์</translation>
@@ -718,6 +719,7 @@
 <translation id="7693840228159394336">ปุ่มตัวเลือกก่อนหน้า</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748">ช่องข้อความรหัสผ่าน <ph name="NAME" /> <ph name="VALUE" /></translation>
+<translation id="7776293189010177726">เปิดเมนู ChromeVox</translation>
 <translation id="7805247615045262757">การนำทางที่เป็นค่าเริ่มต้น</translation>
 <translation id="7805768142964895445">สถานะ</translation>
 <translation id="7810781339813764006">กลุ่มถัดไป</translation>

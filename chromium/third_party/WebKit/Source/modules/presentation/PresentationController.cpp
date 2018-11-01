@@ -66,12 +66,13 @@ DEFINE_TRACE(PresentationController) {
   ContextLifecycleObserver::trace(visitor);
 }
 
-void PresentationController::didStartDefaultSession(
+WebPresentationConnection* PresentationController::didStartDefaultSession(
     const WebPresentationSessionInfo& sessionInfo) {
   if (!m_presentation || !m_presentation->defaultRequest())
-    return;
-  PresentationConnection::take(this, sessionInfo,
-                               m_presentation->defaultRequest());
+    return nullptr;
+
+  return PresentationConnection::take(this, sessionInfo,
+                                      m_presentation->defaultRequest());
 }
 
 void PresentationController::didChangeSessionState(
@@ -132,7 +133,7 @@ void PresentationController::setDefaultRequestUrl(
 
 void PresentationController::registerConnection(
     PresentationConnection* connection) {
-  m_connections.add(connection);
+  m_connections.insert(connection);
 }
 
 void PresentationController::contextDestroyed(ExecutionContext*) {

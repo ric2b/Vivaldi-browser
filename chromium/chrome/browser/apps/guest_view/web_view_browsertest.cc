@@ -2236,6 +2236,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_TearDownTest) {
   LoadAndLaunchPlatformApp("web_view/simple", "WebViewTest.LAUNCHED");
 }
 
+// Tests that an app can inject a content script into a webview, and that it can
+// send cross-origin requests with CORS headers.
+IN_PROC_BROWSER_TEST_P(WebViewTest, ContentScriptFetch) {
+  TestHelper("testContentScriptFetch", "web_view/content_script_fetch",
+             NEEDS_TEST_SERVER);
+}
+
 // In following GeolocationAPIEmbedderHasNoAccess* tests, embedder (i.e. the
 // platform app) does not have geolocation permission for this test.
 // No matter what the API does, geolocation permission would be denied.
@@ -2405,9 +2412,23 @@ IN_PROC_BROWSER_TEST_P(
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, ClearData) {
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
-  ASSERT_TRUE(RunPlatformAppTestWithArg(
-      "platform_apps/web_view/common", "cleardata"))
-          << message_;
+  ASSERT_TRUE(
+      RunPlatformAppTestWithArg("platform_apps/web_view/common", "cleardata"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_P(WebViewTest, ClearSessionCookies) {
+  ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
+  ASSERT_TRUE(RunPlatformAppTestWithArg("platform_apps/web_view/common",
+                                        "cleardata_session"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_P(WebViewTest, ClearPersistentCookies) {
+  ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
+  ASSERT_TRUE(RunPlatformAppTestWithArg("platform_apps/web_view/common",
+                                        "cleardata_persistent"))
+      << message_;
 }
 
 // Regression test for https://crbug.com/615429.
@@ -2774,7 +2795,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
         download->GetLastModifiedTime(), download->GetReceivedBytes(),
         download->GetTotalBytes(), download->GetHash(), download->GetState(),
         download->GetDangerType(), download->GetLastReason(),
-        download->GetOpened()));
+        download->GetOpened(), download->GetReceivedSlices()));
   }
 
   std::unique_ptr<content::DownloadTestObserver> completion_observer(
@@ -3239,6 +3260,24 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestBlobURL) {
 IN_PROC_BROWSER_TEST_P(WebViewTest, LoadWebviewAccessibleResource) {
   TestHelper("testLoadWebviewAccessibleResource",
              "web_view/load_webview_accessible_resource", NEEDS_TEST_SERVER);
+}
+
+// Tests that a WebView can reload a WebView accessible resource. See
+// https://crbug.com/691941.
+IN_PROC_BROWSER_TEST_P(WebViewTest, ReloadWebviewAccessibleResource) {
+  TestHelper("testReloadWebviewAccessibleResource",
+             "web_view/load_webview_accessible_resource", NEEDS_TEST_SERVER);
+
+  content::WebContents* embedder_contents = GetEmbedderWebContents();
+  content::WebContents* web_view_contents =
+      GetGuestViewManager()->GetLastGuestCreated();
+  ASSERT_TRUE(embedder_contents);
+  ASSERT_TRUE(web_view_contents);
+
+  GURL embedder_url(embedder_contents->GetLastCommittedURL());
+  GURL webview_url(embedder_url.GetOrigin().spec() + "assets/foo.html");
+
+  EXPECT_EQ(webview_url, web_view_contents->GetLastCommittedURL());
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, LoadWebViewAccessibility) {

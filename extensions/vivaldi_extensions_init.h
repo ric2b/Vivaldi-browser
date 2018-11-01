@@ -1,6 +1,6 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef  EXTENSIONS_VIVALDI_EXTENSIONS_INIT_H_
+#ifndef EXTENSIONS_VIVALDI_EXTENSIONS_INIT_H_
 #define EXTENSIONS_VIVALDI_EXTENSIONS_INIT_H_
 
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -16,7 +16,8 @@ class VivaldiExtensionInit : public BrowserContextKeyedAPI {
   static VivaldiExtensionInit* Get(content::BrowserContext* context);
 
   static BrowserContextKeyedAPIFactory<VivaldiExtensionInit>*
-      GetFactoryInstance();
+  GetFactoryInstance();
+
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiExtensionInit>;
 
@@ -25,6 +26,6 @@ class VivaldiExtensionInit : public BrowserContextKeyedAPI {
   DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionInit);
 };
 
-} // namespace extensions
+}  // namespace extensions
 
-#endif // EXTENSIONS_VIVALDI_EXTENSIONS_INIT_H_
+#endif  // EXTENSIONS_VIVALDI_EXTENSIONS_INIT_H_

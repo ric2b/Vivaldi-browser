@@ -15,11 +15,12 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_security_policy.h"
-#include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
@@ -154,6 +155,11 @@ void ContentPasswordManagerDriver::AllowToRunFormClassifier() {
   GetPasswordGenerationAgent()->AllowToRunFormClassifier();
 }
 
+autofill::AutofillDriver* ContentPasswordManagerDriver::GetAutofillDriver() {
+  return autofill::ContentAutofillDriver::GetForRenderFrameHost(
+      render_frame_host_);
+}
+
 PasswordGenerationManager*
 ContentPasswordManagerDriver::GetPasswordGenerationManager() {
   return &password_generation_manager_;
@@ -227,10 +233,9 @@ void ContentPasswordManagerDriver::
 }
 
 void ContentPasswordManagerDriver::DidNavigateFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
+    content::NavigationHandle* navigation_handle) {
   // Clear page specific data after main frame navigation.
-  if (!render_frame_host_->GetParent() && !details.is_in_page) {
+  if (navigation_handle->IsInMainFrame() && !navigation_handle->IsSamePage()) {
     GetPasswordManager()->DidNavigateMainFrame();
     GetPasswordAutofillManager()->DidNavigateMainFrame();
   }
@@ -283,13 +288,15 @@ void ContentPasswordManagerDriver::ShowPasswordSuggestions(
     int options,
     const gfx::RectF& bounds) {
   password_autofill_manager_.OnShowPasswordSuggestions(
-      key, text_direction, typed_username, options, bounds);
+      key, text_direction, typed_username, options,
+      TransformToRootCoordinates(bounds));
 }
 
 void ContentPasswordManagerDriver::ShowNotSecureWarning(
     base::i18n::TextDirection text_direction,
     const gfx::RectF& bounds) {
-  password_autofill_manager_.OnShowNotSecureWarning(text_direction, bounds);
+  password_autofill_manager_.OnShowNotSecureWarning(
+      text_direction, TransformToRootCoordinates(bounds));
 }
 
 void ContentPasswordManagerDriver::RecordSavePasswordProgress(
@@ -343,6 +350,16 @@ ContentPasswordManagerDriver::GetPasswordGenerationAgent() {
   }
 
   return password_gen_agent_;
+}
+
+gfx::RectF ContentPasswordManagerDriver::TransformToRootCoordinates(
+    const gfx::RectF& bounds_in_frame_coordinates) {
+  content::RenderWidgetHostView* rwhv = render_frame_host_->GetView();
+  if (!rwhv)
+    return bounds_in_frame_coordinates;
+  return gfx::RectF(rwhv->TransformPointToRootCoordSpaceF(
+                        bounds_in_frame_coordinates.origin()),
+                    bounds_in_frame_coordinates.size());
 }
 
 }  // namespace password_manager

@@ -17,7 +17,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "ios/web/grit/ios_web_resources.h"
-#import "ios/web/net/request_group_util.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
@@ -113,21 +112,16 @@ const char kScriptCommandPrefix[] = "webui";
   if (!web::GetWebClient()->IsAppSpecificURL(URL))
     return;
 
-  GURL navigationURL(URL);
-  // Add request group ID to the URL, if not present. Request group ID may
-  // already be added if restoring state to a WebUI page.
-  GURL requestURL =
-      web::ExtractRequestGroupIDFromURL(net::NSURLWithGURL(URL))
-          ? URL
-          : net::GURLWithNSURL(web::AddRequestGroupIDToURL(
-                net::NSURLWithGURL(URL), _webState->GetRequestGroupID()));
+  // Copy |URL| as it is passed by reference which does not work correctly
+  // with blocks (if the object is destroyed the block will have a dangling
+  // reference).
+  GURL copyURL(URL);
   base::WeakNSObject<CRWWebUIManager> weakSelf(self);
-  [self loadWebUIPageForURL:requestURL
+  [self loadWebUIPageForURL:copyURL
           completionHandler:^(NSString* HTML) {
             web::WebStateImpl* webState = [weakSelf webState];
             if (webState) {
-              webState->LoadWebUIHtml(base::SysNSStringToUTF16(HTML),
-                                      navigationURL);
+              webState->LoadWebUIHtml(base::SysNSStringToUTF16(HTML), copyURL);
             }
           }];
 }
@@ -222,17 +216,22 @@ const char kScriptCommandPrefix[] = "webui";
       {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
       {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
       {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
+      {mojo::kControlMessageHandlerModuleName,
+       IDR_MOJO_CONTROL_MESSAGE_HANDLER_JS},
+      {mojo::kControlMessageProxyModuleName, IDR_MOJO_CONTROL_MESSAGE_PROXY_JS},
+      {mojo::kInterfaceControlMessagesMojom,
+       IDR_MOJO_INTERFACE_CONTROL_MESSAGES_MOJOM_JS},
       {mojo::kInterfaceTypesModuleName, IDR_MOJO_INTERFACE_TYPES_JS},
       {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
       {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
       {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
       {web::kConsoleModuleName, IDR_IOS_CONSOLE_JS},
+      {web::kCoreModuleName, IDR_IOS_MOJO_CORE_JS},
+      {web::kHandleUtilModuleName, IDR_IOS_MOJO_HANDLE_UTIL_JS},
+      {web::kInterfaceProviderModuleName, IDR_IOS_SHELL_INTERFACE_PROVIDER_JS},
+      {web::kSupportModuleName, IDR_IOS_MOJO_SUPPORT_JS},
       {web::kSyncMessageChannelModuleName,
        IDR_IOS_MOJO_SYNC_MESSAGE_CHANNEL_JS},
-      {web::kHandleUtilModuleName, IDR_IOS_MOJO_HANDLE_UTIL_JS},
-      {web::kSupportModuleName, IDR_IOS_MOJO_SUPPORT_JS},
-      {web::kCoreModuleName, IDR_IOS_MOJO_CORE_JS},
-      {web::kInterfaceProviderModuleName, IDR_IOS_SHELL_INTERFACE_PROVIDER_JS},
   };
   scoped_refptr<base::RefCountedMemory> scriptData(
       web::GetWebClient()->GetDataResourceBytes(resource_map[moduleName]));

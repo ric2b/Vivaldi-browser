@@ -17,6 +17,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -271,7 +272,6 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
     const scoped_refptr<SafeBrowsingService>& service)
     : sb_service_(service),
       database_(NULL),
-      enabled_(false),
       enable_download_protection_(false),
       enable_csd_whitelist_(false),
       enable_download_whitelist_(false),
@@ -558,6 +558,14 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
   return false;
 }
 
+bool LocalSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
+    const GURL& url,
+    Client* client) {
+  // TODO(melandory): implement Android support.
+  NOTREACHED();
+  return true;
+}
+
 void LocalSafeBrowsingDatabaseManager::CancelCheck(Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   for (const auto& check : checks_) {
@@ -692,12 +700,13 @@ void LocalSafeBrowsingDatabaseManager::StartOnIOThread(
 
 void LocalSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  SafeBrowsingDatabaseManager::StopOnIOThread(shutdown);
 
   DoStopOnIOThread();
   if (shutdown) {
     sb_service_ = NULL;
   }
+
+  SafeBrowsingDatabaseManager::StopOnIOThread(shutdown);
 }
 
 void LocalSafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished(

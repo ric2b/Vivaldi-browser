@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/prerender/prerender_manager.h"
-#include "chrome/browser/prerender/prerender_util.h"
+#include "components/google/core/browser/google_util.h"
 #include "net/http/http_cache.h"
 
 namespace prerender {
@@ -36,31 +36,6 @@ int GetResourceType(bool is_main_resource, bool is_redirect, bool is_no_store) {
          (is_main_resource * MAIN_RESOURCE);
 }
 
-// Similar to UMA_HISTOGRAM_ENUMERATION but allows a dynamic histogram name.
-// Records a sample such as 0 <= sample < bucket_count, in a histogram with
-// |bucket_count| buckets of width 1 each.
-void RecordHistogramEnum(const std::string& histogram_name,
-                         base::HistogramBase::Sample sample,
-                         base::HistogramBase::Sample bucket_count) {
-  DCHECK_LT(sample, bucket_count);
-  base::HistogramBase* histogram_pointer = base::LinearHistogram::FactoryGet(
-      histogram_name, 1, bucket_count, bucket_count + 1,
-      base::HistogramBase::kUmaTargetedHistogramFlag);
-  histogram_pointer->Add(sample);
-}
-
-// Similar to UMA_HISTOGRAM_CUSTOM_TIMES but allows a dynamic histogram name.
-void RecordHistogramTime(const std::string& histogram_name,
-                         base::TimeDelta time_min,
-                         base::TimeDelta time_max,
-                         base::TimeDelta sample,
-                         base::HistogramBase::Sample bucket_count) {
-  base::HistogramBase* histogram_pointer = base::Histogram::FactoryTimeGet(
-      histogram_name, time_min, time_max, bucket_count,
-      base::HistogramBase::kUmaTargetedHistogramFlag);
-  histogram_pointer->AddTime(sample);
-}
-
 // Time window for which we will record windowed PLTs from the last observed
 // link rel=prefetch tag. This is not intended to be the same as the prerender
 // ttl, it's just intended to be a window during which a prerender has likely
@@ -74,11 +49,7 @@ std::string ComposeHistogramName(const std::string& prefix_type,
   return std::string("Prerender.") + prefix_type + std::string("_") + name;
 }
 
-std::string GetHistogramName(Origin origin, bool is_wash,
-                             const std::string& name) {
-  if (is_wash)
-    return ComposeHistogramName("wash", name);
-
+std::string GetHistogramName(Origin origin, const std::string& name) {
   switch (origin) {
     case ORIGIN_OMNIBOX:
       return ComposeHistogramName("omnibox", name);
@@ -107,7 +78,7 @@ std::string GetHistogramName(Origin origin, bool is_wash,
 
   // Dummy return value to make the compiler happy.
   NOTREACHED();
-  return ComposeHistogramName("wash", name);
+  return ComposeHistogramName("none", name);
 }
 
 bool OriginIsOmnibox(Origin origin) {
@@ -120,17 +91,10 @@ const char* FirstContentfulPaintHiddenName(bool was_hidden) {
 
 }  // namespace
 
-// Helper macros for origin-based histogram reporting. All HISTOGRAM arguments
-// must be UMA_HISTOGRAM... macros that contain an argument "name" which these
-// macros will eventually substitute for the actual name used.
-#define PREFIXED_HISTOGRAM(histogram_name, origin, HISTOGRAM)           \
-  PREFIXED_HISTOGRAM_INTERNAL(origin, IsOriginWash(), HISTOGRAM, histogram_name)
-
-#define PREFIXED_HISTOGRAM_ORIGIN_EXPERIMENT(histogram_name, origin, \
-                                             HISTOGRAM) \
-  PREFIXED_HISTOGRAM_INTERNAL(origin, false, HISTOGRAM, histogram_name)
-
-#define PREFIXED_HISTOGRAM_INTERNAL(origin, wash, HISTOGRAM, histogram_name)  \
+// Helper macro for origin-based histogram reporting. All HISTOGRAM arguments
+// must be UMA_HISTOGRAM... macros that contain an argument "name" which this
+// macro will eventually substitute for the actual name used.
+#define PREFIXED_HISTOGRAM(histogram_name, origin, HISTOGRAM)                 \
   do {                                                                        \
     {                                                                         \
       /* Do not rename.  HISTOGRAM expects a local variable "name". */        \
@@ -138,11 +102,9 @@ const char* FirstContentfulPaintHiddenName(bool was_hidden) {
       HISTOGRAM;                                                              \
     }                                                                         \
     /* Do not rename.  HISTOGRAM expects a local variable "name". */          \
-    std::string name = GetHistogramName(origin, wash, histogram_name);        \
+    std::string name = GetHistogramName(origin, histogram_name);              \
     /* Branching because HISTOGRAM is caching the histogram into a static. */ \
-    if (wash) {                                                               \
-      HISTOGRAM;                                                              \
-    } else if (origin == ORIGIN_OMNIBOX) {                                    \
+    if (origin == ORIGIN_OMNIBOX) {                                           \
       HISTOGRAM;                                                              \
     } else if (origin == ORIGIN_NONE) {                                       \
       HISTOGRAM;                                                              \
@@ -166,28 +128,9 @@ const char* FirstContentfulPaintHiddenName(bool was_hidden) {
   } while (0)
 
 PrerenderHistograms::PrerenderHistograms()
-    : last_origin_(ORIGIN_MAX),
-      origin_wash_(false),
-      seen_any_pageload_(true),
-      seen_pageload_started_after_prerender_(true) {
-}
+    : seen_any_pageload_(true), seen_pageload_started_after_prerender_(true) {}
 
-void PrerenderHistograms::RecordPrerender(Origin origin, const GURL& url) {
-  // We need to update last_origin_ and origin_wash_.
-  if (!WithinWindow()) {
-    // If we are outside a window, this is a fresh start and we are fine,
-    // and there is no mix.
-    origin_wash_ = false;
-  } else {
-    // If we are inside the last window, there is a mish mash of origins if
-    // either there was a mish mash before, or the current origin does not match
-    // the previous one.
-    if (origin != last_origin_)
-      origin_wash_ = true;
-  }
-
-  last_origin_ = origin;
-
+void PrerenderHistograms::RecordPrerender() {
   // If we observe multiple tags within the 30 second window, we will still
   // reset the window to begin at the most recent occurrence, so that we will
   // always be in a window in the 30 seconds from each occurrence.
@@ -266,7 +209,9 @@ void PrerenderHistograms::RecordPerceivedPageLoadTime(
   if (!url.SchemeIsHTTPOrHTTPS())
     return;
   bool within_window = WithinWindow();
-  bool is_google_url = IsGoogleDomain(url);
+  bool is_google_url =
+      google_util::IsGoogleDomainUrl(url, google_util::DISALLOW_SUBDOMAIN,
+                                     google_util::ALLOW_NON_STANDARD_PORTS);
   RECORD_PLT("PerceivedPLT", perceived_page_load_time);
   if (within_window)
     RECORD_PLT("PerceivedPLTWindowed", perceived_page_load_time);
@@ -310,10 +255,9 @@ void PrerenderHistograms::RecordPerceivedFirstContentfulPaintStatus(
     Origin origin,
     bool successful,
     bool was_hidden) {
-  base::UmaHistogramBoolean(
-      GetHistogramName(origin, IsOriginWash(), "PerceivedTTFCPRecorded") +
-          FirstContentfulPaintHiddenName(was_hidden),
-      successful);
+  base::UmaHistogramBoolean(GetHistogramName(origin, "PerceivedTTFCPRecorded") +
+                                FirstContentfulPaintHiddenName(was_hidden),
+                            successful);
 }
 
 void PrerenderHistograms::RecordPageLoadTimeNotSwappedIn(
@@ -322,8 +266,11 @@ void PrerenderHistograms::RecordPageLoadTimeNotSwappedIn(
     const GURL& url) const {
   // If the URL to be prerendered is not a http[s] URL, or is a Google URL,
   // do not record.
-  if (!url.SchemeIsHTTPOrHTTPS() || IsGoogleDomain(url))
+  if (!url.SchemeIsHTTPOrHTTPS() ||
+      google_util::IsGoogleDomainUrl(url, google_util::DISALLOW_SUBDOMAIN,
+                                     google_util::ALLOW_NON_STANDARD_PORTS)) {
     return;
+  }
   RECORD_PLT("PrerenderNotSwappedInPLT", page_load_time);
 }
 
@@ -393,7 +340,7 @@ void PrerenderHistograms::RecordFinalStatus(
     Origin origin,
     FinalStatus final_status) const {
   DCHECK(final_status != FINAL_STATUS_MAX);
-  PREFIXED_HISTOGRAM_ORIGIN_EXPERIMENT(
+  PREFIXED_HISTOGRAM(
       "FinalStatus", origin,
       UMA_HISTOGRAM_ENUMERATION(name, final_status, FINAL_STATUS_MAX));
 }
@@ -439,9 +386,9 @@ void PrerenderHistograms::RecordPrefetchResponseReceived(
 
   int sample = GetResourceType(is_main_resource, is_redirect, is_no_store);
   std::string histogram_name =
-      GetHistogramName(origin, IsOriginWash(), "NoStatePrefetchResponseTypes");
-  RecordHistogramEnum(histogram_name, sample,
-                      NO_STATE_PREFETCH_RESPONSE_TYPE_COUNT);
+      GetHistogramName(origin, "NoStatePrefetchResponseTypes");
+  base::UmaHistogramExactLinear(histogram_name, sample,
+                                NO_STATE_PREFETCH_RESPONSE_TYPE_COUNT);
 }
 
 void PrerenderHistograms::RecordPrefetchRedirectCount(
@@ -453,9 +400,9 @@ void PrerenderHistograms::RecordPrefetchRedirectCount(
   const int kMaxRedirectCount = 10;
   std::string histogram_base_name = base::StringPrintf(
       "NoStatePrefetch%sResourceRedirects", is_main_resource ? "Main" : "Sub");
-  std::string histogram_name =
-      GetHistogramName(origin, IsOriginWash(), histogram_base_name);
-  RecordHistogramEnum(histogram_name, redirect_count, kMaxRedirectCount);
+  std::string histogram_name = GetHistogramName(origin, histogram_base_name);
+  base::UmaHistogramExactLinear(histogram_name, redirect_count,
+                                kMaxRedirectCount);
 }
 
 void PrerenderHistograms::RecordPrefetchFirstContentfulPaintTime(
@@ -468,9 +415,10 @@ void PrerenderHistograms::RecordPrefetchFirstContentfulPaintTime(
 
   if (!prefetch_age.is_zero()) {
     DCHECK_NE(origin, ORIGIN_NONE);
-    RecordHistogramTime(GetHistogramName(origin, IsOriginWash(), "PrefetchAge"),
-                        base::TimeDelta::FromMilliseconds(10),
-                        base::TimeDelta::FromMinutes(30), prefetch_age, 50);
+    base::UmaHistogramCustomTimes(GetHistogramName(origin, "PrefetchAge"),
+                                  prefetch_age,
+                                  base::TimeDelta::FromMilliseconds(10),
+                                  base::TimeDelta::FromMinutes(30), 50);
   }
 
   std::string histogram_base_name;
@@ -485,17 +433,11 @@ void PrerenderHistograms::RecordPrefetchFirstContentfulPaintTime(
 
   histogram_base_name += is_no_store ? ".NoStore" : ".Cacheable";
   histogram_base_name += FirstContentfulPaintHiddenName(was_hidden);
-  std::string histogram_name =
-      GetHistogramName(origin, IsOriginWash(), histogram_base_name);
+  std::string histogram_name = GetHistogramName(origin, histogram_base_name);
 
-  RecordHistogramTime(histogram_name, base::TimeDelta::FromMilliseconds(10),
-                      base::TimeDelta::FromMinutes(2), time, 50);
-}
-
-bool PrerenderHistograms::IsOriginWash() const {
-  if (!WithinWindow())
-    return false;
-  return origin_wash_;
+  base::UmaHistogramCustomTimes(histogram_name, time,
+                                base::TimeDelta::FromMilliseconds(10),
+                                base::TimeDelta::FromMinutes(2), 50);
 }
 
 }  // namespace prerender

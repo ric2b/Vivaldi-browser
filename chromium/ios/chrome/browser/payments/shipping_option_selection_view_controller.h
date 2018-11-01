@@ -7,17 +7,23 @@
 
 #import <UIKit/UIKit.h>
 
+#include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 #include "ios/web/public/payments/payment_request.h"
 
 @class ShippingOptionSelectionViewController;
 
+// Delegate protocol for ShippingOptionSelectionViewController.
 @protocol ShippingOptionSelectionViewControllerDelegate<NSObject>
 
+// Notifies the delegate that the user has selected a shipping option.
 - (void)shippingOptionSelectionViewController:
             (ShippingOptionSelectionViewController*)controller
-                       selectedShippingOption:
-                           (web::PaymentShippingOption*)shippingOption;
+                      didSelectShippingOption:
+                          (web::PaymentShippingOption*)shippingOption;
+
+// Notifies the delegate that the user has chosen to return to the previous
+// screen without making a selection.
 - (void)shippingOptionSelectionViewControllerDidReturn:
     (ShippingOptionSelectionViewController*)controller;
 
@@ -28,19 +34,24 @@
 // delegate.
 @interface ShippingOptionSelectionViewController : CollectionViewController
 
-// The available shipping options to fulfill the payment request.
-@property(nonatomic, assign) std::vector<web::PaymentShippingOption*>
-    shippingOptions;
+// Whether or not the view is in a pending state.
+@property(nonatomic, assign, getter=isPending) BOOL pending;
 
-// The shipping option selected by the user, if any.
-@property(nonatomic, assign) web::PaymentShippingOption* selectedShippingOption;
+// The error message to display, if any.
+@property(nonatomic, copy) NSString* errorMessage;
 
 // The delegate to be notified when the user selects a shipping option or
 // returns without selecting one.
-@property(nonatomic, weak) id<ShippingOptionSelectionViewControllerDelegate>
-    delegate;
+@property(nonatomic, weak)
+    id<ShippingOptionSelectionViewControllerDelegate> delegate;
 
-- (instancetype)init NS_DESIGNATED_INITIALIZER;
+// Initializes this object with an instance of PaymentRequest which owns an
+// instance of web::PaymentRequest as provided by the page invoking the Payment
+// Request API. This object will not take ownership of |paymentRequest|.
+- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;

@@ -165,7 +165,8 @@ class TestWindowTree : public ui::mojom::WindowTree {
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t change_id, uint32_t window_id) override;
   void SetCanFocus(uint32_t window_id, bool can_focus) override;
-  void SetCanAcceptEvents(uint32_t window_id, bool can_accept_events) override;
+  void SetEventTargetingPolicy(uint32_t window_id,
+                               ui::mojom::EventTargetingPolicy policy) override;
   void SetPredefinedCursor(uint32_t change_id,
                            uint32_t window_id,
                            ui::mojom::Cursor cursor_id) override;
@@ -177,6 +178,9 @@ class TestWindowTree : public ui::mojom::WindowTree {
   void OnWindowInputEventAck(uint32_t event_id,
                              ui::mojom::EventResult result) override;
   void DeactivateWindow(uint32_t window_id) override;
+  void StackAbove(uint32_t change_id, uint32_t above_id,
+                  uint32_t below_id) override;
+  void StackAtTop(uint32_t change_id, uint32_t window_id) override;
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<ui::mojom::WindowManagerClient> internal)
       override;

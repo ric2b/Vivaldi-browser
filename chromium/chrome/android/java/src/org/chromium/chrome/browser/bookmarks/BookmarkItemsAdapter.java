@@ -11,18 +11,20 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkPromoHeader.PromoHeaderShowingChangeListener;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * BaseAdapter for {@link BookmarkRecyclerView}. It manages bookmarks to list there.
+ * BaseAdapter for {@link RecyclerView}. It manages bookmarks to list there.
  */
 class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> implements
         BookmarkUIObserver, PromoHeaderShowingChangeListener {
@@ -34,13 +36,17 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     private BookmarkDelegate mDelegate;
     private Context mContext;
     private BookmarkPromoHeader mPromoHeaderManager;
+    private boolean mShouldShowDividers;
 
     private List<List<? extends Object>> mSections;
     private List<Object> mPromoHeaderSection = new ArrayList<>();
-    private List<Object> mFolderDividerSection = new ArrayList<>();
+    private List<Object> mFolderDividerSection;
     private List<BookmarkId> mFolderSection = new ArrayList<>();
-    private List<Object> mBookmarkDividerSection = new ArrayList<>();
+    private List<Object> mBookmarkDividerSection;
     private List<BookmarkId> mBookmarkSection = new ArrayList<>();
+
+    private List<BookmarkRow> mBookmarkRows = new ArrayList<>();
+    private List<BookmarkRow> mFolderRows = new ArrayList<>();
 
     private BookmarkModelObserver mBookmarkModelObserver = new BookmarkModelObserver() {
         @Override
@@ -74,11 +80,25 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     BookmarkItemsAdapter(Context context) {
         mContext = context;
 
+        // TODO(twellington): remove dividers entirely after the bookmarks 720dp layout is restyled
+        //                    to match the < 720dp style.
+        mShouldShowDividers = DeviceFormFactor.isLargeTablet(context);
+
         mSections = new ArrayList<>();
         mSections.add(mPromoHeaderSection);
-        mSections.add(mFolderDividerSection);
+
+        if (mShouldShowDividers) {
+            mFolderDividerSection = new ArrayList<>();
+            mSections.add(mFolderDividerSection);
+        }
+
         mSections.add(mFolderSection);
-        mSections.add(mBookmarkDividerSection);
+
+        if (mShouldShowDividers) {
+            mBookmarkDividerSection = new ArrayList<>();
+            mSections.add(mBookmarkDividerSection);
+        }
+
         mSections.add(mBookmarkSection);
     }
 
@@ -142,6 +162,8 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     }
 
     private void updateDividerSections() {
+        if (!mShouldShowDividers) return;
+
         mFolderDividerSection.clear();
         mBookmarkDividerSection.clear();
 
@@ -160,6 +182,18 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         assert section == mFolderSection || section == mBookmarkSection;
         section.remove(toSectionPosition(position));
         notifyItemRemoved(position);
+
+        if (section == mBookmarkSection && !mBookmarkSection.isEmpty()) {
+            for (BookmarkRow row : mBookmarkRows) {
+                BookmarkId id = row.getItem();
+                setBackgroundResourceForBookmarkRow(row, id);
+            }
+        } else if (!mFolderSection.isEmpty()) {
+            for (BookmarkRow row : mFolderRows) {
+                BookmarkId id = row.getItem();
+                setBackgroundResourceForFolderRow(row, id);
+            }
+        }
     }
 
     // RecyclerView.Adapter implementation.
@@ -206,11 +240,13 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 BookmarkFolderRow folder = (BookmarkFolderRow) LayoutInflater.from(
                         parent.getContext()).inflate(R.layout.bookmark_folder_row, parent, false);
                 folder.onBookmarkDelegateInitialized(mDelegate);
+                mFolderRows.add(folder);
                 return new ItemViewHolder(folder);
             case BOOKMARK_VIEW:
                 BookmarkItemRow item = (BookmarkItemRow) LayoutInflater.from(
                         parent.getContext()).inflate(R.layout.bookmark_item_row, parent, false);
                 item.onBookmarkDelegateInitialized(mDelegate);
+                mBookmarkRows.add(item);
                 return new ItemViewHolder(item);
             default:
                 assert false;
@@ -229,9 +265,11 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 break;
             case FOLDER_VIEW:
                 ((BookmarkRow) holder.itemView).setBookmarkId(id);
+                setBackgroundResourceForFolderRow(((BookmarkRow) holder.itemView), id);
                 break;
             case BOOKMARK_VIEW:
                 ((BookmarkRow) holder.itemView).setBookmarkId(id);
+                setBackgroundResourceForBookmarkRow((BookmarkRow) holder.itemView, id);
                 break;
             default:
                 assert false : "View type not supported!";
@@ -298,5 +336,20 @@ class BookmarkItemsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         if (mPromoHeaderManager.shouldShow()) {
             mPromoHeaderSection.add(null);
         }
+    }
+
+    @VisibleForTesting
+    public BookmarkDelegate getDelegateForTesting() {
+        return mDelegate;
+    }
+
+    private void setBackgroundResourceForBookmarkRow(BookmarkRow row, BookmarkId id) {
+        row.setBackgroundResourceForGroupPosition(id.equals(mBookmarkSection.get(0)),
+                id.equals(mBookmarkSection.get(mBookmarkSection.size() - 1)));
+    }
+
+    private void setBackgroundResourceForFolderRow(BookmarkRow row, BookmarkId id) {
+        row.setBackgroundResourceForGroupPosition(id.equals(mFolderSection.get(0)),
+                id.equals(mFolderSection.get(mFolderSection.size() - 1)));
     }
 }

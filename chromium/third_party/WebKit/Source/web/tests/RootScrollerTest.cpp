@@ -22,7 +22,6 @@
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebRemoteFrame.h"
 #include "public/web/WebScriptSource.h"
@@ -52,8 +51,9 @@ class RootScrollerTest : public ::testing::Test {
 
   ~RootScrollerTest() override {
     m_featuresBackup.restore();
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   WebViewImpl* initialize(const std::string& pageName,
@@ -81,9 +81,9 @@ class RootScrollerTest : public ::testing::Test {
   }
 
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(m_baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
   }
 
   void executeScript(const WebString& code) {
@@ -124,24 +124,24 @@ class RootScrollerTest : public ::testing::Test {
     return &doc->rootScrollerController().effectiveRootScroller();
   }
 
-  WebGestureEvent generateTouchGestureEvent(WebInputEvent::Type type,
-                                            int deltaX = 0,
-                                            int deltaY = 0) {
+  WebCoalescedInputEvent generateTouchGestureEvent(WebInputEvent::Type type,
+                                                   int deltaX = 0,
+                                                   int deltaY = 0) {
     return generateGestureEvent(type, WebGestureDeviceTouchscreen, deltaX,
                                 deltaY);
   }
 
-  WebGestureEvent generateWheelGestureEvent(WebInputEvent::Type type,
-                                            int deltaX = 0,
-                                            int deltaY = 0) {
+  WebCoalescedInputEvent generateWheelGestureEvent(WebInputEvent::Type type,
+                                                   int deltaX = 0,
+                                                   int deltaY = 0) {
     return generateGestureEvent(type, WebGestureDeviceTouchpad, deltaX, deltaY);
   }
 
  protected:
-  WebGestureEvent generateGestureEvent(WebInputEvent::Type type,
-                                       WebGestureDevice device,
-                                       int deltaX,
-                                       int deltaY) {
+  WebCoalescedInputEvent generateGestureEvent(WebInputEvent::Type type,
+                                              WebGestureDevice device,
+                                              int deltaX,
+                                              int deltaY) {
     WebGestureEvent event(type, WebInputEvent::NoModifiers,
                           WebInputEvent::TimeStampForTesting);
     event.sourceDevice = device;
@@ -151,7 +151,7 @@ class RootScrollerTest : public ::testing::Test {
       event.data.scrollUpdate.deltaX = deltaX;
       event.data.scrollUpdate.deltaY = deltaY;
     }
-    return event;
+    return WebCoalescedInputEvent(event);
   }
 
   WebViewImpl* initializeInternal(const std::string& url,

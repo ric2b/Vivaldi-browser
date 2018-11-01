@@ -20,10 +20,14 @@ class IconCacher {
  public:
   virtual ~IconCacher() = default;
 
-  // Fetches the icon if necessary, then invokes |done| with true if it was
-  // newly fetched (false if it was already cached or could not be fetched).
+  // Fetches the icon if necessary. If a new icon was fetched, the optional
+  // |icon_available| callback will be invoked.
+  // If there are preliminary icons (e.g. provided by static resources), the
+  // optional |preliminary_icon_available| callback will be invoked in addition.
+  // TODO(fhorschig): In case we keep these, make them OnceClosures.
   virtual void StartFetch(PopularSites::Site site,
-                          const base::Callback<void(bool)>& done) = 0;
+                          const base::Closure& icon_available,
+                          const base::Closure& preliminary_icon_available) = 0;
 };
 
 }  // namespace ntp_tiles

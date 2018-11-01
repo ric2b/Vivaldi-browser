@@ -80,7 +80,12 @@ Host.UserMetrics.Action = {
   CommandEvaluatedInConsolePanel: 15,
   DOMPropertiesExpanded: 16,
   ResizedViewInResponsiveMode: 17,
-  TimelinePageReloadStarted: 18
+  TimelinePageReloadStarted: 18,
+  ConnectToNodeJSFromFrontend: 19,
+  ConnectToNodeJSDirectly: 20,
+  CpuThrottlingEnabled: 21,
+  CpuProfileNodeFocused: 22,
+  CpuProfileNodeExcluded: 23,
 };
 
 Host.UserMetrics._PanelCodes = {

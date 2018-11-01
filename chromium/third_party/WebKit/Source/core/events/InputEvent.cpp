@@ -26,10 +26,7 @@ const struct {
     {InputEvent::InputType::InsertFromPaste, "insertFromPaste"},
     {InputEvent::InputType::InsertFromDrop, "insertFromDrop"},
     {InputEvent::InputType::InsertReplacementText, "insertReplacementText"},
-    {InputEvent::InputType::DeleteComposedCharacterForward,
-     "deleteComposedCharacterForward"},
-    {InputEvent::InputType::DeleteComposedCharacterBackward,
-     "deleteComposedCharacterBackward"},
+    {InputEvent::InputType::InsertCompositionText, "insertCompositionText"},
     {InputEvent::InputType::DeleteWordBackward, "deleteWordBackward"},
     {InputEvent::InputType::DeleteWordForward, "deleteWordForward"},
     {InputEvent::InputType::DeleteLineBackward, "deleteLineBackward"},
@@ -68,7 +65,7 @@ String convertInputTypeToString(InputEvent::InputType inputType) {
   if (it >= std::begin(kInputTypeStringNameMap) &&
       it < std::end(kInputTypeStringNameMap))
     return AtomicString(it->stringName);
-  return emptyString();
+  return emptyString;
 }
 
 InputEvent::InputType convertStringToInputType(const String& stringName) {
@@ -96,8 +93,10 @@ InputEvent::InputEvent(const AtomicString& type,
     m_dataTransfer = initializer.dataTransfer();
   if (initializer.hasIsComposing())
     m_isComposing = initializer.isComposing();
-  if (initializer.hasRanges())
-    m_ranges = initializer.ranges();
+  if (!initializer.hasTargetRanges())
+    return;
+  for (const auto& range : initializer.targetRanges())
+    m_ranges.push_back(range->toRange());
 }
 
 /* static */
@@ -105,7 +104,7 @@ InputEvent* InputEvent::createBeforeInput(InputType inputType,
                                           const String& data,
                                           EventCancelable cancelable,
                                           EventIsComposing isComposing,
-                                          const RangeVector* ranges) {
+                                          const StaticRangeVector* ranges) {
   InputEventInit inputEventInit;
 
   inputEventInit.setBubbles(true);
@@ -117,7 +116,7 @@ InputEvent* InputEvent::createBeforeInput(InputType inputType,
   inputEventInit.setData(data);
   inputEventInit.setIsComposing(isComposing == IsComposing);
   if (ranges)
-    inputEventInit.setRanges(*ranges);
+    inputEventInit.setTargetRanges(*ranges);
   inputEventInit.setComposed(true);
   return InputEvent::create(EventTypeNames::beforeinput, inputEventInit);
 }
@@ -127,7 +126,7 @@ InputEvent* InputEvent::createBeforeInput(InputType inputType,
                                           DataTransfer* dataTransfer,
                                           EventCancelable cancelable,
                                           EventIsComposing isComposing,
-                                          const RangeVector* ranges) {
+                                          const StaticRangeVector* ranges) {
   InputEventInit inputEventInit;
 
   inputEventInit.setBubbles(true);
@@ -136,7 +135,7 @@ InputEvent* InputEvent::createBeforeInput(InputType inputType,
   inputEventInit.setDataTransfer(dataTransfer);
   inputEventInit.setIsComposing(isComposing == IsComposing);
   if (ranges)
-    inputEventInit.setRanges(*ranges);
+    inputEventInit.setTargetRanges(*ranges);
   inputEventInit.setComposed(true);
   return InputEvent::create(EventTypeNames::beforeinput, inputEventInit);
 }
@@ -145,7 +144,7 @@ InputEvent* InputEvent::createBeforeInput(InputType inputType,
 InputEvent* InputEvent::createInput(InputType inputType,
                                     const String& data,
                                     EventIsComposing isComposing,
-                                    const RangeVector* ranges) {
+                                    const StaticRangeVector* ranges) {
   InputEventInit inputEventInit;
 
   inputEventInit.setBubbles(true);
@@ -157,7 +156,7 @@ InputEvent* InputEvent::createInput(InputType inputType,
   inputEventInit.setData(data);
   inputEventInit.setIsComposing(isComposing == IsComposing);
   if (ranges)
-    inputEventInit.setRanges(*ranges);
+    inputEventInit.setTargetRanges(*ranges);
   inputEventInit.setComposed(true);
   return InputEvent::create(EventTypeNames::input, inputEventInit);
 }
@@ -169,9 +168,7 @@ String InputEvent::inputType() const {
 StaticRangeVector InputEvent::getTargetRanges() const {
   StaticRangeVector staticRanges;
   for (const auto& range : m_ranges)
-    staticRanges.push_back(StaticRange::create(
-        range->ownerDocument(), range->startContainer(), range->startOffset(),
-        range->endContainer(), range->endOffset()));
+    staticRanges.push_back(StaticRange::create(range));
   return staticRanges;
 }
 

@@ -130,8 +130,7 @@ int DragDropControllerMus::StartDragAndDrop(
     Window* source_window,
     const gfx::Point& screen_location,
     int drag_operations,
-    ui::DragDropTypes::DragEventSource source,
-    bool& cancelled) {
+    ui::DragDropTypes::DragEventSource source) {
   DCHECK(!current_drag_state_);
 
   // TODO(erg): Pass |cursor_location| and |bitmap| in PerformDragDrop() when

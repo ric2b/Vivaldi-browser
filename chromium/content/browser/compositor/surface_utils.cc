@@ -10,7 +10,6 @@
 #include "build/build_config.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/resources/single_release_callback.h"
-#include "cc/surfaces/surface_id_allocator.h"
 #include "components/display_compositor/gl_helper.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -20,7 +19,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_ANDROID)
-#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
+#include "content/browser/renderer_host/compositor_impl_android.h"
 #else
 #include "content/browser/compositor/image_transport_factory.h"
 #include "ui/compositor/compositor.h"  // nogncheck
@@ -161,7 +160,7 @@ namespace content {
 
 cc::FrameSinkId AllocateFrameSinkId() {
 #if defined(OS_ANDROID)
-  return ContextProviderFactoryImpl::GetInstance()->AllocateFrameSinkId();
+  return CompositorImpl::AllocateFrameSinkId();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   return factory->GetContextFactoryPrivate()->AllocateFrameSinkId();
@@ -170,7 +169,7 @@ cc::FrameSinkId AllocateFrameSinkId() {
 
 cc::SurfaceManager* GetSurfaceManager() {
 #if defined(OS_ANDROID)
-  return ContextProviderFactoryImpl::GetInstance()->GetSurfaceManager();
+  return CompositorImpl::GetSurfaceManager();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   if (factory == NULL)

@@ -78,7 +78,6 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
   virtual bool isDragAndDropCommand() const;
   virtual bool preservesTypingStyle() const;
   virtual void setShouldRetainAutocorrectionIndicator(bool);
-  virtual bool shouldStopCaretBlinking() const { return false; }
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -136,7 +135,6 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
   void replaceCollapsibleWhitespaceWithNonBreakingSpaceIfNeeded(
       const VisiblePosition&);
   bool canRebalance(const Position&) const;
-  bool shouldRebalanceLeadingWhitespaceFor(const String&) const;
   void removeCSSProperty(Element*, CSSPropertyID);
   void removeElementAttribute(Element*, const QualifiedName& attribute);
   void removeChildrenInRange(Node*, unsigned from, unsigned to, EditingState*);

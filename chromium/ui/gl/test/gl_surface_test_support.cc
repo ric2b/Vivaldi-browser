@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "build/build_config.h"
+#include "ui/base/platform_window_defaults.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
@@ -20,7 +21,6 @@
 
 #if defined(USE_X11)
 #include <X11/Xlib.h>
-#include "ui/platform_window/x11/x11_window.h"
 #endif
 
 namespace gl {
@@ -31,21 +31,21 @@ void GLSurfaceTestSupport::InitializeOneOff() {
 
 #if defined(USE_X11)
   XInitThreads();
-  ui::test::SetUseOverrideRedirectWindowByDefault(true);
 #endif
+  ui::test::EnableTestConfigForPlatformWindows();
 
-  bool use_osmesa = true;
+  bool use_software_gl = true;
 
-  // We usually use OSMesa as this works on all bots. The command line can
-  // override this behaviour to use hardware GL.
+  // We usually use software GL as this works on all bots. The
+  // command line can override this behaviour to use hardware GL.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseGpuInTests)) {
-    use_osmesa = false;
+    use_software_gl = false;
   }
 
 #if defined(OS_ANDROID)
   // On Android we always use hardware GL.
-  use_osmesa = false;
+  use_software_gl = false;
 #endif
 
   std::vector<GLImplementation> allowed_impls =
@@ -53,24 +53,24 @@ void GLSurfaceTestSupport::InitializeOneOff() {
   DCHECK(!allowed_impls.empty());
 
   GLImplementation impl = allowed_impls[0];
-  if (use_osmesa)
-    impl = kGLImplementationOSMesaGL;
+  if (use_software_gl)
+    impl = gl::GetSoftwareGLImplementation();
 
   DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kUseGL))
       << "kUseGL has not effect in tests";
 
-  bool fallback_to_osmesa = false;
+  bool fallback_to_software_gl = false;
   bool gpu_service_logging = false;
   bool disable_gl_drawing = true;
 
   CHECK(init::InitializeGLOneOffImplementation(
-      impl, fallback_to_osmesa, gpu_service_logging, disable_gl_drawing));
+      impl, fallback_to_software_gl, gpu_service_logging, disable_gl_drawing));
 }
 
 // static
 void GLSurfaceTestSupport::InitializeOneOffImplementation(
     GLImplementation impl,
-    bool fallback_to_osmesa) {
+    bool fallback_to_software_gl) {
   DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kUseGL))
       << "kUseGL has not effect in tests";
 
@@ -82,7 +82,7 @@ void GLSurfaceTestSupport::InitializeOneOffImplementation(
   bool disable_gl_drawing = false;
 
   CHECK(init::InitializeGLOneOffImplementation(
-      impl, fallback_to_osmesa, gpu_service_logging, disable_gl_drawing));
+      impl, fallback_to_software_gl, gpu_service_logging, disable_gl_drawing));
 }
 
 // static
@@ -92,6 +92,14 @@ void GLSurfaceTestSupport::InitializeOneOffWithMockBindings() {
   ui::OzonePlatform::InitializeForGPU();
 #endif
   InitializeOneOffImplementation(kGLImplementationMockGL, false);
+}
+
+void GLSurfaceTestSupport::InitializeOneOffWithStubBindings() {
+#if defined(USE_OZONE)
+  // This function skips where Ozone is otherwise initialized.
+  ui::OzonePlatform::InitializeForGPU();
+#endif
+  InitializeOneOffImplementation(kGLImplementationStubGL, false);
 }
 
 }  // namespace gl

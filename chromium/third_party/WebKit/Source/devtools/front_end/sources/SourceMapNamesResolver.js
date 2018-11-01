@@ -31,7 +31,8 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
   var endLocation = scope.endLocation();
 
   if (scope.type() === Protocol.Debugger.ScopeType.Global || !startLocation || !endLocation ||
-      !startLocation.script().sourceMapURL || (startLocation.script() !== endLocation.script()))
+      !startLocation.script() || !startLocation.script().sourceMapURL ||
+      (startLocation.script() !== endLocation.script()))
     return Promise.resolve(/** @type {!Array<!Sources.SourceMapNamesResolver.Identifier>}*/ ([]));
 
   var script = startLocation.script();
@@ -251,9 +252,8 @@ Sources.SourceMapNamesResolver.resolveExpression = function(
  */
 Sources.SourceMapNamesResolver._resolveExpression = function(
     callFrame, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber) {
-  var target = callFrame.target();
-  var rawLocation =
-      Bindings.debuggerWorkspaceBinding.uiLocationToRawLocation(target, uiSourceCode, lineNumber, startColumnNumber);
+  var rawLocation = Bindings.debuggerWorkspaceBinding.uiLocationToRawLocation(
+      callFrame.debuggerModel, uiSourceCode, lineNumber, startColumnNumber);
   if (!rawLocation)
     return Promise.resolve('');
 
@@ -317,8 +317,9 @@ Sources.SourceMapNamesResolver.resolveThisObject = function(callFrame) {
    * @param {?Protocol.Runtime.RemoteObject} evaluateResult
    */
   function onEvaluated(callback, evaluateResult) {
-    var remoteObject =
-        evaluateResult ? callFrame.target().runtimeModel.createRemoteObject(evaluateResult) : callFrame.thisObject();
+    var remoteObject = evaluateResult ?
+        callFrame.debuggerModel.target().runtimeModel.createRemoteObject(evaluateResult) :
+        callFrame.thisObject();
     callback(remoteObject);
   }
 };
@@ -332,7 +333,8 @@ Sources.SourceMapNamesResolver.resolveScopeInObject = function(scope) {
   var endLocation = scope.endLocation();
 
   if (scope.type() === Protocol.Debugger.ScopeType.Global || !startLocation || !endLocation ||
-      !startLocation.script().sourceMapURL || startLocation.script() !== endLocation.script())
+      !startLocation.script() || !startLocation.script().sourceMapURL ||
+      startLocation.script() !== endLocation.script())
     return scope.object();
 
   return new Sources.SourceMapNamesResolver.RemoteObject(scope);
@@ -401,18 +403,20 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
 
   /**
    * @override
+   * @param {boolean} generatePreview
    * @param {function(?Array.<!SDK.RemoteObjectProperty>, ?Array.<!SDK.RemoteObjectProperty>)} callback
    */
-  getOwnProperties(callback) {
-    this._object.getOwnProperties(callback);
+  getOwnProperties(generatePreview, callback) {
+    this._object.getOwnProperties(generatePreview, callback);
   }
 
   /**
    * @override
    * @param {boolean} accessorPropertiesOnly
+   * @param {boolean} generatePreview
    * @param {function(?Array<!SDK.RemoteObjectProperty>, ?Array<!SDK.RemoteObjectProperty>)} callback
    */
-  getAllProperties(accessorPropertiesOnly, callback) {
+  getAllProperties(accessorPropertiesOnly, generatePreview, callback) {
     /**
      * @param {?Array.<!SDK.RemoteObjectProperty>} properties
      * @param {?Array.<!SDK.RemoteObjectProperty>} internalProperties
@@ -443,7 +447,7 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
       callback(newProperties, internalProperties);
     }
 
-    this._object.getAllProperties(accessorPropertiesOnly, wrappedCallback.bind(this));
+    this._object.getAllProperties(accessorPropertiesOnly, generatePreview, wrappedCallback.bind(this));
   }
 
   /**

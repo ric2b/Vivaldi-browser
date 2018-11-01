@@ -28,7 +28,6 @@ import re
 import threading
 import time
 
-from webkitpy.common.checkout.scm.git import Git
 from webkitpy.common.system.executive import ScriptError
 from webkitpy.thirdparty.irc.ircbot import SingleServerIRCBot
 
@@ -50,7 +49,7 @@ class CommitAnnouncer(SingleServerIRCBot):
     def __init__(self, tool, announce_path, irc_password):
         SingleServerIRCBot.__init__(self, [(SERVER, PORT, irc_password)], NICKNAME, NICKNAME)
         self.announce_path = announce_path
-        self.git = Git(cwd=tool.scm().checkout_root, filesystem=tool.filesystem, executive=tool.executive)
+        self.git = tool.git(path=tool.git().checkout_root)
         self.commands = {
             'help': self.help,
             'ping': self.ping,

@@ -7,6 +7,7 @@ import os
 import re
 import sys
 
+from gpu_tests import gpu_integration_test
 from gpu_tests import cloud_storage_integration_test_base
 from gpu_tests import pixel_expectations
 from gpu_tests import pixel_test_pages
@@ -62,8 +63,8 @@ class PixelIntegrationTest(
     return 'pixel'
 
   @classmethod
-  def setUpClass(cls):
-    super(cls, PixelIntegrationTest).setUpClass()
+  def SetUpProcess(cls):
+    super(cls, PixelIntegrationTest).SetUpProcess()
     cls._original_finder_options = cls._finder_options.Copy()
     cls.CustomizeBrowserArgs([])
     cls.StartBrowser()
@@ -131,7 +132,7 @@ class PixelIntegrationTest(
     tab = self.tab
     tab.Navigate(url, script_to_evaluate_on_commit=test_harness_script)
     tab.action_runner.WaitForJavaScriptCondition(
-      'domAutomationController._finished', timeout_in_seconds=300)
+      'domAutomationController._finished', timeout=300)
     if not tab.EvaluateJavaScript('domAutomationController._succeeded'):
       self.fail('page indicated test failure')
     if not tab.screenshot_supported:
@@ -226,3 +227,7 @@ class PixelIntegrationTest(
 
     self._WriteImage(image_path, screenshot)
     return screenshot
+
+def load_tests(loader, tests, pattern):
+  del loader, tests, pattern  # Unused.
+  return gpu_integration_test.LoadAllTestsInModule(sys.modules[__name__])

@@ -10,7 +10,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -69,8 +72,6 @@ void SyncArcPackageHelper::SetupTest(SyncTest* test) {
 
   user_manager_enabler_ = base::MakeUnique<chromeos::ScopedUserManagerEnabler>(
       new chromeos::FakeChromeUserManager());
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      chromeos::switches::kEnableArc);
   ArcAppListPrefsFactory::SetFactoryForSyncTest();
   size_t id = 0;
   for (auto* profile : test_->GetAllProfiles())
@@ -145,19 +146,16 @@ bool SyncArcPackageHelper::AllProfilesHaveSamePackageDetails() {
 
 void SyncArcPackageHelper::SetupArcService(Profile* profile, size_t id) {
   DCHECK(profile);
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      chromeos::switches::kEnableArc);
   const user_manager::User* user = CreateUserAndLogin(profile, id);
   // Have the user-to-profile mapping ready to avoid using the real profile
   // manager (which is null).
   chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(user,
                                                                     profile);
 
-  ArcSessionManager* arc_session_manager = ArcSessionManager::Get();
-  DCHECK(arc_session_manager);
   ArcSessionManager::DisableUIForTesting();
-  arc_session_manager->OnPrimaryUserProfilePrepared(profile);
-  arc_session_manager->EnableArc();
+  ArcAuthNotification::DisableForTesting();
+  arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(profile);
+  arc::SetArcPlayStoreEnabledForProfile(profile, true);
 
   ArcAppListPrefs* arc_app_list_prefs = ArcAppListPrefs::Get(profile);
   DCHECK(arc_app_list_prefs);

@@ -16,6 +16,10 @@
 #include "ui/events/blink/web_input_event_builders_win.h"
 #endif
 
+#if defined(USE_X11)
+#include <X11/Xlib.h>
+#endif
+
 namespace ui {
 
 namespace {
@@ -388,6 +392,18 @@ blink::WebMouseEvent MakeWebMouseEventFromUiEvent(const MouseEvent& event) {
       click_count = event.GetClickCount();
       break;
     case ET_MOUSE_EXITED: {
+#if defined(USE_X11)
+      // NotifyVirtual events are created for intermediate windows that the
+      // pointer crosses through. These occur when middle clicking.
+      // Change these into mouse move events.
+      const base::NativeEvent& native_event = event.native_event();
+
+      if (native_event && native_event->type == LeaveNotify &&
+          native_event->xcrossing.detail == NotifyVirtual) {
+        type = blink::WebInputEvent::MouseMove;
+        break;
+      }
+#endif
       static bool s_send_leave =
           base::FeatureList::IsEnabled(features::kSendMouseLeaveEvents);
       type = s_send_leave ? blink::WebInputEvent::MouseLeave
@@ -427,6 +443,9 @@ blink::WebMouseEvent MakeWebMouseEventFromUiEvent(const MouseEvent& event) {
   webkit_event.tiltX = roundf(event.pointer_details().tilt_x);
   webkit_event.tiltY = roundf(event.pointer_details().tilt_y);
   webkit_event.force = event.pointer_details().force;
+  webkit_event.tangentialPressure = event.pointer_details().tangential_pressure;
+  webkit_event.twist = event.pointer_details().twist;
+  webkit_event.id = event.pointer_details().id;
   webkit_event.pointerType =
       EventPointerTypeToWebPointerType(event.pointer_details().pointer_type);
 

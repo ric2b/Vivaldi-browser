@@ -4,12 +4,18 @@
 
 static_library("browser") {
   sources = [
+    "activation_state_computing_navigation_throttle.cc",
+    "activation_state_computing_navigation_throttle.h",
+    "async_document_subresource_filter.cc",
+    "async_document_subresource_filter.h",
     "content_ruleset_service_delegate.cc",
     "content_ruleset_service_delegate.h",
-    "content_subresource_filter_driver.cc",
-    "content_subresource_filter_driver.h",
     "content_subresource_filter_driver_factory.cc",
     "content_subresource_filter_driver_factory.h",
+    "subframe_navigation_filtering_throttle.cc",
+    "subframe_navigation_filtering_throttle.h",
+    "verified_ruleset_dealer.cc",
+    "verified_ruleset_dealer.h",
   ]
   deps = [
     "//base",
@@ -20,15 +26,21 @@ static_library("browser") {
     "//content/public/browser",
     "//content/public/common",
     "//ipc",
+    "//net",
     "//url",
+  ]
+  public_deps = [
+    "//ui/base",
   ]
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "async_document_subresource_filter_unittest.cc",
     "content_ruleset_service_delegate_unittest.cc",
     "content_subresource_filter_driver_factory_unittest.cc",
+    "verified_ruleset_dealer_unittest.cc",
   ]
   deps = [
     ":browser",
@@ -37,6 +49,8 @@ source_set("unit_tests") {
     "//components/subresource_filter/content/common",
     "//components/subresource_filter/core/browser",
     "//components/subresource_filter/core/browser:test_support",
+    "//components/subresource_filter/core/common",
+    "//components/subresource_filter/core/common:test_support",
     "//content/test:test_support",
     "//ipc",
     "//ipc:test_support",

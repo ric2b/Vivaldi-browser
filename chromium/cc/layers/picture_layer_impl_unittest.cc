@@ -32,7 +32,6 @@
 #include "cc/test/fake_raster_source.h"
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/geometry_test_utils.h"
-#include "cc/test/gpu_rasterization_enabled_settings.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/test/test_layer_tree_host_base.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -71,18 +70,6 @@ namespace {
     EXPECT_FALSE(active_layer()->expression);  \
   } while (false)
 
-class MockCanvas : public SkCanvas {
- public:
-  explicit MockCanvas(int w, int h) : SkCanvas(w, h) {}
-
-  void onDrawRect(const SkRect& rect, const SkPaint& paint) override {
-    // Capture calls before SkCanvas quickReject() kicks in.
-    rects_.push_back(rect);
-  }
-
-  std::vector<SkRect> rects_;
-};
-
 class PictureLayerImplTest : public TestLayerTreeHostBase {
  public:
   void SetUp() override {
@@ -92,13 +79,16 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
 
   LayerTreeSettings CreateSettings() override {
     LayerTreeSettings settings;
-    settings.gpu_rasterization_enabled = true;
     settings.layer_transforms_should_scale_layer_contents = true;
     settings.create_low_res_tiling = true;
     settings.verify_clip_tree_calculations = true;
     settings.renderer_settings.buffer_to_texture_target_map =
         DefaultBufferToTextureTargetMapForTesting();
     return settings;
+  }
+
+  std::unique_ptr<CompositorFrameSink> CreateCompositorFrameSink() override {
+    return FakeCompositorFrameSink::Create3dForGpuRasterization();
   }
 
   void SetupDefaultTreesWithFixedTileSize(const gfx::Size& layer_bounds,
@@ -710,6 +700,36 @@ TEST_F(PictureLayerImplTest, ZoomOutCrash) {
   EXPECT_EQ(active_layer()->tilings()->NumHighResTilings(), 1);
 }
 
+TEST_F(PictureLayerImplTest, ScaledBoundsOverflowInt) {
+  // Limit visible size.
+  gfx::Size viewport_size(1, 1);
+  host_impl()->SetViewportSize(viewport_size);
+
+  gfx::Size layer_bounds(600000, 60);
+
+  // Set up the high and low res tilings before pinch zoom.
+  SetupDefaultTrees(layer_bounds);
+  ResetTilingsAndRasterScales();
+  EXPECT_EQ(0u, active_layer()->tilings()->num_tilings());
+  float scale = 8000.f;
+
+  // Verify this will overflow an int.
+  EXPECT_GT(static_cast<float>(layer_bounds.width()) * scale,
+            static_cast<float>(std::numeric_limits<int>::max()));
+
+  SetContentsScaleOnBothLayers(scale, 1.0f, scale, 1.0f, 0.f, false);
+  float adjusted_scale = active_layer()->HighResTiling()->contents_scale();
+  EXPECT_LT(adjusted_scale, scale);
+
+  // PopulateSharedQuadState CHECKs for overflows.
+  // See http://crbug.com/679035
+  active_layer()->draw_properties().visible_layer_rect =
+      gfx::Rect(layer_bounds);
+  SharedQuadState state;
+  active_layer()->PopulateScaledSharedQuadState(&state, adjusted_scale,
+                                                adjusted_scale);
+}
+
 TEST_F(PictureLayerImplTest, PinchGestureTilings) {
   gfx::Size layer_bounds(1300, 1900);
 
@@ -1128,12 +1148,12 @@ TEST_F(PictureLayerImplTest, DontAddLowResForSmallLayers) {
 
   // Mask layers dont create low res since they always fit on one tile.
   std::unique_ptr<FakePictureLayerImpl> mask =
-      FakePictureLayerImpl::CreateMaskWithRasterSource(
+      FakePictureLayerImpl::CreateSingleTextureMaskWithRasterSource(
           host_impl()->pending_tree(), 3, pending_raster_source);
   mask->SetBounds(layer_bounds);
   mask->SetDrawsContent(true);
   pending_layer()->test_properties()->SetMaskLayer(std::move(mask));
-  pending_layer()->SetHasRenderSurface(true);
+  pending_layer()->test_properties()->force_render_surface = true;
   RebuildPropertyTreesOnPendingTree();
   host_impl()->pending_tree()->UpdateDrawProperties(false);
 
@@ -1161,7 +1181,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   SetupPendingTree(valid_raster_source);
 
   std::unique_ptr<FakePictureLayerImpl> mask_ptr =
-      FakePictureLayerImpl::CreateMaskWithRasterSource(
+      FakePictureLayerImpl::CreateSingleTextureMaskWithRasterSource(
           host_impl()->pending_tree(), 3, valid_raster_source);
   mask_ptr->SetBounds(layer_bounds);
   mask_ptr->SetDrawsContent(true);
@@ -1290,7 +1310,7 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
   SetupPendingTree(valid_raster_source);
 
   std::unique_ptr<FakePictureLayerImpl> mask_ptr =
-      FakePictureLayerImpl::CreateMaskWithRasterSource(
+      FakePictureLayerImpl::CreateSingleTextureMaskWithRasterSource(
           host_impl()->pending_tree(), 3, valid_raster_source);
   mask_ptr->SetBounds(layer_bounds);
   mask_ptr->SetDrawsContent(true);

@@ -5,18 +5,22 @@
 
 #include "notes/notes_model.h"
 
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "app/vivaldi_resources.h"
 #include "base/i18n/string_compare.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "importer/imported_notes_entry.h"
-#include "notes/notesnode.h"
 #include "notes/notes_storage.h"
+#include "notes/notesnode.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::Time;
@@ -46,7 +50,7 @@ class SortComparator {
  private:
   icu::Collator* collator_;
 };
-}
+}  // namespace
 
 static const char kNotes[] = "Notes";
 static const char kOtherNotes[] = "Other Notes";
@@ -174,7 +178,7 @@ void Notes_Model::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
 void Notes_Model::GetNotes(std::vector<Notes_Model::URLAndTitle>* notes) {
   base::AutoLock url_lock(url_lock_);
   const GURL* last_url = NULL;
-  for (auto& i : nodes_ordered_by_url_set_) {
+  for (auto* i : nodes_ordered_by_url_set_) {
     const GURL* url = &(i->GetURL());
     // Only add unique URLs.
     if (!last_url || *url != *last_url) {
@@ -670,8 +674,7 @@ Notes_Node* Notes_Model::GetOrCreateTrashNode() {
   Notes_Node* trash_p = trash.get();
   if (trash) {
     trash->SetType(Notes_Node::TRASH);
-    trash->SetTitle(
-        l10n_util::GetStringUTF16(IDS_NOTES_TRASH_FOLDER_NAME));
+    trash->SetTitle(l10n_util::GetStringUTF16(IDS_NOTES_TRASH_FOLDER_NAME));
     AddNode(root_node_p, root_node_p->child_count(), std::move(trash));
   }
   return trash_p;

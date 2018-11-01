@@ -4,6 +4,7 @@
 
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
 service("video_capture") {
@@ -16,10 +17,6 @@ service("video_capture") {
   deps = [
     ":lib",
     "//mojo/public/cpp/system",
-  ]
-
-  data_deps = [
-    ":manifest",
   ]
 }
 
@@ -50,7 +47,9 @@ source_set("lib") {
   ]
 }
 
-test("video_capture_unittests") {
+source_set("tests") {
+  testonly = true
+
   sources = [
     "test/fake_device_descriptor_test.cc",
     "test/fake_device_descriptor_test.h",
@@ -77,18 +76,22 @@ test("video_capture_unittests") {
     "//media/capture/mojo:capture_types",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/cpp/test:run_all_service_tests",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx:test_support",
   ]
 
   data_deps = [
-    ":unittest_manifest",
+    ":video_capture",
   ]
 }
 
 service_manifest("unittest_manifest") {
   name = "video_capture_unittests"
   source = "test/service_unittest_manifest.json"
+}
+
+catalog("tests_catalog") {
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ ":manifest" ]
 }

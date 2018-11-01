@@ -66,7 +66,7 @@ class JsonRequestTest : public testing::Test {
             {ntp_snippets::kArticleSuggestionsFeature.name}),
         pref_service_(base::MakeUnique<TestingPrefServiceSimple>()),
         mock_task_runner_(new base::TestMockTimeTaskRunner()),
-        tick_clock_(mock_task_runner_->GetMockTickClock()),
+        clock_(mock_task_runner_->GetMockClock()),
         request_context_getter_(
             new net::TestURLRequestContextGetter(mock_task_runner_.get())) {
     translate::LanguageModel::RegisterProfilePrefs(pref_service_->registry());
@@ -88,7 +88,7 @@ class JsonRequestTest : public testing::Test {
   JsonRequest::Builder CreateMinimalBuilder() {
     JsonRequest::Builder builder;
     builder.SetUrl(GURL("http://valid-url.test"))
-        .SetTickClock(tick_clock_.get())
+        .SetClock(clock_.get())
         .SetUrlRequestContextGetter(request_context_getter_.get());
     return builder;
   }
@@ -97,7 +97,7 @@ class JsonRequestTest : public testing::Test {
   variations::testing::VariationParamsManager params_manager_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
   scoped_refptr<base::TestMockTimeTaskRunner> mock_task_runner_;
-  std::unique_ptr<base::TickClock> tick_clock_;
+  std::unique_ptr<base::Clock> clock_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
   net::TestURLFetcherFactory fetcher_factory_;
 
@@ -114,7 +114,6 @@ TEST_F(JsonRequestTest, BuildRequestAuthenticated) {
       .SetUrl(GURL("http://valid-url.test"))
       .SetUrl(GURL("http://valid-url.test"))
       .SetAuthentication("0BFUSGAIA", "headerstuff")
-      .SetPersonalization(Personalization::kPersonal)
       .SetUserClassForTesting("ACTIVE_NTP_USER")
       .SetFetchAPI(FetchAPI::CHROME_READER_API)
       .Build();
@@ -129,9 +128,6 @@ TEST_F(JsonRequestTest, BuildRequestAuthenticated) {
                          "  \"obfuscated_gaia_id\": \"0BFUSGAIA\","
                          "  \"advanced_options\": {"
                          "    \"local_scoring_params\": {"
-                         "      \"content_params\": {"
-                         "        \"only_return_personalized_results\": true"
-                         "      },"
                          "      \"content_restricts\": ["
                          "        {"
                          "          \"type\": \"METADATA\","
@@ -173,7 +169,6 @@ TEST_F(JsonRequestTest, BuildRequestUnauthenticated) {
   params.count_to_fetch = 10;
   builder.SetParams(params)
       .SetUserClassForTesting("ACTIVE_NTP_USER")
-      .SetPersonalization(Personalization::kNonPersonal)
       .SetFetchAPI(FetchAPI::CHROME_READER_API);
 
   EXPECT_THAT(builder.PreviewRequestHeadersForTesting(),
@@ -184,9 +179,6 @@ TEST_F(JsonRequestTest, BuildRequestUnauthenticated) {
                          "  \"response_detail_level\": \"STANDARD\","
                          "  \"advanced_options\": {"
                          "    \"local_scoring_params\": {"
-                         "      \"content_params\": {"
-                         "        \"only_return_personalized_results\": false"
-                         "      },"
                          "      \"content_restricts\": ["
                          "        {"
                          "          \"type\": \"METADATA\","
@@ -227,7 +219,6 @@ TEST_F(JsonRequestTest, BuildRequestExcludedIds) {
   }
   builder.SetParams(params)
       .SetUserClassForTesting("ACTIVE_NTP_USER")
-      .SetPersonalization(Personalization::kNonPersonal)
       .SetFetchAPI(FetchAPI::CHROME_CONTENT_SUGGESTIONS_API);
 
   EXPECT_THAT(builder.PreviewRequestBodyForTesting(),
@@ -265,8 +256,7 @@ TEST_F(JsonRequestTest, BuildRequestNoUserClass) {
   JsonRequest::Builder builder;
   RequestParams params;
   params.interactive_request = false;
-  builder.SetPersonalization(Personalization::kNonPersonal)
-      .SetParams(params)
+  builder.SetParams(params)
       .SetFetchAPI(FetchAPI::CHROME_CONTENT_SUGGESTIONS_API);
 
   EXPECT_THAT(builder.PreviewRequestBodyForTesting(),
@@ -285,7 +275,6 @@ TEST_F(JsonRequestTest, BuildRequestWithTwoLanguages) {
   params.language_code = "en";
   builder.SetParams(params)
       .SetLanguageModel(language_model.get())
-      .SetPersonalization(Personalization::kNonPersonal)
       .SetFetchAPI(FetchAPI::CHROME_CONTENT_SUGGESTIONS_API);
 
   EXPECT_THAT(builder.PreviewRequestBodyForTesting(),
@@ -315,7 +304,6 @@ TEST_F(JsonRequestTest, BuildRequestWithUILanguageOnly) {
   params.language_code = "en";
   builder.SetParams(params)
       .SetLanguageModel(language_model.get())
-      .SetPersonalization(Personalization::kNonPersonal)
       .SetFetchAPI(FetchAPI::CHROME_CONTENT_SUGGESTIONS_API);
 
   EXPECT_THAT(builder.PreviewRequestBodyForTesting(),

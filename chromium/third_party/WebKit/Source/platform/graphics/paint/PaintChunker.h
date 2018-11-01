@@ -10,7 +10,6 @@
 #include "platform/graphics/paint/PaintChunk.h"
 #include "platform/graphics/paint/PaintChunkProperties.h"
 #include "wtf/Allocator.h"
-#include "wtf/AutoReset.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 
@@ -39,8 +38,8 @@ class PLATFORM_EXPORT PaintChunker final {
 
   // Returns true if a new chunk is created.
   bool incrementDisplayItemIndex(const DisplayItem&);
-  // Returns true if the last chunk is removed.
-  bool decrementDisplayItemIndex();
+
+  void decrementDisplayItemIndex();
 
   PaintChunk& paintChunkAt(size_t i) { return m_chunks[i]; }
   size_t lastChunkIndex() const {
@@ -74,19 +73,6 @@ class PLATFORM_EXPORT PaintChunker final {
   Optional<PaintChunk::Id> m_currentChunkId;
   PaintChunkProperties m_currentProperties;
 };
-
-#if DCHECK_IS_ON()
-class DisableNullPaintPropertyChecks {
-  STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(DisableNullPaintPropertyChecks);
-
- public:
-  DisableNullPaintPropertyChecks();
-
- private:
-  AutoReset<bool> m_disabler;
-};
-#endif  // DCHECK_IS_ON()
 
 }  // namespace blink
 

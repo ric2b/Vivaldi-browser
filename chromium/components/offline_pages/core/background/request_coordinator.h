@@ -53,11 +53,35 @@ class RequestCoordinator : public KeyedService,
         const SavePageRequest& request,
         RequestNotifier::BackgroundSavePageResult status) = 0;
     virtual void OnChanged(const SavePageRequest& request) = 0;
+    virtual void OnNetworkProgress(const SavePageRequest& request,
+                                   int64_t received_bytes) = 0;
   };
 
   enum class RequestAvailability {
     ENABLED_FOR_OFFLINER,
     DISABLED_FOR_OFFLINER,
+  };
+
+  // Describes the parameters to control how to save a page when system
+  // conditions allow.
+  struct SavePageLaterParams {
+    SavePageLaterParams();
+    SavePageLaterParams(const SavePageLaterParams& other);
+
+    // The last committed URL of the page to save.
+    GURL url;
+
+    // The identification used by the client.
+    ClientId client_id;
+
+    // Whether the user requests the save action. Defaults to true.
+    bool user_requested;
+
+    // Request availability. Defaults to ENABLED_FOR_OFFLINER.
+    RequestAvailability availability;
+
+    // The original URL of the page to save. Empty if no redirect occurs.
+    GURL original_url;
   };
 
   // Callback specifying which request IDs were actually removed.
@@ -79,10 +103,7 @@ class RequestCoordinator : public KeyedService,
 
   // Queues |request| to later load and save when system conditions allow.
   // Returns an id if the page could be queued successfully, 0L otherwise.
-  int64_t SavePageLater(const GURL& url,
-                        const ClientId& client_id,
-                        bool user_requested,
-                        RequestAvailability availability);
+  int64_t SavePageLater(const SavePageLaterParams& save_page_later_params);
 
   // Remove a list of requests by |request_id|.  This removes requests from the
   // request queue, and cancels an in-progress prerender.
@@ -165,6 +186,8 @@ class RequestCoordinator : public KeyedService,
       const SavePageRequest& request,
       RequestNotifier::BackgroundSavePageResult status) override;
   void NotifyChanged(const SavePageRequest& request) override;
+  void NotifyNetworkProgress(const SavePageRequest& request,
+                             int64_t received_bytes) override;
 
   // Returns the request queue used for requests.  Coordinator keeps ownership.
   RequestQueue* queue() { return queue_.get(); }
@@ -255,6 +278,17 @@ class RequestCoordinator : public KeyedService,
   void HandleRemovedRequests(RequestNotifier::BackgroundSavePageResult status,
                              std::unique_ptr<UpdateRequestsResult> result);
 
+  // Handle updating of request status after cancel is called. Will call
+  // HandleCancelRecordResultCallback for UMA handling
+  void HandleCancelUpdateStatusCallback(
+      const Offliner::CancelCallback& next_callback,
+      Offliner::RequestStatus stop_status,
+      int64_t offline_id);
+  void UpdateStatusForCancel(Offliner::RequestStatus stop_status);
+  void ResetActiveRequestCallback(int64_t offline_id);
+  void StartSchedulerCallback(int64_t offline_id);
+  void TryNextRequestCallback(int64_t offline_id);
+
   bool StartProcessingInternal(const ProcessingWindowState processing_state,
                                const base::Callback<void(bool)>& callback);
 
@@ -299,7 +333,8 @@ class RequestCoordinator : public KeyedService,
   void HandleWatchdogTimeout();
 
   // Cancels an in progress pre-rendering, and updates state appropriately.
-  void StopPrerendering(Offliner::RequestStatus stop_status);
+  void StopPrerendering(const Offliner::CancelCallback& callback,
+                        Offliner::RequestStatus stop_status);
 
   // Marks attempt on the request and sends it to offliner in continuation.
   void SendRequestToOffliner(const SavePageRequest& request);
@@ -314,6 +349,11 @@ class RequestCoordinator : public KeyedService,
   // tests).
   void OfflinerDoneCallback(const SavePageRequest& request,
                             Offliner::RequestStatus status);
+
+  // Called by the offliner periodically to report the accumulated count of
+  // bytes received from the network.
+  void OfflinerProgressCallback(const SavePageRequest& request,
+                                int64_t received_bytes);
 
   // Records a completed attempt for the request and update it in the queue
   // (possibly removing it).

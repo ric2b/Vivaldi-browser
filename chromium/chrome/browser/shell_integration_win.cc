@@ -645,72 +645,6 @@ bool IsFirefoxDefaultBrowser() {
   return ff_default;
 }
 
-// There is no reliable way to say which browser is default on a machine (each
-// browser can have some of the protocols/shortcuts). So we look for only HTTP
-// protocol handler. Even this handler is located at different places in
-// registry on XP and Vista:
-// - HKCR\http\shell\open\command (XP)
-// - HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\
-//   http\UserChoice (Vista)
-// This method checks if Chrome is default browser by checking these
-// locations and returns true if Chrome traces are found there. In case of
-// error (or if Chrome is not found) it returns the default value which
-// is false.
-bool IsChromeDefaultBrowser() {
-  bool chrome_default = false;
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    base::string16 app_cmd;
-    base::win::RegKey key(HKEY_CURRENT_USER,
-      ShellUtil::kRegVistaUrlPrefs, KEY_READ);
-    if (key.Valid() && (key.ReadValue(L"Progid", &app_cmd) == ERROR_SUCCESS) &&
-      app_cmd == L"chrome")
-      chrome_default = true;
-  } else {
-    base::string16 key_path(L"http");
-    key_path.append(ShellUtil::kRegShellOpen);
-    base::win::RegKey key(HKEY_CLASSES_ROOT, key_path.c_str(), KEY_READ);
-    base::string16 app_cmd;
-    if (key.Valid() && (key.ReadValue(L"", &app_cmd) == ERROR_SUCCESS) &&
-      base::string16::npos !=
-      base::ToLowerASCII(app_cmd).find(L"chrome"))
-      chrome_default = true;
-  }
-  return chrome_default;
-}
-
-// There is no reliable way to say which browser is default on a machine (each
-// browser can have some of the protocols/shortcuts). So we look for only HTTP
-// protocol handler. Even this handler is located at different places in
-// registry on XP and Vista:
-// - HKCR\http\shell\open\command (XP)
-// - HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\
-//   http\UserChoice (Vista)
-// This method checks if Opera is defualt browser by checking these
-// locations and returns true if Firefox traces are found there. In case of
-// error (or if Opera is not found)it returns the default value which
-// is false.
-bool IsOperaDefaultBrowser() {
-  bool opera_default = false;
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    base::string16 app_cmd;
-    base::win::RegKey key(HKEY_CURRENT_USER,
-                          ShellUtil::kRegVistaUrlPrefs, KEY_READ);
-    if (key.Valid() && (key.ReadValue(L"Progid", &app_cmd) == ERROR_SUCCESS) &&
-        base::string16::npos != base::ToLowerASCII(app_cmd).find(L"opera"))
-      opera_default = true;
-  } else {
-    base::string16 key_path(L"http");
-    key_path.append(ShellUtil::kRegShellOpen);
-    base::win::RegKey key(HKEY_CLASSES_ROOT, key_path.c_str(), KEY_READ);
-    base::string16 app_cmd;
-    if (key.Valid() && (key.ReadValue(L"", &app_cmd) == ERROR_SUCCESS) &&
-        base::string16::npos != base::ToLowerASCII(app_cmd).find(L"opera"))
-      opera_default = true;
-  }
-  return opera_default;
-}
-
-
 DefaultWebClientState IsDefaultProtocolClient(const std::string& protocol) {
   return GetDefaultWebClientStateFromShellUtilDefaultState(
       ShellUtil::GetChromeDefaultProtocolClientState(
@@ -818,14 +752,8 @@ base::string16 GetAppModelIdForProfile(const base::string16& app_name,
 base::string16 GetChromiumModelIdForProfile(
     const base::FilePath& profile_path) {
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  base::FilePath chrome_exe;
-  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
-    NOTREACHED();
-    return dist->GetBaseAppId();
-  }
   return GetAppModelIdForProfile(
-      ShellUtil::GetBrowserModelId(dist,
-                                   InstallUtil::IsPerUserInstall(chrome_exe)),
+      ShellUtil::GetBrowserModelId(dist, InstallUtil::IsPerUserInstall()),
       profile_path);
 }
 
@@ -858,7 +786,7 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
       path, false,  // not recursive
       base::FileEnumerator::FILES, FILE_PATH_LITERAL("*.lnk"));
 
-  bool is_per_user_install = InstallUtil::IsPerUserInstall(chrome_exe);
+  bool is_per_user_install = InstallUtil::IsPerUserInstall();
 
   int shortcuts_migrated = 0;
   base::FilePath target_path;
@@ -955,34 +883,6 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
     }
   }
   return shortcuts_migrated;
-}
-
-base::FilePath GetStartMenuShortcut(const base::FilePath& chrome_exe) {
-  static const int kFolderIds[] = {
-    base::DIR_COMMON_START_MENU,
-    base::DIR_START_MENU,
-  };
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  const base::string16 shortcut_name(dist->GetShortcutName() +
-                                     installer::kLnkExt);
-  base::FilePath programs_folder;
-  base::FilePath shortcut;
-
-  // Check both the common and the per-user Start Menu folders for system-level
-  // installs.
-  size_t folder = InstallUtil::IsPerUserInstall(chrome_exe) ? 1 : 0;
-  for (; folder < arraysize(kFolderIds); ++folder) {
-    if (!PathService::Get(kFolderIds[folder], &programs_folder)) {
-      NOTREACHED();
-      continue;
-    }
-
-    shortcut = programs_folder.Append(shortcut_name);
-    if (base::PathExists(shortcut))
-      return shortcut;
-  }
-
-  return base::FilePath();
 }
 
 }  // namespace win

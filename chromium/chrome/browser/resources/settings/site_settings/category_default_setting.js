@@ -46,12 +46,16 @@ Polymer({
         return /** @type {chrome.settingsPrivate.PrefObject} */({});
       },
     },
+
+    /* Labels for the toggle on/off positions. */
+    toggleOffLabel: String,
+    toggleOnLabel: String,
   },
 
   observers: [
     'onCategoryChanged_(category)',
     'onChangePermissionControl_(category, controlParams_.value, ' +
-                               'subControlParams_.value)',
+        'subControlParams_.value)',
   ],
 
   ready: function() {
@@ -88,6 +92,7 @@ Polymer({
       case settings.ContentSettingsTypes.MIC:
       case settings.ContentSettingsTypes.NOTIFICATIONS:
       case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
+      case settings.ContentSettingsTypes.MIDI_DEVICES:
         // "Ask" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
             this.category,
@@ -190,8 +195,18 @@ Polymer({
                 setting == settings.PermissionValues.SESSION_ONLY) {
               setting = settings.PermissionValues.ALLOW;
             }
+            var categoryEnabled = setting != settings.PermissionValues.BLOCK;
             this.sliderDescription_ =
-                this.computeCategoryDesc(this.category, setting, true);
+                categoryEnabled ? this.toggleOnLabel : this.toggleOffLabel;
           }.bind(this));
   },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isToggleDisabled_: function() {
+    return this.category == settings.ContentSettingsTypes.POPUPS &&
+        loadTimeData.getBoolean('isGuest');
+  }
 });

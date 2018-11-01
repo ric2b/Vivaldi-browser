@@ -213,7 +213,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
 
         mNetworkCommunicator = this;
 
-        mPolicy = new ContextualSearchPolicy(mActivity, mSelectionController, mNetworkCommunicator);
+        mPolicy = new ContextualSearchPolicy(mSelectionController, mNetworkCommunicator);
 
         mTranslateController = new ContextualSearchTranslateController(activity, mPolicy, this);
     }
@@ -698,14 +698,6 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
         boolean receivedCaptionOrThumbnail = !TextUtils.isEmpty(caption)
                 || !TextUtils.isEmpty(thumbnailUrl);
 
-        if (ContextualSearchFieldTrial.shouldHideContextualCardsData()) {
-            // Clear the thumbnail URL and caption so that they are not displayed in the bar. This
-            // is used to determine the CTR on contextual searches where we would have shown
-            // contextual cards data had it not been disabled via a field trial.
-            thumbnailUrl = "";
-            caption = "";
-        }
-
         mSearchPanel.onSearchTermResolved(message, thumbnailUrl, quickActionUri,
                 quickActionCategory);
         if (!TextUtils.isEmpty(caption)) {
@@ -720,11 +712,9 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
                 mSearchPanel.getSearchBarControl().getQuickActionControl().hasQuickAction();
         boolean receivedContextualCardsEntityData = !quickActionShown && receivedCaptionOrThumbnail;
 
-        if (ContextualSearchFieldTrial.isContextualCardsBarIntegrationEnabled()) {
-            ContextualSearchUma.logContextualCardsDataShown(receivedContextualCardsEntityData);
-            mSearchPanel.getPanelMetrics().setWasContextualCardsDataShown(
-                    receivedContextualCardsEntityData);
-        }
+        ContextualSearchUma.logContextualCardsDataShown(receivedContextualCardsEntityData);
+        mSearchPanel.getPanelMetrics().setWasContextualCardsDataShown(
+                receivedContextualCardsEntityData);
 
         if (ContextualSearchFieldTrial.isContextualSearchSingleActionsEnabled()) {
             ContextualSearchUma.logQuickActionShown(quickActionShown, quickActionCategory);
@@ -927,6 +917,8 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      * Implementation of OverlayContentDelegate. Made public for testing purposes.
      */
     public class SearchOverlayContentDelegate extends OverlayContentDelegate {
+        // Note: New navigation or changes to the WebContents are not advised in this class since
+        // the WebContents is being observed and navigation is already being performed.
 
         public SearchOverlayContentDelegate() {}
 
@@ -942,8 +934,8 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
         @Override
         public void onMainFrameNavigation(String url, boolean isExternalUrl, boolean isFailure) {
             if (isExternalUrl) {
-                if (ContextualSearchFieldTrial.isAmpAsSeparateTabEnabled() && mPolicy.isAmpUrl(url)
-                        && mSearchPanel.didTouchContent()) {
+                if (!ContextualSearchFieldTrial.isAmpAsSeparateTabDisabled()
+                        && mPolicy.isAmpUrl(url) && mSearchPanel.didTouchContent()) {
                     onExternalNavigation(url);
                 }
             } else {
@@ -961,26 +953,6 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
         @Override
         public void onContentLoadStarted(String url) {
             mDidPromoteSearchNavigation = false;
-        }
-
-        @Override
-        public void onContentLoadFinished() {
-            if (mSearchRequest == null) return;
-
-            mSearchPanel.onSearchResultsLoaded(mSearchRequest.wasPrefetch());
-
-            // Any time we place a page in a ContentViewCore, clear history if needed.
-            // This prevents error URLs from appearing in the Tab's history stack.
-            // Also please note that clearHistory() will not
-            // clear the current entry (search results page in this case),
-            // and it will not work properly if there are pending navigations.
-            // That's why we need to clear the history here, after the navigation
-            // is completed.
-            boolean shouldClearHistory = mSearchRequest.getHasFailed();
-            if (shouldClearHistory && mSearchPanel.getContentViewCore() != null) {
-                mSearchPanel.getContentViewCore().getWebContents().getNavigationController()
-                        .clearHistory();
-            }
         }
 
         @Override
@@ -1011,11 +983,9 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
         @Override
         public void onContentViewCreated(ContentViewCore contentViewCore) {
             // TODO(donnd): Consider moving to OverlayPanelContent.
-            if (mPolicy.isContextualSearchJsApiEnabled()) {
                 // Enable the Contextual Search JavaScript API between our service and the new view.
-                nativeEnableContextualSearchJsApiForOverlay(
-                        mNativeContextualSearchManagerPtr, contentViewCore.getWebContents());
-            }
+            nativeEnableContextualSearchJsApiForOverlay(
+                    mNativeContextualSearchManagerPtr, contentViewCore.getWebContents());
 
             // TODO(mdjones): Move SearchContentViewDelegate ownership to panel.
             mSearchContentViewDelegate.setOverlayPanelContentViewCore(contentViewCore);
@@ -1113,6 +1083,11 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
             mSearchRequest.setNormalPriority();
             // If the content view is showing, load at normal priority now.
             if (mSearchPanel.isContentShowing()) {
+                // NOTE: we must reuse the existing content view because we're called from within
+                // a WebContentsObserver.  If we don't reuse the content view then the WebContents
+                // being observed will be deleted.  We notify of the failure to trigger the reuse.
+                // See crbug.com/682953 for details.
+                mSearchPanel.onLoadUrlFailed();
                 loadSearchUrl();
             } else {
                 mDidStartLoadingResolvedSearchRequest = false;
@@ -1300,13 +1275,13 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
     @Override
     public void handleMetricsForWouldSuppressTap(ContextualSearchHeuristics tapHeuristics) {
         mHeuristics = tapHeuristics;
-        if (ContextualSearchFieldTrial.isQuickAnswersEnabled()) {
-            // TODO(donnd): QuickAnswersHeuristic is getting added to TapSuppressionHeuristics and
-            // and getting considered in TapSuppressionHeuristics#shouldSuppressTap(). It should
-            // be a part of ContextualSearchHeuristics for logging purposes but not for suppression.
-            mQuickAnswersHeuristic = new QuickAnswersHeuristic();
-            mHeuristics.add(mQuickAnswersHeuristic);
-        }
+
+        // TODO(donnd): QuickAnswersHeuristic is getting added to TapSuppressionHeuristics and
+        // and getting considered in TapSuppressionHeuristics#shouldSuppressTap(). It should
+        // be a part of ContextualSearchHeuristics for logging purposes but not for suppression.
+        mQuickAnswersHeuristic = new QuickAnswersHeuristic();
+        mHeuristics.add(mQuickAnswersHeuristic);
+
         mSearchPanel.getPanelMetrics().setResultsSeenExperiments(mHeuristics);
         mSearchPanel.getPanelMetrics().setRankerLogExperiments(mHeuristics);
     }
@@ -1340,7 +1315,9 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
             ContextualSearchUma.logSelectionIsValid(selectionValid);
             if (selectionValid) {
                 mSearchPanel.updateBasePageSelectionYPx(y);
-                mSearchPanel.getPanelMetrics().onSelectionEstablished(selection);
+                if (!mSearchPanel.isShowing()) {
+                    mSearchPanel.getPanelMetrics().onSelectionEstablished(selection);
+                }
                 showContextualSearch(stateChangeReason);
             } else {
                 hideContextualSearch(stateChangeReason);

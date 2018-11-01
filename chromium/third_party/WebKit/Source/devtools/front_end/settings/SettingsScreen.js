@@ -71,7 +71,7 @@ Settings.SettingsScreen = class extends UI.VBox {
       return;
     var dialog = new UI.Dialog();
     dialog.addCloseButton();
-    settingsScreen.show(dialog.element);
+    settingsScreen.show(dialog.contentElement);
     dialog.show();
     settingsScreen._selectTab(name || 'preferences');
   }
@@ -479,7 +479,7 @@ Settings.SettingsScreen.ActionDelegate = class {
       case 'settings.show':
         Settings.SettingsScreen._showSettingsScreen();
         return true;
-      case 'settings.help':
+      case 'settings.documentation':
         InspectorFrontendHost.openInNewTab('https://developers.google.com/web/tools/chrome-devtools/');
         return true;
       case 'settings.shortcuts':

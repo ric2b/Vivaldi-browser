@@ -46,7 +46,7 @@
 #define PaintLayerClipper_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ClipRectsCache.h"
+#include "core/paint/ClipRectsCache.h"
 
 #include "platform/graphics/paint/GeometryMapper.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -172,14 +172,14 @@ class CORE_EXPORT PaintLayerClipper {
   DISALLOW_NEW();
 
  public:
-  explicit PaintLayerClipper(const PaintLayer&, bool useGeometryMapper);
+  explicit PaintLayerClipper(const PaintLayer&, GeometryMapper*);
 
   void clearClipRectsIncludingDescendants();
   void clearClipRectsIncludingDescendants(ClipRectsCacheSlot);
 
   // Returns the background clip rect of the layer in the local coordinate
   // space. Only looks for clips up to the given ancestor.
-  LayoutRect localClipRect(const PaintLayer* ancestorLayer) const;
+  LayoutRect localClipRect(const PaintLayer& ancestorLayer) const;
 
   // Computes the same thing as backgroundRect in calculateRects(), but skips
   // applying CSS clip and the visualOverflowRect() of |m_layer|.
@@ -230,12 +230,12 @@ class CORE_EXPORT PaintLayerClipper {
       ClipRect& foregroundRect,
       const LayoutPoint* offsetFromRoot = 0) const;
 
-  ClipRect applyOverflowClipToBackgroundRectWithGeometryMapper(
+  void applyOverflowClipToBackgroundRectWithGeometryMapper(
       const ClipRectsContext&,
-      const ClipRect&) const;
+      ClipRect&) const;
 
   const PaintLayer& m_layer;
-  std::unique_ptr<GeometryMapper> m_geometryMapper;
+  GeometryMapper* m_geometryMapper;
 
   friend class PaintLayerClipperTest;
 };

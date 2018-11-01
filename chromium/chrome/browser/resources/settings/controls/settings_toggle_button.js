@@ -9,11 +9,21 @@
 Polymer({
   is: 'settings-toggle-button',
 
+  properties: {
+    elideLabel: {
+      type: Boolean,
+      reflectToAttribute: true,
+    },
+  },
+
   behaviors: [SettingsBooleanControlBehavior],
 
   /** @private */
   onLabelWrapperTap_: function() {
-    if (!this.controlDisabled_())
-      this.checked = !this.checked;
+    if (this.controlDisabled_())
+      return;
+
+    this.checked = !this.checked;
+    this.notifyChangedByUserInteraction();
   },
 });

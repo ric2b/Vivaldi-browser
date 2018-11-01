@@ -54,6 +54,16 @@ public class SelectFileDialog
     private static final String ALL_AUDIO_TYPES = AUDIO_TYPE + "*";
     private static final String ANY_TYPES = "*/*";
 
+    // A list of some of the more popular image extensions. Not meant to be
+    // exhaustive, but should cover the vast majority of image types.
+    private static final String[] POPULAR_IMAGE_EXTENSIONS = new String[] {".apng", ".bmp", ".gif",
+            ".jpeg", ".jpg", ".pdf", ".png", ".tif", ".tiff", ".xcf", ".webp"};
+
+    // A list of some of the more popular video extensions. Not meant to be
+    // exhaustive, but should cover the vast majority of video types.
+    private static final String[] POPULAR_VIDEO_EXTENSIONS = new String[] {".asf", ".avhcd", ".avi",
+            ".divx", ".flv", ".mov", ".mp4", ".mpeg", ".mpg", ".swf", ".wmv", ".webm", ".mkv"};
+
     /**
      * The SELECT_FILE_DIALOG_SCOPE_* enumerations are used to measure the sort of content that
      * developers are requesting to be shown in the select file dialog. Values must be kept in sync
@@ -386,22 +396,43 @@ public class SelectFileDialog
     // now we want to distinguish between generic, photo and visual media pickers.
     @VisibleForTesting
     int determineSelectFileDialogScope() {
-        boolean isGeneric = noSpecificType();
+        if (mFileTypes.size() == 0) return SELECT_FILE_DIALOG_SCOPE_GENERIC;
 
-        if (!isGeneric && shouldShowImageTypes()) {
-            return SELECT_FILE_DIALOG_SCOPE_IMAGES;
-        } else if (!isGeneric && shouldShowVideoTypes()) {
-            return SELECT_FILE_DIALOG_SCOPE_VIDEOS;
-        } else if (mFileTypes.size() == 2) {
-            // The shouldShow{Image,Video}Types() methods cannot be used here since they test for
-            // a generic dialog, which any request with more than one file type is considered as.
-            if ((mFileTypes.contains(ALL_IMAGE_TYPES) || acceptSpecificType(IMAGE_TYPE))
-                    && (mFileTypes.contains(ALL_VIDEO_TYPES) || acceptSpecificType(VIDEO_TYPE))) {
-                return SELECT_FILE_DIALOG_SCOPE_IMAGES_AND_VIDEOS;
+        // Capture the MIME types:
+        int acceptsImages = countAcceptTypesFor(IMAGE_TYPE);
+        int acceptsVideos = countAcceptTypesFor(VIDEO_TYPE);
+
+        // Capture the most common image and video extensions:
+        if (mFileTypes.size() > acceptsImages + acceptsVideos) {
+            for (String left : mFileTypes) {
+                boolean found = false;
+                for (String right : POPULAR_IMAGE_EXTENSIONS) {
+                    if (left.equalsIgnoreCase(right)) {
+                        found = true;
+                        acceptsImages++;
+                        break;
+                    }
+                }
+
+                if (found) continue;
+
+                for (String right : POPULAR_VIDEO_EXTENSIONS) {
+                    if (left.equalsIgnoreCase(right)) {
+                        acceptsVideos++;
+                        break;
+                    }
+                }
             }
         }
 
-        return SELECT_FILE_DIALOG_SCOPE_GENERIC;
+        int acceptsOthers = mFileTypes.size() - acceptsImages - acceptsVideos;
+
+        if (acceptsOthers > 0) return SELECT_FILE_DIALOG_SCOPE_GENERIC;
+        if (acceptsVideos > 0) {
+            return (acceptsImages == 0) ? SELECT_FILE_DIALOG_SCOPE_VIDEOS
+                                        : SELECT_FILE_DIALOG_SCOPE_IMAGES_AND_VIDEOS;
+        }
+        return SELECT_FILE_DIALOG_SCOPE_IMAGES;
     }
 
     private boolean noSpecificType() {
@@ -414,7 +445,7 @@ public class SelectFileDialog
 
     private boolean shouldShowTypes(String allTypes, String specificType) {
         if (noSpecificType() || mFileTypes.contains(allTypes)) return true;
-        return acceptSpecificType(specificType);
+        return countAcceptTypesFor(specificType) > 0;
     }
 
     private boolean shouldShowImageTypes() {
@@ -445,13 +476,14 @@ public class SelectFileDialog
         return mCapture && acceptsSpecificType(ALL_AUDIO_TYPES);
     }
 
-    private boolean acceptSpecificType(String accept) {
+    private int countAcceptTypesFor(String accept) {
+        int count = 0;
         for (String type : mFileTypes) {
             if (type.startsWith(accept)) {
-                return true;
+                count++;
             }
         }
-        return false;
+        return count;
     }
 
     private class GetDisplayNameTask extends AsyncTask<Uri, Void, String[]> {

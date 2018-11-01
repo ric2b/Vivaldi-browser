@@ -31,6 +31,8 @@
 #ifndef PictureSnapshot_h
 #define PictureSnapshot_h
 
+#include <memory>
+
 #include "platform/PlatformExport.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/json/JSONValues.h"
@@ -38,7 +40,6 @@
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "wtf/RefCounted.h"
-#include <memory>
 
 namespace blink {
 

@@ -30,7 +30,7 @@ class ServicesDelegateImpl : public ServicesDelegate {
   // ServicesDelegate:
   const scoped_refptr<SafeBrowsingDatabaseManager>& v4_local_database_manager()
       const override;
-  void Initialize() override;
+  void Initialize(bool v4_enabled) override;
   void InitializeCsdService(
       net::URLRequestContextGetter* context_getter) override;
   void ShutdownServices() override;
@@ -39,8 +39,6 @@ class ServicesDelegateImpl : public ServicesDelegate {
   std::unique_ptr<TrackedPreferenceValidationDelegate>
       CreatePreferenceValidationDelegate(Profile* profile) override;
   void RegisterDelayedAnalysisCallback(
-      const DelayedAnalysisCallback& callback) override;
-  void RegisterExtendedReportingOnlyDelayedAnalysisCallback(
       const DelayedAnalysisCallback& callback) override;
   void AddDownloadManager(content::DownloadManager* download_manager) override;
   ClientSideDetectionService* GetCsdService() override;

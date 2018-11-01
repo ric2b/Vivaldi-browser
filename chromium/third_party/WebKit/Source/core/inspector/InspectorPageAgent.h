@@ -42,6 +42,10 @@
 
 namespace blink {
 
+namespace probe {
+class RecalculateStyle;
+}
+
 class Resource;
 class Document;
 class DocumentLoader;
@@ -111,7 +115,9 @@ class CORE_EXPORT InspectorPageAgent final
   Response setAutoAttachToCreatedPages(bool) override;
   Response reload(Maybe<bool> bypassCache,
                   Maybe<String> scriptToEvaluateOnLoad) override;
-  Response navigate(const String& url, String* frameId) override;
+  Response navigate(const String& url,
+                    Maybe<String> referrer,
+                    String* frameId) override;
   Response stopLoading() override;
   Response getResourceTree(
       std::unique_ptr<protocol::Page::FrameResourceTree>* frameTree) override;
@@ -134,9 +140,9 @@ class CORE_EXPORT InspectorPageAgent final
   Response stopScreencast() override;
   Response configureOverlay(Maybe<bool> suspended,
                             Maybe<String> message) override;
-  Response getLayoutMetrics(
-      std::unique_ptr<protocol::Page::LayoutViewport>*,
-      std::unique_ptr<protocol::Page::VisualViewport>*) override;
+  Response getLayoutMetrics(std::unique_ptr<protocol::Page::LayoutViewport>*,
+                            std::unique_ptr<protocol::Page::VisualViewport>*,
+                            std::unique_ptr<protocol::DOM::Rect>*) override;
 
   // InspectorInstrumentation API
   void didClearDocumentOfWindowObject(LocalFrame*);
@@ -145,7 +151,7 @@ class CORE_EXPORT InspectorPageAgent final
   void didCommitLoad(LocalFrame*, DocumentLoader*);
   void frameAttachedToParent(LocalFrame*);
   void frameDetachedFromParent(LocalFrame*);
-  void frameStartedLoading(LocalFrame*);
+  void frameStartedLoading(LocalFrame*, FrameLoadType);
   void frameStoppedLoading(LocalFrame*);
   void frameScheduledNavigation(LocalFrame*, double delay);
   void frameClearedScheduledNavigation(LocalFrame*);
@@ -153,7 +159,8 @@ class CORE_EXPORT InspectorPageAgent final
   void didRunJavaScriptDialog(bool result);
   void didUpdateLayout();
   void didResizeMainFrame();
-  void didRecalculateStyle();
+  void will(const probe::RecalculateStyle&);
+  void did(const probe::RecalculateStyle&);
   void windowCreated(LocalFrame*);
 
   // Inspector Controller API

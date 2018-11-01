@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_member.h"
 #include "components/translate/core/common/translate_pref_names.h"
@@ -16,6 +16,7 @@
 #import "components/translate/ios/browser/js_language_detection_manager.h"
 #include "components/translate/ios/browser/string_clipping_util.h"
 #import "ios/web/public/url_scheme_util.h"
+#include "ios/web/public/web_state/navigation_context.h"
 #include "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -137,12 +138,10 @@ void LanguageDetectionController::PageLoaded(
     StartLanguageDetection();
 }
 
-void LanguageDetectionController::UrlHashChanged() {
-  StartLanguageDetection();
-}
-
-void LanguageDetectionController::HistoryStateChanged() {
-  StartLanguageDetection();
+void LanguageDetectionController::DidFinishNavigation(
+    web::NavigationContext* navigation_context) {
+  if (navigation_context->IsSamePage())
+    StartLanguageDetection();
 }
 
 void LanguageDetectionController::WebStateDestroyed() {

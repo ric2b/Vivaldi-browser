@@ -53,18 +53,16 @@ String messageSourceValue(MessageSource source) {
 
 String messageLevelValue(MessageLevel level) {
   switch (level) {
-    case DebugMessageLevel:
-      return protocol::Log::LogEntry::LevelEnum::Debug;
-    case LogMessageLevel:
-      return protocol::Log::LogEntry::LevelEnum::Log;
+    case VerboseMessageLevel:
+      return protocol::Log::LogEntry::LevelEnum::Verbose;
+    case InfoMessageLevel:
+      return protocol::Log::LogEntry::LevelEnum::Info;
     case WarningMessageLevel:
       return protocol::Log::LogEntry::LevelEnum::Warning;
     case ErrorMessageLevel:
       return protocol::Log::LogEntry::LevelEnum::Error;
-    case InfoMessageLevel:
-      return protocol::Log::LogEntry::LevelEnum::Info;
   }
-  return protocol::Log::LogEntry::LevelEnum::Log;
+  return protocol::Log::LogEntry::LevelEnum::Info;
 }
 
 }  // namespace
@@ -167,6 +165,8 @@ Response InspectorLogAgent::clear() {
 }
 
 static PerformanceMonitor::Violation parseViolation(const String& name) {
+  if (name == ViolationSetting::NameEnum::DiscouragedAPIUse)
+    return PerformanceMonitor::kDiscouragedAPIUse;
   if (name == ViolationSetting::NameEnum::LongTask)
     return PerformanceMonitor::kLongTask;
   if (name == ViolationSetting::NameEnum::LongLayout)
@@ -214,7 +214,7 @@ void InspectorLogAgent::reportLongLayout(double duration) {
       String::format("Forced reflow while executing JavaScript took %ldms",
                      lround(duration * 1000));
   ConsoleMessage* message = ConsoleMessage::create(
-      ViolationMessageSource, WarningMessageLevel, messageText);
+      ViolationMessageSource, VerboseMessageLevel, messageText);
   consoleMessageAdded(message);
 }
 
@@ -222,8 +222,9 @@ void InspectorLogAgent::reportGenericViolation(PerformanceMonitor::Violation,
                                                const String& text,
                                                double time,
                                                SourceLocation* location) {
+  location->takeStackTrace();
   ConsoleMessage* message = ConsoleMessage::create(
-      ViolationMessageSource, WarningMessageLevel, text, location->clone());
+      ViolationMessageSource, VerboseMessageLevel, text, location->clone());
   consoleMessageAdded(message);
 };
 

@@ -76,7 +76,7 @@ bool IsCertIssuerInEncodedList(X509Certificate::OSCertHandle cert_handle,
 void GetCertDateForOID(const x509_util::CSSMCachedCertificate& cached_cert,
                        const CSSM_OID* oid,
                        Time* result) {
-  *result = Time::Time();
+  *result = Time();
 
   x509_util::CSSMFieldValue field;
   OSStatus status = cached_cert.GetField(oid, &field);
@@ -230,7 +230,7 @@ bool X509Certificate::IsIssuedByEncoded(
   return false;
 }
 
-void X509Certificate::GetSubjectAltName(
+bool X509Certificate::GetSubjectAltName(
     std::vector<std::string>* dns_names,
     std::vector<std::string>* ip_addrs) const {
   if (dns_names)
@@ -241,34 +241,47 @@ void X509Certificate::GetSubjectAltName(
   x509_util::CSSMCachedCertificate cached_cert;
   OSStatus status = cached_cert.Init(cert_handle_);
   if (status)
-    return;
+    return false;
+
   x509_util::CSSMFieldValue subject_alt_name;
   status = cached_cert.GetField(&CSSMOID_SubjectAltName, &subject_alt_name);
   if (status || !subject_alt_name.field())
-    return;
+    return false;
+
   const CSSM_X509_EXTENSION* cssm_ext =
       subject_alt_name.GetAs<CSSM_X509_EXTENSION>();
   if (!cssm_ext || !cssm_ext->value.parsedValue)
-    return;
+    return false;
   const CE_GeneralNames* alt_name =
       reinterpret_cast<const CE_GeneralNames*>(cssm_ext->value.parsedValue);
 
+  bool has_san = false;
   for (size_t name = 0; name < alt_name->numNames; ++name) {
     const CE_GeneralName& name_struct = alt_name->generalName[name];
     const CSSM_DATA& name_data = name_struct.name;
     // DNSName and IPAddress are encoded as IA5String and OCTET STRINGs
     // respectively, both of which can be byte copied from
     // CSSM_DATA::data into the appropriate output vector.
-    if (dns_names && name_struct.nameType == GNT_DNSName) {
-      dns_names->push_back(std::string(
-          reinterpret_cast<const char*>(name_data.Data),
-          name_data.Length));
-    } else if (ip_addrs && name_struct.nameType == GNT_IPAddress) {
-      ip_addrs->push_back(std::string(
-          reinterpret_cast<const char*>(name_data.Data),
-          name_data.Length));
+    if (name_struct.nameType == GNT_DNSName) {
+      has_san = true;
+      if (dns_names) {
+        dns_names->push_back(std::string(
+            reinterpret_cast<const char*>(name_data.Data), name_data.Length));
+      }
+    } else if (name_struct.nameType == GNT_IPAddress) {
+      has_san = true;
+      if (ip_addrs) {
+        ip_addrs->push_back(std::string(
+            reinterpret_cast<const char*>(name_data.Data), name_data.Length));
+      }
     }
+    // Fast path: Found at least one subjectAltName and the caller doesn't
+    // need the actual values.
+    if (has_san && !ip_addrs && !dns_names)
+      return true;
   }
+
+  return has_san;
 }
 
 // static
@@ -516,43 +529,6 @@ void X509Certificate::GetPublicKeyInfo(OSCertHandle cert_handle,
       *size_bits = 0;
       break;
   }
-}
-
-X509Certificate::SignatureHashAlgorithm
-X509Certificate::GetSignatureHashAlgorithm(OSCertHandle cert_handle) {
-  x509_util::CSSMCachedCertificate cached_cert;
-  OSStatus status = cached_cert.Init(cert_handle);
-  if (status)
-    return kSignatureHashAlgorithmOther;
-
-  x509_util::CSSMFieldValue signature_field;
-  status =
-      cached_cert.GetField(&CSSMOID_X509V1SignatureAlgorithm, &signature_field);
-  if (status || !signature_field.field())
-    return kSignatureHashAlgorithmOther;
-
-  const CSSM_X509_ALGORITHM_IDENTIFIER* sig_algorithm =
-      signature_field.GetAs<CSSM_X509_ALGORITHM_IDENTIFIER>();
-  if (!sig_algorithm)
-    return kSignatureHashAlgorithmOther;
-
-  const CSSM_OID* alg_oid = &sig_algorithm->algorithm;
-  if (CSSMOIDEqual(alg_oid, &CSSMOID_MD2WithRSA))
-    return kSignatureHashAlgorithmMd2;
-  if (CSSMOIDEqual(alg_oid, &CSSMOID_MD4WithRSA))
-    return kSignatureHashAlgorithmMd4;
-  if (CSSMOIDEqual(alg_oid, &CSSMOID_MD5WithRSA))
-    return kSignatureHashAlgorithmMd5;
-  if (CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA) ||
-      CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithRSA_OIW) ||
-      CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA) ||
-      CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_CMS) ||
-      CSSMOIDEqual(alg_oid, &CSSMOID_SHA1WithDSA_JDK) ||
-      CSSMOIDEqual(alg_oid, &CSSMOID_ECDSA_WithSHA1)) {
-    return kSignatureHashAlgorithmSha1;
-  }
-
-  return kSignatureHashAlgorithmOther;
 }
 
 // static

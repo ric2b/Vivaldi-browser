@@ -36,10 +36,13 @@ class WmShellMusTestApi;
 // WmShell implementation for mus.
 class WmShellMus : public WmShell {
  public:
+  // If |create_session_state_delegate_stub| is true SessionStateDelegateStub is
+  // created. If false, the SessionStateDelegate from Shell is used.
   WmShellMus(WmWindow* primary_root_window,
              std::unique_ptr<ShellDelegate> shell_delegate,
              WindowManager* window_manager,
-             views::PointerWatcherEventRouter* pointer_watcher_event_router);
+             views::PointerWatcherEventRouter* pointer_watcher_event_router,
+             bool create_session_state_delegate_stub);
   ~WmShellMus() override;
 
   static WmShellMus* Get();
@@ -106,10 +109,10 @@ class WmShellMus : public WmShell {
   void AddPointerWatcher(views::PointerWatcher* watcher,
                          views::PointerWatcherEventTypes events) override;
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
-  void RequestShutdown() override;
   bool IsTouchDown() override;
   void ToggleIgnoreExternalKeyboard() override;
   void SetLaserPointerEnabled(bool enabled) override;
+  void SetPartialMagnifierEnabled(bool enabled) override;
   void CreatePointerWatcherAdapter() override;
   void CreatePrimaryHost() override;
   void InitHosts(const ShellInitParams& init_params) override;

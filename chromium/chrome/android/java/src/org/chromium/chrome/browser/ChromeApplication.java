@@ -8,8 +8,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -23,50 +21,20 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.MainDex;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.chrome.browser.banners.AppDetailsDelegate;
-import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
-import org.chromium.chrome.browser.datausage.ExternalDataUseObserver;
 import org.chromium.chrome.browser.document.DocumentActivity;
 import org.chromium.chrome.browser.document.IncognitoDocumentActivity;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
-import org.chromium.chrome.browser.feedback.EmptyFeedbackReporter;
-import org.chromium.chrome.browser.feedback.FeedbackReporter;
-import org.chromium.chrome.browser.gsa.GSAHelper;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.init.InvalidStartupDialog;
-import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
-import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.metrics.UmaUtils;
-import org.chromium.chrome.browser.metrics.VariationsSession;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.net.qualityprovider.ExternalEstimateProviderAndroid;
-import org.chromium.chrome.browser.omaha.RequestGenerator;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
-import org.chromium.chrome.browser.physicalweb.PhysicalWebBleClient;
-import org.chromium.chrome.browser.physicalweb.PhysicalWebEnvironment;
-import org.chromium.chrome.browser.policy.PolicyAuditor;
-import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
+import org.chromium.chrome.browser.preferences.autofill.AutofillAndPaymentsPreferences;
 import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences;
-import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences;
-import org.chromium.chrome.browser.rlz.RevenueStats;
-import org.chromium.chrome.browser.services.AndroidEduOwnerCheckCallback;
-import org.chromium.chrome.browser.signin.GoogleActivityController;
-import org.chromium.chrome.browser.sync.GmsCoreSyncListener;
-import org.chromium.chrome.browser.tab.AuthenticatorNavigationInterceptor;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegateImpl;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.webapps.GooglePlayWebApkInstallDelegate;
-import org.chromium.components.signin.AccountManagerDelegate;
-import org.chromium.components.signin.SystemAccountManagerDelegate;
 import org.chromium.content.app.ContentApplication;
-import org.chromium.content.browser.ChildProcessCreationParams;
-import org.chromium.policy.AppRestrictionsProvider;
-import org.chromium.policy.CombinedPolicyProvider;
 
 /**
  * Basic application functionality that should be shared among all browser applications that use
@@ -75,7 +43,6 @@ import org.chromium.policy.CombinedPolicyProvider;
 @MainDex
 public class ChromeApplication extends ContentApplication {
     public static final String COMMAND_LINE_FILE = "chrome-command-line";
-
     private static final String TAG = "ChromiumApplication";
     private static final String PREF_BOOT_TIMESTAMP =
             "com.google.android.apps.chrome.ChromeMobileApplication.BOOT_TIMESTAMP";
@@ -87,14 +54,6 @@ public class ChromeApplication extends ContentApplication {
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         ContextUtils.initApplicationContext(this);
-    }
-
-    /**
-     * This is called during early initialization in order to set up ChildProcessLauncher
-     * for certain Chrome packaging configurations
-     */
-    public ChildProcessCreationParams getChildProcessCreationParams() {
-        return null;
     }
 
     /**
@@ -114,50 +73,16 @@ public class ChromeApplication extends ContentApplication {
         TraceEvent.end("ChromeApplication.onCreate");
     }
 
-    /**
-     * Returns a new instance of VariationsSession.
-     */
-    public VariationsSession createVariationsSession() {
-        return new VariationsSession();
-    }
-
-    /**
-     * Return a {@link AuthenticatorNavigationInterceptor} for the given {@link Tab}.
-     * This can be null if there are no applicable interceptor to be built.
-     */
-    @SuppressWarnings("unused")
-    public AuthenticatorNavigationInterceptor createAuthenticatorNavigationInterceptor(Tab tab) {
-        return null;
-    }
-
-    /**
-     * Initiate AndroidEdu device check.
-     * @param callback Callback that should receive the results of the AndroidEdu device check.
-     */
-    public void checkIsAndroidEduDevice(final AndroidEduOwnerCheckCallback callback) {
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                callback.onSchoolCheckDone(false);
-            }
-        });
-    }
-
     @CalledByNative
     protected void showAutofillSettings() {
-        PreferencesLauncher.launchSettingsPage(this,
-                AutofillPreferences.class.getName());
+        PreferencesLauncher.launchSettingsPage(
+                this, AutofillAndPaymentsPreferences.class.getName());
     }
 
     @CalledByNative
     protected void showPasswordSettings() {
         PreferencesLauncher.launchSettingsPage(this,
                 SavePasswordsPreferences.class.getName());
-    }
-
-    @Override
-    public void initCommandLine() {
-        CommandLineInitUtil.initCommandLine(this, COMMAND_LINE_FILE);
     }
 
     /**
@@ -172,14 +97,9 @@ public class ChromeApplication extends ContentApplication {
         InvalidStartupDialog.show(activity, e.getErrorCode());
     }
 
-    /**
-     * Returns an instance of LocationSettings to be installed as a singleton.
-     */
-    public LocationSettings createLocationSettings() {
-        // Using an anonymous subclass as the constructor is protected.
-        // This is done to deter instantiation of LocationSettings elsewhere without using the
-        // getInstance() helper method.
-        return new LocationSettings(){};
+    @Override
+    public void initCommandLine() {
+        CommandLineInitUtil.initCommandLine(this, COMMAND_LINE_FILE);
     }
 
     /**
@@ -194,8 +114,8 @@ public class ChromeApplication extends ContentApplication {
                     "Attempting to open clear browsing data for a tab without a valid activity");
             return;
         }
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(activity,
-                ClearBrowsingDataPreferences.class.getName());
+
+        Intent intent = PreferencesLauncher.createIntentForClearBrowsingDataPage(activity);
         activity.startActivity(intent);
     }
 
@@ -206,22 +126,6 @@ public class ChromeApplication extends ContentApplication {
     @CalledByNative
     protected boolean areParentalControlsEnabled() {
         return PartnerBrowserCustomizations.isIncognitoDisabled();
-    }
-
-    /**
-     * @return A provider of external estimates.
-     * @param nativePtr Pointer to the native ExternalEstimateProviderAndroid object.
-     */
-    public ExternalEstimateProviderAndroid createExternalEstimateProviderAndroid(long nativePtr) {
-        return new ExternalEstimateProviderAndroid(nativePtr) {};
-    }
-
-    /**
-     * @return An external observer of data use.
-     * @param nativePtr Pointer to the native ExternalDataUseObserver object.
-     */
-    public ExternalDataUseObserver createExternalDataUseObserver(long nativePtr) {
-        return new ExternalDataUseObserver(nativePtr);
     }
 
     /**
@@ -274,130 +178,6 @@ public class ChromeApplication extends ContentApplication {
     private static native void nativeFlushPersistentData();
 
     /**
-     * @return An instance of {@link FeedbackReporter} to report feedback.
-     */
-    public FeedbackReporter createFeedbackReporter() {
-        return new EmptyFeedbackReporter();
-    }
-
-    /**
-     * @return An instance of ExternalAuthUtils to be installed as a singleton.
-     */
-    public ExternalAuthUtils createExternalAuthUtils() {
-        return new ExternalAuthUtils();
-    }
-
-    /**
-     * Returns a new instance of HelpAndFeedback.
-     */
-    public HelpAndFeedback createHelpAndFeedback() {
-        return new HelpAndFeedback();
-    }
-
-    /**
-     * @return An instance of {@link CustomTabsConnection}. Should not be called
-     * outside of {@link CustomTabsConnection#getInstance()}.
-     */
-    public CustomTabsConnection createCustomTabsConnection() {
-        return new CustomTabsConnection(this);
-    }
-
-    /**
-     * @return A new {@link PhysicalWebBleClient} instance.
-     */
-    public PhysicalWebBleClient createPhysicalWebBleClient() {
-        return new PhysicalWebBleClient();
-    }
-
-    /**
-     * @return A new {@link PhysicalWebEnvironment} instance.
-     */
-    public PhysicalWebEnvironment createPhysicalWebEnvironment() {
-        return new PhysicalWebEnvironment();
-    }
-
-    public InstantAppsHandler createInstantAppsHandler() {
-        return new InstantAppsHandler();
-    }
-
-    /**
-     * @return An instance of {@link GSAHelper} that handles the start point of chrome's integration
-     *         with GSA.
-     */
-    public GSAHelper createGsaHelper() {
-        return new GSAHelper();
-    }
-
-    /**
-     * @return An instance of {@link LocaleManager} that handles customized locale related logic.
-     */
-    public LocaleManager createLocaleManager() {
-        return new LocaleManager();
-    }
-
-   /**
-     * Registers various policy providers with the policy manager.
-     * Providers are registered in increasing order of precedence so overrides should call this
-     * method in the end for this method to maintain the highest precedence.
-     * @param combinedProvider The {@link CombinedPolicyProvider} to register the providers with.
-     */
-    public void registerPolicyProviders(CombinedPolicyProvider combinedProvider) {
-        combinedProvider.registerProvider(new AppRestrictionsProvider(getApplicationContext()));
-    }
-
-    /**
-     * @return An instance of PolicyAuditor that notifies the policy system of the user's activity.
-     * Only applicable when the user has a policy active, that is tracking the activity.
-     */
-    public PolicyAuditor getPolicyAuditor() {
-        // This class has a protected constructor to prevent accidental instantiation.
-        return new PolicyAuditor() {};
-    }
-
-    /**
-     * @return An instance of MultiWindowUtils to be installed as a singleton.
-     */
-    public MultiWindowUtils createMultiWindowUtils() {
-        return new MultiWindowUtils();
-    }
-
-    /**
-     * @return An instance of RequestGenerator to be used for Omaha XML creation.  Will be null if
-     *         a generator is unavailable.
-     */
-    public RequestGenerator createOmahaRequestGenerator() {
-        return null;
-    }
-
-    /**
-     * @return An instance of GmsCoreSyncListener to notify GmsCore of sync encryption key changes.
-     *         Will be null if one is unavailable.
-     */
-    public GmsCoreSyncListener createGmsCoreSyncListener() {
-        return null;
-    }
-
-    /**
-    * @return An instance of GoogleActivityController.
-    */
-    public GoogleActivityController createGoogleActivityController() {
-        return new GoogleActivityController();
-    }
-
-    /**
-     * @return An instance of AppDetailsDelegate that can be queried about app information for the
-     *         App Banner feature.  Will be null if one is unavailable.
-     */
-    public AppDetailsDelegate createAppDetailsDelegate() {
-        return null;
-    }
-
-    /** Returns the singleton instance of GooglePlayWebApkInstallDelegate. */
-    public GooglePlayWebApkInstallDelegate getGooglePlayWebApkInstallDelegate() {
-        return null;
-    }
-
-    /**
      * Returns the singleton instance of the DocumentTabModelSelector.
      * TODO(dfalcantara): Find a better place for this once we differentiate between activity and
      *                    application-level TabModelSelectors.
@@ -413,20 +193,5 @@ public class ChromeApplication extends ContentApplication {
                     new StorageDelegate(), new TabDelegate(false), new TabDelegate(true));
         }
         return sDocumentTabModelSelector;
-    }
-
-    /**
-     * @return An instance of RevenueStats to be installed as a singleton.
-     */
-    public RevenueStats createRevenueStatsInstance() {
-        return new RevenueStats();
-    }
-
-    /**
-     * Creates a new {@link AccountManagerDelegate}.
-     * @return the created {@link AccountManagerDelegate}.
-     */
-    public AccountManagerDelegate createAccountManagerDelegate() {
-        return new SystemAccountManagerDelegate(this);
     }
 }

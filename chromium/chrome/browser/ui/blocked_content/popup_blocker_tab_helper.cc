@@ -14,17 +14,14 @@
 #include "chrome/common/render_messages.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/WebKit/public/web/WebWindowFeatures.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #endif
-
-using blink::WebWindowFeatures;
 
 const size_t kMaximumNumberOfPopups = 25;
 
@@ -32,11 +29,11 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(PopupBlockerTabHelper);
 
 struct PopupBlockerTabHelper::BlockedRequest {
   BlockedRequest(const chrome::NavigateParams& params,
-                 const WebWindowFeatures& window_features)
+                 const blink::mojom::WindowFeatures& window_features)
       : params(params), window_features(window_features) {}
 
   chrome::NavigateParams params;
-  WebWindowFeatures window_features;
+  blink::mojom::WindowFeatures window_features;
 };
 
 PopupBlockerTabHelper::PopupBlockerTabHelper(
@@ -47,13 +44,16 @@ PopupBlockerTabHelper::PopupBlockerTabHelper(
 PopupBlockerTabHelper::~PopupBlockerTabHelper() {
 }
 
-void PopupBlockerTabHelper::DidNavigateMainFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
+void PopupBlockerTabHelper::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
   // Clear all page actions, blocked content notifications and browser actions
-  // for this tab, unless this is an in-page navigation.
-  if (details.is_in_page)
+  // for this tab, unless this is an in-page navigation. Also only consider
+  // main frame navigations that successfully committed.
+  if (!navigation_handle->IsInMainFrame() ||
+      !navigation_handle->HasCommitted() ||
+      navigation_handle->IsSamePage()) {
     return;
+  }
 
   // Close blocked popups.
   if (!blocked_popups_.IsEmpty()) {
@@ -72,7 +72,7 @@ void PopupBlockerTabHelper::PopupNotificationVisibilityChanged(
 
 bool PopupBlockerTabHelper::MaybeBlockPopup(
     const chrome::NavigateParams& params,
-    const WebWindowFeatures& window_features) {
+    const blink::mojom::WindowFeatures& window_features) {
   // A page can't spawn popups (or do anything else, either) until its load
   // commits, so when we reach here, the popup was spawned by the
   // NavigationController's last committed entry, not the active entry.  For
@@ -104,7 +104,7 @@ void PopupBlockerTabHelper::AddBlockedPopup(const BlockedWindowParams& params) {
 
 void PopupBlockerTabHelper::AddBlockedPopup(
     const chrome::NavigateParams& params,
-    const WebWindowFeatures& window_features) {
+    const blink::mojom::WindowFeatures& window_features) {
   if (blocked_popups_.size() >= kMaximumNumberOfPopups)
     return;
 

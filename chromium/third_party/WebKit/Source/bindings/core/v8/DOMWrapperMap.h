@@ -31,13 +31,14 @@
 #ifndef DOMWrapperMap_h
 #define DOMWrapperMap_h
 
+#include <utility>
+
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "platform/ScriptForbiddenScope.h"
+#include "v8/include/v8-util.h"
+#include "v8/include/v8.h"
 #include "wtf/Compiler.h"
 #include "wtf/HashMap.h"
-#include <utility>
-#include <v8-util.h>
-#include <v8.h>
 
 namespace blink {
 
@@ -114,7 +115,7 @@ class DOMWrapperMap {
       return oldValue;
     }
     static v8::PersistentContainerValue Get(const Impl* impl, KeyType* key) {
-      return impl->get(key);
+      return impl->at(key);
     }
 
     static v8::PersistentContainerValue Remove(Impl* impl, KeyType* key) {

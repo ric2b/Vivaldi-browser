@@ -45,18 +45,20 @@ def write_message(f, options, node, locale=None):
     except:
       return
   name = node.attrs["name"]
+  message = getMessage(node.clique.GetMessage())
   clique = node.GetCliques()[0]
-
   tid = clique.GetId()
-  if tid in generated_translation:
+
+  unique = (name, message)
+  if unique in generated_translation:
     return
-  generated_translation.add(tid)
+  generated_translation.add(unique)
 
   print >> f, "#. Description:", node.attrs["desc"].encode("utf8")
   print >> f, "#. TranslationId:", tid
   print >> f, "#. vivaldi-file:", options.vivaldi_file
-  message = getMessage(node.clique.GetMessage())
 
+  print >> f, '#, fuzzy'
   print >> f, 'msgctxt "%s"' % name
   print >> f, 'msgid "%s"' % message
   print >> f, 'msgstr "%s"' % translated

@@ -44,9 +44,8 @@ void MockCryptoClientStream::OnHandshakeMessage(
 
 void MockCryptoClientStream::CryptoConnect() {
   if (proof_verify_details_) {
-    bool unused = false;
     if (!proof_verify_details_->cert_verify_result.verified_cert
-             ->VerifyNameMatch(server_id_.host(), &unused)) {
+             ->VerifyNameMatch(server_id_.host(), false)) {
       handshake_confirmed_ = false;
       encryption_established_ = false;
       session()->connection()->CloseConnection(
@@ -99,6 +98,11 @@ void MockCryptoClientStream::CryptoConnect() {
     case COLD_START: {
       handshake_confirmed_ = false;
       encryption_established_ = false;
+      break;
+    }
+
+    case USE_DEFAULT_CRYPTO_STREAM: {
+      NOTREACHED();
       break;
     }
   }

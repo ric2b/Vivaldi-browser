@@ -123,7 +123,6 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
   static const SkColor kTreeSelectedTextColor = SK_ColorBLACK;
   static const SkColor kTreeSelectionBackgroundColor =
       SkColorSetRGB(0xEE, 0xEE, 0xEE);
-  static const SkColor kTreeArrowColor = SkColorSetRGB(0x7A, 0x7A, 0x7A);
   // Table:
   static const SkColor kTableBackground = SK_ColorWHITE;
   static const SkColor kTableTextColor = SK_ColorBLACK;
@@ -244,8 +243,6 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
     case NativeTheme::kColorId_TreeSelectionBackgroundFocused:
     case NativeTheme::kColorId_TreeSelectionBackgroundUnfocused:
       return kTreeSelectionBackgroundColor;
-    case NativeTheme::kColorId_TreeArrow:
-      return kTreeArrowColor;
 
     // Table
     case NativeTheme::kColorId_TableBackground:
@@ -260,6 +257,17 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
       return kTableSelectionBackgroundColor;
     case NativeTheme::kColorId_TableGroupingIndicatorColor:
       return kTableGroupingIndicatorColor;
+
+    // Table Header
+    case NativeTheme::kColorId_TableHeaderText:
+      return base_theme->GetSystemColor(
+          NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+    case NativeTheme::kColorId_TableHeaderBackground:
+      return base_theme->GetSystemColor(
+          NativeTheme::kColorId_MenuBackgroundColor);
+    case NativeTheme::kColorId_TableHeaderSeparator:
+      return base_theme->GetSystemColor(
+          NativeTheme::kColorId_EnabledMenuButtonBorderColor);
 
     // FocusableBorder
     case NativeTheme::kColorId_FocusedBorderColor:
@@ -329,19 +337,19 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
 
 void CommonThemePaintMenuItemBackground(
     const NativeTheme* theme,
-    SkCanvas* canvas,
+    cc::PaintCanvas* canvas,
     NativeTheme::State state,
     const gfx::Rect& rect,
     const NativeTheme::MenuItemExtraParams& menu_item) {
-  SkPaint paint;
+  cc::PaintFlags flags;
   switch (state) {
     case NativeTheme::kNormal:
     case NativeTheme::kDisabled:
-      paint.setColor(
+      flags.setColor(
           theme->GetSystemColor(NativeTheme::kColorId_MenuBackgroundColor));
       break;
     case NativeTheme::kHovered:
-      paint.setColor(theme->GetSystemColor(
+      flags.setColor(theme->GetSystemColor(
           NativeTheme::kColorId_FocusedMenuItemBackgroundColor));
       break;
     default:
@@ -350,10 +358,10 @@ void CommonThemePaintMenuItemBackground(
   }
   if (menu_item.corner_radius > 0) {
     const SkScalar radius = SkIntToScalar(menu_item.corner_radius);
-    canvas->drawRoundRect(gfx::RectToSkRect(rect), radius, radius, paint);
+    canvas->drawRoundRect(gfx::RectToSkRect(rect), radius, radius, flags);
     return;
   }
-  canvas->drawRect(gfx::RectToSkRect(rect), paint);
+  canvas->drawRect(gfx::RectToSkRect(rect), flags);
 }
 
 }  // namespace ui

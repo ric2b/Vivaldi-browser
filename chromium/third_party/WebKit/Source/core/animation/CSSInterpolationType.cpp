@@ -4,13 +4,14 @@
 
 #include "core/animation/CSSInterpolationType.h"
 
+#include <memory>
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/StringKeyframe.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSValue.h"
 #include "core/css/CSSVariableReferenceValue.h"
 #include "core/css/ComputedStyleCSSValueMapping.h"
-#include "core/css/PropertyRegistry.h"
+#include "core/css/PropertyRegistration.h"
 #include "core/css/parser/CSSTokenizer.h"
 #include "core/css/resolver/CSSVariableResolver.h"
 #include "core/css/resolver/StyleBuilder.h"
@@ -18,7 +19,6 @@
 #include "core/style/DataEquivalency.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -87,6 +87,12 @@ class InheritedCustomPropertyChecker
     if (!inheritedValue) {
       inheritedValue = m_initialValue.get();
     }
+    if (inheritedValue == m_inheritedValue.get()) {
+      return true;
+    }
+    if (!inheritedValue || !m_inheritedValue) {
+      return false;
+    }
     return m_inheritedValue->equals(*inheritedValue);
   }
 
@@ -99,6 +105,13 @@ class InheritedCustomPropertyChecker
 CSSInterpolationType::CSSInterpolationType(PropertyHandle property)
     : InterpolationType(property) {
   DCHECK(!isShorthandProperty(cssProperty()));
+}
+
+void CSSInterpolationType::setCustomPropertyRegistration(
+    const PropertyRegistration& registration) {
+  DCHECK(getProperty().isCSSCustomProperty());
+  DCHECK(!m_registration);
+  m_registration = &registration;
 }
 
 InterpolationValue CSSInterpolationType::maybeConvertSingle(
@@ -155,17 +168,7 @@ InterpolationValue CSSInterpolationType::maybeConvertSingleInternal(
     return maybeConvertInherit(state, conversionCheckers);
   }
 
-  return maybeConvertValue(*value, state, conversionCheckers);
-}
-
-const PropertyRegistry::Registration* getRegistration(
-    const StyleResolverState& state,
-    const AtomicString& propertyName) {
-  const PropertyRegistry* registry = state.document().propertyRegistry();
-  if (registry) {
-    return registry->registration(propertyName);
-  }
-  return nullptr;
+  return maybeConvertValue(*value, &state, conversionCheckers);
 }
 
 InterpolationValue CSSInterpolationType::maybeConvertCustomPropertyDeclaration(
@@ -182,7 +185,7 @@ InterpolationValue CSSInterpolationType::maybeConvertCustomPropertyDeclaration(
   // the default CSSValueInterpolationType handler.
   // This might involve making the "catch-all" InterpolationType explicit
   // e.g. add bool InterpolationType::isCatchAll().
-  return maybeConvertValue(declaration, state, conversionCheckers);
+  return maybeConvertValue(declaration, &state, conversionCheckers);
 }
 
 InterpolationValue
@@ -193,34 +196,35 @@ CSSInterpolationType::maybeConvertCustomPropertyDeclarationInternal(
   const AtomicString& name = declaration.name();
   DCHECK_EQ(getProperty().customPropertyName(), name);
 
-  const PropertyRegistry::Registration* registration =
-      getRegistration(state, name);
-
   if (!declaration.value()) {
     // Unregistered custom properties inherit:
     // https://www.w3.org/TR/css-variables-1/#defining-variables
-    bool isInheritedProperty = registration ? registration->inherits() : true;
+    bool isInheritedProperty =
+        m_registration ? m_registration->inherits() : true;
     DCHECK(declaration.isInitial(isInheritedProperty) ||
            declaration.isInherit(isInheritedProperty));
 
-    if (!registration) {
+    if (!m_registration) {
       return nullptr;
     }
 
+    const CSSValue* value = nullptr;
     if (declaration.isInitial(isInheritedProperty)) {
-      return maybeConvertValue(*registration->initial(), state,
-                               conversionCheckers);
+      value = m_registration->initial();
+    } else {
+      value =
+          state.parentStyle()->getRegisteredVariable(name, isInheritedProperty);
+      if (!value) {
+        value = m_registration->initial();
+      }
+      conversionCheckers.push_back(InheritedCustomPropertyChecker::create(
+          name, isInheritedProperty, value, m_registration->initial()));
+    }
+    if (!value) {
+      return nullptr;
     }
 
-    DCHECK(declaration.isInherit(isInheritedProperty));
-    const CSSValue* inheritedValue =
-        state.parentStyle()->getRegisteredVariable(name, isInheritedProperty);
-    if (!inheritedValue) {
-      inheritedValue = registration->initial();
-    }
-    conversionCheckers.push_back(InheritedCustomPropertyChecker::create(
-        name, isInheritedProperty, inheritedValue, registration->initial()));
-    return maybeConvertValue(*inheritedValue, state, conversionCheckers);
+    return maybeConvertValue(*value, &state, conversionCheckers);
   }
 
   if (declaration.value()->needsVariableResolution()) {
@@ -233,11 +237,11 @@ CSSInterpolationType::maybeConvertCustomPropertyDeclarationInternal(
     return nullptr;
   }
 
-  if (registration) {
+  if (m_registration) {
     const CSSValue* parsedValue =
-        declaration.value()->parseForSyntax(registration->syntax());
+        declaration.value()->parseForSyntax(m_registration->syntax());
     if (parsedValue) {
-      return maybeConvertValue(*parsedValue, state, conversionCheckers);
+      return maybeConvertValue(*parsedValue, &state, conversionCheckers);
     }
   }
 
@@ -246,27 +250,27 @@ CSSInterpolationType::maybeConvertCustomPropertyDeclarationInternal(
 
 InterpolationValue CSSInterpolationType::maybeConvertUnderlyingValue(
     const InterpolationEnvironment& environment) const {
-  const StyleResolverState& state = environment.state();
+  const ComputedStyle& style = environment.style();
   if (!getProperty().isCSSCustomProperty()) {
-    return maybeConvertStandardPropertyUnderlyingValue(state);
+    return maybeConvertStandardPropertyUnderlyingValue(style);
   }
 
   const PropertyHandle property = getProperty();
   const AtomicString& name = property.customPropertyName();
-  const PropertyRegistry::Registration* registration =
-      getRegistration(state, name);
-  if (!registration) {
+  if (!m_registration) {
     return nullptr;
   }
   const CSSValue* underlyingValue =
-      state.style()->getRegisteredVariable(name, registration->inherits());
+      style.getRegisteredVariable(name, m_registration->inherits());
   if (!underlyingValue) {
-    underlyingValue = registration->initial();
+    underlyingValue = m_registration->initial();
+  }
+  if (!underlyingValue) {
+    return nullptr;
   }
   // TODO(alancutter): Remove the need for passing in conversion checkers.
   ConversionCheckers dummyConversionCheckers;
-  return maybeConvertValue(*underlyingValue, environment.state(),
-                           dummyConversionCheckers);
+  return maybeConvertValue(*underlyingValue, nullptr, dummyConversionCheckers);
 }
 
 void CSSInterpolationType::apply(
@@ -305,10 +309,8 @@ void CSSInterpolationType::applyCustomPropertyValue(
   ComputedStyle& style = *state.style();
   const PropertyHandle property = getProperty();
   const AtomicString& propertyName = property.customPropertyName();
-  const PropertyRegistry::Registration* registration =
-      getRegistration(state, propertyName);
-  DCHECK(registration);
-  if (registration->inherits()) {
+  DCHECK(m_registration);
+  if (m_registration->inherits()) {
     style.setResolvedInheritedVariable(propertyName, variableData.release(),
                                        cssValue);
   } else {

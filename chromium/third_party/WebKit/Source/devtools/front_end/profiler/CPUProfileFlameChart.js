@@ -115,6 +115,13 @@ Profiler.ProfileFlameChartDataProvider = class {
   /**
    * @override
    * @param {number} entryIndex
+   */
+  highlightEntry(entryIndex) {
+  }
+
+  /**
+   * @override
+   * @param {number} entryIndex
    * @return {boolean}
    */
   canJumpToEntry(entryIndex) {
@@ -336,14 +343,6 @@ Profiler.CPUProfileFlameChart = class extends UI.VBox {
 Profiler.CPUProfileFlameChart.OverviewCalculator = class {
   constructor(dataProvider) {
     this._dataProvider = dataProvider;
-  }
-
-  /**
-   * @override
-   * @return {number}
-   */
-  paddingLeft() {
-    return 0;
   }
 
   /**

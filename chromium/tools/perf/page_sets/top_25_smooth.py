@@ -60,7 +60,7 @@ class GmailSmoothPage(top_pages.TopPages):
     action_runner.WaitForJavaScriptCondition(
         'window.gmonkey !== undefined &&'
         'document.getElementById("gb") !== null',
-        timeout_in_seconds=120)
+        timeout=120)
 
   def RunPageInteractions(self, action_runner):
     action_runner.ExecuteJavaScript('''

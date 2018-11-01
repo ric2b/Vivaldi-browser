@@ -5,21 +5,27 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_VIRTUAL_KEYBOARD_PRIVATE_CHROME_VIRTUAL_KEYBOARD_DELEGATE_H_
 #define CHROME_BROWSER_EXTENSIONS_API_VIRTUAL_KEYBOARD_PRIVATE_CHROME_VIRTUAL_KEYBOARD_DELEGATE_H_
 
+#include <string>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
 
 namespace extensions {
 
 class ChromeVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
  public:
-  ChromeVirtualKeyboardDelegate() {}
-  ~ChromeVirtualKeyboardDelegate() override {}
-  bool GetKeyboardConfig(base::DictionaryValue* settings) override;
+  ChromeVirtualKeyboardDelegate();
+  ~ChromeVirtualKeyboardDelegate() override;
+
+  void GetKeyboardConfig(
+      OnKeyboardSettingsCallback on_settings_callback) override;
   bool HideKeyboard() override;
   bool InsertText(const base::string16& text) override;
   bool OnKeyboardLoaded() override;
   void SetHotrodKeyboard(bool enable) override;
+  void SetKeyboardRestricted(bool restricted) override;
   bool LockKeyboard(bool state) override;
   bool SendKeyEvent(const std::string& type,
                     int char_value,
@@ -32,6 +38,11 @@ class ChromeVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
   bool SetRequestedKeyboardState(int state_enum) override;
 
  private:
+  void OnHasInputDevices(OnKeyboardSettingsCallback on_settings_callback,
+                         bool has_input_devices);
+
+  base::WeakPtr<ChromeVirtualKeyboardDelegate> weak_this_;
+  base::WeakPtrFactory<ChromeVirtualKeyboardDelegate> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(ChromeVirtualKeyboardDelegate);
 };
 

@@ -91,7 +91,8 @@ class CHROMEOS_EXPORT NetworkStateHandler
                       const tracked_objects::Location& from_here);
 
   // Returns the state for technology |type|. Only
-  // NetworkTypePattern::Primitive, ::Mobile and ::Ethernet are supported.
+  // NetworkTypePattern::Primitive, ::Mobile, ::Ethernet, and ::Tether are
+  // supported.
   TechnologyState GetTechnologyState(const NetworkTypePattern& type) const;
   bool IsTechnologyAvailable(const NetworkTypePattern& type) const {
     return GetTechnologyState(type) != TECHNOLOGY_UNAVAILABLE;
@@ -181,6 +182,15 @@ class CHROMEOS_EXPORT NetworkStateHandler
                             int limit,
                             NetworkStateList* list);
 
+  // Sets |list| to contain the list of "tether" networks. If |limit| > 0, that
+  // will determine the number of results; pass 0 for no limit. The returned
+  // list contains a copy of NetworkState pointers which should not be stored or
+  // used beyond the scope of the calling function (i.e. they may later become
+  // invalid, but only on the UI thread).
+  // NOTE: See AddTetherNetworkState for more information about "tether"
+  // networks.
+  void GetTetherNetworkList(int limit, NetworkStateList* list);
+
   // Finds and returns the NetworkState associated with |service_path| or NULL
   // if not found. If |configured_only| is true, only returns saved entries
   // (IsInProfile is true).
@@ -191,6 +201,19 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // Finds and returns the NetworkState associated with |guid| or NULL if not
   // found. This returns all entries (IsInProfile() may be true or false).
   const NetworkState* GetNetworkStateFromGuid(const std::string& guid) const;
+
+  // Creates a "tether" NetworkState that has no underlying shill type or
+  // service. When initially created, it does not actually represent a real
+  // network. The |guid| provided must be non-empty. If a network with |guid|
+  // already exists, this method will do nothing. Use the provided |guid| to
+  // refer to and fetch this NetworkState in the future.
+  // NOTE: only GetNetworkStateFromGuid is supported to fetch "tether"
+  // NetworkStates.
+  void AddTetherNetworkState(const std::string& guid, const std::string& name);
+
+  // Remove a "tether" NetworkState, using the same |guid| passed to
+  // AddTetherNetworkState.
+  void RemoveTetherNetworkState(const std::string& guid);
 
   // Sets |list| to contain the list of devices.  The returned list contains
   // a copy of DeviceState pointers which should not be stored or used beyond
@@ -348,6 +371,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // Ensure a valid GUID for NetworkState.
   void UpdateGuid(NetworkState* network);
 
+  // Sends NetworkListChanged() to observers and logs an event.
+  void NotifyNetworkListChanged();
+
   // Sends DeviceListChanged() to observers and logs an event.
   void NotifyDeviceListChanged();
 
@@ -394,6 +420,10 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // List of managed network states
   ManagedStateList network_list_;
+
+  // List of managed "tether" network states, which exist separately from
+  // |network_list_|.
+  ManagedStateList tether_network_list_;
 
   // Set to true when the network list is sorted, cleared when network updates
   // arrive. Used to trigger sorting when needed.

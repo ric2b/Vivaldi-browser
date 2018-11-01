@@ -131,7 +131,7 @@ DiscardableSharedMemoryHeap::Grow(
   num_blocks_ += span->length_;
 
   // Start tracking if segment is resident by adding it to |memory_segments_|.
-  memory_segments_.push_back(new ScopedMemorySegment(
+  memory_segments_.push_back(base::MakeUnique<ScopedMemorySegment>(
       this, std::move(shared_memory), size, id, deleted_callback));
 
   return span;
@@ -226,9 +226,10 @@ void DiscardableSharedMemoryHeap::ReleaseFreeMemory() {
   // Erase all free segments after rearranging the segments in such a way
   // that used segments precede all free segments.
   memory_segments_.erase(
-      std::partition(
-          memory_segments_.begin(), memory_segments_.end(),
-          [](const ScopedMemorySegment* segment) { return segment->IsUsed(); }),
+      std::partition(memory_segments_.begin(), memory_segments_.end(),
+                     [](const std::unique_ptr<ScopedMemorySegment>& segment) {
+                       return segment->IsUsed();
+                     }),
       memory_segments_.end());
 }
 
@@ -237,7 +238,7 @@ void DiscardableSharedMemoryHeap::ReleasePurgedMemory() {
   // that resident segments precede all purged segments.
   memory_segments_.erase(
       std::partition(memory_segments_.begin(), memory_segments_.end(),
-                     [](const ScopedMemorySegment* segment) {
+                     [](const std::unique_ptr<ScopedMemorySegment>& segment) {
                        return segment->IsResident();
                      }),
       memory_segments_.end());
@@ -254,7 +255,7 @@ size_t DiscardableSharedMemoryHeap::GetSizeOfFreeLists() const {
 bool DiscardableSharedMemoryHeap::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   std::for_each(memory_segments_.begin(), memory_segments_.end(),
-                [pmd](const ScopedMemorySegment* segment) {
+                [pmd](const std::unique_ptr<ScopedMemorySegment>& segment) {
                   segment->OnMemoryDump(pmd);
                 });
   return true;
@@ -426,7 +427,9 @@ void DiscardableSharedMemoryHeap::OnMemoryDump(
           ->GetTracingProcessId();
   base::trace_event::MemoryAllocatorDumpGuid shared_segment_guid =
       GetSegmentGUIDForTracing(tracing_process_id, segment_id);
-  pmd->CreateWeakSharedGlobalAllocatorDump(shared_segment_guid);
+  // TODO(ssid): Make this weak once the GUID created is consistent
+  // crbug.com/661257.
+  pmd->CreateSharedGlobalAllocatorDump(shared_segment_guid);
 
   // The size is added to the global dump so that it gets propagated to both the
   // dumps associated.
@@ -464,9 +467,9 @@ DiscardableSharedMemoryHeap::CreateMemoryAllocatorDump(
     return dump;
   }
 
-  ScopedVector<ScopedMemorySegment>::const_iterator it =
+  auto it =
       std::find_if(memory_segments_.begin(), memory_segments_.end(),
-                   [span](const ScopedMemorySegment* segment) {
+                   [span](const std::unique_ptr<ScopedMemorySegment>& segment) {
                      return segment->ContainsSpan(span);
                    });
   DCHECK(it != memory_segments_.end());

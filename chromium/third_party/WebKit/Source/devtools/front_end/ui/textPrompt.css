@@ -4,6 +4,11 @@
  * found in the LICENSE file.
  */
 
+.text-prompt-root {
+    display: flex;
+    align-items: center;
+}
+
 .text-prompt-editing {
     -webkit-user-select: text;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2),
@@ -38,6 +43,12 @@
 ::content .text-prompt[data-placeholder]:empty::before {
     content: attr(data-placeholder);
     color: rgb(128, 128, 128);
+}
+
+::content .text-prompt:not([data-placeholder]):empty::after {
+    content: '\00A0';
+    width: 0;
+    display: block;
 }
 
 .text-prompt-editing ::content br {

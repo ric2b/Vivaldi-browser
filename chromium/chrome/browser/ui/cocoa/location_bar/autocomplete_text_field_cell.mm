@@ -196,7 +196,7 @@ size_t CalculatePositionsInFrame(
 }
 
 - (void)clearTrackingArea {
-  for (auto& decoration : mouseTrackingDecorations_)
+  for (auto* decoration : mouseTrackingDecorations_)
     decoration->RemoveTrackingArea();
 
   mouseTrackingDecorations_.clear();
@@ -361,12 +361,22 @@ size_t CalculatePositionsInFrame(
   }
 
   // Draw the border.
+  const ui::ThemeProvider* provider = [[controlView window] themeProvider];
+  bool increaseContrast = provider && provider->ShouldIncreaseContrast();
   if (!inDarkMode) {
-    const CGFloat kNormalStrokeGray = 168 / 255.;
-    [[NSColor colorWithCalibratedWhite:kNormalStrokeGray alpha:1] set];
+    if (increaseContrast) {
+      [[NSColor blackColor] set];
+    } else {
+      const CGFloat kNormalStrokeGray = 168 / 255.;
+      [[NSColor colorWithCalibratedWhite:kNormalStrokeGray alpha:1] set];
+    }
   } else {
-    const CGFloat k30PercentAlpha = 0.3;
-    [[NSColor colorWithCalibratedWhite:0 alpha:k30PercentAlpha] set];
+    if (increaseContrast) {
+      [[NSColor whiteColor] set];
+    } else {
+      const CGFloat k30PercentAlpha = 0.3;
+      [[NSColor colorWithCalibratedWhite:0 alpha:k30PercentAlpha] set];
+    }
   }
   [path stroke];
 

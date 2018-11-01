@@ -2,22 +2,24 @@
 
 #include "renderer/vivaldi_render_view_observer.h"
 
+#include <memory>
+#include <string>
+
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/shared_memory.h"
 #include "content/child/child_thread_impl.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/renderer/render_thread.h"
-#include "content/public/renderer/render_view.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "skia/ext/image_operations.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
 using blink::WebDocument;
@@ -28,12 +30,10 @@ using blink::WebView;
 namespace vivaldi {
 
 VivaldiRenderViewObserver::VivaldiRenderViewObserver(
-  content::RenderView* render_view)
-: content::RenderViewObserver(render_view)
-{}
+    content::RenderView* render_view)
+    : content::RenderViewObserver(render_view) {}
 
-VivaldiRenderViewObserver::~VivaldiRenderViewObserver() {
-}
+VivaldiRenderViewObserver::~VivaldiRenderViewObserver() {}
 
 void VivaldiRenderViewObserver::OnDestruct() {
   delete this;
@@ -55,8 +55,9 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
 void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
   WebLocalFrame* frame = render_view()->GetWebView()->focusedFrame();
   unsigned length = text.length();
-  frame->setMarkedText(text, length, length);  // We do not want any selection.
-  frame->unmarkText();  // Or marked text.
+  // We do not want any selection.
+  frame->setMarkedText(blink::WebString::fromUTF16(text), length, length);
+  frame->unmarkText();                         // Or marked text.
 }
 
 void VivaldiRenderViewObserver::OnPinchZoom(float scale, int x, int y) {
@@ -82,8 +83,8 @@ void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
       role = element.getAttribute("role").utf8();
     }
   }
-  Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname,
-    type, editable, role));
+  Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname, type,
+                                                  editable, role));
 }
 
 namespace {
@@ -121,7 +122,7 @@ bool CopyBitmapToSharedMem(const SkBitmap& bitmap,
     shared_buf->Unmap();
   }
   *shared_mem_handle =
-    base::SharedMemory::DuplicateHandle(shared_buf->handle());
+      base::SharedMemory::DuplicateHandle(shared_buf->handle());
   return true;
 }
 
@@ -145,8 +146,7 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     SkBitmap thumbnail;
     if (bitmap.colorType() == kN32_SkColorType) {
       thumbnail = bitmap;
-    }
-    else {
+    } else {
       bitmap.copyTo(&thumbnail, kN32_SkColorType);
     }
     if (CopyBitmapToSharedMem(thumbnail, &shared_memory_handle)) {
@@ -157,8 +157,8 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     }
   } else {
     Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-      routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
-      false));
+        routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
+        false));
   }
   return;
 }

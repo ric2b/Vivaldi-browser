@@ -28,6 +28,9 @@ extern const int kTrayImageItemHorizontalPaddingVerticalAlignment;
 
 ASH_EXPORT extern const int kTrayItemSize;
 
+// Extra padding used beside a single icon in the tray area of the shelf.
+extern const int kTrayImageItemPadding;
+
 extern const int kTrayLabelItemHorizontalPaddingBottomAlignment;
 extern const int kTrayLabelItemVerticalPaddingVerticalAlignment;
 
@@ -42,16 +45,23 @@ extern const int kTrayPopupAutoCloseDelayInSeconds;
 extern const int kTrayPopupAutoCloseDelayForTextInSeconds;
 extern const int kTrayPopupPaddingHorizontal;
 extern const int kTrayPopupPaddingBetweenItems;
-// Used for buttons that have borders.
 extern const int kTrayPopupButtonEndMargin;
-extern const int kTrayPopupUserCardVerticalPadding;
 // The padding used on the left and right of labels. This applies to all labels
 // in the system menu.
 extern const int kTrayPopupLabelHorizontalPadding;
 
-// Padding used to adjust the slider position in volume row and brightness
-// row horizontally.
-extern const int kTrayPopupSliderPaddingMD;
+// The minimum/default height of the rows in the system tray menu.
+extern const int kTrayPopupItemMinHeight;
+
+// The width used for the first region of the row (which holds an image).
+extern const int kTrayPopupItemMinStartWidth;
+
+// The width used for the end region of the row (usually a more arrow).
+extern const int kTrayPopupItemMinEndWidth;
+
+// When transitioning between a detailed and a default view, this delay is used
+// before the transition starts.
+ASH_EXPORT extern const int kTrayDetailedViewTransitionDelayMs;
 
 // Padding used on right side of labels to keep minimum distance to the next
 // item. This applies to all labels in the system menu.
@@ -68,7 +78,6 @@ extern const int kTrayToggleButtonWidth;
 
 extern const SkColor kBackgroundColor;
 extern const SkColor kHoverBackgroundColor;
-extern const SkColor kPublicAccountBackgroundColor;
 extern const SkColor kPublicAccountUserCardTextColor;
 extern const SkColor kPublicAccountUserCardNameColor;
 
@@ -90,15 +99,11 @@ extern const int kTrayNotificationContentsWidth;
 // Extra padding used to adjust hitting region around tray items.
 extern const int kHitRegionPadding;
 
-// Color and width of a line used to separate tray items in the shelf and
-// system menu.
-extern const SkColor kSeparatorColor;
+// Width of a line used to separate tray items in the shelf.
 ASH_EXPORT extern const int kSeparatorWidth;
 
-// The color and height of the horizontal separator used in the material design
-// system menu (i.e., the vertical line used to separate elements horizontally).
-extern const SkColor kHorizontalSeparatorColor;
-extern const int kHorizontalSeparatorHeight;
+// The color of the separators used in the system menu.
+extern const SkColor kMenuSeparatorColor;
 
 // The size and foreground color of the icons appearing in the material design
 // system tray.
@@ -142,66 +147,6 @@ extern const int kTrayPopupInkDropCornerRadius;
 
 // The height of the system info row.
 extern const int kTrayPopupSystemInfoRowHeight;
-
-enum TrayConstant {
-  // A legacy height value used in non-MD calculations for applying additional
-  // borders on tray items.
-  TRAY_ITEM_HEIGHT_LEGACY,
-
-  // Padding between items in the status tray area.
-  TRAY_SPACING,
-
-  // Padding between the edge of shelf and the item in status tray area.
-  TRAY_PADDING_FROM_EDGE_OF_SHELF,
-
-  // The minimum height of the rows in the system tray menu.
-  TRAY_POPUP_ITEM_MIN_HEIGHT,
-
-  // The maximum height of the rows in the system tray menu.
-  TRAY_POPUP_ITEM_MAX_HEIGHT,
-
-  // The width used for the main image of the row. This applies to all rows
-  // in the system menu that have a main image (e.g. default and detailed).
-  TRAY_POPUP_ITEM_MAIN_IMAGE_CONTAINER_WIDTH,
-
-  // The width used for the images used in the 'more' region of default rows.
-  TRAY_POPUP_ITEM_MORE_IMAGE_SIZE,
-
-  // The horizontal inset in the 'more' region of default rows.
-  TRAY_POPUP_ITEM_MORE_REGION_HORIZONTAL_INSET,
-
-  // The left inset for all tray system menu rows.
-  TRAY_POPUP_ITEM_LEFT_INSET,
-
-  // The right inset for all tray system menu rows.
-  TRAY_POPUP_ITEM_RIGHT_INSET,
-
-  // The minimum default width for the left container of the system menu rows.
-  TRAY_POPUP_ITEM_MIN_START_WIDTH,
-
-  // The minimum default width for the right container of the system menu rows.
-  TRAY_POPUP_ITEM_MIN_END_WIDTH,
-
-  // Duration to delay transitions to the default view.
-  TRAY_POPUP_TRANSITION_TO_DEFAULT_DELAY,
-
-  // Duration to delay transitions to the detailed view.
-  TRAY_POPUP_TRANSITION_TO_DETAILED_DELAY,
-
-  // The width and height of the virtual keyboard button in the status tray
-  // area. For non-MD, adjustments are made to the button dimensions based on
-  // the shelf orientation, so this constant does not specify the true
-  // user-visible button bounds.
-  VIRTUAL_KEYBOARD_BUTTON_SIZE,
-
-  // The icon size of opt-in IME menu tray.
-  TRAY_IME_MENU_ICON,
-
-  // Extra padding used beside a single icon in the tray area of the shelf.
-  TRAY_IMAGE_ITEM_PADDING,
-};
-
-ASH_EXPORT int GetTrayConstant(TrayConstant constant);
 
 namespace test {
 const int kSettingsTrayItemViewId = 10000;

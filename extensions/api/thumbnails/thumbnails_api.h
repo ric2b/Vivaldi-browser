@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_API_THUMBNAILS_THUMBNAILS_API_H_
 #define EXTENSIONS_API_THUMBNAILS_THUMBNAILS_API_H_
 
+#include <string>
+
 #include "base/memory/shared_memory_handle.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "content/public/browser/readback_types.h"
@@ -38,7 +40,7 @@ class ThumbnailsIsThumbnailAvailableFunction
   bool RunAsync() override;
 
  private:
-   DISALLOW_COPY_AND_ASSIGN(ThumbnailsIsThumbnailAvailableFunction);
+  DISALLOW_COPY_AND_ASSIGN(ThumbnailsIsThumbnailAvailableFunction);
 };
 
 class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
@@ -56,7 +58,7 @@ class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
  protected:
   ~ThumbnailsCaptureUIFunction() override;
   bool CaptureAsync(content::WebContents* web_contents,
-                    gfx::Rect& capture_area,
+                    const gfx::Rect& capture_area,
                     const content::ReadbackRequestCallback callback);
   void OnCaptureSuccess(const SkBitmap& bitmap);
   void OnCaptureFailure(FailureReason reason);
@@ -72,7 +74,8 @@ class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
   bool encode_to_data_url_ = false;
   bool copy_to_clipboard_ = false;
   base::FilePath file_path_;
-  std::string base_path_;
+  bool save_to_disk_ = false;
+  std::string save_folder_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUIFunction);
 };
@@ -111,10 +114,11 @@ class ThumbnailsCaptureTabFunction : public ChromeAsyncExtensionFunction {
   bool capture_full_page_ = false;
   bool show_file_in_path_ = false;
   bool copy_to_clipboard_ = false;
+  bool save_to_disk_ = false;
   base::FilePath file_path_;
+  std::string save_folder_;
   int width_ = 0;
   int height_ = 0;
-  std::string base_path_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureTabFunction);
 };

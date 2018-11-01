@@ -317,10 +317,6 @@ Sources.NavigatorView = class extends UI.VBox {
   _projectRemoved(event) {
     var project = /** @type {!Workspace.Project} */ (event.data);
 
-    var frame = Bindings.NetworkProject.frameForProject(project);
-    if (frame)
-      this._discardFrame(frame);
-
     var uiSourceCodes = project.uiSourceCodes();
     for (var i = 0; i < uiSourceCodes.length; ++i)
       this._removeUISourceCode(uiSourceCodes[i]);
@@ -424,6 +420,9 @@ Sources.NavigatorView = class extends UI.VBox {
     if (!this._groupByFrame || !frame)
       return this._targetNode(project, target);
 
+    if (!frame.parentFrame && target.parentTarget())
+      return this._targetNode(project, target);
+
     var frameNode = this._frameNodes.get(frame);
     if (frameNode)
       return frameNode;
@@ -464,8 +463,7 @@ Sources.NavigatorView = class extends UI.VBox {
     if (!targetNode) {
       targetNode = new Sources.NavigatorGroupTreeNode(
           this, project, 'target:' + target.id(),
-          !target.hasBrowserCapability() ? Sources.NavigatorView.Types.Worker :
-                                           Sources.NavigatorView.Types.NetworkFolder,
+          !target.hasBrowserCapability() ? Sources.NavigatorView.Types.Worker : Sources.NavigatorView.Types.Frame,
           target.name());
       this._rootNode.appendChild(targetNode);
     }
@@ -546,8 +544,10 @@ Sources.NavigatorView = class extends UI.VBox {
           break;
         if (!(node instanceof Sources.NavigatorGroupTreeNode || node instanceof Sources.NavigatorFolderTreeNode))
           break;
-        if (node._type === Sources.NavigatorView.Types.Frame)
+        if (node._type === Sources.NavigatorView.Types.Frame) {
+          this._discardFrame(/** @type {!SDK.ResourceTreeFrame} */ (frame));
           break;
+        }
 
         var folderId = this._folderNodeId(project, target, frame, uiSourceCode.origin(), node._folderPath);
         this._subfolderNodes.delete(folderId);
@@ -613,7 +613,7 @@ Sources.NavigatorView = class extends UI.VBox {
   _handleContextMenuDelete(uiSourceCode) {
     var shouldDelete = window.confirm(Common.UIString('Are you sure you want to delete this file?'));
     if (shouldDelete)
-      uiSourceCode.project().deleteFile(uiSourceCode.url());
+      uiSourceCode.project().deleteFile(uiSourceCode);
   }
 
   /**

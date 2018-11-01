@@ -6,8 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/lazy_instance.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -16,10 +14,17 @@ namespace content {
 
 // static
 bool SiteIsolationPolicy::AreCrossProcessFramesPossible() {
+// Before turning this on for Android, input event routing needs to be
+// completed there, and perf regressions in https://crbug.com/690229 need to be
+// investigated.
+#if defined(OS_ANDROID)
   return UseDedicatedProcessesForAllSites() ||
          IsTopDocumentIsolationEnabled() ||
          GetContentClient()->IsSupplementarySiteIsolationModeEnabled() ||
          base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames);
+#else
+  return true;
+#endif
 }
 
 // static
@@ -36,11 +41,6 @@ bool SiteIsolationPolicy::IsTopDocumentIsolationEnabled() {
 
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kTopDocumentIsolation);
-}
-
-// static
-bool SiteIsolationPolicy::UseSubframeNavigationEntries() {
-  return true;
 }
 
 }  // namespace content

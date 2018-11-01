@@ -28,7 +28,7 @@
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
-#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_handle.h"
 
 using password_manager::PasswordFormManager;
 
@@ -355,12 +355,20 @@ void ManagePasswordsUIController::NavigateToPasswordManagerSettingsPage() {
       chrome::kPasswordManagerSubPage);
 }
 
+void ManagePasswordsUIController::NavigateToPasswordManagerAccountDashboard() {
+  chrome::NavigateParams params(
+      chrome::FindBrowserWithWebContents(web_contents()),
+      GURL(password_manager::kPasswordManagerAccountDashboardURL),
+      ui::PAGE_TRANSITION_LINK);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  chrome::Navigate(&params);
+}
+
 void ManagePasswordsUIController::NavigateToChromeSignIn() {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
   browser->window()->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
-      signin::ManageAccountsParams(),
-      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE);
+      BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN, signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, false);
 }
 
 void ManagePasswordsUIController::OnDialogHidden() {
@@ -376,7 +384,7 @@ void ManagePasswordsUIController::SavePasswordInternal() {
       GetPasswordStore(web_contents());
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
-  for (const auto& form : form_manager->blacklisted_matches()) {
+  for (auto* form : form_manager->blacklisted_matches()) {
     password_store->RemoveLogin(*form);
   }
 
@@ -400,8 +408,8 @@ void ManagePasswordsUIController::NeverSavePasswordInternal() {
 void ManagePasswordsUIController::UpdateBubbleAndIconVisibility() {
   // If we're not on a "webby" URL (e.g. "chrome://sign-in"), we shouldn't
   // display either the bubble or the icon.
-  if (!BrowsingDataHelper::IsWebScheme(
-          web_contents()->GetLastCommittedURL().scheme())) {
+  if (!ChromePasswordManagerClient::CanShowBubbleOnURL(
+          web_contents()->GetLastCommittedURL())) {
     passwords_data_.OnInactive();
   }
 
@@ -427,12 +435,14 @@ bool ManagePasswordsUIController::HasBrowserWindow() const {
   return chrome::FindBrowserWithWebContents(web_contents()) != nullptr;
 }
 
-void ManagePasswordsUIController::DidNavigateMainFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
-  // Don't react to in-page (fragment) navigations.
-  if (details.is_in_page)
+void ManagePasswordsUIController::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() ||
+      !navigation_handle->HasCommitted() ||
+      // Don't react to in-page (fragment) navigations.
+      navigation_handle->IsSamePage()) {
     return;
+  }
 
   // It is possible that the user was not able to interact with the password
   // bubble.

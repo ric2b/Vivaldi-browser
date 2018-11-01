@@ -12,6 +12,7 @@
 #ifndef V8TestInterfaceGarbageCollected_h
 #define V8TestInterfaceGarbageCollected_h
 
+#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -35,8 +36,7 @@ class V8TestInterfaceGarbageCollected {
   }
   CORE_EXPORT static TestInterfaceGarbageCollected* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
   CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-  template<typename VisitorDispatcher>
-  static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable) {
+  static void trace(Visitor* visitor, ScriptWrappable* scriptWrappable) {
     visitor->trace(scriptWrappable->toImpl<TestInterfaceGarbageCollected>());
   }
   static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
@@ -45,6 +45,22 @@ class V8TestInterfaceGarbageCollected {
   static void constructorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   static const int eventListenerCacheIndex = v8DefaultWrapperInternalFieldCount + 0;
   static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 1;
+
+  // Callback functions
+
+  CORE_EXPORT static void attr1AttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void attr1AttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+
+  CORE_EXPORT static void funcMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void addMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void clearMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void deleteMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 };
 
 template <>

@@ -17,8 +17,8 @@
 #import "ios/clean/chrome/browser/ui/commands/tab_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
 #import "ios/clean/chrome/browser/ui/settings/settings_coordinator.h"
+#import "ios/clean/chrome/browser/ui/tab/tab_coordinator.h"
 #import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_view_controller.h"
-#import "ios/clean/chrome/browser/ui/tab_strip/tab_strip_container_coordinator.h"
 #import "ios/shared/chrome/browser/coordinator_context/coordinator_context.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/web_state.h"
@@ -32,17 +32,32 @@
 @interface TabGridCoordinator ()<TabGridDataSource,
                                  SettingsCommands,
                                  TabCommands,
-                                 TabGridCommands>
+                                 TabGridCommands> {
+  std::vector<std::unique_ptr<web::WebState>> _webStates;
+  size_t _activeWebStateIndex;
+}
+
 @property(nonatomic, strong) TabGridViewController* viewController;
 @property(nonatomic, weak) SettingsCoordinator* settingsCoordinator;
 @end
 
-@implementation TabGridCoordinator {
-  std::unique_ptr<web::WebState> _placeholderWebState;
-}
-
+@implementation TabGridCoordinator
 @synthesize viewController = _viewController;
 @synthesize settingsCoordinator = _settingsCoordinator;
+
+#pragma mark - Properties
+
+- (void)setBrowserState:(ios::ChromeBrowserState*)browserState {
+  [super setBrowserState:browserState];
+
+  for (int i = 0; i < 7; i++) {
+    web::WebState::CreateParams webStateCreateParams(browserState);
+    std::unique_ptr<web::WebState> webState =
+        web::WebState::Create(webStateCreateParams);
+    _webStates.push_back(std::move(webState));
+  }
+  _activeWebStateIndex = 0;
+}
 
 #pragma mark - BrowserCoordinator
 
@@ -53,47 +68,60 @@
   self.viewController.tabCommandHandler = self;
   self.viewController.tabGridCommandHandler = self;
 
-  // |rootViewController| is nullable, so this is by design a no-op if it hasn't
+  // |baseViewController| is nullable, so this is by design a no-op if it hasn't
   // been set. This may be true in a unit test, or if this coordinator is being
   // used as a root coordinator.
-  [self.rootViewController presentViewController:self.viewController
-                                        animated:self.context.animated
-                                      completion:nil];
+  [self.context.baseViewController presentViewController:self.viewController
+                                                animated:self.context.animated
+                                              completion:nil];
 }
 
 #pragma mark - TabGridDataSource
 
 - (NSUInteger)numberOfTabsInTabGrid {
-  return 1;
+  return static_cast<NSUInteger>(_webStates.size());
 }
 
 - (NSString*)titleAtIndex:(NSInteger)index {
-  // Placeholder implementation: ignore |index| and return the placeholder
-  // web state, lazily creating it if needed.
-  if (!_placeholderWebState.get()) {
-    web::WebState::CreateParams webStateCreateParams(self.browserState);
-    _placeholderWebState = web::WebState::Create(webStateCreateParams);
-    _placeholderWebState->SetWebUsageEnabled(true);
-  }
-  GURL url = _placeholderWebState.get()->GetVisibleURL();
+  size_t i = static_cast<size_t>(index);
+  DCHECK(i < _webStates.size());
+  web::WebState* webState = _webStates[i].get();
+  GURL url = webState->GetVisibleURL();
   NSString* urlText = @"<New Tab>";
-  if (!url.is_valid()) {
+  if (url.is_valid()) {
     urlText = base::SysUTF8ToNSString(url.spec());
   }
   return urlText;
 }
 
+- (NSInteger)indexOfActiveTab {
+  return static_cast<NSInteger>(_activeWebStateIndex);
+}
+
 #pragma mark - TabCommands
 
 - (void)showTabAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK(_placeholderWebState);
-
-  TabStripContainerCoordinator* tabCoordinator =
-      [[TabStripContainerCoordinator alloc] init];
-  tabCoordinator.webState = _placeholderWebState.get();
+  TabCoordinator* tabCoordinator = [[TabCoordinator alloc] init];
+  size_t index = static_cast<size_t>(indexPath.item);
+  DCHECK(index < _webStates.size());
+  tabCoordinator.webState = _webStates[index].get();
   tabCoordinator.presentationKey = indexPath;
   [self addChildCoordinator:tabCoordinator];
   [tabCoordinator start];
+  _activeWebStateIndex = index;
+}
+
+- (void)closeTabAtIndexPath:(NSIndexPath*)indexPath {
+  size_t index = static_cast<size_t>(indexPath.item);
+  DCHECK(index < _webStates.size());
+  _webStates.erase(_webStates.begin() + index);
+}
+
+- (void)createNewTabAtIndexPath:(NSIndexPath*)indexPath {
+  web::WebState::CreateParams webStateCreateParams(self.browserState);
+  std::unique_ptr<web::WebState> webState =
+      web::WebState::Create(webStateCreateParams);
+  _webStates.push_back(std::move(webState));
 }
 
 #pragma mark - TabGridCommands
@@ -128,13 +156,15 @@
 - (void)openURL:(NSURL*)URL {
   [self.overlayCoordinator stop];
   [self removeOverlayCoordinator];
+  web::WebState* activeWebState = _webStates[_activeWebStateIndex].get();
   web::NavigationManager::WebLoadParams params(net::GURLWithNSURL(URL));
   params.transition_type = ui::PAGE_TRANSITION_LINK;
-  _placeholderWebState->GetNavigationManager()->LoadURLWithParams(params);
+  activeWebState->GetNavigationManager()->LoadURLWithParams(params);
   if (!self.children.count) {
-    // Placeholder — since there's only one tab in the grid, just open
-    // the tab at index path (0,0).
-    [self showTabAtIndexPath:[NSIndexPath indexPathForItem:0 inSection:0]];
+    [self showTabAtIndexPath:[NSIndexPath
+                                 indexPathForItem:static_cast<NSUInteger>(
+                                                      _activeWebStateIndex)
+                                        inSection:0]];
   }
 }
 

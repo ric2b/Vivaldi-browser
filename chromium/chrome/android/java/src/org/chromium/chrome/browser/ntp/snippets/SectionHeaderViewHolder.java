@@ -8,11 +8,11 @@ import android.view.LayoutInflater;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ntp.UiConfig;
-import org.chromium.chrome.browser.ntp.cards.MarginResizer;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
 import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.chrome.browser.widget.displaystyle.MarginResizer;
+import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 
 /**
  * View holder for the header of a section of cards.
@@ -22,19 +22,20 @@ public class SectionHeaderViewHolder extends NewTabPageViewHolder {
 
     private final int mMaxSnippetHeaderHeight;
 
-    private SectionHeader mHeaderListItem;
-
     public SectionHeaderViewHolder(final NewTabPageRecyclerView recyclerView, UiConfig config) {
         super(LayoutInflater.from(recyclerView.getContext())
                         .inflate(R.layout.new_tab_page_snippets_header, recyclerView, false));
         mMaxSnippetHeaderHeight = itemView.getResources().getDimensionPixelSize(
                 R.dimen.snippets_article_header_height);
-        MarginResizer.createWithViewAdapter(itemView, config);
+
+        int wideLateralMargin = recyclerView.getResources().getDimensionPixelSize(
+                R.dimen.ntp_wide_card_lateral_margins);
+        MarginResizer.createWithViewAdapter(itemView, config, 0,
+                wideLateralMargin);
     }
 
     public void onBindViewHolder(SectionHeader header) {
-        mHeaderListItem = header;
-        ((TextView) itemView).setText(mHeaderListItem.getHeaderText());
+        ((TextView) itemView).setText(header.getHeaderText());
         updateDisplay(0, false);
     }
 
@@ -42,10 +43,7 @@ public class SectionHeaderViewHolder extends NewTabPageViewHolder {
      * @return The header height we want to set.
      */
     private int getHeaderHeight(int amountScrolled, boolean canTransition) {
-        if (!mHeaderListItem.isVisible()) return 0;
-
-        // If the header cannot transition but is visible - set the height to the maximum so
-        // it always displays
+        // If the header cannot transition set the height to the maximum so it always displays.
         if (!canTransition) return mMaxSnippetHeaderHeight;
 
         // Check if snippet header top is within range to start showing. Set the header height,

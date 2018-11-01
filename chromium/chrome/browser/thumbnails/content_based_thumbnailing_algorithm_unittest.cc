@@ -9,6 +9,7 @@
 #include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread.h"
+#include "skia/ext/platform_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/canvas.h"
@@ -139,7 +140,7 @@ TEST_F(ContentBasedThumbnailingAlgorithmTest, CreateRetargetedThumbnail) {
 
   // The image consists of vertical non-overlapping stripes 150 pixels wide.
   canvas.FillRect(gfx::Rect(200, 200, 800, 400), SkColorSetRGB(255, 255, 255));
-  SkBitmap source = skia::ReadPixels(canvas.sk_canvas());
+  SkBitmap source = canvas.ToBitmap();
 
   ConsumerCallbackCatcher catcher;
   const gfx::Size thumbnail_size(432, 284);

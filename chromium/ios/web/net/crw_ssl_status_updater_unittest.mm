@@ -80,7 +80,8 @@ class CRWSSLStatusUpdaterTest : public web::WebTest {
     delegate_.reset([[OCMockObject
         mockForProtocol:@protocol(CRWSSLStatusUpdaterDelegate)] retain]);
 
-    nav_manager_.reset(new NavigationManagerImpl(nullptr, GetBrowserState()));
+    nav_manager_.reset(new NavigationManagerImpl());
+    nav_manager_->SetBrowserState(GetBrowserState());
 
     ssl_status_updater_.reset([[CRWSSLStatusUpdater alloc]
         initWithDataSource:data_source_
@@ -104,15 +105,15 @@ class CRWSSLStatusUpdaterTest : public web::WebTest {
   CRWSessionController* SessionControllerWithEntry(std::string item_url_spec) {
     std::vector<std::unique_ptr<web::NavigationItem>> nav_items;
     base::scoped_nsobject<CRWSessionController> session_controller(
-        [[CRWSessionController alloc]
-            initWithNavigationItems:std::move(nav_items)
-                       currentIndex:0
-                       browserState:GetBrowserState()]);
-    [session_controller addPendingEntry:GURL(item_url_spec)
-                               referrer:Referrer()
-                             transition:ui::PAGE_TRANSITION_LINK
-                      rendererInitiated:NO];
-    [session_controller commitPendingEntry];
+        [[CRWSessionController alloc] initWithBrowserState:GetBrowserState()
+                                           navigationItems:std::move(nav_items)
+                                              currentIndex:0]);
+    [session_controller
+        addPendingItem:GURL(item_url_spec)
+              referrer:Referrer()
+            transition:ui::PAGE_TRANSITION_LINK
+        initiationType:web::NavigationInitiationType::USER_INITIATED];
+    [session_controller commitPendingItem];
 
     return session_controller.autorelease();
   }

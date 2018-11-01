@@ -76,6 +76,13 @@ class V8DetachedContextAgeInGC(perf_benchmark.PerfBenchmark):
   def Name(cls):
     return 'v8.detached_context_age_in_gc'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/685350
+    if possible_browser.platform.GetDeviceTypeName() == 'Nexus 9':
+      return True
+    return False
+
 
 class _InfiniteScrollBenchmark(perf_benchmark.PerfBenchmark):
   """ Base class for infinite scroll benchmarks.
@@ -218,6 +225,21 @@ class V8MobileInfiniteScroll(_InfiniteScrollBenchmark):
   def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
       return (possible_browser.browser_type == 'reference' and
               possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+
+
+@benchmark.Enabled('android')
+class V8MobileInfiniteScrollTurbo(V8MobileInfiniteScroll):
+  """Measures V8 GC metrics and memory usage while scrolling the top mobile
+  web pages and running Ignition+TurboFan.
+  http://www.chromium.org/developers/design-documents/rendering-benchmarks"""
+
+  def SetExtraBrowserOptions(self, options):
+    super(V8MobileInfiniteScrollTurbo, self).SetExtraBrowserOptions(options)
+    v8_helper.EnableTurbo(options)
+
+  @classmethod
+  def Name(cls):
+    return 'v8.mobile_infinite_scroll-turbo_tbmv2'
 
 
 class V8Adword(perf_benchmark.PerfBenchmark):

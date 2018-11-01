@@ -39,6 +39,7 @@
 #include "core/frame/DOMTimer.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "platform/weborigin/SecurityViolationReportingPolicy.h"
 
 namespace blink {
 
@@ -49,10 +50,11 @@ static bool isAllowed(ScriptState* scriptState,
                       bool isEval) {
   if (executionContext->isDocument()) {
     Document* document = static_cast<Document*>(executionContext);
-    if (isEval &&
-        !document->contentSecurityPolicy()->allowEval(
-            scriptState, ContentSecurityPolicy::SendReport,
-            ContentSecurityPolicy::WillNotThrowException))
+    if (!document->frame())
+      return false;
+    if (isEval && !document->contentSecurityPolicy()->allowEval(
+                      scriptState, SecurityViolationReportingPolicy::Report,
+                      ContentSecurityPolicy::WillNotThrowException))
       return false;
     return true;
   }
@@ -63,7 +65,8 @@ static bool isAllowed(ScriptState* scriptState,
       return false;
     ContentSecurityPolicy* policy = workerGlobalScope->contentSecurityPolicy();
     if (isEval && policy &&
-        !policy->allowEval(scriptState, ContentSecurityPolicy::SendReport,
+        !policy->allowEval(scriptState,
+                           SecurityViolationReportingPolicy::Report,
                            ContentSecurityPolicy::WillNotThrowException))
       return false;
     return true;
@@ -85,8 +88,8 @@ int setTimeout(ScriptState* scriptState,
     // be done using the scheduler instead.
     V8GCForContextDispose::instance().notifyIdle();
   }
-  ScheduledAction* action =
-      ScheduledAction::create(scriptState, handler, arguments);
+  ScheduledAction* action = ScheduledAction::create(
+      scriptState, executionContext, handler, arguments);
   return DOMTimer::install(executionContext, action, timeout, true);
 }
 
@@ -107,7 +110,8 @@ int setTimeout(ScriptState* scriptState,
     // be done using the scheduler instead.
     V8GCForContextDispose::instance().notifyIdle();
   }
-  ScheduledAction* action = ScheduledAction::create(scriptState, handler);
+  ScheduledAction* action =
+      ScheduledAction::create(scriptState, executionContext, handler);
   return DOMTimer::install(executionContext, action, timeout, true);
 }
 
@@ -119,8 +123,8 @@ int setInterval(ScriptState* scriptState,
   ExecutionContext* executionContext = eventTarget.getExecutionContext();
   if (!isAllowed(scriptState, executionContext, false))
     return 0;
-  ScheduledAction* action =
-      ScheduledAction::create(scriptState, handler, arguments);
+  ScheduledAction* action = ScheduledAction::create(
+      scriptState, executionContext, handler, arguments);
   return DOMTimer::install(executionContext, action, timeout, false);
 }
 
@@ -136,7 +140,8 @@ int setInterval(ScriptState* scriptState,
   // perfomance issue.
   if (handler.isEmpty())
     return 0;
-  ScheduledAction* action = ScheduledAction::create(scriptState, handler);
+  ScheduledAction* action =
+      ScheduledAction::create(scriptState, executionContext, handler);
   return DOMTimer::install(executionContext, action, timeout, false);
 }
 

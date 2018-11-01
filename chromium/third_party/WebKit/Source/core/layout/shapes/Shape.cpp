@@ -43,6 +43,7 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "wtf/MathExtras.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/typed_arrays/ArrayBufferContents.h"
@@ -239,14 +240,13 @@ std::unique_ptr<Shape> Shape::createRasterShape(Image* image,
     // that loads SVG Images during paint invalidations to mark layoutObjects
     // for layout, which is not allowed. See https://crbug.com/429346
     ImageObserverDisabler disabler(image);
-    SkPaint paint;
+    PaintFlags flags;
     IntRect imageSourceRect(IntPoint(), image->size());
     IntRect imageDestRect(IntPoint(), imageRect.size());
     // TODO(ccameron): No color conversion is required here.
-    image->draw(imageBuffer->canvas(), paint, imageDestRect, imageSourceRect,
+    image->draw(imageBuffer->canvas(), flags, imageDestRect, imageSourceRect,
                 DoNotRespectImageOrientation,
-                Image::DoNotClampImageToSourceRect,
-                ColorBehavior::transformToGlobalTarget());
+                Image::DoNotClampImageToSourceRect);
 
     WTF::ArrayBufferContents contents;
     imageBuffer->getImageData(Unmultiplied,

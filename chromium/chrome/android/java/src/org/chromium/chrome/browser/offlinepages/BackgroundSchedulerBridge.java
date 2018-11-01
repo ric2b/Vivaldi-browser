@@ -31,20 +31,30 @@ public class BackgroundSchedulerBridge {
                 callback);
     }
 
+    /**
+     * Stops scheduled processing.
+     * @return true, as it always expects to be rescheduled.
+     */
+    public static boolean stopScheduledProcessing() {
+        nativeStopScheduledProcessing();
+        return true;
+    }
+
     @CalledByNative
     private static void schedule(TriggerConditions triggerConditions) {
-        BackgroundScheduler.schedule(ContextUtils.getApplicationContext(), triggerConditions);
+        BackgroundScheduler.getInstance(ContextUtils.getApplicationContext())
+                .schedule(triggerConditions);
     }
 
     @CalledByNative
     private static void backupSchedule(TriggerConditions triggerConditions, long delayInSeconds) {
-        BackgroundScheduler.backupSchedule(ContextUtils.getApplicationContext(), triggerConditions,
-                                           delayInSeconds);
+        BackgroundScheduler.getInstance(ContextUtils.getApplicationContext())
+                .scheduleBackup(triggerConditions, delayInSeconds);
     }
 
     @CalledByNative
     private static void unschedule() {
-        BackgroundScheduler.unschedule(ContextUtils.getApplicationContext());
+        BackgroundScheduler.getInstance(ContextUtils.getApplicationContext()).cancel();
     }
 
     @CalledByNative
@@ -76,4 +86,6 @@ public class BackgroundSchedulerBridge {
     /** Instructs the native RequestCoordinator to start processing. */
     private static native boolean nativeStartScheduledProcessing(boolean powerConnected,
             int batteryPercentage, int netConnectionType, Callback<Boolean> callback);
+    /** Instructs the native RequestCoordinator to stop processing. */
+    private static native void nativeStopScheduledProcessing();
 }

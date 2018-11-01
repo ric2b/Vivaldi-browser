@@ -25,7 +25,6 @@
 #ifndef DOMTokenList_h
 #define DOMTokenList_h
 
-#include "bindings/core/v8/Iterable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/SpaceSplitString.h"
 #include "platform/heap/Handle.h"
@@ -34,7 +33,6 @@
 
 namespace blink {
 
-class Element;
 class ExceptionState;
 
 class CORE_EXPORT DOMTokenListObserver : public GarbageCollectedMixin {
@@ -47,8 +45,7 @@ class CORE_EXPORT DOMTokenListObserver : public GarbageCollectedMixin {
 };
 
 class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
-                                 public ScriptWrappable,
-                                 public ValueIterable<String> {
+                                 public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(DOMTokenList);
 
@@ -79,8 +76,6 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
 
   const AtomicString& toString() const { return value(); }
 
-  virtual Element* element() { return 0; }
-
   DEFINE_INLINE_VIRTUAL_TRACE() { visitor->trace(m_observer); }
 
  protected:
@@ -99,7 +94,6 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
   static AtomicString removeTokens(const AtomicString&, const Vector<String>&);
 
  private:
-  IterationSource* startIteration(ScriptState*, ExceptionState&) override;
   SpaceSplitString m_tokens;
   AtomicString m_value;
   WeakMember<DOMTokenListObserver> m_observer;

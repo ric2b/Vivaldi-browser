@@ -12,9 +12,9 @@
 #include "components/cryptauth/connection.h"
 #include "components/cryptauth/cryptauth_test_util.h"
 #include "components/cryptauth/fake_connection.h"
+#include "components/cryptauth/fake_secure_context.h"
 #include "components/cryptauth/remote_device.h"
 #include "components/cryptauth/wire_message.h"
-#include "components/proximity_auth/fake_secure_context.h"
 #include "components/proximity_auth/messenger_observer.h"
 #include "components/proximity_auth/remote_status_update.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -32,6 +32,7 @@ using testing::StrictMock;
 namespace proximity_auth {
 namespace {
 
+const char kTestFeature[] = "testFeature";
 const char kChallenge[] = "a most difficult challenge";
 
 class MockMessengerObserver : public MessengerObserver {
@@ -65,15 +66,15 @@ class TestMessenger : public MessengerImpl {
   TestMessenger()
       : MessengerImpl(base::MakeUnique<cryptauth::FakeConnection>(
                           cryptauth::CreateClassicRemoteDeviceForTest()),
-                      base::MakeUnique<FakeSecureContext>()) {}
+                      base::MakeUnique<cryptauth::FakeSecureContext>()) {}
   ~TestMessenger() override {}
 
   // Simple getters for the mock objects owned by |this| messenger.
   cryptauth::FakeConnection* GetFakeConnection() {
     return static_cast<cryptauth::FakeConnection*>(connection());
   }
-  FakeSecureContext* GetFakeSecureContext() {
-    return static_cast<FakeSecureContext*>(GetSecureContext());
+  cryptauth::FakeSecureContext* GetFakeSecureContext() {
+    return static_cast<cryptauth::FakeSecureContext*>(GetSecureContext());
   }
 
  private:
@@ -85,14 +86,14 @@ class TestMessenger : public MessengerImpl {
 TEST(ProximityAuthMessengerImplTest, SupportsSignIn_ProtocolVersionThreeZero) {
   TestMessenger messenger;
   messenger.GetFakeSecureContext()->set_protocol_version(
-      SecureContext::PROTOCOL_VERSION_THREE_ZERO);
+      cryptauth::SecureContext::PROTOCOL_VERSION_THREE_ZERO);
   EXPECT_FALSE(messenger.SupportsSignIn());
 }
 
 TEST(ProximityAuthMessengerImplTest, SupportsSignIn_ProtocolVersionThreeOne) {
   TestMessenger messenger;
   messenger.GetFakeSecureContext()->set_protocol_version(
-      SecureContext::PROTOCOL_VERSION_THREE_ONE);
+      cryptauth::SecureContext::PROTOCOL_VERSION_THREE_ONE);
   EXPECT_TRUE(messenger.SupportsSignIn());
 }
 
@@ -143,7 +144,7 @@ TEST(ProximityAuthMessengerImplTest,
      RequestDecryption_SignInUnsupported_DoesntSendMessage) {
   TestMessenger messenger;
   messenger.GetFakeSecureContext()->set_protocol_version(
-      SecureContext::PROTOCOL_VERSION_THREE_ZERO);
+      cryptauth::SecureContext::PROTOCOL_VERSION_THREE_ZERO);
   messenger.RequestDecryption(kChallenge);
   EXPECT_FALSE(messenger.GetFakeConnection()->current_message());
 }
@@ -206,7 +207,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   EXPECT_CALL(observer, OnDecryptResponseProxy(std::string()));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{\"type\":\"decrypt_response\"}, but encoded");
 }
 
@@ -218,7 +220,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   EXPECT_CALL(observer, OnDecryptResponseProxy(std::string()));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{"
       "\"type\":\"decrypt_response\","
       "\"data\":\"not a base64-encoded string\""
@@ -233,7 +236,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   EXPECT_CALL(observer, OnDecryptResponseProxy("a winner is you"));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{"
       "\"type\":\"decrypt_response\","
       "\"data\":\"YSB3aW5uZXIgaXMgeW91\""  // "a winner is you", base64-encoded
@@ -249,7 +253,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   EXPECT_CALL(observer, OnDecryptResponseProxy("\xFF\xE6"));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{"
       "\"type\":\"decrypt_response\","
       "\"data\":\"_-Y=\""  // "\0xFF\0xE6", base64url-encoded.
@@ -260,7 +265,7 @@ TEST(ProximityAuthMessengerImplTest,
      RequestUnlock_SignInUnsupported_DoesntSendMessage) {
   TestMessenger messenger;
   messenger.GetFakeSecureContext()->set_protocol_version(
-      SecureContext::PROTOCOL_VERSION_THREE_ZERO);
+      cryptauth::SecureContext::PROTOCOL_VERSION_THREE_ZERO);
   messenger.RequestUnlock();
   EXPECT_FALSE(messenger.GetFakeConnection()->current_message());
 }
@@ -301,8 +306,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   EXPECT_CALL(observer, OnUnlockResponse(true));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
-      "{\"type\":\"unlock_response\"}, but encoded");
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature), "{\"type\":\"unlock_response\"}, but encoded");
 }
 
 TEST(ProximityAuthMessengerImplTest,
@@ -312,8 +317,8 @@ TEST(ProximityAuthMessengerImplTest,
 
   // Receive a status update message that's missing all the data.
   EXPECT_CALL(observer, OnRemoteStatusUpdate(_)).Times(0);
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
-      "{\"type\":\"status_update\"}, but encoded");
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature), "{\"type\":\"status_update\"}, but encoded");
 }
 
 TEST(ProximityAuthMessengerImplTest,
@@ -328,7 +333,8 @@ TEST(ProximityAuthMessengerImplTest,
                               SECURE_SCREEN_LOCK_ENABLED),
                         Field(&RemoteStatusUpdate::trust_agent_state,
                               TRUST_AGENT_UNSUPPORTED))));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{"
       "\"type\":\"status_update\","
       "\"user_presence\":\"present\","
@@ -344,8 +350,8 @@ TEST(ProximityAuthMessengerImplTest, OnMessageReceived_InvalidJSON) {
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   // The StrictMock will verify that no observer methods are called.
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
-      "Not JSON, but encoded");
+  messenger.GetFakeConnection()->ReceiveMessage(std::string(kTestFeature),
+                                                "Not JSON, but encoded");
 }
 
 TEST(ProximityAuthMessengerImplTest, OnMessageReceived_MissingTypeField) {
@@ -355,7 +361,8 @@ TEST(ProximityAuthMessengerImplTest, OnMessageReceived_MissingTypeField) {
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   // The StrictMock will verify that no observer methods are called.
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{\"some key that's not 'type'\":\"some value\"}, but encoded");
 }
 
@@ -364,8 +371,8 @@ TEST(ProximityAuthMessengerImplTest, OnMessageReceived_UnexpectedReply) {
   StrictMock<MockMessengerObserver> observer(&messenger);
 
   // The StrictMock will verify that no observer methods are called.
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
-      "{\"type\":\"unlock_response\"}, but encoded");
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature), "{\"type\":\"unlock_response\"}, but encoded");
 }
 
 TEST(ProximityAuthMessengerImplTest,
@@ -377,8 +384,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   // The StrictMock will verify that no observer methods are called.
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
-      "{\"type\":\"unlock_response\"}, but encoded");
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature), "{\"type\":\"unlock_response\"}, but encoded");
 }
 
 TEST(ProximityAuthMessengerImplTest,
@@ -390,7 +397,8 @@ TEST(ProximityAuthMessengerImplTest,
   messenger.GetFakeConnection()->FinishSendingMessageWithSuccess(true);
 
   // The StrictMock will verify that no observer methods are called.
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{"
       "\"type\":\"decrypt_response\","
       "\"data\":\"YSB3aW5uZXIgaXMgeW91\""
@@ -427,7 +435,8 @@ TEST(ProximityAuthMessengerImplTest, BuffersMessages_WhileAwaitingReply) {
 
   // Now simulate a response arriving for the original decryption request.
   EXPECT_CALL(observer, OnDecryptResponseProxy("a winner is you"));
-  messenger.GetFakeConnection()->ReceiveMessageWithPayload(
+  messenger.GetFakeConnection()->ReceiveMessage(
+      std::string(kTestFeature),
       "{"
       "\"type\":\"decrypt_response\","
       "\"data\":\"YSB3aW5uZXIgaXMgeW91\""

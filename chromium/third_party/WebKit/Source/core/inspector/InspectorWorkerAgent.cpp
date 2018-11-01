@@ -57,7 +57,7 @@ void InspectorWorkerAgent::restore() {
 
 Response InspectorWorkerAgent::disable() {
   if (autoAttachEnabled()) {
-    disconnectFromAllProxies();
+    disconnectFromAllProxies(false);
     m_instrumentingAgents->removeInspectorWorkerAgent(this);
   }
   m_state->setBoolean(WorkerAgentState::autoAttach, false);
@@ -77,7 +77,7 @@ Response InspectorWorkerAgent::setAutoAttach(bool autoAttach,
     m_instrumentingAgents->addInspectorWorkerAgent(this);
     connectToAllProxies();
   } else {
-    disconnectFromAllProxies();
+    disconnectFromAllProxies(true);
     m_instrumentingAgents->removeInspectorWorkerAgent(this);
   }
   return Response::OK();
@@ -89,7 +89,7 @@ bool InspectorWorkerAgent::autoAttachEnabled() {
 
 Response InspectorWorkerAgent::sendMessageToTarget(const String& targetId,
                                                    const String& message) {
-  WorkerInspectorProxy* proxy = m_connectedProxies.get(targetId);
+  WorkerInspectorProxy* proxy = m_connectedProxies.at(targetId);
   if (!proxy)
     return Response::Error("Not attached to a target with given id");
   proxy->sendMessageToInspector(message);
@@ -124,7 +124,7 @@ void InspectorWorkerAgent::workerTerminated(WorkerInspectorProxy* proxy) {
     return;
   frontend()->detachedFromTarget(proxy->inspectorId());
   proxy->disconnectFromInspector(this);
-  m_connectedProxies.remove(proxy->inspectorId());
+  m_connectedProxies.erase(proxy->inspectorId());
 }
 
 void InspectorWorkerAgent::connectToAllProxies() {
@@ -135,9 +135,12 @@ void InspectorWorkerAgent::connectToAllProxies() {
   }
 }
 
-void InspectorWorkerAgent::disconnectFromAllProxies() {
-  for (auto& idProxy : m_connectedProxies)
+void InspectorWorkerAgent::disconnectFromAllProxies(bool reportToFrontend) {
+  for (auto& idProxy : m_connectedProxies) {
+    if (reportToFrontend)
+      frontend()->detachedFromTarget(idProxy.key);
     idProxy.value->disconnectFromInspector(this);
+  }
   m_connectedProxies.clear();
 }
 

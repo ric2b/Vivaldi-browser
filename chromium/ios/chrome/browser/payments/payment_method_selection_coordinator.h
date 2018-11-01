@@ -10,6 +10,7 @@
 
 #import "ios/chrome/browser/chrome_coordinator.h"
 #import "ios/chrome/browser/payments/payment_method_selection_view_controller.h"
+#include "ios/chrome/browser/payments/payment_request.h"
 
 namespace autofill {
 class CreditCard;
@@ -17,12 +18,13 @@ class CreditCard;
 
 @class PaymentMethodSelectionCoordinator;
 
+// Delegate protocol for PaymentMethodSelectionCoordinator.
 @protocol PaymentMethodSelectionCoordinatorDelegate<NSObject>
 
 // Notifies the delegate that the user has selected a payment method.
 - (void)paymentMethodSelectionCoordinator:
             (PaymentMethodSelectionCoordinator*)coordinator
-                    selectedPaymentMethod:(autofill::CreditCard*)paymentMethod;
+                   didSelectPaymentMethod:(autofill::CreditCard*)paymentMethod;
 
 // Notifies the delegate that the user has chosen to return to the previous
 // screen without making a selection.
@@ -37,16 +39,15 @@ class CreditCard;
 @interface PaymentMethodSelectionCoordinator
     : ChromeCoordinator<PaymentMethodSelectionViewControllerDelegate>
 
-// The payment methods available to fulfill the payment request.
-@property(nonatomic, assign) std::vector<autofill::CreditCard*> paymentMethods;
-
-// The payment method selected by the user, if any.
-@property(nonatomic, assign) autofill::CreditCard* selectedPaymentMethod;
+// The PaymentRequest object owning an instance of web::PaymentRequest as
+// provided by the page invoking the Payment Request API. This pointer is not
+// owned by this class and should outlive it.
+@property(nonatomic, assign) PaymentRequest* paymentRequest;
 
 // The delegate to be notified when the user selects a payment method or returns
 // without selecting a payment method.
-@property(nonatomic, weak) id<PaymentMethodSelectionCoordinatorDelegate>
-    delegate;
+@property(nonatomic, weak)
+    id<PaymentMethodSelectionCoordinatorDelegate> delegate;
 
 @end
 

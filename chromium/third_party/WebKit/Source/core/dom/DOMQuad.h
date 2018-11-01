@@ -13,6 +13,8 @@ namespace blink {
 
 class DOMPoint;
 class DOMPointInit;
+class DOMQuadInit;
+class DOMRect;
 class DOMRectInit;
 
 class CORE_EXPORT DOMQuad : public GarbageCollected<DOMQuad>,
@@ -25,11 +27,14 @@ class CORE_EXPORT DOMQuad : public GarbageCollected<DOMQuad>,
                          const DOMPointInit& p3,
                          const DOMPointInit& p4);
   static DOMQuad* fromRect(const DOMRectInit&);
+  static DOMQuad* fromQuad(const DOMQuadInit&);
 
   DOMPoint* p1() const { return m_p1; }
   DOMPoint* p2() const { return m_p2; }
   DOMPoint* p3() const { return m_p3; }
   DOMPoint* p4() const { return m_p4; }
+
+  DOMRect* getBounds();
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
@@ -47,10 +52,17 @@ class CORE_EXPORT DOMQuad : public GarbageCollected<DOMQuad>,
           const DOMPointInit& p4);
   DOMQuad(double x, double y, double width, double height);
 
+  void calculateBounds();
+
   Member<DOMPoint> m_p1;
   Member<DOMPoint> m_p2;
   Member<DOMPoint> m_p3;
   Member<DOMPoint> m_p4;
+
+  double m_left;
+  double m_right;
+  double m_top;
+  double m_bottom;
 };
 
 }  // namespace blink

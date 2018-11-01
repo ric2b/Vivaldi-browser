@@ -21,6 +21,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/save_page_type.h"
+#include "content/public/browser/screen_orientation_delegate.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/stop_find_action.h"
@@ -190,6 +191,10 @@ class WebContents : public PageNavigator,
   // Returns the WebContents associated with the |frame_tree_node_id|.
   CONTENT_EXPORT static WebContents* FromFrameTreeNodeId(
       int frame_tree_node_id);
+
+  // Sets delegate for platform specific screen orientation functionality.
+  CONTENT_EXPORT static void SetScreenOrientationDelegate(
+      ScreenOrientationDelegate* delegate);
 
   ~WebContents() override {}
 
@@ -463,7 +468,7 @@ class WebContents : public PageNavigator,
   virtual void PasteAndMatchStyle() = 0;
   virtual void Delete() = 0;
   virtual void SelectAll() = 0;
-  virtual void Unselect() = 0;
+  virtual void CollapseSelection() = 0;
 
   // Adjust the selection starting and ending points in the focused frame by
   // the given amounts. A negative amount moves the selection towards the
@@ -745,6 +750,12 @@ class WebContents : public PageNavigator,
 
   virtual int GetCurrentlyPlayingVideoCount() = 0;
   virtual bool IsFullscreen() = 0;
+
+  // Tells the renderer to clear the focused element (if any).
+  virtual void ClearFocusedElement() = 0;
+
+  // Returns true if the current focused element is editable.
+  virtual bool IsFocusedElementEditable() = 0;
 
 #if defined(OS_ANDROID)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(

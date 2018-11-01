@@ -6,6 +6,18 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("interfaces") {
   sources = [
+    "fingerprint.mojom",
+    "power_monitor.mojom",
+    "time_zone_monitor.mojom",
+  ]
+
+  public_deps = [
+    ":constants",
+  ]
+}
+
+mojom("constants") {
+  sources = [
     "constants.mojom",
   ]
 }

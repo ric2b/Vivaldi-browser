@@ -115,6 +115,10 @@ void fillGlobalStates(AXObject& axObject,
   }
 }
 
+bool roleAllowsModal(AccessibilityRole role) {
+  return role == DialogRole || role == AlertDialogRole;
+}
+
 bool roleAllowsMultiselectable(AccessibilityRole role) {
   return role == GridRole || role == ListBoxRole || role == TabListRole ||
          role == TreeGridRole || role == TreeRole;
@@ -306,6 +310,11 @@ void fillWidgetStates(AXObject& axObject,
         createProperty(AXWidgetStatesEnum::Selected,
                        createBooleanValue(axObject.isSelected())));
   }
+
+  if (roleAllowsModal(role)) {
+    properties.addItem(createProperty(AXWidgetStatesEnum::Modal,
+                                      createBooleanValue(axObject.isModal())));
+  }
 }
 
 std::unique_ptr<AXProperty> createRelatedNodeListProperty(
@@ -327,29 +336,79 @@ std::unique_ptr<AXProperty> createRelatedNodeListProperty(
   return createProperty(key, std::move(nodeListValue));
 }
 
-void fillRelationships(AXObject& axObject,
-                       protocol::Array<AXProperty>& properties) {
-  if (AXObject* activeDescendant = axObject.activeDescendant()) {
-    properties.addItem(
-        createProperty(AXRelationshipAttributesEnum::Activedescendant,
-                       createRelatedNodeListValue(*activeDescendant)));
+class SparseAttributeAXPropertyAdapter
+    : public GarbageCollected<SparseAttributeAXPropertyAdapter>,
+      public AXSparseAttributeClient {
+ public:
+  SparseAttributeAXPropertyAdapter(AXObject& axObject,
+                                   protocol::Array<AXProperty>& properties)
+      : m_axObject(&axObject), m_properties(properties) {}
+
+  DEFINE_INLINE_TRACE() { visitor->trace(m_axObject); }
+
+ private:
+  Member<AXObject> m_axObject;
+  protocol::Array<AXProperty>& m_properties;
+
+  void addBoolAttribute(AXBoolAttribute attribute, bool value) {
+    // Implement this when we add the first sparse bool attribute.
   }
 
+  void addStringAttribute(AXStringAttribute attribute, const String& value) {
+    switch (attribute) {
+      case AXStringAttribute::AriaKeyShortcuts:
+        m_properties.addItem(
+            createProperty(AXGlobalStatesEnum::Keyshortcuts,
+                           createValue(value, AXValueTypeEnum::String)));
+        break;
+      case AXStringAttribute::AriaRoleDescription:
+        m_properties.addItem(
+            createProperty(AXGlobalStatesEnum::Roledescription,
+                           createValue(value, AXValueTypeEnum::String)));
+        break;
+    }
+  }
+
+  void addObjectAttribute(AXObjectAttribute attribute, AXObject& object) {
+    switch (attribute) {
+      case AXObjectAttribute::AriaActiveDescendant:
+        m_properties.addItem(
+            createProperty(AXRelationshipAttributesEnum::Activedescendant,
+                           createRelatedNodeListValue(object)));
+        break;
+      case AXObjectAttribute::AriaErrorMessage:
+        m_properties.addItem(
+            createProperty(AXRelationshipAttributesEnum::Errormessage,
+                           createRelatedNodeListValue(object)));
+        break;
+    }
+  }
+
+  void addObjectVectorAttribute(AXObjectVectorAttribute attribute,
+                                HeapVector<Member<AXObject>>& objects) {
+    switch (attribute) {
+      case AXObjectVectorAttribute::AriaControls:
+        m_properties.addItem(createRelatedNodeListProperty(
+            AXRelationshipAttributesEnum::Controls, objects, aria_controlsAttr,
+            *m_axObject));
+        break;
+      case AXObjectVectorAttribute::AriaDetails:
+        m_properties.addItem(createRelatedNodeListProperty(
+            AXRelationshipAttributesEnum::Details, objects, aria_controlsAttr,
+            *m_axObject));
+        break;
+      case AXObjectVectorAttribute::AriaFlowTo:
+        m_properties.addItem(createRelatedNodeListProperty(
+            AXRelationshipAttributesEnum::Flowto, objects, aria_flowtoAttr,
+            *m_axObject));
+        break;
+    }
+  }
+};
+
+void fillRelationships(AXObject& axObject,
+                       protocol::Array<AXProperty>& properties) {
   AXObject::AXObjectVector results;
-  axObject.ariaFlowToElements(results);
-  if (!results.isEmpty())
-    properties.addItem(
-        createRelatedNodeListProperty(AXRelationshipAttributesEnum::Flowto,
-                                      results, aria_flowtoAttr, axObject));
-  results.clear();
-
-  axObject.ariaControlsElements(results);
-  if (!results.isEmpty())
-    properties.addItem(
-        createRelatedNodeListProperty(AXRelationshipAttributesEnum::Controls,
-                                      results, aria_controlsAttr, axObject));
-  results.clear();
-
   axObject.ariaDescribedbyElements(results);
   if (!results.isEmpty())
     properties.addItem(
@@ -411,13 +470,14 @@ Response InspectorAccessibilityAgent::getPartialAXTree(
     (*nodes)->addItem(buildObjectForIgnoredNode(domNode, inspectedAXObject,
                                                 fetchRelatives.fromMaybe(true),
                                                 *nodes, *cache));
+    return Response::OK();
   } else {
     (*nodes)->addItem(
         buildProtocolAXObject(*inspectedAXObject, inspectedAXObject,
                               fetchRelatives.fromMaybe(true), *nodes, *cache));
   }
 
-  if (!inspectedAXObject || !inspectedAXObject->isAXLayoutObject())
+  if (!inspectedAXObject)
     return Response::OK();
 
   AXObject* parent = inspectedAXObject->parentObjectUnignored();
@@ -545,6 +605,9 @@ std::unique_ptr<AXNode> InspectorAccessibilityAgent::buildProtocolAXObject(
   fillWidgetStates(axObject, *(properties.get()));
   fillRelationships(axObject, *(properties.get()));
 
+  SparseAttributeAXPropertyAdapter adapter(axObject, *properties);
+  axObject.getSparseAXAttributes(adapter);
+
   AXObject::NameSources nameSources;
   String computedName = axObject.name(&nameSources);
   if (!nameSources.isEmpty()) {
@@ -635,19 +698,6 @@ void InspectorAccessibilityAgent::populateRelatives(
   nodeObject.setChildIds(std::move(childIds));
 }
 
-void InspectorAccessibilityAgent::addChild(
-    std::unique_ptr<protocol::Array<AXNodeId>>& childIds,
-    AXObject& childAXObject,
-    AXObject* inspectedAXObject,
-    std::unique_ptr<protocol::Array<AXNode>>& nodes,
-    AXObjectCacheImpl& cache) const {
-  childIds->addItem(String::number(childAXObject.axObjectID()));
-  if (&childAXObject == inspectedAXObject)
-    return;
-  nodes->addItem(buildProtocolAXObject(childAXObject, inspectedAXObject, true,
-                                       nodes, cache));
-}
-
 void InspectorAccessibilityAgent::addChildren(
     AXObject& axObject,
     AXObject* inspectedAXObject,
@@ -666,14 +716,14 @@ void InspectorAccessibilityAgent::addChildren(
     childIds->addItem(String::number(childAXObject.axObjectID()));
     if (&childAXObject == inspectedAXObject)
       continue;
-    if (&axObject != inspectedAXObject) {
-      if (!inspectedAXObject)
-        continue;
-      if (&axObject != inspectedAXObject->parentObjectUnignored())
-        continue;
+    if (&axObject != inspectedAXObject &&
+        (axObject.getNode() ||
+         axObject.parentObjectUnignored() != inspectedAXObject)) {
+      continue;
     }
 
-    // Only add children/siblings of inspected node to returned nodes.
+    // Only add children of inspected node (or un-inspectable children of
+    // inspected node) to returned nodes.
     std::unique_ptr<AXNode> childNode = buildProtocolAXObject(
         childAXObject, inspectedAXObject, true, nodes, cache);
     nodes->addItem(std::move(childNode));

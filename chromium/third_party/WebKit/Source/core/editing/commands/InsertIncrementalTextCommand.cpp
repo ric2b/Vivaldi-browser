@@ -56,11 +56,6 @@ size_t computeCommonGraphemeClusterPrefixLength(const Position& selectionStart,
                                                 const String& newText) {
   const size_t commonPrefixLength = computeCommonPrefixLength(oldText, newText);
   const int selectionOffset = selectionStart.computeOffsetInContainerNode();
-
-  if (!selectionStart.computeContainerNode() ||
-      !selectionStart.computeContainerNode()->parentNode())
-    return 0;
-
   const ContainerNode* selectionNode =
       selectionStart.computeContainerNode()->parentNode();
 
@@ -94,11 +89,6 @@ size_t computeCommonGraphemeClusterSuffixLength(const Position& selectionStart,
                                                 const String& newText) {
   const size_t commonSuffixLength = computeCommonSuffixLength(oldText, newText);
   const int selectionOffset = selectionStart.computeOffsetInContainerNode();
-
-  if (!selectionStart.computeContainerNode() ||
-      !selectionStart.computeContainerNode()->parentNode())
-    return 0;
-
   const ContainerNode* selectionNode =
       selectionStart.computeContainerNode()->parentNode();
 

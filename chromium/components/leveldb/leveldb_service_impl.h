@@ -15,10 +15,15 @@ namespace leveldb {
 // Creates LevelDBDatabases based scoped to a |directory|/|dbname|.
 class LevelDBServiceImpl : public mojom::LevelDBService {
  public:
-  LevelDBServiceImpl(scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+  // The |file_task_runner| is used to run tasks to interact with the
+  // file_service. Specifically this task runner must NOT be the same as the
+  // task runner this implementation runs on, or deadlock might occur.
+  LevelDBServiceImpl(
+      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner);
   ~LevelDBServiceImpl() override;
 
   // Overridden from LevelDBService:
+  void SetEnvironmentName(const std::string& name) override;
   void Open(filesystem::mojom::DirectoryPtr directory,
             const std::string& dbname,
             leveldb::mojom::LevelDBDatabaseAssociatedRequest database,
@@ -40,6 +45,8 @@ class LevelDBServiceImpl : public mojom::LevelDBService {
   // threads that want to call file stuff, we create a dedicated thread to send
   // and receive mojo message calls.
   scoped_refptr<LevelDBMojoProxy> thread_;
+
+  std::string environment_name_;
 
   DISALLOW_COPY_AND_ASSIGN(LevelDBServiceImpl);
 };

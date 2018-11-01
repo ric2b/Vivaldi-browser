@@ -43,6 +43,7 @@ class CONTENT_EXPORT LevelDBWrapperImpl : public mojom::LevelDBWrapper {
     virtual void DidCommit(leveldb::mojom::DatabaseError error) = 0;
     // Called during loading if no data was found. Needs to call |callback|.
     virtual void MigrateData(ValueMapCallback callback);
+    virtual void OnMapLoaded(leveldb::mojom::DatabaseError error);
   };
 
   // |no_bindings_callback| will be called when this object has no more
@@ -72,6 +73,10 @@ class CONTENT_EXPORT LevelDBWrapperImpl : public mojom::LevelDBWrapper {
   // waiting on the result of initializing our map the commit won't happen
   // until the load has finished.
   void ScheduleImmediateCommit();
+
+  // Clears the in-memory cache if currently no changes are pending. If there
+  // are uncommitted changes this method does nothing.
+  void PurgeMemory();
 
   // LevelDBWrapper:
   void AddObserver(mojom::LevelDBObserverAssociatedPtrInfo observer) override;

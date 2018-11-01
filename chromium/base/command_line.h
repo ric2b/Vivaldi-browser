@@ -182,8 +182,6 @@ class BASE_EXPORT CommandLine {
                           const StringType& value);
   void AppendSwitchASCII(const std::string& switch_string,
                          const std::string& value);
-  // Add a switch if it is not already present in the list
-  void AppendSwitchNoDup(const std::string& switch_string);
 
   // Copy a set of switches (and any values) from another command line.
   // Commonly used when launching a subprocess.

@@ -25,8 +25,6 @@
 #include "mojo/public/cpp/bindings/interface_endpoint_client.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
-#include "mojo/public/cpp/bindings/lib/control_message_handler.h"
-#include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
 #include "mojo/public/cpp/bindings/message_header_validator.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
@@ -60,7 +58,7 @@ class InterfacePtrState {
 
     // It is safe to capture |this| because the callback won't be run after this
     // object goes away.
-    endpoint_client_->control_message_proxy()->QueryVersion(base::Bind(
+    endpoint_client_->QueryVersion(base::Bind(
         &InterfacePtrState::OnQueryVersion, base::Unretained(this), callback));
   }
 
@@ -71,19 +69,17 @@ class InterfacePtrState {
       return;
 
     version_ = version;
-    endpoint_client_->control_message_proxy()->RequireVersion(version);
+    endpoint_client_->RequireVersion(version);
   }
 
   void FlushForTesting() {
     ConfigureProxyIfNecessary();
-    endpoint_client_->control_message_proxy()->FlushForTesting();
+    endpoint_client_->FlushForTesting();
   }
 
-  void SendDisconnectReason(uint32_t custom_reason,
-                            const std::string& description) {
+  void CloseWithReason(uint32_t custom_reason, const std::string& description) {
     ConfigureProxyIfNecessary();
-    endpoint_client_->control_message_proxy()->SendDisconnectReason(
-        custom_reason, description);
+    endpoint_client_->CloseWithReason(custom_reason, description);
   }
 
   void Swap(InterfacePtrState* other) {
@@ -200,8 +196,6 @@ class InterfacePtrState {
         // will not be used.
         0u));
     proxy_.reset(new Proxy(endpoint_client_.get()));
-    if (Interface::PassesAssociatedKinds_)
-      proxy_->set_group_controller(endpoint_client_->group_controller());
   }
 
   void OnQueryVersion(const base::Callback<void(uint32_t)>& callback,

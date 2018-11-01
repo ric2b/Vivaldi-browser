@@ -34,12 +34,7 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptableDocumentParser.h"
-#include "core/fetch/FetchInitiatorInfo.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/Resource.h"
-#include "core/fetch/ResourceFetcher.h"
-#include "core/fetch/UniqueIdentifier.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/frame/FrameConsole.h"
@@ -60,6 +55,12 @@
 #include "core/xmlhttprequest/XMLHttpRequest.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/blob/BlobData.h"
+#include "platform/loader/fetch/FetchInitiatorInfo.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/Resource.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/UniqueIdentifier.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadTiming.h"
@@ -685,7 +686,7 @@ void InspectorNetworkAgent::willSendRequest(
     request.setShouldResetAppCache(true);
   }
   if (m_state->booleanProperty(NetworkAgentState::bypassServiceWorker, false))
-    request.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::All);
+    request.setServiceWorkerMode(WebURLRequest::ServiceWorkerMode::None);
 
   willSendRequestInternal(frame, identifier, loader, request, redirectResponse,
                           initiatorInfo);
@@ -694,6 +695,10 @@ void InspectorNetworkAgent::willSendRequest(
     request.addHTTPHeaderField(
         HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id,
         AtomicString(m_hostId));
+
+  request.setHTTPHeaderField(
+      HTTPNames::X_DevTools_Request_Id,
+      AtomicString(IdentifiersFactory::requestId(identifier)));
 }
 
 void InspectorNetworkAgent::markResourceAsCached(unsigned long identifier) {
@@ -920,9 +925,8 @@ void InspectorNetworkAgent::willLoadXHR(XMLHttpRequest* xhr,
 void InspectorNetworkAgent::delayedRemoveReplayXHR(XMLHttpRequest* xhr) {
   if (!m_replayXHRs.contains(xhr))
     return;
-
-  m_replayXHRsToBeDeleted.add(xhr);
-  m_replayXHRs.remove(xhr);
+  m_replayXHRsToBeDeleted.insert(xhr);
+  m_replayXHRs.erase(xhr);
   m_removeFinishedReplayXHRTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
@@ -964,10 +968,10 @@ void InspectorNetworkAgent::didFinishXHRInternal(ExecutionContext* context,
         (success ? "XHR finished loading: " : "XHR failed loading: ") + method +
         " \"" + url + "\".";
     ConsoleMessage* consoleMessage = ConsoleMessage::createForRequest(
-        NetworkMessageSource, DebugMessageLevel, message, url, it->value);
+        NetworkMessageSource, InfoMessageLevel, message, url, it->value);
     m_inspectedFrames->root()->console().addMessageToStorage(consoleMessage);
   }
-  m_knownRequestIdMap.remove(client);
+  m_knownRequestIdMap.erase(client);
 }
 
 void InspectorNetworkAgent::willStartFetch(ThreadableLoaderClient* client) {
@@ -977,7 +981,7 @@ void InspectorNetworkAgent::willStartFetch(ThreadableLoaderClient* client) {
 }
 
 void InspectorNetworkAgent::didFailFetch(ThreadableLoaderClient* client) {
-  m_knownRequestIdMap.remove(client);
+  m_knownRequestIdMap.erase(client);
 }
 
 void InspectorNetworkAgent::didFinishFetch(ExecutionContext* context,
@@ -992,10 +996,10 @@ void InspectorNetworkAgent::didFinishFetch(ExecutionContext* context,
   if (m_state->booleanProperty(NetworkAgentState::monitoringXHR, false)) {
     String message = "Fetch complete: " + method + " \"" + url + "\".";
     ConsoleMessage* consoleMessage = ConsoleMessage::createForRequest(
-        NetworkMessageSource, DebugMessageLevel, message, url, it->value);
+        NetworkMessageSource, InfoMessageLevel, message, url, it->value);
     m_inspectedFrames->root()->console().addMessageToStorage(consoleMessage);
   }
-  m_knownRequestIdMap.remove(client);
+  m_knownRequestIdMap.erase(client);
 }
 
 void InspectorNetworkAgent::willSendEventSourceRequest(
@@ -1021,8 +1025,22 @@ void InspectorNetworkAgent::willDispatchEventSourceEvent(
 
 void InspectorNetworkAgent::didFinishEventSourceRequest(
     ThreadableLoaderClient* eventSource) {
-  m_knownRequestIdMap.remove(eventSource);
+  m_knownRequestIdMap.erase(eventSource);
   clearPendingRequestData();
+}
+
+void InspectorNetworkAgent::detachClientRequest(
+    ThreadableLoaderClient* client) {
+  // This method is called by loader clients when finalizing
+  // (i.e., from their "prefinalizers".) The client reference must
+  // no longer be held onto upon completion.
+  if (m_pendingRequest == client) {
+    m_pendingRequest = nullptr;
+    if (m_pendingRequestType == InspectorPageAgent::XHRResource) {
+      m_pendingXHRReplayData.clear();
+    }
+  }
+  m_knownRequestIdMap.erase(client);
 }
 
 void InspectorNetworkAgent::applyUserAgentOverride(String* userAgent) {
@@ -1030,22 +1048,6 @@ void InspectorNetworkAgent::applyUserAgentOverride(String* userAgent) {
   m_state->getString(NetworkAgentState::userAgentOverride, &userAgentOverride);
   if (!userAgentOverride.isEmpty())
     *userAgent = userAgentOverride;
-}
-
-void InspectorNetworkAgent::willRecalculateStyle(Document*) {
-  DCHECK(!m_isRecalculatingStyle);
-  m_isRecalculatingStyle = true;
-}
-
-void InspectorNetworkAgent::didRecalculateStyle() {
-  m_isRecalculatingStyle = false;
-  m_styleRecalculationInitiator = nullptr;
-}
-
-void InspectorNetworkAgent::didScheduleStyleRecalculation(Document* document) {
-  if (!m_styleRecalculationInitiator)
-    m_styleRecalculationInitiator =
-        buildInitiatorObject(document, FetchInitiatorInfo());
 }
 
 std::unique_ptr<protocol::Network::Initiator>
@@ -1081,9 +1083,6 @@ InspectorNetworkAgent::buildInitiatorObject(
           document->scriptableDocumentParser()->lineNumber().zeroBasedInt());
     return initiatorObject;
   }
-
-  if (m_isRecalculatingStyle && m_styleRecalculationInitiator)
-    return m_styleRecalculationInitiator->clone();
 
   return protocol::Network::Initiator::create()
       .setType(protocol::Network::Initiator::TypeEnum::Other)
@@ -1382,7 +1381,7 @@ Response InspectorNetworkAgent::replayXHR(const String& requestId) {
   xhr->sendForInspectorXHRReplay(xhrReplayData->formData(),
                                  IGNORE_EXCEPTION_FOR_TESTING);
 
-  m_replayXHRs.add(xhr);
+  m_replayXHRs.insert(xhr);
   return Response::OK();
 }
 
@@ -1476,14 +1475,36 @@ void InspectorNetworkAgent::didCommitLoad(LocalFrame* frame,
 
 void InspectorNetworkAgent::frameScheduledNavigation(LocalFrame* frame,
                                                      double) {
-  std::unique_ptr<protocol::Network::Initiator> initiator =
-      buildInitiatorObject(frame->document(), FetchInitiatorInfo());
-  m_frameNavigationInitiatorMap.set(IdentifiersFactory::frameId(frame),
-                                    std::move(initiator));
+  String frameId = IdentifiersFactory::frameId(frame);
+  m_framesWithScheduledNavigation.insert(frameId);
+  if (!m_framesWithScheduledClientNavigation.contains(frameId)) {
+    m_frameNavigationInitiatorMap.set(
+        frameId, buildInitiatorObject(frame->document(), FetchInitiatorInfo()));
+  }
 }
 
 void InspectorNetworkAgent::frameClearedScheduledNavigation(LocalFrame* frame) {
-  m_frameNavigationInitiatorMap.remove(IdentifiersFactory::frameId(frame));
+  String frameId = IdentifiersFactory::frameId(frame);
+  m_framesWithScheduledNavigation.erase(frameId);
+  if (!m_framesWithScheduledClientNavigation.contains(frameId))
+    m_frameNavigationInitiatorMap.erase(frameId);
+}
+
+void InspectorNetworkAgent::frameScheduledClientNavigation(LocalFrame* frame) {
+  String frameId = IdentifiersFactory::frameId(frame);
+  m_framesWithScheduledClientNavigation.insert(frameId);
+  if (!m_framesWithScheduledNavigation.contains(frameId)) {
+    m_frameNavigationInitiatorMap.set(
+        frameId, buildInitiatorObject(frame->document(), FetchInitiatorInfo()));
+  }
+}
+
+void InspectorNetworkAgent::frameClearedScheduledClientNavigation(
+    LocalFrame* frame) {
+  String frameId = IdentifiersFactory::frameId(frame);
+  m_framesWithScheduledClientNavigation.erase(frameId);
+  if (!m_framesWithScheduledNavigation.contains(frameId))
+    m_frameNavigationInitiatorMap.erase(frameId);
 }
 
 void InspectorNetworkAgent::setHostId(const String& hostId) {
@@ -1529,8 +1550,9 @@ InspectorNetworkAgent::InspectorNetworkAgent(InspectedFrames* inspectedFrames)
       m_resourcesData(NetworkResourcesData::create(maximumTotalBufferSize,
                                                    maximumResourceBufferSize)),
       m_pendingRequest(nullptr),
-      m_isRecalculatingStyle(false),
       m_removeFinishedReplayXHRTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedLoading,
+                                inspectedFrames->root()),
           this,
           &InspectorNetworkAgent::removeFinishedReplayXHRFired) {}
 

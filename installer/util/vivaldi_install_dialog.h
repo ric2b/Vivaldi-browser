@@ -1,20 +1,21 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
 
-
-#ifndef VIVALDI_INSTALL_DIALOG_H_
-#define VIVALDI_INSTALL_DIALOG_H_
+#ifndef INSTALLER_UTIL_VIVALDI_INSTALL_DIALOG_H_
+#define INSTALLER_UTIL_VIVALDI_INSTALL_DIALOG_H_
 
 #include <windows.h>
+
 #include <string>
-#include "base/macros.h"
+#include <vector>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "chrome/installer/util/util_constants.h"
 
 namespace installer {
 
 class VivaldiInstallDialog {
-
-public:
+ public:
   enum DlgResult {
     INSTALL_DLG_ERROR = -1,   // Dialog could not be shown.
     INSTALL_DLG_CANCEL = 0,   // The user cancelled install.
@@ -23,17 +24,17 @@ public:
 
   enum InstallType {
     INSTALL_UNDEFINED = -1,
-    INSTALL_FOR_ALL_USERS = 0,    // Install for all users, system level.
-    INSTALL_FOR_CURRENT_USER = 1, // Install for current user.
-    INSTALL_STANDALONE = 2       // Install Vivaldi standalone.
+    INSTALL_FOR_ALL_USERS = 0,     // Install for all users, system level.
+    INSTALL_FOR_CURRENT_USER = 1,  // Install for current user.
+    INSTALL_STANDALONE = 2         // Install Vivaldi standalone.
   };
 
   enum Scaling {
-    DPI_NORMAL,   // 100%
-    DPI_MEDIUM,   // 125%
-    DPI_LARGE,    // 150%
-    DPI_XL,       // 200%
-    DPI_XXL       // 250%
+    DPI_NORMAL,  // 100%
+    DPI_MEDIUM,  // 125%
+    DPI_LARGE,   // 150%
+    DPI_XL,      // 200%
+    DPI_XXL      // 250%
   };
 
   VivaldiInstallDialog(HINSTANCE instance,
@@ -54,9 +55,9 @@ public:
   const bool GetRegisterBrowser() const;
 
   static bool IsVivaldiInstalled(const base::FilePath& path,
-                                 InstallType& installed_type);
+                                 InstallType* installed_type);
 
-private:
+ private:
   void InitDialog();
   void ShowBrowseFolderDialog();
   void DoDialog();
@@ -84,14 +85,12 @@ private:
   HBRUSH CreateDIBrush(int x, int y, int cx, int cy);
   HBRUSH GetCtlBrush(HWND hdlg, int id_dlg_item);
 
+  static INT_PTR CALLBACK DlgProc(HWND hdlg,
+                                  UINT msg,
+                                  WPARAM wparam,
+                                  LPARAM lparam);
 
-  static INT_PTR CALLBACK DlgProc(
-      HWND hdlg,
-      UINT msg,
-      WPARAM wparam,
-      LPARAM lparam);
-
-private:
+ private:
   std::wstring language_code_;
   base::FilePath destination_folder_;
   base::FilePath last_standalone_folder_;
@@ -132,5 +131,5 @@ private:
   DISALLOW_COPY_AND_ASSIGN(VivaldiInstallDialog);
 };
 
-} // namespace installer
-#endif VIVALDI_INSTALL_DIALOG_H_
+}  // namespace installer
+#endif  // INSTALLER_UTIL_VIVALDI_INSTALL_DIALOG_H_

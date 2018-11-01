@@ -63,7 +63,11 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   int GetMaximumNumberOfLoggedInUsers() const override { return 3; }
   int NumberOfLoggedInUsers() const override { return 1; }
   bool IsActiveUserSessionStarted() const override { return true; }
-  bool CanLockScreen() const override { return true; }
+  bool CanLockScreen() const override {
+    // The Chrome OS session_manager process currently rejects screen-lock
+    // requests due to no user being logged in.
+    return false;
+  }
   bool IsScreenLocked() const override { return screen_locked_; }
   bool ShouldLockScreenAutomatically() const override { return false; }
   void LockScreen() override {
@@ -90,7 +94,7 @@ class SessionStateDelegateStub : public SessionStateDelegate {
     return gfx::ImageSkia();
   }
   void SwitchActiveUser(const AccountId& account_id) override {}
-  void CycleActiveUser(CycleUser cycle_user) override {}
+  void CycleActiveUser(CycleUserDirection direction) override {}
   bool IsMultiProfileAllowedByPrimaryUserPolicy() const override {
     return true;
   }
@@ -113,12 +117,14 @@ WmShellMus::WmShellMus(
     WmWindow* primary_root_window,
     std::unique_ptr<ShellDelegate> shell_delegate,
     WindowManager* window_manager,
-    views::PointerWatcherEventRouter* pointer_watcher_event_router)
+    views::PointerWatcherEventRouter* pointer_watcher_event_router,
+    bool create_session_state_delegate_stub)
     : WmShell(std::move(shell_delegate)),
       window_manager_(window_manager),
       primary_root_window_(primary_root_window),
-      pointer_watcher_event_router_(pointer_watcher_event_router),
-      session_state_delegate_(new SessionStateDelegateStub) {
+      pointer_watcher_event_router_(pointer_watcher_event_router) {
+  if (create_session_state_delegate_stub)
+    session_state_delegate_ = base::MakeUnique<SessionStateDelegateStub>();
   DCHECK(primary_root_window_);
   WmShell::Set(this);
 
@@ -262,11 +268,13 @@ void WmShellMus::SetDisplayWorkAreaInsets(WmWindow* window,
 }
 
 bool WmShellMus::IsPinned() {
+  // TODO: http://crbug.com/622486.
   NOTIMPLEMENTED();
   return false;
 }
 
 void WmShellMus::SetPinnedWindow(WmWindow* window) {
+  // TODO: http://crbug.com/622486.
   NOTIMPLEMENTED();
 }
 
@@ -366,7 +374,9 @@ void WmShellMus::OnOverviewModeEnded() {
 }
 
 SessionStateDelegate* WmShellMus::GetSessionStateDelegate() {
-  return session_state_delegate_.get();
+  return session_state_delegate_
+             ? session_state_delegate_.get()
+             : Shell::GetInstance()->session_state_delegate();
 }
 
 void WmShellMus::AddDisplayObserver(WmDisplayObserver* observer) {
@@ -389,10 +399,6 @@ void WmShellMus::RemovePointerWatcher(views::PointerWatcher* watcher) {
   pointer_watcher_event_router_->RemovePointerWatcher(watcher);
 }
 
-void WmShellMus::RequestShutdown() {
-  NOTIMPLEMENTED();
-}
-
 bool WmShellMus::IsTouchDown() {
   // TODO: implement me, http://crbug.com/634967.
   // NOTIMPLEMENTED is too spammy here.
@@ -404,6 +410,10 @@ void WmShellMus::ToggleIgnoreExternalKeyboard() {
 }
 
 void WmShellMus::SetLaserPointerEnabled(bool enabled) {
+  NOTIMPLEMENTED();
+}
+
+void WmShellMus::SetPartialMagnifierEnabled(bool enabled) {
   NOTIMPLEMENTED();
 }
 

@@ -14,14 +14,16 @@
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "content/browser/accessibility/ax_tree_id_registry.h"
+#include "content/browser/accessibility/ax_platform_position.h"
 #include "content/browser/accessibility/browser_accessibility_event.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "third_party/WebKit/public/web/WebAXEnums.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_range.h"
 #include "ui/accessibility/ax_serializable_tree.h"
+#include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -116,7 +118,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
       BrowserAccessibilityFactory* factory = new BrowserAccessibilityFactory());
 
   static BrowserAccessibilityManager* FromID(
-      AXTreeIDRegistry::AXTreeID ax_tree_id);
+      ui::AXTreeIDRegistry::AXTreeID ax_tree_id);
 
   ~BrowserAccessibilityManager() override;
 
@@ -198,8 +200,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   void SetScrollOffset(const BrowserAccessibility& node, gfx::Point offset);
   void SetValue(
       const BrowserAccessibility& node, const base::string16& value);
-  void SetTextSelection(
-      const BrowserAccessibility& node, int start_offset, int end_offset);
+  void SetSelection(
+      ui::AXRange<AXPlatformPosition::AXPositionInstance::element_type> range);
   void SetAccessibilityFocus(const BrowserAccessibility& node);
   void ShowContextMenu(const BrowserAccessibility& node);
 
@@ -323,7 +325,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
       int end_offset);
 
   // Accessors.
-  AXTreeIDRegistry::AXTreeID ax_tree_id() const { return ax_tree_id_; }
+  ui::AXTreeIDRegistry::AXTreeID ax_tree_id() const { return ax_tree_id_; }
 
   // AXTreeDelegate implementation.
   void OnNodeDataWillChange(ui::AXTree* tree,
@@ -372,6 +374,9 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   void CacheHitTestResult(BrowserAccessibility* hit_test_result);
 
  protected:
+  using AXPlatformPositionInstance = AXPlatformPosition::AXPositionInstance;
+  using AXPlatformRange = ui::AXRange<AXPlatformPositionInstance::element_type>;
+
   BrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate,
       BrowserAccessibilityFactory* factory);
@@ -455,13 +460,14 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   bool connected_to_parent_tree_node_;
 
   // The global ID of this accessibility tree.
-  AXTreeIDRegistry::AXTreeID ax_tree_id_;
+  ui::AXTreeIDRegistry::AXTreeID ax_tree_id_;
 
   // If this tree has a parent tree, this is the cached ID of the parent
   // node within that parent tree. It's computed as needed and cached for
   // speed so that it can be accessed quickly if it hasn't changed.
   int parent_node_id_from_parent_tree_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityManager);
 };
 

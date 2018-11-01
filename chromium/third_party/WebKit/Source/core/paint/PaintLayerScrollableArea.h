@@ -280,11 +280,14 @@ class CORE_EXPORT PaintLayerScrollableArea final
   int visibleHeight() const override;
   int visibleWidth() const override;
   IntSize contentsSize() const override;
+  void contentsResized() override;
+  bool isScrollable() const override;
   IntPoint lastKnownMousePosition() const override;
   bool scrollAnimatorEnabled() const override;
   bool shouldSuspendScrollAnimations() const override;
   bool scrollbarsCanBeActive() const override;
   void scrollbarVisibilityChanged() override;
+  void scrollbarFrameRectChanged() override;
   IntRect scrollableAreaBoundingBox() const override;
   void registerForAnimation() override;
   void deregisterForAnimation() override;
@@ -344,10 +347,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   bool inResizeMode() const { return m_inResizeMode; }
   void setInResizeMode(bool inResizeMode) { m_inResizeMode = inResizeMode; }
-
-  IntRect touchResizerCornerRect(const IntRect& bounds) const {
-    return resizerCornerRect(bounds, ResizerForTouch);
-  }
 
   LayoutUnit scrollWidth() const;
   LayoutUnit scrollHeight() const;
@@ -422,7 +421,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   IntRect rectForHorizontalScrollbar(const IntRect& borderBoxRect) const;
   IntRect rectForVerticalScrollbar(const IntRect& borderBoxRect) const;
 
-  Widget* getWidget() override;
+  FrameViewBase* getWidget() override;
   bool shouldPerformScrollAnchoring() const override;
   ScrollAnchor* scrollAnchor() override { return &m_scrollAnchor; }
   bool isPaintLayerScrollableArea() const override { return true; }
@@ -432,6 +431,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   FloatQuad localToVisibleContentQuad(const FloatQuad&,
                                       const LayoutObject*,
                                       unsigned = 0) const final;
+
+  RefPtr<WebTaskRunner> getTimerTaskRunner() const final;
 
   bool shouldRebuildHorizontalScrollbarLayer() const {
     return m_rebuildHorizontalScrollbarLayer;

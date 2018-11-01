@@ -93,7 +93,6 @@ TEST(BluetoothDeviceTest, CanonicalizeAddressFormat_RejectsInvalidFormats) {
   }
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 // Verifies basic device properties, e.g. GetAddress, GetName, ...
 TEST_F(BluetoothTest, LowEnergyDeviceProperties) {
   if (!PlatformSupportsLowEnergy()) {
@@ -120,9 +119,7 @@ TEST_F(BluetoothTest, LowEnergyDeviceProperties) {
   EXPECT_TRUE(
       base::ContainsKey(uuids, BluetoothUUID(kTestUUIDGenericAttribute)));
 }
-#endif  // defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 // Device with no advertised Service UUIDs.
 TEST_F(BluetoothTest, LowEnergyDeviceNoUUIDs) {
   if (!PlatformSupportsLowEnergy()) {
@@ -136,7 +133,6 @@ TEST_F(BluetoothTest, LowEnergyDeviceNoUUIDs) {
   UUIDSet uuids = device->GetUUIDs();
   EXPECT_EQ(0u, uuids.size());
 }
-#endif  // defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 
 #if defined(OS_MACOSX)
 // TODO(ortuno): Enable on Android once it supports Service Data.
@@ -350,7 +346,7 @@ TEST_F(BluetoothTest, GetUUIDs_Connection) {
   // Discover services, should notify of device changed.
   //  - GetUUIDs: Should return the device's services' UUIDs.
   std::vector<std::string> services;
-  services.push_back(BluetoothUUID(kTestUUIDGenericAccess).canonical_value());
+  services.push_back(kTestUUIDGenericAccess);
   SimulateGattServicesDiscovered(device, services);
 
   EXPECT_EQ(1, observer.device_changed_count());
@@ -461,7 +457,7 @@ TEST_F(BluetoothTest, AdvertisementData_DiscoveryDuringConnection) {
   // Discover services, should notify of device changed.
   //  - GetUUIDs: Should return both Advertised UUIDs and Service UUIDs.
   std::vector<std::string> services;
-  services.push_back(BluetoothUUID(kTestUUIDHeartRate).canonical_value());
+  services.push_back(kTestUUIDHeartRate);
   SimulateGattServicesDiscovered(device, services);
 
   EXPECT_EQ(2, observer.device_changed_count());
@@ -600,7 +596,7 @@ TEST_F(BluetoothTest, AdvertisementData_ConnectionDuringDiscovery) {
   // Discover Services, should notify of device changed.
   //  - GetUUIDs: Should return Advertised UUIDs and Service UUIDs.
   std::vector<std::string> services;
-  services.push_back(BluetoothUUID(kTestUUIDHeartRate).canonical_value());
+  services.push_back(kTestUUIDHeartRate);
   SimulateGattServicesDiscovered(device, services);
 
   EXPECT_EQ(2, observer.device_changed_count());
@@ -677,7 +673,8 @@ TEST_F(BluetoothTest, AdvertisementData_ConnectionDuringDiscovery) {
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
 
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_MACOSX) || \
+    defined(OS_LINUX)
 // GetName for Device with no name.
 TEST_F(BluetoothTest, GetName_NullName) {
   if (!PlatformSupportsLowEnergy()) {
@@ -697,7 +694,8 @@ TEST_F(BluetoothTest, GetName_NullName) {
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
   EXPECT_FALSE(device->GetName());
 }
-#endif  // defined(OS_ANDROID) || defined(OS_CHROMEOS)  || defined(OS_MACOSX)
+#endif  // defined(OS_ANDROID) || defined(OS_CHROMEOS)  || defined(OS_MACOSX) ||
+        // defined(OS_LINUX)
 
 // TODO(506415): Test GetNameForDisplay with a device with no name.
 // BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() will run, which

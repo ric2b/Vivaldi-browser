@@ -25,6 +25,7 @@
 #include "third_party/boringssl/src/include/openssl/asn1.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
 #include "third_party/boringssl/src/include/openssl/mem.h"
+#include "third_party/boringssl/src/include/openssl/pool.h"
 
 namespace net {
 
@@ -190,6 +191,19 @@ class DERCacheInitSingleton {
 base::LazyInstance<DERCacheInitSingleton>::Leaky g_der_cache_singleton =
     LAZY_INSTANCE_INITIALIZER;
 
+class BufferPoolSingleton {
+ public:
+  BufferPoolSingleton() : pool_(CRYPTO_BUFFER_POOL_new()) {}
+  CRYPTO_BUFFER_POOL* pool() { return pool_; }
+
+ private:
+  // The singleton is leaky, so there is no need to use a smart pointer.
+  CRYPTO_BUFFER_POOL* pool_;
+};
+
+base::LazyInstance<BufferPoolSingleton>::Leaky g_buffer_pool_singleton =
+    LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
 
 bool CreateSelfSignedCert(crypto::RSAPrivateKey* key,
@@ -271,9 +285,16 @@ bool ParseDate(ASN1_TIME* x509_time, base::Time* time) {
 }
 
 // Returns true if |der_cache| points to valid data, false otherwise.
-// (note: the DER-encoded data in |der_cache| is owned by |cert|, callers should
+// (note: the DER-encoded data in |der_cache| is owned by |x509|, callers should
 // not free it).
 bool GetDER(X509* x509, base::StringPiece* der_cache) {
+  if (x509->buf) {
+    *der_cache = base::StringPiece(
+        reinterpret_cast<const char*>(CRYPTO_BUFFER_data(x509->buf)),
+        CRYPTO_BUFFER_len(x509->buf));
+    return true;
+  }
+
   int x509_der_cache_index =
       g_der_cache_singleton.Get().der_cache_ex_index();
 
@@ -318,6 +339,14 @@ bool GetTLSServerEndPointChannelBinding(const X509Certificate& certificate,
 
   const EVP_MD* digest_evp_md = nullptr;
   switch (signature_algorithm->digest()) {
+    case net::DigestAlgorithm::Md2:
+    case net::DigestAlgorithm::Md4:
+      // Shouldn't be reachable.
+      digest_evp_md = nullptr;
+      break;
+
+    // Per RFC 5929 section 4.1, MD5 and SHA1 map to SHA256.
+    case net::DigestAlgorithm::Md5:
     case net::DigestAlgorithm::Sha1:
     case net::DigestAlgorithm::Sha256:
       digest_evp_md = EVP_sha256();
@@ -345,6 +374,23 @@ bool GetTLSServerEndPointChannelBinding(const X509Certificate& certificate,
   token->assign(kChannelBindingPrefix);
   token->append(digest.begin(), digest.end());
   return true;
+}
+
+CRYPTO_BUFFER_POOL* GetBufferPool() {
+  return g_buffer_pool_singleton.Get().pool();
+}
+
+bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(const uint8_t* data,
+                                                  size_t length) {
+  return bssl::UniquePtr<CRYPTO_BUFFER>(
+      CRYPTO_BUFFER_new(data, length, GetBufferPool()));
+}
+
+bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(
+    const base::StringPiece& data) {
+  return bssl::UniquePtr<CRYPTO_BUFFER>(
+      CRYPTO_BUFFER_new(reinterpret_cast<const uint8_t*>(data.data()),
+                        data.size(), GetBufferPool()));
 }
 
 }  // namespace x509_util

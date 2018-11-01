@@ -50,6 +50,15 @@ class AudioGetInfoFunction : public UIThreadExtensionFunction {
   ResponseAction Run() override;
 };
 
+class AudioGetDevicesFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("audio.getDevices", AUDIO_GETDEVICES);
+
+ protected:
+  ~AudioGetDevicesFunction() override {}
+  ResponseAction Run() override;
+};
+
 class AudioSetActiveDevicesFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("audio.setActiveDevices", AUDIO_SETACTIVEDEVICES);
@@ -65,6 +74,24 @@ class AudioSetPropertiesFunction : public UIThreadExtensionFunction {
 
  protected:
   ~AudioSetPropertiesFunction() override {}
+  ResponseAction Run() override;
+};
+
+class AudioSetMuteFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("audio.setMute", AUDIO_SETMUTE);
+
+ protected:
+  ~AudioSetMuteFunction() override {}
+  ResponseAction Run() override;
+};
+
+class AudioGetMuteFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("audio.getMute", AUDIO_GETMUTE);
+
+ protected:
+  ~AudioGetMuteFunction() override {}
   ResponseAction Run() override;
 };
 

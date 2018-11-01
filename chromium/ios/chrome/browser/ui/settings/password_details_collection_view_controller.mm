@@ -16,9 +16,11 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
+#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/settings/cells/password_details_item.h"
 #import "ios/chrome/browser/ui/settings/reauthentication_module.h"
 #import "ios/chrome/browser/ui/settings/save_passwords_collection_view_controller.h"
+#include "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/CollectionCells/src/MaterialCollectionCells.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
@@ -36,8 +38,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeHeader = kItemTypeEnumZero,
   ItemTypeUsername,
   ItemTypePassword,
-  ItemTypeShow,
-  ItemTypeHide,
+  ItemTypeShowHide,
   ItemTypeCopy,
   ItemTypeDelete,
 };
@@ -147,9 +148,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
 
   // TODO(crbug.com/159166): Change the style of the buttons once there are
   // final mocks.
-  [model addItem:[self showPasswordButtonItem]
-      toSectionWithIdentifier:SectionIdentifierPassword];
-  [model addItem:[self hidePasswordButtonItem]
+  [model addItem:[self showHidePasswordButtonItem]
       toSectionWithIdentifier:SectionIdentifierPassword];
   [model addItem:[self passwordCopyButtonItem]
       toSectionWithIdentifier:SectionIdentifierPassword];
@@ -164,14 +163,6 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
 
 #pragma mark - Items
 
-- (CollectionViewItem*)showPasswordButtonItem {
-  CollectionViewTextItem* item =
-      [[[CollectionViewTextItem alloc] initWithType:ItemTypeShow] autorelease];
-  item.text = l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_SHOW_BUTTON);
-  item.accessibilityTraits |= UIAccessibilityTraitButton;
-  return item;
-}
-
 - (CollectionViewItem*)passwordCopyButtonItem {
   CollectionViewTextItem* item =
       [[[CollectionViewTextItem alloc] initWithType:ItemTypeCopy] autorelease];
@@ -180,10 +171,10 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   return item;
 }
 
-- (CollectionViewItem*)hidePasswordButtonItem {
-  CollectionViewTextItem* item =
-      [[[CollectionViewTextItem alloc] initWithType:ItemTypeHide] autorelease];
-  item.text = l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_HIDE_BUTTON);
+- (CollectionViewItem*)showHidePasswordButtonItem {
+  CollectionViewTextItem* item = [[[CollectionViewTextItem alloc]
+      initWithType:ItemTypeShowHide] autorelease];
+  item.text = [self showHideButtonText];
   item.accessibilityTraits |= UIAccessibilityTraitButton;
   return item;
 }
@@ -197,6 +188,28 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
 }
 
 #pragma mark - Actions
+
+- (NSString*)showHideButtonText {
+  if (_plainTextPasswordShown) {
+    return l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_HIDE_BUTTON);
+  }
+  return l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_SHOW_BUTTON);
+}
+
+// Changes the text on the Show/Hide button appropriately according to
+// |_plainTextPasswordShown|.
+- (void)toggleShowHideButton {
+  CollectionViewModel* model = self.collectionViewModel;
+  NSIndexPath* path = [model indexPathForItemType:ItemTypeShowHide
+                                sectionIdentifier:SectionIdentifierPassword];
+  CollectionViewTextItem* item =
+      base::mac::ObjCCastStrict<CollectionViewTextItem>(
+          [model itemAtIndexPath:path]);
+  item.text = [self showHideButtonText];
+  [self reconfigureCellsForItems:@[ item ]
+         inSectionWithIdentifier:SectionIdentifierPassword];
+  [self.collectionView.collectionViewLayout invalidateLayout];
+}
 
 - (void)showPassword {
   if (_plainTextPasswordShown) {
@@ -216,6 +229,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
                    inSectionWithIdentifier:SectionIdentifierPassword];
       [[strongSelf collectionView].collectionViewLayout invalidateLayout];
       strongSelf.get()->_plainTextPasswordShown = YES;
+      [strongSelf toggleShowHideButton];
     };
 
     [_weakReauthenticationModule
@@ -234,6 +248,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
          inSectionWithIdentifier:SectionIdentifierPassword];
   [self.collectionView.collectionViewLayout invalidateLayout];
   _plainTextPasswordShown = NO;
+  [self toggleShowHideButton];
 }
 
 - (void)copyPassword {
@@ -243,6 +258,7 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   if (_plainTextPasswordShown) {
     UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
     generalPasteboard.string = _password;
+    TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
     [self showCopyPasswordResultToast:
               l10n_util::GetNSString(
                   IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE)];
@@ -256,10 +272,12 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
       if (success) {
         UIPasteboard* generalPasteboard = [UIPasteboard generalPasteboard];
         generalPasteboard.string = strongSelf.get()->_password;
+        TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
         [strongSelf showCopyPasswordResultToast:
                         l10n_util::GetNSString(
                             IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE)];
       } else {
+        TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeError);
         [strongSelf showCopyPasswordResultToast:
                         l10n_util::GetNSString(
                             IDS_IOS_SETTINGS_PASSWORD_WAS_NOT_COPIED_MESSAGE)];
@@ -296,7 +314,22 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
     textCell.textLabel.textColor = [[MDCPalette greyPalette] tint500];
   }
   return view;
-};
+}
+
+- (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
+                 cellForItemAtIndexPath:(NSIndexPath*)indexPath {
+  UICollectionViewCell* cell =
+      [super collectionView:collectionView cellForItemAtIndexPath:indexPath];
+
+  NSInteger type = [self.collectionViewModel itemTypeForIndexPath:indexPath];
+  if (type == ItemTypeDelete) {
+    MDCCollectionViewTextCell* textCell =
+        base::mac::ObjCCastStrict<MDCCollectionViewTextCell>(cell);
+    textCell.textLabel.textColor = [[MDCPalette cr_redPalette] tint500];
+  }
+
+  return cell;
+}
 
 #pragma mark - UICollectionViewDelegate
 
@@ -306,11 +339,12 @@ reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
   NSInteger itemType =
       [self.collectionViewModel itemTypeForIndexPath:indexPath];
   switch (itemType) {
-    case ItemTypeShow:
-      [self showPassword];
-      break;
-    case ItemTypeHide:
-      [self hidePassword];
+    case ItemTypeShowHide:
+      if (_plainTextPasswordShown) {
+        [self hidePassword];
+      } else {
+        [self showPassword];
+      }
       break;
     case ItemTypeCopy:
       [self copyPassword];

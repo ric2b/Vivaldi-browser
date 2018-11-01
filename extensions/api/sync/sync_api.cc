@@ -5,16 +5,18 @@
 
 #include "extensions/api/sync/sync_api.h"
 
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/profiles/profile.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
-
+#include "sync/vivaldi_sync_model_factory.h"
 #include "sync/vivaldi_syncmanager.h"
 #include "sync/vivaldi_syncmanager_factory.h"
-#include "sync/vivaldi_sync_model_factory.h"
 
 using vivaldi::VivaldiSyncManagerFactory;
 using vivaldi::VivaldiSyncManager;

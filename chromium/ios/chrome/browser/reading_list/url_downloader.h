@@ -18,10 +18,6 @@ namespace base {
 class FilePath;
 }
 
-namespace dom_distiller {
-class DomDistillerService;
-}
-
 namespace net {
 class URLFetcher;
 class URLRequestContextGetter;
@@ -52,12 +48,9 @@ class URLDownloader : public net::URLFetcherDelegate,
     DOWNLOAD_SUCCESS,
     // The URL was already available offline. No action was done.
     DOWNLOAD_EXISTS,
-    // The URL could not be downloaded because of a temporary error. Client may
-    // want to try again later.
-    ERROR_RETRY,
-    // The URL could not be dowmloaded and URLDownloader thinks a retry would
-    // end with the same result. There is no need to retry.
-    ERROR_PERMANENT
+    // The URL could not be downloaded because of an error. Client may want to
+    // try again later.
+    ERROR,
   };
 
   // A completion callback that takes a GURL and a bool indicating the
@@ -75,6 +68,7 @@ class URLDownloader : public net::URLFetcherDelegate,
                                                  const GURL&,
                                                  SuccessState,
                                                  const base::FilePath&,
+                                                 int64_t size,
                                                  const std::string&)>;
 
   // Create a URL downloader with completion callbacks for downloads and
@@ -82,7 +76,7 @@ class URLDownloader : public net::URLFetcherDelegate,
   // and a boolean indicating success. For downloads, if distillation was
   // successful, it will also include the distilled url and extracted title.
   URLDownloader(
-      dom_distiller::DomDistillerService* distiller_service,
+      dom_distiller::DistillerFactory* distiller_factory,
       reading_list::ReadingListDistillerPageFactory* distiller_page_factory,
       PrefService* prefs,
       base::FilePath chrome_profile_path,
@@ -102,6 +96,9 @@ class URLDownloader : public net::URLFetcherDelegate,
 
   // URLFetcherDelegate delegate method.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
+
+  // Cancels the current download task.
+  void CancelTask();
 
  private:
   enum TaskType { DELETE, DOWNLOAD };
@@ -177,16 +174,18 @@ class URLDownloader : public net::URLFetcherDelegate,
   // Saves the file downloaded by |fetcher_|. Creates the directory if needed.
   SuccessState SavePDFFile(const base::FilePath& temporary_path);
 
-  dom_distiller::DomDistillerService* distiller_service_;
   reading_list::ReadingListDistillerPageFactory* distiller_page_factory_;
+  dom_distiller::DistillerFactory* distiller_factory_;
   PrefService* pref_service_;
   const DownloadCompletion download_completion_;
   const SuccessCompletion delete_completion_;
+
   std::deque<Task> tasks_;
   bool working_;
   base::FilePath base_directory_;
   GURL original_url_;
   GURL distilled_url_;
+  int64_t saved_size_;
   std::string mime_type_;
   // Fetcher used to redownload the document and save it in the sandbox.
   std::unique_ptr<net::URLFetcher> fetcher_;

@@ -69,12 +69,13 @@ bool IsCustomItemCheckedInternal(const std::vector<content::MenuItem>& items,
 const size_t kMaxCustomMenuDepth = 5;
 const size_t kMaxCustomMenuTotalItems = 1000;
 
-void AddCustomItemsToMenu(const std::vector<content::MenuItem>& items,
-                          size_t depth,
-                          size_t* total_items,
-                          ScopedVector<ui::SimpleMenuModel>* submenus,
-                          ui::SimpleMenuModel::Delegate* delegate,
-                          ui::SimpleMenuModel* menu_model) {
+void AddCustomItemsToMenu(
+    const std::vector<content::MenuItem>& items,
+    size_t depth,
+    size_t* total_items,
+    std::vector<std::unique_ptr<ui::SimpleMenuModel>>* submenus,
+    ui::SimpleMenuModel::Delegate* delegate,
+    ui::SimpleMenuModel* menu_model) {
   if (depth > kMaxCustomMenuDepth) {
     LOG(ERROR) << "Custom menu too deeply nested.";
     return;
@@ -113,7 +114,7 @@ void AddCustomItemsToMenu(const std::vector<content::MenuItem>& items,
         break;
       case content::MenuItem::SUBMENU: {
         ui::SimpleMenuModel* submenu = new ui::SimpleMenuModel(delegate);
-        submenus->push_back(submenu);
+        submenus->push_back(base::WrapUnique(submenu));
         AddCustomItemsToMenu(items[i].submenu, depth + 1, total_items, submenus,
                              delegate, submenu);
         menu_model->AddSubMenu(
@@ -350,11 +351,6 @@ void RenderViewContextMenuBase::MenuClosed(ui::SimpleMenuModel* source) {
   if (view)
     view->SetShowingContextMenu(false);
   source_web_contents_->NotifyContextMenuClosed(params_.custom_context);
-
-  if (!command_executed_) {
-    for (auto& observer : observers_)
-      observer.OnMenuCancel();
-  }
 }
 
 RenderFrameHost* RenderViewContextMenuBase::GetRenderFrameHost() {
@@ -392,16 +388,15 @@ void RenderViewContextMenuBase::OpenURLWithExtraHeaders(
   if (!extra_headers.empty())
     open_url_params.extra_headers = extra_headers;
 
+  open_url_params.source_render_process_id = render_process_id_;
+  open_url_params.source_render_frame_id = render_frame_id_;
+
   // Vivaldi specific; set site instance to lookup |Browser| to make sure the
   // correct Profile is used in incognito mode.
   open_url_params.source_site_instance =
       source_web_contents_->GetSiteInstance();
 
-  WebContents* new_contents = source_web_contents_->OpenURL(open_url_params);
-  if (!new_contents)
-    return;
-
-  NotifyURLOpened(url, new_contents);
+  source_web_contents_->OpenURL(open_url_params);
 }
 
 bool RenderViewContextMenuBase::IsCustomItemChecked(int id) const {

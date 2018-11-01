@@ -127,12 +127,12 @@ AssociatedResourceFetcherImpl::~AssociatedResourceFetcherImpl() {
     loader_->cancel();
 }
 
-void AssociatedResourceFetcherImpl::SetSkipServiceWorker(
-    blink::WebURLRequest::SkipServiceWorker skip_service_worker) {
+void AssociatedResourceFetcherImpl::SetServiceWorkerMode(
+    blink::WebURLRequest::ServiceWorkerMode service_worker_mode) {
   DCHECK(!request_.isNull());
   DCHECK(!loader_);
 
-  request_.setSkipServiceWorker(skip_service_worker);
+  request_.setServiceWorkerMode(service_worker_mode);
 }
 
 void AssociatedResourceFetcherImpl::SetCachePolicy(
@@ -165,7 +165,6 @@ void AssociatedResourceFetcherImpl::Start(
   request_.setRequestContext(request_context);
   request_.setFrameType(frame_type);
   request_.setFirstPartyForCookies(frame->document().firstPartyForCookies());
-  frame->dispatchWillSendRequest(request_);
 
   client_.reset(new ClientImpl(callback));
 

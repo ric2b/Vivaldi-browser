@@ -35,7 +35,6 @@ class RasterizeAndRecordMicro(legacy_page_test.LegacyPageTest):
     time.sleep(self._start_wait_time)
 
     # Enqueue benchmark
-    # TODO(catapult:#3028): Fix interpolation of JavaScript values.
     tab.ExecuteJavaScript("""
         window.benchmark_results = {};
         window.benchmark_results.done = false;
@@ -46,18 +45,22 @@ class RasterizeAndRecordMicro(legacy_page_test.LegacyPageTest):
                   window.benchmark_results.done = true;
                   window.benchmark_results.results = value;
                 }, {
-                  "record_repeat_count": %i,
-                  "rasterize_repeat_count": %i
+                  "record_repeat_count": {{ record_repeat_count }},
+                  "rasterize_repeat_count": {{ rasterize_repeat_count }}
                 });
-    """ % (self._record_repeat, self._rasterize_repeat))
+        """,
+        record_repeat_count=self._record_repeat,
+        rasterize_repeat_count=self._rasterize_repeat)
 
-    benchmark_id = tab.EvaluateJavaScript('window.benchmark_results.id')
+    # Evaluating this expression usually takes between 60 and 90 seconds.
+    benchmark_id = tab.EvaluateJavaScript(
+        'window.benchmark_results.id', timeout=self._timeout)
     if not benchmark_id:
       raise legacy_page_test.MeasurementFailure(
           'Failed to schedule rasterize_and_record_micro')
 
-    tab.WaitForJavaScriptExpression(
-        'window.benchmark_results.done', self._timeout)
+    tab.WaitForJavaScriptCondition(
+        'window.benchmark_results.done', timeout=self._timeout)
 
     data = tab.EvaluateJavaScript('window.benchmark_results.results')
 

@@ -17,13 +17,11 @@
 
 namespace media {
 
-static bool IsStreamValidAndEncrypted(DemuxerStream* stream) {
+static bool IsStreamValid(DemuxerStream* stream) {
   return ((stream->type() == DemuxerStream::AUDIO &&
-           stream->audio_decoder_config().IsValidConfig() &&
-           stream->audio_decoder_config().is_encrypted()) ||
+           stream->audio_decoder_config().IsValidConfig()) ||
           (stream->type() == DemuxerStream::VIDEO &&
-           stream->video_decoder_config().IsValidConfig() &&
-           stream->video_decoder_config().is_encrypted()));
+           stream->video_decoder_config().IsValidConfig()));
 }
 
 DecryptingDemuxerStream::DecryptingDemuxerStream(
@@ -153,20 +151,6 @@ VideoRotation DecryptingDemuxerStream::video_rotation() {
   return demuxer_stream_->video_rotation();
 }
 
-bool DecryptingDemuxerStream::enabled() const {
-  return demuxer_stream_->enabled();
-}
-
-void DecryptingDemuxerStream::set_enabled(bool enabled,
-                                          base::TimeDelta timestamp) {
-  demuxer_stream_->set_enabled(enabled, timestamp);
-}
-
-void DecryptingDemuxerStream::SetStreamStatusChangeCB(
-    const StreamStatusChangeCB& cb) {
-  demuxer_stream_->SetStreamStatusChangeCB(cb);
-}
-
 DecryptingDemuxerStream::~DecryptingDemuxerStream() {
   DVLOG(2) << __func__ << " : state_ = " << state_;
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -227,16 +211,26 @@ void DecryptingDemuxerStream::DecryptBuffer(
     return;
   }
 
+  DCHECK_EQ(kOk, status);
+
   if (buffer->end_of_stream()) {
     DVLOG(2) << "DoDecryptBuffer() - EOS buffer.";
     state_ = kIdle;
-    base::ResetAndReturn(&read_cb_).Run(status, buffer);
+    base::ResetAndReturn(&read_cb_).Run(kOk, buffer);
     return;
   }
 
-  DCHECK(buffer->decrypt_config());
+  // TODO(xhwang): Unify clear buffer handling in clear and encrypted stream.
+  // See http://crbug.com/675003
+  if (!buffer->decrypt_config()) {
+    DVLOG(2) << "DoDecryptBuffer() - clear buffer in clear stream.";
+    state_ = kIdle;
+    base::ResetAndReturn(&read_cb_).Run(kOk, buffer);
+    return;
+  }
+
   if (!buffer->decrypt_config()->is_encrypted()) {
-    DVLOG(2) << "DoDecryptBuffer() - clear buffer.";
+    DVLOG(2) << "DoDecryptBuffer() - clear buffer in encrypted stream.";
     scoped_refptr<DecoderBuffer> decrypted = DecoderBuffer::CopyFrom(
         buffer->data(), buffer->data_size());
     decrypted->set_timestamp(buffer->timestamp());
@@ -362,32 +356,24 @@ Decryptor::StreamType DecryptingDemuxerStream::GetDecryptorStreamType() const {
 }
 
 void DecryptingDemuxerStream::InitializeDecoderConfig() {
-  // The decoder selector or upstream demuxer make sure the stream is valid and
-  // potentially encrypted.
-  DCHECK(IsStreamValidAndEncrypted(demuxer_stream_));
+  // The decoder selector or upstream demuxer make sure the stream is valid.
+  DCHECK(IsStreamValid(demuxer_stream_));
 
+  // Since |this| is a decrypted version of |demuxer_stream_|, the decoder
+  // config of |this| should always be a decrypted version of |demuxer_stream_|
+  // configs.
   switch (demuxer_stream_->type()) {
     case AUDIO: {
-      AudioDecoderConfig input_audio_config =
-          demuxer_stream_->audio_decoder_config();
-      audio_config_.Initialize(
-          input_audio_config.codec(), input_audio_config.sample_format(),
-          input_audio_config.channel_layout(),
-          input_audio_config.samples_per_second(),
-          input_audio_config.extra_data(), Unencrypted(),
-          input_audio_config.seek_preroll(), input_audio_config.codec_delay());
+      audio_config_ = demuxer_stream_->audio_decoder_config();
+      if (audio_config_.is_encrypted())
+        audio_config_.SetIsEncrypted(false);
       break;
     }
 
     case VIDEO: {
-      VideoDecoderConfig input_video_config =
-          demuxer_stream_->video_decoder_config();
-      video_config_.Initialize(
-          input_video_config.codec(), input_video_config.profile(),
-          input_video_config.format(), input_video_config.color_space(),
-          input_video_config.coded_size(), input_video_config.visible_rect(),
-          input_video_config.natural_size(), input_video_config.extra_data(),
-          Unencrypted());
+      video_config_ = demuxer_stream_->video_decoder_config();
+      if (video_config_.is_encrypted())
+        video_config_.SetIsEncrypted(false);
       break;
     }
 

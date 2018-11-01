@@ -32,6 +32,10 @@
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/web_state/web_state.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace autofill {
 
 AutofillClientIOS::AutofillClientIOS(
@@ -74,6 +78,10 @@ IdentityProvider* AutofillClientIOS::GetIdentityProvider() {
 
 rappor::RapporServiceImpl* AutofillClientIOS::GetRapporServiceImpl() {
   return GetApplicationContext()->GetRapporServiceImpl();
+}
+
+ukm::UkmService* AutofillClientIOS::GetUkmService() {
+  return GetApplicationContext()->GetUkmService();
 }
 
 void AutofillClientIOS::ShowAutofillSettings() {

@@ -1,13 +1,15 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#include "chrome/utility/importer/importer.h"
-#include "chrome/common/importer/importer_data_types.h"
-#include "base/values.h"
-#include "components/autofill/core/common/password_form.h"
-#include "chrome/common/importer/importer_type.h"
+#ifndef IMPORTER_CHROMIUM_PROFILE_IMPORTER_H_
+#define IMPORTER_CHROMIUM_PROFILE_IMPORTER_H_
 
-#ifndef  VIVALDI_IMPORTER_CHROME_IMPORTER_H_
-#define VIVALDI_IMPORTER_CHROME_IMPORTER_H_
+#include <vector>
+
+#include "base/values.h"
+#include "chrome/common/importer/importer_data_types.h"
+#include "chrome/common/importer/importer_type.h"
+#include "chrome/utility/importer/importer.h"
+#include "components/autofill/core/common/password_form.h"
 
 using autofill::PasswordForm;
 
@@ -19,20 +21,19 @@ struct ChromiumProfile {
 
 class ImportedNoteEntry;
 
-class ChromiumProfileImporter
-{
+class ChromiumProfileImporter {
  public:
-   ChromiumProfileImporter();
-   ~ChromiumProfileImporter();
-   void DetectChromiumProfiles(std::vector<importer::SourceProfile>* profiles);
+  ChromiumProfileImporter();
+  ~ChromiumProfileImporter();
+  void DetectChromiumProfiles(std::vector<importer::SourceProfile>* profiles);
 
  private:
-   ChromiumProfile GetChromeProfile(importer::ImporterType importerType);
-   void ReadProfiles(std::vector<importer::ChromeProfileInfo>
-     *cp, base::FilePath profileDirectory);
-   std::vector<ChromiumProfile> chromeProfiles;
+  ChromiumProfile GetChromeProfile(importer::ImporterType importerType);
+  void ReadProfiles(std::vector<importer::ChromeProfileInfo>* cp,
+                    base::FilePath profileDirectory);
+  std::vector<ChromiumProfile> chromeProfiles;
 
-   DISALLOW_COPY_AND_ASSIGN(ChromiumProfileImporter);
+  DISALLOW_COPY_AND_ASSIGN(ChromiumProfileImporter);
 };
 
-#endif // VIVALDI_IMPORTER_CHROME_IMPORTER_H_
+#endif  // IMPORTER_CHROMIUM_PROFILE_IMPORTER_H_

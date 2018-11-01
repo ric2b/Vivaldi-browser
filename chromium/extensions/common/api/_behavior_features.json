@@ -5,7 +5,7 @@
 // This features file defines switches used to control Extension behaviour,
 // typically whitelist configuration.
 // See chrome/common/extensions/api/_features.md to understand this file, as
-// well as feature.h, simple_feature.h, and base_feature_provider.h.
+// well as feature.h, simple_feature.h, and feature_provider.h.
 
 {
   "whitelisted_for_incognito": {
@@ -25,14 +25,7 @@
     "component_extensions_auto_granted": false,
     "extension_types": "all",
     "whitelist": [
-      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/505879
-      "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",  // http://crbug.com/505879
-      "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",  // http://crbug.com/505879
-      "16CA7A47AAE4BE49B1E75A6B960C3875E945B264",  // http://crbug.com/505879
-      "F155646B5D1CA545F7E1E4E20D573DFDD44C2540",  // http://crbug.com/505879
-      "B11A93E7E5B541F8010245EBDE2C74647D6C14B9",  // http://crbug.com/505879
-      "FA01E0B81978950F2BC5A50512FD769725F57510"   // http://crbug.com/505879
+      "226CF815E39A363090A1E547D53063472B8279FA"   // Media Router Stable
     ]
   },
   "zoom_without_bubble": {
@@ -87,7 +80,23 @@
       "D519188F86D9ACCEE0412007B227D9936EB9676B",  // Gaia auth extension
       "40FF1103292F40C34066E023B8BE8CAE18306EAE",  // Chromeos help
       "3C654B3B6682CA194E75AD044CEDE927675DDEE8",  // Easy unlock
+      "CBCC42ABED43A4B58FE3810E62AFFA010EB0349F",  // PDF Viewer
       "2FCBCE08B34CCA1728A85F1EFBD9A34DD2558B2E"   // ChromeVox
     ]
-  }]
+  }],
+  "allow_deprecated_audio_api": {
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "whitelist": [
+      "8C3741E3AF0B93B6E8E0DDD499BB0B74839EA578",
+      "E703483CEF33DEC18B4B6DD84B5C776FB9182BDB",
+      "A3BC37E2148AC4E99BE4B16AF9D42DD1E592BBBE",  // http://crbug.com/335729
+      "1C93BD3CF875F4A73C0B2A163BB8FBDA8B8B3D80",  // http://crbug.com/335729
+      "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/335729
+      "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/407693
+      "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/407693
+      "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/407693
+      "81986D4F846CEDDDB962643FA501D1780DD441BB"   // http://crbug.com/407693
+    ]
+  }
 }

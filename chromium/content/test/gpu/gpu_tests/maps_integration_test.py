@@ -4,12 +4,13 @@
 
 import json
 import os
+import sys
 
+from gpu_tests import gpu_integration_test
 from gpu_tests import cloud_storage_integration_test_base
 from gpu_tests import maps_expectations
 from gpu_tests import path_util
 
-import py_utils
 from py_utils import cloud_storage
 
 data_path = os.path.join(path_util.GetChromiumSrcDir(),
@@ -59,16 +60,16 @@ class MapsIntegrationTest(
     return maps_expectations.MapsExpectations()
 
   @classmethod
-  def setUpClass(cls):
-    super(cls, MapsIntegrationTest).setUpClass()
+  def SetUpProcess(cls):
+    super(cls, MapsIntegrationTest).SetUpProcess()
     cls.SetBrowserOptions(cls._finder_options)
     cls.StartWPRServer(os.path.join(data_path, 'maps_004.wpr.updated'),
                        cloud_storage.PUBLIC_BUCKET)
     cls.StartBrowser()
 
   @classmethod
-  def tearDownClass(cls):
-    super(cls, MapsIntegrationTest).tearDownClass()
+  def TearDownProcess(cls):
+    super(cls, MapsIntegrationTest).TearDownProcess()
     cls.StopWPRServer()
 
   @classmethod
@@ -85,27 +86,22 @@ class MapsIntegrationTest(
     return json_contents
 
   def _SpinWaitOnRAF(self, iterations, timeout=60):
-    tab = self.tab
-    waitScript = r"""
-      window.__spinWaitOnRAFDone = false;
-      var iterationsLeft = %d;
+    self.tab.ExecuteJavaScript("""
+        window.__spinWaitOnRAFDone = false;
+        var iterationsLeft = {{ iterations }};
 
-      function spin() {
-        iterationsLeft--;
-        if (iterationsLeft == 0) {
-          window.__spinWaitOnRAFDone = true;
-          return;
+        function spin() {
+          iterationsLeft--;
+          if (iterationsLeft == 0) {
+            window.__spinWaitOnRAFDone = true;
+            return;
+          }
+          window.requestAnimationFrame(spin);
         }
         window.requestAnimationFrame(spin);
-      }
-      window.requestAnimationFrame(spin);
-    """ % iterations
-
-    def IsWaitComplete():
-      return tab.EvaluateJavaScript('window.__spinWaitOnRAFDone')
-
-    tab.ExecuteJavaScript(waitScript)
-    py_utils.WaitFor(IsWaitComplete, timeout)
+        """, iterations=iterations)
+    self.tab.WaitForJavaScriptCondition(
+        'window.__spinWaitOnRAFDone', timeout=timeout)
 
   def RunActualGpuTest(self, url, *args):
     tab = self.tab
@@ -113,7 +109,7 @@ class MapsIntegrationTest(
     action_runner = tab.action_runner
     action_runner.Navigate(url)
     action_runner.WaitForJavaScriptCondition(
-        'window.testDone', timeout_in_seconds=180)
+        'window.testDone', timeout=180)
 
     # TODO(kbr): This should not be necessary, but it's not clear if the test
     # is failing on the bots in its absence. Remove once we can verify that
@@ -138,3 +134,7 @@ class MapsIntegrationTest(
     # line.
     expected = self._ReadPixelExpectations(pixel_expectations_file)
     self._ValidateScreenshotSamples(tab, url, screenshot, expected, dpr)
+
+def load_tests(loader, tests, pattern):
+  del loader, tests, pattern  # Unused.
+  return gpu_integration_test.LoadAllTestsInModule(sys.modules[__name__])

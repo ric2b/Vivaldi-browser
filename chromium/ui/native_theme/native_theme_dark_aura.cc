@@ -130,7 +130,6 @@ SkColor NativeThemeDarkAura::GetSystemColor(ColorId color_id) const {
     case kColorId_TreeSelectedTextUnfocused:
     case kColorId_TreeSelectionBackgroundFocused:
     case kColorId_TreeSelectionBackgroundUnfocused:
-    case kColorId_TreeArrow:
     case kColorId_TableBackground:
     case kColorId_TableText:
     case kColorId_TableSelectedText:
@@ -138,6 +137,9 @@ SkColor NativeThemeDarkAura::GetSystemColor(ColorId color_id) const {
     case kColorId_TableSelectionBackgroundFocused:
     case kColorId_TableSelectionBackgroundUnfocused:
     case kColorId_TableGroupingIndicatorColor:
+    case kColorId_TableHeaderText:
+    case kColorId_TableHeaderBackground:
+    case kColorId_TableHeaderSeparator:
     case kColorId_ResultsTablePositiveText:
     case kColorId_ResultsTablePositiveHoveredText:
     case kColorId_ResultsTablePositiveSelectedText:

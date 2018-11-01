@@ -26,7 +26,6 @@
 #include "base/value_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/api/file_handlers/app_file_handler_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/path_util.h"
@@ -43,6 +42,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/api/file_handlers/app_file_handler_util.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/extension_prefs.h"
@@ -629,8 +629,7 @@ ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   bool is_writable = policy->CanReadWriteFileSystem(renderer_id,
                                                     filesystem_id);
 
-  return RespondNow(
-      OneArgument(base::MakeUnique<base::FundamentalValue>(is_writable)));
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(is_writable)));
 }
 
 // Handles showing a dialog to the user to ask for the filename for a file to
@@ -1195,7 +1194,7 @@ void FileSystemRetainEntryFunction::RetainFileEntry(
 ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
   std::string entry_id;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &entry_id));
-  return RespondNow(OneArgument(base::MakeUnique<base::FundamentalValue>(
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
       SavedFilesService::Get(Profile::FromBrowserContext(browser_context()))
           ->IsRegistered(extension_->id(), entry_id))));
 }

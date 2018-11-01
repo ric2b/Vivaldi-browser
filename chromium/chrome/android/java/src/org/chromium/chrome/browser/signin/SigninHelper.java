@@ -135,8 +135,7 @@ public class SigninHelper {
 
         Account syncAccount = mChromeSigninController.getSignedInUser();
         if (syncAccount == null) {
-            ChromePreferenceManager chromePreferenceManager =
-                    ChromePreferenceManager.getInstance(mContext);
+            ChromePreferenceManager chromePreferenceManager = ChromePreferenceManager.getInstance();
             if (chromePreferenceManager.getShowSigninPromo()) return;
 
             // Never shows a signin promo if user has manually disconnected.
@@ -175,11 +174,6 @@ public class SigninHelper {
                 protected void onPostExecute(Void result) {
                     String renamedAccount = getNewSignedInAccountName(mContext);
                     if (renamedAccount == null) {
-                        // SigninManager.signOut() uses the same code path as a user-triggered
-                        // signout, which can be prohibited in some cases (e.g. child accounts).
-                        // Here we have to sign out though to ensure account consistency,
-                        // so override the flag.
-                        mSigninManager.prohibitSignout(false);
                         mSigninManager.signOut();
                     } else {
                         validateAccountSettings(true);

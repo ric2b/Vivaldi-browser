@@ -13,22 +13,37 @@ a {
   font: 13px Roboto, sans-serif;
 }
 
+#crosEulaFrame {
+  border: 1px solid var(--google-blue-500);
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .13);
+}
+
 #installationSettings {
-  padding-top: 31px; /* = 44 - font size */
+  -webkit-margin-start: 20px;
+  margin-top: 31px; /* = 44 - font size */
 }
 
 #logging {
+  -webkit-margin-start: 20px;
   color: rgba(0, 0, 0, 0.54);
-  padding-top: 21px; /* = 36 - font size */
+  margin-bottom: 20px;
+  margin-top: 23px; /* = 36 - font size */
 }
 
 #usageStats {
-  --paper-checkbox-size: 20px;
-  --paper-checkbox-checked-color: rgb(66, 133, 244); /* #4285f4 */
-  /* End padding must be greater than --paper-checkbox-label-spacing */
-  -webkit-padding-end: 16px;
-  max-width: 550px;
-  padding-bottom: 20px;
+  --paper-checkbox-size: 16px;
+  --paper-checkbox-checked-color: var(--google-blue-500);
+  size: 16px;
+}
+
+#usageStatsLabelContainer {
+  -webkit-margin-start: 16px;
+}
+
+#usageStatsLabelContainer label {
+  color: rgba(0, 0, 0, .54);
+  line-height: 20px;
 }
 
 .bottom-buttons {

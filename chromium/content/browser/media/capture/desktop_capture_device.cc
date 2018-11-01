@@ -64,7 +64,7 @@ bool IsFrameUnpackedOrInverted(webrtc::DesktopFrame* frame) {
 
 #if defined(OS_WIN)
 const base::Feature kDirectXCapturer{"DirectXCapturer",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
@@ -186,6 +186,8 @@ void DesktopCaptureDevice::Core::AllocateAndStart(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
 
   desktop_capturer_->Start(this);
+  // Assume it will be always started successfully for now.
+  client_->OnStarted();
 
   CaptureFrameAndScheduleNext();
 }

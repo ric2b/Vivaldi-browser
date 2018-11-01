@@ -57,8 +57,6 @@ class SelectionModifier {
                                  unsigned verticalDistance,
                                  VerticalDirection);
 
-  DECLARE_VIRTUAL_TRACE();
-
  private:
   // TODO(yosin): We should move |EPositionType| to "SelectionModifier.cpp",
   // it is only used for implementing |modify()|.
@@ -82,7 +80,6 @@ class SelectionModifier {
   VisiblePosition modifyMovingLeft(TextGranularity);
   VisiblePosition modifyMovingBackward(TextGranularity);
   VisiblePosition nextWordPositionForPlatform(const VisiblePosition&);
-  void willBeModified(EAlteration, SelectionDirection);
 
   Member<LocalFrame> m_frame;
   VisibleSelection m_selection;

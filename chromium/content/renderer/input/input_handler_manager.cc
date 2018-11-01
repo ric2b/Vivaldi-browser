@@ -69,19 +69,19 @@ InputHandlerManager::~InputHandlerManager() {
 void InputHandlerManager::AddInputHandler(
     int routing_id,
     const base::WeakPtr<cc::InputHandler>& input_handler,
-    const base::WeakPtr<RenderViewImpl>& render_view_impl,
+    const base::WeakPtr<RenderWidget>& render_widget,
     bool enable_smooth_scrolling) {
   if (task_runner_->BelongsToCurrentThread()) {
     AddInputHandlerOnCompositorThread(
         routing_id, base::ThreadTaskRunnerHandle::Get(), input_handler,
-        render_view_impl, enable_smooth_scrolling);
+        render_widget, enable_smooth_scrolling);
   } else {
     task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&InputHandlerManager::AddInputHandlerOnCompositorThread,
                    base::Unretained(this), routing_id,
                    base::ThreadTaskRunnerHandle::Get(), input_handler,
-                   render_view_impl, enable_smooth_scrolling));
+                   render_widget, enable_smooth_scrolling));
   }
 }
 
@@ -89,7 +89,7 @@ void InputHandlerManager::AddInputHandlerOnCompositorThread(
     int routing_id,
     const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
     const base::WeakPtr<cc::InputHandler>& input_handler,
-    const base::WeakPtr<RenderViewImpl>& render_view_impl,
+    const base::WeakPtr<RenderWidget>& render_widget,
     bool enable_smooth_scrolling) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -106,7 +106,7 @@ void InputHandlerManager::AddInputHandlerOnCompositorThread(
       "result", "AddingRoute");
   std::unique_ptr<InputHandlerWrapper> wrapper(
       new InputHandlerWrapper(this, routing_id, main_task_runner, input_handler,
-                              render_view_impl, enable_smooth_scrolling));
+                              render_widget, enable_smooth_scrolling));
   client_->RegisterRoutingID(routing_id);
   if (synchronous_handler_proxy_client_) {
     synchronous_handler_proxy_client_->DidAddSynchronousHandlerProxy(
@@ -196,13 +196,15 @@ void InputHandlerManager::NotifyInputEventHandledOnMainThread(
   client_->NotifyInputEventHandled(routing_id, type, result, ack_result);
 }
 
-void InputHandlerManager::ProcessRafAlignedInputOnMainThread(int routing_id) {
-  client_->ProcessRafAlignedInput(routing_id);
+void InputHandlerManager::ProcessRafAlignedInputOnMainThread(
+    int routing_id,
+    base::TimeTicks frame_time) {
+  client_->ProcessRafAlignedInput(routing_id, frame_time);
 }
 
 void InputHandlerManager::HandleInputEvent(
     int routing_id,
-    blink::WebScopedInputEvent input_event,
+    ui::WebScopedInputEvent input_event,
     const ui::LatencyInfo& latency_info,
     const InputEventAckStateCallback& callback) {
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -231,7 +233,7 @@ void InputHandlerManager::HandleInputEvent(
 void InputHandlerManager::DidHandleInputEventAndOverscroll(
     const InputEventAckStateCallback& callback,
     InputHandlerProxy::EventDisposition event_disposition,
-    blink::WebScopedInputEvent input_event,
+    ui::WebScopedInputEvent input_event,
     const ui::LatencyInfo& latency_info,
     std::unique_ptr<ui::DidOverscrollParams> overscroll_params) {
   InputEventAckState input_event_ack_state =
@@ -278,7 +280,7 @@ void InputHandlerManager::NeedsMainFrame(int routing_id) {
 
 void InputHandlerManager::DispatchNonBlockingEventToMainThread(
     int routing_id,
-    blink::WebScopedInputEvent event,
+    ui::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   client_->DispatchNonBlockingEventToMainThread(routing_id, std::move(event),

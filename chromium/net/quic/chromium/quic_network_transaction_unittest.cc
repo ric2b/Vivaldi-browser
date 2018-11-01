@@ -507,6 +507,7 @@ class QuicNetworkTransactionTest
     params_.http_auth_handler_factory = auth_handler_factory_.get();
     params_.http_server_properties = &http_server_properties_;
     params_.quic_supported_versions = SupportedVersions(version_);
+    params_.net_log = net_log_.bound().net_log();
     for (const char* host :
          {kDefaultServerHostName, "www.example.org", "news.example.org",
           "bar.example.org", "foo.example.org", "invalid.example.org",
@@ -990,9 +991,8 @@ TEST_P(QuicNetworkTransactionTest, QuicProxyWithCert) {
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
   ASSERT_TRUE(cert.get());
   // This certificate is valid for the proxy, but not for the origin.
-  bool common_name_fallback_used;
-  EXPECT_TRUE(cert->VerifyNameMatch(proxy_host, &common_name_fallback_used));
-  EXPECT_FALSE(cert->VerifyNameMatch(origin_host, &common_name_fallback_used));
+  EXPECT_TRUE(cert->VerifyNameMatch(proxy_host, false));
+  EXPECT_FALSE(cert->VerifyNameMatch(origin_host, false));
   ProofVerifyDetailsChromium verify_details;
   verify_details.cert_verify_result.verified_cert = cert;
   crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details);
@@ -1017,10 +1017,9 @@ TEST_P(QuicNetworkTransactionTest, AlternativeServicesDifferentHost) {
   ASSERT_TRUE(cert.get());
   // TODO(rch): the connection should be "to" the origin, so if the cert is
   // valid for the origin but not the alternative, that should work too.
-  bool common_name_fallback_used;
-  EXPECT_TRUE(cert->VerifyNameMatch(origin.host(), &common_name_fallback_used));
+  EXPECT_TRUE(cert->VerifyNameMatch(origin.host(), false));
   EXPECT_TRUE(
-      cert->VerifyNameMatch(alternative.host(), &common_name_fallback_used));
+      cert->VerifyNameMatch(alternative.host(), false));
   ProofVerifyDetailsChromium verify_details;
   verify_details.cert_verify_result.verified_cert = cert;
   crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details);
@@ -2190,7 +2189,7 @@ TEST_P(QuicNetworkTransactionTest,
       ConstructServerRstPacket(1, false, 99, QUIC_STREAM_LAST_ERROR));
   std::string quic_error_details = "Data for nonexistent stream";
   mock_quic_data.AddWrite(ConstructClientAckAndConnectionClosePacket(
-      3, QuicTime::Delta::Infinite(), 0, 1, QUIC_INVALID_STREAM_ID,
+      3, QuicTime::Delta::Zero(), 1, 1, QUIC_INVALID_STREAM_ID,
       quic_error_details));
   mock_quic_data.AddSocketDataToFactory(&socket_factory_);
 
@@ -2498,8 +2497,7 @@ TEST_P(QuicNetworkTransactionTest, DISABLED_HangingZeroRttFallback) {
 TEST_P(QuicNetworkTransactionTest, BrokenAlternateProtocolOnConnectFailure) {
   // Alternate-protocol job will fail before creating a QUIC session.
   StaticSocketDataProvider quic_data(nullptr, 0, nullptr, 0);
-  quic_data.set_connect_data(
-      MockConnect(SYNCHRONOUS, ERR_INTERNET_DISCONNECTED));
+  quic_data.set_connect_data(MockConnect(SYNCHRONOUS, ERR_CONNECTION_FAILED));
   socket_factory_.AddSocketDataProvider(&quic_data);
 
   // Main job which will succeed even though the alternate job fails.
@@ -2664,7 +2662,10 @@ TEST_P(QuicNetworkTransactionTest, SecureResourceOverSecureQuic) {
       test_socket_performance_watcher_factory_.rtt_notification_received());
 }
 
-TEST_P(QuicNetworkTransactionTest, QuicUploadToAlternativeProxyServer) {
+// TODO(zhongyi): disabled this broken test as it was not testing the correct
+// code path. Need a fix to re-enable this test, tracking at crbug.com/704596.
+TEST_P(QuicNetworkTransactionTest,
+       DISABLED_QuicUploadToAlternativeProxyServer) {
   base::HistogramTester histogram_tester;
   proxy_service_ =
       ProxyService::CreateFixedFromPacResult("HTTPS mail.example.org:443");
@@ -2869,7 +2870,7 @@ TEST_P(QuicNetworkTransactionTest, QuicForceHolBlocking) {
       GetRequestHeaders("POST", "https", "/"), &offset));
 
   std::unique_ptr<QuicEncryptedPacket> packet;
-  if (version_ > QUIC_VERSION_35) {
+  if (version_ == QUIC_VERSION_36) {
     packet = ConstructClientForceHolDataPacket(3, kClientDataStreamId1, true,
                                                true, &offset, "1");
   } else {
@@ -3326,9 +3327,8 @@ TEST_P(QuicNetworkTransactionWithDestinationTest, InvalidCertificate) {
 
   scoped_refptr<X509Certificate> cert(
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
-  bool unused;
-  ASSERT_FALSE(cert->VerifyNameMatch(origin1_, &unused));
-  ASSERT_TRUE(cert->VerifyNameMatch(origin2_, &unused));
+  ASSERT_FALSE(cert->VerifyNameMatch(origin1_, false));
+  ASSERT_TRUE(cert->VerifyNameMatch(origin2_, false));
 
   ProofVerifyDetailsChromium verify_details;
   verify_details.cert_verify_result.verified_cert = cert;
@@ -3366,10 +3366,9 @@ TEST_P(QuicNetworkTransactionWithDestinationTest, PoolIfCertificateValid) {
 
   scoped_refptr<X509Certificate> cert(
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
-  bool unused;
-  ASSERT_TRUE(cert->VerifyNameMatch(origin1_, &unused));
-  ASSERT_TRUE(cert->VerifyNameMatch(origin2_, &unused));
-  ASSERT_FALSE(cert->VerifyNameMatch(kDifferentHostname, &unused));
+  ASSERT_TRUE(cert->VerifyNameMatch(origin1_, false));
+  ASSERT_TRUE(cert->VerifyNameMatch(origin2_, false));
+  ASSERT_FALSE(cert->VerifyNameMatch(kDifferentHostname, false));
 
   ProofVerifyDetailsChromium verify_details;
   verify_details.cert_verify_result.verified_cert = cert;
@@ -3436,15 +3435,14 @@ TEST_P(QuicNetworkTransactionWithDestinationTest,
 
   scoped_refptr<X509Certificate> cert1(
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
-  bool unused;
-  ASSERT_TRUE(cert1->VerifyNameMatch(origin1_, &unused));
-  ASSERT_FALSE(cert1->VerifyNameMatch(origin2_, &unused));
-  ASSERT_FALSE(cert1->VerifyNameMatch(kDifferentHostname, &unused));
+  ASSERT_TRUE(cert1->VerifyNameMatch(origin1_, false));
+  ASSERT_FALSE(cert1->VerifyNameMatch(origin2_, false));
+  ASSERT_FALSE(cert1->VerifyNameMatch(kDifferentHostname, false));
 
   scoped_refptr<X509Certificate> cert2(
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem"));
-  ASSERT_TRUE(cert2->VerifyNameMatch(origin2_, &unused));
-  ASSERT_FALSE(cert2->VerifyNameMatch(kDifferentHostname, &unused));
+  ASSERT_TRUE(cert2->VerifyNameMatch(origin2_, false));
+  ASSERT_FALSE(cert2->VerifyNameMatch(kDifferentHostname, false));
 
   ProofVerifyDetailsChromium verify_details1;
   verify_details1.cert_verify_result.verified_cert = cert1;

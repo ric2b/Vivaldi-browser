@@ -24,19 +24,20 @@
 
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
 StyleRuleImport* StyleRuleImport::create(const String& href,
-                                         MediaQuerySet* media) {
+                                         RefPtr<MediaQuerySet> media) {
   return new StyleRuleImport(href, media);
 }
 
-StyleRuleImport::StyleRuleImport(const String& href, MediaQuerySet* media)
+StyleRuleImport::StyleRuleImport(const String& href,
+                                 RefPtr<MediaQuerySet> media)
     : StyleRuleBase(Import),
       m_parentStyleSheet(nullptr),
       m_styleSheetClient(new ImportedStyleSheetClient(this)),
@@ -58,7 +59,6 @@ void StyleRuleImport::dispose() {
 DEFINE_TRACE_AFTER_DISPATCH(StyleRuleImport) {
   visitor->trace(m_styleSheetClient);
   visitor->trace(m_parentStyleSheet);
-  visitor->trace(m_mediaQueries);
   visitor->trace(m_styleSheet);
   visitor->trace(m_resource);
   StyleRuleBase::traceAfterDispatch(visitor);

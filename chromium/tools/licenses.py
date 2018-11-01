@@ -18,11 +18,18 @@ Commands:
 import argparse
 import cgi
 import os
+import subprocess
 import sys
+
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),
                                 "..", "..", "scripts", "licenses"))
 import licenses_vivaldi
+
+# TODO(agrieve): Move build_utils.WriteDepFile into a non-android directory.
+_REPOSITORY_ROOT = os.path.dirname(os.path.dirname(__file__))
+sys.path.append(os.path.join(_REPOSITORY_ROOT, 'build/android/gyp/util'))
+import build_utils
 
 # Paths from the root of the tree to directories to skip.
 PRUNE_PATHS = set([
@@ -50,7 +57,6 @@ PRUNE_PATHS = set([
     os.path.join('third_party','gnu_binutils'),
     os.path.join('third_party','gold'),
     os.path.join('third_party','gperf'),
-    os.path.join('third_party','kasko'),
     os.path.join('third_party','lighttpd'),
     os.path.join('third_party','llvm'),
     os.path.join('third_party','llvm-build'),
@@ -244,12 +250,6 @@ SPECIAL_CASES = {
         "License Android Compatible": "yes",
         "License File": "/third_party/swiftshader/LICENSE.txt",
     },
-    os.path.join('third_party', 'opera'): {
-        "Name": "Opera",
-        "URL": "http://www.opera.com/",
-        "License": "BSD",
-        "License File": "/third_party/opera/LICENSE.txt",
-    },
 }
 SPECIAL_CASES.update(licenses_vivaldi.SPECIAL_CASES)
 
@@ -280,7 +280,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'bspatch'),
     os.path.join('third_party', 'cacheinvalidation'),
     os.path.join('third_party', 'cld'),
-    os.path.join('third_party', 'codesighs'),
     os.path.join('third_party', 'flot'),
     os.path.join('third_party', 'gtk+'),
     os.path.join('third_party', 'iaccessible2'),
@@ -466,6 +465,20 @@ def FindThirdPartyDirsWithFiles(root):
     return FilterDirsWithFiles(third_party_dirs, root)
 
 
+def FindThirdPartyDeps(gn_out_dir, gn_target):
+    if not gn_out_dir:
+        raise RuntimeError("--gn-out-dir is required if --gn-target is used.")
+
+    gn_deps = subprocess.check_output(["gn", "desc", gn_out_dir, gn_target,
+                                       "deps", "--as=buildfile", "--all"])
+    third_party_deps = set()
+    for build_dep in gn_deps.split():
+        if ("third_party" in build_dep and
+                os.path.basename(build_dep) == "BUILD.gn"):
+            third_party_deps.add(os.path.dirname(build_dep))
+    return third_party_deps
+
+
 def ScanThirdPartyDirs(root=None):
     """Scan a list of directories and report on any problems we find."""
     if root is None:
@@ -487,7 +500,8 @@ def ScanThirdPartyDirs(root=None):
 
 
 def GenerateCredits(
-        file_template_file, entry_template_file, output_file, target_os):
+        file_template_file, entry_template_file, output_file, target_os,
+        gn_out_dir, gn_target, depfile=None):
     """Generate about:credits."""
 
     def EvaluateTemplate(template, env, escape=True):
@@ -499,29 +513,41 @@ def GenerateCredits(
             template = template.replace('{{%s}}' % key, val)
         return template
 
-    root = os.path.join(os.path.dirname(__file__), '..')
-    third_party_dirs = FindThirdPartyDirs(PRUNE_PATHS, root)
+    if gn_target:
+        third_party_dirs = FindThirdPartyDeps(gn_out_dir, gn_target)
+
+        # Sanity-check to raise a build error if invalid gn_... settings are
+        # somehow passed to this script.
+        if not third_party_dirs:
+            raise RuntimeError("No deps found.")
+    else:
+        third_party_dirs = FindThirdPartyDirs(PRUNE_PATHS, _REPOSITORY_ROOT)
 
     if not file_template_file:
-        file_template_file = os.path.join(root, 'components', 'about_ui',
-                                          'resources', 'about_credits.tmpl')
+        file_template_file = os.path.join(_REPOSITORY_ROOT, 'components',
+                                          'about_ui', 'resources',
+                                          'about_credits.tmpl')
     if not entry_template_file:
-        entry_template_file = os.path.join(root, 'components', 'about_ui',
-                                           'resources',
+        entry_template_file = os.path.join(_REPOSITORY_ROOT, 'components',
+                                           'about_ui', 'resources',
                                            'about_credits_entry.tmpl')
 
     entry_template = open(entry_template_file).read()
     entries = []
     for path in third_party_dirs:
         try:
-            metadata = ParseDir(path, root)
+            metadata = ParseDir(path, _REPOSITORY_ROOT)
         except LicenseError:
             # TODO(phajdan.jr): Convert to fatal error (http://crbug.com/39240).
             continue
         if metadata['License File'] == NOT_SHIPPED:
             continue
-        if target_os == 'ios':
-            # Skip over files that are known not to be used on iOS.
+        if target_os == 'ios' and not gn_target:
+            # Skip over files that are known not to be used on iOS. But
+            # skipping is unnecessary if GN was used to query the actual
+            # dependencies.
+            # TODO(lambroslambrou): Remove this step once the iOS build is
+            # updated to provide --gn-target to this script.
             if path in KNOWN_NON_IOS_LIBRARIES:
                 continue
         env = {
@@ -532,6 +558,7 @@ def GenerateCredits(
         entry = {
             'name': metadata['Name'],
             'content': EvaluateTemplate(entry_template, env),
+            'license_file': metadata['License File'],
         }
         entries.append(entry)
 
@@ -552,6 +579,19 @@ def GenerateCredits(
     else:
       print template_contents
 
+    if depfile:
+      assert output_file
+      # Add in build.ninja so that the target will be considered dirty whenever
+      # gn gen is run. Otherwise, it will fail to notice new files being added.
+      # This is still no perfect, as it will fail if no build files are changed,
+      # but a new README.chromium / LICENSE is added. This shouldn't happen in
+      # practice however.
+      license_file_list = (entry['license_file'] for entry in entries if entry['license_file'])
+      license_file_list = (os.path.relpath(p) for p in license_file_list)
+      license_file_list = sorted(set(license_file_list))
+      build_utils.WriteDepfile(depfile, output_file,
+                               license_file_list + ['build.ninja'])
+
     return True
 
 
@@ -563,8 +603,13 @@ def main():
                         help='Template HTML to use for each license.')
     parser.add_argument('--target-os',
                         help='OS that this build is targeting.')
+    parser.add_argument('--gn-out-dir',
+                        help='GN output directory for scanning dependencies.')
+    parser.add_argument('--gn-target',
+                        help='GN target to scan for dependencies.')
     parser.add_argument('command', choices=['help', 'scan', 'credits'])
     parser.add_argument('output_file', nargs='?')
+    build_utils.AddDepfileOption(parser)
     args = parser.parse_args()
 
     if args.command == 'scan':
@@ -572,7 +617,8 @@ def main():
             return 1
     elif args.command == 'credits':
         if not GenerateCredits(args.file_template, args.entry_template,
-                               args.output_file, args.target_os):
+                               args.output_file, args.target_os,
+                               args.gn_out_dir, args.gn_target, args.depfile):
             return 1
     else:
         print __doc__

@@ -15,6 +15,7 @@
 #include <string>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -23,6 +24,7 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -104,10 +106,10 @@ BluetoothDeviceClient::ServiceRecordList CreateFakeServiceRecords() {
   std::unique_ptr<BluetoothServiceRecordBlueZ> record1 =
       base::MakeUnique<BluetoothServiceRecordBlueZ>();
   // ID 0 = handle.
-  record1->AddRecordEntry(0x0, BluetoothServiceAttributeValueBlueZ(
-                                   BluetoothServiceAttributeValueBlueZ::UINT, 4,
-                                   base::MakeUnique<base::FundamentalValue>(
-                                       static_cast<int32_t>(0x1337))));
+  record1->AddRecordEntry(
+      0x0, BluetoothServiceAttributeValueBlueZ(
+               BluetoothServiceAttributeValueBlueZ::UINT, 4,
+               base::MakeUnique<base::Value>(static_cast<int32_t>(0x1337))));
   // ID 1 = service class id list.
   std::unique_ptr<BluetoothServiceAttributeValueBlueZ::Sequence> class_id_list =
       base::MakeUnique<BluetoothServiceAttributeValueBlueZ::Sequence>();
@@ -120,10 +122,11 @@ BluetoothDeviceClient::ServiceRecordList CreateFakeServiceRecords() {
   std::unique_ptr<BluetoothServiceRecordBlueZ> record2 =
       base::MakeUnique<BluetoothServiceRecordBlueZ>();
   // ID 0 = handle.
-  record2->AddRecordEntry(0x0, BluetoothServiceAttributeValueBlueZ(
-                                   BluetoothServiceAttributeValueBlueZ::UINT, 4,
-                                   base::MakeUnique<base::FundamentalValue>(
-                                       static_cast<int32_t>(0xffffffff))));
+  record2->AddRecordEntry(
+      0x0,
+      BluetoothServiceAttributeValueBlueZ(
+          BluetoothServiceAttributeValueBlueZ::UINT, 4,
+          base::MakeUnique<base::Value>(static_cast<int32_t>(0xffffffff))));
   records.emplace_back(*record2);
 
   return records;
@@ -1775,9 +1778,12 @@ void FakeBluetoothDeviceClient::CreateTestDevice(
     device::BluetoothTransport type) {
   // Create a random device path.
   dbus::ObjectPath device_path;
+  std::string id;
   do {
-    device_path = dbus::ObjectPath(adapter_path.value() + "/dev" +
-                                   base::RandBytesAsString(10));
+    // Construct an id that is valid according to the DBUS specification.
+    base::Base64Encode(base::RandBytesAsString(10), &id);
+    base::RemoveChars(id, "+/=", &id);
+    device_path = dbus::ObjectPath(adapter_path.value() + "/dev" + id);
   } while (std::find(device_list_.begin(), device_list_.end(), device_path) !=
            device_list_.end());
 
@@ -1794,6 +1800,8 @@ void FakeBluetoothDeviceClient::CreateTestDevice(
   properties->alias.ReplaceValue(alias);
 
   properties->uuids.ReplaceValue(service_uuids);
+  properties->bluetooth_class.ReplaceValue(
+      0x1F00u);  // Unspecified Device Class
 
   switch (type) {
     case device::BLUETOOTH_TRANSPORT_CLASSIC:

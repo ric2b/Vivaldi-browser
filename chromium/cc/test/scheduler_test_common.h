@@ -144,8 +144,14 @@ class TestScheduler : public Scheduler {
     return begin_frame_source_ && observing_begin_frame_source_;
   }
 
+  bool BeginFrameNeeded() const { return state_machine_.BeginFrameNeeded(); }
+
   int current_frame_number() const {
     return state_machine_.current_frame_number();
+  }
+
+  bool needs_impl_side_invalidation() const {
+    return state_machine_.needs_impl_side_invalidation();
   }
 
   ~TestScheduler() override;

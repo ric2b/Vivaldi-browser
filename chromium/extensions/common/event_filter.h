@@ -48,12 +48,9 @@ class EventFilter {
                                  const EventFilteringInfo& event_info,
                                  int routing_id);
 
-  int GetMatcherCountForEvent(const std::string& event_name);
+  int GetMatcherCountForEventForTesting(const std::string& event_name);
 
-  // For testing.
-  bool IsURLMatcherEmpty() const {
-    return url_matcher_.IsEmpty();
-  }
+  bool IsURLMatcherEmptyForTesting() const { return url_matcher_.IsEmpty(); }
 
  private:
   class EventMatcherEntry {
@@ -94,10 +91,8 @@ class EventFilter {
   // Maps from event name to the map of matchers that are registered for it.
   using EventMatcherMultiMap = std::map<std::string, EventMatcherMap>;
 
-  // Adds the list of URL filters in |matcher| to the URL matcher, having
-  // matches for those URLs map to |id|.
+  // Adds the list of URL filters in |matcher| to the URL matcher.
   bool CreateConditionSets(
-      MatcherID id,
       EventMatcher* matcher,
       url_matcher::URLMatcherConditionSet::Vector* condition_sets);
 

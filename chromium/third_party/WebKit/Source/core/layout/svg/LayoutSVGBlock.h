@@ -46,9 +46,9 @@ class LayoutSVGBlock : public LayoutBlockFlow {
 
  protected:
   void willBeDestroyed() override;
-  bool mapToVisualRectInAncestorSpace(
+  bool mapToVisualRectInAncestorSpaceInternal(
       const LayoutBoxModelObject* ancestor,
-      LayoutRect&,
+      TransformState&,
       VisualRectFlags = DefaultVisualRectFlags) const final;
 
   AffineTransform m_localTransform;

@@ -133,9 +133,10 @@ PaintInvalidationState::PaintInvalidationState(
     // paintInvalidationContainer.
     m_paintInvalidationContainerForStackedContents =
         m_paintInvalidationContainer;
-  } else if (currentObject.isFloating() &&
-             !currentObject.parent()->isLayoutBlock()) {
-    // See LayoutObject::paintingLayer() for specialty of floating objects.
+  } else if (currentObject.isFloatingWithNonContainingBlockParent() ||
+             currentObject.isColumnSpanAll()) {
+    // In these cases, the object may belong to an ancestor of the current
+    // paint invalidation container, in paint order.
     m_paintInvalidationContainer =
         &currentObject.containerForPaintInvalidation();
     m_cachedOffsetsEnabled = false;
@@ -230,8 +231,7 @@ PaintLayer& PaintInvalidationState::childPaintingLayer(
     return *toLayoutBoxModelObject(child).layer();
   // See LayoutObject::paintingLayer() for the special-cases of floating under
   // inline and multicolumn.
-  if (child.isColumnSpanAll() ||
-      (child.isFloating() && !m_currentObject.isLayoutBlock()))
+  if (child.isColumnSpanAll() || child.isFloatingWithNonContainingBlockParent())
     return *child.paintingLayer();
   return m_paintingLayer;
 }
@@ -254,7 +254,7 @@ void PaintInvalidationState::updateForCurrentObject(
 
   EPosition position = m_currentObject.styleRef().position();
 
-  if (position == FixedPosition) {
+  if (position == EPosition::kFixed) {
     // Use slow path to get the offset of the fixed-position, and enable fast
     // path for descendants.
     FloatPoint fixedOffset = m_currentObject.localToAncestorPoint(
@@ -278,7 +278,7 @@ void PaintInvalidationState::updateForCurrentObject(
     return;
   }
 
-  if (position == AbsolutePosition) {
+  if (position == EPosition::kAbsolute) {
     m_cachedOffsetsEnabled = m_cachedOffsetsForAbsolutePositionEnabled;
     if (!m_cachedOffsetsEnabled)
       return;
@@ -502,11 +502,12 @@ static void slowMapToVisualRectInAncestorSpace(
   if (object.isBox())
     toLayoutBox(&object)->flipForWritingMode(rect);
 
-  if (object.isLayoutView())
+  if (object.isLayoutView()) {
     toLayoutView(object).mapToVisualRectInAncestorSpace(
         &ancestor, rect, InputIsInFrameCoordinates, DefaultVisualRectFlags);
-  else
+  } else {
     object.mapToVisualRectInAncestorSpace(&ancestor, rect);
+  }
 }
 
 void PaintInvalidationState::mapLocalRectToPaintInvalidationContainer(

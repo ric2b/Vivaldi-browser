@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -79,18 +80,20 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
 
   // Sets the master interface name for this router. Only used when reporting
   // message header or control message validation errors.
-  void SetMasterInterfaceName(const std::string& name);
+  // |name| must be a string literal.
+  void SetMasterInterfaceName(const char* name);
 
   // ---------------------------------------------------------------------------
   // The following public methods are safe to call from any threads.
 
   // AssociatedGroupController implementation:
-  void CreateEndpointHandlePair(
-      ScopedInterfaceEndpointHandle* local_endpoint,
-      ScopedInterfaceEndpointHandle* remote_endpoint) override;
+  InterfaceId AssociateInterface(
+      ScopedInterfaceEndpointHandle handle_to_send) override;
   ScopedInterfaceEndpointHandle CreateLocalEndpointHandle(
       InterfaceId id) override;
-  void CloseEndpointHandle(InterfaceId id, bool is_local) override;
+  void CloseEndpointHandle(
+      InterfaceId id,
+      const base::Optional<DisconnectReason>& reason) override;
   InterfaceEndpointController* AttachEndpointClient(
       const ScopedInterfaceEndpointHandle& handle,
       InterfaceEndpointClient* endpoint_client,
@@ -150,6 +153,7 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
 
  private:
   class InterfaceEndpoint;
+  class MessageWrapper;
   struct Task;
 
   ~MultiplexRouter() override;
@@ -158,8 +162,9 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   bool Accept(Message* message) override;
 
   // PipeControlMessageHandlerDelegate implementation:
-  bool OnPeerAssociatedEndpointClosed(InterfaceId id) override;
-  bool OnAssociatedEndpointClosedBeforeSent(InterfaceId id) override;
+  bool OnPeerAssociatedEndpointClosed(
+      InterfaceId id,
+      const base::Optional<DisconnectReason>& reason) override;
 
   void OnPipeConnectionError();
 
@@ -219,6 +224,7 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   void RaiseErrorInNonTestingMode();
 
   InterfaceEndpoint* FindOrInsertEndpoint(InterfaceId id, bool* inserted);
+  InterfaceEndpoint* FindEndpoint(InterfaceId id);
 
   void AssertLockAcquired();
 
@@ -237,8 +243,8 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   base::ThreadChecker thread_checker_;
 
   // Protects the following members.
-  // Sets to nullptr in Config::SINGLE_INTERFACE* mode.
-  std::unique_ptr<base::Lock> lock_;
+  // Not set in Config::SINGLE_INTERFACE* mode.
+  mutable base::Optional<base::Lock> lock_;
   PipeControlMessageHandler control_message_handler_;
 
   // NOTE: It is unsafe to call into this object while holding |lock_|.

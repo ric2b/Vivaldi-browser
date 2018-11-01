@@ -3,9 +3,26 @@
 # found in the LICENSE file.
 
 import("//third_party/protobuf/proto_library.gni")
+import("//ui/vector_icons/vector_icons.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+}
+
+aggregate_vector_icons("omnibox_vector_icons") {
+  icon_directory = "vector_icons"
+
+  icons = [
+    "calculator.1x.icon",
+    "calculator.icon",
+    "extension_app.1x.icon",
+    "extension_app.icon",
+    "http.icon",
+    "keyword_search.icon",
+    "search.icon",
+    "star.1x.icon",
+    "star.icon",
+  ]
 }
 
 static_library("browser") {
@@ -36,6 +53,8 @@ static_library("browser") {
     "builtin_provider.h",
     "clipboard_url_provider.cc",
     "clipboard_url_provider.h",
+    "features.cc",
+    "features.h",
     "history_provider.cc",
     "history_provider.h",
     "history_quick_provider.cc",
@@ -109,6 +128,8 @@ static_library("browser") {
     "zero_suggest_provider.h",
   ]
 
+  defines = [ "OMNIBOX_BROWSER_IMPLEMENTATION" ]
+
   public_deps = [
     "//components/history/core/browser",
     "//components/metrics/proto",
@@ -136,6 +157,7 @@ static_library("browser") {
     "//components/url_formatter",
     "//components/variations",
     "//components/variations/net",
+    "//extensions/common:common_constants",
     "//net",
     "//skia",
     "//sql",
@@ -144,6 +166,11 @@ static_library("browser") {
     "//ui/gfx",
     "//url",
   ]
+
+  if (!is_android && !is_ios) {
+    sources += get_target_outputs(":omnibox_vector_icons")
+    deps += [ ":omnibox_vector_icons" ]
+  }
 
   # TODO(brettw) Fix the include cycle and remove this line.
   allow_circular_includes_from = [ "//components/search_engines" ]

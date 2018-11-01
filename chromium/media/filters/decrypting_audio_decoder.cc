@@ -58,21 +58,15 @@ void DecryptingAudioDecoder::Initialize(const AudioDecoderConfig& config,
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(decode_cb_.is_null());
   DCHECK(reset_cb_.is_null());
+  DCHECK(cdm_context);
 
   weak_this_ = weak_factory_.GetWeakPtr();
   init_cb_ = BindToCurrentLoop(init_cb);
   output_cb_ = BindToCurrentLoop(output_cb);
 
-  // TODO(xhwang): We should be able to DCHECK config.IsValidConfig() and
-  // config.is_encrypted().
+  // TODO(xhwang): We should be able to DCHECK config.IsValidConfig().
   if (!config.IsValidConfig()) {
     DLOG(ERROR) << "Invalid audio stream config.";
-    base::ResetAndReturn(&init_cb_).Run(false);
-    return;
-  }
-
-  // DecryptingAudioDecoder only accepts potentially encrypted stream.
-  if (!config.is_encrypted()) {
     base::ResetAndReturn(&init_cb_).Run(false);
     return;
   }
@@ -80,7 +74,6 @@ void DecryptingAudioDecoder::Initialize(const AudioDecoderConfig& config,
   config_ = config;
 
   if (state_ == kUninitialized) {
-    DCHECK(cdm_context);
     if (!cdm_context->GetDecryptor()) {
       MEDIA_LOG(DEBUG, media_log_) << GetDisplayName() << ": no decryptor";
       base::ResetAndReturn(&init_cb_).Run(false);
@@ -89,7 +82,8 @@ void DecryptingAudioDecoder::Initialize(const AudioDecoderConfig& config,
 
     decryptor_ = cdm_context->GetDecryptor();
   } else {
-    // Reinitialization (i.e. upon a config change)
+    // Reinitialization (i.e. upon a config change). The new config can be
+    // encrypted or clear.
     decryptor_->DeinitializeDecoder(Decryptor::kAudio);
   }
 

@@ -23,23 +23,23 @@ HashMap<const void*, HashMap<const DisplayItemClient*, String>>*
 
 DisplayItemClient::DisplayItemClient() {
   if (displayItemClientsShouldKeepAlive) {
-    for (auto item : *displayItemClientsShouldKeepAlive)
+    for (const auto& item : *displayItemClientsShouldKeepAlive)
       CHECK(!item.value.contains(this));
   }
   if (!liveDisplayItemClients)
     liveDisplayItemClients = new HashSet<const DisplayItemClient*>();
-  liveDisplayItemClients->add(this);
+  liveDisplayItemClients->insert(this);
 }
 
 DisplayItemClient::~DisplayItemClient() {
   if (displayItemClientsShouldKeepAlive) {
-    for (auto& item : *displayItemClientsShouldKeepAlive) {
+    for (const auto& item : *displayItemClientsShouldKeepAlive) {
       CHECK(!item.value.contains(this))
-          << "Short-lived DisplayItemClient: " << item.value.get(this)
+          << "Short-lived DisplayItemClient: " << item.value.at(this)
           << ". See crbug.com/609218.";
     }
   }
-  liveDisplayItemClients->remove(this);
+  liveDisplayItemClients->erase(this);
   // In case this object is a subsequence owner.
   endShouldKeepAliveAllClients(this);
 }
@@ -53,9 +53,10 @@ void DisplayItemClient::beginShouldKeepAlive(const void* owner) const {
   if (!displayItemClientsShouldKeepAlive)
     displayItemClientsShouldKeepAlive =
         new HashMap<const void*, HashMap<const DisplayItemClient*, String>>();
-  auto addResult = displayItemClientsShouldKeepAlive
-                       ->add(owner, HashMap<const DisplayItemClient*, String>())
-                       .storedValue->value.add(this, "");
+  auto addResult =
+      displayItemClientsShouldKeepAlive
+          ->insert(owner, HashMap<const DisplayItemClient*, String>())
+          .storedValue->value.insert(this, "");
   if (addResult.isNewEntry)
     addResult.storedValue->value = debugName();
 }
@@ -63,13 +64,13 @@ void DisplayItemClient::beginShouldKeepAlive(const void* owner) const {
 void DisplayItemClient::endShouldKeepAlive() const {
   if (displayItemClientsShouldKeepAlive) {
     for (auto& item : *displayItemClientsShouldKeepAlive)
-      item.value.remove(this);
+      item.value.erase(this);
   }
 }
 
 void DisplayItemClient::endShouldKeepAliveAllClients(const void* owner) {
   if (displayItemClientsShouldKeepAlive)
-    displayItemClientsShouldKeepAlive->remove(owner);
+    displayItemClientsShouldKeepAlive->erase(owner);
 }
 
 void DisplayItemClient::endShouldKeepAliveAllClients() {

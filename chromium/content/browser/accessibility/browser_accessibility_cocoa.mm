@@ -32,8 +32,10 @@
 using AXPlatformPositionInstance =
     content::AXPlatformPosition::AXPositionInstance;
 using AXPlatformRange = ui::AXRange<AXPlatformPositionInstance::element_type>;
+using AXTextMarkerRangeRef = CFTypeRef;
+using AXTextMarkerRef = CFTypeRef;
+using StringAttribute = ui::AXStringAttribute;
 using content::AXPlatformPosition;
-using content::AXTreeIDRegistry;
 using content::AccessibilityMatchPredicate;
 using content::BrowserAccessibility;
 using content::BrowserAccessibilityDelegate;
@@ -42,9 +44,7 @@ using content::BrowserAccessibilityManagerMac;
 using content::ContentClient;
 using content::OneShotAccessibilityTreeSearch;
 using ui::AXNodeData;
-using StringAttribute = ui::AXStringAttribute;
-using AXTextMarkerRef = CFTypeRef;
-using AXTextMarkerRangeRef = CFTypeRef;
+using ui::AXTreeIDRegistry;
 
 namespace {
 
@@ -60,6 +60,7 @@ NSString* const NSAccessibilityARIARowCountAttribute = @"AXARIARowCount";
 NSString* const NSAccessibilityARIARowIndexAttribute = @"AXARIARowIndex";
 NSString* const NSAccessibilityARIASetSizeAttribute = @"AXARIASetSize";
 NSString* const NSAccessibilityAccessKeyAttribute = @"AXAccessKey";
+NSString* const NSAccessibilityDOMIdentifierAttribute = @"AXDOMIdentifier";
 NSString* const NSAccessibilityDropEffectsAttribute = @"AXDropEffects";
 NSString* const NSAccessibilityGrabbedAttribute = @"AXGrabbed";
 NSString* const NSAccessibilityInvalidAttribute = @"AXInvalid";
@@ -552,6 +553,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
       {NSAccessibilityDisclosureLevelAttribute, @"disclosureLevel"},
       {NSAccessibilityDisclosedRowsAttribute, @"disclosedRows"},
       {NSAccessibilityDropEffectsAttribute, @"dropEffects"},
+      {NSAccessibilityDOMIdentifierAttribute, @"domIdentifier"},
       {NSAccessibilityEnabledAttribute, @"enabled"},
       {NSAccessibilityEndTextMarkerAttribute, @"endTextMarker"},
       {NSAccessibilityExpandedAttribute, @"expanded"},
@@ -944,6 +946,17 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   return nil;
 }
 
+- (NSString*)domIdentifier {
+  if (![self instanceActive])
+    return nil;
+
+  std::string id;
+  if (browserAccessibility_->GetHtmlAttribute("id", &id))
+    return base::SysUTF8ToNSString(id);
+
+  return nil;
+}
+
 - (NSNumber*)enabled {
   if (![self instanceActive])
     return nil;
@@ -959,8 +972,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (!root)
     return nil;
 
-  AXPlatformPositionInstance position =
-      CreateTextPosition(*root, 0, ui::AX_TEXT_AFFINITY_DOWNSTREAM);
+  AXPlatformPositionInstance position = root->CreatePositionAt(0);
   return CreateTextMarker(position->CreatePositionAtEndOfAnchor());
 }
 
@@ -1373,6 +1385,13 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSString*)roleDescription {
   if (![self instanceActive])
     return nil;
+
+  if (browserAccessibility_->HasStringAttribute(
+      ui::AX_ATTR_ROLE_DESCRIPTION)) {
+    return NSStringForStringAttribute(
+        browserAccessibility_, ui::AX_ATTR_ROLE_DESCRIPTION);
+  }
+
   NSString* role = [self role];
 
   ContentClient* content_client = content::GetContentClient();
@@ -1719,8 +1738,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (!root)
     return nil;
 
-  AXPlatformPositionInstance position =
-      CreateTextPosition(*root, 0, ui::AX_TEXT_AFFINITY_DOWNSTREAM);
+  AXPlatformPositionInstance position = root->CreatePositionAt(0);
   return CreateTextMarker(position->CreatePositionAtStartOfAnchor());
 }
 
@@ -2128,8 +2146,8 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   }
 
   if ([attribute isEqualToString:@"AXTextMarkerRangeForUIElement"]) {
-    AXPlatformPositionInstance startPosition = CreateTextPosition(
-        *browserAccessibility_, 0, ui::AX_TEXT_AFFINITY_DOWNSTREAM);
+    AXPlatformPositionInstance startPosition =
+        browserAccessibility_->CreatePositionAt(0);
     AXPlatformPositionInstance endPosition =
         startPosition->CreatePositionAtEndOfAnchor();
     AXPlatformRange range =
@@ -2160,29 +2178,35 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   }
 
   if ([attribute isEqualToString:@"AXLeftWordTextMarkerRangeForTextMarker"]) {
-    AXPlatformPositionInstance position =
+    AXPlatformPositionInstance endPosition =
         CreatePositionFromTextMarker(parameter);
-    if (position->IsNullPosition())
+    if (endPosition->IsNullPosition())
       return nil;
 
+    AXPlatformPositionInstance startWordPosition =
+        endPosition->CreatePreviousWordStartPosition();
+    AXPlatformPositionInstance endWordPosition =
+        endPosition->CreatePreviousWordEndPosition();
     AXPlatformPositionInstance startPosition =
-        position->CreatePreviousWordStartPosition();
-    AXPlatformPositionInstance endPosition =
-        startPosition->CreateNextWordEndPosition();
+        *startWordPosition <= *endWordPosition ? std::move(endWordPosition)
+                                               : std::move(startWordPosition);
     AXPlatformRange range(std::move(startPosition), std::move(endPosition));
     return CreateTextMarkerRange(std::move(range));
   }
 
   if ([attribute isEqualToString:@"AXRightWordTextMarkerRangeForTextMarker"]) {
-    AXPlatformPositionInstance position =
+    AXPlatformPositionInstance startPosition =
         CreatePositionFromTextMarker(parameter);
-    if (position->IsNullPosition())
+    if (startPosition->IsNullPosition())
       return nil;
 
+    AXPlatformPositionInstance endWordPosition =
+        startPosition->CreateNextWordEndPosition();
+    AXPlatformPositionInstance startWordPosition =
+        startPosition->CreateNextWordStartPosition();
     AXPlatformPositionInstance endPosition =
-        position->CreateNextWordEndPosition();
-    AXPlatformPositionInstance startPosition =
-        endPosition->CreatePreviousWordStartPosition();
+        *startWordPosition <= *endWordPosition ? std::move(startWordPosition)
+                                               : std::move(endWordPosition);
     AXPlatformRange range(std::move(startPosition), std::move(endPosition));
     return CreateTextMarkerRange(std::move(range));
   }
@@ -2202,6 +2226,54 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
     if (position->IsNullPosition())
       return nil;
     return CreateTextMarker(position->CreatePreviousWordStartPosition());
+  }
+
+  if ([attribute isEqualToString:@"AXTextMarkerRangeForLine"]) {
+    AXPlatformPositionInstance position =
+        CreatePositionFromTextMarker(parameter);
+    if (position->IsNullPosition())
+      return nil;
+
+    AXPlatformPositionInstance startPosition =
+        position->CreatePreviousLineStartPosition();
+    AXPlatformPositionInstance endPosition =
+        position->CreateNextLineEndPosition();
+    AXPlatformRange range(std::move(startPosition), std::move(endPosition));
+    return CreateTextMarkerRange(std::move(range));
+  }
+
+  if ([attribute isEqualToString:@"AXLeftLineTextMarkerRangeForTextMarker"]) {
+    AXPlatformPositionInstance endPosition =
+        CreatePositionFromTextMarker(parameter);
+    if (endPosition->IsNullPosition())
+      return nil;
+
+    AXPlatformPositionInstance startLinePosition =
+        endPosition->CreatePreviousLineStartPosition();
+    AXPlatformPositionInstance endLinePosition =
+        endPosition->CreatePreviousLineEndPosition();
+    AXPlatformPositionInstance startPosition =
+        *startLinePosition <= *endLinePosition ? std::move(endLinePosition)
+                                               : std::move(startLinePosition);
+    AXPlatformRange range(std::move(startPosition), std::move(endPosition));
+    return CreateTextMarkerRange(std::move(range));
+  }
+
+  if ([attribute isEqualToString:@"AXRightLineTextMarkerRangeForTextMarker"]) {
+    AXPlatformPositionInstance startPosition =
+        CreatePositionFromTextMarker(parameter);
+    if (startPosition->IsNullPosition())
+      return nil;
+
+    AXPlatformPositionInstance startLinePosition =
+        startPosition->CreateNextLineStartPosition();
+    AXPlatformPositionInstance endLinePosition =
+        startPosition->CreateNextLineEndPosition();
+    AXPlatformPositionInstance endPosition =
+        *startLinePosition <= *endLinePosition ? std::move(startLinePosition)
+                                               : std::move(endLinePosition);
+    AXPlatformRange range(std::move(startPosition), std::move(endPosition));
+    return CreateTextMarkerRange(std::move(range));
   }
 
   if ([attribute isEqualToString:@"AXNextLineEndTextMarkerForTextMarker"]) {
@@ -2494,6 +2566,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
       arrayWithObjects:NSAccessibilityAccessKeyAttribute,
                        NSAccessibilityChildrenAttribute,
                        NSAccessibilityDescriptionAttribute,
+                       NSAccessibilityDOMIdentifierAttribute,
                        NSAccessibilityEnabledAttribute,
                        NSAccessibilityEndTextMarkerAttribute,
                        NSAccessibilityFocusedAttribute,
@@ -2773,8 +2846,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if ([attribute isEqualToString:NSAccessibilitySelectedTextRangeAttribute]) {
     NSRange range = [(NSValue*)value rangeValue];
     BrowserAccessibilityManager* manager = browserAccessibility_->manager();
-    manager->SetTextSelection(
-        *browserAccessibility_, range.location, range.location + range.length);
+    manager->SetSelection(AXPlatformRange(
+        browserAccessibility_->CreatePositionAt(range.location),
+        browserAccessibility_->CreatePositionAt(NSMaxRange(range))));
   }
 }
 

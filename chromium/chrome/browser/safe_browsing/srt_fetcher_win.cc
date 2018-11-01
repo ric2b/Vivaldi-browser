@@ -27,7 +27,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
+#include "base/version.h"
 #include "base/win/registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -450,7 +453,7 @@ class UMAHistogramReporter {
   }
 
   void RecordBooleanHistogram(const std::string& name, bool sample) const {
-    auto histogram =
+    auto* histogram =
         base::BooleanHistogram::FactoryGet(FullName(name), kUmaHistogramFlag);
     if (histogram)
       histogram->AddBoolean(sample);
@@ -460,7 +463,7 @@ class UMAHistogramReporter {
                                   Sample sample,
                                   Sample boundary) const {
     // See HISTOGRAM_ENUMERATION_WITH_FLAG for the parameters to |FactoryGet|.
-    auto histogram = base::LinearHistogram::FactoryGet(
+    auto* histogram = base::LinearHistogram::FactoryGet(
         FullName(name), 1, boundary, boundary + 1, kUmaHistogramFlag);
     if (histogram)
       histogram->Add(sample);
@@ -469,7 +472,7 @@ class UMAHistogramReporter {
   void RecordLongTimesHistogram(const std::string& name,
                                 const base::TimeDelta& sample) const {
     // See UMA_HISTOGRAM_LONG_TIMES for the parameters to |FactoryTimeGet|.
-    auto histogram = base::Histogram::FactoryTimeGet(
+    auto* histogram = base::Histogram::FactoryTimeGet(
         FullName(name), base::TimeDelta::FromMilliseconds(1),
         base::TimeDelta::FromHours(1), 100, kUmaHistogramFlag);
     if (histogram)
@@ -478,14 +481,14 @@ class UMAHistogramReporter {
 
   void RecordMemoryKBHistogram(const std::string& name, Sample sample) const {
     // See UMA_HISTOGRAM_MEMORY_KB for the parameters to |FactoryGet|.
-    auto histogram = base::Histogram::FactoryGet(FullName(name), 1000, 500000,
-                                                 50, kUmaHistogramFlag);
+    auto* histogram = base::Histogram::FactoryGet(FullName(name), 1000, 500000,
+                                                  50, kUmaHistogramFlag);
     if (histogram)
       histogram->Add(sample);
   }
 
   void RecordSparseHistogram(const std::string& name, Sample sample) const {
-    auto histogram =
+    auto* histogram =
         base::SparseHistogram::FactoryGet(FullName(name), kUmaHistogramFlag);
     if (histogram)
       histogram->Add(sample);
@@ -494,7 +497,7 @@ class UMAHistogramReporter {
   void RecordSparseHistogramCount(const std::string& name,
                                   Sample sample,
                                   int count) const {
-    auto histogram =
+    auto* histogram =
         base::SparseHistogram::FactoryGet(FullName(name), kUmaHistogramFlag);
     if (histogram)
       histogram->AddCount(sample, count);
@@ -528,7 +531,7 @@ void DisplaySRTPrompt(const base::FilePath& download_path) {
   if (browser->type() != Browser::TYPE_TABBED) {
     browser = chrome::FindTabbedBrowser(profile, false);
     if (!browser)
-      browser = new Browser(Browser::CreateParams(profile));
+      browser = new Browser(Browser::CreateParams(profile, false));
   }
   GlobalErrorService* global_error_service =
       GlobalErrorServiceFactory::GetForProfile(profile);
@@ -713,6 +716,10 @@ void MaybeFetchSRT(Browser* browser, const base::Version& reporter_version) {
   new SRTFetcher(profile);
 }
 
+base::Time Now() {
+  return g_testing_delegate_ ? g_testing_delegate_->Now() : base::Time::Now();
+}
+
 }  // namespace
 
 // This class tries to run a queue of reporters and react to their exit codes.
@@ -722,11 +729,8 @@ class ReporterRunner : public chrome::BrowserListObserver {
  public:
   // Registers |invocations| to run next time |TryToRun| is scheduled. (And if
   // it's not already scheduled, call it now.)
-  static void ScheduleInvocations(
-      const SwReporterQueue& invocations,
-      const base::Version& version,
-      scoped_refptr<base::TaskRunner> main_thread_task_runner,
-      scoped_refptr<base::TaskRunner> blocking_task_runner) {
+  static void ScheduleInvocations(const SwReporterQueue& invocations,
+                                  const base::Version& version) {
     if (!instance_) {
       instance_ = new ReporterRunner;
       ANNOTATE_LEAKING_OBJECT_PTR(instance_);
@@ -742,9 +746,6 @@ class ReporterRunner : public chrome::BrowserListObserver {
 
     instance_->pending_invocations_ = invocations;
     instance_->version_ = version;
-    instance_->main_thread_task_runner_ = std::move(main_thread_task_runner);
-    instance_->blocking_task_runner_ = std::move(blocking_task_runner);
-
     if (instance_->first_run_) {
       instance_->first_run_ = false;
       instance_->TryToRun();
@@ -771,20 +772,16 @@ class ReporterRunner : public chrome::BrowserListObserver {
     auto next_invocation = current_invocations_.front();
     current_invocations_.pop();
 
-    if (g_testing_delegate_)
-      g_testing_delegate_->NotifyLaunchReady();
-
     AppendInvocationSpecificSwitches(&next_invocation);
 
-    // It's OK to simply |PostTaskAndReplyWithResult| so that
-    // |LaunchAndWaitForExit| doesn't need to access |main_thread_task_runner_|
-    // since the callback is not delayed and the test task runner won't need to
-    // force it.
+    base::TaskRunner* task_runner =
+        g_testing_delegate_ ? g_testing_delegate_->BlockingTaskRunner()
+                            : blocking_task_runner_.get();
     base::PostTaskAndReplyWithResult(
-        blocking_task_runner_.get(), FROM_HERE,
+        task_runner, FROM_HERE,
         base::Bind(&LaunchAndWaitForExit, next_invocation),
-        base::Bind(&ReporterRunner::ReporterDone, base::Unretained(this),
-                   base::Time::Now(), version_, next_invocation));
+        base::Bind(&ReporterRunner::ReporterDone, base::Unretained(this), Now(),
+                   version_, next_invocation));
   }
 
   // This method is called on the UI thread when an invocation of the reporter
@@ -796,11 +793,8 @@ class ReporterRunner : public chrome::BrowserListObserver {
                     int exit_code) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-    if (g_testing_delegate_)
-      g_testing_delegate_->NotifyReporterDone();
-
-    base::TimeDelta reporter_running_time =
-        base::Time::Now() - reporter_start_time;
+    base::Time now = Now();
+    base::TimeDelta reporter_running_time = now - reporter_start_time;
 
     // Don't continue the current queue of reporters if one failed to launch.
     if (exit_code == kReporterFailureExitCode)
@@ -811,7 +805,7 @@ class ReporterRunner : public chrome::BrowserListObserver {
     // retrying earlier, risking running too often if it always fails, since
     // not many users fail here.)
     if (current_invocations_.empty()) {
-      main_thread_task_runner_->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
           base::Bind(&ReporterRunner::TryToRun, base::Unretained(this)),
           base::TimeDelta::FromDays(days_between_reporter_runs_));
@@ -839,7 +833,7 @@ class ReporterRunner : public chrome::BrowserListObserver {
         local_state->SetInteger(prefs::kSwReporterLastExitCode, exit_code);
       }
       local_state->SetInt64(prefs::kSwReporterLastTimeTriggered,
-                            base::Time::Now().ToInternalValue());
+                            now.ToInternalValue());
     }
     uma.ReportRuntime(reporter_running_time);
     uma.ReportScanTimes();
@@ -902,7 +896,7 @@ class ReporterRunner : public chrome::BrowserListObserver {
     } else {
       days_between_reporter_runs_ = kDaysBetweenSuccessfulSwReporterRuns;
     }
-    const base::Time now = base::Time::Now();
+    const base::Time now = Now();
     const base::Time last_time_triggered = base::Time::FromInternalValue(
         local_state->GetInt64(prefs::kSwReporterLastTimeTriggered));
     const base::Time next_trigger(
@@ -913,11 +907,24 @@ class ReporterRunner : public chrome::BrowserListObserver {
          // Also make sure the kSwReporterLastTimeTriggered value is not set in
          // the future.
          last_time_triggered > now)) {
+      const base::Time last_time_sent_logs = base::Time::FromInternalValue(
+          local_state->GetInt64(prefs::kSwReporterLastTimeSentReport));
+      const base::Time next_time_send_logs =
+          last_time_sent_logs +
+          base::TimeDelta::FromDays(kDaysBetweenReporterLogsSent);
+      // Send the logs for this whole queue of invocations if the last send is
+      // in the future or if logs have been sent at least
+      // |kSwReporterLastTimeSentReport| days ago. The former is intended as a
+      // measure for failure recovery, in case the time in local state is
+      // incorrectly set to the future.
+      in_logs_upload_period_ =
+          last_time_sent_logs > now || next_time_send_logs <= now;
+
       DCHECK(current_invocations_.empty());
       current_invocations_ = pending_invocations_;
       ScheduleNextInvocation();
     } else {
-      main_thread_task_runner_->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
           base::Bind(&ReporterRunner::TryToRun, base::Unretained(this)),
           next_trigger - now);
@@ -925,8 +932,8 @@ class ReporterRunner : public chrome::BrowserListObserver {
   }
 
   // Returns true if the experiment to send reporter logs is enabled, the user
-  // opted into Safe Browsing extended reporting, and logs have been sent at
-  // least |kSwReporterLastTimeSentReport| days ago.
+  // opted into Safe Browsing extended reporting, and this queue of invocations
+  // started during the logs upload interval.
   bool ShouldSendReporterLogs(const std::string& suffix,
                               const PrefService& local_state) {
     UMAHistogramReporter uma(suffix);
@@ -934,22 +941,12 @@ class ReporterRunner : public chrome::BrowserListObserver {
       uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_SBER_DISABLED);
       return false;
     }
-
-    const base::Time now = base::Time::Now();
-    const base::Time last_time_sent_logs = base::Time::FromInternalValue(
-        local_state.GetInt64(prefs::kSwReporterLastTimeSentReport));
-    const base::Time next_time_send_logs =
-        last_time_sent_logs +
-        base::TimeDelta::FromDays(kDaysBetweenReporterLogsSent);
-    // Send the logs if the last send is the future or if the interval has
-    // passed. The former is intended as a measure for failure recovery, in
-    // case the time in local state is incorrectly set to the future.
-    if (last_time_sent_logs > now || next_time_send_logs <= now) {
-      uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_ENABLED);
-      return true;
+    if (!in_logs_upload_period_) {
+      uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_RECENTLY_SENT_LOGS);
+      return false;
     }
-    uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_RECENTLY_SENT_LOGS);
-    return false;
+    uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_ENABLED);
+    return true;
   }
 
   // Appends switches to the next invocation that depend on the user current
@@ -974,7 +971,7 @@ class ReporterRunner : public chrome::BrowserListObserver {
       // state values after the reporter runs, we could send logs again too
       // quickly (for example, if Chrome stops before the reporter finishes).
       local_state->SetInt64(prefs::kSwReporterLastTimeSentReport,
-                            base::Time::Now().ToInternalValue());
+                            Now().ToInternalValue());
     }
 
     if (ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())
@@ -1000,14 +997,27 @@ class ReporterRunner : public chrome::BrowserListObserver {
   SwReporterQueue pending_invocations_;
 
   base::Version version_;
-  scoped_refptr<base::TaskRunner> main_thread_task_runner_;
-  scoped_refptr<base::TaskRunner> blocking_task_runner_;
+
+  scoped_refptr<base::TaskRunner> blocking_task_runner_ =
+      base::CreateTaskRunnerWithTraits(
+          // LaunchAndWaitForExit() creates (MayBlock()) and joins
+          // (WithBaseSyncPrimitives()) a process.
+          base::TaskTraits()
+              .WithShutdownBehavior(
+                  base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+              .WithPriority(base::TaskPriority::BACKGROUND)
+              .MayBlock()
+              .WithBaseSyncPrimitives());
 
   // This value is used to identify how long to wait before starting a new run
   // of the reporter queue. It's initialized with the default value and may be
   // changed to a different value when a prompt is pending and the reporter
   // should be run before adding the global error to the Chrome menu.
   int days_between_reporter_runs_ = kDaysBetweenSuccessfulSwReporterRuns;
+
+  // This will be true if the current queue of invocations started at a time
+  // when logs should be uploaded.
+  bool in_logs_upload_period_ = false;
 
   // A single leaky instance.
   static ReporterRunner* instance_;
@@ -1047,14 +1057,10 @@ bool SwReporterInvocation::BehaviourIsSupported(
 }
 
 void RunSwReporters(const SwReporterQueue& invocations,
-                    const base::Version& version,
-                    scoped_refptr<base::TaskRunner> main_thread_task_runner,
-                    scoped_refptr<base::TaskRunner> blocking_task_runner) {
+                    const base::Version& version) {
   DCHECK(!invocations.empty());
   DCHECK(version.IsValid());
-  ReporterRunner::ScheduleInvocations(invocations, version,
-                                      std::move(main_thread_task_runner),
-                                      std::move(blocking_task_runner));
+  ReporterRunner::ScheduleInvocations(invocations, version);
 }
 
 bool ReporterFoundUws() {

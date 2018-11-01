@@ -43,6 +43,7 @@ class NoOpGLSurface : public GLSurface {
   void* GetHandle() override { return nullptr; }
   void* GetDisplay() override { return nullptr; }
   bool IsSurfaceless() const override { return true; }
+  GLSurfaceFormat GetFormat() override { return GLSurfaceFormat(); }
 
  protected:
   ~NoOpGLSurface() override {}
@@ -87,6 +88,12 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
                                  compatible_surface, attribs);
     case kGLImplementationMockGL:
       return new GLContextStub(share_group);
+    case kGLImplementationStubGL: {
+      scoped_refptr<GLContextStub> stub_context =
+          new GLContextStub(share_group);
+      stub_context->SetUseStubApi(true);
+      return stub_context;
+    }
     default:
       NOTREACHED();
       return nullptr;
@@ -106,6 +113,7 @@ scoped_refptr<GLSurface> CreateViewGLSurface(gfx::AcceleratedWidget window) {
       return InitializeGLSurface(new GLSurfaceOSMesaHeadless());
     }
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();
@@ -127,6 +135,7 @@ scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
       return InitializeGLSurfaceWithFormat(
           new NoOpGLSurface(size), format);
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();

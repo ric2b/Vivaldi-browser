@@ -4,6 +4,7 @@ import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/app/source_updates.gni")
 import("//vivaldi/base/source_updates.gni")
 import("//vivaldi/browser/source_updates.gni")
+import("//vivaldi/components/source_updates.gni")
 import("//vivaldi/extensions/source_updates.gni")
 import("//vivaldi/extraparts/source_updates.gni")
 import("//vivaldi/importer/source_updates.gni")
@@ -15,14 +16,6 @@ import("//vivaldi/testing/source_updates.gni")
 import("//vivaldi/ui/source_updates.gni")
 import("//vivaldi/vivapp/source_updates.gni")
 import("//vivaldi/platform_media/source_updates.gni")
-
-post_process_target("//content/browser:browser") {
-  sources += [ "//content/browser/loader/resource_controller.cc" ]
-}
-
-post_process_target("//components/sessions:sessions") {
-  sources += [ "core/live_tab_context.cc" ]
-}
 
 foreach (_target, [
     "//chrome/app/version_assembly:chrome_exe_version_manifest",

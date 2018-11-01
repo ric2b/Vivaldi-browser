@@ -4,7 +4,6 @@
 
 #include "ash/common/system/user/tray_user.h"
 
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/tray/system_tray.h"
@@ -16,11 +15,11 @@
 #include "ash/common/system/user/rounded_image_view.h"
 #include "ash/common/system/user/user_view.h"
 #include "ash/common/wm_shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
-#include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/border.h"
@@ -156,11 +155,9 @@ void TrayUser::UpdateAfterLoginStatusChange(LoginStatus status) {
       label_ = nullptr;
     }
     if (need_avatar) {
-      avatar_ = new tray::RoundedImageView(kTrayRoundedBorderRadius, true);
-      if (MaterialDesignController::IsShelfMaterial()) {
-        avatar_->SetPaintToLayer(true);
-        avatar_->layer()->SetFillsBoundsOpaquely(false);
-      }
+      avatar_ = new tray::RoundedImageView(kTrayRoundedBorderRadius);
+      avatar_->SetPaintToLayer();
+      avatar_->layer()->SetFillsBoundsOpaquely(false);
       layout_view_->AddChildView(avatar_);
     } else {
       avatar_ = nullptr;

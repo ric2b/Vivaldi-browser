@@ -6,19 +6,19 @@ package org.chromium.chrome.browser.instantapps;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.provider.Browser;
 
-import org.chromium.base.CommandLine;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.base.metrics.CachedMetrics.TimesHistogramSample;
-import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
@@ -41,6 +41,9 @@ public class InstantAppsHandler {
     private static final String INSTANT_APP_START_TIME_EXTRA =
             "org.chromium.chrome.INSTANT_APP_START_TIME";
 
+    // TODO(mariakhomenko): Use system once we roll to O SDK.
+    private static final int FLAG_DO_NOT_LAUNCH = 0x00000200;
+
     // TODO(mariakhomenko): Depend directly on the constants once we roll to v8 libraries.
     private static final String DO_NOT_LAUNCH_EXTRA =
             "com.google.android.gms.instantapps.DO_NOT_LAUNCH_INSTANT_APP";
@@ -59,6 +62,17 @@ public class InstantAppsHandler {
 
     private static final String BROWSER_LAUNCH_REASON =
             "com.google.android.gms.instantapps.BROWSER_LAUNCH_REASON";
+
+    private static final String SUPERVISOR_PKG = "com.google.android.instantapps.supervisor";
+
+    private static final String[] SUPERVISOR_START_ACTIONS = {
+            "com.google.android.instantapps.START", "com.google.android.instantapps.nmr1.INSTALL",
+            "com.google.android.instantapps.nmr1.VIEW"};
+
+    // Instant Apps system resolver activity on N-MR1+.
+    @VisibleForTesting
+    public static final String EPHEMERAL_INSTALLER_CLASS =
+            "com.google.android.gms.instantapps.routing.EphemeralInstallerActivity";
 
     /** Finch experiment name. */
     private static final String INSTANT_APPS_EXPERIMENT_NAME = "InstantApps";
@@ -105,27 +119,27 @@ public class InstantAppsHandler {
     public static InstantAppsHandler getInstance() {
         synchronized (INSTANCE_LOCK) {
             if (sInstance == null) {
-                Context appContext = ContextUtils.getApplicationContext();
-                sInstance = ((ChromeApplication) appContext).createInstantAppsHandler();
+                sInstance = AppHooks.get().createInstantAppsHandler();
             }
         }
         return sInstance;
     }
 
     /**
-     * Check the cached value to figure out if the feature is enabled. We have to use the cached
-     * value because native library hasn't yet been loaded.
-     * @param context The application context.
-     * @return Whether the feature is enabled.
+     * Checks whether {@param intent} is for an Instant App. Considers both package and actions that
+     * would resolve to Supervisor.
+     * @return Whether the given intent is going to open an Instant App.
      */
-    protected boolean isEnabled(Context context) {
-        // Will go away once the feature is enabled for everyone by default.
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-        try {
-            return ChromePreferenceManager.getInstance(context).getCachedInstantAppsEnabled();
-        } finally {
-            StrictMode.setThreadPolicy(oldPolicy);
+    public static boolean isIntentToInstantApp(Intent intent) {
+        if (SUPERVISOR_PKG.equals(intent.getPackage())) return true;
+
+        String intentAction = intent.getAction();
+        for (String action : SUPERVISOR_START_ACTIONS) {
+            if (action.equals(intentAction)) {
+                return true;
+            }
         }
+        return false;
     }
 
     /**
@@ -179,52 +193,39 @@ public class InstantAppsHandler {
     }
 
     /**
-     * Cache whether the Instant Apps feature is enabled.
-     * This should only be called with the native library loaded.
+     * Handle incoming intent.
+     * @param context Context.
+     * @param intent The incoming intent being handled.
+     * @param isCustomTabsIntent Whether we are in custom tabs.
+     * @param isRedirect Whether this is the redirect resolve case where incoming intent was
+     *        resolved to another URL.
+     * @return Whether Instant Apps is handling the URL request.
      */
-    public void cacheInstantAppsEnabled() {
-        Context context = ContextUtils.getApplicationContext();
-        boolean isEnabled = false;
-        boolean wasEnabled = isEnabled(context);
-        CommandLine instance = CommandLine.getInstance();
-        if (instance.hasSwitch(ChromeSwitches.DISABLE_APP_LINK)) {
-            isEnabled = false;
-        } else if (instance.hasSwitch(ChromeSwitches.ENABLE_APP_LINK)) {
-            isEnabled = true;
-        } else {
-            String experiment = FieldTrialList.findFullName(INSTANT_APPS_EXPERIMENT_NAME);
-            if (INSTANT_APPS_DISABLED_ARM.equals(experiment)) {
-                isEnabled = false;
-            } else if (INSTANT_APPS_ENABLED_ARM.equals(experiment)) {
-                isEnabled = true;
-            }
-        }
-
-        if (isEnabled != wasEnabled) {
-            ChromePreferenceManager.getInstance(context).setCachedInstantAppsEnabled(isEnabled);
-        }
-    }
-
-    /** Handle incoming intent. */
     public boolean handleIncomingIntent(Context context, Intent intent,
-            boolean isCustomTabsIntent) {
+            boolean isCustomTabsIntent, boolean isRedirect) {
         long startTimeStamp = SystemClock.elapsedRealtime();
         boolean result = handleIncomingIntentInternal(context, intent, isCustomTabsIntent,
-                startTimeStamp);
+                startTimeStamp, isRedirect);
         recordHandleIntentDuration(startTimeStamp);
         return result;
     }
 
     private boolean handleIncomingIntentInternal(
-            Context context, Intent intent, boolean isCustomTabsIntent, long startTime) {
-        boolean isEnabled = isEnabled(context);
-        if (!isEnabled || (isCustomTabsIntent && !IntentUtils.safeGetBooleanExtra(
-                intent, CUSTOM_APPS_INSTANT_APP_EXTRA, false))) {
-            Log.i(TAG, "Not handling with Instant Apps. Enabled? " + isEnabled);
+            Context context, Intent intent, boolean isCustomTabsIntent, long startTime,
+            boolean isRedirect) {
+        if (!isRedirect && !isCustomTabsIntent && BuildInfo.isAtLeastO()) {
+            Log.i(TAG, "Disabled for Android O+");
             return false;
         }
 
-        if (IntentUtils.safeGetBooleanExtra(intent, DO_NOT_LAUNCH_EXTRA, false)) {
+        if (isCustomTabsIntent && !IntentUtils.safeGetBooleanExtra(
+                intent, CUSTOM_APPS_INSTANT_APP_EXTRA, false)) {
+            Log.i(TAG, "Not handling with Instant Apps (missing CUSTOM_APPS_INSTANT_APP_EXTRA)");
+            return false;
+        }
+
+        if (IntentUtils.safeGetBooleanExtra(intent, DO_NOT_LAUNCH_EXTRA, false)
+                || (BuildInfo.isAtLeastO() && (intent.getFlags() & FLAG_DO_NOT_LAUNCH) != 0)) {
             maybeRecordFallbackStats(intent);
             Log.i(TAG, "Not handling with Instant Apps (DO_NOT_LAUNCH_EXTRA)");
             return false;
@@ -281,8 +282,6 @@ public class InstantAppsHandler {
      */
     public boolean handleNavigation(Context context, String url, Uri referrer,
             WebContents webContents) {
-        if (!isEnabled(context)) return false;
-
         if (InstantAppsSettings.isInstantAppDefault(webContents, url)) {
             return launchInstantAppForNavigation(context, url, referrer);
         }
@@ -319,7 +318,7 @@ public class InstantAppsHandler {
     private boolean isChromeDefaultHandler(Context context) {
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
-            return ChromePreferenceManager.getInstance(context).getCachedChromeDefaultBrowser();
+            return ChromePreferenceManager.getInstance().getCachedChromeDefaultBrowser();
         } finally {
             StrictMode.setThreadPolicy(oldPolicy);
         }
@@ -357,5 +356,14 @@ public class InstantAppsHandler {
      */
     public Intent getInstantAppIntentForUrl(String url) {
         return null;
+    }
+
+    /**
+     * Whether the given ResolveInfo object refers to Instant Apps as a launcher.
+     * @param info The resolve info.
+     */
+    public boolean isInstantAppResolveInfo(ResolveInfo info) {
+        if (info == null || info.activityInfo == null) return false;
+        return EPHEMERAL_INSTALLER_CLASS.equals(info.activityInfo.name);
     }
 }

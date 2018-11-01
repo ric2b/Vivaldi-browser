@@ -4,6 +4,7 @@
 
 #include "platform/fonts/Font.h"
 
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/testing/FontTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/text/TextRun.h"
@@ -13,13 +14,9 @@ using blink::testing::createTestFont;
 
 namespace blink {
 
-static inline String fontPath(String relativePath) {
-  return testing::blinkRootDir() + "/Source/platform/testing/data/" +
-         relativePath;
-}
-
 TEST(FontTest, TextIntercepts) {
-  Font font = createTestFont("Ahem", fontPath("Ahem.woff"), 16);
+  Font font =
+      createTestFont("Ahem", testing::platformTestDataPath("Ahem.woff"), 16);
   // A sequence of LATIN CAPITAL LETTER E WITH ACUTE and LATIN SMALL LETTER P
   // characters. E ACUTES are squares above the baseline in Ahem, while p's
   // are rectangles below the baseline.
@@ -27,7 +24,7 @@ TEST(FontTest, TextIntercepts) {
                                           0x70, 0xc9, 0x70, 0xc9};
   TextRun ahemAboveBelowBaseline(ahemAboveBelowBaselineString, 9);
   TextRunPaintInfo textRunPaintInfo(ahemAboveBelowBaseline);
-  SkPaint defaultPaint;
+  PaintFlags defaultPaint;
   float deviceScaleFactor = 1;
 
   std::tuple<float, float> belowBaselineBounds = std::make_tuple(2, 4);

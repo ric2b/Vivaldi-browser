@@ -113,7 +113,8 @@ def AddCommonOptions(parser):
   group.add_argument('--trace-output', metavar='FILENAME',
                      type=os.path.realpath,
                      help='Path to save test_runner trace data to. This option '
-                          'has been implemented for gtest and perf test.')
+                          'has been implemented for gtest, instrumentation '
+                          'test and perf test.')
 
   logcat_output_group = group.add_mutually_exclusive_group()
   logcat_output_group.add_argument(
@@ -399,6 +400,22 @@ def AddInstrumentationTestOptions(parser):
   group.add_argument('--store-tombstones', dest='store_tombstones',
                      action='store_true',
                      help='Add tombstones in results if crash.')
+  group.add_argument('--shared-prefs-file', dest='shared_prefs_file',
+                     type=os.path.realpath,
+                     help='The relative path to a file containing JSON list '
+                          'of shared preference files to edit and how to do '
+                          'so. Example list: '
+                          '[{'
+                          '  "package": "com.package.example",'
+                          '  "filename": "ExampleSettings.xml",'
+                          '  "set": {'
+                          '    "boolean_key_in_xml": true,'
+                          '    "string_key_in_xml": "string_value"'
+                          '  },'
+                          '  "remove": ['
+                          '    "key_in_xml_to_remove"'
+                          '  ]'
+                          '}]')
 
   AddCommonOptions(parser)
   AddDeviceOptions(parser)

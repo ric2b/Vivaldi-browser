@@ -92,6 +92,7 @@ void ConfigureHttp2Params(base::StringPiece http2_trial_group,
 }
 
 bool ShouldEnableQuic(base::StringPiece quic_trial_group,
+                      const VariationParameters& quic_trial_params,
                       bool is_quic_force_disabled,
                       bool is_quic_force_enabled) {
   if (is_quic_force_disabled)
@@ -100,7 +101,10 @@ bool ShouldEnableQuic(base::StringPiece quic_trial_group,
     return true;
 
   return quic_trial_group.starts_with(kQuicFieldTrialEnabledGroupName) ||
-         quic_trial_group.starts_with(kQuicFieldTrialHttpsEnabledGroupName);
+         quic_trial_group.starts_with(kQuicFieldTrialHttpsEnabledGroupName) ||
+         base::LowerCaseEqualsASCII(
+             GetVariationParam(quic_trial_params, "enable_quic"),
+             "true");
 }
 
 bool ShouldDisableQuicWhenConnectionTimesOutWithOpenStreams(
@@ -251,6 +255,12 @@ bool ShouldQuicDoNotFragment(const VariationParameters& quic_trial_params) {
       GetVariationParam(quic_trial_params, "do_not_fragment"), "true");
 }
 
+bool ShouldQuicEstimateInitialRtt(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "estimate_initial_rtt"), "true");
+}
+
 bool ShouldQuicDisablePreConnectIfZeroRtt(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
@@ -292,6 +302,14 @@ bool ShouldQuicAllowServerMigration(
       "true");
 }
 
+bool ShouldQuicDoNotMarkAsBrokenOnNetworkChange(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params,
+                        "do_not_mark_as_broken_on_network_change"),
+      "true");
+}
+
 size_t GetQuicMaxPacketLength(const VariationParameters& quic_trial_params) {
   unsigned value;
   if (base::StringToUint(
@@ -313,7 +331,8 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
                          const std::string& quic_user_agent_id,
                          net::HttpNetworkSession::Params* params) {
   params->enable_quic = ShouldEnableQuic(
-      quic_trial_group, is_quic_force_disabled, is_quic_force_enabled);
+      quic_trial_group, quic_trial_params, is_quic_force_disabled,
+      is_quic_force_enabled);
   params->disable_quic_on_timeout_with_open_streams =
       ShouldDisableQuicWhenConnectionTimesOutWithOpenStreams(quic_trial_params);
 
@@ -370,6 +389,8 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
         ShouldQuicRaceCertVerification(quic_trial_params);
     params->quic_do_not_fragment =
         ShouldQuicDoNotFragment(quic_trial_params);
+    params->quic_estimate_initial_rtt =
+        ShouldQuicEstimateInitialRtt(quic_trial_params);
     params->quic_disable_preconnect_if_0rtt =
         ShouldQuicDisablePreConnectIfZeroRtt(quic_trial_params);
     params->quic_host_whitelist = GetQuicHostWhitelist(quic_trial_params);
@@ -379,6 +400,8 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
         ShouldQuicMigrateSessionsEarly(quic_trial_params);
     params->quic_allow_server_migration =
         ShouldQuicAllowServerMigration(quic_trial_params);
+    params->quic_do_not_mark_as_broken_on_network_change =
+        ShouldQuicDoNotMarkAsBrokenOnNetworkChange(quic_trial_params);
   }
 
   size_t max_packet_length = GetQuicMaxPacketLength(quic_trial_params);

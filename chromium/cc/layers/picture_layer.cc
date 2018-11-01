@@ -6,17 +6,12 @@
 
 #include "base/auto_reset.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/blimp/client_picture_cache.h"
-#include "cc/blimp/engine_picture_cache.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
+#include "cc/paint/paint_record.h"
 #include "cc/playback/recording_source.h"
-#include "cc/proto/cc_conversions.h"
-#include "cc/proto/gfx_conversions.h"
-#include "cc/proto/layer.pb.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
@@ -32,7 +27,7 @@ scoped_refptr<PictureLayer> PictureLayer::Create(ContentLayerClient* client) {
 PictureLayer::PictureLayer(ContentLayerClient* client)
     : instrumentation_object_tracker_(id()),
       update_source_frame_number_(-1),
-      is_mask_(false) {
+      mask_type_(LayerMaskType::NOT_MASK) {
   picture_layer_inputs_.client = client;
 }
 
@@ -47,15 +42,15 @@ PictureLayer::~PictureLayer() {
 
 std::unique_ptr<LayerImpl> PictureLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  return PictureLayerImpl::Create(tree_impl, id(), is_mask_);
+  return PictureLayerImpl::Create(tree_impl, id(), mask_type_);
 }
 
 void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
   Layer::PushPropertiesTo(base_layer);
   TRACE_EVENT0("cc", "PictureLayer::PushPropertiesTo");
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
-  // TODO(danakj): Make is_mask_ a constructor parameter for PictureLayer.
-  DCHECK_EQ(layer_impl->is_mask(), is_mask_);
+  // TODO(danakj): Make mask_type_ a constructor parameter for PictureLayer.
+  DCHECK_EQ(layer_impl->mask_type(), mask_type());
   DropRecordingSourceContentIfInvalid();
 
   layer_impl->SetNearestNeighbor(picture_layer_inputs_.nearest_neighbor);
@@ -65,7 +60,7 @@ void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
   scoped_refptr<RasterSource> raster_source =
       recording_source_->CreateRasterSource(can_use_lcd_text);
   layer_impl->set_gpu_raster_max_texture_size(
-      GetLayerTree()->device_viewport_size());
+      layer_tree_host()->device_viewport_size());
   layer_impl->UpdateRasterSource(raster_source, &last_updated_invalidation_,
                                  nullptr);
   DCHECK(last_updated_invalidation_.IsEmpty());
@@ -73,8 +68,13 @@ void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
 
 void PictureLayer::SetLayerTreeHost(LayerTreeHost* host) {
   Layer::SetLayerTreeHost(host);
+
   if (!host)
     return;
+
+  if (!host->GetSettings().enable_mask_tiling &&
+      mask_type_ == LayerMaskType::MULTI_TEXTURE_MASK)
+    mask_type_ = LayerMaskType::SINGLE_TEXTURE_MASK;
 
   if (!recording_source_)
     recording_source_.reset(new RecordingSource);
@@ -88,7 +88,7 @@ void PictureLayer::SetLayerTreeHost(LayerTreeHost* host) {
 }
 
 void PictureLayer::SetNeedsDisplayRect(const gfx::Rect& layer_rect) {
-  DCHECK(!layer_tree_host() || !GetLayerTree()->in_paint_layer_contents());
+  DCHECK(!layer_tree_host() || !layer_tree_host()->in_paint_layer_contents());
   if (recording_source_)
     recording_source_->SetNeedsDisplayRect(layer_rect);
   Layer::SetNeedsDisplayRect(layer_rect);
@@ -142,14 +142,14 @@ bool PictureLayer::Update() {
   return updated;
 }
 
-void PictureLayer::SetIsMask(bool is_mask) {
-  is_mask_ = is_mask;
+void PictureLayer::SetLayerMaskType(LayerMaskType mask_type) {
+  mask_type_ = mask_type;
 }
 
 sk_sp<SkPicture> PictureLayer::GetPicture() const {
-  // We could either flatten the RecordingSource into a single
-  // SkPicture, or paint a fresh one depending on what we intend to do with the
-  // picture. For now we just paint a fresh one to get consistent results.
+  // We could either flatten the RecordingSource into a single SkPicture, or
+  // paint a fresh one depending on what we intend to do with it.  For now we
+  // just paint a fresh one to get consistent results.
   if (!DrawsContent())
     return nullptr;
 
@@ -200,35 +200,6 @@ void PictureLayer::SetNearestNeighbor(bool nearest_neighbor) {
 
 bool PictureLayer::HasDrawableContent() const {
   return picture_layer_inputs_.client && Layer::HasDrawableContent();
-}
-
-void PictureLayer::SetTypeForProtoSerialization(proto::LayerNode* proto) const {
-  proto->set_type(proto::LayerNode::PICTURE_LAYER);
-}
-
-void PictureLayer::ToLayerPropertiesProto(proto::LayerProperties* proto) {
-  DCHECK(GetLayerTree());
-  DCHECK(GetLayerTree()->engine_picture_cache());
-
-  Layer::ToLayerPropertiesProto(proto);
-  DropRecordingSourceContentIfInvalid();
-  proto::PictureLayerProperties* picture = proto->mutable_picture();
-
-  picture->set_nearest_neighbor(picture_layer_inputs_.nearest_neighbor);
-  RectToProto(picture_layer_inputs_.recorded_viewport,
-              picture->mutable_recorded_viewport());
-  if (picture_layer_inputs_.display_list) {
-    picture_layer_inputs_.display_list->ToProtobuf(
-        picture->mutable_display_list());
-    for (const auto& item : *picture_layer_inputs_.display_list) {
-      sk_sp<const SkPicture> picture = item.GetPicture();
-      // Only DrawingDisplayItems have SkPictures.
-      if (!picture)
-        continue;
-
-      GetLayerTree()->engine_picture_cache()->MarkUsed(picture.get());
-    }
-  }
 }
 
 void PictureLayer::RunMicroBenchmark(MicroBenchmark* benchmark) {

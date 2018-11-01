@@ -211,6 +211,8 @@ TEST(TimeFormattingTest, MAYBE_TimeFormatDateUS) {
   EXPECT_EQ(ASCIIToUTF16("4/30/11, 3:42:07 PM ") + GetShortTimeZone(time),
             TimeFormatShortDateAndTimeWithTimeZone(time));
 
+  EXPECT_EQ(ASCIIToUTF16("April 2011"), TimeFormatMonthAndYear(time));
+
   EXPECT_EQ(ASCIIToUTF16("Saturday, April 30, 2011 at 3:42:07 PM"),
             TimeFormatFriendlyDateAndTime(time));
 
@@ -238,10 +240,34 @@ TEST(TimeFormattingTest, MAYBE_TimeFormatDateGB) {
             TimeFormatShortDateAndTime(time));
   EXPECT_EQ(ASCIIToUTF16("30/04/2011, 15:42:07 ") + GetShortTimeZone(time),
             TimeFormatShortDateAndTimeWithTimeZone(time));
+  EXPECT_EQ(ASCIIToUTF16("April 2011"), TimeFormatMonthAndYear(time));
   EXPECT_EQ(ASCIIToUTF16("Saturday, 30 April 2011 at 15:42:07"),
             TimeFormatFriendlyDateAndTime(time));
   EXPECT_EQ(ASCIIToUTF16("Saturday, 30 April 2011"),
             TimeFormatFriendlyDate(time));
+}
+
+TEST(TimeFormattingTest, TimeFormatWithPattern) {
+  test::ScopedRestoreICUDefaultLocale restore_locale;
+
+  Time time;
+  EXPECT_TRUE(Time::FromLocalExploded(kTestDateTimeExploded, &time));
+
+  i18n::SetICUDefaultLocale("en_US");
+  EXPECT_EQ(ASCIIToUTF16("Apr 30, 2011"), TimeFormatWithPattern(time, "yMMMd"));
+  EXPECT_EQ(ASCIIToUTF16("April 30, 3:42:07 PM"),
+            TimeFormatWithPattern(time, "MMMMdjmmss"));
+
+  i18n::SetICUDefaultLocale("en_GB");
+  EXPECT_EQ(ASCIIToUTF16("30 Apr 2011"), TimeFormatWithPattern(time, "yMMMd"));
+  EXPECT_EQ(ASCIIToUTF16("30 April, 15:42:07"),
+            TimeFormatWithPattern(time, "MMMMdjmmss"));
+
+  i18n::SetICUDefaultLocale("ja_JP");
+  EXPECT_EQ(WideToUTF16(L"2011年4月30日"),
+            TimeFormatWithPattern(time, "yMMMd"));
+  EXPECT_EQ(WideToUTF16(L"4月30日") + ASCIIToUTF16(" 15:42:07"),
+            TimeFormatWithPattern(time, "MMMMdjmmss"));
 }
 
 TEST(TimeFormattingTest, TimeDurationFormat) {
@@ -336,6 +362,25 @@ TEST(TimeFormattingTest, TimeDurationFormatWithSeconds) {
             TimeDurationFormatWithSecondsString(delta, DURATION_WIDTH_NARROW));
   EXPECT_EQ(ASCIIToUTF16("15:42:00"),
             TimeDurationFormatWithSecondsString(delta, DURATION_WIDTH_NUMERIC));
+}
+
+TEST(TimeFormattingTest, TimeIntervalFormat) {
+  test::ScopedRestoreICUDefaultLocale restore_locale;
+  i18n::SetICUDefaultLocale("en_US");
+
+  const Time::Exploded kTestIntervalEndTimeExploded = {
+      2011, 5,  6, 28,  // Sat, Apr 30, 2012
+      15,   42, 7, 0    // 15:42:07.000
+  };
+
+  Time begin_time;
+  EXPECT_TRUE(Time::FromLocalExploded(kTestDateTimeExploded, &begin_time));
+  Time end_time;
+  EXPECT_TRUE(Time::FromLocalExploded(kTestIntervalEndTimeExploded, &end_time));
+
+  EXPECT_EQ(
+      WideToUTF16(L"Saturday, April 30 – Saturday, May 28"),
+      DateIntervalFormat(begin_time, end_time, DATE_FORMAT_MONTH_WEEKDAY_DAY));
 }
 
 }  // namespace

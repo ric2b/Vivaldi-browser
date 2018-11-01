@@ -5,6 +5,7 @@
 
 #include "sync/test/fake_server/notes_entity_builder.h"
 
+#include <memory>
 #include <string>
 
 #include "base/guid.h"

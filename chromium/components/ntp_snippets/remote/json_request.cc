@@ -14,8 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
-#include "base/time/tick_clock.h"
-#include "base/time/time.h"
+#include "base/time/clock.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/ntp_snippets/category_info.h"
@@ -25,12 +24,13 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_associated_data.h"
-#include "grit/components_strings.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
@@ -139,10 +139,7 @@ CategoryInfo BuildArticleCategoryInfo(
                         : l10n_util::GetStringUTF16(
                               IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_HEADER),
       ContentSuggestionsCardLayout::FULL_CARD,
-      // TODO(dgn): merge has_more_action and has_reload_action when we remove
-      // the kFetchMoreFeature flag. See https://crbug.com/667752
-      /*has_more_action=*/base::FeatureList::IsEnabled(kFetchMoreFeature),
-      /*has_reload_action=*/true,
+      /*has_fetch_action=*/true,
       /*has_view_all_action=*/false,
       /*show_if_empty=*/true,
       l10n_util::GetStringUTF16(IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_EMPTY));
@@ -152,11 +149,7 @@ CategoryInfo BuildRemoteCategoryInfo(const base::string16& title,
                                      bool allow_fetching_more_results) {
   return CategoryInfo(
       title, ContentSuggestionsCardLayout::FULL_CARD,
-      // TODO(dgn): merge has_more_action and has_reload_action when we remove
-      // the kFetchMoreFeature flag. See https://crbug.com/667752
-      /*has_more_action=*/allow_fetching_more_results &&
-          base::FeatureList::IsEnabled(kFetchMoreFeature),
-      /*has_reload_action=*/allow_fetching_more_results,
+      /*has_fetch_action=*/allow_fetching_more_results,
       /*has_view_all_action=*/false,
       /*show_if_empty=*/false,
       // TODO(tschumann): The message for no-articles is likely wrong
@@ -167,13 +160,13 @@ CategoryInfo BuildRemoteCategoryInfo(const base::string16& title,
 
 JsonRequest::JsonRequest(
     base::Optional<Category> exclusive_category,
-    base::TickClock* tick_clock,  // Needed until destruction of the request.
+    base::Clock* clock,  // Needed until destruction of the request.
     const ParseJSONCallback& callback)
     : exclusive_category_(exclusive_category),
-      tick_clock_(tick_clock),
+      clock_(clock),
       parse_json_callback_(callback),
       weak_ptr_factory_(this) {
-  creation_time_ = tick_clock_->NowTicks();
+  creation_time_ = clock_->Now();
 }
 
 JsonRequest::~JsonRequest() {
@@ -187,7 +180,7 @@ void JsonRequest::Start(CompletedCallback callback) {
 }
 
 base::TimeDelta JsonRequest::GetFetchDuration() const {
-  return tick_clock_->NowTicks() - creation_time_;
+  return clock_->Now() - creation_time_;
 }
 
 std::string JsonRequest::GetResponseString() const {
@@ -253,7 +246,6 @@ void JsonRequest::OnJsonError(const std::string& error) {
 
 JsonRequest::Builder::Builder()
     : fetch_api_(CHROME_READER_API),
-      personalization_(Personalization::kBoth),
       language_model_(nullptr) {}
 JsonRequest::Builder::Builder(JsonRequest::Builder&&) = default;
 JsonRequest::Builder::~Builder() = default;
@@ -261,9 +253,9 @@ JsonRequest::Builder::~Builder() = default;
 std::unique_ptr<JsonRequest> JsonRequest::Builder::Build() const {
   DCHECK(!url_.is_empty());
   DCHECK(url_request_context_getter_);
-  DCHECK(tick_clock_);
-  auto request = base::MakeUnique<JsonRequest>(
-      params_.exclusive_category, tick_clock_, parse_json_callback_);
+  DCHECK(clock_);
+  auto request = base::MakeUnique<JsonRequest>(params_.exclusive_category,
+                                               clock_, parse_json_callback_);
   std::string body = BuildBody();
   std::string headers = BuildHeaders();
   request->url_fetcher_ = BuildURLFetcher(request.get(), headers, body);
@@ -307,15 +299,8 @@ JsonRequest::Builder& JsonRequest::Builder::SetParseJsonCallback(
   return *this;
 }
 
-JsonRequest::Builder& JsonRequest::Builder::SetPersonalization(
-    Personalization personalization) {
-  personalization_ = personalization;
-  return *this;
-}
-
-JsonRequest::Builder& JsonRequest::Builder::SetTickClock(
-    base::TickClock* tick_clock) {
-  tick_clock_ = tick_clock;
+JsonRequest::Builder& JsonRequest::Builder::SetClock(base::Clock* clock) {
+  clock_ = clock;
   return *this;
 }
 
@@ -360,10 +345,6 @@ std::string JsonRequest::Builder::BuildBody() const {
   std::string user_locale = PosixLocaleFromBCP47Language(params_.language_code);
   switch (fetch_api_) {
     case CHROME_READER_API: {
-      auto content_params = base::MakeUnique<base::DictionaryValue>();
-      content_params->SetBoolean("only_return_personalized_results",
-                                 ReturnOnlyPersonalizedResults());
-
       auto content_restricts = base::MakeUnique<base::ListValue>();
       for (const auto* metadata : {"TITLE", "SNIPPET", "THUMBNAIL"}) {
         auto entry = base::MakeUnique<base::DictionaryValue>();
@@ -373,7 +354,6 @@ std::string JsonRequest::Builder::BuildBody() const {
       }
 
       auto local_scoring_params = base::MakeUnique<base::DictionaryValue>();
-      local_scoring_params->Set("content_params", std::move(content_params));
       local_scoring_params->Set("content_restricts",
                                 std::move(content_restricts));
 
@@ -436,7 +416,6 @@ std::string JsonRequest::Builder::BuildBody() const {
       }
       request->Set("topLanguages", std::move(language_list));
 
-      // TODO(sfiera): Support only_return_personalized_results.
       // TODO(sfiera): Support count_to_fetch.
       break;
     }
@@ -453,13 +432,43 @@ std::unique_ptr<net::URLFetcher> JsonRequest::Builder::BuildURLFetcher(
     net::URLFetcherDelegate* delegate,
     const std::string& headers,
     const std::string& body) const {
-  std::unique_ptr<net::URLFetcher> url_fetcher =
-      net::URLFetcher::Create(url_, net::URLFetcher::POST, delegate);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("ntp_snippets_fetch", R"(
+        semantics {
+          sender: "New Tab Page Content Suggestions Fetch"
+          description:
+            "Chromium can show content suggestions (e.g. news articles) on the "
+            "New Tab page. For signed-in users, these may be personalized "
+            "based on the user's synced browsing history."
+          trigger:
+            "Triggered periodically in the background, or upon explicit user "
+            "request."
+          data:
+            "The Chromium UI language, as well as a second language the user "
+            "understands, based on translate::LanguageModel. For signed-in "
+            "users, the requests is authenticated."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "This feature cannot be disabled by settings now (but is requested "
+            "to be implemented in crbug.com/695129)."
+          policy {
+            NTPContentSuggestionsEnabled {
+              policy_options {mode: MANDATORY}
+              value: false
+            }
+          }
+        })");
+  std::unique_ptr<net::URLFetcher> url_fetcher = net::URLFetcher::Create(
+      url_, net::URLFetcher::POST, delegate, traffic_annotation);
   url_fetcher->SetRequestContext(url_request_context_getter_.get());
   url_fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                             net::LOAD_DO_NOT_SAVE_COOKIES);
   data_use_measurement::DataUseUserData::AttachToFetcher(
-      url_fetcher.get(), data_use_measurement::DataUseUserData::NTP_SNIPPETS);
+      url_fetcher.get(),
+      data_use_measurement::DataUseUserData::NTP_SNIPPETS_SUGGESTIONS);
 
   url_fetcher->SetExtraRequestHeaders(headers);
   url_fetcher->SetUploadData("application/json", body);

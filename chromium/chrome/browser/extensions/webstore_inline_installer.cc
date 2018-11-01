@@ -4,11 +4,17 @@
 
 #include "chrome/browser/extensions/webstore_inline_installer.h"
 
+#include <utility>
+
+#include "base/json/json_writer.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
+#include "chrome/browser/extensions/webstore_data_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
-#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 
 using content::WebContents;
@@ -95,9 +101,45 @@ bool WebstoreInlineInstaller::IsRequestorPermitted(
   return true;
 }
 
+std::string WebstoreInlineInstaller::GetJsonPostData() {
+  // web_contents() might return null during tab destruction. This object would
+  // also be destroyed shortly thereafter but check to be on the safe side.
+  if (!web_contents())
+    return std::string();
+
+  content::NavigationController& navigation_controller =
+      web_contents()->GetController();
+  content::NavigationEntry* navigation_entry =
+      navigation_controller.GetLastCommittedEntry();
+
+  if (navigation_entry) {
+    const std::vector<GURL>& redirect_urls =
+        navigation_entry->GetRedirectChain();
+
+    if (!redirect_urls.empty()) {
+      base::DictionaryValue dictionary;
+      dictionary.SetString("id", id());
+      dictionary.SetString("referrer", requestor_url_.spec());
+      std::unique_ptr<base::ListValue> redirect_chain =
+          base::MakeUnique<base::ListValue>();
+      for (const GURL& url : redirect_urls) {
+        redirect_chain->AppendString(url.spec());
+      }
+      dictionary.Set("redirect_chain", std::move(redirect_chain));
+
+      std::string json;
+      base::JSONWriter::Write(dictionary, &json);
+      return json;
+    }
+  }
+
+  return std::string();
+}
+
 bool WebstoreInlineInstaller::CheckRequestorAlive() const {
   // The frame or tab may have gone away - cancel installation in that case.
-  return host_ != nullptr && web_contents() != nullptr;
+  return host_ != nullptr && web_contents() != nullptr &&
+         chrome::FindBrowserWithWebContents(web_contents()) != nullptr;
 }
 
 const GURL& WebstoreInlineInstaller::GetRequestorURL() const {
@@ -188,13 +230,14 @@ bool WebstoreInlineInstaller::CheckRequestorPermitted(
 // Private implementation.
 //
 
-void WebstoreInlineInstaller::DidNavigateAnyFrame(
-    content::RenderFrameHost* render_frame_host,
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
-  if (!details.is_in_page &&
-      (render_frame_host == host_ || details.is_main_frame))
+void WebstoreInlineInstaller::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->HasCommitted() &&
+      !navigation_handle->IsSamePage() &&
+      (navigation_handle->GetRenderFrameHost() == host_ ||
+       navigation_handle->IsInMainFrame())) {
     host_ = nullptr;
+  }
 }
 
 void WebstoreInlineInstaller::WebContentsDestroyed() {

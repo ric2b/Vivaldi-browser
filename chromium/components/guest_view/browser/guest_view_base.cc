@@ -16,7 +16,7 @@
 #include "components/guest_view/common/guest_view_messages.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
-#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -79,12 +79,16 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
     Destroy();
   }
 
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override {
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
     // If the embedder navigates to a different page then destroy the guest.
-    if (details.is_navigation_to_different_page())
-      Destroy();
+    if (!navigation_handle->IsInMainFrame() ||
+        !navigation_handle->HasCommitted() ||
+        navigation_handle->IsSamePage()) {
+      return;
+    }
+
+    Destroy();
   }
 
   void RenderProcessGone(base::TerminationStatus status) override {
@@ -235,9 +239,9 @@ void GuestViewBase::InitWithWebContents(
   // after the latter has handled WebContentsObserver events (observers are
   // notified of events in the same order they are added as observers). For
   // example, GuestViewBase may wish to put its guest into isolated zoom mode
-  // in DidNavigateMainFrame, but since ZoomController always resets to default
+  // in DidFinishNavigation, but since ZoomController always resets to default
   // zoom mode on this event, GuestViewBase would need to do so after
-  // ZoomController::DidNavigateMainFrame has completed.
+  // ZoomController::DidFinishNavigation has completed.
   zoom::ZoomController::CreateForWebContents(guest_web_contents);
 
   AttachWebContentsObservers(guest_web_contents);
@@ -645,9 +649,11 @@ void GuestViewBase::WebContentsDestroyed() {
   delete this;
 }
 
-void GuestViewBase::DidNavigateMainFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
+void GuestViewBase::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
+    return;
+
   if (attached() && ZoomPropagatesFromEmbedderToGuest())
     SetGuestZoomLevelToMatchEmbedder();
 }

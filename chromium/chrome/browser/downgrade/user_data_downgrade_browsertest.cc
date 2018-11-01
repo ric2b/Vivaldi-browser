@@ -8,6 +8,7 @@
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_reg_util_win.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "chrome/common/chrome_constants.h"
@@ -24,7 +25,7 @@ class UserDataDowngradeBrowserTestBase : public InProcessBrowserTest {
   // content::BrowserTestBase:
   void SetUpInProcessBrowserTestFixture() override {
     HKEY root = HKEY_CURRENT_USER;
-    registry_override_manager_.OverrideRegistry(root);
+    ASSERT_NO_FATAL_FAILURE(registry_override_manager_.OverrideRegistry(root));
     key_.Create(root,
                 BrowserDistribution::GetDistribution()->GetStateKey().c_str(),
                 KEY_SET_VALUE | KEY_WOW64_32KEY);

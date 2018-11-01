@@ -360,6 +360,12 @@
   return kMenubarHeight;
 }
 
+- (BOOL)isInAnyFullscreenMode {
+  // Subclass must implement.
+  NOTIMPLEMENTED();
+  return NO;
+}
+
 - (NSView*)avatarView {
   return nil;
 }

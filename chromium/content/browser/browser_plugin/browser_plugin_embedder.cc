@@ -223,6 +223,16 @@ bool BrowserPluginEmbedder::WereAnyGuestsRecentlyAudible() {
       base::Bind(&BrowserPluginEmbedder::GuestRecentlyAudibleCallback));
 }
 
+bool BrowserPluginEmbedder::AreAnyGuestsFocused() {
+  BrowserPluginGuestManager::GuestCallback callback =
+      base::Bind([](WebContents* guest) {
+        return static_cast<WebContentsImpl*>(guest)
+            ->GetBrowserPluginGuest()
+            ->focused();
+      });
+  return GetBrowserPluginGuestManager()->ForEachGuest(web_contents(), callback);
+}
+
 // static
 bool BrowserPluginEmbedder::UnlockMouseIfNecessaryCallback(bool* mouse_unlocked,
                                                            WebContents* guest) {

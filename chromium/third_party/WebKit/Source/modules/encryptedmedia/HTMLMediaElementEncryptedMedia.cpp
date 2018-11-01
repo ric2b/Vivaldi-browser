@@ -12,6 +12,7 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
@@ -51,7 +52,7 @@ class SetMediaKeysHandler : public ScriptPromiseResolver {
   Member<HTMLMediaElement> m_element;
   Member<MediaKeys> m_newMediaKeys;
   bool m_madeReservation;
-  Timer<SetMediaKeysHandler> m_timer;
+  TaskRunnerTimer<SetMediaKeysHandler> m_timer;
 };
 
 typedef Function<void()> SuccessCallback;
@@ -68,7 +69,10 @@ class SetContentDecryptionModuleResult final
         m_failureCallback(std::move(failure)) {}
 
   // ContentDecryptionModuleResult implementation.
-  void complete() override { (*m_successCallback)(); }
+  void complete() override {
+    DVLOG(EME_LOG_LEVEL) << __func__ << ": promise resolved.";
+    (*m_successCallback)();
+  }
 
   void completeWithContentDecryptionModule(
       WebContentDecryptionModule*) override {
@@ -97,6 +101,9 @@ class SetContentDecryptionModuleResult final
       result.append(')');
     }
 
+    DVLOG(EME_LOG_LEVEL) << __func__ << ": promise rejected with code " << code
+                         << " and message: " << result.toString();
+
     (*m_failureCallback)(WebCdmExceptionToExceptionCode(code),
                          result.toString());
   }
@@ -123,7 +130,9 @@ SetMediaKeysHandler::SetMediaKeysHandler(ScriptState* scriptState,
       m_element(element),
       m_newMediaKeys(mediaKeys),
       m_madeReservation(false),
-      m_timer(this, &SetMediaKeysHandler::timerFired) {
+      m_timer(TaskRunnerHelper::get(TaskType::MiscPlatformAPI, scriptState),
+              this,
+              &SetMediaKeysHandler::timerFired) {
   DVLOG(EME_LOG_LEVEL) << __func__;
 
   // 5. Run the following steps in parallel.
@@ -335,7 +344,7 @@ ScriptPromise HTMLMediaElementEncryptedMedia::setMediaKeys(
     MediaKeys* mediaKeys) {
   HTMLMediaElementEncryptedMedia& thisElement =
       HTMLMediaElementEncryptedMedia::from(element);
-  DVLOG(EME_LOG_LEVEL) << __func__ << " current("
+  DVLOG(EME_LOG_LEVEL) << __func__ << ": current("
                        << thisElement.m_mediaKeys.get() << "), new("
                        << mediaKeys << ")";
 

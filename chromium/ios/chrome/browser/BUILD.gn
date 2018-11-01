@@ -8,19 +8,6 @@ import("//build/config/ios/rules.gni")
 import("//rlz/features/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 
-declare_args() {
-  google_test_gaia_client_id = ""
-  google_test_gaia_client_secret = ""
-  google_staging_api_url = ""
-  google_staging_lso_url = ""
-  google_test_api_url = ""
-  google_test_lso_url = ""
-  google_test_oauth_client_id = ""
-  google_test_oauth_client_secret = ""
-  google_test_oauth_url = ""
-  google_test_sync_url = ""
-}
-
 source_set("browser") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -79,7 +66,6 @@ source_set("browser") {
     "xcallback_parameters.mm",
   ]
   deps = [
-    ":google_api_keys_header",
     ":settings_resources",
     "//base",
     "//components/autofill/core/browser",
@@ -161,6 +147,7 @@ source_set("browser_impl") {
     "//components/prefs",
     "//components/rappor",
     "//components/translate/core/browser",
+    "//components/ukm",
     "//components/update_client",
     "//components/variations",
     "//components/variations/field_trial_config",
@@ -194,20 +181,6 @@ source_set("browser_impl") {
   }
 }
 
-buildflag_header("google_api_keys_header") {
-  header = "google_api_keys.h"
-  flags = [
-    "GOOGLE_STAGING_API_URL=\"$google_staging_api_url\"",
-    "GOOGLE_STAGING_LSO_URL=\"$google_staging_lso_url\"",
-    "GOOGLE_TEST_API_URL=\"$google_test_api_url\"",
-    "GOOGLE_TEST_LSO_URL=\"$google_test_lso_url\"",
-    "GOOGLE_TEST_OAUTH_CLIENT_ID=\"$google_test_oauth_client_id\"",
-    "GOOGLE_TEST_OAUTH_CLIENT_SECRET=\"$google_test_oauth_client_secret\"",
-    "GOOGLE_TEST_OAUTH_URL=\"$google_test_oauth_url\"",
-    "GOOGLE_TEST_SYNC_URL=\"$google_test_sync_url\"",
-  ]
-}
-
 bundle_data("settings_resources") {
   sources = [
     "resources/Settings.bundle/Experimental.plist",
@@ -219,6 +192,7 @@ bundle_data("settings_resources") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "callback_counter_unittest.mm",

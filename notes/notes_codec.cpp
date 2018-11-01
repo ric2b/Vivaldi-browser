@@ -5,8 +5,10 @@
 
 #include "notes/notes_codec.h"
 
-#include <iostream>
 #include <algorithm>
+#include <iostream>
+#include <memory>
+#include <vector>
 
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_number_conversions.h"
@@ -158,7 +160,7 @@ bool NotesCodec::DecodeHelper(Notes_Node* notes_node,
       return false;
   }
 
-  notes_node->Decode(d_value, maximum_id_, this);
+  notes_node->Decode(d_value, &maximum_id_, this);
   // Other and trash nodes are included inside the normal notes node during
   // encoding; extract them so that they can be placed in the root node
   ExtractSpecialNode(Notes_Node::OTHER, notes_node, other_notes_node);

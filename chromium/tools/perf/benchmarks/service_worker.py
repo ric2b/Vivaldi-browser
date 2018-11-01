@@ -151,7 +151,7 @@ class _ServiceWorkerMicroBenchmarkMeasurement(legacy_page_test.LegacyPageTest):
 
   def ValidateAndMeasurePage(self, page, tab, results):
     del page  # unused
-    tab.WaitForJavaScriptExpression('window.done', 40)
+    tab.WaitForJavaScriptCondition('window.done', timeout=40)
     json = tab.EvaluateJavaScript('window.results || {}')
     for key, value in json.iteritems():
       results.AddValue(scalar.ScalarValue(

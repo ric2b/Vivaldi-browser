@@ -19,7 +19,7 @@ namespace spoof {
 void ForceWhatsappMode(const net::URLRequest* request,
                        net::HttpRequestHeaders* headers);
 
-} // namespace spoof
-} // namespace vivaldi
+}  // namespace spoof
+}  // namespace vivaldi
 
-#endif // EXTENSIONS_TOOLS_VIVALDI_TOOLS_H_
+#endif  // EXTENSIONS_TOOLS_VIVALDI_TOOLS_H_

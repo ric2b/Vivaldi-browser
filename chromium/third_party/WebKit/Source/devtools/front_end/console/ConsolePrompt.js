@@ -220,7 +220,7 @@ Console.ConsolePrompt = class extends UI.Widget {
         continue;
       set.add(item);
       result.push(
-          {title: item.substring(text.length - prefix.length), iconType: 'smallicon-text-prompt', isSecondary: true});
+          {text: item.substring(text.length - prefix.length), iconType: 'smallicon-text-prompt', isSecondary: true});
     }
     return result;
   }
@@ -264,14 +264,14 @@ Console.ConsolePrompt = class extends UI.Widget {
 
     var excludedTokens = new Set(['js-comment', 'js-string-2', 'js-def']);
     var trimmedBefore = before.trim();
-    if (!trimmedBefore.endsWith('['))
+    if (!trimmedBefore.endsWith('[') && !trimmedBefore.match(/\.\s*(get|set|delete)\s*\(\s*$/))
       excludedTokens.add('js-string');
     if (!trimmedBefore.endsWith('.'))
       excludedTokens.add('js-property');
     if (excludedTokens.has(currentTokenType))
       return Promise.resolve(historyWords);
 
-    return Components.JavaScriptAutocomplete.completionsForTextInCurrentContext(before, query, force)
+    return ObjectUI.JavaScriptAutocomplete.completionsForTextInCurrentContext(before, query, force)
         .then(words => words.concat(historyWords));
   }
 

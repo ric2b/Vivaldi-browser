@@ -209,6 +209,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_COPY_LINK" desc="The label for a menu item to copy a link. [CHAR-LIMIT=30]">
         Copy link
       </message>
+      <message name="IDS_COPIED" desc="Notification telling the user that something has been copied to the clipboard.">
+        Copied
+      </message>
 
       <!-- Main Preferences -->
       <message name="IDS_PREFERENCES" desc="Title for Chrome's Settings.">
@@ -234,6 +237,15 @@ CHAR-LIMIT guidelines:
       </message>
       <message name="IDS_ENTER_VR" desc="Menu item for entering VR. [CHAR-LIMIT=27]">
         Enter VR
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_GROUP_GENERAL" desc='Subheading for "General" section of a list of notification categories. [CHAR-LIMIT=32]'>
+        General
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_BROWSER" desc="Label for browser-related notifications, within a list of notification categories. [CHAR-LIMIT=32]">
+        Browser
+      </message>
+      <message name="IDS_NOTIFICATION_CATEGORY_SITES" desc="Label for notifications from websites, within a list of notification categories. [CHAR-LIMIT=32]">
+        Sites
       </message>
 
       <!-- Sign-in preference -->
@@ -270,14 +282,26 @@ CHAR-LIMIT guidelines:
         Recently visited
       </message>
 
-      <!-- Autofill preferences -->
-      <message name="IDS_PREFS_AUTOFILL" desc="Title for 'Autofill forms' settings, which control what personal data can be automatically filled into web page forms. [CHAR-LIMIT=32]">
+      <!-- Autofill and Payments preferences -->
+      <message name="IDS_PREFS_AUTOFILL_AND_PAYMENTS" desc="Title of Autofill and payments settings prefrences. [CHAR-LIMIT=32]">
+        Autofill and payments
+      </message>
+      <message name="IDS_AUTOFILL_SWITCH" desc="Title for 'Autofill forms' switch preference, which controls whether personal data can be automatically filled into web page forms. [CHAR-LIMIT=32]">
         Autofill forms
       </message>
-      <message name="IDS_AUTOFILL_PROFILES_TITLE" desc="Header above the list of profiles (which contain the user's name, address, etc) that can be automatically filled into web page forms. [CHAR-LIMIT=32]">
+      <message name="IDS_AUTOFILL_PROFILES_TITLE" desc="Title of the preference to list profiles (which contain the user's name, address, etc) that can be automatically filled into web page forms. [CHAR-LIMIT=32]">
         Addresses
       </message>
-      <message name="IDS_AUTOFILL_CREDIT_CARDS_TITLE" desc="Header above the list of the user's credit cards that can be automatically filled into web page forms. [CHAR-LIMIT=32]">
+      <message name="IDS_PAYMENT_APPS_TITLE" desc="Title of the preference to list the payment apps on device.">
+        Payment apps
+      </message>
+      <message name="IDS_PAYMENT_NO_APPS_SUMMARY" desc="Summary of the preference to list the payment apps on device when no payments apps installed.">
+        No supported apps installed
+      </message>
+      <message name="IDS_PAYMENT_APPS_CONTROL_MESSAGE" desc="Message to explain what the user controls by toggling the switch of the payment app preference.">
+        On some websites, you can pay with supported payment apps. Choose which apps to use in Chrome.
+      </message>
+      <message name="IDS_AUTOFILL_CREDIT_CARDS_TITLE" desc="Title of the preference to list the user's credit cards that can be automatically filled into web page forms. [CHAR-LIMIT=32]">
         Credit cards
       </message>
       <message name="IDS_AUTOFILL_CREATE_PROFILE" desc="Button that allows the user to create a new profile (which contains the user's name, address, etc) that will be automatically filled into web page forms. [CHAR-LIMIT=32]">
@@ -322,10 +346,10 @@ CHAR-LIMIT guidelines:
         Edit
       </message>
       <message name="IDS_AUTOFILL_MANAGE_WALLET_CARDS_URL" desc="URL for managing wallet credit cards" translateable="false">
-        https://wallet.google.com/manage/paymentMethods
+        https://payments.google.com/#paymentMethods
       </message>
       <message name="IDS_AUTOFILL_MANAGE_WALLET_ADDRESSES_URL" desc="URL for managing wallet addresses" translateable="false">
-        https://wallet.google.com/manage/addressBook
+        https://payments.google.com/#paymentMethods
       </message>
       <message name="IDS_AUTOFILL_FROM_GOOGLE_ACCOUNT_LONG" desc="Text that indicates an address or credit card came from Google servers.">
         From Google Payments
@@ -546,6 +570,9 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_OPEN_CLEAR_BROWSING_DATA_DIALOG_BUTTON" desc="Title of the button that will open the clear browsing data dialog.">
         Clear browsing data…
       </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_BASIC_TAB_TITLE" desc="The title of the tab showing the basic clear browsing data options.">
+        Basic
+      </message>
       <message name="IDS_ANDROID_HISTORY_NO_SYNCED_RESULTS" desc="The notification at the top of the history page indicating that it does not include visits from other devices.">
         Showing history from this device. <ph name="BEGIN_LINK">&lt;link&gt;</ph>Learn more<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
@@ -731,10 +758,10 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_PERMISSIONS_ALLOW_DSE_ADDRESS_BAR" desc="Summary text explaining that Chrome will allow the default search engine to access the user's location, but only when the user searches directly from the address bar. e.g. Location access: Allow (for address bar searches)">
         Allow (for address bar searches)
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_PERMISSIONS_ALLOW_DSE" desc="Summary text explaining that Chrome will allow the default search engine to access the user's location, both when performed from the address bar and from Google search result pages. e.g. Location access: Allow for Google searches">
+      <message name="IDS_WEBSITE_SETTINGS_PERMISSIONS_ALLOW_DSE" desc="Summary text explaining that Chrome will allow the default search engine to access the user's location, both when performed from the address bar and from search result pages. e.g. Location access: Allow for current search engine">
         Allow for current search engine
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_PERMISSIONS_BLOCK_DSE" desc="Summary text explaining that Chrome will allow the default search engine to access the user's location, both when performed from the address bar and from Google search result pages. e.g. Location access: Allow for Google searches">
+      <message name="IDS_WEBSITE_SETTINGS_PERMISSIONS_BLOCK_DSE" desc="Summary text explaining that Chrome will block the default search engine from accessing the user's location, both when performed from the address bar and from search result pages. e.g. Location access: Block for current search engine">
         Block for current search engine
       </message>
       <message name="IDS_WEBSITE_RESET" desc="The label for the button allowing users to clear all data and reset the permissions for a website.">
@@ -1482,9 +1509,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_CONTEXTMENU_OPEN_IMAGE_IN_NEW_TAB" desc="Context sensitive menu item for opening/viewing the selected image in a new tab. [CHAR-LIMIT=30]">
         Open image in new tab
       </message>
-      <message name="IDS_CONTEXTMENU_LOAD_IMAGES" desc="Context sensitive menu item for Data Saver low fidelity placeholder images that reloads the page with the original images. [CHAR-LIMIT=30]">
-        Load images
-      </message>
       <message name="IDS_CONTEXTMENU_LOAD_ORIGINAL_IMAGE" desc="Context sensitive menu item for Data Saver low fidelity placeholder images that loads the original version in place. [CHAR-LIMIT=30]">
         Load image
       </message>
@@ -1497,7 +1521,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_CONTEXTMENU_SAVE_VIDEO" desc="Context sensitive menu item for saving the selected video. [CHAR-LIMIT=30]">
         Download video
       </message>
-
+      <message name="IDS_CONTEXTMENU_OPEN_IN_NEW_CHROME_TAB" desc="Context sensitive menu item to open the selected link in a new Chrome tab from Chrome Custom Tab. [CHAR-LIMIT=30]">
+        Open in new Chrome tab
+      </message>
+      <message name="IDS_CONTEXTMENU_OPEN_IN_CHROME_INCOGNITO_TAB" desc="Context sensitive menu item to open the selected link in a Chrome incognito tab from Chrome Custom Tab. [CHAR-LIMIT=30]">
+        Open in incognito tab
+      </message>
       <!-- Swipe refresh -->
       <message name="IDS_ACCESSIBILITY_SWIPE_REFRESH" desc="Content description for the swipe refresh action.">
         Refreshing page
@@ -1571,6 +1600,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <!-- Add to Home screen strings -->
       <message name="IDS_MENU_ADD_TO_HOMESCREEN" desc="Menu item for adding a shortcut to the Home screen (default title). [CHAR-LIMIT=27]">
         Add to Home screen
+      </message>
+      <message name="IDS_MENU_OPEN_WEBAPK" desc="Menu item for opening the installed WebAPK associated with the current PWA. [CHAR-LIMIT=27]">
+        Open <ph name="WEBAPK_NAME">%1$s<ex>Telegram</ex></ph>
+      </message>
+      <message name="IDS_OPEN_WEBAPK_FAILED" desc="Opening of a WebAPK failed. [CHAR-LIMIT=27]">
+        Could not launch app
       </message>
       <message name="IDS_MENU_ADD_TO_HOMESCREEN_ADD" desc="Menu item for adding a shortcut to the Home screen. [CHAR-LIMIT=27]">
         Add shortcut
@@ -1658,6 +1693,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
 
       <!-- Download UI -->
+      <message name="IDS_DOWNLOAD_NOTIFICATION_SUMMARY_TITLE" desc="Text that shows up for a summary notification for all downloads.">
+        Chrome Downloads
+      </message>
       <message name="IDS_DOWNLOAD_NOTIFICATION_CANCEL_BUTTON" desc="Text on the button that cancels a download.">
         Cancel
       </message>
@@ -1835,6 +1873,24 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_DOWNLOAD_MANAGER_OPEN_WITH" desc="Menu item to open an item with another app.">
         Open with…
       </message>
+      <message name="IDS_DOWNLOAD_MANAGER_SEARCH" desc="Placeholder text for the input field that allows users to search downloads.">
+        Search your downloads
+      </message>
+      <message name="IDS_DOWNLOAD_MANAGER_NO_RESULTS" desc="Text explaining that no download items matched a search query.">
+        No downloads found
+      </message>
+      <message name="IDS_DOWNLOAD_MANAGER_OFFLINE_HEADER_TITLE" desc="Text explaining the number of suggested offline pages.">
+        <ph name="NUMBER_OF_SUGGESTIONS">%1$s<ex>10</ex></ph> Chrome suggestions
+      </message>
+      <message name="IDS_DOWNLOAD_MANAGER_OFFLINE_HEADER_DESCRIPTION" desc="Text containing the offline pages description.">
+        Pages updated regularly
+      </message>
+      <message name="IDS_ACCESSIBILITY_EXPAND_OFFLINE_PAGES" desc="Content description for the suggested section header expand button.">
+        Tap to expand
+      </message>
+      <message name="IDS_ACCESSIBILITY_COLLAPSE_OFFLINE_PAGES" desc="Content description for the suggested section header collapse button.">
+        Tap to collapse
+      </message>
 
       <!-- Browsing History UI -->
       <message name="IDS_HISTORY_MANAGER_EMPTY" desc="Indicates that there are no browsing history items.">
@@ -1919,8 +1975,8 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_SIGNIN_HI_NAME" desc="Title welcoming the user by their name after they have signed in.">
         Hi, <ph name="FULL_NAME">%1$s<ex>John Smith</ex></ph>
       </message>
-      <message name="IDS_SIGNIN_SIGNED_IN_DESCRIPTION_UCA_ADDENDUM" desc="Additional explanation for child accounts that synced settings are managed by parents.">
-        Your parents help manage these settings.
+      <message name="IDS_SIGNIN_SIGNED_IN_SETTINGS_DESCRIPTION_CHILD_ACCOUNT" desc="Label of the section containing the link to go to the settings page, when signing in to a child account.">
+        You and your parents can control how this works in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
       </message>
       <message name="IDS_SIGNIN_SIGNED_IN_SETTINGS_DESCRIPTION" desc="Label of the section containing the link to go to the settings page.">
         Control how this works in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
@@ -2344,12 +2400,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_ACCESSIBILITY_TABSTRIP_INCOGNITO_IDENTIFIER_SELECTED" desc="Content description for the tab that is selected in incognito mode">
         Selected Incognito Tab
       </message>
-      <message name="IDS_ACCESSIBILITY_NTP_TOOLBAR_BTN_BOOKMARKS" desc="Content description for the bookmarks tab of the new tab page.">
-        Bookmarks
-      </message>
-      <message name="IDS_ACCESSIBILITY_NTP_TOOLBAR_BTN_RECENT_TABS" desc="Content description for the recent tabs section of the new tab page.">
-        Recent tabs
-      </message>
       <message name="IDS_ACCESSIBILITY_OMNIBOX_BTN_REFINE" desc="Content description for the omnibox refine button.">
         Refine
       </message>
@@ -2438,6 +2488,9 @@ However, you aren’t invisible. Going incognito doesn’t hide your browsing fr
       </message>
       <message name="IDS_CONTEXTUAL_SEARCH_QUICK_ACTION_CAPTION_PHONE" desc="Caption displayed in the Contextual Search bar prompting the user to call the selected phone number.">
         Call
+      </message>
+      <message name="IDS_CONTEXTUAL_SEARCH_QUICK_ACTION_CAPTION_GENERIC_WEBSITE" desc="Caption displayed in the Contextual Search bar prompting the user to navigate to a web page.">
+        Go to page
       </message>
 
       <!-- Web apps -->
@@ -2563,39 +2616,11 @@ However, you aren’t invisible. Going incognito doesn’t hide your browsing fr
 
 You must have Bluetooth and Location turned on in order to use the Physical Web.
       </message>
-      <message name="IDS_PHYSICAL_WEB_OPTIN_TITLE" desc="The title for a dialog inviting the user to opt-in to the Physical Web.">
-        Chrome + Physical Web
-      </message>
-      <message name="IDS_PHYSICAL_WEB_OPTIN_DESCRIPTION" desc="Description of the Physical Web displayed in the opt-in dialog">
-        Devices nearby you are broadcasting web pages over Bluetooth. Chrome will scan for pages and display them when you wake up your device. These pages will go through a Google service to improve the quality of page results.
-
-You can control the Physical Web in Chrome Settings.
-
-<ph name="BEGIN_LINK">&lt;learnmore&gt;</ph>Learn more<ph name="END_LINK">&lt;/learnmore&gt;</ph>
-      </message>
-      <message name="IDS_PHYSICAL_WEB_LIST_URLS_ACTIVITY_TITLE" desc="The title for a dialog that shows a list of URLs broadcasted from nearby devices.">
-        The Physical Web
-      </message>
-      <message name="IDS_PHYSICAL_WEB_NOTIFICATION_TITLE" desc="The message displayed in a notification when there are nearby URLs.">
-        Physical Web pages nearby
-      </message>
-      <message name="IDS_PHYSICAL_WEB_OPTIN_NOTIFICATION_TITLE" desc="The first line in a notification message informing the user there are nearby devices broadcasting URLs and Chrome can be used to browse the list of URLs.">
-        Web pages are nearby
-      </message>
-      <message name="IDS_PHYSICAL_WEB_OPTIN_NOTIFICATION_TEXT" desc="The second line in a notification message informing the user there are nearby devices broadcasting URLs and Chrome can be used to browse the list of URLs.">
-        View them in Chrome
-      </message>
-      <message name="IDS_PHYSICAL_WEB_EMPTY_LIST" desc="The message displayed in place of a list of nearby URLs when there are no URLs to display.">
-        No nearby Physical Web pages found
-      </message>
-      <message name="IDS_PHYSICAL_WEB_EMPTY_LIST_SCANNING" desc="The message displayed in place of a list of nearby URLs while still scanning for nearby URLs.">
-        Looking for nearby Physical Web pages
-      </message>
-      <message name="IDS_PHYSICAL_WEB_REFRESH" desc="The label for a button that initiates a scan for nearby URLs">
-        Refresh
-      </message>
       <message name="IDS_PHYSICAL_WEB_LAUNCH_BUTTON" desc="The label for a button that opens a list of nearby URLs">
         See what's nearby
+      </message>
+      <message name="IDS_PHYSICAL_WEB_SHARE_ACTIVITY_TITLE" desc="Title of the Physical Web Share activity that will appear in the Android share dialog.">
+        Physical Web
       </message>
 
       <!-- WebUsb Picker UI strings -->
@@ -2610,197 +2635,6 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_USB_CHOOSER_DIALOG_FOOTNOTE_TEXT" desc="This text is shown at the bottom of the USB chooser dialog with a link to part of its text.">
         <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
-      </message>
-
-      <!-- Payments -->
-      <message name="IDS_PAYMENTS_NAME_FIELD_IN_CONTACT_DETAILS" desc="The label for text input field containing the full name of a person. [CHAR-LIMIT=32]">
-        Name
-      </message>
-      <message name="IDS_PAYMENTS_SAVE_CARD_TO_DEVICE_CHECKBOX" desc="The label for the checkbox that enables the user to save a credit card to their device, for example, on their phone.">
-        Save this card to this device
-      </message>
-      <message name="IDS_PAYMENTS_ACCEPTED_CARDS_LABEL" desc="The title for the section that displays the credit card types that the merchant accepts.">
-        Cards accepted
-      </message>
-      <message name="IDS_PAYMENTS_METHOD_OF_PAYMENT_LABEL" desc="The title for the section that lets the user select the method of payment.">
-        Payment
-      </message>
-      <message name="IDS_PAYMENTS_CONTACT_DETAILS_LABEL" desc="The title for the section that lets the user select how they can be contacted.">
-        Contact info
-      </message>
-      <message name="IDS_PAYMENTS_ADD_CONTACT_DETAILS_LABEL" desc="The title of the dialog for user to add new contact information, such as the user's full name, an email address or a phone number.">
-        Add contact info
-      </message>
-      <message name="IDS_PAYMENTS_EDIT_CONTACT_DETAILS_LABEL" desc="The title of the dialog for user to edit their contact information, such as the user's full name, an email address or a phone number.">
-        Edit contact info
-      </message>
-      <message name="IDS_PAYMENTS_ADD_CARD" desc="The title of the dialog for user to add new payment card.">
-        Add card
-      </message>
-      <message name="IDS_PAYMENTS_BILLING_ADDRESS_REQUIRED" desc="The label to indicate billing address is required for payment card.">
-        Billing address required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_BILLING_ADDRESS" desc="The title of the dialog for user to add billing address to payment card.">
-        Add billing address
-      </message>
-      <message name="IDS_PAYMENTS_NAME_ON_CARD_REQUIRED" desc="The label to indicate name on card is required for payment card.">
-        Name on card required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_NAME_ON_CARD" desc="The title of the dialog for user to add name on card to payment card.">
-        Add name on card
-      </message>
-      <message name="IDS_PAYMENTS_CARD_NUMBER_INVALID" desc="The label to indicate payment card number is invalid.">
-        Card number invalid
-      </message>
-      <message name="IDS_PAYMENTS_ADD_VALID_CARD_NUMBER" desc="The title of the dialog for user to add valid payment card number.">
-        Add valid card number
-      </message>
-      <message name="IDS_PAYMENTS_MORE_INFORMATION_REQUIRED" desc="The label to indicate more information is required for payment card or shipping address or contact info.">
-        More information required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_MORE_INFORMATION" desc="The title of the dialog for user to add more information to payment card or shipping address or contact info.">
-        Add more information
-      </message>
-      <message name="IDS_PAYMENTS_EDIT_CARD" desc="The title of the dialog for user to edit payment card.">
-        Edit card
-      </message>
-      <message name="IDS_PAYMENTS_CREDIT_CARD_EXPIRATION_DATE_ABBR" desc="Abbreviated label for credit card expiration date. [CHAR-LIMIT=32]">
-        Exp: <ph name="EXPIRATION_MONTH">%1$s<ex>06</ex></ph>/<ph name="EXPIRATION_YEAR">%2$s<ex>17</ex></ph>
-      </message>
-      <message name="IDS_PAYMENTS_PHONE_NUMBER_REQUIRED" desc="The label to indicate phone number is required in the shipping address or contact info. This phone number can be used, for example, if there's a problem with shipping a package to its destination.">
-        Phone number required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_PHONE_NUMBER" desc="The title of the dialog for user to add phone number to the shipping address or contact info. This phone number can be used, for example, if there's a problem with shipping a package to its destination.">
-        Add phone number
-      </message>
-      <message name="IDS_PAYMENTS_RECIPIENT_REQUIRED" desc="The label to indicate recipient is required in the shipping address. The recipient could be a person or institute name identifies the receiver of the shipping package.">
-        Recipient required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_RECIPIENT" desc="The title of the dialog for user to add recipient in the shipping address. The recipient could be a person or institute name identifies the receiver of the shipping package.">
-        Add recipient
-      </message>
-      <message name="IDS_PAYMENTS_INVALID_ADDRESS" desc="The label to indicate the shipping address is invalid. For example, missing state or city name.">
-        Invalid address
-      </message>
-      <message name="IDS_PAYMENTS_ADD_VALID_ADDRESS" desc="The title of the dialog for user to add valid shipping address. For example, missing state or city name.">
-        Add valid address
-      </message>
-      <message name="IDS_PAYMENTS_EMAIL_REQUIRED" desc="The label to indicate email is required for the contact details. This email can be used to contact the payer.">
-        Email required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_EMAIL" desc="The title of the dialog for user to add email to the contact details. This email can be used to contact the payer.">
-        Add email
-      </message>
-      <message name="IDS_PAYMENTS_NAME_REQUIRED" desc="The label to indicate name is required for the contact details. This name could be a person or institute name of the payer.">
-        Name required
-      </message>
-      <message name="IDS_PAYMENTS_ADD_NAME" desc="The title of the dialog for user to add name to the contact details. This name could be a person or institute name of the payer.">
-        Add name
-      </message>
-      <message name="IDS_PAYMENTS_ORDER_SUMMARY_LABEL" desc="The title of the section that shows the summary of the order, including names and prices of individual line items, i.e. the bill.">
-        Order summary
-      </message>
-      <message name="IDS_PAYMENTS_EDIT_BUTTON" desc="The label for the button that lets the user edit their payment options.">
-        Edit
-      </message>
-      <message name="IDS_PAYMENTS_PAY_BUTTON" desc="The label for the button that finishes the payment process.">
-        Pay
-      </message>
-      <message name="IDS_PAYMENTS_LOADING_MESSAGE" desc="The text that informs the user that payment information is being loaded up.">
-        Loading
-      </message>
-      <message name="IDS_PAYMENTS_ERROR_MESSAGE" desc="The text that informs the user that there is error in verifying and charging the payment.">
-        There was an error processing your order.  Please check your account and try again.
-      </message>
-      <message name="IDS_PAYMENTS_REQUIRED_FIELD_MESSAGE" desc="The text that informs the user that '*' character indicates an input field that is required. The '*' character should not be changed.">
-        * indicates required field
-      </message>
-      <message name="IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE" desc="The text that informs the user that an input field is required.">
-        Required field
-      </message>
-      <message name="IDS_PAYMENTS_PHONE_INVALID_VALIDATION_MESSAGE" desc="The text that informs the user that the phone number they have entered is not valid.">
-        Invalid phone number
-      </message>
-      <message name="IDS_PAYMENTS_EMAIL_INVALID_VALIDATION_MESSAGE" desc="The text that informs the user that the email address they have entered is not valid.">
-        Invalid email address
-      </message>
-      <message name="IDS_PAYMENTS_CARD_NUMBER_INVALID_VALIDATION_MESSAGE" desc="The text that informs the user that the credit card number they have entered is not valid.">
-        Invalid card number
-      </message>
-      <message name="IDS_PAYMENTS_CARD_EXPIRATION_INVALID_VALIDATION_MESSAGE" desc="The text that informs the user that the credit card expiration date they have entered is not valid.">
-        Invalid expiration date
-      </message>
-      <message name="IDS_PAYMENTS_ADD_CONTACT" desc="Text on a button that lets a user add new contact details, like the user's full name, an email address or a phone number.">
-        Add contact info
-      </message>
-      <message name="IDS_PAYMENTS_CHECKING_OPTION" desc="Text explaining that the option the user selected is being checked and verified.">
-        Checking
-      </message>
-      <message name="IDS_PAYMENTS_UPDATED_LABEL" desc="The text that informs the user that the total value of their cart has been updated.">
-        Updated
-      </message>
-      <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS" desc="Label of the section containing the link to go to the settings page for card and address options.">
-        You can manage cards and addresses in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
-      </message>
-      <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_IN" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is signed in.">
-        Card and address options are from your Google Account (<ph name="ACCOUNT_EMAIL">%1$s<ex>johndoe@gmail.com</ex></ph>) and Chrome. You can manage these in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
-      </message>
-      <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_OUT" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is not signed in.">
-        Card and address options are from Chrome. You can manage these in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
-      </message>
-
-      <!-- Shipping address in web payments API -->
-      <message name="IDS_PAYMENTS_SHIPPING_SUMMARY_LABEL" desc="The title for the section of shipping information. Shipping is typically used for packages.">
-        Shipping
-      </message>
-      <message name="IDS_PAYMENTS_SHIPPING_ADDRESS_LABEL" desc="The title for the section that lets the user select the address where the product should be shipped. Shipping is typically used for packages.">
-        Shipping address
-      </message>
-      <message name="IDS_PAYMENTS_SHIPPING_OPTION_LABEL" desc="The title for the section that lets the user select how the product should be shipped. Shipping is typically used for packages.">
-        Shipping option
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_SHIPPING_ADDRESS_FOR_SHIPPING_METHODS" desc="Text implying that a user needs to pick a shipping address to see the shipping methods. Shipping is typically used for packages.">
-        Select a shipping address to check shipping methods and requirements.
-      </message>
-      <message name="IDS_PAYMENTS_UNSUPPORTED_SHIPPING_ADDRESS" desc="Text implying that a user needs to pick a different shipping address, because the currently selected address is not supported. Shipping is typically used for packages.">
-        Unsupported shipping address. Select a different address.
-      </message>
-
-      <!-- Delivery address in web payments API -->
-      <message name="IDS_PAYMENTS_DELIVERY_SUMMARY_LABEL" desc="The title for the section of delivery information. Delivery is commonly faster than shipping. For example, it might be used for food delivery.">
-        Delivery
-      </message>
-      <message name="IDS_PAYMENTS_DELIVERY_ADDRESS_LABEL" desc="The title for the section that lets the user select the address where the product should be delivered. Delivery is commonly faster than shipping. For example, it might be used for food delivery.">
-        Delivery address
-      </message>
-      <message name="IDS_PAYMENTS_DELIVERY_OPTION_LABEL" desc="The title for the section that lets the user select how the product should be delivered. Delivery is commonly faster than shipping. For example, it might be used for food delivery.">
-        Delivery option
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_DELIVERY_ADDRESS_FOR_DELIVERY_METHODS" desc="Text implying that a user needs to pick a delivery address to see the delivery methods. Delivery is commonly faster than shipping. For example, it might be used for food delivery.">
-        Select a delivery address to check delivery methods and requirements.
-      </message>
-      <message name="IDS_PAYMENTS_UNSUPPORTED_DELIVERY_ADDRESS" desc="Text implying that a user needs to pick a different delivery address, because the currently selected address is not supported. Delivery is commonly faster than shipping. For example, it might be used for food delivery.">
-        Unsupported delivery address. Select a different address.
-      </message>
-
-      <!-- Pickup address in web payments API -->
-      <message name="IDS_PAYMENTS_PICKUP_SUMMARY_LABEL" desc="The title for the section of pickup information. For example, this could be the address for laundry pickup.">
-        Pickup
-      </message>
-      <message name="IDS_PAYMENTS_PICKUP_ADDRESS_LABEL" desc="The title for the section that lets the user select the address where their item should be picked up. For example, this item could be laundry to be cleaned.">
-        Pickup address
-      </message>
-      <message name="IDS_PAYMENTS_PICKUP_OPTION_LABEL" desc="The title for the section that lets the user select how their item should be picked up. This item can be laundry to be cleaned, for example.">
-        Pickup option
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_PICKUP_ADDRESS_FOR_PICKUP_METHODS" desc="Text implying that a user needs to choose a pickup address to see the pickup methods. For example, this could be the address for laundry pickup.">
-        Select a pickup address to check pickup methods and requirements.
-      </message>
-      <message name="IDS_PAYMENTS_UNSUPPORTED_PICKUP_ADDRESS" desc="Text implying that a user needs to choose a different pickup address, because the currently selected address is not supported. This address can be used, for example, for laundry pickup.">
-        Unsupported pickup address. Select a different address.
-      </message>
-      <message name="IDS_PAYMENTS_ANDROID_APP_ERROR" desc="Error message that is shown when an Android payment application fails to start.">
-        Unable to launch payment app.
       </message>
 
       <!-- Migration strings -->
@@ -2916,6 +2750,20 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_KEYBOARD_SHORTCUT_WEBPAGE_GROUP_HEADER" desc="A text label that appears above a list of shortcuts that are related to manipulation of the current tab window. This group is part of several groups of keyboard shortcuts all shown in a dialog.">
         Webpage shortcuts
+      </message>
+
+      <!-- VR services check infobar -->
+      <message name="IDS_VR_SERVICES_CHECK_INFOBAR_INSTALL_TEXT" desc="Text to be displayed in the VR Services check infobar. When a WebVR page is loaded if the VR services that are needed to display WebVR don't exist an infobar will be shown to the user prompting them to install VR services.">
+        To view virtual reality content, install Google VR Services
+      </message>
+      <message name="IDS_VR_SERVICES_CHECK_INFOBAR_UPDATE_TEXT" desc="Text to be displayed in the VR Services check infobar. When a WebVR page is loaded if the VR services that are needed to display WebVR are out of date an infobar will be shown to the user prompting them to update VR services.">
+        To view virtual reality content, update Google VR Services
+      </message>
+      <message name="IDS_VR_SERVICES_CHECK_INFOBAR_INSTALL_BUTTON" desc="Text to be displayed in the VR Services check infobar confirm button for installing.">
+        Install
+      </message>
+      <message name="IDS_VR_SERVICES_CHECK_INFOBAR_UPDATE_BUTTON" desc="Text to be displayed in the VR Services check infobar confirm button for updating.">
+        Update
       </message>
     </messages>
   </release>

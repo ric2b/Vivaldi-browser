@@ -4,7 +4,6 @@
 
 #include "core/workers/WorkerInspectorProxy.h"
 
-#include "core/dom/ExecutionContextTask.h"
 #include "core/frame/FrameConsole.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -12,6 +11,7 @@
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
@@ -51,7 +51,7 @@ const String& WorkerInspectorProxy::inspectorId() {
 
 WorkerThreadStartMode WorkerInspectorProxy::workerStartMode(
     Document* document) {
-  if (InspectorInstrumentation::shouldWaitForDebuggerOnWorkerStart(document))
+  if (probe::shouldWaitForDebuggerOnWorkerStart(document))
     return PauseWorkerGlobalScopeOnStart;
   return DontPauseWorkerGlobalScopeOnStart;
 }
@@ -62,19 +62,18 @@ void WorkerInspectorProxy::workerThreadCreated(Document* document,
   m_workerThread = workerThread;
   m_document = document;
   m_url = url.getString();
-  inspectorProxies().add(this);
+  inspectorProxies().insert(this);
   // We expect everyone starting worker thread to synchronously ask for
   // workerStartMode right before.
-  bool waitingForDebugger =
-      InspectorInstrumentation::shouldWaitForDebuggerOnWorkerStart(document);
-  InspectorInstrumentation::didStartWorker(document, this, waitingForDebugger);
+  bool waitingForDebugger = probe::shouldWaitForDebuggerOnWorkerStart(document);
+  probe::didStartWorker(document, this, waitingForDebugger);
 }
 
 void WorkerInspectorProxy::workerThreadTerminated() {
   if (m_workerThread) {
     DCHECK(inspectorProxies().contains(this));
-    inspectorProxies().remove(this);
-    InspectorInstrumentation::workerTerminated(m_document, this);
+    inspectorProxies().erase(this);
+    probe::workerTerminated(m_document, this);
   }
 
   m_workerThread = nullptr;

@@ -3,10 +3,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_NOTES_NOTES_STORAGE_H_
-#define VIVALDI_NOTES_NOTES_STORAGE_H_
+#ifndef NOTES_NOTES_STORAGE_H_
+#define NOTES_NOTES_STORAGE_H_
 
+#include <memory>
 #include <string>
+#include <utility>
+
 #include "base/files/important_file_writer.h"
 #include "base/memory/ref_counted.h"
 
@@ -40,7 +43,7 @@ class NotesLoadDetails {
 
   Notes_Node* notes_node() { return notes_node_.get(); }
   std::unique_ptr<Notes_Node> release_notes_node() {
-      return std::move(notes_node_);
+    return std::move(notes_node_);
   }
   Notes_Node* other_notes_node() { return other_notes_node_.get(); }
   std::unique_ptr<Notes_Node> release_other_notes_node() {
@@ -120,7 +123,7 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   // ImportantFileWriter::DataSerializer implementation.
   bool SerializeData(std::string* output) override;
 
-private:
+ private:
   friend class base::RefCountedThreadSafe<NotesStorage>;
 
   // Serializes the data and schedules save using ImportantFileWriter.
@@ -143,4 +146,4 @@ private:
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_NOTES_NOTES_STORAGE_H_
+#endif  // NOTES_NOTES_STORAGE_H_

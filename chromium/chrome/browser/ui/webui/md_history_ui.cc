@@ -16,8 +16,6 @@
 #include "chrome/browser/ui/webui/foreign_session_handler.h"
 #include "chrome/browser/ui/webui/history_login_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -80,7 +78,6 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
                              IDS_MD_HISTORY_HAS_SYNCED_RESULTS);
   source->AddLocalizedString("hasSyncedResultsDescription",
                              IDS_MD_HISTORY_HAS_SYNCED_RESULTS_DESCRIPTION);
-  source->AddLocalizedString("historyInterval", IDS_HISTORY_INTERVAL);
   source->AddLocalizedString("historyMenuButton",
                              IDS_MD_HISTORY_HISTORY_MENU_DESCRIPTION);
   source->AddLocalizedString("historyMenuItem",
@@ -133,11 +130,6 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
   source->AddBoolean("allowDeletingHistory", allow_deleting_history);
 
   source->AddBoolean(kShowMenuPromoKey, !MenuPromoShown(profile));
-
-  bool group_by_domain = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kHistoryEnableGroupByDomain) || profile->IsSupervised();
-  source->AddBoolean("groupByDomain", group_by_domain);
-
   source->AddBoolean("isGuestSession", profile->IsGuestSession());
 
   source->AddBoolean(kIsUserSignedInKey, IsUserSignedIn(profile));
@@ -159,20 +151,16 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
     {"app.js", IDR_MD_HISTORY_APP_JS},
     {"browser_service.html", IDR_MD_HISTORY_BROWSER_SERVICE_HTML},
     {"browser_service.js", IDR_MD_HISTORY_BROWSER_SERVICE_JS},
-    {"grouped_list.html", IDR_MD_HISTORY_GROUPED_LIST_HTML},
-    {"grouped_list.js", IDR_MD_HISTORY_GROUPED_LIST_JS},
     {"history_item.html", IDR_MD_HISTORY_HISTORY_ITEM_HTML},
     {"history_item.js", IDR_MD_HISTORY_HISTORY_ITEM_JS},
     {"history_list.html", IDR_MD_HISTORY_HISTORY_LIST_HTML},
     {"history_list.js", IDR_MD_HISTORY_HISTORY_LIST_JS},
-    {"history_list_behavior.html", IDR_MD_HISTORY_HISTORY_LIST_BEHAVIOR_HTML},
-    {"history_list_behavior.js", IDR_MD_HISTORY_HISTORY_LIST_BEHAVIOR_JS},
     {"history_toolbar.html", IDR_MD_HISTORY_HISTORY_TOOLBAR_HTML},
     {"history_toolbar.js", IDR_MD_HISTORY_HISTORY_TOOLBAR_JS},
     {"icons.html", IDR_MD_HISTORY_ICONS_HTML},
     {"lazy_load.html", IDR_MD_HISTORY_LAZY_LOAD_HTML},
-    {"list_container.html", IDR_MD_HISTORY_LIST_CONTAINER_HTML},
-    {"list_container.js", IDR_MD_HISTORY_LIST_CONTAINER_JS},
+    {"query_manager.html", IDR_MD_HISTORY_QUERY_MANAGER_HTML},
+    {"query_manager.js", IDR_MD_HISTORY_QUERY_MANAGER_JS},
     {"router.html", IDR_MD_HISTORY_ROUTER_HTML},
     {"router.js", IDR_MD_HISTORY_ROUTER_JS},
     {"searched_label.html", IDR_MD_HISTORY_SEARCHED_LABEL_HTML},
@@ -238,14 +226,6 @@ MdHistoryUI::MdHistoryUI(content::WebUI* web_ui) : WebUIController(web_ui) {
 }
 
 MdHistoryUI::~MdHistoryUI() {}
-
-// static
-bool MdHistoryUI::IsEnabled(Profile* profile) {
-  return base::FeatureList::IsEnabled(features::kMaterialDesignHistory) &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kHistoryEnableGroupByDomain) &&
-         !profile->IsSupervised();
-}
 
 // static
 base::RefCountedMemory* MdHistoryUI::GetFaviconResourceBytes(

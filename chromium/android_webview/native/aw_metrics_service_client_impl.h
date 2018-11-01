@@ -12,6 +12,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "components/metrics/metrics_log_uploader.h"
 
 namespace metrics {
 class MetricsStateManager;
@@ -55,6 +56,7 @@ class AwMetricsServiceClientImpl : public AwMetricsServiceClient {
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       const std::string& server_url,
       const std::string& mime_type,
+      metrics::MetricsLogUploader::MetricServiceType service_type,
       const base::Callback<void(int)>& on_upload_complete) override;
   base::TimeDelta GetStandardUploadInterval() override;
 
@@ -77,4 +79,4 @@ bool RegisterAwMetricsServiceClient(JNIEnv* env);
 
 }  // namespace android_webview
 
-#endif  // ANDROID_WEBVIEW_NATIVE_AW_METRICS_SWITCH_
+#endif  // ANDROID_WEBVIEW_NATIVE_AW_METRICS_SERVICE_CLIENT_IMPL_

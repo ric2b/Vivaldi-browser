@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/android/shortcut_info.h"
+#include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/net/file_downloader.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -39,11 +40,7 @@ class WebApkIconHasher;
 // Java WebApkInstaller counterpart.
 class WebApkInstaller : public net::URLFetcherDelegate {
  public:
-  // Called when the creation/updating of a WebAPK is finished or failed.
-  // Parameters:
-  // - whether the process succeeds.
-  // - the package name of the WebAPK.
-  using FinishCallback = base::Callback<void(bool, const std::string&)>;
+  using FinishCallback = WebApkInstallService::FinishCallback;
 
   ~WebApkInstaller() override;
 
@@ -52,9 +49,9 @@ class WebApkInstaller : public net::URLFetcherDelegate {
   // install the downloaded WebAPK. Calls |callback| once the install completed
   // or failed.
   static void InstallAsync(content::BrowserContext* context,
-                    const ShortcutInfo& shortcut_info,
-                    const SkBitmap& shortcut_icon,
-                    const FinishCallback& finish_callback);
+                           const ShortcutInfo& shortcut_info,
+                           const SkBitmap& shortcut_icon,
+                           const FinishCallback& finish_callback);
 
   // Creates a self-owned WebApkInstaller instance and talks to the Chrome
   // WebAPK server to update a WebAPK on the server and to the Google Play
@@ -91,7 +88,7 @@ class WebApkInstaller : public net::URLFetcherDelegate {
   // Called once the installation is complete or failed.
   void OnInstallFinished(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj,
-                         jboolean success);
+                         jint result);
 
   // Creates a WebApk install or update request.
   // Should be used only for testing.
@@ -132,13 +129,13 @@ class WebApkInstaller : public net::URLFetcherDelegate {
 
   // Called when the package name of the WebAPK is available and the install
   // or update request is handled by Google Play.
-  virtual bool InstallOrUpdateWebApkFromGooglePlay(
+  virtual void InstallOrUpdateWebApkFromGooglePlay(
       const std::string& package_name,
       int version,
       const std::string& token);
 
-  // Called when the request to install the WebAPK is sent to Google Play.
-  void OnSuccess();
+  // Called when the install or update process has completed or failed.
+  void OnResult(WebApkInstallResult result);
 
  private:
   enum TaskType {
@@ -222,16 +219,6 @@ class WebApkInstaller : public net::URLFetcherDelegate {
   // readable.
   void OnWebApkMadeWorldReadable(const base::FilePath& file_path,
                                  bool change_permission_success);
-
-  // Called when the request to the WebAPK server times out or when the WebAPK
-  // download times out.
-  void OnTimeout();
-
-  // Called if a WebAPK could not be created. WebApkInstaller only tracks the
-  // WebAPK creation and the WebAPK download. It does not track the
-  // WebAPK installation. OnFailure() is not called if the WebAPK could not be
-  // installed.
-  void OnFailure();
 
   net::URLRequestContextGetter* request_context_getter_;
 

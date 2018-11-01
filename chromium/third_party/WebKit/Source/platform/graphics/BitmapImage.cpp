@@ -34,9 +34,10 @@
 #include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/StaticBitmapImage.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/text/WTFString.h"
@@ -260,16 +261,16 @@ String BitmapImage::filenameExtension() const {
 }
 
 void BitmapImage::draw(
-    SkCanvas* canvas,
-    const SkPaint& paint,
+    PaintCanvas* canvas,
+    const PaintFlags& flags,
     const FloatRect& dstRect,
     const FloatRect& srcRect,
     RespectImageOrientationEnum shouldRespectImageOrientation,
-    ImageClampingMode clampMode,
-    const ColorBehavior& colorBehavior) {
+    ImageClampingMode clampMode) {
   TRACE_EVENT0("skia", "BitmapImage::draw");
 
-  sk_sp<SkImage> image = imageForCurrentFrame(colorBehavior);
+  sk_sp<SkImage> image =
+      imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   if (!image)
     return;  // It's too early and we don't have an image yet.
 
@@ -283,7 +284,7 @@ void BitmapImage::draw(
   if (shouldRespectImageOrientation == RespectImageOrientation)
     orientation = frameOrientationAtIndex(m_currentFrame);
 
-  SkAutoCanvasRestore autoRestore(canvas, false);
+  PaintCanvasAutoRestore autoRestore(canvas, false);
   FloatRect adjustedDstRect = dstRect;
   if (orientation != DefaultImageOrientation) {
     canvas->save();
@@ -305,7 +306,7 @@ void BitmapImage::draw(
     }
   }
 
-  canvas->drawImageRect(image.get(), adjustedSrcRect, adjustedDstRect, &paint,
+  canvas->drawImageRect(image.get(), adjustedSrcRect, adjustedDstRect, &flags,
                         WebCoreClampingModeToSkiaRectConstraint(clampMode));
 
   if (image->isLazyGenerated())

@@ -9,8 +9,8 @@
 #include <string>
 
 #include "base/macros.h"
-#include "chrome/browser/chromeos/login/screens/app_launch_splash_screen_actor.h"
-#include "chrome/browser/chromeos/login/screens/network_error_model.h"
+#include "chrome/browser/chromeos/login/screens/app_launch_splash_screen_view.h"
+#include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 
@@ -19,12 +19,12 @@ namespace chromeos {
 // A class that handles the WebUI hooks for the app launch splash screen.
 class AppLaunchSplashScreenHandler
     : public BaseScreenHandler,
-      public AppLaunchSplashScreenActor,
+      public AppLaunchSplashScreenView,
       public NetworkStateInformer::NetworkStateInformerObserver {
  public:
   AppLaunchSplashScreenHandler(
       const scoped_refptr<NetworkStateInformer>& network_state_informer,
-      NetworkErrorModel* network_error_model);
+      ErrorScreen* error_screen);
   ~AppLaunchSplashScreenHandler() override;
 
   // BaseScreenHandler implementation:
@@ -57,22 +57,22 @@ class AppLaunchSplashScreenHandler
   void HandleContinueAppLaunch();
   void HandleNetworkConfigRequested();
 
-  AppLaunchSplashScreenHandler::Delegate* delegate_;
-  bool show_on_init_;
+  AppLaunchSplashScreenHandler::Delegate* delegate_ = nullptr;
+  bool show_on_init_ = false;
   std::string app_id_;
-  AppLaunchState state_;
+  AppLaunchState state_ = APP_LAUNCH_STATE_LOADING_AUTH_FILE;
 
   scoped_refptr<NetworkStateInformer> network_state_informer_;
-  NetworkErrorModel* network_error_model_;
+  ErrorScreen* error_screen_;
 
   // True if we are online.
-  bool online_state_;
+  bool online_state_ = false;
 
   // True if we have network config screen was already shown before.
-  bool network_config_done_;
+  bool network_config_done_ = false;
 
   // True if we have manually requested network config screen.
-  bool network_config_requested_;
+  bool network_config_requested_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AppLaunchSplashScreenHandler);
 };

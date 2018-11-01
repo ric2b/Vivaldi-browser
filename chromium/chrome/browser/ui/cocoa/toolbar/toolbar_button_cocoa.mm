@@ -16,6 +16,7 @@
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/vector_icons/vector_icons.h"
 
 namespace {
 
@@ -206,12 +207,11 @@ const NSSize kMDButtonIconSize = NSMakeSize(16, 16);
 }
 
 - (const gfx::VectorIcon*)vectorIcon {
-  BOOL isRTL = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
   switch ([self viewID]) {
     case VIEW_ID_BACK_BUTTON:
-      return isRTL ? &kNavigateForwardIcon : &kNavigateBackIcon;
+      return &ui::kBackArrowIcon;
     case VIEW_ID_FORWARD_BUTTON:
-      return isRTL ? &kNavigateBackIcon : &kNavigateForwardIcon;
+      return &ui::kForwardArrowIcon;
     case VIEW_ID_HOME_BUTTON:
       return &kNavigateHomeIcon;
     case VIEW_ID_APP_MENU:
@@ -224,7 +224,11 @@ const NSSize kMDButtonIconSize = NSMakeSize(16, 16);
 }
 
 - (SkColor)vectorIconColor:(BOOL)themeIsDark {
-  return themeIsDark ? SK_ColorWHITE : SkColorSetRGB(0x5A, 0x5A, 0x5A);
+  const ui::ThemeProvider* provider = [[self window] themeProvider];
+  return themeIsDark ? SK_ColorWHITE
+                     : (provider && provider->ShouldIncreaseContrast()
+                            ? SK_ColorBLACK
+                            : SkColorSetRGB(0x5A, 0x5A, 0x5A));
 }
 
 - (NSImage*)browserToolsIconForFillColor:(SkColor)fillColor {
@@ -311,17 +315,21 @@ const NSSize kMDButtonIconSize = NSMakeSize(16, 16);
       normalIcon = [self browserToolsIconForFillColor:normalColor];
       disabledIcon = [self browserToolsIconForFillColor:disabledColor];
     } else {
+      BOOL isRTL = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
       normalIcon = NSImageFromImageSkia(
           gfx::CreateVectorIcon(*icon,
                                 kMDButtonIconSize.width,
                                 normalColor));
-
+      if (isRTL)
+        normalIcon = cocoa_l10n_util::FlippedImage(normalIcon);
       // The home button has no icon for its disabled state.
       if (icon != &kNavigateReloadIcon) {
         disabledIcon = NSImageFromImageSkia(
             gfx::CreateVectorIcon(*icon,
                                   kMDButtonIconSize.width,
                                   disabledColor));
+        if (isRTL)
+          disabledIcon = cocoa_l10n_util::FlippedImage(disabledIcon);
       }
     }
   }

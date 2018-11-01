@@ -67,8 +67,7 @@ class DragDropControllerMus : public client::DragDropClient {
                        Window* source_window,
                        const gfx::Point& screen_location,
                        int drag_operations,
-                       ui::DragDropTypes::DragEventSource source,
-                       bool& cancelled) override;
+                       ui::DragDropTypes::DragEventSource source) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 

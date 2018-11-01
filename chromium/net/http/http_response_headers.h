@@ -88,6 +88,9 @@ class NET_EXPORT HttpResponseHeaders
   // Removes all instances of a particular header.
   void RemoveHeader(const std::string& name);
 
+  // Removes all instances of particular headers.
+  void RemoveHeaders(const std::unordered_set<std::string>& header_names);
+
   // Removes a particular header line. The header name is compared
   // case-insensitively.
   void RemoveHeaderLine(const std::string& name, const std::string& value);
@@ -115,30 +118,6 @@ class NET_EXPORT HttpResponseHeaders
   void UpdateWithNewRange(const HttpByteRange& byte_range,
                           int64_t resource_size,
                           bool replace_status_line);
-
-  // Creates a normalized header string.  The output will be formatted exactly
-  // like so:
-  //     HTTP/<version> <status_code>[ <status_text>]\n
-  //     [<header-name>: <header-values>\n]*
-  // meaning, each line is \n-terminated, and there is no extra whitespace
-  // beyond the single space separators shown (of course, values can contain
-  // whitespace within them).  If a given header-name appears more than once
-  // in the set of headers, they are combined into a single line like so:
-  //     <header-name>: <header-value1>, <header-value2>, ...<header-valueN>\n
-  //
-  // DANGER: For some headers (e.g., "Set-Cookie"), the normalized form can be
-  // a lossy format.  This is due to the fact that some servers generate
-  // Set-Cookie headers that contain unquoted commas (usually as part of the
-  // value of an "expires" attribute).  So, use this function with caution.  Do
-  // not expect to be able to re-parse Set-Cookie headers from this output.
-  //
-  // NOTE: Do not make any assumptions about the encoding of this output
-  // string.  It may be non-ASCII, and the encoding used by the server is not
-  // necessarily known to us.  Do not assume that this output is UTF-8!
-  //
-  // TODO(darin): remove this method
-  //
-  void GetNormalizedHeaders(std::string* output) const;
 
   // Fetch the "normalized" value of a single header, where all values for the
   // header name are separated by commas.  See the GetNormalizedHeaders for

@@ -33,12 +33,10 @@
 
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebString.h"
+#include "public/platform/WebURL.h"
+#include "public/platform/WebURLResponse.h"
 
 namespace blink {
-
-class WebURL;
-class WebURLResponse;
-
 namespace URLTestHelpers {
 
 inline blink::KURL toKURL(const std::string& url) {
@@ -46,31 +44,36 @@ inline blink::KURL toKURL(const std::string& url) {
   return blink::KURL(blink::ParsedURLString, wtfString);
 }
 
+// Avoid directly using these methods, instead please use ScopedMockedURL (or
+// define a variant of ScopedMockedURL classes if necessary) in new code.
+//
 // Helper functions for mock URLs. These functions set up the desired URL and
 // mimeType, with a 200 OK return status.
-// For the mock URL, fullURL == baseURL + fileName.
-// For the actual file path:
-// <WebKit root directory> + relativeBaseDirectory + fileName,
-// or, if the relative base directory is not specified:
-// <WebKit root directory> + fileName.
-//
-void registerMockedURLFromBaseURL(
+// webTestDataPath() or platformTestDataPath() in UnitTestHelpers can be used to
+// get the appropriate |basePath| and |filePath| for test data directories.
+//  - For the mock URL, fullURL == baseURL + fileName.
+//  - For the file path, filePath == basePath + ("/" +) fileName.
+
+// Registers from a base URL and a base file path, and returns a calculated full
+// URL.
+WebURL registerMockedURLLoadFromBase(
     const WebString& baseURL,
+    const WebString& basePath,
     const WebString& fileName,
     const WebString& mimeType = WebString::fromUTF8("text/html"));
+
+// Registers from a full URL and a full file path.
 void registerMockedURLLoad(
     const WebURL& fullURL,
-    const WebString& fileName,
+    const WebString& filePath,
     const WebString& mimeType = WebString::fromUTF8("text/html"));
-void registerMockedURLLoad(const WebURL& fullURL,
-                           const WebString& fileName,
-                           const WebString& relativeBaseDirectory,
-                           const WebString& mimeType);
-void registerMockedURLLoadWithCustomResponse(
-    const WebURL& fullURL,
-    const WebString& fileName,
-    const WebString& relativeBaseDirectory,
-    WebURLResponse);
+
+// Registers with a custom response.
+void registerMockedURLLoadWithCustomResponse(const WebURL& fullURL,
+                                             const WebString& filePath,
+                                             WebURLResponse);
+
+// Registers a mock URL that returns a 404 error.
 void registerMockedErrorURLLoad(const WebURL& fullURL);
 
 }  // namespace URLTestHelpers

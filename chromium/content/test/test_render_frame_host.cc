@@ -24,6 +24,7 @@
 #include "content/test/test_render_view_host.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
+#include "net/http/http_response_headers.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
@@ -112,7 +113,7 @@ void TestRenderFrameHost::SimulateNavigationStart(const GURL& url) {
   }
 
   OnDidStartLoading(true);
-  OnDidStartProvisionalLoad(url, base::TimeTicks::Now());
+  OnDidStartProvisionalLoad(url, std::vector<GURL>(), base::TimeTicks::Now());
   SimulateWillStartRequest(ui::PAGE_TRANSITION_LINK);
 }
 
@@ -213,7 +214,8 @@ void TestRenderFrameHost::SimulateNavigationError(const GURL& url,
 void TestRenderFrameHost::SimulateNavigationErrorPageCommit() {
   CHECK(navigation_handle());
   GURL error_url = GURL(kUnreachableWebDataURL);
-  OnDidStartProvisionalLoad(error_url, base::TimeTicks::Now());
+  OnDidStartProvisionalLoad(error_url, std::vector<GURL>(),
+                            base::TimeTicks::Now());
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
   params.did_create_new_entry = true;
@@ -321,7 +323,8 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   // DidStartProvisionalLoad may delete the pending entry that holds |url|,
   // so we keep a copy of it to use below.
   GURL url_copy(url);
-  OnDidStartProvisionalLoad(url_copy, base::TimeTicks::Now());
+  OnDidStartProvisionalLoad(url_copy, std::vector<GURL>(),
+                            base::TimeTicks::Now());
   SimulateWillStartRequest(transition);
 
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
@@ -397,6 +400,13 @@ void TestRenderFrameHost::SendNavigateWithParameters(
 
 void TestRenderFrameHost::SendNavigateWithParams(
     FrameHostMsg_DidCommitProvisionalLoad_Params* params) {
+  if (navigation_handle()) {
+    scoped_refptr<net::HttpResponseHeaders> response_headers =
+        new net::HttpResponseHeaders(std::string());
+    response_headers->AddHeader(
+        std::string("Content-Type: ") + contents_mime_type_);
+    navigation_handle()->set_response_headers_for_testing(response_headers);
+  }
   FrameHostMsg_DidCommitProvisionalLoad msg(GetRoutingID(), *params);
   OnDidCommitProvisionalLoad(msg);
   last_commit_was_error_page_ = params->url_is_unreachable;
@@ -419,6 +429,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
     common_params.url = url;
     common_params.referrer = Referrer(GURL(), blink::WebReferrerPolicyDefault);
     common_params.transition = ui::PAGE_TRANSITION_LINK;
+    common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
     OnBeginNavigation(common_params, begin_params);
   }
 }
@@ -448,8 +459,10 @@ void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
   // PlzNavigate
   NavigationRequest* request = frame_tree_node_->navigation_request();
   CHECK(request);
-  bool have_to_make_network_request = ShouldMakeNetworkRequestForURL(
-      request->common_params().url);
+  bool have_to_make_network_request =
+      ShouldMakeNetworkRequestForURL(request->common_params().url) &&
+      !FrameMsg_Navigate_Type::IsSameDocument(
+          request->common_params().navigation_type);
 
   // Simulate a beforeUnload ACK from the renderer if the browser is waiting for
   // it. If it runs it will update the request state.

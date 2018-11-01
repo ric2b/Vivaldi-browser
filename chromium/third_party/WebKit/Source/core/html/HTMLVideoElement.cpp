@@ -25,6 +25,7 @@
 
 #include "core/html/HTMLVideoElement.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
@@ -36,27 +37,44 @@
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
+#include "core/html/MediaCustomControlsFullscreenDetector.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutVideo.h"
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "public/platform/WebCanvas.h"
-#include <memory>
 
 namespace blink {
 
 using namespace HTMLNames;
+
+namespace {
+
+// This enum is used to record histograms. Do not reorder.
+enum VideoPersistenceControlsType {
+  VideoPersistenceControlsTypeNative = 0,
+  VideoPersistenceControlsTypeCustom,
+  VideoPersistenceControlsTypeCount
+};
+
+}  // anonymous namespace
 
 inline HTMLVideoElement::HTMLVideoElement(Document& document)
     : HTMLMediaElement(videoTag, document) {
   if (document.settings()) {
     m_defaultPosterURL =
         AtomicString(document.settings()->getDefaultVideoPosterURL());
+  }
+
+  if (RuntimeEnabledFeatures::videoFullscreenDetectionEnabled()) {
+    m_customControlsFullscreenDetector =
+        new MediaCustomControlsFullscreenDetector(*this);
   }
 }
 
@@ -69,7 +87,32 @@ HTMLVideoElement* HTMLVideoElement::create(Document& document) {
 
 DEFINE_TRACE(HTMLVideoElement) {
   visitor->trace(m_imageLoader);
+  visitor->trace(m_customControlsFullscreenDetector);
   HTMLMediaElement::trace(visitor);
+}
+
+Node::InsertionNotificationRequest HTMLVideoElement::insertedInto(
+    ContainerNode* insertionPoint) {
+  if (insertionPoint->isConnected() && m_customControlsFullscreenDetector)
+    m_customControlsFullscreenDetector->attach();
+
+  return HTMLMediaElement::insertedInto(insertionPoint);
+}
+
+void HTMLVideoElement::removedFrom(ContainerNode* insertionPoint) {
+  HTMLMediaElement::removedFrom(insertionPoint);
+
+  if (m_customControlsFullscreenDetector)
+    m_customControlsFullscreenDetector->detach();
+
+  onBecamePersistentVideo(false);
+}
+
+void HTMLVideoElement::contextDestroyed(ExecutionContext* context) {
+  if (m_customControlsFullscreenDetector)
+    m_customControlsFullscreenDetector->contextDestroyed();
+
+  HTMLMediaElement::contextDestroyed(context);
 }
 
 bool HTMLVideoElement::layoutObjectIsNeeded(const ComputedStyle& style) {
@@ -184,6 +227,62 @@ void HTMLVideoElement::setDisplayMode(DisplayMode mode) {
     layoutObject()->updateFromElement();
 }
 
+// TODO(zqzhang): this callback could be used to hide native controls instead of
+// using a settings. See `HTMLMediaElement::onMediaControlsEnabledChange`.
+void HTMLVideoElement::onBecamePersistentVideo(bool value) {
+  if (value) {
+    // Record the type of video. If it is already fullscreen, it is a video with
+    // native controls, otherwise it is assumed to be with custom controls.
+    // This is only recorded when entering this mode.
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, histogram,
+                        ("Media.VideoPersistence.ControlsType",
+                         VideoPersistenceControlsTypeCount));
+    if (isFullscreen())
+      histogram.count(VideoPersistenceControlsTypeNative);
+    else
+      histogram.count(VideoPersistenceControlsTypeCustom);
+
+    Element* fullscreenElement =
+        Fullscreen::currentFullScreenElementFrom(document());
+    // Only set the video in persistent mode if it is not using native controls
+    // and is currently fullscreen.
+    if (!fullscreenElement || isFullscreen())
+      return;
+
+    m_isPersistent = true;
+    pseudoStateChanged(CSSSelector::PseudoVideoPersistent);
+
+    // The video is also marked as containing a persistent video to simplify the
+    // internal CSS logic.
+    for (Element* element = this; element && element != fullscreenElement;
+         element = element->parentOrShadowHostElement()) {
+      element->setContainsPersistentVideo(true);
+    }
+    fullscreenElement->setContainsPersistentVideo(true);
+  } else {
+    if (!m_isPersistent)
+      return;
+
+    m_isPersistent = false;
+    pseudoStateChanged(CSSSelector::PseudoVideoPersistent);
+
+    Element* fullscreenElement =
+        Fullscreen::currentFullScreenElementFrom(document());
+    // If the page is no longer fullscreen, the full tree will have to be
+    // traversed to make sure things are cleaned up.
+    for (Element* element = this; element && element != fullscreenElement;
+         element = element->parentOrShadowHostElement()) {
+      element->setContainsPersistentVideo(false);
+    }
+    if (fullscreenElement)
+      fullscreenElement->setContainsPersistentVideo(false);
+  }
+}
+
+bool HTMLVideoElement::isPersistent() const {
+  return m_isPersistent;
+}
+
 void HTMLVideoElement::updateDisplayState() {
   if (posterImageURL().isEmpty())
     setDisplayMode(Video);
@@ -191,33 +290,37 @@ void HTMLVideoElement::updateDisplayState() {
     setDisplayMode(Poster);
 }
 
-void HTMLVideoElement::paintCurrentFrame(SkCanvas* canvas,
+void HTMLVideoElement::paintCurrentFrame(PaintCanvas* canvas,
                                          const IntRect& destRect,
-                                         const SkPaint* paint) const {
+                                         const PaintFlags* flags) const {
   if (!webMediaPlayer())
     return;
 
-  SkPaint mediaPaint;
-  if (paint) {
-    mediaPaint = *paint;
+  PaintFlags mediaFlags;
+  if (flags) {
+    mediaFlags = *flags;
   } else {
-    mediaPaint.setAlpha(0xFF);
-    mediaPaint.setFilterQuality(kLow_SkFilterQuality);
+    mediaFlags.setAlpha(0xFF);
+    mediaFlags.setFilterQuality(kLow_SkFilterQuality);
   }
 
-  webMediaPlayer()->paint(canvas, destRect, mediaPaint);
+  webMediaPlayer()->paint(canvas, destRect, mediaFlags);
 }
 
 bool HTMLVideoElement::copyVideoTextureToPlatformTexture(
     gpu::gles2::GLES2Interface* gl,
     GLuint texture,
+    GLenum internalFormat,
+    GLenum type,
     bool premultiplyAlpha,
     bool flipY) {
   if (!webMediaPlayer())
     return false;
 
+  DCHECK(Extensions3DUtil::canUseCopyTextureCHROMIUM(GL_TEXTURE_2D,
+                                                     internalFormat, type, 0));
   return webMediaPlayer()->copyVideoTextureToPlatformTexture(
-      gl, texture, premultiplyAlpha, flipY);
+      gl, texture, internalFormat, type, premultiplyAlpha, flipY);
 }
 
 bool HTMLVideoElement::texImageImpl(
@@ -277,6 +380,7 @@ bool HTMLVideoElement::usesOverlayFullscreenVideo() const {
 void HTMLVideoElement::didMoveToNewDocument(Document& oldDocument) {
   if (m_imageLoader)
     m_imageLoader->elementDidMoveToNewDocument();
+
   HTMLMediaElement::didMoveToNewDocument(oldDocument);
 }
 

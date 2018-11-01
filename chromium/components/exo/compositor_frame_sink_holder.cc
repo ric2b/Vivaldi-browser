@@ -41,15 +41,6 @@ void CompositorFrameSinkHolder::SetNeedsBeginFrame(bool needs_begin_frame) {
   OnNeedsBeginFrames(needs_begin_frame);
 }
 
-void CompositorFrameSinkHolder::Satisfy(const cc::SurfaceSequence& sequence) {
-  frame_sink_->Satisfy(sequence);
-}
-
-void CompositorFrameSinkHolder::Require(const cc::SurfaceId& id,
-                                        const cc::SurfaceSequence& sequence) {
-  frame_sink_->Require(id.local_frame_id(), sequence);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // cc::mojom::MojoCompositorFrameSinkClient overrides:
 
@@ -58,6 +49,7 @@ void CompositorFrameSinkHolder::DidReceiveCompositorFrameAck() {
 }
 
 void CompositorFrameSinkHolder::OnBeginFrame(const cc::BeginFrameArgs& args) {
+  // TODO(eseckler): Hook up |surface_| to the ExternalBeginFrameSource.
   if (surface_)
     surface_->BeginFrame(args.frame_time);
 
@@ -76,7 +68,9 @@ void CompositorFrameSinkHolder::ReclaimResources(
   }
 }
 
-void CompositorFrameSinkHolder::WillDrawSurface() {
+void CompositorFrameSinkHolder::WillDrawSurface(
+    const cc::LocalSurfaceId& local_surface_id,
+    const gfx::Rect& damage_rect) {
   if (surface_)
     surface_->WillDraw();
 
@@ -98,6 +92,10 @@ void CompositorFrameSinkHolder::OnBeginFrameSourcePausedChanged(bool paused) {}
 
 void CompositorFrameSinkHolder::OnNeedsBeginFrames(bool needs_begin_frames) {
   frame_sink_->SetNeedsBeginFrame(needs_begin_frames);
+}
+
+void CompositorFrameSinkHolder::OnDidFinishFrame(const cc::BeginFrameAck& ack) {
+  // TODO(eseckler): Pass on the ack to frame_sink_.
 }
 
 ////////////////////////////////////////////////////////////////////////////////

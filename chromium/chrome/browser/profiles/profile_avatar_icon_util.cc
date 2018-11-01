@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "cc/paint/paint_flags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/grit/generated_resources.h"
@@ -188,21 +189,21 @@ void AvatarImageSource::Draw(gfx::Canvas* canvas) {
                  SkFloatToScalar(x + border_size - 0.5f),   // right
                  SkFloatToScalar(y + border_size - 0.5f));  // bottom
 
-    SkPaint paint;
-    paint.setColor(border_color);
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(SkIntToScalar(1));
+    cc::PaintFlags flags;
+    flags.setColor(border_color);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(SkIntToScalar(1));
 
-    canvas->DrawPath(path, paint);
+    canvas->DrawPath(path, flags);
   } else if (border_ == BORDER_ETCHED) {
     // Give the avatar an etched look by drawing a highlight on the bottom and
     // right edges.
     SkColor shadow_color = SkColorSetARGB(83, 0, 0, 0);
     SkColor highlight_color = SkColorSetARGB(96, 255, 255, 255);
 
-    SkPaint paint;
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(SkIntToScalar(1));
+    cc::PaintFlags flags;
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(SkIntToScalar(1));
 
     SkPath path;
 
@@ -217,8 +218,8 @@ void AvatarImageSource::Draw(gfx::Canvas* canvas) {
     // Draw right to the top-right, stopping within the last pixel.
     path.rLineTo(SkFloatToScalar(width_ - 0.5f), SkIntToScalar(0));
 
-    paint.setColor(shadow_color);
-    canvas->DrawPath(path, paint);
+    flags.setColor(shadow_color);
+    canvas->DrawPath(path, flags);
 
     path.reset();
 
@@ -232,8 +233,8 @@ void AvatarImageSource::Draw(gfx::Canvas* canvas) {
     // Draw up to the top-right.
     path.rLineTo(SkIntToScalar(0), SkFloatToScalar(-height_ + 1.5f));
 
-    paint.setColor(highlight_color);
-    canvas->DrawPath(path, paint);
+    flags.setColor(highlight_color);
+    canvas->DrawPath(path, flags);
   }
 }
 
@@ -368,6 +369,10 @@ int GetPlaceholderAvatarIconResourceID() {
   return IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE;
 }
 
+std::string GetPlaceholderAvatarIconUrl() {
+  return "chrome://theme/IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE";
+}
+
 const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
   CHECK_LT(index, kDefaultAvatarIconsCount);
   static const IconResourceInfo resource_info[kDefaultAvatarIconsCount] = {
@@ -414,7 +419,7 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
        "avatar_alien.png",
        IDS_DEFAULT_AVATAR_LABEL_13},
       {IDR_PROFILE_AVATAR_14,
-       "avatar_smiley.png",
+       "avatar_awesome.png",
        IDS_DEFAULT_AVATAR_LABEL_14},
       {IDR_PROFILE_AVATAR_15,
        "avatar_flower.png",

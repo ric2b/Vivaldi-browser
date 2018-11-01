@@ -59,6 +59,13 @@ bool TestSafeBrowsingDatabaseManager::CheckResourceUrl(const GURL& url,
   return true;
 }
 
+bool TestSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
+    const GURL& url,
+    Client* client) {
+  NOTIMPLEMENTED();
+  return true;
+}
+
 bool TestSafeBrowsingDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {
   NOTIMPLEMENTED();
   return true;
@@ -112,6 +119,18 @@ bool TestSafeBrowsingDatabaseManager::IsMalwareKillSwitchOn() {
 bool TestSafeBrowsingDatabaseManager::IsSupported() const {
   NOTIMPLEMENTED();
   return false;
+}
+
+void TestSafeBrowsingDatabaseManager::StartOnIOThread(
+    net::URLRequestContextGetter* request_context_getter,
+    const V4ProtocolConfig& config) {
+  SafeBrowsingDatabaseManager::StartOnIOThread(request_context_getter, config);
+  enabled_ = true;
+}
+
+void TestSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
+  enabled_ = false;
+  SafeBrowsingDatabaseManager::StopOnIOThread(shutdown);
 }
 
 }  // namespace safe_browsing

@@ -12,6 +12,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "net/spdy/hpack/hpack_input_stream.h"
 #include "net/spdy/hpack/hpack_output_stream.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 
 namespace net {
 
@@ -50,7 +51,7 @@ size_t HpackHuffmanTable::DecodeTable::size() const {
   return size_t(1) << indexed_length;
 }
 
-HpackHuffmanTable::HpackHuffmanTable() {}
+HpackHuffmanTable::HpackHuffmanTable() : pad_bits_(0), failed_symbol_id_(0) {}
 
 HpackHuffmanTable::~HpackHuffmanTable() {}
 
@@ -316,6 +317,13 @@ bool HpackHuffmanTable::GenericDecodeString(HpackInputStream* in,
   }
   NOTREACHED();
   return false;
+}
+
+size_t HpackHuffmanTable::EstimateMemoryUsage() const {
+  return SpdyEstimateMemoryUsage(decode_tables_) +
+         SpdyEstimateMemoryUsage(decode_entries_) +
+         SpdyEstimateMemoryUsage(code_by_id_) +
+         SpdyEstimateMemoryUsage(length_by_id_);
 }
 
 }  // namespace net

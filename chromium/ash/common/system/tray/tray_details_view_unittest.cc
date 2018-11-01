@@ -5,7 +5,6 @@
 #include "ash/common/system/tray/tray_details_view.h"
 
 #include "ash/common/ash_view_ids.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/special_popup_row.h"
 #include "ash/common/system/tray/system_tray.h"
@@ -13,13 +12,13 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_header_button.h"
 #include "ash/common/system/tray/view_click_listener.h"
+#include "ash/resources/grit/ash_resources.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/test/ash_test_base.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
@@ -45,22 +44,6 @@ class TestDetailsView : public TrayDetailsView {
   }
 
   void FocusTitleRow() { title_row()->content()->RequestFocus(); }
-
-  // TrayDetailsView:
-  void CreateExtraTitleRowButtons() override {
-    // TODO(tdanderson): Add test coverage for material design buttons in the
-    // title row once they are implemented.
-    if (MaterialDesignController::IsSystemTrayMenuMaterial())
-      return;
-
-    tray_popup_header_button_ =
-        new TrayPopupHeaderButton(this, IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED,
-                                  IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED,
-                                  IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED_HOVER,
-                                  IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED_HOVER,
-                                  IDS_ASH_STATUS_TRAY_BLUETOOTH);
-    title_row()->AddViewToRowNonMd(tray_popup_header_button_, true);
-  }
 
   void CreateScrollerViews() { CreateScrollableList(); }
 
@@ -143,17 +126,30 @@ class TrayDetailsViewTest : public AshTestBase {
 
   void TransitionFromDetailedToDefaultView(TestDetailsView* detailed) {
     detailed->TransitionToDefaultView();
-    scoped_task_runner_->FastForwardBy(base::TimeDelta::FromMilliseconds(
-        GetTrayConstant(TRAY_POPUP_TRANSITION_TO_DEFAULT_DELAY)));
+    (*scoped_task_runner_)
+        ->FastForwardBy(base::TimeDelta::FromMilliseconds(
+            kTrayDetailedViewTransitionDelayMs));
   }
 
   void FocusBackButton(TestDetailsView* detailed) {
     detailed->back_button_->RequestFocus();
   }
 
+  void SetUp() override {
+    AshTestBase::SetUp();
+    scoped_task_runner_ =
+        base::MakeUnique<base::ScopedMockTimeMessageLoopTaskRunner>();
+  }
+
+  void TearDown() override {
+    scoped_task_runner_.reset();
+    AshTestBase::TearDown();
+  }
+
  private:
   // Used to control the |transition_delay_timer_|.
-  base::ScopedMockTimeMessageLoopTaskRunner scoped_task_runner_;
+  std::unique_ptr<base::ScopedMockTimeMessageLoopTaskRunner>
+      scoped_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayDetailsViewTest);
 };
@@ -184,10 +180,7 @@ TEST_F(TrayDetailsViewTest, TransitionToDefaultViewTest) {
   // Transition back to default view, the default view of item 2 should have
   // focus.
   tray->GetSystemBubble()->bubble_view()->set_can_activate(true);
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    FocusBackButton(test_item_2->detailed_view());
-  else
-    test_item_2->detailed_view()->FocusTitleRow();
+  FocusBackButton(test_item_2->detailed_view());
   TransitionFromDetailedToDefaultView(test_item_2->detailed_view());
   RunAllPendingInMessageLoop();
 
@@ -211,111 +204,6 @@ TEST_F(TrayDetailsViewTest, TransitionToDefaultViewTest) {
   EXPECT_FALSE(test_item_2->default_view()->HasFocus());
 }
 
-// Tests that HoverHighlightView enters hover state in response to touch.
-TEST_F(TrayDetailsViewTest, HoverHighlightViewTouchFeedback) {
-  // Material design detailed views will not use the visual feedback from
-  // HoverHighlightView.
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    return;
-
-  HoverHighlightView* view = CreateAndShowHoverHighlightView();
-  EXPECT_FALSE(view->hover());
-
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.set_current_location(view->GetBoundsInScreen().CenterPoint());
-  generator.PressTouch();
-  EXPECT_TRUE(view->hover());
-
-  generator.ReleaseTouch();
-}
-
-// Tests that touch events leaving HoverHighlightView cancel the hover state.
-TEST_F(TrayDetailsViewTest, HoverHighlightViewTouchFeedbackCancellation) {
-  // Material design detailed views will not use the visual feedback from
-  // HoverHighlightView.
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    return;
-
-  HoverHighlightView* view = CreateAndShowHoverHighlightView();
-  EXPECT_FALSE(view->hover());
-
-  gfx::Rect view_bounds = view->GetBoundsInScreen();
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.set_current_location(view_bounds.CenterPoint());
-  generator.PressTouch();
-  EXPECT_TRUE(view->hover());
-
-  gfx::Point move_point(view_bounds.x(), view_bounds.CenterPoint().y());
-  generator.MoveTouch(move_point);
-  EXPECT_FALSE(view->hover());
-
-  generator.set_current_location(move_point);
-  generator.ReleaseTouch();
-  EXPECT_FALSE(view->hover());
-}
-
-// Tests that TrayPopupHeaderButton renders a background in response to touch.
-TEST_F(TrayDetailsViewTest, TrayPopupHeaderButtonTouchFeedback) {
-  // Material design detailed views will not use TrayPopupHeaderButton.
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    return;
-
-  TrayPopupHeaderButton* button = CreateAndShowTrayPopupHeaderButton();
-  EXPECT_FALSE(button->background());
-
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.set_current_location(button->GetBoundsInScreen().CenterPoint());
-  generator.PressTouch();
-  EXPECT_TRUE(button->background());
-
-  generator.ReleaseTouch();
-  EXPECT_FALSE(button->background());
-}
-
-// Tests that touch events leaving TrayPopupHeaderButton cancel the touch
-// feedback background.
-TEST_F(TrayDetailsViewTest, TrayPopupHeaderButtonTouchFeedbackCancellation) {
-  // Material design detailed views will not use TrayPopupHeaderButton.
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    return;
-
-  TrayPopupHeaderButton* button = CreateAndShowTrayPopupHeaderButton();
-  EXPECT_FALSE(button->background());
-
-  gfx::Rect view_bounds = button->GetBoundsInScreen();
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.set_current_location(view_bounds.CenterPoint());
-  generator.PressTouch();
-  EXPECT_TRUE(button->background());
-
-  gfx::Point move_point(view_bounds.x(), view_bounds.CenterPoint().y());
-  generator.MoveTouch(move_point);
-  EXPECT_FALSE(button->background());
-
-  generator.set_current_location(move_point);
-  generator.ReleaseTouch();
-  EXPECT_FALSE(button->background());
-}
-
-// Tests that a mouse entering TrayPopupHeaderButton renders a background as
-// visual feedback.
-TEST_F(TrayDetailsViewTest, TrayPopupHeaderButtonMouseHoverFeedback) {
-  // Material design detailed views will not use TrayPopupHeaderButton.
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    return;
-
-  TrayPopupHeaderButton* button = CreateAndShowTrayPopupHeaderButton();
-  EXPECT_FALSE(button->background());
-
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  gfx::Rect bounds = button->GetBoundsInScreen();
-  gfx::Point initial_point(bounds.x() - 1, bounds.y());
-  generator.set_current_location(initial_point);
-  generator.MoveMouseBy(1, 0);
-  RunAllPendingInMessageLoop();
-  EXPECT_TRUE(button->background());
-}
-
 TEST_F(TrayDetailsViewTest, ScrollContentsTest) {
   SystemTray* tray = GetPrimarySystemTray();
   TestItem* test_item = new TestItem;
@@ -326,14 +214,14 @@ TEST_F(TrayDetailsViewTest, ScrollContentsTest) {
   RunAllPendingInMessageLoop();
   test_item->detailed_view()->CreateScrollerViews();
 
-  test_item->detailed_view()->scroll_content()->SetPaintToLayer(true);
+  test_item->detailed_view()->scroll_content()->SetPaintToLayer();
   views::View* view1 = new views::View();
   test_item->detailed_view()->scroll_content()->AddChildView(view1);
   views::View* view2 = new views::View();
-  view2->SetPaintToLayer(true);
+  view2->SetPaintToLayer();
   test_item->detailed_view()->scroll_content()->AddChildView(view2);
   views::View* view3 = new views::View();
-  view3->SetPaintToLayer(true);
+  view3->SetPaintToLayer();
   test_item->detailed_view()->scroll_content()->AddChildView(view3);
 
   // Child layers should have same order as the child views.
@@ -346,7 +234,7 @@ TEST_F(TrayDetailsViewTest, ScrollContentsTest) {
   // Mark |view2| as sticky and add one more child (which will reorder layers).
   view2->set_id(VIEW_ID_STICKY_HEADER);
   views::View* view4 = new views::View();
-  view4->SetPaintToLayer(true);
+  view4->SetPaintToLayer();
   test_item->detailed_view()->scroll_content()->AddChildView(view4);
 
   // Sticky header layer should be above the last child's layer.

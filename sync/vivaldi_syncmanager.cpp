@@ -2,6 +2,10 @@
 
 #include "sync/vivaldi_syncmanager.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
@@ -27,9 +31,9 @@ using syncer::WeakHandle;
 namespace vivaldi {
 
 VivaldiSyncManager::VivaldiSyncManager(
-    ProfileSyncService::InitParams& init_params,
-    std::shared_ptr<VivaldiInvalidationService>  invalidation_service)
-    : ProfileSyncService(std::move(init_params)),
+    ProfileSyncService::InitParams* init_params,
+    std::shared_ptr<VivaldiInvalidationService> invalidation_service)
+    : ProfileSyncService(std::move(*init_params)),
       model_(NULL),
       polling_posted_(false),
       invalidation_service_(invalidation_service),
@@ -85,7 +89,7 @@ void VivaldiSyncManager::HandleConfigureSyncMessage(
 void VivaldiSyncManager::HandleConfigurePollingMessage(
     const base::DictionaryValue& args) {
   std::string interval_seconds_str;
-  if(!args.GetString("polling_interval_seconds", &interval_seconds_str))
+  if (!args.GetString("polling_interval_seconds", &interval_seconds_str))
     return;
 
   uint32_t interval_seconds;
@@ -93,7 +97,7 @@ void VivaldiSyncManager::HandleConfigurePollingMessage(
   if (!base::StringToUint(interval_seconds_str, &interval_seconds))
     return;
 
-  polling_interval_= base::TimeDelta::FromSeconds(interval_seconds);
+  polling_interval_ = base::TimeDelta::FromSeconds(interval_seconds);
 }
 
 void VivaldiSyncManager::StartPollingServer() {
@@ -101,8 +105,10 @@ void VivaldiSyncManager::StartPollingServer() {
     return;
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&VivaldiSyncManager::PerformPollServer,
-                            weak_factory_.GetWeakPtr()), polling_interval_);
+      FROM_HERE,
+      base::Bind(&VivaldiSyncManager::PerformPollServer,
+                 weak_factory_.GetWeakPtr()),
+      polling_interval_);
 
   polling_posted_ = true;
 }
@@ -207,14 +213,10 @@ void VivaldiSyncManager::SetToken(const base::DictionaryValue& args,
   std::string username;
   std::string password;
   std::string expire;
-  if (!(args.GetString("token", &token) &&
-        args.GetString("expire", &expire) &&
+  if (!(args.GetString("token", &token) && args.GetString("expire", &expire) &&
         args.GetString("account_id", &account_id) &&
-        (!full_login ||  (
-        args.GetString("username", &username) &&
-        args.GetString("password", &password)
-          ))
-        )) {
+        (!full_login || (args.GetString("username", &username) &&
+                         args.GetString("password", &password))))) {
     return;
   }
 
@@ -306,22 +308,6 @@ void VivaldiSyncManager::SetupConfiguration() {
     SetFirstSetupComplete();
 
   sync_tracker_.reset(new SyncStartupTracker(sync_client_->GetProfile(), this));
-}
-
-void VivaldiSyncManager::OnPassphraseRequired(
-    syncer::PassphraseRequiredReason reason,
-    const sync_pb::EncryptedData& pending_keys) {
-  if (IsEngineInitialized()) {
-    EnableEncryptEverything();
-    if (IsPassphraseRequired()) {
-      // TODO(yngve): ask for password again
-      ignore_result(SetDecryptionPassphrase(password_));
-    } else {
-      if (!IsUsingSecondaryPassphrase())
-        SetEncryptionPassphrase(password_, ProfileSyncService::EXPLICIT);
-    }
-  }
-  ProfileSyncService::OnPassphraseRequired(reason, pending_keys);
 }
 
 }  // namespace vivaldi

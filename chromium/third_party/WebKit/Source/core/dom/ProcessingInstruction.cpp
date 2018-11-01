@@ -26,14 +26,14 @@
 #include "core/dom/Document.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
 #include "core/dom/StyleEngine.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/XSLStyleSheetResource.h"
 #include "core/xml/DocumentXSLT.h"
 #include "core/xml/XSLStyleSheet.h"
 #include "core/xml/parser/XMLDocumentParser.h"  // for parseAttributes()
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include <memory>
 
 namespace blink {
@@ -79,7 +79,7 @@ Node::NodeType ProcessingInstruction::getNodeType() const {
   return kProcessingInstructionNode;
 }
 
-Node* ProcessingInstruction::cloneNode(bool /*deep*/) {
+Node* ProcessingInstruction::cloneNode(bool /*deep*/, ExceptionState&) {
   // FIXME: Is it a problem that this does not copy m_localHref?
   // What about other data members?
   return create(document(), m_target, m_data);
@@ -120,12 +120,12 @@ bool ProcessingInstruction::checkStyleSheet(String& href, String& charset) {
   if (!m_isCSS && !m_isXSL)
     return false;
 
-  href = attrs.get("href");
-  charset = attrs.get("charset");
-  String alternate = attrs.get("alternate");
+  href = attrs.at("href");
+  charset = attrs.at("charset");
+  String alternate = attrs.at("alternate");
   m_alternate = alternate == "yes";
-  m_title = attrs.get("title");
-  m_media = attrs.get("media");
+  m_title = attrs.at("title");
+  m_media = attrs.at("media");
 
   return !m_alternate || !m_title.isEmpty();
 }

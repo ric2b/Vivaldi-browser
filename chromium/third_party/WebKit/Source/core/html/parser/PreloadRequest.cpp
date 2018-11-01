@@ -5,11 +5,11 @@
 #include "core/html/parser/PreloadRequest.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/FetchInitiatorInfo.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/CrossOriginAttributeValue.h"
+#include "platform/loader/fetch/FetchInitiatorInfo.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
 namespace blink {
@@ -74,7 +74,7 @@ Resource* PreloadRequest::start(Document* document) {
     request.setCharset(
         m_charset.isEmpty() ? document->characterSet().getString() : m_charset);
   }
-  request.setForPreload(true, m_discoveryTime);
+  request.setSpeculativePreload(true, m_discoveryTime);
 
   return document->loader()->startPreload(m_resourceType, request);
 }

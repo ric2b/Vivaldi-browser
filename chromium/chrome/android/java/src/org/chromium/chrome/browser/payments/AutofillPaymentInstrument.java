@@ -5,18 +5,19 @@
 package org.chromium.chrome.browser.payments;
 
 import android.content.Context;
-import android.os.Handler;
 import android.text.TextUtils;
 import android.util.JsonWriter;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.FullCardRequestDelegate;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
 
@@ -34,7 +35,6 @@ import javax.annotation.Nullable;
  */
 public class AutofillPaymentInstrument extends PaymentInstrument
         implements FullCardRequestDelegate, NormalizedAddressRequestDelegate {
-    private final Context mContext;
     private final WebContents mWebContents;
     private CreditCard mCard;
     private String mSecurityCode;
@@ -48,26 +48,29 @@ public class AutofillPaymentInstrument extends PaymentInstrument
     /**
      * Builds a payment instrument for the given credit card.
      *
-     * @param context        The application context.
      * @param webContents    The web contents where PaymentRequest was invoked.
      * @param card           The autofill card that can be used for payment.
      * @param billingAddress The billing address for the card.
      * @param methodName     The payment method name, e.g., "basic-card", "visa", amex", or null.
      */
-    public AutofillPaymentInstrument(Context context, WebContents webContents, CreditCard card,
+    public AutofillPaymentInstrument(WebContents webContents, CreditCard card,
             @Nullable AutofillProfile billingAddress, @Nullable String methodName) {
-        super(card.getGUID(), card.getObfuscatedNumber(), card.getName(),
-                card.getIssuerIconDrawableId() == 0
-                ? null
-                : ApiCompatibilityUtils.getDrawable(
-                        context.getResources(), card.getIssuerIconDrawableId()));
-        mContext = context;
+        super(card.getGUID(), card.getObfuscatedNumber(), card.getName(), null);
         mWebContents = webContents;
         mCard = card;
         mBillingAddress = billingAddress;
         mIsEditable = true;
         mMethodName = methodName;
-        checkAndUpateCardCompleteness();
+
+        Context context = ChromeActivity.fromWebContents(mWebContents);
+        if (context == null) return;
+
+        if (card.getIssuerIconDrawableId() != 0) {
+            updateDrawableIcon(ApiCompatibilityUtils.getDrawable(
+                    context.getResources(), card.getIssuerIconDrawableId()));
+        }
+
+        checkAndUpateCardCompleteness(context);
     }
 
     @Override
@@ -79,12 +82,14 @@ public class AutofillPaymentInstrument extends PaymentInstrument
 
     @Override
     public void invokePaymentApp(String unusedMerchantName, String unusedOrigin,
-            PaymentItem unusedTotal, List<PaymentItem> unusedCart,
-            Map<String, PaymentMethodData> unusedMethodDataMap,
+            byte[][] unusedCertificateChain, Map<String, PaymentMethodData> unusedMethodDataMap,
+            PaymentItem unusedTotal, List<PaymentItem> unusedDisplayItems,
+            Map<String, PaymentDetailsModifier> unusedModifiers,
             InstrumentDetailsCallback callback) {
         // The billing address should never be null for a credit card at this point.
         assert mBillingAddress != null;
-        assert AutofillAddress.checkAddressCompletionStatus(mBillingAddress)
+        assert AutofillAddress.checkAddressCompletionStatus(
+                mBillingAddress, AutofillAddress.IGNORE_PHONE_COMPLETENESS_CHECK)
                 == AutofillAddress.COMPLETE;
         assert mIsComplete;
         assert mHasValidNumberAndName;
@@ -96,7 +101,7 @@ public class AutofillPaymentInstrument extends PaymentInstrument
 
         // Start the billing address normalization.
         PersonalDataManager.getInstance().normalizeAddress(
-                mBillingAddress.getGUID(), AutofillAddress.getCountryCode(mBillingAddress), this);
+                mBillingAddress, AutofillAddress.getCountryCode(mBillingAddress), this);
 
         // Start to get the full card details.
         PersonalDataManager.getInstance().getFullCard(mWebContents, mCard, this);
@@ -121,20 +126,7 @@ public class AutofillPaymentInstrument extends PaymentInstrument
         mCallback.onInstrumentDetailsLoadingWithoutUI();
 
         // Wait for the billing address normalization before sending the instrument details.
-        if (mIsWaitingForBillingNormalization) {
-            // If the normalization is not completed yet, Start a timer to cancel it if it takes too
-            // long.
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    onAddressNormalized(null);
-                }
-            }, PersonalDataManager.getInstance().getNormalizationTimeoutMS());
-
-            return;
-        } else {
-            sendIntrumentDetails();
-        }
+        if (!mIsWaitingForBillingNormalization) sendInstrumentDetails();
     }
 
     @Override
@@ -146,14 +138,19 @@ public class AutofillPaymentInstrument extends PaymentInstrument
         if (profile != null) mBillingAddress = profile;
 
         // Wait for the full card details before sending the instrument details.
-        if (!mIsWaitingForFullCardDetails) sendIntrumentDetails();
+        if (!mIsWaitingForFullCardDetails) sendInstrumentDetails();
+    }
+
+    @Override
+    public void onCouldNotNormalize(AutofillProfile profile) {
+        onAddressNormalized(null);
     }
 
     /**
      * Stringify the card details and send the resulting string and the method name to the
      * registered callback.
      */
-    private void sendIntrumentDetails() {
+    private void sendInstrumentDetails() {
         StringWriter stringWriter = new StringWriter();
         JsonWriter json = new JsonWriter(stringWriter);
         try {
@@ -250,16 +247,21 @@ public class AutofillPaymentInstrument extends PaymentInstrument
         assert card.getBillingAddressId() != null;
         assert card.getBillingAddressId().equals(billingAddress.getGUID());
         assert card.getIssuerIconDrawableId() != 0;
-        assert AutofillAddress.checkAddressCompletionStatus(billingAddress)
+        assert AutofillAddress.checkAddressCompletionStatus(
+                billingAddress, AutofillAddress.IGNORE_PHONE_COMPLETENESS_CHECK)
                 == AutofillAddress.COMPLETE;
 
         mCard = card;
         mMethodName = methodName;
         mBillingAddress = billingAddress;
+
+        Context context = ChromeActivity.fromWebContents(mWebContents);
+        if (context == null) return;
+
         updateIdentifierLabelsAndIcon(card.getGUID(), card.getObfuscatedNumber(), card.getName(),
                 null, ApiCompatibilityUtils.getDrawable(
-                              mContext.getResources(), card.getIssuerIconDrawableId()));
-        checkAndUpateCardCompleteness();
+                        context.getResources(), card.getIssuerIconDrawableId()));
+        checkAndUpateCardCompleteness(context);
         assert mIsComplete;
         assert mHasValidNumberAndName;
     }
@@ -280,7 +282,7 @@ public class AutofillPaymentInstrument extends PaymentInstrument
      * Does not check that the card type is accepted by the merchant. This is done elsewhere to
      * filter out such cards from view entirely.
      */
-    private void checkAndUpateCardCompleteness() {
+    private void checkAndUpateCardCompleteness(Context context) {
         int editMessageResId = 0; // Zero is the invalid resource Id.
         int editTitleResId = R.string.payments_edit_card;
         int invalidFieldsCount = 0;
@@ -304,7 +306,7 @@ public class AutofillPaymentInstrument extends PaymentInstrument
                         mCard.getNumber().toString(), true)
                     == null) {
                 mHasValidNumberAndName = false;
-                editMessageResId = R.string.payments_card_number_invalid;
+                editMessageResId = R.string.payments_card_number_invalid_validation_message;
                 editTitleResId = R.string.payments_add_valid_card_number;
                 invalidFieldsCount++;
             }
@@ -315,8 +317,8 @@ public class AutofillPaymentInstrument extends PaymentInstrument
             editTitleResId = R.string.payments_add_more_information;
         }
 
-        mEditMessage = editMessageResId == 0 ? null : mContext.getString(editMessageResId);
-        mEditTitle = mContext.getString(editTitleResId);
+        mEditMessage = editMessageResId == 0 ? null : context.getString(editMessageResId);
+        mEditTitle = context.getString(editTitleResId);
         mIsComplete = mEditMessage == null;
     }
 

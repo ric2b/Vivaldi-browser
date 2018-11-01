@@ -239,6 +239,32 @@ void GetClusterAtImpl(size_t pos,
   DCHECK(!glyphs->is_empty());
 }
 
+// Returns the line segment index for the |line|, |text_x| pair. |text_x| is
+// relative to text in the given line. Returns -1 if |text_x| is to the left
+// of text in the line and |line|.segments.size() if it's to the right.
+// |offset_relative_segment| will contain the offset of |text_x| relative to
+// the start of the segment it is contained in.
+int GetLineSegmentContainingXCoord(const internal::Line& line,
+                                   float line_x,
+                                   float* offset_relative_segment) {
+  DCHECK(offset_relative_segment);
+
+  *offset_relative_segment = 0;
+  if (line_x < 0)
+    return -1;
+  for (size_t i = 0; i < line.segments.size(); i++) {
+    const internal::LineSegment& segment = line.segments[i];
+
+    // segment.x_range is not used because it is in text space.
+    if (line_x < segment.width()) {
+      *offset_relative_segment = line_x;
+      return i;
+    }
+    line_x -= segment.width();
+  }
+  return line.segments.size();
+}
+
 // Internal class to generate Line structures. If |multiline| is true, the text
 // is broken into lines at |words| boundaries such that each line is no longer
 // than |max_width|. If |multiline| is false, only outputs a single Line from
@@ -465,7 +491,8 @@ class HarfBuzzLineBreaker {
   // no larger than |available_width_|.
   size_t GetCutoffPos(const internal::LineSegment& segment) const {
     DCHECK(!segment.char_range.is_empty());
-    const internal::TextRunHarfBuzz& run = *(run_list_.runs()[segment.run]);
+    const internal::TextRunHarfBuzz& run =
+        *(run_list_.runs()[segment.run]).get();
     size_t end_pos = segment.char_range.start();
     SkScalar width = 0;
     while (end_pos < segment.char_range.end()) {
@@ -778,7 +805,7 @@ void TextRunList::ComputePrecedingRunWidths() {
   // Precalculate run width information.
   width_ = 0.0f;
   for (size_t i = 0; i < runs_.size(); ++i) {
-    TextRunHarfBuzz* run = runs_[visual_to_logical_[i]];
+    const auto& run = runs_[visual_to_logical_[i]];
     run->preceding_run_widths = width_;
     width_ += run->width;
   }
@@ -917,7 +944,7 @@ std::vector<RenderText::FontSpan> RenderTextHarfBuzz::GetFontSpansForTesting() {
 
   internal::TextRunList* run_list = GetRunList();
   std::vector<RenderText::FontSpan> spans;
-  for (auto* run : run_list->runs()) {
+  for (const auto& run : run_list->runs()) {
     spans.push_back(RenderText::FontSpan(
         run->font, Range(DisplayIndexToTextIndex(run->range.start()),
                          DisplayIndexToTextIndex(run->range.end()))));
@@ -935,7 +962,7 @@ Range RenderTextHarfBuzz::GetGlyphBounds(size_t index) {
   if (run_index >= run_list->size())
     return Range(GetStringSize().width());
   const size_t layout_index = TextIndexToDisplayIndex(index);
-  internal::TextRunHarfBuzz* run = run_list->runs()[run_index];
+  internal::TextRunHarfBuzz* run = run_list->runs()[run_index].get();
   RangeF bounds = run->GetGraphemeBounds(this, layout_index);
   // If cursor is enabled, extend the last glyph up to the rightmost cursor
   // position since clients expect them to be contiguous.
@@ -977,11 +1004,11 @@ SelectionModel RenderTextHarfBuzz::AdjacentCharSelectionModel(
     if (edge.caret_pos() == selection.caret_pos())
       return edge;
     int visual_index = (direction == CURSOR_RIGHT) ? 0 : run_list->size() - 1;
-    run = run_list->runs()[run_list->visual_to_logical(visual_index)];
+    run = run_list->runs()[run_list->visual_to_logical(visual_index)].get();
   } else {
     // If the cursor is moving within the current run, just move it by one
     // grapheme in the appropriate direction.
-    run = run_list->runs()[run_index];
+    run = run_list->runs()[run_index].get();
     size_t caret = selection.caret_pos();
     bool forward_motion = run->is_rtl == (direction == CURSOR_LEFT);
     if (forward_motion) {
@@ -1000,7 +1027,7 @@ SelectionModel RenderTextHarfBuzz::AdjacentCharSelectionModel(
     visual_index += (direction == CURSOR_LEFT) ? -1 : 1;
     if (visual_index < 0 || visual_index >= static_cast<int>(run_list->size()))
       return EdgeSelectionModel(direction);
-    run = run_list->runs()[run_list->visual_to_logical(visual_index)];
+    run = run_list->runs()[run_list->visual_to_logical(visual_index)].get();
   }
   bool forward_motion = run->is_rtl == (direction == CURSOR_LEFT);
   return forward_motion ? FirstSelectionModelInsideRun(run) :
@@ -1291,48 +1318,11 @@ size_t RenderTextHarfBuzz::GetRunContainingCaret(
   LogicalCursorDirection affinity = caret.caret_affinity();
   internal::TextRunList* run_list = GetRunList();
   for (size_t i = 0; i < run_list->size(); ++i) {
-    internal::TextRunHarfBuzz* run = run_list->runs()[i];
+    internal::TextRunHarfBuzz* run = run_list->runs()[i].get();
     if (RangeContainsCaret(run->range, layout_position, affinity))
       return i;
   }
   return run_list->size();
-}
-
-int RenderTextHarfBuzz::GetLineContainingYCoord(float text_y) {
-  if (text_y < 0)
-    return -1;
-
-  for (size_t i = 0; i < lines().size(); i++) {
-    const internal::Line& line = lines()[i];
-
-    if (text_y <= line.size.height())
-      return i;
-    text_y -= line.size.height();
-  }
-
-  return lines().size();
-}
-
-int RenderTextHarfBuzz::GetLineSegmentContainingXCoord(
-    const internal::Line& line,
-    float line_x,
-    float* offset_relative_segment) {
-  DCHECK(offset_relative_segment);
-
-  *offset_relative_segment = 0;
-  if (line_x < 0)
-    return -1;
-  for (size_t i = 0; i < line.segments.size(); i++) {
-    const internal::LineSegment& segment = line.segments[i];
-
-    // segment.x_range is not used because it is in text space.
-    if (line_x < segment.width()) {
-      *offset_relative_segment = line_x;
-      return i;
-    }
-    line_x -= segment.width();
-  }
-  return line.segments.size();
 }
 
 SelectionModel RenderTextHarfBuzz::FirstSelectionModelInsideRun(
@@ -1359,10 +1349,10 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   // to misbehave since they expect non-zero text metrics from a non-empty text.
   base::i18n::BiDiLineIterator bidi_iterator;
   if (!bidi_iterator.Open(text, GetTextDirection(text))) {
-    internal::TextRunHarfBuzz* run =
-        new internal::TextRunHarfBuzz(font_list().GetPrimaryFont());
+    auto run = base::MakeUnique<internal::TextRunHarfBuzz>(
+        font_list().GetPrimaryFont());
     run->range = Range(0, text.length());
-    run_list_out->add(run);
+    run_list_out->Add(std::move(run));
     run_list_out->InitIndexMap();
     return;
   }
@@ -1380,8 +1370,8 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   internal::StyleIterator style(empty_colors, baselines(), weights(), styles());
 
   for (size_t run_break = 0; run_break < text.length();) {
-    internal::TextRunHarfBuzz* run =
-        new internal::TextRunHarfBuzz(font_list().GetPrimaryFont());
+    auto run = base::MakeUnique<internal::TextRunHarfBuzz>(
+        font_list().GetPrimaryFont());
     run->range.set_start(run_break);
     run->italic = style.style(ITALIC);
     run->baseline_type = style.baseline();
@@ -1417,7 +1407,7 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
     style.UpdatePosition(DisplayIndexToTextIndex(run_break));
     run->range.set_end(run_break);
 
-    run_list_out->add(run);
+    run_list_out->Add(std::move(run));
   }
 
   // Undo the temporarily applied composition underlines and selection colors.
@@ -1448,8 +1438,8 @@ bool RenderTextHarfBuzz::CompareFamily(
 
 void RenderTextHarfBuzz::ShapeRunList(const base::string16& text,
                                       internal::TextRunList* run_list) {
-  for (auto* run : run_list->runs())
-    ShapeRun(text, run);
+  for (const auto& run : run_list->runs())
+    ShapeRun(text, run.get());
   run_list->ComputePrecedingRunWidths();
 }
 

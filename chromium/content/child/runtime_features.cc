@@ -181,6 +181,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnablePreciseMemoryInfo))
     WebRuntimeFeatures::enablePreciseMemoryInfo(true);
 
+  if (command_line.HasSwitch(switches::kEnablePrintBrowser))
+    WebRuntimeFeatures::enablePrintBrowser(true);
+
   if (command_line.HasSwitch(switches::kEnableNetworkInformation) ||
       enableExperimentalWebPlatformFeatures) {
     WebRuntimeFeatures::enableNetworkInformation(true);
@@ -205,6 +208,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   if (command_line.HasSwitch(switches::kEnableWebVR))
     WebRuntimeFeatures::enableWebVR(true);
+
+  WebRuntimeFeatures::enableWebVRExperimentalRendering(
+      base::FeatureList::IsEnabled(features::kWebVRExperimentalRendering));
 
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::enablePresentationAPI(false);
@@ -287,9 +293,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(
           features::kFramebustingNeedsSameOriginOrUserGesture));
 
-  if (base::FeatureList::IsEnabled(features::kParseHTMLOnMainThread))
-    WebRuntimeFeatures::enableFeatureFromString("ParseHTMLOnMainThread", true);
-
   if (command_line.HasSwitch(switches::kDisableBackgroundTimerThrottling))
     WebRuntimeFeatures::enableTimerThrottlingForBackgroundTabs(false);
 
@@ -305,6 +308,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::enableTimerThrottlingForHiddenFrames(
       base::FeatureList::IsEnabled(features::kTimerThrottlingForHiddenFrames));
+
+  WebRuntimeFeatures::enableTouchpadAndWheelScrollLatching(
+      base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
 
   if (base::FeatureList::IsEnabled(
           features::kSendBeaconThrowForBlobWithNonSimpleType))
@@ -358,6 +364,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::enableGamepadExtensions(true);
     WebRuntimeFeatures::enableWebVR(true);
   }
+
+  if (base::FeatureList::IsEnabled(features::kLoadingWithMojo))
+    WebRuntimeFeatures::enableLoadingWithMojo(true);
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

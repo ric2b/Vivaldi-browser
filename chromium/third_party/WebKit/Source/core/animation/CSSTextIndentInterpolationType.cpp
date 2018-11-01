@@ -152,7 +152,7 @@ InterpolationValue CSSTextIndentInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSTextIndentInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   InterpolationValue length = nullptr;
   TextIndentLine line = ComputedStyle::initialTextIndentLine();
@@ -178,8 +178,7 @@ InterpolationValue CSSTextIndentInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSTextIndentInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  const ComputedStyle& style = *state.style();
+    const ComputedStyle& style) const {
   return createValue(style.textIndent(), IndentMode(style),
                      style.effectiveZoom());
 }
@@ -199,11 +198,10 @@ PairwiseInterpolationValue CSSTextIndentInterpolationType::maybeMergeSingles(
       LengthInterpolationFunctions::mergeSingles(
           InterpolationValue(
               std::move(start.interpolableValue),
-              std::move(
-                  startNonInterpolableValue.lengthNonInterpolableValue())),
+              startNonInterpolableValue.lengthNonInterpolableValue()),
           InterpolationValue(
               std::move(end.interpolableValue),
-              std::move(endNonInterpolableValue.lengthNonInterpolableValue())));
+              endNonInterpolableValue.lengthNonInterpolableValue()));
   result.nonInterpolableValue = CSSTextIndentNonInterpolableValue::create(
       std::move(result.nonInterpolableValue), startNonInterpolableValue.mode());
   return result;

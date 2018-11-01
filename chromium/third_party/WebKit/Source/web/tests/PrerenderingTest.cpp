@@ -28,14 +28,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <functional>
+#include <list>
+#include <memory>
 #include "core/dom/NodeTraversal.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebCache.h"
 #include "public/platform/WebPrerender.h"
 #include "public/platform/WebPrerenderingSupport.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebPrerendererClient.h"
 #include "public/web/WebScriptSource.h"
@@ -45,17 +49,13 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 #include "wtf/PtrUtil.h"
-#include <functional>
-#include <list>
-#include <memory>
 
-using namespace blink;
-using blink::URLTestHelpers::toKURL;
+namespace blink {
 
 namespace {
 
 WebURL toWebURL(const char* url) {
-  return WebURL(toKURL(url));
+  return WebURL(blink::URLTestHelpers::toKURL(url));
 }
 
 class TestPrerendererClient : public WebPrerendererClient {
@@ -156,16 +156,18 @@ class TestPrerenderingSupport : public WebPrerenderingSupport {
   Vector<WebPrerender> m_abandonedPrerenders;
 };
 
-class PrerenderingTest : public testing::Test {
+class PrerenderingTest : public ::testing::Test {
  public:
   ~PrerenderingTest() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   void initialize(const char* baseURL, const char* fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL),
-                                                 WebString::fromUTF8(fileName));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(baseURL), blink::testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
     const bool RunJavascript = true;
     m_webViewHelper.initialize(RunJavascript);
     m_webViewHelper.webView()->setPrerendererClient(&m_prerendererClient);
@@ -225,6 +227,8 @@ class PrerenderingTest : public testing::Test {
 
   FrameTestHelpers::WebViewHelper m_webViewHelper;
 };
+
+}  // namespace
 
 TEST_F(PrerenderingTest, SinglePrerender) {
   initialize("http://www.foo.com/", "prerender/single_prerender.html");
@@ -470,4 +474,4 @@ TEST_F(PrerenderingTest, RelNext) {
       relNextAndPrerender.relTypes());
 }
 
-}  // namespace
+}  // namespace blink

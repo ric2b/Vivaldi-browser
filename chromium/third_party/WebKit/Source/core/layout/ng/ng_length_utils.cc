@@ -14,7 +14,7 @@
 
 namespace blink {
 // TODO(layout-ng):
-// - positioned and/or replaced calculations
+// - replaced calculations
 // - Take scrollbars into account
 
 bool NeedMinAndMaxContentSizes(const NGConstraintSpace& constraint_space,
@@ -41,9 +41,10 @@ LayoutUnit ResolveInlineLength(
     const WTF::Optional<MinAndMaxContentSizes>& min_and_max,
     const Length& length,
     LengthResolveType type) {
-  // TODO(layout-ng): Handle min/max/fit-content
   DCHECK(!length.isMaxSizeNone());
   DCHECK_GE(constraint_space.AvailableSize().inline_size, LayoutUnit());
+  DCHECK_GE(constraint_space.PercentageResolutionSize().inline_size,
+            LayoutUnit());
 
   if (type == LengthResolveType::kMinSize && length.isAuto())
     return LayoutUnit();
@@ -55,8 +56,8 @@ LayoutUnit ResolveInlineLength(
   // computing it as an optimization and to simplify the code below.
   NGBoxStrut border_and_padding;
   if (type != LengthResolveType::kMarginBorderPaddingSize) {
-    border_and_padding =
-        ComputeBorders(style) + ComputePadding(constraint_space, style);
+    border_and_padding = ComputeBorders(constraint_space, style) +
+                         ComputePadding(constraint_space, style);
   }
   switch (length.type()) {
     case Auto:
@@ -137,8 +138,8 @@ LayoutUnit ResolveBlockLength(const NGConstraintSpace& constraint_space,
   // computing it as an optimization and to simplify the code below.
   NGBoxStrut border_and_padding;
   if (type != LengthResolveType::kMarginBorderPaddingSize) {
-    border_and_padding =
-        ComputeBorders(style) + ComputePadding(constraint_space, style);
+    border_and_padding = ComputeBorders(constraint_space, style) +
+                         ComputePadding(constraint_space, style);
   }
   switch (length.type()) {
     case FillAvailable: {
@@ -189,14 +190,16 @@ MinAndMaxContentSizes ComputeMinAndMaxContentContribution(
   // ResolveInlineLength.
   NGWritingMode writing_mode = FromPlatformWritingMode(style.getWritingMode());
   NGConstraintSpaceBuilder builder(writing_mode);
-  NGConstraintSpace* space = builder.ToConstraintSpace();
+  builder.SetInitialContainingBlockSize(
+      NGPhysicalSize{LayoutUnit(), LayoutUnit()});
+  RefPtr<NGConstraintSpace> space = builder.ToConstraintSpace(writing_mode);
 
   MinAndMaxContentSizes computed_sizes;
   Length inline_size = style.logicalWidth();
   if (inline_size.isAuto()) {
     CHECK(min_and_max.has_value());
     NGBoxStrut border_and_padding =
-        ComputeBorders(style) + ComputePadding(*space, style);
+        ComputeBorders(*space, style) + ComputePadding(*space, style);
     computed_sizes.min_content =
         min_and_max->min_content + border_and_padding.InlineSum();
     computed_sizes.max_content =
@@ -242,18 +245,16 @@ LayoutUnit ComputeInlineSizeForFragment(
   LayoutUnit extent = ResolveInlineLength(
       space, style, min_and_max, logicalWidth, LengthResolveType::kContentSize);
 
-  Length max_length = style.logicalMaxWidth();
-  if (!max_length.isMaxSizeNone()) {
-    LayoutUnit max = ResolveInlineLength(space, style, min_and_max, max_length,
-                                         LengthResolveType::kMaxSize);
-    extent = std::min(extent, max);
+  Optional<LayoutUnit> max_length;
+  if (!style.logicalMaxWidth().isMaxSizeNone()) {
+    max_length =
+        ResolveInlineLength(space, style, min_and_max, style.logicalMaxWidth(),
+                            LengthResolveType::kMaxSize);
   }
-
-  LayoutUnit min =
+  Optional<LayoutUnit> min_length =
       ResolveInlineLength(space, style, min_and_max, style.logicalMinWidth(),
                           LengthResolveType::kMinSize);
-  extent = std::max(extent, min);
-  return extent;
+  return ConstrainByMinMax(extent, min_length, max_length);
 }
 
 LayoutUnit ComputeBlockSizeForFragment(
@@ -270,20 +271,16 @@ LayoutUnit ComputeBlockSizeForFragment(
     DCHECK_EQ(content_size, NGSizeIndefinite);
     return extent;
   }
-
-  Length max_length = style.logicalMaxHeight();
-  if (!max_length.isMaxSizeNone()) {
-    LayoutUnit max =
-        ResolveBlockLength(constraint_space, style, max_length, content_size,
-                           LengthResolveType::kMaxSize);
-    extent = std::min(extent, max);
+  Optional<LayoutUnit> max_length;
+  if (!style.logicalMaxHeight().isMaxSizeNone()) {
+    max_length =
+        ResolveBlockLength(constraint_space, style, style.logicalMaxHeight(),
+                           content_size, LengthResolveType::kMaxSize);
   }
-
-  LayoutUnit min =
+  Optional<LayoutUnit> min_length =
       ResolveBlockLength(constraint_space, style, style.logicalMinHeight(),
                          content_size, LengthResolveType::kMinSize);
-  extent = std::max(extent, min);
-  return extent;
+  return ConstrainByMinMax(extent, min_length, max_length);
 }
 
 int ResolveUsedColumnCount(int computed_count,
@@ -357,7 +354,13 @@ NGBoxStrut ComputeMargins(const NGConstraintSpace& constraint_space,
   return physical_dim.ConvertToLogical(writing_mode, direction);
 }
 
-NGBoxStrut ComputeBorders(const ComputedStyle& style) {
+NGBoxStrut ComputeBorders(const NGConstraintSpace& constraint_space,
+                          const ComputedStyle& style) {
+  // If we are producing an anonymous fragment (e.g. a column) we shouldn't
+  // have any borders.
+  if (constraint_space.IsAnonymous())
+    return NGBoxStrut();
+
   NGBoxStrut borders;
   borders.inline_start = LayoutUnit(style.borderStartWidth());
   borders.inline_end = LayoutUnit(style.borderEndWidth());
@@ -368,6 +371,11 @@ NGBoxStrut ComputeBorders(const ComputedStyle& style) {
 
 NGBoxStrut ComputePadding(const NGConstraintSpace& constraint_space,
                           const ComputedStyle& style) {
+  // If we are producing an anonymous fragment (e.g. a column) we shouldn't
+  // have any padding.
+  if (constraint_space.IsAnonymous())
+    return NGBoxStrut();
+
   // We don't need these for padding computations
   MinAndMaxContentSizes empty_sizes;
   // Padding always gets computed relative to the inline size:
@@ -390,10 +398,10 @@ NGBoxStrut ComputePadding(const NGConstraintSpace& constraint_space,
 
 void ApplyAutoMargins(const NGConstraintSpace& constraint_space,
                       const ComputedStyle& style,
-                      const NGFragment& fragment,
+                      const LayoutUnit& inline_size,
                       NGBoxStrut* margins) {
   DCHECK(margins) << "Margins cannot be NULL here";
-  const LayoutUnit used_space = fragment.InlineSize() + margins->InlineSum();
+  const LayoutUnit used_space = inline_size + margins->InlineSum();
   const LayoutUnit available_space =
       constraint_space.AvailableSize().inline_size - used_space;
   if (available_space < LayoutUnit())
@@ -406,6 +414,16 @@ void ApplyAutoMargins(const NGConstraintSpace& constraint_space,
   } else if (style.marginEnd().isAuto()) {
     margins->inline_end = available_space;
   }
+}
+
+LayoutUnit ConstrainByMinMax(LayoutUnit length,
+                             Optional<LayoutUnit> min,
+                             Optional<LayoutUnit> max) {
+  if (max && length > max.value())
+    length = max.value();
+  if (min && length < min.value())
+    length = min.value();
+  return length;
 }
 
 }  // namespace blink

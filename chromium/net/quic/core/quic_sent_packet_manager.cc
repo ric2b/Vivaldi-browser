@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <string>
 
-#include "base/stl_util.h"
 #include "net/quic/chromium/quic_utils_chromium.h"
 #include "net/quic/core/congestion_control/general_loss_algorithm.h"
 #include "net/quic/core/congestion_control/pacing_sender.h"
@@ -18,6 +17,7 @@
 #include "net/quic/core/quic_pending_retransmission.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_map_util.h"
 
 namespace net {
 
@@ -280,7 +280,7 @@ void QuicSentPacketManager::OnIncomingAck(const QuicAckFrame& ack_frame,
          pending_retransmissions_.front().second == LOSS_RETRANSMISSION) {
     // Cancel any pending retransmissions larger than largest_newly_acked_.
     unacked_packets_.RestoreToInFlight(pending_retransmissions_.front().first);
-    pending_retransmissions_.erase(pending_retransmissions_.begin());
+    pending_retransmissions_.pop_front();
   }
 
   if (debug_delegate_ != nullptr) {
@@ -397,8 +397,8 @@ void QuicSentPacketManager::MarkForRetransmission(
   }
     // TODO(ianswett): Currently the RTO can fire while there are pending NACK
     // retransmissions for the same data, which is not ideal.
-    if (base::ContainsKey(pending_retransmissions_, packet_number)) {
-      return;
+  if (QuicContainsKey(pending_retransmissions_, packet_number)) {
+    return;
     }
 
     pending_retransmissions_[packet_number] = transmission_type;
@@ -438,7 +438,7 @@ bool QuicSentPacketManager::HasPendingRetransmissions() const {
 
 QuicPendingRetransmission QuicSentPacketManager::NextPendingRetransmission() {
   QUIC_BUG_IF(pending_retransmissions_.empty())
-      << "Unexpected call to PendingRetransmissions() with empty pending "
+      << "Unexpected call to NextPendingRetransmission() with empty pending "
       << "retransmission list. Corrupted memory usage imminent.";
   QuicPacketNumber packet_number = pending_retransmissions_.begin()->first;
   TransmissionType transmission_type = pending_retransmissions_.begin()->second;
@@ -781,8 +781,7 @@ const QuicTime QuicSentPacketManager::GetRetransmissionTime() const {
       pending_timer_transmission_count_ > 0) {
     return QuicTime::Zero();
   }
-  if (FLAGS_quic_reloadable_flag_quic_more_conservative_retransmission_alarm &&
-      !unacked_packets_.HasUnackedRetransmittableFrames()) {
+  if (!unacked_packets_.HasUnackedRetransmittableFrames()) {
     return QuicTime::Zero();
   }
   switch (GetRetransmissionMode()) {

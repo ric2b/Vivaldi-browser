@@ -90,12 +90,6 @@ class MEDIA_EXPORT AudioRendererImpl
   void OnSuspend() override;
   void OnResume() override;
 
-  // Determines whether the decoded audio queue size is increased as part of
-  // underflow handling.
-  void set_increase_queue_size_on_underflow(bool increase) {
-    increase_queue_size_on_underflow_ = increase;
-  }
-
  private:
   friend class AudioRendererImplTest;
 
@@ -255,7 +249,6 @@ class MEDIA_EXPORT AudioRendererImpl
   // Algorithm for scaling audio.
   double playback_rate_;
   std::unique_ptr<AudioRendererAlgorithm> algorithm_;
-  bool increase_queue_size_on_underflow_;
 
   // Simple state tracking variable.
   State state_;

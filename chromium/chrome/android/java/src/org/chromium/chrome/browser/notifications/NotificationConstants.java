@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.notifications;
 
+import android.content.Intent;
+
 /**
  * Constants used in more than a single Notification class, e.g. intents and extra names.
  */
@@ -23,8 +25,11 @@ public class NotificationConstants {
     /**
      * Names of the Intent extras used for Intents related to notifications. These intents are set
      * and owned by Chromium.
+     *
+     * When adding a new extra, as well as setting it on the intent in NotificationPlatformBridge,
+     * it *must* also be set in {@link NotificationJobService#getJobExtrasFromIntent(Intent)}
      */
-    static final String EXTRA_NOTIFICATION_ID = "notification_id";
+    public static final String EXTRA_NOTIFICATION_ID = "notification_id";
     static final String EXTRA_NOTIFICATION_INFO_ORIGIN = "notification_info_origin";
     static final String EXTRA_NOTIFICATION_INFO_PROFILE_ID = "notification_info_profile_id";
     static final String EXTRA_NOTIFICATION_INFO_PROFILE_INCOGNITO =
@@ -32,6 +37,8 @@ public class NotificationConstants {
     static final String EXTRA_NOTIFICATION_INFO_TAG = "notification_info_tag";
     static final String EXTRA_NOTIFICATION_INFO_ACTION_INDEX = "notification_info_action_index";
     static final String EXTRA_NOTIFICATION_INFO_WEBAPK_PACKAGE = "notification_info_webapk_package";
+    static final String EXTRA_NOTIFICATION_REPLY = "notification_reply";
+    static final String EXTRA_NOTIFICATION_ACTION = "notification_action";
 
     /**
      * Unique identifier for a single sync notification. Since the notification ID is reused,
@@ -47,6 +54,14 @@ public class NotificationConstants {
      * Unique identifier for the Physical Web notification.
      */
     public static final int NOTIFICATION_ID_PHYSICAL_WEB = 3;
+
+    /**
+     * Unique identifier for the summary notification for downloads.  Using the ID this summary was
+     * going to have before it was migrated here.
+     * TODO(dtrainor): Clean up this ID and make sure it's in line with existing id counters without
+     * tags.
+     */
+    public static final int NOTIFICATION_ID_DOWNLOAD_SUMMARY = 999999;
 
     /**
      * Separator used to separate the notification origin from additional data such as the
@@ -70,4 +85,8 @@ public class NotificationConstants {
     // Web notification group names are set dynamically as this prefix + notification origin.
     // For example, 'Web:chromium.org' for a notification from chromium.org.
     static final String GROUP_WEB_PREFIX = "Web:";
+
+    public static final String CATEGORY_ID_BROWSER = "browser";
+    public static final String CATEGORY_ID_SITES = "sites";
+    public static final String CATEGORY_GROUP_ID_GENERAL = "general";
 }

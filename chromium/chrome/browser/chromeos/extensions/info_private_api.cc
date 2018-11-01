@@ -8,12 +8,11 @@
 
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -25,7 +24,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/system/statistics_provider.h"
-#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_util.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -135,6 +134,15 @@ const char kPlayStoreStatusAvailable[] = "available";
 // Key which corresponds to the "enabled" value of the PlayStoreStatus enum in
 // JS.
 const char kPlayStoreStatusEnabled[] = "enabled";
+
+// Key which corresponds to the managedDeviceStatus property in JS.
+const char kPropertyManagedDeviceStatus[] = "managedDeviceStatus";
+
+// Value to which managedDeviceStatus property is set for unmanaged devices.
+const char kManagedDeviceStatusNotManaged[] = "not managed";
+
+// Value to which managedDeviceStatus property is set for managed devices.
+const char kManagedDeviceStatusManaged[] = "managed";
 
 const struct {
   const char* api_name;
@@ -249,7 +257,7 @@ base::Value* ChromeosInfoPrivateGetFunction::GetValue(
   }
 
   if (property_name == kPropertyOwner) {
-    return new base::FundamentalValue(
+    return new base::Value(
         user_manager::UserManager::Get()->IsCurrentUserOwner());
   }
 
@@ -262,15 +270,20 @@ base::Value* ChromeosInfoPrivateGetFunction::GetValue(
   }
 
   if (property_name == kPropertyPlayStoreStatus) {
-    if (arc::ArcSessionManager::IsAllowedForProfile(
-            Profile::FromBrowserContext(context_))) {
+    if (arc::IsArcAllowedForProfile(Profile::FromBrowserContext(context_)))
       return new base::StringValue(kPlayStoreStatusEnabled);
-    }
-    if (arc::ArcBridgeService::GetAvailable(
-            base::CommandLine::ForCurrentProcess())) {
+    if (arc::IsArcAvailable())
       return new base::StringValue(kPlayStoreStatusAvailable);
-    }
     return new base::StringValue(kPlayStoreStatusNotAvailable);
+  }
+
+  if (property_name == kPropertyManagedDeviceStatus) {
+    policy::BrowserPolicyConnectorChromeOS* connector =
+        g_browser_process->platform_part()->browser_policy_connector_chromeos();
+    if (connector->IsEnterpriseManaged()) {
+      return new base::StringValue(kManagedDeviceStatusManaged);
+    }
+    return new base::StringValue(kManagedDeviceStatusNotManaged);
   }
 
   if (property_name == kPropertyClientId) {
@@ -290,7 +303,7 @@ base::Value* ChromeosInfoPrivateGetFunction::GetValue(
 
   const char* pref_name = GetBoolPrefNameForApiProperty(property_name.c_str());
   if (pref_name) {
-    return new base::FundamentalValue(
+    return new base::Value(
         Profile::FromBrowserContext(context_)->GetPrefs()->GetBoolean(
             pref_name));
   }

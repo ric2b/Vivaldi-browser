@@ -187,7 +187,7 @@ CustomElementDefinition* CustomElementRegistry::define(
   CHECK(!exceptionState.hadException());
   CHECK(definition->descriptor() == descriptor);
   DefinitionMap::AddResult result =
-      m_definitions.add(descriptor.name(), definition);
+      m_definitions.insert(descriptor.name(), definition);
   CHECK(result.isNewEntry);
 
   HeapVector<Member<Element>> candidates;
@@ -238,7 +238,7 @@ bool CustomElementRegistry::nameIsDefined(const AtomicString& name) const {
 }
 
 void CustomElementRegistry::entangle(V0CustomElementRegistrationContext* v0) {
-  m_v0->add(v0);
+  m_v0->insert(v0);
   v0->setV1(this);
 }
 
@@ -252,7 +252,7 @@ bool CustomElementRegistry::v0NameIsDefined(const AtomicString& name) {
 
 CustomElementDefinition* CustomElementRegistry::definitionForName(
     const AtomicString& name) const {
-  return m_definitions.get(name);
+  return m_definitions.at(name);
 }
 
 void CustomElementRegistry::addCandidate(Element* candidate) {
@@ -264,10 +264,10 @@ void CustomElementRegistry::addCandidate(Element* candidate) {
   if (it != m_upgradeCandidates->end()) {
     set = it->value;
   } else {
-    set = m_upgradeCandidates->add(name, new UpgradeCandidateSet())
+    set = m_upgradeCandidates->insert(name, new UpgradeCandidateSet())
               .storedValue->value;
   }
-  set->add(candidate);
+  set->insert(candidate);
 }
 
 // https://html.spec.whatwg.org/multipage/scripting.html#dom-customelementsregistry-whendefined
@@ -280,12 +280,12 @@ ScriptPromise CustomElementRegistry::whenDefined(
   CustomElementDefinition* definition = definitionForName(name);
   if (definition)
     return ScriptPromise::castUndefined(scriptState);
-  ScriptPromiseResolver* resolver = m_whenDefinedPromiseMap.get(name);
+  ScriptPromiseResolver* resolver = m_whenDefinedPromiseMap.at(name);
   if (resolver)
     return resolver->promise();
   ScriptPromiseResolver* newResolver =
       ScriptPromiseResolver::create(scriptState);
-  m_whenDefinedPromiseMap.add(name, newResolver);
+  m_whenDefinedPromiseMap.insert(name, newResolver);
   return newResolver->promise();
 }
 

@@ -137,9 +137,9 @@ class CORE_EXPORT HTMLCanvasElement final
 
   void paint(GraphicsContext&, const LayoutRect&);
 
-  SkCanvas* drawingCanvas() const;
+  PaintCanvas* drawingCanvas() const;
   void disableDeferral(DisableDeferralReason) const;
-  SkCanvas* existingDrawingCanvas() const;
+  PaintCanvas* existingDrawingCanvas() const;
 
   CanvasRenderingContext* renderingContext() const { return m_context.get(); }
 
@@ -170,6 +170,12 @@ class CORE_EXPORT HTMLCanvasElement final
 
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
 
+  bool isDirty() { return !m_dirtyRect.isEmpty(); }
+
+  void doDeferredPaintInvalidation();
+
+  void finalizeFrame();
+
   // ContextLifecycleObserver and PageVisibilityObserver implementation
   void contextDestroyed(ExecutionContext*) override;
 
@@ -194,12 +200,8 @@ class CORE_EXPORT HTMLCanvasElement final
 
   // ImageBufferClient implementation
   void notifySurfaceInvalid() override;
-  bool isDirty() override { return !m_dirtyRect.isEmpty(); }
   void didDisableAcceleration() override;
-  void didFinalizeFrame() override;
-  void restoreCanvasMatrixClipStack(SkCanvas*) const override;
-
-  void doDeferredPaintInvalidation();
+  void restoreCanvasMatrixClipStack(PaintCanvas*) const override;
 
   // ImageBitmapSource implementation
   IntSize bitmapSourceSize() const override;
@@ -209,6 +211,11 @@ class CORE_EXPORT HTMLCanvasElement final
                                   const ImageBitmapOptions&,
                                   ExceptionState&) override;
 
+  // OffscreenCanvasPlaceholder implementation.
+  void setPlaceholderFrame(RefPtr<StaticBitmapImage>,
+                           WeakPtr<OffscreenCanvasFrameDispatcher>,
+                           RefPtr<WebTaskRunner>,
+                           unsigned resourceId) override;
   DECLARE_VIRTUAL_TRACE();
 
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
@@ -314,6 +321,7 @@ class CORE_EXPORT HTMLCanvasElement final
 
   int m_numFramesSinceLastRenderingModeSwitch;
   bool m_pendingRenderingModeSwitch;
+  bool m_didNotifyListenersForCurrentFrame = false;
 };
 
 }  // namespace blink

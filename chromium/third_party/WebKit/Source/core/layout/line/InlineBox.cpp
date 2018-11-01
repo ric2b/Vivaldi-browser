@@ -305,15 +305,17 @@ SelectionState InlineBox::getSelectionState() const {
 }
 
 bool InlineBox::canAccommodateEllipsis(bool ltr,
-                                       int blockEdge,
-                                       int ellipsisWidth) const {
+                                       LayoutUnit blockEdge,
+                                       LayoutUnit ellipsisWidth) const {
   // Non-atomic inline-level elements can always accommodate an ellipsis.
-  if (!getLineLayoutItem().isAtomicInlineLevel())
+  // Skip list markers and try the next box.
+  if (!getLineLayoutItem().isAtomicInlineLevel() ||
+      getLineLayoutItem().isListMarker())
     return true;
 
-  IntRect boxRect(x().toInt(), 0, m_logicalWidth.toInt(), 10);
-  IntRect ellipsisRect(ltr ? blockEdge - ellipsisWidth : blockEdge, 0,
-                       ellipsisWidth, 10);
+  LayoutRect boxRect(x(), LayoutUnit(), m_logicalWidth, LayoutUnit(10));
+  LayoutRect ellipsisRect(ltr ? blockEdge - ellipsisWidth : blockEdge,
+                          LayoutUnit(), ellipsisWidth, LayoutUnit(10));
   return !(boxRect.intersects(ellipsisRect));
 }
 
@@ -322,7 +324,8 @@ LayoutUnit InlineBox::placeEllipsisBox(bool,
                                        LayoutUnit,
                                        LayoutUnit,
                                        LayoutUnit& truncatedWidth,
-                                       bool&) {
+                                       bool&,
+                                       LayoutUnit) {
   // Use -1 to mean "we didn't set the position."
   truncatedWidth += logicalWidth();
   return LayoutUnit(-1);

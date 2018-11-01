@@ -22,6 +22,7 @@
 
 #include "core/events/Event.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/EventTarget.h"
@@ -87,7 +88,6 @@ Event::Event(const AtomicString& eventType,
       m_immediatePropagationStopped(false),
       m_defaultPrevented(false),
       m_defaultHandled(false),
-      m_cancelBubble(false),
       m_wasInitialized(true),
       m_isTrusted(false),
       m_preventDefaultCalledOnUncancelableEvent(false),
@@ -135,21 +135,26 @@ void Event::initEvent(const AtomicString& eventTypeArg,
   m_cancelable = cancelableArg;
 }
 
-bool Event::legacyReturnValue(ExecutionContext* executionContext) const {
+bool Event::legacyReturnValue(ScriptState* scriptState) const {
   bool returnValue = !defaultPrevented();
-  if (returnValue)
-    UseCounter::count(executionContext, UseCounter::EventGetReturnValueTrue);
-  else
-    UseCounter::count(executionContext, UseCounter::EventGetReturnValueFalse);
+  if (returnValue) {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventGetReturnValueTrue);
+  } else {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventGetReturnValueFalse);
+  }
   return returnValue;
 }
 
-void Event::setLegacyReturnValue(ExecutionContext* executionContext,
-                                 bool returnValue) {
-  if (returnValue)
-    UseCounter::count(executionContext, UseCounter::EventSetReturnValueTrue);
-  else
-    UseCounter::count(executionContext, UseCounter::EventSetReturnValueFalse);
+void Event::setLegacyReturnValue(ScriptState* scriptState, bool returnValue) {
+  if (returnValue) {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventSetReturnValueTrue);
+  } else {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventSetReturnValueFalse);
+  }
   setDefaultPrevented(!returnValue);
 }
 
@@ -336,12 +341,9 @@ double Event::timeStamp(ScriptState* scriptState) const {
   return timeStamp;
 }
 
-void Event::setCancelBubble(ExecutionContext* context, bool cancel) {
-  if (!m_cancelBubble && cancel)
-    UseCounter::count(context, UseCounter::EventCancelBubbleWasChangedToTrue);
-  else if (m_cancelBubble && !cancel)
-    UseCounter::count(context, UseCounter::EventCancelBubbleWasChangedToFalse);
-  m_cancelBubble = cancel;
+void Event::setCancelBubble(ScriptState* scriptState, bool cancel) {
+  if (cancel)
+    m_propagationStopped = true;
 }
 
 DEFINE_TRACE(Event) {

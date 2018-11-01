@@ -79,7 +79,9 @@ static objc_exception_preprocessor g_next_preprocessor = nullptr;
 
 static const char* const kExceptionSinkholes[] = {
   "CFRunLoopRunSpecific",
+  "_CFXNotificationPost",
   "_dispatch_client_callout",
+  "__NSFireDelayedPerform",
 };
 
 // This function is used to make it clear to the crash processor that this is
@@ -167,11 +169,13 @@ static id ObjcExceptionPreprocessor(id exception) {
       // Check if the function is one that is known to obscure (by way of
       // catch-and-rethrow) exception stack traces. If it is, sinkhole it
       // by crashing here at the point of throw.
-      for (const auto& sinkhole : kExceptionSinkholes) {
+      for (const char* sinkhole : kExceptionSinkholes) {
         if (strcmp(sinkhole, proc_name) == 0) {
           TERMINATING_FROM_UNCAUGHT_NSEXCEPTION(exception);
         }
       }
+
+      DVLOG(1) << "Stopping search for exception handler at " << proc_name;
 
       break;
     }

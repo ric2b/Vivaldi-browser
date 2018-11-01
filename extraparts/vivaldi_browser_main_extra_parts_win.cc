@@ -2,14 +2,15 @@
 
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
-#include "chrome/common/chrome_switches.h"
+#include <shlobj.h>
+
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/win/registry.h"
-#include <shlobj.h>
+#include "chrome/common/chrome_switches.h"
 
 #define GOOGLE_CHROME_BASE_DIRECTORY L"Google\\Chrome\\Application"
 

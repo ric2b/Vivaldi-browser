@@ -308,37 +308,34 @@ struct IPC_EXPORT ParamTraits<double> {
   static void Log(const param_type& p, std::string* l);
 };
 
-template <class P, size_t n>
-struct ParamTraits<P[n]> {
-  typedef P param_type[n];
-  static void GetSize(base::PickleSizer* m, const param_type& p) {
-    GetParamSize(m, static_cast<int>(n));
-    for (size_t i = 0; i < n; i++)
-      GetParamSize(m, p[i]);
+template <class P, size_t Size>
+struct ParamTraits<P[Size]> {
+  using param_type = P[Size];
+  static void GetSize(base::PickleSizer* sizer, const param_type& p) {
+    for (const P& element : p)
+      GetParamSize(sizer, element);
   }
   static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, static_cast<int>(n));
-    for (size_t i = 0; i < n; i++)
-      WriteParam(m, p[i]);
+    for (const P& element : p)
+      WriteParam(m, element);
   }
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    int size;
-    if (!iter->ReadLength(&size) || size != static_cast<int>(n))
-      return false;
-    for (int i = 0; i < size; i++) {
-      if (!ReadParam(m, iter, &(*r)[i]))
+    for (P& element : *r) {
+      if (!ReadParam(m, iter, &element))
         return false;
     }
     return true;
   }
   static void Log(const param_type& p, std::string* l) {
-    for (size_t i = 0; i < n; ++i) {
-      if (i != 0)
+    l->append("[");
+    for (const P& element : p) {
+      if (&element != &p[0])
         l->append(" ");
-      LogParam((p[i]), l);
+      LogParam(element, l);
     }
+    l->append("]");
   }
 };
 

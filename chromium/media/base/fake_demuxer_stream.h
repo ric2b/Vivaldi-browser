@@ -9,7 +9,7 @@
 #include "base/memory/ref_counted.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
-#include "media/base/demuxer_stream_provider.h"
+#include "media/base/media_resource.h"
 #include "media/base/video_decoder_config.h"
 
 namespace base {
@@ -35,9 +35,6 @@ class FakeDemuxerStream : public DemuxerStream {
   Type type() const override;
   bool SupportsConfigChanges() override;
   VideoRotation video_rotation() override;
-  bool enabled() const override;
-  void set_enabled(bool enabled, base::TimeDelta timestamp) override;
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
 
   void Initialize();
 
@@ -103,21 +100,22 @@ class FakeDemuxerStream : public DemuxerStream {
   DISALLOW_COPY_AND_ASSIGN(FakeDemuxerStream);
 };
 
-class FakeDemuxerStreamProvider : public DemuxerStreamProvider {
+class FakeMediaResource : public MediaResource {
  public:
   // Note: FakeDemuxerStream currently only supports a fake video DemuxerStream.
-  FakeDemuxerStreamProvider(int num_video_configs,
-                            int num_video_buffers_in_one_config,
-                            bool is_video_encrypted);
-  ~FakeDemuxerStreamProvider() override;
+  FakeMediaResource(int num_video_configs,
+                    int num_video_buffers_in_one_config,
+                    bool is_video_encrypted);
+  ~FakeMediaResource() override;
 
-  // DemuxerStreamProvider implementation.
-  DemuxerStream* GetStream(DemuxerStream::Type type) override;
+  // MediaResource implementation.
+  std::vector<DemuxerStream*> GetAllStreams() override;
+  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
 
  private:
   FakeDemuxerStream fake_video_stream_;
 
-  DISALLOW_COPY_AND_ASSIGN(FakeDemuxerStreamProvider);
+  DISALLOW_COPY_AND_ASSIGN(FakeMediaResource);
 };
 
 }  // namespace media

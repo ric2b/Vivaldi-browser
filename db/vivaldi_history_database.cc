@@ -2,6 +2,7 @@
 #include "db/vivaldi_history_database.h"
 #include "db/vivaldi_history_types.h"
 
+#include <limits>
 #include <string>
 
 #include "sql/statement.h"

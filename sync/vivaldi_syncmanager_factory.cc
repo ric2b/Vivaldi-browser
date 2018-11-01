@@ -1,9 +1,10 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#include "sync/vivaldi_syncmanager.h"
 #include "sync/vivaldi_syncmanager_factory.h"
+#include "sync/vivaldi_syncmanager.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -12,8 +13,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/common/channel_info.h"
 
@@ -131,7 +132,7 @@ KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
           base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
 
   auto vss = base::WrapUnique(new VivaldiSyncManager(
-      init_params, sync_client->GetVivaldiInvalidationService()));
+      &init_params, sync_client->GetVivaldiInvalidationService()));
 
   vss->Initialize();
 

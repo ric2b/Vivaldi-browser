@@ -2,10 +2,10 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebHistoryItem.h"
@@ -19,20 +19,21 @@
 
 namespace blink {
 
-class ProgrammaticScrollTest : public testing::Test {
+class ProgrammaticScrollTest : public ::testing::Test {
  public:
   ProgrammaticScrollTest() : m_baseURL("http://www.test.com/") {}
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
  protected:
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(m_baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
   }
 
   std::string m_baseURL;
@@ -50,7 +51,7 @@ TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithScale) {
 
   WebViewImpl* webViewImpl = toWebViewImpl(webView);
   FrameLoader& loader = webViewImpl->mainFrameImpl()->frame()->loader();
-  loader.setLoadType(FrameLoadTypeBackForward);
+  loader.documentLoader()->setLoadType(FrameLoadTypeBackForward);
 
   webViewImpl->setPageScaleFactor(3.0f);
   webViewImpl->mainFrame()->setScrollOffset(WebSize(0, 500));
@@ -80,7 +81,7 @@ TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithoutScale) {
 
   WebViewImpl* webViewImpl = toWebViewImpl(webView);
   FrameLoader& loader = webViewImpl->mainFrameImpl()->frame()->loader();
-  loader.setLoadType(FrameLoadTypeBackForward);
+  loader.documentLoader()->setLoadType(FrameLoadTypeBackForward);
 
   webViewImpl->setPageScaleFactor(3.0f);
   webViewImpl->mainFrame()->setScrollOffset(WebSize(0, 500));

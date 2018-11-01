@@ -17,20 +17,19 @@ namespace vivaldi {
 void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
                                                bool progress_known,
                                                float progress) {
-
   extensions::AppWindow* current_vivaldi_window =
-    vivaldi::ui_tools::GetActiveAppWindow();
+      vivaldi::ui_tools::GetActiveAppWindow();
 
   if (!current_vivaldi_window)
-    return; // Only for vivaldi
+    return;  // Only for vivaldi
 
   // Taskbar progress bar is only supported on Win7.
   if (base::win::GetVersion() < base::win::VERSION_WIN7)
     return;
 
   base::win::ScopedComPtr<ITaskbarList3> taskbar;
-  HRESULT result = taskbar.CreateInstance(CLSID_TaskbarList, NULL,
-    CLSCTX_INPROC_SERVER);
+  HRESULT result =
+      taskbar.CreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER);
   if (FAILED(result)) {
     return;
   }
@@ -48,7 +47,6 @@ void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
     taskbar->SetProgressState(frame, TBPF_INDETERMINATE);
   else
     taskbar->SetProgressValue(frame, static_cast<int>(progress * 100), 100);
-
 }
 
-} // namespace vivaldi
+}  // namespace vivaldi

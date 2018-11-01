@@ -76,17 +76,18 @@ class AccountPickerScreen(object):
 
   @property
   def auth_type(self):
-    return self._oobe.EvaluateJavaScript('%s.authType' % self._GET_POD_JS)
+    return self._oobe.EvaluateJavaScript(
+        '{{ @pod }}.authType', pod=self._GET_POD_JS)
 
   @property
   def smart_lock_state(self):
     icon_shown = self._oobe.EvaluateJavaScript(
-        '!%s.customIconElement.hidden' % self._GET_POD_JS)
+        '!{{ @pod }}.customIconElement.hidden', pod=self._GET_POD_JS)
     if not icon_shown:
       return self.SmartLockState.NOT_SHOWN
     class_list_dict = self._oobe.EvaluateJavaScript(
-        '%s.customIconElement.querySelector(".custom-icon")'
-        '.classList' % self._GET_POD_JS)
+        '{{ @pod }}.customIconElement.querySelector(".custom-icon").classList',
+        pod=self._GET_POD_JS)
     class_list = [v for k,v in class_list_dict.items() if k != 'length']
 
     if 'custom-icon-unlocked' in class_list:
@@ -126,10 +127,10 @@ class AccountPickerScreen(object):
            self.auth_type == self.AuthType.FORCE_OFFLINE_PASSWORD)
     oobe = self._oobe
     oobe.EvaluateJavaScript(
-        '%s.passwordElement.value = "%s"' % (
-        self._GET_POD_JS, self._chromeos.password))
+        '{{ @pod }}.passwordElement.value = {{ password }}',
+        pod=self._GET_POD_JS, password=self._chromeos.password)
     oobe.EvaluateJavaScript(
-        '%s.activate()' % self._GET_POD_JS)
+        '{{ @pod }}.activate()', pod=self._GET_POD_JS)
     util.WaitFor(lambda: (self._chromeos.session_state ==
                           ChromeOS.SessionState.IN_SESSION),
                  5)
@@ -137,7 +138,8 @@ class AccountPickerScreen(object):
   def UnlockWithClick(self):
     """ Clicks the user pod to unlock or sign-in. """
     assert(self.auth_type == self.AuthType.USER_CLICK)
-    self._oobe.EvaluateJavaScript('%s.activate()' % self._GET_POD_JS)
+    self._oobe.EvaluateJavaScript(
+        '{{ @pod }}.activate()', pod=self._GET_POD_JS)
 
 
 class SmartLockSettings(object):
@@ -171,14 +173,14 @@ class SmartLockSettings(object):
     tab = self._tab
     tab.EvaluateJavaScript(
         'document.getElementById("easy-unlock-turn-off-button").click()')
-    util.WaitFor(lambda: tab.EvaluateJavaScript(
+    tab.WaitForJavaScriptCondition(
         '!document.getElementById("easy-unlock-turn-off-overlay").hidden && '
-        'document.getElementById("easy-unlock-turn-off-confirm") != null'),
-        10)
+        'document.getElementById("easy-unlock-turn-off-confirm") != null',
+        timeout=10)
     tab.EvaluateJavaScript(
         'document.getElementById("easy-unlock-turn-off-confirm").click()')
-    util.WaitFor(lambda: tab.EvaluateJavaScript(
-        '!document.getElementById("easy-unlock-disabled").hidden'), 15)
+    tab.WaitForJavaScriptCondition(
+        '!document.getElementById("easy-unlock-disabled").hidden', timeout=15)
 
   def StartSetup(self):
     """ Starts the Smart Lock setup flow by clicking the button.
@@ -323,15 +325,15 @@ class SmartLockApp(object):
     self._app_page.EvaluateJavaScript(
         'document.getElementById("pairing-button").click()')
     time.sleep(1)
-    util.WaitFor(lambda: self._app_page.EvaluateJavaScript(
-        '!document.getElementById("pairing-button").disabled'), 60)
+    self._app_page.WaitForJavaScriptCondition(
+        '!document.getElementById("pairing-button").disabled', timeout=60)
     time.sleep(1)
-    util.WaitFor(lambda: self._app_page.EvaluateJavaScript(
+    self._app_page.WaitForJavaScriptCondition(
         '!document.getElementById("pairing-button-title")'
-        '.classList.contains("animated-fade-out")'), 5)
-    util.WaitFor(lambda: self._app_page.EvaluateJavaScript(
+        '.classList.contains("animated-fade-out")', timeout=5)
+    self._app_page.WaitForJavaScriptCondition(
         '!document.getElementById("pairing-button-title")'
-        '.classList.contains("animated-fade-in")'), 5)
+        '.classList.contains("animated-fade-in")', timeout=5)
 
 
 class ChromeOS(object):
@@ -393,12 +395,12 @@ class ChromeOS(object):
   @property
   def cryptauth_access_token(self):
     try:
-      util.WaitFor(lambda: self._background_page.EvaluateJavaScript(
+      self._background_page.WaitForJavaScriptCondition(
             'var __token = __token || null; '
             'chrome.identity.getAuthToken(function(token) {'
             '  __token = token;'
             '}); '
-            '__token != null'), 5)
+            '__token != null', timeout=5)
       return self._background_page.EvaluateJavaScript('__token');
     except exceptions.TimeoutException:
       logger.error('Failed to get access token.');
@@ -488,10 +490,10 @@ class ChromeOS(object):
               oobe.EvaluateJavaScript(
                   "typeof Oobe.authenticateForTesting == 'function'"))
     util.WaitFor(IsLockScreenResponsive, 10)
-    util.WaitFor(lambda: oobe.EvaluateJavaScript(
+    oobe.WaitForJavaScriptCondition(
         'document.getElementById("pod-row") && '
         'document.getElementById("pod-row").pods && '
-        'document.getElementById("pod-row").pods.length > 0'), 10)
+        'document.getElementById("pod-row").pods.length > 0', timeout=10)
     return AccountPickerScreen(oobe, self)
 
   def GetSmartLockSettings(self):
@@ -511,11 +513,12 @@ class ChromeOS(object):
       tab.Navigate(self._SMART_LOCK_SETTINGS_URL)
 
     # Wait for settings page to be responsive.
-    util.WaitFor(lambda: tab.EvaluateJavaScript(
+    tab.WaitForJavaScriptCondition(
         'document.getElementById("easy-unlock-disabled") && '
         'document.getElementById("easy-unlock-enabled") && '
         '(!document.getElementById("easy-unlock-disabled").hidden || '
-        ' !document.getElementById("easy-unlock-enabled").hidden)'), 10)
+        ' !document.getElementById("easy-unlock-enabled").hidden)',
+        timeout=10)
     settings = SmartLockSettings(tab, self)
     logger.info('Started Smart Lock settings: enabled=%s' %
                  settings.is_smart_lock_enabled)
@@ -530,22 +533,23 @@ class ChromeOS(object):
     app_page = self._FindSmartLockAppPage('/pairing.html')
     if app_page is not None:
       # Wait for app window to be responsive.
-      util.WaitFor(lambda: app_page.EvaluateJavaScript(
-            'document.getElementById("pairing-button") != null'), 10)
+      tab.WaitForJavaScriptCondition(
+            'document.getElementById("pairing-button") != null', timeout=10)
       return SmartLockApp(app_page, self)
     return None
 
   def SetCryptAuthStaging(self, cryptauth_staging_url):
     logger.info('Setting CryptAuth to Staging')
     try:
-      self._background_page.ExecuteJavaScript(
-              'var key = app.CryptAuthClient.GOOGLE_API_URL_OVERRIDE_;'
-              'var __complete = false;'
-              'chrome.storage.local.set({key: "%s"}, function() {'
-              '    __complete = true;'
-              '});' % cryptauth_staging_url)
-      util.WaitFor(lambda: self._background_page.EvaluateJavaScript(
-              '__complete == true'), 10)
+      self._background_page.ExecuteJavaScript("""
+          var key = app.CryptAuthClient.GOOGLE_API_URL_OVERRIDE_;
+          var __complete = false;
+          chrome.storage.local.set({key: {{ url }}}, function() {
+              __complete = true;
+          });""",
+          url=cryptauth_staging_url)
+      self._background_page.WaitForJavaScriptCondition(
+          '__complete == true', timeout=10)
     except exceptions.TimeoutException:
       logger.error('Failed to override CryptAuth to staging url.')
 
@@ -568,7 +572,8 @@ class ChromeOS(object):
     except KeyError:
       return None
     for extension_page in extensions:
-      pathname = extension_page.EvaluateJavaScript('document.location.pathname')
+      pathname = extension_page.EvaluateJavaScript(
+          'document.location.pathname')
       if pathname == page_name:
         return extension_page
     return None

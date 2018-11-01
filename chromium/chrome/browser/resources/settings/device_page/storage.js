@@ -49,6 +49,18 @@ Polymer({
       value: false,
     },
 
+    /** @private */
+    isGuest_: {
+      type: Boolean,
+      value: function() { return loadTimeData.getBoolean('isGuest'); }
+    },
+
+    /** @private */
+    hasDriveCache_: {
+      type: Boolean,
+      value: false
+    },
+
     /** @private {settings.StorageSizeStat} */
     sizeStat_: Object,
   },
@@ -76,9 +88,11 @@ Polymer({
     cr.addWebUIListener(
         'storage-android-size-changed',
         this.handleAndroidSizeChanged_.bind(this));
-    cr.addWebUIListener(
-        'storage-other-users-size-changed',
-        this.handleOtherUsersSizeChanged_.bind(this));
+    if (!this.isGuest_) {
+      cr.addWebUIListener(
+          'storage-other-users-size-changed',
+          this.handleOtherUsersSizeChanged_.bind(this));
+    }
     cr.addWebUIListener(
         'storage-drive-enabled-changed',
         this.handleDriveEnabledChanged_.bind(this));
@@ -120,7 +134,8 @@ Polymer({
    */
   onDriveCacheTap_: function(e) {
     e.preventDefault();
-    this.$.storageDriveCache.open();
+    if (this.hasDriveCache_)
+      this.$.storageDriveCache.open();
   },
 
   /**
@@ -169,10 +184,14 @@ Polymer({
   /**
    * @param {string} size Formatted string representing the size of Offline
    *     files.
+   * @param {boolean} hasCache True if the device has at least one offline file.
    * @private
    */
-  handleDriveCacheSizeChanged_: function(size) {
-    this.$.driveCacheSize.textContent = size;
+  handleDriveCacheSizeChanged_: function(size, hasCache) {
+    if (this.driveEnabled_) {
+      this.$$('#driveCacheSize').textContent = size;
+      this.hasDriveCache_ = hasCache;
+    }
   },
 
   /**
@@ -190,7 +209,8 @@ Polymer({
    * @private
    */
   handleAndroidSizeChanged_: function(size) {
-    this.$.androidSize.textContent = size;
+    if (this.androidEnabled_)
+      this.$$('#androidSize').textContent = size;
   },
 
   /**
@@ -198,7 +218,8 @@ Polymer({
    * @private
    */
   handleOtherUsersSizeChanged_: function(size) {
-    this.$.otherUsersSize.textContent = size;
+    if (!this.isGuest_)
+      this.$$('#otherUsersSize').textContent = size;
   },
 
   /**

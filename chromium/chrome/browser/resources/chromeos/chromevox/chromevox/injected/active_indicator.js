@@ -149,15 +149,15 @@ cvox.ActiveIndicator.STYLE =
     '  visibility: hidden !important;' +
     '}' +
     '.cvox_indicator_pulsing {' +
-    '  -webkit-animation: ' +
+    '  animation: ' +
     // NOTE(deboer): This animation is 0 seconds long to work around
     // http://crbug.com/128993.  Revert it to 2s when the bug is fixed.
     '      cvox_indicator_pulsing_animation 0s 2 alternate !important;' +
-    '  -webkit-animation-timing-function: ease-in-out !important;' +
+    '  animation-timing-function: ease-in-out !important;' +
     '}' +
     '.cvox_indicator_region {' +
     '  opacity: 0 !important;' +
-    '  -webkit-transition: opacity 1s !important;' +
+    '  transition: opacity 1s !important;' +
     '}' +
     '.cvox_indicator_visible {' +
     '  opacity: 1 !important;' +
@@ -168,13 +168,13 @@ cvox.ActiveIndicator.STYLE =
     '  border-radius: 6px !important;' +
     '  margin: 0px !important;' +
     '  padding: 0px !important;' +
-    '  -webkit-transition: none !important;' +
+    '  transition: none !important;' +
     '}' +
     '.cvox_indicator_animate_normal .cvox_indicator_region * {' +
-    '  -webkit-transition: all 0.3s !important;' +
+    '  transition: all 0.3s !important;' +
     '}' +
     '.cvox_indicator_animate_quick .cvox_indicator_region * {' +
-    '  -webkit-transition: all 0.1s !important;' +
+    '  transition: all 0.1s !important;' +
     '}' +
     '.cvox_indicator_top {' +
     '  border-radius: inherit inherit 0 0 !important;' +
@@ -194,7 +194,7 @@ cvox.ActiveIndicator.STYLE =
     '.cvox_indicator_bottom {' +
     '  border-radius: 0 0 inherit inherit !important;' +
     '}' +
-    '@-webkit-keyframes cvox_indicator_pulsing_animation {' +
+    '@keyframes cvox_indicator_pulsing_animation {' +
     '   0% {opacity: 1.0}' +
     '  50% {opacity: 0.5}' +
     ' 100% {opacity: 1.0}' +

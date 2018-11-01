@@ -81,7 +81,9 @@ using namespace HTMLNames;
 
 CompositeEditCommand::CompositeEditCommand(Document& document)
     : EditCommand(document) {
-  setStartingSelection(document.frame()->selection().selection());
+  setStartingSelection(document.frame()
+                           ->selection()
+                           .computeVisibleSelectionInDOMTreeDeprecated());
   setEndingVisibleSelection(m_startingSelection);
 }
 
@@ -99,8 +101,7 @@ bool CompositeEditCommand::apply() {
       case InputEvent::InputType::InsertFromPaste:
       case InputEvent::InputType::InsertFromDrop:
       case InputEvent::InputType::InsertReplacementText:
-      case InputEvent::InputType::DeleteComposedCharacterForward:
-      case InputEvent::InputType::DeleteComposedCharacterBackward:
+      case InputEvent::InputType::InsertCompositionText:
       case InputEvent::InputType::DeleteWordBackward:
       case InputEvent::InputType::DeleteWordForward:
       case InputEvent::InputType::DeleteLineBackward:
@@ -128,10 +129,8 @@ bool CompositeEditCommand::apply() {
   LocalFrame* frame = document().frame();
   DCHECK(frame);
   EditingState editingState;
-  {
-    EventQueueScope eventQueueScope;
-    doApply(&editingState);
-  }
+  EventQueueScope eventQueueScope;
+  doApply(&editingState);
 
   // Only need to call appliedEditing for top-level commands, and TypingCommands
   // do it on their own (see TypingCommand::typingAddedToOpenCommand).
@@ -433,7 +432,7 @@ void CompositeEditCommand::updatePositionForNodeRemovalPreservingChildren(
     Node& node) {
   int offset =
       position.isOffsetInAnchor() ? position.offsetInContainerNode() : 0;
-  updatePositionForNodeRemoval(position, node);
+  position = computePositionForNodeRemoval(position, node);
   if (offset == 0)
     return;
   position = Position(position.computeContainerNode(), offset);
@@ -688,21 +687,11 @@ void CompositeEditCommand::setNodeAttribute(Element* element,
       ASSERT_NO_EDITING_ABORT);
 }
 
-static inline bool containsOnlyWhitespace(const String& text) {
-  for (unsigned i = 0; i < text.length(); ++i) {
-    if (!isWhitespace(text[i]))
-      return false;
-  }
-
-  return true;
-}
-
-bool CompositeEditCommand::shouldRebalanceLeadingWhitespaceFor(
-    const String& text) const {
-  return containsOnlyWhitespace(text);
-}
-
 bool CompositeEditCommand::canRebalance(const Position& position) const {
+  // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets()
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
   Node* node = position.computeContainerNode();
   if (!position.isOffsetInAnchor() || !node || !node->isTextNode() ||
       !hasRichlyEditableStyle(*node))
@@ -777,7 +766,7 @@ void CompositeEditCommand::rebalanceWhitespaceOnTextSubstring(Text* textNode,
   const bool nextSiblingIsTextNode =
       textNode->nextSibling() && textNode->nextSibling()->isTextNode() &&
       toText(textNode->nextSibling())->data().length() &&
-      toText(textNode->nextSibling())->data()[0] != ' ';
+      !isWhitespace(toText(textNode->nextSibling())->data()[0]);
   const bool shouldEmitNBSPbeforeEnd =
       (isEndOfParagraph(visibleDownstreamPos) ||
        (unsigned)downstream == text.length()) &&

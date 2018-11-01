@@ -13,14 +13,17 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.util.JsonWriter;
 
 import org.chromium.IsReadyToPayService;
 import org.chromium.IsReadyToPayServiceCallback;
+import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.R;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
 import org.chromium.ui.base.WindowAndroid;
@@ -45,6 +48,8 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
     private static final String EXTRA_ORIGIN = "origin";
     private static final String EXTRA_DETAILS = "details";
     private static final String EXTRA_INSTRUMENT_DETAILS = "instrumentDetails";
+    private static final String EXTRA_CERTIFICATE_CHAIN = "certificateChain";
+    private static final String EXTRA_CERTIFICATE = "certificate";
     private static final String EMPTY_JSON_DATA = "{}";
     private final Handler mHandler;
     private final WebContents mWebContents;
@@ -70,6 +75,7 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
             respondToGetInstrumentsQuery(null);
         }
     };
+
     /**
      * Builds the point of interaction with a locally installed 3rd party native Android payment
      * app.
@@ -83,6 +89,7 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
     public AndroidPaymentApp(WebContents webContents, String packageName, String activity,
             String label, Drawable icon) {
         super(packageName, label, null, icon);
+        ThreadUtils.assertOnUiThread();
         mHandler = new Handler();
         mWebContents = webContents;
         mPayIntent = new Intent();
@@ -103,17 +110,26 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
         mIsReadyToPayIntent.setClassName(mIsReadyToPayIntent.getPackage(), className);
     }
 
+    private void addCertificateChain(Bundle extras, byte[][] certificateChain) {
+        if (certificateChain != null && certificateChain.length > 0) {
+            Parcelable[] certificateArray = new Parcelable[certificateChain.length];
+            for (int i = 0; i < certificateChain.length; i++) {
+                Bundle bundle = new Bundle();
+                bundle.putByteArray(EXTRA_CERTIFICATE, certificateChain[i]);
+                certificateArray[i] = bundle;
+            }
+            extras.putParcelableArray(EXTRA_CERTIFICATE_CHAIN, certificateArray);
+        }
+    }
+
     @Override
     public void getInstruments(Map<String, PaymentMethodData> methodData, String origin,
-            InstrumentsCallback callback) {
+            byte[][] certificateChain, InstrumentsCallback callback) {
+        assert mInstrumentsCallback == null
+                : "Have not responded to previous request for instruments yet";
         mInstrumentsCallback = callback;
         if (mIsReadyToPayIntent.getPackage() == null) {
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    respondToGetInstrumentsQuery(AndroidPaymentApp.this);
-                }
-            });
+            respondToGetInstrumentsQuery(AndroidPaymentApp.this);
             return;
         }
         Bundle extras = new Bundle();
@@ -121,6 +137,7 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
         extras.putString(EXTRA_ORIGIN, origin);
         PaymentMethodData data = methodData.get(mMethodNames.iterator().next());
         extras.putString(EXTRA_DATA, data == null ? EMPTY_JSON_DATA : data.stringifiedData);
+        addCertificateChain(extras, certificateChain);
         mIsReadyToPayIntent.putExtras(extras);
 
         if (mIsReadyToPayService != null) {
@@ -128,13 +145,13 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
         } else {
             ContentViewCore contentView = ContentViewCore.fromWebContents(mWebContents);
             if (contentView == null) {
-                notifyError();
+                respondToGetInstrumentsQuery(null);
                 return;
             }
 
             WindowAndroid window = contentView.getWindowAndroid();
             if (window == null) {
-                notifyError();
+                respondToGetInstrumentsQuery(null);
                 return;
             }
 
@@ -147,13 +164,21 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
         }
     }
 
-    private void respondToGetInstrumentsQuery(PaymentInstrument instrument) {
-        List<PaymentInstrument> instruments = null;
-        if (instrument != null) {
-            instruments = new ArrayList<>();
-            instruments.add(instrument);
-        }
-        mInstrumentsCallback.onInstrumentsReady(this, instruments);
+    private void respondToGetInstrumentsQuery(final PaymentInstrument instrument) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                ThreadUtils.assertOnUiThread();
+                if (mInstrumentsCallback == null) return;
+                List<PaymentInstrument> instruments = null;
+                if (instrument != null) {
+                    instruments = new ArrayList<>();
+                    instruments.add(instrument);
+                }
+                mInstrumentsCallback.onInstrumentsReady(AndroidPaymentApp.this, instruments);
+                mInstrumentsCallback = null;
+            }
+        });
     }
 
     private void sendIsReadyToPayIntentToPaymentApp() {
@@ -201,12 +226,14 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
     }
 
     @Override
-    public void invokePaymentApp(String merchantName, String origin, PaymentItem total,
-            List<PaymentItem> cart, Map<String, PaymentMethodData> methodDataMap,
+    public void invokePaymentApp(String merchantName, String origin, byte[][] certificateChain,
+            Map<String, PaymentMethodData> methodDataMap, PaymentItem total,
+            List<PaymentItem> displayItems, Map<String, PaymentDetailsModifier> modifiers,
             InstrumentDetailsCallback callback) {
         assert !mMethodNames.isEmpty();
         Bundle extras = new Bundle();
         extras.putString(EXTRA_ORIGIN, origin);
+        addCertificateChain(extras, certificateChain);
 
         String methodName = mMethodNames.iterator().next();
         extras.putString(EXTRA_METHOD_NAME, methodName);
@@ -215,7 +242,7 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
         extras.putString(
                 EXTRA_DATA, methodData == null ? EMPTY_JSON_DATA : methodData.stringifiedData);
 
-        String details = serializeDetails(total, cart);
+        String details = serializeDetails(total, displayItems);
         extras.putString(EXTRA_DETAILS, details == null ? EMPTY_JSON_DATA : details);
         mPayIntent.putExtras(extras);
 
@@ -247,7 +274,7 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
         });
     }
 
-    private static String serializeDetails(PaymentItem total, List<PaymentItem> cart) {
+    private static String serializeDetails(PaymentItem total, List<PaymentItem> displayItems) {
         StringWriter stringWriter = new StringWriter();
         JsonWriter json = new JsonWriter(stringWriter);
         try {
@@ -260,10 +287,10 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
             // }}} total
 
             // displayitems {{{
-            if (cart != null) {
+            if (displayItems != null) {
                 json.name("displayItems").beginArray();
-                for (int i = 0; i < cart.size(); i++) {
-                    serializePaymentItem(json, cart.get(i));
+                for (int i = 0; i < displayItems.size(); i++) {
+                    serializePaymentItem(json, displayItems.get(i));
                 }
                 json.endArray();
             }
@@ -296,6 +323,7 @@ public class AndroidPaymentApp extends PaymentInstrument implements PaymentApp,
 
     @Override
     public void onIntentCompleted(WindowAndroid window, int resultCode, Intent data) {
+        ThreadUtils.assertOnUiThread();
         window.removeIntentCallback(this);
         if (data == null || data.getExtras() == null || resultCode != Activity.RESULT_OK) {
             mInstrumentDetailsCallback.onInstrumentDetailsError();

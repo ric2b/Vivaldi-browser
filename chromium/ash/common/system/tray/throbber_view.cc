@@ -5,7 +5,7 @@
 #include "ash/common/system/tray/throbber_view.h"
 
 #include "ash/common/system/tray/tray_constants.h"
-#include "grit/ash_resources.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -40,7 +40,7 @@ ThrobberView::ThrobberView() {
   throbber_->set_stop_delay_ms(kThrobberAnimationDurationMs);
   AddChildView(throbber_);
 
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetOpacity(0.0);
 }
@@ -48,8 +48,7 @@ ThrobberView::ThrobberView() {
 ThrobberView::~ThrobberView() {}
 
 gfx::Size ThrobberView::GetPreferredSize() const {
-  int size = GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT);
-  return gfx::Size(size, size);
+  return gfx::Size(kTrayPopupItemMinHeight, kTrayPopupItemMinHeight);
 }
 
 void ThrobberView::Layout() {

@@ -8,10 +8,13 @@
 #include <stdint.h>
 
 #include <array>
+#include <deque>
 #include <list>
 #include <map>
 #include <memory>
+#include <queue>
 #include <set>
+#include <stack>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -19,6 +22,7 @@
 #include <vector>
 
 #include "base/base_export.h"
+#include "base/containers/linked_list.h"
 #include "base/strings/string16.h"
 #include "base/template_util.h"
 
@@ -108,6 +112,9 @@ size_t EstimateMemoryUsage(const std::vector<T, A>& vector);
 template <class T, class A>
 size_t EstimateMemoryUsage(const std::list<T, A>& list);
 
+template <class T>
+size_t EstimateMemoryUsage(const base::LinkedList<T>& list);
+
 template <class T, class C, class A>
 size_t EstimateMemoryUsage(const std::set<T, C, A>& set);
 
@@ -132,13 +139,20 @@ size_t EstimateMemoryUsage(const std::unordered_map<K, V, H, KE, A>& map);
 template <class K, class V, class H, class KE, class A>
 size_t EstimateMemoryUsage(const std::unordered_multimap<K, V, H, KE, A>& map);
 
+template <class T, class A>
+size_t EstimateMemoryUsage(const std::deque<T, A>& deque);
+
+template <class T, class C>
+size_t EstimateMemoryUsage(const std::queue<T, C>& queue);
+
+template <class T, class C>
+size_t EstimateMemoryUsage(const std::priority_queue<T, C>& queue);
+
+template <class T, class C>
+size_t EstimateMemoryUsage(const std::stack<T, C>& stack);
+
 // TODO(dskiba):
 //   std::forward_list
-//   std::deque
-//   std::queue
-//   std::stack
-//   std::queue
-//   std::priority_queue
 
 // Definitions
 
@@ -196,6 +210,16 @@ struct EMUCaller<
                             is_trivially_destructible<T>::value>::type> {
   static size_t Call(const T& value) { return 0; }
 };
+
+// Returns reference to the underlying container of a container adapter.
+// Works for std::stack, std::queue and std::priority_queue.
+template <class A>
+const typename A::container_type& GetUnderlyingContainer(const A& adapter) {
+  struct ExposedAdapter : A {
+    using A::c;
+  };
+  return adapter.*&ExposedAdapter::c;
+}
 
 }  // namespace internal
 
@@ -332,6 +356,18 @@ size_t EstimateMemoryUsage(const std::list<T, A>& list) {
          EstimateIterableMemoryUsage(list);
 }
 
+template <class T>
+size_t EstimateMemoryUsage(const base::LinkedList<T>& list) {
+  size_t memory_usage = 0u;
+  for (base::LinkNode<T>* node = list.head(); node != list.end();
+       node = node->next()) {
+    // Since we increment by calling node = node->next() we know that node
+    // isn't nullptr.
+    memory_usage += EstimateMemoryUsage(*node->value()) + sizeof(T);
+  }
+  return memory_usage;
+}
+
 // Tree containers
 
 template <class V>
@@ -437,6 +473,74 @@ size_t EstimateMemoryUsage(const std::unordered_multimap<K, V, H, KE, A>& map) {
   return EstimateHashMapMemoryUsage<value_type>(map.bucket_count(),
                                                 map.size()) +
          EstimateIterableMemoryUsage(map);
+}
+
+// std::deque
+
+template <class T, class A>
+size_t EstimateMemoryUsage(const std::deque<T, A>& deque) {
+// Since std::deque implementations are wildly different
+// (see crbug.com/674287), we can't have one "good enough"
+// way to estimate.
+
+// kBlockSize      - minimum size of a block, in bytes
+// kMinBlockLength - number of elements in a block
+//                   if sizeof(T) > kBlockSize
+#if defined(_LIBCPP_VERSION)
+  size_t kBlockSize = 4096;
+  size_t kMinBlockLength = 16;
+#elif defined(__GLIBCXX__)
+  size_t kBlockSize = 512;
+  size_t kMinBlockLength = 1;
+#elif defined(_MSC_VER)
+  size_t kBlockSize = 16;
+  size_t kMinBlockLength = 1;
+#else
+  size_t kBlockSize = 0;
+  size_t kMinBlockLength = 1;
+#endif
+
+  size_t block_length =
+      (sizeof(T) > kBlockSize) ? kMinBlockLength : kBlockSize / sizeof(T);
+
+  size_t blocks = (deque.size() + block_length - 1) / block_length;
+
+#if defined(__GLIBCXX__)
+  // libstdc++: deque always has at least one block
+  if (!blocks)
+    blocks = 1;
+#endif
+
+#if defined(_LIBCPP_VERSION)
+  // libc++: deque keeps at most two blocks when it shrinks,
+  // so even if the size is zero, deque might be holding up
+  // to 4096 * 2 bytes. One way to know whether deque has
+  // ever allocated (and hence has 1 or 2 blocks) is to check
+  // iterator's pointer. Non-zero value means that deque has
+  // at least one block.
+  if (!blocks && deque.begin().operator->())
+    blocks = 1;
+#endif
+
+  return (blocks * block_length * sizeof(T)) +
+         EstimateIterableMemoryUsage(deque);
+}
+
+// Container adapters
+
+template <class T, class C>
+size_t EstimateMemoryUsage(const std::queue<T, C>& queue) {
+  return EstimateMemoryUsage(internal::GetUnderlyingContainer(queue));
+}
+
+template <class T, class C>
+size_t EstimateMemoryUsage(const std::priority_queue<T, C>& queue) {
+  return EstimateMemoryUsage(internal::GetUnderlyingContainer(queue));
+}
+
+template <class T, class C>
+size_t EstimateMemoryUsage(const std::stack<T, C>& stack) {
+  return EstimateMemoryUsage(internal::GetUnderlyingContainer(stack));
 }
 
 }  // namespace trace_event

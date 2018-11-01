@@ -201,7 +201,7 @@ IN_PROC_BROWSER_TEST_F(SyncErrorTest, BirthdayErrorUsingActionableErrorTest) {
 }
 
 // Tests that on receiving CLIENT_DATA_OBSOLETE sync engine gets restarted and
-// initialized with different cache_guld.
+// initialized with different cache_guid.
 IN_PROC_BROWSER_TEST_F(SyncErrorTest, ClientDataObsoleteTest) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 

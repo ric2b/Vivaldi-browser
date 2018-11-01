@@ -24,7 +24,7 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
   void postTask(TaskType,
                 const WebTraceLocation&,
                 std::unique_ptr<ExecutionContextTask>,
-                const String& taskNameForInstrumentation = emptyString()) final;
+                const String& taskNameForInstrumentation = emptyString) final;
 
   virtual ScriptWrappable* getScriptWrappable() const = 0;
   virtual WorkerOrWorkletScriptController* scriptController() = 0;
@@ -55,9 +55,7 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
   void addDeprecationMessage(UseCounter::Feature);
 
  private:
-  void runTask(std::unique_ptr<ExecutionContextTask>,
-               bool isInstrumented,
-               ExecutionContext*);
+  void runTask(std::unique_ptr<ExecutionContextTask>, bool isInstrumented);
 
   BitVector m_deprecationWarningBits;
 };

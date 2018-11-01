@@ -23,6 +23,37 @@ missing Mesa library.
 [DevTools](https://developer.chrome.com/devtools) interface or use a tool such
 as [Selenium](http://www.seleniumhq.org/) to drive the headless browser.
 
+## Usage from Node.js
+
+For example, the [chrome-remote-interface](https://github.com/cyrus-and/chrome-remote-interface)
+Node.js package can be used to extract a page's DOM like this:
+
+```
+const CDP = require('chrome-remote-interface');
+
+CDP((client) => {
+  // Extract used DevTools domains.
+  const {Page, Runtime} = client;
+
+  // Enable events on domains we are interested in.
+  Promise.all([
+    Page.enable()
+  ]).then(() => {
+    return Page.navigate({url: 'https://example.com'});
+  });
+
+  // Evaluate outerHTML after page has loaded.
+  Page.loadEventFired(() => {
+    Runtime.evaluate({expression: 'document.body.outerHTML'}).then((result) => {
+      console.log(result.result.value);
+      client.close();
+    });
+  });
+}).on('error', (err) => {
+  console.error('Cannot connect to browser:', err);
+});
+```
+
 ## Usage as a C++ library
 
 Headless Chromium can be built as a library for embedding into a C++
@@ -30,8 +61,10 @@ application. This approach is otherwise similar to controlling the browser over
 a DevTools connection, but it provides more customization points, e.g., for
 networking and [mojo services](https://docs.google.com/document/d/1Fr6_DJH6OK9rG3-ibMvRPTNnHsAXPk0VzxxiuJDSK3M/edit#heading=h.qh0udvlk963d).
 
-Headless Shell is a sample application which demonstrates the use of the
-headless C++ API. To run it, first initialize a headless build configuration:
+[Headless Example](https://cs.chromium.org/chromium/src/headless/app/headless_example.cc)
+is a small sample application which demonstrates the use of the headless C++
+API. It loads a web page and outputs the resulting DOM. To run it, first
+initialize a headless build configuration:
 
 ```
 $ mkdir -p out/Debug
@@ -39,22 +72,26 @@ $ echo 'import("//build/args/headless.gn")' > out/Debug/args.gn
 $ gn gen out/Debug
 ```
 
-Then build the shell:
+Then build the example:
+
+```
+$ ninja -C out/Debug headless_example
+```
+
+After the build completes, the example can be run with the following command:
+
+```
+$ out/Debug/headless_example https://www.google.com
+```
+
+[Headless Shell](https://cs.chromium.org/chromium/src/headless/app/headless_shell.cc)
+is a more capable headless application. For instance, it supports remote
+debugging with the [DevTools](https://developer.chrome.com/devtools) protocol.
+To do this, start the application with an argument specifying the debugging
+port:
 
 ```
 $ ninja -C out/Debug headless_shell
-```
-
-After the build completes, Headless Shell can be run with the following command:
-
-```
-$ out/Debug/headless_shell https://www.google.com
-```
-
-To attach a [DevTools](https://developer.chrome.com/devtools) debugger to the
-shell, start it with an argument specifying the debugging port:
-
-```
 $ out/Debug/headless_shell --remote-debugging-port=9222 https://youtube.com
 ```
 
@@ -89,8 +126,14 @@ web pages. Its main classes are:
 ## Resources and Documentation
 
 Mailing list: [headless-dev@chromium.org](https://groups.google.com/a/chromium.org/forum/#!forum/headless-dev)
+
 Bug tracker: [Proj=Headless](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=Proj%3DHeadless)
 
+[File a new bug](https://bugs.chromium.org/p/chromium/issues/entry?labels=Proj-Headless)
+
+* [BeginFrame sequence numbers + acknowledgements](https://docs.google.com/document/d/1nxaunQ0cYWxhtS6Zzfwa99nae74F7gxanbuT5JRpI6Y/edit#)
+* [Deterministic page loading for Blink](https://docs.google.com/document/d/19s2g4fPP9p9qmMZvwPX8uDGbb-39rgR9k56B4B-ueG8/edit#)
+* [Crash dumps for Headless Chrome](https://docs.google.com/document/d/1l6AGOOBLk99PaAKoZQW_DVhM8FQ6Fut27lD938CRbTM/edit)
 * [Runtime headless mode for Chrome](https://docs.google.com/document/d/1aIJUzQr3eougZQp90bp4mqGr5gY6hdUice8UPa-Ys90/edit#)
 * [Virtual Time in Blink](https://docs.google.com/document/d/1y9kdt_zezt7pbey6uzvt1dgklwc1ob_vy4nzo1zbqmo/edit#heading=h.tn3gd1y9ifml)
 * [Headless Chrome architecture](https://docs.google.com/document/d/11zIkKkLBocofGgoTeeyibB2TZ_k7nR78v7kNelCatUE/edit)

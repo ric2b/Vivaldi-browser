@@ -13,6 +13,7 @@ BackgroundLoaderContents::BackgroundLoaderContents(
     : browser_context_(browser_context) {
   web_contents_.reset(content::WebContents::Create(
       content::WebContents::CreateParams(browser_context_)));
+  web_contents_->SetAudioMuted(true);
   web_contents_->SetDelegate(this);
 }
 
@@ -66,7 +67,7 @@ bool BackgroundLoaderContents::ShouldCreateWebContents(
     int32_t route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
-    WindowContainerType window_container_type,
+    content::mojom::WindowContainerType window_container_type,
     const GURL& opener_url,
     const std::string& frame_name,
     const GURL& target_url,

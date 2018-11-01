@@ -77,7 +77,7 @@ String PseudoElement::pseudoElementNameForEvents(PseudoId pseudoId) {
     case PseudoIdBefore:
       return before;
     default:
-      return emptyString();
+      return emptyString;
   }
 }
 
@@ -104,7 +104,7 @@ PassRefPtr<ComputedStyle> PseudoElement::customStyleForLayoutObject() {
 void PseudoElement::dispose() {
   DCHECK(parentOrShadowHostElement());
 
-  InspectorInstrumentation::pseudoElementDestroyed(this);
+  probe::pseudoElementDestroyed(this);
 
   DCHECK(!nextSibling());
   DCHECK(!previousSibling());
@@ -147,7 +147,7 @@ bool PseudoElement::layoutObjectIsNeeded(const ComputedStyle& style) {
   return pseudoElementLayoutObjectIsNeeded(&style);
 }
 
-void PseudoElement::didRecalcStyle(StyleRecalcChange) {
+void PseudoElement::didRecalcStyle() {
   if (!layoutObject())
     return;
 

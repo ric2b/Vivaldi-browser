@@ -4,7 +4,6 @@
 
 #include "cc/test/fake_picture_layer.h"
 
-#include "cc/proto/layer.pb.h"
 #include "cc/test/fake_picture_layer_impl.h"
 
 namespace cc {
@@ -32,9 +31,18 @@ FakePictureLayer::~FakePictureLayer() {}
 
 std::unique_ptr<LayerImpl> FakePictureLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  if (is_mask())
-    return FakePictureLayerImpl::CreateMask(tree_impl, id());
-  return FakePictureLayerImpl::Create(tree_impl, id());
+  switch (mask_type()) {
+    case Layer::LayerMaskType::NOT_MASK:
+      return FakePictureLayerImpl::Create(tree_impl, id());
+    case Layer::LayerMaskType::MULTI_TEXTURE_MASK:
+      return FakePictureLayerImpl::CreateMask(tree_impl, id());
+    case Layer::LayerMaskType::SINGLE_TEXTURE_MASK:
+      return FakePictureLayerImpl::CreateSingleTextureMask(tree_impl, id());
+    default:
+      NOTREACHED();
+      break;
+  }
+  return nullptr;
 }
 
 bool FakePictureLayer::Update() {
@@ -47,11 +55,6 @@ bool FakePictureLayer::IsSuitableForGpuRasterization() const {
   if (force_unsuitable_for_gpu_rasterization_)
     return false;
   return PictureLayer::IsSuitableForGpuRasterization();
-}
-
-void FakePictureLayer::SetTypeForProtoSerialization(
-    proto::LayerNode* proto) const {
-  proto->set_type(proto::LayerNode::FAKE_PICTURE_LAYER);
 }
 
 }  // namespace cc

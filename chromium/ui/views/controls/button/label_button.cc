@@ -99,12 +99,12 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
   SetTextInternal(text);
 
   AddChildView(ink_drop_container_);
-  ink_drop_container_->SetPaintToLayer(true);
+  ink_drop_container_->SetPaintToLayer();
   ink_drop_container_->layer()->SetFillsBoundsOpaquely(false);
   ink_drop_container_->SetVisible(false);
 
   AddChildView(image_);
-  image_->set_interactive(false);
+  image_->set_can_process_events_within_subtree(false);
 
   AddChildView(label_);
   label_->SetFontList(cached_normal_font_list_);
@@ -423,13 +423,13 @@ void LabelButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 }
 
 void LabelButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
-  image()->SetPaintToLayer(true);
+  image()->SetPaintToLayer();
   image()->layer()->SetFillsBoundsOpaquely(false);
   ink_drop_container_->AddInkDropLayer(ink_drop_layer);
 }
 
 void LabelButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
-  image()->SetPaintToLayer(false);
+  image()->DestroyLayer();
   ink_drop_container_->RemoveInkDropLayer(ink_drop_layer);
 }
 
@@ -458,7 +458,7 @@ std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
                    gfx::RectF(image()->GetMirroredBounds()).CenterPoint());
 }
 
-void LabelButton::StateChanged() {
+void LabelButton::StateChanged(ButtonState old_state) {
   const gfx::Size previous_image_size(image_->GetPreferredSize());
   UpdateImage();
   ResetLabelEnabledColor();

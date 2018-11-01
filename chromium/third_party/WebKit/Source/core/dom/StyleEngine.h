@@ -315,6 +315,8 @@ class CORE_EXPORT StyleEngine final
   void scheduleRuleSetInvalidationsForElement(
       Element&,
       const HeapHashSet<Member<RuleSet>>&);
+  void scheduleTypeRuleSetInvalidations(ContainerNode&,
+                                        const HeapHashSet<Member<RuleSet>>&);
   void invalidateSlottedElements(HTMLSlotElement&);
 
   void updateViewport();
@@ -334,6 +336,7 @@ class CORE_EXPORT StyleEngine final
   // attaching elements and when it is safe to execute scripts.
   int m_pendingScriptBlockingStylesheets = 0;
   int m_pendingRenderBlockingStylesheets = 0;
+  int m_pendingBodyStylesheets = 0;
 
   HeapVector<TraceWrapperMember<CSSStyleSheet>> m_injectedAuthorStyleSheets;
   Member<CSSStyleSheet> m_inspectorStyleSheet;

@@ -18,8 +18,10 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/capture_client_observer.h"
+#include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/transient_window_client.h"
+#include "ui/aura/mus/capture_synchronizer.h"
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/window_mus.h"
 #include "ui/aura/mus/window_tree_client_delegate.h"
@@ -30,22 +32,25 @@
 #include "ui/aura/test/mus/window_tree_client_private.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_property.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host_observer.h"
+#include "ui/base/class_property.h"
 #include "ui/compositor/compositor.h"
+#include "ui/display/display.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace aura {
 
 namespace {
 
-DEFINE_WINDOW_PROPERTY_KEY(uint8_t, kTestPropertyKey1, 0);
-DEFINE_WINDOW_PROPERTY_KEY(uint16_t, kTestPropertyKey2, 0);
-DEFINE_WINDOW_PROPERTY_KEY(bool, kTestPropertyKey3, false);
+DEFINE_UI_CLASS_PROPERTY_KEY(uint8_t, kTestPropertyKey1, 0);
+DEFINE_UI_CLASS_PROPERTY_KEY(uint16_t, kTestPropertyKey2, 0);
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kTestPropertyKey3, false);
 
 const char kTestPropertyServerKey1[] = "test-property-server1";
 const char kTestPropertyServerKey2[] = "test-property-server2";
@@ -68,9 +73,15 @@ bool IsWindowHostVisible(Window* window) {
 
 // Register some test window properties for aura/mus conversion.
 void RegisterTestProperties(PropertyConverter* converter) {
-  converter->RegisterProperty(kTestPropertyKey1, kTestPropertyServerKey1);
-  converter->RegisterProperty(kTestPropertyKey2, kTestPropertyServerKey2);
-  converter->RegisterProperty(kTestPropertyKey3, kTestPropertyServerKey3);
+  converter->RegisterProperty(
+      kTestPropertyKey1, kTestPropertyServerKey1,
+      PropertyConverter::CreateAcceptAnyValueCallback());
+  converter->RegisterProperty(
+      kTestPropertyKey2, kTestPropertyServerKey2,
+      PropertyConverter::CreateAcceptAnyValueCallback());
+  converter->RegisterProperty(
+      kTestPropertyKey3, kTestPropertyServerKey3,
+      PropertyConverter::CreateAcceptAnyValueCallback());
 }
 
 // Convert a primitive aura property value to a mus transport value.
@@ -107,14 +118,23 @@ class WindowTreeClientClientTestHighDPI : public WindowTreeClientClientTest {
   WindowTreeClientClientTestHighDPI() {}
   ~WindowTreeClientClientTestHighDPI() override {}
 
+  const ui::PointerEvent* last_event_observed() const {
+    return last_event_observed_.get();
+  }
+
   // WindowTreeClientClientTest:
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         switches::kForceDeviceScaleFactor, "2");
     WindowTreeClientClientTest::SetUp();
   }
+  void OnPointerEventObserved(const ui::PointerEvent& event,
+                              Window* target) override {
+    last_event_observed_.reset(new ui::PointerEvent(event));
+  }
 
  private:
+  std::unique_ptr<ui::PointerEvent> last_event_observed_;
   DISALLOW_COPY_AND_ASSIGN(WindowTreeClientClientTestHighDPI);
 };
 
@@ -532,7 +552,7 @@ TEST_F(WindowTreeClientClientTest, InputEventBasic) {
                          gfx::Point(), ui::EventTimeForNow(), ui::EF_NONE, 0));
   window_tree_client()->OnWindowInputEvent(
       InputEventBasicTestWindowDelegate::kEventId, server_id(&child),
-      ui::Event::Clone(*ui_event.get()), 0);
+      window_tree_host.display_id(), ui::Event::Clone(*ui_event.get()), 0);
   EXPECT_TRUE(window_tree()->WasEventAcked(
       InputEventBasicTestWindowDelegate::kEventId));
   EXPECT_EQ(ui::mojom::EventResult::HANDLED,
@@ -583,7 +603,7 @@ TEST_F(WindowTreeClientPointerObserverTest, OnPointerEventObserved) {
       0, ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH),
       base::TimeTicks()));
   window_tree_client()->OnPointerEventObserved(std::move(pointer_event_down),
-                                               0u);
+                                               0u, 0);
 
   // Delegate sensed the event.
   const ui::PointerEvent* last_event = last_event_observed();
@@ -600,7 +620,8 @@ TEST_F(WindowTreeClientPointerObserverTest, OnPointerEventObserved) {
       ui::ET_POINTER_UP, gfx::Point(), gfx::Point(), ui::EF_CONTROL_DOWN, 1, 0,
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH),
       base::TimeTicks()));
-  window_tree_client()->OnPointerEventObserved(std::move(pointer_event_up), 0u);
+  window_tree_client()->OnPointerEventObserved(std::move(pointer_event_up), 0u,
+                                               0);
 
   // No event was sensed.
   EXPECT_FALSE(last_event_observed());
@@ -623,7 +644,7 @@ TEST_F(WindowTreeClientPointerObserverTest,
       ui::ET_POINTER_DOWN, gfx::Point(), gfx::Point(), ui::EF_CONTROL_DOWN, 1,
       0, ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH),
       base::TimeTicks::Now()));
-  window_tree_client()->OnWindowInputEvent(1, server_id(top_level.get()),
+  window_tree_client()->OnWindowInputEvent(1, server_id(top_level.get()), 0,
                                            std::move(pointer_event_down), true);
 
   // Delegate sensed the event.
@@ -1364,6 +1385,78 @@ TEST_F(WindowTreeClientWmTest, OnWindowTreeCaptureChanged) {
   capture_recorder.reset_capture_captured_count();
 }
 
+TEST_F(WindowTreeClientClientTest, TwoWindowTreesRequestCapture) {
+  // Creating a WindowTreeHost so we can have two root windows: top_level
+  // and root_window().
+  std::unique_ptr<WindowTreeHostMus> window_tree_host =
+      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl());
+  window_tree_host->InitHost();
+  Window* top_level = window_tree_host->window();
+  std::unique_ptr<client::DefaultCaptureClient> capture_client(
+      base::MakeUnique<client::DefaultCaptureClient>());
+  client::SetCaptureClient(top_level, capture_client.get());
+  window_tree_client_impl()->capture_synchronizer()->AttachToCaptureClient(
+      capture_client.get());
+  EXPECT_NE(server_id(top_level), server_id(root_window()));
+
+  // Ack the request to the windowtree to create the new window.
+  uint32_t change_id;
+  ASSERT_TRUE(window_tree()->GetAndRemoveFirstChangeOfType(
+      WindowTreeChangeType::NEW_TOP_LEVEL, &change_id));
+  EXPECT_EQ(window_tree()->window_id(), server_id(top_level));
+
+  ui::mojom::WindowDataPtr data = ui::mojom::WindowData::New();
+  data->window_id = server_id(top_level);
+  data->visible = true;
+  const int64_t display_id = 1;
+  window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
+                                          display_id, true);
+  EXPECT_EQ(
+      0u, window_tree()->GetChangeCountForType(WindowTreeChangeType::VISIBLE));
+  EXPECT_TRUE(top_level->TargetVisibility());
+
+  std::unique_ptr<CaptureRecorder> capture_recorder1(
+      base::MakeUnique<CaptureRecorder>(root_window()));
+  std::unique_ptr<CaptureRecorder> capture_recorder2(
+      base::MakeUnique<CaptureRecorder>(top_level));
+  EXPECT_NE(client::GetCaptureClient(root_window()),
+            client::GetCaptureClient(top_level));
+
+  EXPECT_EQ(0, capture_recorder1->capture_changed_count());
+  EXPECT_EQ(0, capture_recorder2->capture_changed_count());
+  // Give capture to top_level and ensure everyone is notified correctly.
+  top_level->SetCapture();
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::CAPTURE, true));
+  EXPECT_EQ(0, capture_recorder1->capture_changed_count());
+  EXPECT_EQ(1, capture_recorder2->capture_changed_count());
+  EXPECT_EQ(top_level->id(),
+            capture_recorder2->last_gained_capture_window_id());
+  EXPECT_EQ(0, capture_recorder2->last_lost_capture_window_id());
+  top_level->ReleaseCapture();
+  capture_recorder1->reset_capture_captured_count();
+  capture_recorder2->reset_capture_captured_count();
+
+  // Release capture of top_level shouldn't affect the capture of root_window().
+  top_level->SetCapture();
+  root_window()->SetCapture();
+  top_level->ReleaseCapture();
+  EXPECT_EQ(1, capture_recorder1->capture_changed_count());
+  EXPECT_EQ(2, capture_recorder2->capture_changed_count());
+  EXPECT_EQ(root_window()->id(),
+            capture_recorder1->last_gained_capture_window_id());
+  EXPECT_EQ(0, capture_recorder1->last_lost_capture_window_id());
+  EXPECT_EQ(0, capture_recorder2->last_gained_capture_window_id());
+  EXPECT_EQ(top_level->id(), capture_recorder2->last_lost_capture_window_id());
+
+  capture_recorder1->reset_capture_captured_count();
+  capture_recorder2->reset_capture_captured_count();
+  capture_recorder1.reset();
+  capture_recorder2.reset();
+  window_tree_host.reset();
+  capture_client.reset();
+}
+
 TEST_F(WindowTreeClientClientTest, ModalFail) {
   Window window(nullptr);
   window.Init(ui::LAYER_NOT_DRAWN);
@@ -1499,6 +1592,40 @@ TEST_F(WindowTreeClientClientTestHighDPI, NewTopLevelWindowBounds) {
   // in pixels.
   EXPECT_EQ(gfx::Rect(0, 0, 3, 4), top_level->bounds());
   EXPECT_EQ(gfx::Rect(2, 4, 6, 8), top_level->GetHost()->GetBoundsInPixels());
+}
+
+TEST_F(WindowTreeClientClientTestHighDPI, PointerEventsInDips) {
+  display::Screen* screen = display::Screen::GetScreen();
+  const display::Display primary_display = screen->GetPrimaryDisplay();
+  ASSERT_EQ(2.0f, primary_display.device_scale_factor());
+
+  std::unique_ptr<Window> top_level(base::MakeUnique<Window>(nullptr));
+  top_level->SetType(ui::wm::WINDOW_TYPE_NORMAL);
+  top_level->Init(ui::LAYER_NOT_DRAWN);
+  top_level->SetBounds(gfx::Rect(0, 0, 100, 100));
+  top_level->Show();
+
+  // Start a pointer watcher for all events excluding move events.
+  window_tree_client_impl()->StartPointerWatcher(false /* want_moves */);
+
+  // Simulate the server sending an observed event.
+  const gfx::Point location_pixels(10, 12);
+  const gfx::Point root_location_pixels(14, 16);
+  std::unique_ptr<ui::PointerEvent> pointer_event_down(new ui::PointerEvent(
+      ui::ET_POINTER_DOWN, location_pixels, root_location_pixels,
+      ui::EF_CONTROL_DOWN, 1, 0,
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH),
+      base::TimeTicks()));
+  window_tree_client()->OnPointerEventObserved(std::move(pointer_event_down),
+                                               0u, primary_display.id());
+
+  // Delegate received the event in Dips.
+  const ui::PointerEvent* last_event = last_event_observed();
+  ASSERT_TRUE(last_event);
+  EXPECT_EQ(gfx::ConvertPointToDIP(2.0f, location_pixels),
+            last_event->location());
+  EXPECT_EQ(gfx::ConvertPointToDIP(2.0f, root_location_pixels),
+            last_event->root_location());
 }
 
 }  // namespace aura

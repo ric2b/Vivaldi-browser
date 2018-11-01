@@ -47,6 +47,36 @@ namespace android {
 
 namespace {
 
+class DownloadUIAdapterDelegate : public DownloadUIAdapter::Delegate {
+ public:
+  explicit DownloadUIAdapterDelegate(OfflinePageModel* model);
+
+  // DownloadUIAdapter::Delegate
+  bool IsVisibleInUI(const ClientId& client_id) override;
+  bool IsTemporarilyHiddenInUI(const ClientId& client_id) override;
+  void SetUIAdapter(DownloadUIAdapter* ui_adapter) override;
+
+ private:
+  // Not owned, cached service pointer.
+  OfflinePageModel* model_;
+};
+
+DownloadUIAdapterDelegate::DownloadUIAdapterDelegate(OfflinePageModel* model)
+    : model_(model) {}
+
+bool DownloadUIAdapterDelegate::IsVisibleInUI(const ClientId& client_id) {
+  const std::string& name_space = client_id.name_space;
+  return model_->GetPolicyController()->IsSupportedByDownload(name_space) &&
+         base::IsValidGUID(client_id.id);
+}
+
+bool DownloadUIAdapterDelegate::IsTemporarilyHiddenInUI(
+    const ClientId& client_id) {
+  return false;
+}
+
+void DownloadUIAdapterDelegate::SetUIAdapter(DownloadUIAdapter* ui_adapter) {}
+
 // TODO(dewittj): Move to Download UI Adapter.
 content::WebContents* GetWebContentsFromJavaTab(
     const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
@@ -58,7 +88,8 @@ content::WebContents* GetWebContentsFromJavaTab(
   return tab->web_contents();
 }
 
-void SavePageIfNotNavigatedAway(const GURL& original_url,
+void SavePageIfNotNavigatedAway(const GURL& url,
+                                const GURL& original_url,
                                 const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
   content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
   if (!web_contents)
@@ -66,8 +97,8 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
 
   // This ignores fragment differences in URLs, bails out only if tab has
   // navigated away and not just scrolled to a fragment.
-  GURL url = web_contents->GetLastCommittedURL();
-  if (!OfflinePageUtils::EqualsIgnoringFragment(url, original_url))
+  GURL current_url = web_contents->GetLastCommittedURL();
+  if (!OfflinePageUtils::EqualsIgnoringFragment(current_url, url))
     return;
 
   offline_pages::ClientId client_id;
@@ -85,9 +116,13 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
         offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
             web_contents->GetBrowserContext());
     if (request_coordinator) {
-      request_id = request_coordinator->SavePageLater(
-          url, client_id, true,
-          RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER);
+      offline_pages::RequestCoordinator::SavePageLaterParams params;
+      params.url = current_url;
+      params.client_id = client_id;
+      params.availability =
+          RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER;
+      params.original_url = original_url;
+      request_id = request_coordinator->SavePageLater(params);
     } else {
       DVLOG(1) << "SavePageIfNotNavigatedAway has no valid coordinator.";
     }
@@ -118,6 +153,7 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
 }
 
 void RequestQueueDuplicateCheckDone(
+    const GURL& url,
     const GURL& original_url,
     const ScopedJavaGlobalRef<jobject>& j_tab_ref,
     bool has_duplicates,
@@ -143,10 +179,11 @@ void RequestQueueDuplicateCheckDone(
     return;
   }
 
-  SavePageIfNotNavigatedAway(original_url, j_tab_ref);
+  SavePageIfNotNavigatedAway(url, original_url, j_tab_ref);
 }
 
-void ModelDuplicateCheckDone(const GURL& original_url,
+void ModelDuplicateCheckDone(const GURL& url,
+                             const GURL& original_url,
                              const ScopedJavaGlobalRef<jobject>& j_tab_ref,
                              bool has_duplicates,
                              const base::Time& latest_saved_time) {
@@ -166,26 +203,27 @@ void ModelDuplicateCheckDone(const GURL& original_url,
         base::TimeDelta::FromDays(7).InSeconds(), 50);
 
     OfflinePageInfoBarDelegate::Create(
-        base::Bind(&SavePageIfNotNavigatedAway, original_url, j_tab_ref),
-        original_url, web_contents);
+        base::Bind(&SavePageIfNotNavigatedAway, url, original_url, j_tab_ref),
+        url, web_contents);
     return;
   }
 
   OfflinePageUtils::CheckExistenceOfRequestsWithURL(
       Profile::FromBrowserContext(web_contents->GetBrowserContext())
           ->GetOriginalProfile(),
-      kDownloadNamespace, original_url,
-      base::Bind(&RequestQueueDuplicateCheckDone, original_url, j_tab_ref));
+      kDownloadNamespace, url, base::Bind(&RequestQueueDuplicateCheckDone, url,
+                                          original_url, j_tab_ref));
 }
 
 void ToJavaOfflinePageDownloadItemList(
     JNIEnv* env,
     jobject j_result_obj,
     const std::vector<const DownloadUIItem*>& items) {
-  for (const auto item : items) {
+  for (const auto* item : items) {
     Java_OfflinePageDownloadBridge_createDownloadItemAndAddToList(
         env, j_result_obj, ConvertUTF8ToJavaString(env, item->guid),
-        ConvertUTF8ToJavaString(env, item->url.spec()),
+        ConvertUTF8ToJavaString(env, item->url.spec()), item->download_state,
+        item->download_progress_bytes,
         ConvertUTF16ToJavaString(env, item->title),
         ConvertUTF8ToJavaString(env, item->target_path.value()),
         item->start_time.ToJavaTime(), item->total_bytes);
@@ -197,7 +235,8 @@ ScopedJavaLocalRef<jobject> ToJavaOfflinePageDownloadItem(
     const DownloadUIItem& item) {
   return Java_OfflinePageDownloadBridge_createDownloadItem(
       env, ConvertUTF8ToJavaString(env, item.guid),
-      ConvertUTF8ToJavaString(env, item.url.spec()),
+      ConvertUTF8ToJavaString(env, item.url.spec()), item.download_state,
+      item.download_progress_bytes,
       ConvertUTF16ToJavaString(env, item.title),
       ConvertUTF8ToJavaString(env, item.target_path.value()),
       item.start_time.ToJavaTime(), item.total_bytes);
@@ -342,12 +381,15 @@ void OfflinePageDownloadBridge::StartDownload(
     return;
 
   GURL url = web_contents->GetLastCommittedURL();
+  GURL original_url =
+      offline_pages::OfflinePageUtils::GetOriginalURLFromWebContents(
+          web_contents);
 
   ScopedJavaGlobalRef<jobject> j_tab_ref(env, j_tab);
 
   OfflinePageUtils::CheckExistenceOfPagesWithURL(
       tab->GetProfile()->GetOriginalProfile(), kDownloadNamespace, url,
-      base::Bind(&ModelDuplicateCheckDone, url, j_tab_ref));
+      base::Bind(&ModelDuplicateCheckDone, url, original_url, j_tab_ref));
 }
 
 void OfflinePageDownloadBridge::CancelDownload(
@@ -398,6 +440,17 @@ void OfflinePageDownloadBridge::ResumeDownload(
   }
 }
 
+void OfflinePageDownloadBridge::ResumePendingRequestImmediately(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  RequestCoordinator* coordinator =
+      RequestCoordinatorFactory::GetForBrowserContext(browser_context_);
+  if (coordinator)
+    coordinator->StartImmediateProcessing(base::Bind([](bool result) {}));
+  else
+    LOG(WARNING) << "ResumePendingRequestImmediately has no valid coordinator.";
+}
+
 void OfflinePageDownloadBridge::ItemsLoaded() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
@@ -441,9 +494,20 @@ static jlong Init(JNIEnv* env,
 
   OfflinePageModel* offline_page_model =
       OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  DCHECK(offline_page_model);
 
   DownloadUIAdapter* adapter =
       DownloadUIAdapter::FromOfflinePageModel(offline_page_model);
+
+  if (!adapter) {
+    RequestCoordinator* request_coordinator =
+        RequestCoordinatorFactory::GetForBrowserContext(browser_context);
+    DCHECK(request_coordinator);
+    adapter = new DownloadUIAdapter(
+        offline_page_model, request_coordinator,
+        base::MakeUnique<DownloadUIAdapterDelegate>(offline_page_model));
+    DownloadUIAdapter::AttachToOfflinePageModel(adapter, offline_page_model);
+  }
 
   return reinterpret_cast<jlong>(
       new OfflinePageDownloadBridge(env, obj, adapter, browser_context));

@@ -12,7 +12,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
@@ -62,7 +61,7 @@ class KeyboardContentsDelegate : public content::WebContentsDelegate,
       int32_t route_id,
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
-      WindowContainerType window_container_type,
+      content::mojom::WindowContainerType window_container_type,
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
@@ -94,6 +93,25 @@ class KeyboardContentsDelegate : public content::WebContentsDelegate,
       const content::MediaStreamRequest& request,
       const content::MediaResponseCallback& callback) override {
     ui_->RequestAudioInput(web_contents, request, callback);
+  }
+
+  // Overridden from content::WebContentsDelegate:
+  bool PreHandleGestureEvent(content::WebContents* source,
+                             const blink::WebGestureEvent& event) override {
+    switch (event.type()) {
+      // Scroll events are not suppressed because the menu to select IME should
+      // be scrollable.
+      case blink::WebInputEvent::GestureScrollBegin:
+      case blink::WebInputEvent::GestureScrollEnd:
+      case blink::WebInputEvent::GestureScrollUpdate:
+      case blink::WebInputEvent::GestureFlingStart:
+      case blink::WebInputEvent::GestureFlingCancel:
+        return false;
+      default:
+        // Stop gesture events from being passed to renderer to suppress the
+        // context menu. crbug.com/685140
+        return true;
+    }
   }
 
   // Overridden from content::WebContentsObserver:

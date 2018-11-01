@@ -7,22 +7,22 @@
 # files having the prefix //vivaldi/ while chromium is using // as the prefix.
 # The out directories are in the vivaldi folder and thus we have to override
 # the path replacement to chromium for them
-path_map = [
-  # Prefix, actual path
-  # Most specific prefixes first
-  [
-    "//vivaldi",
-    "//",
-  ],
-  [
-    "//out",
-    "//out",
-  ],
-  [
-    "//",
-    "//chromium",
-  ],
-]
+set_path_map([
+    # Prefix, actual path
+    # Most specific prefixes first
+    [
+      "//vivaldi",
+      "//",
+    ],
+    [
+      "//out",
+      "//out",
+    ],
+    [
+      "//",
+      "//chromium",
+    ],
+  ])
 
 # We mainly use the chromium setup, no need to duplicate the system
 import("//chromium/.gn")

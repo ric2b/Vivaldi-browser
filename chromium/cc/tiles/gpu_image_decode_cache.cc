@@ -6,6 +6,7 @@
 
 #include <inttypes.h>
 
+#include "base/auto_reset.h"
 #include "base/debug/alias.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/memory_coordinator_client_registry.h"
@@ -28,7 +29,6 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
-#include "third_party/skia/include/gpu/GrTexture.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gl/trace_util.h"
 
@@ -453,6 +453,10 @@ bool GpuImageDecodeCache::GetTaskForImageAndRefInternal(
   if (new_data)
     persistent_cache_.Put(image_id, std::move(new_data));
 
+  // Ref the image before creating a task - this ref is owned by the caller, and
+  // it is their responsibility to release it by calling UnrefImage.
+  RefImage(draw_image);
+
   if (task_type == DecodeTaskType::PART_OF_UPLOAD_TASK) {
     // Ref image and create a upload and decode tasks. We will release this ref
     // in UploadTaskCompleted.
@@ -466,9 +470,6 @@ bool GpuImageDecodeCache::GetTaskForImageAndRefInternal(
     *task = GetImageDecodeTaskAndRef(draw_image, tracing_info, task_type);
   }
 
-  // Ref the image again - this ref is owned by the caller, and it is their
-  // responsibility to release it by calling UnrefImage.
-  RefImage(draw_image);
   return true;
 }
 
@@ -612,14 +613,13 @@ bool GpuImageDecodeCache::OnMemoryDump(
       MemoryAllocatorDump* dump =
           image_data->decode.data()->CreateMemoryAllocatorDump(
               discardable_dump_name.c_str(), pmd);
-      // If our image is locked, dump the "locked_size" as an additional
-      // column.
+      // Dump the "locked_size" as an additional column.
       // This lets us see the amount of discardable which is contributing to
       // memory pressure.
-      if (image_data->decode.is_locked()) {
-        dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
-                        image_data->size);
-      }
+      size_t locked_size =
+          image_data->decode.is_locked() ? image_data->size : 0u;
+      dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
+                      locked_size);
     }
 
     // If we have an uploaded image (that is actually on the GPU, not just a
@@ -1260,25 +1260,22 @@ bool GpuImageDecodeCache::DiscardableIsLockedForTesting(
   return image_data->decode.is_locked();
 }
 
-void GpuImageDecodeCache::OnMemoryStateChange(base::MemoryState state) {
-  switch (state) {
-    case base::MemoryState::NORMAL:
-      memory_state_ = state;
-      break;
-    case base::MemoryState::THROTTLED:
-    case base::MemoryState::SUSPENDED: {
-      memory_state_ = state;
+bool GpuImageDecodeCache::IsInInUseCacheForTesting(
+    const DrawImage& image) const {
+  auto found = in_use_cache_.find(GenerateInUseCacheKey(image));
+  return found != in_use_cache_.end();
+}
 
-      // We've just changed our memory state to a (potentially) more
-      // restrictive one. Re-enforce cache limits.
-      base::AutoLock lock(lock_);
-      EnsureCapacity(0);
-      break;
-    }
-    case base::MemoryState::UNKNOWN:
-      // NOT_REACHED.
-      break;
-  }
+void GpuImageDecodeCache::OnMemoryStateChange(base::MemoryState state) {
+  memory_state_ = state;
+}
+
+void GpuImageDecodeCache::OnPurgeMemory() {
+  base::AutoLock lock(lock_);
+  // Temporary changes |memory_state_| to free up cache as much as possible.
+  base::AutoReset<base::MemoryState> reset(&memory_state_,
+                                           base::MemoryState::SUSPENDED);
+  EnsureCapacity(0);
 }
 
 }  // namespace cc

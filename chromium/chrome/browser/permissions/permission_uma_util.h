@@ -9,17 +9,16 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "chrome/browser/permissions/permission_request.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/permissions/permission_util.h"
+#include "content/public/browser/permission_type.h"
 
 enum class PermissionRequestGestureType;
 class GURL;
 class PermissionRequest;
 class Profile;
-
-namespace content {
-enum class PermissionType;
-}  // namespace content
 
 // This should stay in sync with the SourceUI enum in the permission report
 // protobuf (src/chrome/common/safe_browsing/permission_report.proto).
@@ -30,7 +29,7 @@ enum class PermissionSourceUI {
   PAGE_ACTION = 3,
 
   // Always keep this at the end.
-  SOURCE_UI_NUM,
+  NUM,
 };
 
 // This should stay in sync with the PersistDecision enum in the permission
@@ -41,11 +40,31 @@ enum class PermissionPersistDecision {
   NOT_PERSISTED = 2,
 };
 
+// Any new values should be inserted immediately prior to NUM.
+enum class SafeBrowsingResponse {
+  NOT_BLACKLISTED = 0,
+  TIMEOUT = 1,
+  BLACKLISTED = 2,
+
+  // Always keep this at the end.
+  NUM,
+};
+
+// Any new values should be inserted immediately prior to NUM.
+enum class PermissionEmbargoStatus {
+  NOT_EMBARGOED = 0,
+  PERMISSIONS_BLACKLISTING = 1,
+  REPEATED_DISMISSALS = 2,
+
+  // Keep this at the end.
+  NUM,
+};
+
 // A bundle for the information sent in a PermissionReport.
 struct PermissionReportInfo {
   PermissionReportInfo(
       const GURL& origin,
-      content::PermissionType permission,
+      ContentSettingsType permission,
       PermissionAction action,
       PermissionSourceUI source_ui,
       PermissionRequestGestureType gesture_type,
@@ -56,7 +75,7 @@ struct PermissionReportInfo {
   PermissionReportInfo(const PermissionReportInfo& other);
 
   GURL origin;
-  content::PermissionType permission;
+  ContentSettingsType permission;
   PermissionAction action;
   PermissionSourceUI source_ui;
   PermissionRequestGestureType gesture_type;
@@ -90,30 +109,41 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptIgnoredPriorDismissCountPrefix[];
   static const char kPermissionsPromptIgnoredPriorIgnoreCountPrefix[];
 
-  static void PermissionRequested(content::PermissionType permission,
+  static void PermissionRequested(ContentSettingsType permission,
                                   const GURL& requesting_origin,
                                   const GURL& embedding_origin,
                                   Profile* profile);
-  static void PermissionGranted(content::PermissionType permission,
+  static void PermissionGranted(ContentSettingsType permission,
                                 PermissionRequestGestureType gesture_type,
                                 const GURL& requesting_origin,
                                 Profile* profile);
-  static void PermissionDenied(content::PermissionType permission,
+  static void PermissionDenied(ContentSettingsType permission,
                                PermissionRequestGestureType gesture_type,
                                const GURL& requesting_origin,
                                Profile* profile);
-  static void PermissionDismissed(content::PermissionType permission,
+  static void PermissionDismissed(ContentSettingsType permission,
                                   PermissionRequestGestureType gesture_type,
                                   const GURL& requesting_origin,
                                   Profile* profile);
-  static void PermissionIgnored(content::PermissionType permission,
+  static void PermissionIgnored(ContentSettingsType permission,
                                 PermissionRequestGestureType gesture_type,
                                 const GURL& requesting_origin,
                                 Profile* profile);
-  static void PermissionRevoked(content::PermissionType permission,
+  static void PermissionRevoked(ContentSettingsType permission,
                                 PermissionSourceUI source_ui,
                                 const GURL& revoked_origin,
                                 Profile* profile);
+
+  static void RecordEmbargoPromptSuppression(
+      PermissionEmbargoStatus embargo_status);
+
+  static void RecordEmbargoPromptSuppressionFromSource(
+      PermissionStatusSource source);
+
+  static void RecordEmbargoStatus(PermissionEmbargoStatus embargo_status);
+
+  static void RecordSafeBrowsingResponse(base::TimeDelta response_time,
+                                         SafeBrowsingResponse response);
 
   // UMA specifically for when permission prompts are shown. This should be
   // roughly equivalent to the metrics above, however it is
@@ -158,11 +188,11 @@ class PermissionUmaUtil {
   // persistence toggle. Records whether the toggle was enabled (persist) or
   // disabled (don't persist).
   static void PermissionPromptAcceptedWithPersistenceToggle(
-      content::PermissionType permission,
+      ContentSettingsType permission,
       bool toggle_enabled);
 
   static void PermissionPromptDeniedWithPersistenceToggle(
-      content::PermissionType permission,
+      ContentSettingsType permission,
       bool toggle_enabled);
 
  private:
@@ -170,7 +200,7 @@ class PermissionUmaUtil {
 
   static bool IsOptedIntoPermissionActionReporting(Profile* profile);
 
-  static void RecordPermissionAction(content::PermissionType permission,
+  static void RecordPermissionAction(ContentSettingsType permission,
                                      PermissionAction action,
                                      PermissionSourceUI source_ui,
                                      PermissionRequestGestureType gesture_type,
@@ -180,7 +210,7 @@ class PermissionUmaUtil {
   // Records |count| total prior actions for a prompt of type |permission|
   // for a single origin using |prefix| for the metric.
   static void RecordPermissionPromptPriorCount(
-      content::PermissionType permission,
+      ContentSettingsType permission,
       const std::string& prefix,
       int count);
 

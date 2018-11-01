@@ -39,6 +39,7 @@ import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.IntentHandler;
@@ -52,7 +53,6 @@ import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
-import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.content.browser.ChildProcessLauncher;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
@@ -132,6 +132,7 @@ public class CustomTabsConnection {
     private final AtomicBoolean mWarmupHasBeenCalled = new AtomicBoolean();
     private final AtomicBoolean mWarmupHasBeenFinished = new AtomicBoolean();
     private ExternalPrerenderHandler mExternalPrerenderHandler;
+    private boolean mForcePrerenderForTesting;
 
     // Conversion between native TimeTicks and SystemClock.uptimeMillis().
     private long mNativeTickOffsetUs;
@@ -151,13 +152,13 @@ public class CustomTabsConnection {
 
     /**
      * @return The unique instance of ChromeCustomTabsConnection.
+     * TODO(estevenson): Remove Application param.
      */
     @SuppressFBWarnings("BC_UNCONFIRMED_CAST")
     public static CustomTabsConnection getInstance(Application application) {
         if (sInstance.get() == null) {
-            ChromeApplication chromeApplication = (ChromeApplication) application;
-            chromeApplication.initCommandLine();
-            sInstance.compareAndSet(null, chromeApplication.createCustomTabsConnection());
+            ((ChromeApplication) application).initCommandLine();
+            sInstance.compareAndSet(null, AppHooks.get().createCustomTabsConnection());
         }
         return sInstance.get();
     }
@@ -178,6 +179,7 @@ public class CustomTabsConnection {
 
     public boolean newSession(CustomTabsSessionToken session) {
         boolean success = newSessionInternal(session);
+        if (mForcePrerenderForTesting) mClientManager.setPrerenderCellularForSession(session, true);
         logCall("newSession()", success);
         return success;
     }
@@ -207,8 +209,6 @@ public class CustomTabsConnection {
             System.exit(-1);
         }
         final Context context = app.getApplicationContext();
-        final ChromeApplication chrome = (ChromeApplication) context;
-        ChildProcessCreationParams.set(chrome.getChildProcessCreationParams());
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... params) {
@@ -974,5 +974,10 @@ public class CustomTabsConnection {
     @VisibleForTesting
     void ban(Context context, int uid) {
         mClientManager.ban(uid);
+    }
+
+    @VisibleForTesting
+    void setForcePrerender(boolean force) {
+        mForcePrerenderForTesting = force;
     }
 }

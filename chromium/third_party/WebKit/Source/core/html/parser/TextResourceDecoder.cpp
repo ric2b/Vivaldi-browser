@@ -31,8 +31,6 @@
 #include "wtf/text/TextCodec.h"
 #include "wtf/text/TextEncodingRegistry.h"
 
-using namespace WTF;
-
 namespace blink {
 
 using namespace HTMLNames;
@@ -434,7 +432,7 @@ String TextResourceDecoder::decode(const char* data, size_t len) {
     if (!m_checkedForBOM) {
       DCHECK_EQ(0u, lengthOfBOM);
       m_buffer.append(data, len);
-      return emptyString();
+      return emptyString;
     }
   }
   DCHECK_LE(lengthOfBOM, m_buffer.size() + len);
@@ -443,7 +441,7 @@ String TextResourceDecoder::decode(const char* data, size_t len) {
 
   if (m_contentType == CSSContent && !m_checkedForCSSCharset) {
     if (!checkForCSSCharset(data, len, movedDataToBuffer))
-      return emptyString();
+      return emptyString;
   }
 
   // We check XML declaration in HTML content only if there is enough data
@@ -452,7 +450,7 @@ String TextResourceDecoder::decode(const char* data, size_t len) {
        m_contentType == XMLContent) &&
       !m_checkedForXMLCharset) {
     if (!checkForXMLCharset(data, len, movedDataToBuffer))
-      return emptyString();
+      return emptyString;
   }
 
   const char* dataForDecode = data + lengthOfBOM;
@@ -485,7 +483,7 @@ String TextResourceDecoder::decode(const char* data, size_t len) {
     m_codec = newTextCodec(m_encoding);
 
   String result = m_codec->decode(
-      dataForDecode, lengthForDecode, DoNotFlush,
+      dataForDecode, lengthForDecode, WTF::DoNotFlush,
       m_contentType == XMLContent && !m_useLenientXMLDecoding, m_sawError);
 
   m_buffer.clear();
@@ -510,7 +508,7 @@ String TextResourceDecoder::flush() {
     m_codec = newTextCodec(m_encoding);
 
   String result = m_codec->decode(
-      m_buffer.data(), m_buffer.size(), FetchEOF,
+      m_buffer.data(), m_buffer.size(), WTF::FetchEOF,
       m_contentType == XMLContent && !m_useLenientXMLDecoding, m_sawError);
   m_buffer.clear();
   m_codec.reset();

@@ -57,6 +57,8 @@
             android:title="@string/menu_find_in_page" />
         <item android:id="@+id/add_to_homescreen_id"
             android:title="@string/menu_add_to_homescreen" />
+        <item android:id="@+id/open_webapk_id"
+            android:title="@string/menu_open_webapk" />
         <item android:id="@+id/request_desktop_site_id"
             android:title="@string/menu_request_desktop_site"
             android:checkable="true"
@@ -70,8 +72,6 @@
             android:title="@string/menu_help" />
         <item android:id="@+id/enter_vr_id"
             android:title="@string/enter_vr" />
-        <item android:id="@+id/content_suggestions_standalone_ui"
-            android:title="@null" />
     </group>
 
     <!-- Items shown only in the tab switcher -->
@@ -100,4 +100,3 @@
             android:title="@string/menu_preferences" />
     </group>
 </menu>
-

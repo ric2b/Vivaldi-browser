@@ -43,6 +43,8 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
 
     this._gutterContainer = this.listItemElement.createChild('div', 'gutter-container');
     this._gutterContainer.addEventListener('click', this._showContextMenu.bind(this));
+    var gutterMenuIcon = UI.Icon.create('largeicon-menu', 'gutter-menu-icon');
+    this._gutterContainer.appendChild(gutterMenuIcon);
     this._decorationsElement = this._gutterContainer.createChild('div', 'hidden');
 
     this._elementCloseTag = elementCloseTag;
@@ -637,7 +639,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
 
     this._editing = UI.InplaceEditor.startEditing(attribute, config);
 
-    this.listItemElement.getComponentSelection().setBaseAndExtent(elementForSelection, 0, elementForSelection, 1);
+    this.listItemElement.getComponentSelection().selectAllChildren(elementForSelection);
 
     return true;
   }
@@ -661,7 +663,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
     var config = new UI.InplaceEditor.Config(
         this._textNodeEditingCommitted.bind(this, textNode), this._editingCancelled.bind(this));
     this._editing = UI.InplaceEditor.startEditing(textNodeElement, config);
-    this.listItemElement.getComponentSelection().setBaseAndExtent(textNodeElement, 0, textNodeElement, 1);
+    this.listItemElement.getComponentSelection().selectAllChildren(textNodeElement);
 
     return true;
   }
@@ -715,7 +717,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
 
     var config = new UI.InplaceEditor.Config(editingComitted.bind(this), editingCancelled.bind(this), tagName);
     this._editing = UI.InplaceEditor.startEditing(tagNameElement, config);
-    this.listItemElement.getComponentSelection().setBaseAndExtent(tagNameElement, 0, tagNameElement, 1);
+    this.listItemElement.getComponentSelection().selectAllChildren(tagNameElement);
     return true;
   }
 
@@ -825,6 +827,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
         return;
 
       treeOutline.runPendingUpdates();
+      treeOutline.focus();
 
       // Search for the attribute's position, and then decide where to move to.
       var attributes = this._node.attributes();
@@ -1385,14 +1388,14 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
           var text = node.nodeValue();
           newNode.textContent = text.startsWith('\n') ? text.substring(1) : text;
 
-          var javascriptSyntaxHighlighter = new UI.DOMSyntaxHighlighter('text/javascript', true);
+          var javascriptSyntaxHighlighter = new UI.SyntaxHighlighter('text/javascript', true);
           javascriptSyntaxHighlighter.syntaxHighlightNode(newNode).then(updateSearchHighlight.bind(this));
         } else if (node.parentNode && node.parentNode.nodeName().toLowerCase() === 'style') {
           var newNode = titleDOM.createChild('span', 'webkit-html-text-node webkit-html-css-node');
           var text = node.nodeValue();
           newNode.textContent = text.startsWith('\n') ? text.substring(1) : text;
 
-          var cssSyntaxHighlighter = new UI.DOMSyntaxHighlighter('text/css', true);
+          var cssSyntaxHighlighter = new UI.SyntaxHighlighter('text/css', true);
           cssSyntaxHighlighter.syntaxHighlightNode(newNode).then(updateSearchHighlight.bind(this));
         } else {
           titleDOM.createTextChild('"');

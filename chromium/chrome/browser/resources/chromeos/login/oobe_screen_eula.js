@@ -27,15 +27,6 @@ login.createScreen('EulaScreen', 'eula', function() {
           'click', function(event) {
             $('popup-overlay').hidden = true;
           });
-      // Do not allow focus leaving the overlay.
-      $('popup-overlay').addEventListener('focusout', function(event) {
-        // WebKit does not allow immediate focus return.
-        window.setTimeout(function() {
-          // TODO(ivankr): focus cycling.
-          $('installation-settings-ok-button').focus();
-        }, 0);
-        event.preventDefault();
-      });
 
       var self = this;
       $('usage-stats').addEventListener('click', function(event) {
@@ -117,6 +108,9 @@ login.createScreen('EulaScreen', 'eula', function() {
      * Returns a control which should receive an initial focus.
      */
     get defaultControl() {
+      if (loadTimeData.getString('newOobeUI') == 'on')
+        return $('oobe-eula-md');
+
       return $('accept-button').disabled ? $('back-button') :
                                            $('accept-button');
     },

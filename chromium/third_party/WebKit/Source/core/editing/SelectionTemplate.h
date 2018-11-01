@@ -5,15 +5,16 @@
 #ifndef SelectionTemplate_h
 #define SelectionTemplate_h
 
+#include <iosfwd>
 #include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/Position.h"
 #include "core/editing/PositionWithAffinity.h"
+#include "core/editing/SelectionType.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/TextGranularity.h"
 #include "wtf/Allocator.h"
-#include <iosfwd>
 
 namespace blink {
 
@@ -66,6 +67,7 @@ class CORE_EXPORT SelectionTemplate final {
     Builder& setGranularity(TextGranularity);
     Builder& setHasTrailingWhitespace(bool);
     Builder& setIsDirectional(bool);
+    Builder& setIsHandleVisible(bool);
 
    private:
     SelectionTemplate m_selection;
@@ -86,18 +88,28 @@ class CORE_EXPORT SelectionTemplate final {
   TextAffinity affinity() const { return m_affinity; }
   TextGranularity granularity() const { return m_granularity; }
   bool hasTrailingWhitespace() const { return m_hasTrailingWhitespace; }
+  bool isCaret() const { return m_base.isNotNull() && m_base == m_extent; }
   bool isDirectional() const { return m_isDirectional; }
+  bool isHandleVisible() const { return m_isHandleVisible; }
   bool isNone() const { return m_base.isNull(); }
+  bool isRange() const { return m_base != m_extent; }
 
   // Returns true if |this| selection holds valid values otherwise it causes
   // assertion failure.
   bool assertValid() const;
   bool assertValidFor(const Document&) const;
 
-  DEFINE_INLINE_TRACE() {
-    visitor->trace(m_base);
-    visitor->trace(m_extent);
-  }
+  const PositionTemplate<Strategy>& computeEndPosition() const;
+  const PositionTemplate<Strategy>& computeStartPosition() const;
+
+  // Returns |SelectionType| for |this| based on |m_base| and |m_extent|
+  // If |m_granularity| is |CharacterGranularity|, otherwise this function
+  // returns |RangeSelection| event if |m_base| == |m_extent|.
+  // Note: |m_granularity| will be removed, using this function is not
+  // encouraged.
+  SelectionType selectionTypeWithLegacyGranularity() const;
+
+  DECLARE_TRACE();
 
   void printTo(std::ostream*, const char* type) const;
 #ifndef NDEBUG
@@ -115,6 +127,7 @@ class CORE_EXPORT SelectionTemplate final {
   TextGranularity m_granularity = CharacterGranularity;
   bool m_hasTrailingWhitespace = false;
   bool m_isDirectional = false;
+  bool m_isHandleVisible = false;
 #if DCHECK_IS_ON()
   uint64_t m_domTreeVersion;
 #endif

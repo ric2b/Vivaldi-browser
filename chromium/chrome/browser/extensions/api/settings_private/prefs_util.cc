@@ -107,6 +107,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kWebKitMinimumFontSize] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kWebKitEncryptedMediaEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kWebKitFixedFontFamily] =
       settings_private::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)[::prefs::kWebKitSansSerifFontFamily] =
@@ -153,6 +155,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kSearchSuggestEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Languages page
   (*s_whitelist)[spellcheck::prefs::kSpellCheckDictionaries] =
       settings_private::PrefType::PREF_TYPE_LIST;
   (*s_whitelist)[spellcheck::prefs::kSpellCheckUseSpellingService] =
@@ -161,6 +165,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[translate::TranslatePrefs::kPrefTranslateBlockedLanguages] =
       settings_private::PrefType::PREF_TYPE_LIST;
+#if defined(OS_CHROMEOS)
+  (*s_whitelist)[::prefs::kLanguageImeMenuActivated] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
   // Search page.
   (*s_whitelist)[::prefs::kDefaultSearchProviderEnabled] =
@@ -172,6 +180,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kBlockThirdPartyCookies] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kPluginsAlwaysOpenPdfExternally] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kEnableDRM] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Clear browsing data settings.
@@ -208,6 +218,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_LIST;
   (*s_whitelist)[::prefs::kEnableAutoScreenLock] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kEnableQuickUnlockFingerprint] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Accessibility.
   (*s_whitelist)[::prefs::kAccessibilitySpokenFeedbackEnabled] =
@@ -228,6 +240,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kAccessibilityLargeCursorEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityLargeCursorDipSize] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kAccessibilityScreenMagnifierEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kAccessibilitySelectToSpeakEnabled] =
@@ -470,6 +484,7 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
 #endif
 
   const Extension* extension = GetExtensionControllingPref(*pref_object);
+
   if (extension) {
     pref_object->controlled_by =
         settings_private::ControlledBy::CONTROLLED_BY_EXTENSION;
@@ -730,7 +745,15 @@ const Extension* PrefsUtil::GetExtensionControllingPref(
   if (pref_object.key == proxy_config::prefs::kProxy)
     return GetExtensionOverridingProxy(profile_);
 
-  return nullptr;
+  // If it's none of the above, attempt a more general strategy.
+  std::string extension_id =
+      ExtensionPrefValueMapFactory::GetForBrowserContext(profile_)
+          ->GetExtensionControllingPref(pref_object.key);
+  if (extension_id.empty())
+    return nullptr;
+
+  return ExtensionRegistry::Get(profile_)->GetExtensionById(
+      extension_id, ExtensionRegistry::ENABLED);
 }
 
 }  // namespace extensions

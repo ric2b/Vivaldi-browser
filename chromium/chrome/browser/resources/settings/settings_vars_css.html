@@ -15,15 +15,16 @@
 
     --settings-background-color: rgb(241, 241, 241);
     --settings-box-row-padding: 20px;
+    --settings-box-row-indent: calc(
+        var(--settings-box-row-padding) + var(--settings-indent-width));
     --settings-indent-width: 36px;
-    --settings-card-max-width: 640px;
+    --settings-card-max-width: 680px;
     --settings-disabled-opacity: .65;
     --settings-error-color: var(--paper-red-700);
 
     --settings-list-frame-padding: {
       -webkit-padding-end: var(--settings-box-row-padding);
-      -webkit-padding-start: calc(
-          var(--settings-box-row-padding) + var(--settings-indent-width));
+      -webkit-padding-start: var(--settings-box-row-indent);
       padding-bottom: 0;
       padding-top: 0;
     }
@@ -32,20 +33,28 @@
 
     --settings-page-vertical-margin: 21px;
 
+    /* TODO (scottchen): re-implement with paddings instead; */
     /* These are used for row items such as radio buttons, check boxes, list
      * items etc. */
-    --settings-row-min-height: 44px;
-    --settings-row-two-line-min-height: 56px;
+    --settings-row-min-height: 45px;
+    --settings-row-two-line-min-height: 64px;
 
+    /* TODO (scottchen): re-implement with paddings instead; */
     /* These are used for the settings-box containers, which may contain one or
      * more "row items". */
-    --settings-box-min-height: 48px;
-    --settings-box-two-line-min-height: 60px;
+    --settings-box-min-height: 45px;
+    --settings-box-two-line-min-height: 64px;
+    --settings-box-three-line-min-height: 84px;
+
+    --settings-text-elide: {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    };
 
     --settings-secondary: {
       color: var(--paper-grey-600);
       font-weight: 400;
-      margin-top: 4px;
     };
     --settings-separator-line: var(--cr-separator-line);
 
@@ -55,13 +64,19 @@
     --settings-toggle-bar-size: {
       height: 12px;
       left: 4px;
-      width: 24px;
+      width: 28px;
     };
     --settings-toggle-button-size: {
       box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
       height: 16px;
       top: -2px;
       width: 16px;
+    };
+    --settings-toggle-ink-size: {
+      height: 40px;
+      top: -12px;
+      left: -12px;
+      width: 40px;
     };
     --settings-toggle-color: var(--google-blue-500);
 
@@ -73,21 +88,34 @@
     --iron-icon-width: var(--cr-icon-size);
     --paper-checkbox-label-color: inherit;
     --paper-dialog-color: inherit;
+
+    --cr-icon-ripple-size: 40px;
     --paper-icon-button: {
-      height: var(--cr-icon-ripple-size);
-      width: var(--cr-icon-ripple-size);
+      /**
+       * This makes the icons 20px (in combination with "--cr-icon-ripple-size:
+       * 40px"), since paper-icon-button>iron-icon width and height are
+       * hardcoded to 100%.
+       */
+      padding: 10px;
     };
     --paper-input-container-focus-color: var(--google-blue-500);
     --paper-input-container-input: {
       color: inherit;
       font-size: inherit;
       font-weight: inherit;
+      line-height: inherit;
       vertical-align: baseline;
     };
-    --paper-input-max-width: 264px;
-    --paper-item: {
+    --paper-input-container-label: {
       font-size: inherit;
-    };
+      line-height: inherit;
+    }
+    --paper-input-error: {
+      font-size: 92.31%; /* Should be 12px when 100% is 13px. */
+      line-height: inherit;
+      overflow: visible; /* Half-visible error message is not useful at all. */
+    }
+    --paper-input-max-width: 264px;
     --paper-radio-button-ink-size: 40px;
     --paper-radio-button-label-color: inherit;
     --paper-radio-button-size: 16px;
@@ -97,11 +125,18 @@
     --paper-toggle-button-checked-bar-color: var(--settings-toggle-color);
     --paper-toggle-button-checked-button: {
       @apply(--settings-toggle-button-size);
-      transform: translate(14px, 0);
+      transform: translate(18px, 0);
     };
     --paper-toggle-button-checked-button-color: var(--settings-toggle-color);
     --paper-toggle-button-label-spacing: 0;
     --paper-toggle-button-unchecked-bar: var(--settings-toggle-bar-size);
     --paper-toggle-button-unchecked-button: var(--settings-toggle-button-size);
+    --paper-toggle-button-unchecked-ink: var(--settings-toggle-ink-size);
+
+    --settings-input-underline: {
+      border-color: var(--paper-grey-300);
+    }
+
+    --paper-input-container-underline: var(--settings-input-underline);
   }
 </style>

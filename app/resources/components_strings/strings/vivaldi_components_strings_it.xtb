@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Mostra una copia salvata (cioè che è noto sia obsoleta) di questa pagina.</translation>
 <translation id="1559528461873125649">Nessun file o directory corrispondente</translation>
 <translation id="1710259589646384581">Sistema operativo</translation>
-<translation id="1838667051080421715">È visualizzata la sorgente di una pagina web.</translation>
+<translation id="1728677426644403582">Stai visualizzando l'origine di una pagina web</translation>
 <translation id="194030505837763158">Vai al link: <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Forse cercavi <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Meno</translation>
 <translation id="2166378884831602661">Il sito non può fornire una connessione protetta</translation>
 <translation id="2292556288342944218">L'accesso a Internet è bloccato</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ha inviato una risposta non valida.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">L'accesso al file è stato negato</translation>
 <translation id="2705137772291741111">La copia del sito salvata (nella cache) era illeggibile.</translation>
 <translation id="2784949926578158345">La connessione è stata reimpostata.</translation>
-<translation id="284702764277384724">Il certificato del server <ph name="HOST_NAME" /> risulta essere un falso.</translation>
 <translation id="2909946352844186028">È stato rilevato un cambio di rete.</translation>
 <translation id="3005723025932146533">Mostra copia salvata</translation>
 <translation id="3093245981617870298">Sei offline.</translation>
@@ -36,7 +34,6 @@
 <translation id="4021036232240155012">DNS è il servizio di rete che traduce il nome di un sito web nel relativo indirizzo Internet.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> non ha accettato il certificato di accesso oppure non ne è stato fornito uno.</translation>
 <translation id="4522570452068850558">Dettagli</translation>
-<translation id="4670097147947922288">È visualizzata la pagina di un'estensione.</translation>
 <translation id="4708268264240856090">La connessione è stata interrotta</translation>
 <translation id="4744603770635761495">Percorso eseguibile</translation>
 <translation id="4764776831041365478">La pagina web all'indirizzo <ph name="URL" /> potrebbe essere temporaneamente non disponibile oppure è stata permanentemente spostata a un nuovo indirizzo web.</translation>
@@ -53,7 +50,6 @@
 <translation id="5675650730144413517">La pagina non funziona</translation>
 <translation id="5869405914158311789">Impossibile raggiungere il sito</translation>
 <translation id="5990559369517809815">Le richieste al server sono state bloccate da un'estensione.</translation>
-<translation id="6042308850641462728">Più</translation>
 <translation id="6146055958333702838">Controlla eventuali cavi e riavvia eventuali router, modem o altri dispositivi di rete in uso.</translation>
 <translation id="6165508094623778733">Ulteriori informazioni</translation>
 <translation id="6203231073485539293">Controlla la connessione a Internet</translation>
@@ -61,12 +57,11 @@
 <translation id="6321917430147971392">Controlla le impostazioni DNS</translation>
 <translation id="6328639280570009161">Prova a disattivare la previsione della rete</translation>
 <translation id="6433595998831338502">Connessione negata da <ph name="HOST_NAME" />.</translation>
+<translation id="6569060085658103619">Stai visualizzando la pagina di un'estensione</translation>
 <translation id="6711464428925977395">Si è verificato un problema con il server proxy oppure l'indirizzo non è corretto.</translation>
 <translation id="6757797048963528358">Il dispositivo è entrato in modalità sospensione.</translation>
-<translation id="6830600606572693159">La pagina web all'indirizzo <ph name="URL" /> non è al momento disponibile. Potrebbe essere sovraccarica o non disponibile per manutenzione.</translation>
 <translation id="6897140037006041989">User-agent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> non è conforme agli standard di sicurezza.</translation>
-<translation id="7269802741830436641">La pagina web ha generato un loop di reindirizzamento</translation>
 <translation id="7353601530677266744">Riga di comando</translation>
 <translation id="7419106976560586862">Percorso profilo</translation>
 <translation id="7518003948725431193">Nessuna pagina web trovata per l'indirizzo web: <ph name="URL" /></translation>
@@ -74,8 +69,8 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> al momento non è in grado di gestire la richiesta.</translation>
 <translation id="7716424297397655342">Impossibile caricare il sito dalla cache</translation>
 <translation id="7758069387465995638">Il software antivirus o il firewall potrebbe avere bloccato la connessione.</translation>
-<translation id="778579833039460630">Nessun dato ricevuto</translation>
 <translation id="7951415247503192394">(a 32 bit)</translation>
+<translation id="8089520772729574115">meno di 1 MB</translation>
 <translation id="8134994873729925007">Impossibile trovare l'<ph name="BEGIN_ABBR" />indirizzo DNS<ph name="END_ABBR" /> del server <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Visita &lt;strong&gt;vivaldi://policy&lt;/strong&gt; per visualizzare l'elenco di URL inseriti nella blacklist e altre norme applicate dall'amministratore di sistema.</translation>
 <translation id="8149426793427495338">Il computer è entrato in modalità sospensione.</translation>

@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/hpack/hpack_static_table.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 #include "net/spdy/spdy_flags.h"
 
 namespace net {
@@ -126,13 +127,7 @@ void HpackHeaderTable::SetMaxSize(size_t max_size) {
 
 void HpackHeaderTable::SetSettingsHeaderTableSize(size_t settings_size) {
   settings_size_bound_ = settings_size;
-  if (!FLAGS_chromium_reloadable_flag_increase_hpack_table_size) {
-    if (settings_size_bound_ < max_size_) {
-      SetMaxSize(settings_size_bound_);
-    }
-  } else {
-    SetMaxSize(settings_size_bound_);
-  }
+  SetMaxSize(settings_size_bound_);
 }
 
 void HpackHeaderTable::EvictionSet(StringPiece name,
@@ -241,6 +236,10 @@ const HpackEntry* HpackHeaderTable::TryAddEntry(StringPiece name,
     // Call |debug_visitor_->OnNewEntry()| to get the current time.
     HpackEntry& entry = dynamic_entries_.front();
     entry.set_time_added(debug_visitor_->OnNewEntry(entry));
+    DVLOG(2) << "HpackHeaderTable::OnNewEntry: name=" << entry.name()
+             << ",  value=" << entry.value()
+             << ",  insert_index=" << entry.InsertionIndex()
+             << ",  time_added=" << entry.time_added();
   }
 
   return &dynamic_entries_.front();
@@ -268,6 +267,12 @@ void HpackHeaderTable::DebugLogTableState() const {
   for (const auto it : dynamic_name_index_) {
     DVLOG(2) << "  " << it.first << ": " << it.second->GetDebugString();
   }
+}
+
+size_t HpackHeaderTable::EstimateMemoryUsage() const {
+  return SpdyEstimateMemoryUsage(dynamic_entries_) +
+         SpdyEstimateMemoryUsage(dynamic_index_) +
+         SpdyEstimateMemoryUsage(dynamic_name_index_);
 }
 
 }  // namespace net

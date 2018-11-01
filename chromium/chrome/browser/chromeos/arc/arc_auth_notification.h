@@ -9,11 +9,14 @@ class Profile;
 
 namespace arc {
 
-// First run notification that can enable Arc.
+// First run notification that can enable ARC.
 class ArcAuthNotification {
  public:
   static void Show(Profile* profile);
   static void Hide();
+
+  // Disables showing ArcAuthNotification to make testing easier.
+  static void DisableForTesting();
 };
 
 }  // namespace arc

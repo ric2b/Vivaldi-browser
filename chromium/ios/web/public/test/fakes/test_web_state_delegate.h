@@ -15,6 +15,24 @@
 
 namespace web {
 
+// Encapsulates parameters passed to OpenURLFromWebState.
+struct TestOpenURLRequest {
+  TestOpenURLRequest();
+  TestOpenURLRequest(const TestOpenURLRequest&);
+  ~TestOpenURLRequest();
+  WebState* web_state = nullptr;
+  WebState::OpenURLParams params;
+};
+
+// Encapsulates parameters passed to ShowRepostFormWarningDialog.
+struct TestRepostFormRequest {
+  TestRepostFormRequest();
+  TestRepostFormRequest(const TestRepostFormRequest&);
+  ~TestRepostFormRequest();
+  WebState* web_state = nullptr;
+  base::Callback<void(bool)> callback;
+};
+
 // Encapsulates parameters passed to OnAuthRequired.
 struct TestAuthenticationRequest {
   TestAuthenticationRequest();
@@ -33,25 +51,34 @@ class TestWebStateDelegate : public WebStateDelegate {
   ~TestWebStateDelegate() override;
 
   // WebStateDelegate overrides:
+  WebState* OpenURLFromWebState(WebState*,
+                                const WebState::OpenURLParams&) override;
   JavaScriptDialogPresenter* GetJavaScriptDialogPresenter(WebState*) override;
-  void LoadProgressChanged(WebState* source, double progress) override;
   bool HandleContextMenu(WebState* source,
                          const ContextMenuParams& params) override;
-
+  void ShowRepostFormWarningDialog(
+      WebState* source,
+      const base::Callback<void(bool)>& callback) override;
   TestJavaScriptDialogPresenter* GetTestJavaScriptDialogPresenter();
   void OnAuthRequired(WebState* source,
                       NSURLProtectionSpace* protection_space,
                       NSURLCredential* proposed_credential,
                       const AuthCallback& callback) override;
 
-  // True if the WebStateDelegate LoadProgressChanged method has been called.
-  bool load_progress_changed_called() const {
-    return load_progress_changed_called_;
-  }
-
   // True if the WebStateDelegate HandleContextMenu method has been called.
   bool handle_context_menu_called() const {
     return handle_context_menu_called_;
+  }
+
+  // Returns the last Open URL request passed to |OpenURLFromWebState|.
+  TestOpenURLRequest* last_open_url_request() const {
+    return last_open_url_request_.get();
+  }
+
+  // Returns the last Repost Form request passed to
+  // |ShowRepostFormWarningDialog|.
+  TestRepostFormRequest* last_repost_form_request() const {
+    return last_repost_form_request_.get();
   }
 
   // True if the WebStateDelegate GetJavaScriptDialogPresenter method has been
@@ -65,9 +92,15 @@ class TestWebStateDelegate : public WebStateDelegate {
     return last_authentication_request_.get();
   }
 
+  // Clears the last HTTP Authentication request passed to |OnAuthRequired|.
+  void ClearLastAuthenticationRequest() {
+    last_authentication_request_.reset();
+  }
+
  private:
-  bool load_progress_changed_called_ = false;
   bool handle_context_menu_called_ = false;
+  std::unique_ptr<TestOpenURLRequest> last_open_url_request_;
+  std::unique_ptr<TestRepostFormRequest> last_repost_form_request_;
   bool get_java_script_dialog_presenter_called_ = false;
   TestJavaScriptDialogPresenter java_script_dialog_presenter_;
   std::unique_ptr<TestAuthenticationRequest> last_authentication_request_;

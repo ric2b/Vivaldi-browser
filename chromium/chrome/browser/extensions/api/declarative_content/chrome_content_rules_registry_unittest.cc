@@ -12,9 +12,10 @@
 #include "chrome/browser/extensions/api/declarative_content/content_predicate_evaluator.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
 #include "chrome/test/base/testing_profile.h"
-#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/frame_navigate_params.h"
+#include "content/public/test/test_web_contents_factory.h"
 #include "extensions/common/extension.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -77,8 +78,7 @@ class TestPredicateEvaluator : public ContentPredicateEvaluator {
 
   void OnWebContentsNavigation(
       content::WebContents* contents,
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override {
+      content::NavigationHandle* navigation_handle) override {
     RequestEvaluationIfSpecified();
   }
 
@@ -136,6 +136,7 @@ class DeclarativeChromeContentRulesRegistryTest : public testing::Test {
 
  private:
   TestExtensionEnvironment env_;
+  content::TestWebContentsFactory factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DeclarativeChromeContentRulesRegistryTest);
 };
@@ -151,8 +152,11 @@ TEST_F(DeclarativeChromeContentRulesRegistryTest, ActiveRulesDoesntGrow) {
 
   std::unique_ptr<content::WebContents> tab = env()->MakeTab();
   registry->MonitorWebContentsForRuleEvaluation(tab.get());
-  registry->DidNavigateMainFrame(tab.get(), content::LoadCommittedDetails(),
-                                 content::FrameNavigateParams());
+  std::unique_ptr<content::NavigationHandle> navigation_handle =
+      content::NavigationHandle::CreateNavigationHandleForTesting(
+          GURL(), tab->GetMainFrame(), true);
+
+  registry->DidFinishNavigation(tab.get(), navigation_handle.get());
   EXPECT_EQ(0u, registry->GetActiveRulesCountForTesting());
 
   // Add a rule.
@@ -179,25 +183,27 @@ TEST_F(DeclarativeChromeContentRulesRegistryTest, ActiveRulesDoesntGrow) {
       "{\"page_action\": {}}"));
   registry->AddRulesImpl(extension->id(), rules);
 
-  registry->DidNavigateMainFrame(tab.get(), content::LoadCommittedDetails(),
-                                 content::FrameNavigateParams());
+  registry->DidFinishNavigation(tab.get(), navigation_handle.get());
   EXPECT_EQ(0u, registry->GetActiveRulesCountForTesting());
 
   evaluator->RequestImmediateEvaluation(tab.get(), true);
   EXPECT_EQ(1u, registry->GetActiveRulesCountForTesting());
 
   // Closing the tab should erase its entry from active_rules_.
+  navigation_handle.reset();
   tab.reset();
   EXPECT_EQ(0u, registry->GetActiveRulesCountForTesting());
 
   tab = env()->MakeTab();
+  navigation_handle =
+      content::NavigationHandle::CreateNavigationHandleForTesting(
+          GURL(), tab->GetMainFrame(), true);
   registry->MonitorWebContentsForRuleEvaluation(tab.get());
   evaluator->RequestImmediateEvaluation(tab.get(), true);
   EXPECT_EQ(1u, registry->GetActiveRulesCountForTesting());
 
   evaluator->RequestEvaluationOnNextOperation(tab.get(), false);
-  registry->DidNavigateMainFrame(tab.get(), content::LoadCommittedDetails(),
-                                 content::FrameNavigateParams());
+  registry->DidFinishNavigation(tab.get(), navigation_handle.get());
   EXPECT_EQ(0u, registry->GetActiveRulesCountForTesting());
 }
 

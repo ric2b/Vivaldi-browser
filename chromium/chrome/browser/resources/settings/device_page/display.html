@@ -7,17 +7,17 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tabs.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
-<link rel="import" href="/device_page/display_layout.html">
-<link rel="import" href="/device_page/display_overscan_dialog.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/settings_vars_css.html">
+<link rel="import" href="display_layout.html">
+<link rel="import" href="display_overscan_dialog.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
 
 <dom-module id="settings-display">
   <template>
     <style include="settings-shared md-select">
      .settings-box.embedded {
+       -webkit-margin-start: 20px;
        align-self: stretch;
-       margin-left: 20px;
        padding: 0;
      }
 
@@ -50,7 +50,7 @@
      }
 
      .settings-box > paper-button:first-child {
-       padding-left: 0
+       -webkit-padding-start: 0
      }
 
      paper-tab {
@@ -86,11 +86,12 @@
       <div class="settings-box embedded first two-line"
           hidden$="[[!showMirror_(displays)]]">
         <div class="start">
-          <div>$i18n{displayMirror}</div>
+          <div id="displayMirrorCheckboxLabel">$i18n{displayMirror}</div>
           <div class="secondary">[[getDisplayMirrorText_(displays)]]</div>
         </div>
         <paper-toggle-button checked="[[isMirrored_(displays)]]"
-            on-tap="onMirroredTap_">
+            on-tap="onMirroredTap_"
+            aria-labelledby="displayMirrorCheckboxLabel">
       </div>
       <div class="settings-box embedded"
           hidden$="[[!showDisplaySelectMenu_(displays, selectedDisplay)]]">
@@ -134,10 +135,14 @@
           on-tap="onOverscanTap_" hidden$="[[selectedDisplay.isInternal]]"
           actionable>
         <div class="start">
-          <div>$i18n{displayOverscanPageTitle}</div>
-          <div class="secondary">$i18n{displayOverscanPageText}</div>
+          $i18n{displayOverscanPageTitle}
+          <div class="secondary" id="displayOverscanSecondary">
+            $i18n{displayOverscanPageText}
+          </div>
         </div>
-        <button class="subpage-arrow" is="paper-icon-button-light"></button>
+        <button class="subpage-arrow" is="paper-icon-button-light"
+            aria-label="$i18n{displayOverscanPageTitle}"
+            aria-describedby="displayOverscanSecondary"></button>
       </div>
 
       <settings-display-overscan-dialog id="displayOverscan"
@@ -149,10 +154,14 @@
           hidden$="[[!showTouchCalibrationSetting_(selectedDisplay)]]"
           actionable>
         <div class="start">
-          <div>$i18n{displayTouchCalibrationTitle}</div>
-          <div class="secondary">$i18n{displayTouchCalibrationText}</div>
+          $i18n{displayTouchCalibrationTitle}
+          <div class="secondary" id="touchCalibrationSecondary">
+            $i18n{displayTouchCalibrationText}
+          </div>
         </div>
-        <button class="subpage-arrow" is="paper-icon-button-light"></button>
+        <button class="subpage-arrow" is="paper-icon-button-light"
+            aria-label="$i18n{displayTouchCalibrationTitle}"
+            aria-describedby="touchCalibrationSecondary"></button>
       </div>
     </div>
   </template>

@@ -17,8 +17,8 @@
 #include "media/base/audio_decoder_config.h"
 #include "media/base/audio_renderer.h"
 #include "media/base/bind_to_current_loop.h"
-#include "media/base/demuxer_stream_provider.h"
 #include "media/base/media_log.h"
+#include "media/base/media_resource.h"
 #include "media/base/media_switches.h"
 #include "media/base/renderer_client.h"
 #include "media/base/time_source.h"
@@ -27,7 +27,7 @@
 #include "media/base/wall_clock_time_source.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/pipeline_stats.h"
+#include "platform_media/common/pipeline_stats.h"
 #endif
 
 namespace media {
@@ -133,7 +133,7 @@ RendererImpl::~RendererImpl() {
   }
 }
 
-void RendererImpl::Initialize(DemuxerStreamProvider* demuxer_stream_provider,
+void RendererImpl::Initialize(MediaResource* media_resource,
                               RendererClient* client,
                               const PipelineStatusCB& init_cb) {
   DVLOG(1) << __func__;
@@ -143,10 +143,11 @@ void RendererImpl::Initialize(DemuxerStreamProvider* demuxer_stream_provider,
   DCHECK(client);
 
   client_ = client;
-  demuxer_stream_provider_ = demuxer_stream_provider;
+  media_resource_ = media_resource;
   init_cb_ = init_cb;
 
   if (HasEncryptedStream() && !cdm_context_) {
+    DVLOG(1) << __func__ << ": Has encrypted stream but CDM is not set.";
     state_ = STATE_INIT_PENDING_CDM;
     return;
   }
@@ -354,15 +355,17 @@ bool RendererImpl::GetWallClockTimes(
 }
 
 bool RendererImpl::HasEncryptedStream() {
-  DemuxerStream* audio_stream =
-      demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO);
-  if (audio_stream && audio_stream->audio_decoder_config().is_encrypted())
-    return true;
+  std::vector<DemuxerStream*> demuxer_streams =
+      media_resource_->GetAllStreams();
 
-  DemuxerStream* video_stream =
-      demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO);
-  if (video_stream && video_stream->video_decoder_config().is_encrypted())
-    return true;
+  for (auto* stream : demuxer_streams) {
+    if (stream->type() == DemuxerStream::AUDIO &&
+        stream->audio_decoder_config().is_encrypted())
+      return true;
+    if (stream->type() == DemuxerStream::VIDEO &&
+        stream->video_decoder_config().is_encrypted())
+      return true;
+  }
 
   return false;
 }
@@ -385,16 +388,15 @@ void RendererImpl::InitializeAudioRenderer() {
   PipelineStatusCB done_cb =
       base::Bind(&RendererImpl::OnAudioRendererInitializeDone, weak_this_);
 
+  // TODO(servolk): Implement proper support for multiple streams. But for now
+  // pick the first enabled stream to preserve the existing behavior.
   DemuxerStream* audio_stream =
-      demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO);
+      media_resource_->GetFirstStream(DemuxerStream::AUDIO);
   if (!audio_stream) {
     audio_renderer_.reset();
     task_runner_->PostTask(FROM_HERE, base::Bind(done_cb, PIPELINE_OK));
     return;
   }
-
-  audio_stream->SetStreamStatusChangeCB(base::Bind(
-      &RendererImpl::OnStreamStatusChanged, weak_this_, audio_stream));
 
   audio_renderer_client_.reset(
       new RendererClientInternal(DemuxerStream::AUDIO, this));
@@ -418,8 +420,10 @@ void RendererImpl::OnAudioRendererInitializeDone(PipelineStatus status) {
 
   if (status != PIPELINE_OK) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    pipeline_stats::ReportStreamError(
-        demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO));
+      for (auto* stream : media_resource_->GetAllStreams()) {
+        if (stream->type() == DemuxerStream::AUDIO)
+            pipeline_stats::ReportStreamError(stream);
+      }
 #endif
 
     FinishInitialization(status);
@@ -439,16 +443,15 @@ void RendererImpl::InitializeVideoRenderer() {
   PipelineStatusCB done_cb =
       base::Bind(&RendererImpl::OnVideoRendererInitializeDone, weak_this_);
 
+  // TODO(servolk): Implement proper support for multiple streams. But for now
+  // pick the first enabled stream to preserve the existing behavior.
   DemuxerStream* video_stream =
-      demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO);
+      media_resource_->GetFirstStream(DemuxerStream::VIDEO);
   if (!video_stream) {
     video_renderer_.reset();
     task_runner_->PostTask(FROM_HERE, base::Bind(done_cb, PIPELINE_OK));
     return;
   }
-
-  video_stream->SetStreamStatusChangeCB(base::Bind(
-      &RendererImpl::OnStreamStatusChanged, weak_this_, video_stream));
 
   video_renderer_client_.reset(
       new RendererClientInternal(DemuxerStream::VIDEO, this));
@@ -475,13 +478,18 @@ void RendererImpl::OnVideoRendererInitializeDone(PipelineStatus status) {
 
   if (status != PIPELINE_OK) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    pipeline_stats::ReportStreamError(
-        demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO));
+    for (auto* stream : media_resource_->GetAllStreams()) {
+      if (stream->type() == DemuxerStream::VIDEO)
+          pipeline_stats::ReportStreamError(stream);
+    }
 #endif
 
     FinishInitialization(status);
     return;
   }
+
+  media_resource_->SetStreamStatusChangeCB(
+      base::Bind(&RendererImpl::OnStreamStatusChanged, weak_this_));
 
   if (audio_renderer_) {
     time_source_ = audio_renderer_->GetTimeSource();

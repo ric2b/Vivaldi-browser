@@ -90,13 +90,12 @@ base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
 }
 
 gfx::Image& ResourceBundle::GetNativeImageNamed(int resource_id) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+
   // Check to see if the image is already in the cache.
-  {
-    base::AutoLock lock(*images_and_fonts_lock_);
-    ImageMap::iterator found = images_.find(resource_id);
-    if (found != images_.end()) {
-      return found->second;
-    }
+  ImageMap::iterator found = images_.find(resource_id);
+  if (found != images_.end()) {
+    return found->second;
   }
 
   gfx::Image image;
@@ -166,14 +165,11 @@ gfx::Image& ResourceBundle::GetNativeImageNamed(int resource_id) {
     image = gfx::Image(ui_image, base::scoped_policy::RETAIN);
   }
 
-  base::AutoLock lock(*images_and_fonts_lock_);
+  DCHECK(sequence_checker_.CalledOnValidSequence());
 
-  // Another thread raced the load and has already cached the image.
-  if (images_.count(resource_id))
-    return images_[resource_id];
-
-  images_[resource_id] = image;
-  return images_[resource_id];
+  auto inserted = images_.insert(std::make_pair(resource_id, image));
+  DCHECK(inserted.second);
+  return inserted.first->second;
 }
 
 }  // namespace ui

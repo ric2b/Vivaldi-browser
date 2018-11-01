@@ -14,8 +14,8 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/weborigin/KURL.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "v8/include/v8.h"
 #include "wtf/Vector.h"
-#include <v8.h>
 
 namespace blink {
 namespace {
@@ -23,8 +23,8 @@ namespace {
 TEST(PresentationAvailabilityTest, NoPageVisibilityChangeAfterDetach) {
   V8TestingScope scope;
   WTF::Vector<KURL> urls;
-  urls.append(URLTestHelpers::toKURL("https://example.com"));
-  urls.append(URLTestHelpers::toKURL("https://another.com"));
+  urls.push_back(URLTestHelpers::toKURL("https://example.com"));
+  urls.push_back(URLTestHelpers::toKURL("https://another.com"));
 
   Persistent<PresentationAvailabilityProperty> resolver =
       new PresentationAvailabilityProperty(

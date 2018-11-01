@@ -18,7 +18,6 @@
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_manager.h"
-#include "cc/surfaces/surface_sequence.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
@@ -33,7 +32,7 @@
 #include "content/public/browser/guest_mode.h"
 #include "content/public/browser/render_process_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -57,24 +56,15 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       next_surface_sequence_(1u),
       last_compositor_frame_sink_id_(0),
       current_surface_scale_factor_(1.f),
-      ack_pending_count_(0),
       frame_connector_(nullptr),
-      begin_frame_source_(nullptr),
       weak_factory_(this) {
-  id_allocator_.reset(new cc::SurfaceIdAllocator());
-  auto* manager = GetSurfaceManager();
-  manager->RegisterFrameSinkId(frame_sink_id_);
-  surface_factory_ =
-      base::MakeUnique<cc::SurfaceFactory>(frame_sink_id_, manager, this);
+  id_allocator_.reset(new cc::LocalSurfaceIdAllocator());
+  GetSurfaceManager()->RegisterFrameSinkId(frame_sink_id_);
+  CreateCompositorFrameSinkSupport();
 }
 
 RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
-  surface_factory_->EvictSurface();
-  if (GetSurfaceManager())
-    GetSurfaceManager()->InvalidateFrameSinkId(frame_sink_id_);
-}
-
-void RenderWidgetHostViewChildFrame::InvalidateFrameSinkId() {
+  ResetCompositorFrameSinkSupport();
   if (GetSurfaceManager())
     GetSurfaceManager()->InvalidateFrameSinkId(frame_sink_id_);
 }
@@ -95,22 +85,13 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
       GetSurfaceManager()->UnregisterFrameSinkHierarchy(parent_frame_sink_id_,
                                                         frame_sink_id_);
     }
-    // Unregister the client here, as it is not guaranteed in tests that the
-    // destructor will be called.
-    GetSurfaceManager()->UnregisterSurfaceFactoryClient(frame_sink_id_);
-
     parent_frame_sink_id_ = cc::FrameSinkId();
-
-    // After the RenderWidgetHostViewChildFrame loses the frame_connector, it
-    // won't be able to walk up the frame tree anymore. Clean up anything that
-    // needs to be done through the CrossProcessFrameConnector before it's gone.
 
     // Unlocks the mouse if this RenderWidgetHostView holds the lock.
     UnlockMouse();
   }
   frame_connector_ = frame_connector;
   if (frame_connector_) {
-    GetSurfaceManager()->RegisterSurfaceFactoryClient(frame_sink_id_, this);
     RenderWidgetHostViewBase* parent_view =
         frame_connector_->GetParentRenderWidgetHostView();
     if (parent_view) {
@@ -154,7 +135,7 @@ bool RenderWidgetHostViewChildFrame::HasFocus() const {
 }
 
 bool RenderWidgetHostViewChildFrame::IsSurfaceAvailableForCopy() const {
-  return local_frame_id_.is_valid();
+  return local_surface_id_.is_valid();
 }
 
 void RenderWidgetHostViewChildFrame::Show() {
@@ -301,20 +282,13 @@ void RenderWidgetHostViewChildFrame::Destroy() {
 
   host_->SetView(nullptr);
   host_ = nullptr;
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+
+  delete this;
 }
 
 void RenderWidgetHostViewChildFrame::SetTooltipText(
     const base::string16& tooltip_text) {
   frame_connector_->GetRootRenderWidgetHostView()->SetTooltipText(tooltip_text);
-}
-
-void RenderWidgetHostViewChildFrame::LockCompositingSurface() {
-  NOTIMPLEMENTED();
-}
-
-void RenderWidgetHostViewChildFrame::UnlockCompositingSurface() {
-  NOTIMPLEMENTED();
 }
 
 RenderWidgetHostViewBase* RenderWidgetHostViewChildFrame::GetParentView() {
@@ -367,16 +341,70 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     frame_connector_->BubbleScrollEvent(event);
 }
 
-void RenderWidgetHostViewChildFrame::SurfaceDrawn(
-    uint32_t compositor_frame_sink_id) {
-  DCHECK_GT(ack_pending_count_, 0U);
-  if (host_) {
-    host_->Send(new ViewMsg_ReclaimCompositorResources(
-        host_->GetRoutingID(), compositor_frame_sink_id, true /* is_swap_ack */,
-        surface_returned_resources_));
-    surface_returned_resources_.clear();
+void RenderWidgetHostViewChildFrame::DidReceiveCompositorFrameAck() {
+  if (!host_)
+    return;
+  host_->Send(new ViewMsg_ReclaimCompositorResources(
+      host_->GetRoutingID(), last_compositor_frame_sink_id_,
+      true /* is_swap_ack */, cc::ReturnedResourceArray()));
+}
+
+bool RenderWidgetHostViewChildFrame::ShouldCreateNewSurfaceId(
+    uint32_t compositor_frame_sink_id,
+    const cc::CompositorFrame& frame) {
+  gfx::Size new_frame_size = frame.render_pass_list.back()->output_rect.size();
+  float new_scale_factor = frame.metadata.device_scale_factor;
+
+  return compositor_frame_sink_id != last_compositor_frame_sink_id_ ||
+         new_frame_size != current_surface_size_ ||
+         new_scale_factor != current_surface_scale_factor_;
+}
+
+void RenderWidgetHostViewChildFrame::ProcessCompositorFrame(
+    uint32_t compositor_frame_sink_id,
+    cc::CompositorFrame frame) {
+  if (ShouldCreateNewSurfaceId(compositor_frame_sink_id, frame)) {
+    ClearCompositorSurfaceIfNecessary();
+    // If the renderer changed its frame sink, reset the
+    // CompositorFrameSinkSupport to avoid returning stale resources.
+    if (compositor_frame_sink_id != last_compositor_frame_sink_id_) {
+      ResetCompositorFrameSinkSupport();
+      CreateCompositorFrameSinkSupport();
+    }
+    last_compositor_frame_sink_id_ = compositor_frame_sink_id;
+    current_surface_size_ = frame.render_pass_list.back()->output_rect.size();
+    current_surface_scale_factor_ = frame.metadata.device_scale_factor;
   }
-  ack_pending_count_--;
+
+  bool allocated_new_local_surface_id = false;
+  if (!local_surface_id_.is_valid()) {
+    local_surface_id_ = id_allocator_->GenerateId();
+    allocated_new_local_surface_id = true;
+  }
+
+  support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
+  if (allocated_new_local_surface_id)
+    SendSurfaceInfoToEmbedder();
+  ProcessFrameSwappedCallbacks();
+}
+
+void RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedder() {
+  cc::SurfaceSequence sequence =
+      cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
+  cc::SurfaceManager* manager = GetSurfaceManager();
+  cc::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
+  // The renderer process will satisfy this dependency when it creates a
+  // SurfaceLayer.
+  manager->GetSurfaceForId(surface_id)->AddDestructionDependency(sequence);
+  cc::SurfaceInfo surface_info(surface_id, current_surface_scale_factor_,
+                               current_surface_size_);
+  SendSurfaceInfoToEmbedderImpl(surface_info, sequence);
+}
+
+void RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedderImpl(
+    const cc::SurfaceInfo& surface_info,
+    const cc::SurfaceSequence& sequence) {
+  frame_connector_->SetChildFrameSurface(surface_info, sequence);
 }
 
 void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
@@ -384,60 +412,10 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
     cc::CompositorFrame frame) {
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
-
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
-
   if (!frame_connector_)
     return;
-
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
-
-  gfx::Size frame_size = root_pass->output_rect.size();
-  float scale_factor = frame.metadata.device_scale_factor;
-
-  // Check whether we need to recreate the cc::Surface, which means the child
-  // frame renderer has changed its frame sink, or size, or scale factor.
-  if (compositor_frame_sink_id != last_compositor_frame_sink_id_ ||
-      frame_size != current_surface_size_ ||
-      scale_factor != current_surface_scale_factor_) {
-    ClearCompositorSurfaceIfNecessary();
-    // If the renderer changed its frame sink, reset the surface factory to
-    // avoid returning stale resources.
-    if (compositor_frame_sink_id != last_compositor_frame_sink_id_)
-      surface_factory_->Reset();
-    last_compositor_frame_sink_id_ = compositor_frame_sink_id;
-    current_surface_size_ = frame_size;
-    current_surface_scale_factor_ = scale_factor;
-  }
-
-  bool allocated_new_local_frame_id = false;
-  if (!local_frame_id_.is_valid()) {
-    local_frame_id_ = id_allocator_->GenerateId();
-    allocated_new_local_frame_id = true;
-  }
-
-  cc::SurfaceFactory::DrawCallback ack_callback =
-      base::Bind(&RenderWidgetHostViewChildFrame::SurfaceDrawn, AsWeakPtr(),
-                 compositor_frame_sink_id);
-  ack_pending_count_++;
-  // If this value grows very large, something is going wrong.
-  DCHECK_LT(ack_pending_count_, 1000U);
-  surface_factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
-                                          ack_callback);
-
-  if (allocated_new_local_frame_id) {
-    cc::SurfaceSequence sequence =
-        cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
-    // The renderer process will satisfy this dependency when it creates a
-    // SurfaceLayer.
-    cc::SurfaceManager* manager = GetSurfaceManager();
-    manager->GetSurfaceForId(cc::SurfaceId(frame_sink_id_, local_frame_id_))
-        ->AddDestructionDependency(sequence);
-    frame_connector_->SetChildFrameSurface(
-        cc::SurfaceId(frame_sink_id_, local_frame_id_), frame_size,
-        scale_factor, sequence);
-  }
-  ProcessFrameSwappedCallbacks();
+  ProcessCompositorFrame(compositor_frame_sink_id, std::move(frame));
 }
 
 void RenderWidgetHostViewChildFrame::ProcessFrameSwappedCallbacks() {
@@ -531,11 +509,11 @@ void RenderWidgetHostViewChildFrame::ProcessGestureEvent(
 
 gfx::Point RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
     const gfx::Point& point) {
-  if (!frame_connector_ || !local_frame_id_.is_valid())
+  if (!frame_connector_ || !local_surface_id_.is_valid())
     return point;
 
   return frame_connector_->TransformPointToRootCoordSpace(
-      point, cc::SurfaceId(frame_sink_id_, local_frame_id_));
+      point, cc::SurfaceId(frame_sink_id_, local_surface_id_));
 }
 
 bool RenderWidgetHostViewChildFrame::TransformPointToLocalCoordSpace(
@@ -543,11 +521,11 @@ bool RenderWidgetHostViewChildFrame::TransformPointToLocalCoordSpace(
     const cc::SurfaceId& original_surface,
     gfx::Point* transformed_point) {
   *transformed_point = point;
-  if (!frame_connector_ || !local_frame_id_.is_valid())
+  if (!frame_connector_ || !local_surface_id_.is_valid())
     return false;
 
   return frame_connector_->TransformPointToLocalCoordSpace(
-      point, original_surface, cc::SurfaceId(frame_sink_id_, local_frame_id_),
+      point, original_surface, cc::SurfaceId(frame_sink_id_, local_surface_id_),
       transformed_point);
 }
 
@@ -555,7 +533,7 @@ bool RenderWidgetHostViewChildFrame::TransformPointToCoordSpaceForView(
     const gfx::Point& point,
     RenderWidgetHostViewBase* target_view,
     gfx::Point* transformed_point) {
-  if (!frame_connector_ || !local_frame_id_.is_valid())
+  if (!frame_connector_ || !local_surface_id_.is_valid())
     return false;
 
   if (target_view == this) {
@@ -564,7 +542,7 @@ bool RenderWidgetHostViewChildFrame::TransformPointToCoordSpaceForView(
   }
 
   return frame_connector_->TransformPointToCoordSpaceForView(
-      point, target_view, cc::SurfaceId(frame_sink_id_, local_frame_id_),
+      point, target_view, cc::SurfaceId(frame_sink_id_, local_surface_id_),
       transformed_point);
 }
 
@@ -595,8 +573,7 @@ bool RenderWidgetHostViewChildFrame::IsSpeaking() const {
   return false;
 }
 
-void RenderWidgetHostViewChildFrame::StopSpeaking() {
-}
+void RenderWidgetHostViewChildFrame::StopSpeaking() {}
 #endif  // defined(OS_MACOSX)
 
 void RenderWidgetHostViewChildFrame::RegisterFrameSwappedCallback(
@@ -604,8 +581,8 @@ void RenderWidgetHostViewChildFrame::RegisterFrameSwappedCallback(
   frame_swapped_callbacks_.push_back(std::move(callback));
 }
 
-void RenderWidgetHostViewChildFrame::CopyFromCompositingSurface(
-    const gfx::Rect& src_subrect,
+void RenderWidgetHostViewChildFrame::CopyFromSurface(
+    const gfx::Rect& src_rect,
     const gfx::Size& output_size,
     const ReadbackRequestCallback& callback,
     const SkColorType preferred_color_type) {
@@ -614,11 +591,11 @@ void RenderWidgetHostViewChildFrame::CopyFromCompositingSurface(
     // point we should be guaranteed that the surface is available.
     RegisterFrameSwappedCallback(base::MakeUnique<base::Closure>(base::Bind(
         &RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest, AsWeakPtr(),
-        src_subrect, output_size, callback, preferred_color_type)));
+        src_rect, output_size, callback, preferred_color_type)));
     return;
   }
 
-  SubmitSurfaceCopyRequest(src_subrect, output_size, callback,
+  SubmitSurfaceCopyRequest(src_rect, output_size, callback,
                            preferred_color_type);
 }
 
@@ -628,6 +605,7 @@ void RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest(
     const ReadbackRequestCallback& callback,
     const SkColorType preferred_color_type) {
   DCHECK(IsSurfaceAvailableForCopy());
+  DCHECK(support_);
 
   std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(
@@ -636,19 +614,12 @@ void RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest(
   if (!src_subrect.IsEmpty())
     request->set_area(src_subrect);
 
-  surface_factory_->RequestCopyOfSurface(std::move(request));
+  support_->RequestCopyOfSurface(std::move(request));
 }
 
-void RenderWidgetHostViewChildFrame::CopyFromCompositingSurfaceToVideoFrame(
-    const gfx::Rect& src_subrect,
-    const scoped_refptr<media::VideoFrame>& target,
-    const base::Callback<void(const gfx::Rect&, bool)>& callback) {
-  NOTIMPLEMENTED();
-  callback.Run(gfx::Rect(), false);
-}
-
-bool RenderWidgetHostViewChildFrame::CanCopyToVideoFrame() const {
-  return false;
+void RenderWidgetHostViewChildFrame::PassSurfaceCopyRequest(
+    std::unique_ptr<cc::CopyOutputRequest> request) {
+  support_->RequestCopyOfSurface(std::move(request));
 }
 
 bool RenderWidgetHostViewChildFrame::HasAcceleratedSurface(
@@ -656,58 +627,24 @@ bool RenderWidgetHostViewChildFrame::HasAcceleratedSurface(
   return false;
 }
 
-// cc::SurfaceFactoryClient implementation.
-void RenderWidgetHostViewChildFrame::ReturnResources(
+void RenderWidgetHostViewChildFrame::ReclaimResources(
     const cc::ReturnedResourceArray& resources) {
-  if (resources.empty())
+  if (!host_)
     return;
-
-  if (!ack_pending_count_ && host_) {
-    host_->Send(new ViewMsg_ReclaimCompositorResources(
-        host_->GetRoutingID(), last_compositor_frame_sink_id_,
-        false /* is_swap_ack */, resources));
-    return;
-  }
-
-  std::copy(resources.begin(), resources.end(),
-            std::back_inserter(surface_returned_resources_));
-}
-
-void RenderWidgetHostViewChildFrame::SetBeginFrameSource(
-    cc::BeginFrameSource* source) {
-  bool needs_begin_frames = host_->needs_begin_frames();
-  if (begin_frame_source_ && needs_begin_frames)
-    begin_frame_source_->RemoveObserver(this);
-  begin_frame_source_ = source;
-  if (begin_frame_source_ && needs_begin_frames)
-    begin_frame_source_->AddObserver(this);
+  host_->Send(new ViewMsg_ReclaimCompositorResources(
+      host_->GetRoutingID(), last_compositor_frame_sink_id_,
+      false /* is_swap_ack */, resources));
 }
 
 void RenderWidgetHostViewChildFrame::OnBeginFrame(
     const cc::BeginFrameArgs& args) {
   host_->Send(new ViewMsg_BeginFrame(host_->GetRoutingID(), args));
-  last_begin_frame_args_ = args;
-}
-
-const cc::BeginFrameArgs&
-RenderWidgetHostViewChildFrame::LastUsedBeginFrameArgs() const {
-  return last_begin_frame_args_;
-}
-
-void RenderWidgetHostViewChildFrame::OnBeginFrameSourcePausedChanged(
-    bool paused) {
-  // Only used on Android WebView.
 }
 
 void RenderWidgetHostViewChildFrame::SetNeedsBeginFrames(
     bool needs_begin_frames) {
-  if (!begin_frame_source_)
-    return;
-
-  if (needs_begin_frames)
-    begin_frame_source_->AddObserver(this);
-  else
-    begin_frame_source_->RemoveObserver(this);
+  if (support_)
+    support_->SetNeedsBeginFrame(needs_begin_frames);
 }
 
 InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
@@ -743,8 +680,9 @@ RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
 }
 
 void RenderWidgetHostViewChildFrame::ClearCompositorSurfaceIfNecessary() {
-  surface_factory_->EvictSurface();
-  local_frame_id_ = cc::LocalFrameId();
+  if (support_)
+    support_->EvictFrame();
+  local_surface_id_ = cc::LocalSurfaceId();
 }
 
 bool RenderWidgetHostViewChildFrame::IsChildFrameForTesting() const {
@@ -752,7 +690,31 @@ bool RenderWidgetHostViewChildFrame::IsChildFrameForTesting() const {
 }
 
 cc::SurfaceId RenderWidgetHostViewChildFrame::SurfaceIdForTesting() const {
-  return cc::SurfaceId(frame_sink_id_, local_frame_id_);
+  return cc::SurfaceId(frame_sink_id_, local_surface_id_);
 };
+
+void RenderWidgetHostViewChildFrame::CreateCompositorFrameSinkSupport() {
+  DCHECK(!support_);
+  support_ = base::MakeUnique<cc::CompositorFrameSinkSupport>(
+      this, GetSurfaceManager(), frame_sink_id_, false /* is_root */,
+      false /* handles_frame_sink_id_invalidation */,
+      true /* needs_sync_points */);
+  if (parent_frame_sink_id_.is_valid()) {
+    GetSurfaceManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                    frame_sink_id_);
+  }
+  if (host_->needs_begin_frames())
+    support_->SetNeedsBeginFrame(true);
+}
+
+void RenderWidgetHostViewChildFrame::ResetCompositorFrameSinkSupport() {
+  if (!support_)
+    return;
+  if (parent_frame_sink_id_.is_valid()) {
+    GetSurfaceManager()->UnregisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                      frame_sink_id_);
+  }
+  support_.reset();
+}
 
 }  // namespace content

@@ -32,13 +32,13 @@
 
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/loader/ThreadableLoader.h"
 #include "platform/blob/BlobRegistry.h"
 #include "platform/blob/BlobURL.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
@@ -114,18 +114,14 @@ void FileReaderLoader::start(ExecutionContext* executionContext,
   ResourceLoaderOptions resourceLoaderOptions;
   resourceLoaderOptions.allowCredentials = AllowStoredCredentials;
 
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_loader);
   if (m_client) {
     DCHECK(!m_loader);
-    m_loader = ThreadableLoader::create(
-        *executionContext, this, options, resourceLoaderOptions,
-        ThreadableLoader::ClientSpec::kFileReaderLoader);
+    m_loader = ThreadableLoader::create(*executionContext, this, options,
+                                        resourceLoaderOptions);
     m_loader->start(request);
   } else {
     ThreadableLoader::loadResourceSynchronously(
-        *executionContext, request, *this, options, resourceLoaderOptions,
-        ThreadableLoader::ClientSpec::kFileReaderLoader);
+        *executionContext, request, *this, options, resourceLoaderOptions);
   }
 }
 

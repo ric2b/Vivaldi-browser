@@ -7,10 +7,6 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/RawResource.h"
-#include "core/fetch/Resource.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorCSSAgent.h"
@@ -18,6 +14,10 @@
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
 #include "core/page/Page.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/RawResource.h"
+#include "platform/loader/fetch/Resource.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -120,14 +120,14 @@ void InspectorResourceContentLoader::start() {
     resourceRequest.setRequestContext(WebURLRequest::RequestContextInternal);
 
     if (!resourceRequest.url().getString().isEmpty()) {
-      urlsToFetch.add(resourceRequest.url().getString());
+      urlsToFetch.insert(resourceRequest.url().getString());
       FetchRequest request(resourceRequest, FetchInitiatorTypeNames::internal);
       Resource* resource = RawResource::fetch(request, document->fetcher());
       if (resource) {
         // Prevent garbage collection by holding a reference to this resource.
         m_resources.push_back(resource);
         ResourceClient* resourceClient = new ResourceClient(this);
-        m_pendingResourceClients.add(resourceClient);
+        m_pendingResourceClients.insert(resourceClient);
         resourceClient->waitForResource(resource);
       }
     }
@@ -140,7 +140,7 @@ void InspectorResourceContentLoader::start() {
       String url = styleSheet->href();
       if (url.isEmpty() || urlsToFetch.contains(url))
         continue;
-      urlsToFetch.add(url);
+      urlsToFetch.insert(url);
       FetchRequest request(ResourceRequest(url),
                            FetchInitiatorTypeNames::internal);
       request.mutableResourceRequest().setRequestContext(
@@ -152,7 +152,7 @@ void InspectorResourceContentLoader::start() {
       // Prevent garbage collection by holding a reference to this resource.
       m_resources.push_back(resource);
       ResourceClient* resourceClient = new ResourceClient(this);
-      m_pendingResourceClients.add(resourceClient);
+      m_pendingResourceClients.insert(resourceClient);
       resourceClient->waitForResource(resource);
     }
   }
@@ -170,13 +170,13 @@ void InspectorResourceContentLoader::ensureResourcesContentLoaded(
     std::unique_ptr<WTF::Closure> callback) {
   if (!m_started)
     start();
-  m_callbacks.add(clientId, Callbacks())
+  m_callbacks.insert(clientId, Callbacks())
       .storedValue->value.push_back(std::move(callback));
   checkDone();
 }
 
 void InspectorResourceContentLoader::cancel(int clientId) {
-  m_callbacks.remove(clientId);
+  m_callbacks.erase(clientId);
 }
 
 InspectorResourceContentLoader::~InspectorResourceContentLoader() {
@@ -227,7 +227,7 @@ void InspectorResourceContentLoader::checkDone() {
 }
 
 void InspectorResourceContentLoader::resourceFinished(ResourceClient* client) {
-  m_pendingResourceClients.remove(client);
+  m_pendingResourceClients.erase(client);
   checkDone();
 }
 

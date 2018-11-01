@@ -28,13 +28,12 @@
 namespace {
 
 void DoNothing(ContentSetting content_setting) {}
-void DoNothing2(blink::mojom::PermissionStatus status) {}
 
 class TestNotificationPermissionContext : public NotificationPermissionContext {
  public:
   explicit TestNotificationPermissionContext(Profile* profile)
       : NotificationPermissionContext(profile,
-                                      content::PermissionType::NOTIFICATIONS),
+                                      CONTENT_SETTINGS_TYPE_NOTIFICATIONS),
         permission_set_count_(0),
         last_permission_set_persisted_(false),
         last_permission_set_setting_(CONTENT_SETTING_DEFAULT) {}
@@ -113,23 +112,27 @@ TEST_F(NotificationPermissionContextTest, IgnoresEmbedderOrigin) {
   GURL different_origin("https://foobar.com");
 
   NotificationPermissionContext context(profile(),
-                                        content::PermissionType::NOTIFICATIONS);
+                                        CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
   UpdateContentSetting(&context, requesting_origin, embedding_origin,
                        CONTENT_SETTING_ALLOW);
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-      context.GetPermissionStatus(requesting_origin, embedding_origin));
+            context.GetPermissionStatus(requesting_origin, embedding_origin)
+                .content_setting);
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-      context.GetPermissionStatus(requesting_origin, different_origin));
+            context.GetPermissionStatus(requesting_origin, different_origin)
+                .content_setting);
 
   context.ResetPermission(requesting_origin, embedding_origin);
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
-      context.GetPermissionStatus(requesting_origin, embedding_origin));
+            context.GetPermissionStatus(requesting_origin, embedding_origin)
+                .content_setting);
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
-      context.GetPermissionStatus(requesting_origin, different_origin));
+            context.GetPermissionStatus(requesting_origin, different_origin)
+                .content_setting);
 }
 
 // Push messaging permission requests should only succeed for top level origins
@@ -138,13 +141,14 @@ TEST_F(NotificationPermissionContextTest, PushTopLevelOriginOnly) {
   GURL requesting_origin("https://example.com");
   GURL embedding_origin("https://chrome.com");
 
-  NotificationPermissionContext context(
-      profile(), content::PermissionType::PUSH_MESSAGING);
+  NotificationPermissionContext context(profile(),
+                                        CONTENT_SETTINGS_TYPE_PUSH_MESSAGING);
   UpdateContentSetting(&context, requesting_origin, embedding_origin,
                        CONTENT_SETTING_ALLOW);
 
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            context.GetPermissionStatus(requesting_origin, embedding_origin));
+            context.GetPermissionStatus(requesting_origin, embedding_origin)
+                .content_setting);
 
   context.ResetPermission(requesting_origin, embedding_origin);
 
@@ -152,12 +156,14 @@ TEST_F(NotificationPermissionContextTest, PushTopLevelOriginOnly) {
                        CONTENT_SETTING_ALLOW);
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            context.GetPermissionStatus(embedding_origin, embedding_origin));
+            context.GetPermissionStatus(embedding_origin, embedding_origin)
+                .content_setting);
 
   context.ResetPermission(embedding_origin, embedding_origin);
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
-            context.GetPermissionStatus(embedding_origin, embedding_origin));
+            context.GetPermissionStatus(embedding_origin, embedding_origin)
+                .content_setting);
 }
 
 // Web Notifications do not require a secure origin when requesting permission.
@@ -166,14 +172,14 @@ TEST_F(NotificationPermissionContextTest, NoSecureOriginRequirement) {
   GURL origin("http://example.com");
 
   NotificationPermissionContext context(profile(),
-                                        content::PermissionType::NOTIFICATIONS);
+                                        CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
   EXPECT_EQ(CONTENT_SETTING_ASK,
-            context.GetPermissionStatus(origin, origin));
+            context.GetPermissionStatus(origin, origin).content_setting);
 
   UpdateContentSetting(&context, origin, origin, CONTENT_SETTING_ALLOW);
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            context.GetPermissionStatus(origin, origin));
+            context.GetPermissionStatus(origin, origin).content_setting);
 }
 
 // Push notifications requires a secure origin to acquire permission.
@@ -182,21 +188,25 @@ TEST_F(NotificationPermissionContextTest, PushSecureOriginRequirement) {
   GURL secure_origin("https://example.com");
 
   NotificationPermissionContext context(
-      profile(), content::PermissionType::PUSH_MESSAGING);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK, context.GetPermissionStatus(origin, origin));
+      profile(), CONTENT_SETTINGS_TYPE_PUSH_MESSAGING);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            context.GetPermissionStatus(origin, origin).content_setting);
 
   UpdateContentSetting(&context, origin, origin, CONTENT_SETTING_ALLOW);
 
-  EXPECT_EQ(CONTENT_SETTING_BLOCK, context.GetPermissionStatus(origin, origin));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            context.GetPermissionStatus(origin, origin).content_setting);
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
-            context.GetPermissionStatus(secure_origin, secure_origin));
+            context.GetPermissionStatus(secure_origin, secure_origin)
+                .content_setting);
 
   UpdateContentSetting(&context, secure_origin, secure_origin,
                        CONTENT_SETTING_ALLOW);
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            context.GetPermissionStatus(secure_origin, secure_origin));
+            context.GetPermissionStatus(secure_origin, secure_origin)
+                .content_setting);
 }
 
 // Tests auto-denial after a time delay in incognito.
@@ -278,7 +288,7 @@ TEST_F(NotificationPermissionContextTest, TestCancelledIncognitoRequest) {
 
   base::TestMockTimeTaskRunner* task_runner = SwitchToMockTime();
 
-  content::PermissionManager* permission_manager =
+  PermissionManager* permission_manager =
       PermissionManagerFactory::GetForProfile(
           profile()->GetOffTheRecordProfile());
 
@@ -286,8 +296,8 @@ TEST_F(NotificationPermissionContextTest, TestCancelledIncognitoRequest) {
   // https://crbug.com/586944 regresses, then as well as the EXPECT_EQs below
   // failing, PermissionManager::OnPermissionsRequestResponseStatus will crash.
   int request_id = permission_manager->RequestPermission(
-      content::PermissionType::NOTIFICATIONS, web_contents()->GetMainFrame(),
-      url.GetOrigin(), true /* user_gesture */, base::Bind(&DoNothing2));
+      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, web_contents()->GetMainFrame(),
+      url.GetOrigin(), true /* user_gesture */, base::Bind(&DoNothing));
 
   permission_manager->CancelPermissionRequest(request_id);
 

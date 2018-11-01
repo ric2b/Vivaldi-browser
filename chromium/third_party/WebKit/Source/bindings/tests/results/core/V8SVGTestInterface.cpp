@@ -12,7 +12,6 @@
 #include "V8SVGTestInterface.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/SVGNames.h"
@@ -29,7 +28,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::trace, V8SVGTestInterface::traceWrappers, 0, nullptr, "SVGTestInterface", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent };
+const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::trace, V8SVGTestInterface::traceWrappers, nullptr, "SVGTestInterface", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -62,10 +61,6 @@ static void typeAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info)
   v8SetReturnValueString(info, impl->fastGetAttribute(SVGNames::typeAttr), info.GetIsolate());
 }
 
-CORE_EXPORT void typeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  SVGTestInterfaceV8Internal::typeAttributeGetter(info);
-}
-
 static void typeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Object> holder = info.Holder();
   SVGTestInterface* impl = V8SVGTestInterface::toImpl(holder);
@@ -81,7 +76,13 @@ static void typeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::Function
   impl->setAttribute(SVGNames::typeAttr, cppValue);
 }
 
-CORE_EXPORT void typeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+} // namespace SVGTestInterfaceV8Internal
+
+void V8SVGTestInterface::typeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  SVGTestInterfaceV8Internal::typeAttributeGetter(info);
+}
+
+void V8SVGTestInterface::typeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Value> v8Value = info[0];
 
   V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
@@ -89,10 +90,8 @@ CORE_EXPORT void typeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::
   SVGTestInterfaceV8Internal::typeAttributeSetter(v8Value, info);
 }
 
-} // namespace SVGTestInterfaceV8Internal
-
 const V8DOMConfiguration::AccessorConfiguration V8SVGTestInterfaceAccessors[] = {
-    {"type", SVGTestInterfaceV8Internal::typeAttributeGetterCallback, SVGTestInterfaceV8Internal::typeAttributeSetterCallback, 0, 0, nullptr, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
+    {"type", V8SVGTestInterface::typeAttributeGetterCallback, V8SVGTestInterface::typeAttributeSetterCallback, nullptr, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
 };
 
 static void installV8SVGTestInterfaceTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {

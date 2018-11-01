@@ -1,5 +1,8 @@
 // Copyright (c) 2016 Vivaldi. All rights reserved.
 
+#ifndef BROWSER_VIVALDI_DOWNLOAD_STATUS_H_
+#define BROWSER_VIVALDI_DOWNLOAD_STATUS_H_
+
 #if defined(OS_WIN)
 
 namespace extensions {
@@ -12,6 +15,8 @@ void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
                                                bool progress_known,
                                                float progress);
 
-} // namespace vivaldi
+}  // namespace vivaldi
 
-#endif // OS_WIN
+#endif  // OS_WIN
+
+#endif  // BROWSER_VIVALDI_DOWNLOAD_STATUS_H_

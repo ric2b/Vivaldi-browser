@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/optional.h"
+#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -50,6 +52,7 @@ class URLRequest;
 
 namespace payments {
 class PaymentRequest;
+class PaymentRequestDialog;
 }
 
 namespace security_state {
@@ -136,6 +139,9 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser);
 void HideTaskManagerViews();
 
+// Show the Views "Chrome Update" dialog.
+void ShowUpdateChromeDialogViews(gfx::NativeWindow parent);
+
 #endif  // OS_MACOSX
 
 #if defined(TOOLKIT_VIEWS)
@@ -150,7 +156,17 @@ void ShowBookmarkEditorViews(gfx::NativeWindow parent_window,
                              const BookmarkEditor::EditDetails& details,
                              BookmarkEditor::Configuration configuration);
 
-void ShowPaymentRequestDialog(payments::PaymentRequest* request);
+payments::PaymentRequestDialog* CreatePaymentRequestDialog(
+    payments::PaymentRequest* request);
+
+// Shows the dialog to choose a share target app. |targets| is a list of app
+// title and manifest URL pairs that will be shown in a list. If the user picks
+// a target, this calls |callback| with the manifest URL of the chosen target,
+// or supplies null if the user cancelled the share.
+void ShowWebShareTargetPickerDialog(
+    gfx::NativeWindow parent_window,
+    const std::vector<std::pair<base::string16, GURL>>& targets,
+    const base::Callback<void(base::Optional<std::string>)>& callback);
 
 #if defined(OS_MACOSX)
 

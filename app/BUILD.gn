@@ -27,6 +27,7 @@ single_grit_action("vivaldi_native_strings") {
   grit_out_dir = "$root_gen_dir/vivaldi"
   source = "native_resources/vivaldi_native_strings.grd"
   grit_resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+  have_strings = true
 }
 
 grit("vivaldi_native_resources") {

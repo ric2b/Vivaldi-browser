@@ -51,11 +51,12 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     var filterContainerElement = hbox.createChild('div', 'styles-sidebar-pane-filter-box');
     var filterInput = Elements.StylesSidebarPane.createPropertyFilterElement(
         Common.UIString('Filter'), hbox, filterCallback.bind(this));
+    UI.ARIAUtils.setAccessibleName(filterInput, Common.UIString('Filter Computed Styles'));
     filterContainerElement.appendChild(filterInput);
 
     var toolbar = new UI.Toolbar('styles-pane-toolbar', hbox);
-    toolbar.appendToolbarItem(new UI.ToolbarCheckbox(
-        Common.UIString('Show all'), undefined, this._showInheritedComputedStylePropertiesSetting));
+    toolbar.appendToolbarItem(new UI.ToolbarSettingCheckbox(
+        this._showInheritedComputedStylePropertiesSetting, undefined, Common.UIString('Show all')));
 
     this._propertiesOutline = new UI.TreeOutlineInShadow();
     this._propertiesOutline.hideOverflow();
@@ -157,6 +158,8 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       var inherited = !inhertiedProperties.has(canonicalName);
       if (!showInherited && inherited && !(propertyName in this._alwaysShowComputedProperties))
         continue;
+      if (!showInherited && propertyName.startsWith('--'))
+        continue;
       if (propertyName !== canonicalName && propertyValue === nodeStyle.computedStyle.get(canonicalName))
         continue;
 
@@ -195,8 +198,8 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       var trace = propertyTraces.get(propertyName);
       if (trace) {
         var activeProperty = this._renderPropertyTrace(cssModel, matchedStyles, nodeStyle.node, treeElement, trace);
-        treeElement.listItemElement.addEventListener('mousedown', (e) => e.consume(), false);
-        treeElement.listItemElement.addEventListener('dblclick', (e) => e.consume(), false);
+        treeElement.listItemElement.addEventListener('mousedown', e => e.consume(), false);
+        treeElement.listItemElement.addEventListener('dblclick', e => e.consume(), false);
         treeElement.listItemElement.addEventListener('click', handleClick.bind(null, treeElement), false);
         var gotoSourceElement = UI.Icon.create('smallicon-arrow-in-circle', 'goto-source-icon');
         gotoSourceElement.addEventListener('click', this._navigateToSource.bind(this, activeProperty));
@@ -301,7 +304,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
   _computePropertyTraces(matchedStyles) {
     var result = new Map();
     for (var style of matchedStyles.nodeStyles()) {
-      var allProperties = style.allProperties;
+      var allProperties = style.allProperties();
       for (var property of allProperties) {
         if (!property.activeInStyle() || !matchedStyles.propertyState(property))
           continue;
@@ -320,7 +323,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
   _computeInheritedProperties(matchedStyles) {
     var result = new Set();
     for (var style of matchedStyles.nodeStyles()) {
-      for (var property of style.allProperties) {
+      for (var property of style.allProperties()) {
         if (!matchedStyles.propertyState(property))
           continue;
         result.add(SDK.cssMetadata().canonicalPropertyName(property.name));

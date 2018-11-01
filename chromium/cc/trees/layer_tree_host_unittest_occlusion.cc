@@ -41,7 +41,7 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnLayer
     child_->SetIsDrawable(true);
     root->AddChild(child_);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeTest::SetupTree();
   }
 
@@ -97,7 +97,7 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnSurface
     child2->SetIsDrawable(true);
     root->AddChild(child2);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeTest::SetupTree();
   }
 
@@ -106,13 +106,13 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnSurface
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* child = impl->active_tree()->LayerById(child_->id());
-    RenderSurfaceImpl* surface = child->render_surface();
+    RenderSurfaceImpl* surface = child->GetRenderSurface();
 
     // Verify the draw properties are valid.
     EXPECT_TRUE(root->is_drawn_render_surface_layer_list_member());
     EXPECT_TRUE(child->is_drawn_render_surface_layer_list_member());
-    EXPECT_TRUE(child->has_render_surface());
-    EXPECT_EQ(child->render_surface(), child->render_target());
+    EXPECT_TRUE(child->GetRenderSurface());
+    EXPECT_EQ(child->GetRenderSurface(), child->render_target());
 
     EXPECT_OCCLUSION_EQ(
         Occlusion(surface->draw_transform(), SimpleEnclosedRegion(),
@@ -163,7 +163,7 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnMask
     child2->SetIsDrawable(true);
     root->AddChild(child2);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeTest::SetupTree();
     client_.set_bounds(root->bounds());
   }
@@ -173,14 +173,14 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnMask
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* child = impl->active_tree()->LayerById(child_->id());
-    RenderSurfaceImpl* surface = child->render_surface();
+    RenderSurfaceImpl* surface = child->GetRenderSurface();
     LayerImpl* mask = surface->MaskLayer();
 
     // Verify the draw properties are valid.
     EXPECT_TRUE(root->is_drawn_render_surface_layer_list_member());
     EXPECT_TRUE(child->is_drawn_render_surface_layer_list_member());
-    EXPECT_TRUE(child->has_render_surface());
-    EXPECT_EQ(child->render_surface(), child->render_target());
+    EXPECT_TRUE(child->GetRenderSurface());
+    EXPECT_EQ(child->GetRenderSurface(), child->render_target());
 
     gfx::Transform transform = surface->draw_transform();
     transform.PreconcatTransform(child->DrawTransform());
@@ -236,7 +236,7 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnScaledMask
     child2->SetIsDrawable(true);
     root->AddChild(child2);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeTest::SetupTree();
     client_.set_bounds(root->bounds());
   }
@@ -245,7 +245,7 @@ class LayerTreeHostOcclusionTestDrawPropertiesOnScaledMask
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* child = impl->active_tree()->LayerById(child_->id());
-    LayerImpl* mask = child->render_surface()->MaskLayer();
+    LayerImpl* mask = child->GetRenderSurface()->MaskLayer();
 
     gfx::Transform scale;
     scale.Scale(2, 2);

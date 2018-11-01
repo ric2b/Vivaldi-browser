@@ -23,6 +23,12 @@ bool IsSyncDisabled(browser_sync::ProfileSyncService* service) {
 // Returns true if these services have matching progress markers.
 bool ProgressMarkersMatch(const browser_sync::ProfileSyncService* service1,
                           const browser_sync::ProfileSyncService* service2) {
+  // GetActiveDataTypes() is always empty during configuration, so progress
+  // markers cannot be compared.
+  if (!service1->ConfigurationDone() || !service2->ConfigurationDone()) {
+    return false;
+  }
+
   const syncer::ModelTypeSet common_types =
       Intersection(service1->GetActiveDataTypes(),
                    service2->GetActiveDataTypes());
@@ -73,7 +79,7 @@ class ProgressMarkerWatcher : public syncer::SyncServiceObserver {
   ProgressMarkerWatcher(browser_sync::ProfileSyncService* service,
                         QuiesceStatusChangeChecker* quiesce_checker);
   ~ProgressMarkerWatcher() override;
-  void OnStateChanged() override;
+  void OnStateChanged(syncer::SyncService* sync) override;
 
   bool HasLatestProgressMarkers();
   bool IsSyncDisabled();
@@ -101,7 +107,7 @@ ProgressMarkerWatcher::ProgressMarkerWatcher(
 
 ProgressMarkerWatcher::~ProgressMarkerWatcher() { }
 
-void ProgressMarkerWatcher::OnStateChanged() {
+void ProgressMarkerWatcher::OnStateChanged(syncer::SyncService* sync) {
   UpdateHasLatestProgressMarkers();
   quiesce_checker_->OnServiceStateChanged(service_);
 }

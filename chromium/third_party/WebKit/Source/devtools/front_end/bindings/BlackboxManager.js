@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @implements {SDK.TargetManager.Observer}
  * @unrestricted
+ * @implements {SDK.SDKModelObserver<!SDK.DebuggerModel>}
  */
 Bindings.BlackboxManager = class {
   /**
@@ -19,50 +19,46 @@ Bindings.BlackboxManager = class {
     Common.moduleSetting('skipStackFramesPattern').addChangeListener(this._patternChanged.bind(this));
     Common.moduleSetting('skipContentScripts').addChangeListener(this._patternChanged.bind(this));
 
+    /** @type {!Set<function()>} */
+    this._listeners = new Set();
+
     /** @type {!Map<!SDK.DebuggerModel, !Map<string, !Array<!Protocol.Debugger.ScriptPosition>>>} */
     this._debuggerModelData = new Map();
     /** @type {!Map<string, boolean>} */
     this._isBlackboxedURLCache = new Map();
 
-    SDK.targetManager.observeTargets(this);
+    SDK.targetManager.observeModels(SDK.DebuggerModel, this);
   }
 
   /**
-   * @param {function(!Common.Event)} listener
-   * @param {!Object=} thisObject
+   * @param {function()} listener
    */
-  addChangeListener(listener, thisObject) {
-    Common.moduleSetting('skipStackFramesPattern').addChangeListener(listener, thisObject);
+  addChangeListener(listener) {
+    this._listeners.add(listener);
   }
 
   /**
-   * @param {function(!Common.Event)} listener
-   * @param {!Object=} thisObject
+   * @param {function()} listener
    */
-  removeChangeListener(listener, thisObject) {
-    Common.moduleSetting('skipStackFramesPattern').removeChangeListener(listener, thisObject);
-  }
-
-  /**
-   * @override
-   * @param {!SDK.Target} target
-   */
-  targetAdded(target) {
-    var debuggerModel = SDK.DebuggerModel.fromTarget(target);
-    if (debuggerModel)
-      this._setBlackboxPatterns(debuggerModel);
+  removeChangeListener(listener) {
+    this._listeners.delete(listener);
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!SDK.DebuggerModel} debuggerModel
    */
-  targetRemoved(target) {
-    var debuggerModel = SDK.DebuggerModel.fromTarget(target);
-    if (debuggerModel) {
-      this._debuggerModelData.delete(debuggerModel);
-      this._isBlackboxedURLCache.clear();
-    }
+  modelAdded(debuggerModel) {
+    this._setBlackboxPatterns(debuggerModel);
+  }
+
+  /**
+   * @override
+   * @param {!SDK.DebuggerModel} debuggerModel
+   */
+  modelRemoved(debuggerModel) {
+    this._debuggerModelData.delete(debuggerModel);
+    this._isBlackboxedURLCache.clear();
   }
 
   /**
@@ -146,7 +142,7 @@ Bindings.BlackboxManager = class {
     if (!previousScriptState)
       return Promise.resolve();
 
-    var hasBlackboxedMappings = sourceMap.sourceURLs().some((url) => this.isBlackboxedURL(url));
+    var hasBlackboxedMappings = sourceMap.sourceURLs().some(url => this.isBlackboxedURL(url));
     var mappings = hasBlackboxedMappings ? sourceMap.mappings().slice() : [];
     if (!mappings.length) {
       if (previousScriptState.length > 0)
@@ -278,14 +274,19 @@ Bindings.BlackboxManager = class {
 
     /** @type {!Array<!Promise>} */
     var promises = [];
-    for (var debuggerModel of SDK.DebuggerModel.instances()) {
+    for (var debuggerModel of SDK.targetManager.models(SDK.DebuggerModel)) {
       promises.push(this._setBlackboxPatterns(debuggerModel));
       for (var scriptId in debuggerModel.scripts) {
         var script = debuggerModel.scripts[scriptId];
         promises.push(this._addScript(script).then(loadSourceMap.bind(this, script)));
       }
     }
-    Promise.all(promises).then(this._patternChangeFinishedForTests.bind(this));
+    Promise.all(promises).then(() => {
+      var listeners = Array.from(this._listeners);
+      for (var listener of listeners)
+        listener();
+      this._patternChangeFinishedForTests();
+    });
 
     /**
      * @param {!SDK.Script} script

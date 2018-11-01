@@ -24,6 +24,10 @@
 #import "ios/web/public/test/http_server.h"
 #include "ios/web/public/test/http_server_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 const CGFloat kScrollDisplacement = 50.0;
 
 // Test cases to verify that keyboard commands are and are not registered when
@@ -136,7 +140,7 @@ const CGFloat kScrollDisplacement = 50.0;
 
   // Close Settings
   id<GREYMatcher> settingsDoneButton =
-      chrome_test_util::buttonWithAccessibilityLabelId(
+      chrome_test_util::ButtonWithAccessibilityLabelId(
           IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
   [[EarlGrey selectElementWithMatcher:settingsDoneButton]
       performAction:grey_tap()];
@@ -152,7 +156,7 @@ const CGFloat kScrollDisplacement = 50.0;
   // Bookmark page
   if (IsIPadIdiom()) {
     id<GREYMatcher> bookmarkMatcher =
-        chrome_test_util::buttonWithAccessibilityLabelId(IDS_TOOLTIP_STAR);
+        chrome_test_util::ButtonWithAccessibilityLabelId(IDS_TOOLTIP_STAR);
     [[EarlGrey selectElementWithMatcher:bookmarkMatcher]
         performAction:grey_tap()];
   } else {
@@ -163,7 +167,7 @@ const CGFloat kScrollDisplacement = 50.0;
   }
 
   // Tap on the HUD.
-  id<GREYMatcher> edit = chrome_test_util::buttonWithAccessibilityLabelId(
+  id<GREYMatcher> edit = chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON);
   [[EarlGrey selectElementWithMatcher:edit] performAction:grey_tap()];
 

@@ -49,6 +49,11 @@ class InstallAttributes {
   static std::string GetEnterpriseOwnedInstallAttributesBlobForTesting(
       const std::string& user_name);
 
+  // Return serialized InstallAttributes of an enterprise-owned configuration.
+  static std::string
+  GetActiveDirectoryEnterpriseOwnedInstallAttributesBlobForTesting(
+      const std::string& realm);
+
   explicit InstallAttributes(CryptohomeClient* cryptohome_client);
   ~InstallAttributes();
 
@@ -64,6 +69,13 @@ class InstallAttributes {
   // attributes and read them if ready. Actual read will be performed in
   // ReadAttributesIfReady().
   void ReadImmutableAttributes(const base::Closure& callback);
+
+  // Updates the firmware management parameters from TPM, storing the devmode
+  // flag according to |block_devmode|. Invokes |callback| when done. Must be
+  // called before LockDevice is done. Used to update TPM on enrollment.
+  void SetBlockDevmodeInTpm(
+      bool block_devmode,
+      const CryptohomeClient::ProtobufMethodCallback& callback);
 
   // Locks the device into |device_mode|.  Depending on |device_mode|, a
   // specific subset of |domain|, |realm| and |device_id| must be set.  Can also
@@ -105,6 +117,9 @@ class InstallAttributes {
   // Returns an empty string if the device is not an enterprise device or the
   // device id was not stored in the lockbox (prior to R19).
   std::string GetDeviceId() const { return registration_device_id_; }
+
+  // Return whether TPM is locked.
+  bool IsDeviceLocked() const { return device_locked_; }
 
  protected:
   // True if install attributes have been read successfully.  False if read

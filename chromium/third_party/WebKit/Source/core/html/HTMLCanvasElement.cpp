@@ -27,6 +27,10 @@
 
 #include "core/html/HTMLCanvasElement.h"
 
+#include <math.h>
+
+#include <memory>
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
@@ -52,10 +56,12 @@
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/layout/LayoutHTMLCanvas.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
+#include "core/page/ChromeClient.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintTiming.h"
 #include "platform/Histogram.h"
@@ -68,15 +74,14 @@
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/image-encoders/ImageEncoderUtils.h"
 #include "platform/transforms/AffineTransform.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
+#include "v8/include/v8.h"
 #include "wtf/CheckedNumeric.h"
 #include "wtf/PtrUtil.h"
-#include <math.h>
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
@@ -175,7 +180,7 @@ void HTMLCanvasElement::parseAttribute(
 LayoutObject* HTMLCanvasElement::createLayoutObject(
     const ComputedStyle& style) {
   LocalFrame* frame = document().frame();
-  if (frame && frame->script().canExecuteScripts(NotAboutToExecuteScript))
+  if (frame && document().canExecuteScripts(NotAboutToExecuteScript))
     return new LayoutHTMLCanvas(this);
   return HTMLElement::createLayoutObject(style);
 }
@@ -268,6 +273,8 @@ CanvasRenderingContext* HTMLCanvasElement::getCanvasRenderingContext(
   if (!m_context)
     return nullptr;
 
+  probe::didCreateCanvasContext(&document());
+
   if (m_context->is3d()) {
     updateExternallyAllocatedMemory();
   }
@@ -308,7 +315,7 @@ void HTMLCanvasElement::didDraw(const FloatRect& rect) {
   if (layoutObject())
     layoutObject()->setMayNeedPaintInvalidation();
   if (m_context && m_context->is2d() && m_context->shouldAntialias() &&
-      page() && page()->deviceScaleFactor() > 1.0f) {
+      page() && page()->deviceScaleFactorDeprecated() > 1.0f) {
     FloatRect inflatedRect = rect;
     inflatedRect.inflate(1);
     m_dirtyRect.unite(inflatedRect);
@@ -319,11 +326,63 @@ void HTMLCanvasElement::didDraw(const FloatRect& rect) {
     buffer()->didDraw(rect);
 }
 
-void HTMLCanvasElement::didFinalizeFrame() {
-  notifyListenersCanvasChanged();
+void HTMLCanvasElement::finalizeFrame() {
+  if (hasImageBuffer())
+    m_imageBuffer->finalizeFrame();
+
+  // If the canvas is visible, notifying listeners is taken
+  // care of in the in doDeferredPaintInvalidation, which allows
+  // the frame to be grabbed prior to compositing, which is
+  // critically important because compositing may clear the canvas's
+  // image. (e.g. WebGL context with preserveDrawingBuffer=false).
+  // If the canvas is not visible, doDeferredPaintInvalidation
+  // will not get called, so we need to take care of business here.
+  if (!m_didNotifyListenersForCurrentFrame)
+    notifyListenersCanvasChanged();
+  m_didNotifyListenersForCurrentFrame = false;
+}
+
+void HTMLCanvasElement::didDisableAcceleration() {
+  // We must force a paint invalidation on the canvas even if it's
+  // content did not change because it layer was destroyed.
+  didDraw(FloatRect(0, 0, size().width(), size().height()));
+}
+
+void HTMLCanvasElement::restoreCanvasMatrixClipStack(
+    PaintCanvas* canvas) const {
+  if (m_context)
+    m_context->restoreCanvasMatrixClipStack(canvas);
+}
+
+void HTMLCanvasElement::doDeferredPaintInvalidation() {
+  DCHECK(!m_dirtyRect.isEmpty());
+  if (m_context->is2d()) {
+    FloatRect srcRect(0, 0, size().width(), size().height());
+    m_dirtyRect.intersect(srcRect);
+    LayoutBox* lb = layoutBox();
+    FloatRect invalidationRect;
+    if (lb) {
+      FloatRect mappedDirtyRect =
+          mapRect(m_dirtyRect, srcRect, FloatRect(lb->contentBoxRect()));
+      if (m_context->isAccelerated()) {
+        // Accelerated 2D canvases need the dirty rect to be expressed relative
+        // to the content box, as opposed to the layout box.
+        mappedDirtyRect.move(-lb->contentBoxOffset());
+      }
+      invalidationRect = mappedDirtyRect;
+    } else {
+      invalidationRect = m_dirtyRect;
+    }
+    if (hasImageBuffer()) {
+      m_imageBuffer->doPaintInvalidation(invalidationRect);
+    }
+  }
 
   if (m_dirtyRect.isEmpty())
     return;
+
+  notifyListenersCanvasChanged();
+  m_didNotifyListenersForCurrentFrame = true;
 
   // Propagate the m_dirtyRect accumulated so far to the compositor
   // before restarting with a blank dirty rect.
@@ -382,47 +441,6 @@ void HTMLCanvasElement::didFinalizeFrame() {
     m_pendingRenderingModeSwitch = false;
   }
 
-  m_context->incrementFrameCount();
-}
-
-void HTMLCanvasElement::didDisableAcceleration() {
-  // We must force a paint invalidation on the canvas even if it's
-  // content did not change because it layer was destroyed.
-  didDraw(FloatRect(0, 0, size().width(), size().height()));
-}
-
-void HTMLCanvasElement::restoreCanvasMatrixClipStack(SkCanvas* canvas) const {
-  if (m_context)
-    m_context->restoreCanvasMatrixClipStack(canvas);
-}
-
-void HTMLCanvasElement::doDeferredPaintInvalidation() {
-  DCHECK(!m_dirtyRect.isEmpty());
-  if (!m_context->is2d()) {
-    didFinalizeFrame();
-  } else {
-    FloatRect srcRect(0, 0, size().width(), size().height());
-    m_dirtyRect.intersect(srcRect);
-    LayoutBox* lb = layoutBox();
-    FloatRect invalidationRect;
-    if (lb) {
-      FloatRect mappedDirtyRect =
-          mapRect(m_dirtyRect, srcRect, FloatRect(lb->contentBoxRect()));
-      if (m_context->isAccelerated()) {
-        // Accelerated 2D canvases need the dirty rect to be expressed relative
-        // to the content box, as opposed to the layout box.
-        mappedDirtyRect.move(-lb->contentBoxOffset());
-      }
-      invalidationRect = mappedDirtyRect;
-    } else {
-      invalidationRect = m_dirtyRect;
-    }
-    if (hasImageBuffer()) {
-      m_imageBuffer->finalizeFrame(invalidationRect);
-    } else {
-      didFinalizeFrame();
-    }
-  }
   DCHECK(m_dirtyRect.isEmpty());
 }
 
@@ -773,11 +791,11 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback,
 }
 
 void HTMLCanvasElement::addListener(CanvasDrawListener* listener) {
-  m_listeners.add(listener);
+  m_listeners.insert(listener);
 }
 
 void HTMLCanvasElement::removeListener(CanvasDrawListener* listener) {
-  m_listeners.remove(listener);
+  m_listeners.erase(listener);
 }
 
 SecurityOrigin* HTMLCanvasElement::getSecurityOrigin() const {
@@ -818,7 +836,7 @@ bool HTMLCanvasElement::shouldAccelerate(AccelerationCriteria criteria) const {
   if (RuntimeEnabledFeatures::displayList2dCanvasEnabled()) {
 #if 0
         // TODO(junov): re-enable this code once we solve the problem of recording
-        // GPU-backed images to an SkPicture for cross-context rendering crbug.com/490328
+        // GPU-backed images to a PaintRecord for cross-context rendering crbug.com/490328
 
         // If the compositor provides GPU acceleration to display list canvases, we
         // prefer that over direct acceleration.
@@ -895,7 +913,8 @@ HTMLCanvasElement::createWebGLImageBufferSurface(OpacityMode opacityMode) {
   // then make a non-accelerated ImageBuffer. This means copying the internal
   // Image will require a pixel readback, but that is unavoidable in this case.
   auto surface = WTF::wrapUnique(new AcceleratedImageBufferSurface(
-      size(), opacityMode, m_context->skColorSpace(), m_context->colorType()));
+      size(), opacityMode, m_context->skSurfaceColorSpace(),
+      m_context->colorType()));
   if (surface->isValid())
     return std::move(surface);
   return nullptr;
@@ -926,8 +945,8 @@ HTMLCanvasElement::createAcceleratedImageBufferSurface(
   std::unique_ptr<ImageBufferSurface> surface =
       WTF::wrapUnique(new Canvas2DImageBufferSurface(
           std::move(contextProvider), size(), *msaaSampleCount, opacityMode,
-          Canvas2DLayerBridge::EnableAcceleration, m_context->skColorSpace(),
-          m_context->colorType()));
+          Canvas2DLayerBridge::EnableAcceleration, m_context->gfxColorSpace(),
+          m_context->skSurfacesUseColorSpace(), m_context->colorType()));
   if (!surface->isValid()) {
     CanvasMetrics::countCanvasContextUsage(
         CanvasMetrics::GPUAccelerated2DCanvasImageBufferCreationFailed);
@@ -945,7 +964,7 @@ HTMLCanvasElement::createUnacceleratedImageBufferSurface(
   if (shouldUseDisplayList()) {
     auto surface = WTF::wrapUnique(new RecordingImageBufferSurface(
         size(), WTF::wrapUnique(new UnacceleratedSurfaceFactory), opacityMode,
-        m_context->skColorSpace(), m_context->colorType()));
+        m_context->skSurfaceColorSpace(), m_context->colorType()));
     if (surface->isValid()) {
       CanvasMetrics::countCanvasContextUsage(
           CanvasMetrics::DisplayList2DCanvasImageBufferCreated);
@@ -956,8 +975,9 @@ HTMLCanvasElement::createUnacceleratedImageBufferSurface(
   }
 
   auto surfaceFactory = WTF::makeUnique<UnacceleratedSurfaceFactory>();
-  auto surface = surfaceFactory->createSurface(
-      size(), opacityMode, m_context->skColorSpace(), m_context->colorType());
+  auto surface = surfaceFactory->createSurface(size(), opacityMode,
+                                               m_context->skSurfaceColorSpace(),
+                                               m_context->colorType());
   if (surface->isValid()) {
     CanvasMetrics::countCanvasContextUsage(
         CanvasMetrics::Unaccelerated2DCanvasImageBufferCreated);
@@ -1085,7 +1105,7 @@ void HTMLCanvasElement::updateExternallyAllocatedMemory() const {
   m_externallyAllocatedMemory = externallyAllocatedMemory;
 }
 
-SkCanvas* HTMLCanvasElement::drawingCanvas() const {
+PaintCanvas* HTMLCanvasElement::drawingCanvas() const {
   return buffer() ? m_imageBuffer->canvas() : nullptr;
 }
 
@@ -1094,7 +1114,7 @@ void HTMLCanvasElement::disableDeferral(DisableDeferralReason reason) const {
     m_imageBuffer->disableDeferral(reason);
 }
 
-SkCanvas* HTMLCanvasElement::existingDrawingCanvas() const {
+PaintCanvas* HTMLCanvasElement::existingDrawingCanvas() const {
   if (!hasImageBuffer())
     return nullptr;
 
@@ -1251,8 +1271,11 @@ PassRefPtr<Image> HTMLCanvasElement::getSourceImageForCanvas(
     return result;
   }
 
-  if (m_context->getContextType() == CanvasRenderingContext::ContextImageBitmap)
+  if (m_context->getContextType() ==
+      CanvasRenderingContext::ContextImageBitmap) {
+    *status = NormalSourceImageStatus;
     return m_context->getImage(hint, reason);
+  }
 
   sk_sp<SkImage> skImage;
   // TODO(ccameron): Canvas should produce sRGB images.
@@ -1335,6 +1358,17 @@ ScriptPromise HTMLCanvasElement::createImageBitmap(
   return ImageBitmapSource::fulfillImageBitmap(
       scriptState,
       isPaintable() ? ImageBitmap::create(this, cropRect, options) : nullptr);
+}
+
+void HTMLCanvasElement::setPlaceholderFrame(
+    RefPtr<StaticBitmapImage> image,
+    WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
+    RefPtr<WebTaskRunner> taskRunner,
+    unsigned resourceId) {
+  OffscreenCanvasPlaceholder::setPlaceholderFrame(
+      std::move(image), std::move(dispatcher), std::move(taskRunner),
+      resourceId);
+  notifyListenersCanvasChanged();
 }
 
 bool HTMLCanvasElement::isOpaque() const {
@@ -1423,9 +1457,18 @@ String HTMLCanvasElement::getIdFromControl(const Element* element) {
 
 void HTMLCanvasElement::createLayer() {
   DCHECK(!m_surfaceLayerBridge);
-  m_surfaceLayerBridge = WTF::wrapUnique(new CanvasSurfaceLayerBridge(this));
-  // Creates a placeholder layer first before Surface is created.
-  m_surfaceLayerBridge->createSolidColorLayer();
+  LocalFrame* frame = document().frame();
+  WebLayerTreeView* layerTreeView = nullptr;
+  // TODO(xlai): Ensure OffscreenCanvas commit() is still functional when a
+  // frame-less HTML canvas's document is reparenting under another frame.
+  // See crbug.com/683172.
+  if (frame) {
+    layerTreeView = frame->page()->chromeClient().getWebLayerTreeView(frame);
+    m_surfaceLayerBridge =
+        WTF::wrapUnique(new CanvasSurfaceLayerBridge(this, layerTreeView));
+    // Creates a placeholder layer first before Surface is created.
+    m_surfaceLayerBridge->createSolidColorLayer();
+  }
 }
 
 void HTMLCanvasElement::OnWebLayerReplaced() {

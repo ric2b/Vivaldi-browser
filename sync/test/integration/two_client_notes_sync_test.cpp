@@ -3,13 +3,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/rand_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "sync/test/integration/notes_helper.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
+#include "sync/test/integration/notes_helper.h"
 #include "sync/test/integration/notes_sync_test.h"
 #include "ui/base/layout.h"
 
@@ -37,11 +39,10 @@ using notes_helper::IndexedSubfolderName;
 using notes_helper::IndexedSubsubfolderName;
 using notes_helper::ContainsDuplicateNotes;
 
-static const std::string kGenericURL = "http://www.host.ext:1234/path/filename";
-static const std::string kGenericURLTitle = "URL Title";
-static const std::string kGenericFolderName = "Folder Name";
-static const std::string kGenericSubfolderName = "Subfolder Name";
-static const std::string kGenericSubsubfolderName = "Subsubfolder Name";
+static const char kGenericURL[] = "http://www.host.ext:1234/path/filename";
+static const char kGenericURLTitle[] = "URL Title";
+static const char kGenericFolderName[] = "Folder Name";
+static const char kGenericSubfolderName[] = "Subfolder Name";
 
 class TwoClientNotesSyncTest : public NotesSyncTest {
  public:
@@ -72,8 +73,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  Notes_Node *trash_node_0 = GetNotesModel(0)->trash_node();
-  Notes_Node *trash_node_1 = GetNotesModel(1)->trash_node();
+  Notes_Node* trash_node_0 = GetNotesModel(0)->trash_node();
+  Notes_Node* trash_node_1 = GetNotesModel(1)->trash_node();
   ASSERT_TRUE(AddNote(0, trash_node_0, 0, "trash_1_url0",
                       GURL("http://www.microsoft.com")));
   ASSERT_EQ(1, trash_node_0->child_count());

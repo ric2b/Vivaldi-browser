@@ -1,7 +1,7 @@
 // Copyright (c) 2016 Vivaldi. All rights reserved.
 
-#ifndef BROWSER_VIVALDI_CLIPBOARD_UTILS_H
-#define BROWSER_VIVALDI_CLIPBOARD_UTILS_H
+#ifndef BROWSER_VIVALDI_CLIPBOARD_UTILS_H_
+#define BROWSER_VIVALDI_CLIPBOARD_UTILS_H_
 
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/base/clipboard/clipboard_types.h"
@@ -13,8 +13,8 @@ namespace clipboard {
 void OnInputEvent(const blink::WebInputEvent& input_event);
 bool SuppressWrite(ui::ClipboardType clipboardType);
 
-}  // Clipboard
+}  // namespace clipboard
 
-}  // vivaldi
+}  // namespace vivaldi
 
-#endif  // BROWSER_VIVALDI_CLIPBOARD_UTILS_H
+#endif  // BROWSER_VIVALDI_CLIPBOARD_UTILS_H_

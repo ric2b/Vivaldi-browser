@@ -162,6 +162,10 @@ void WebRuntimeFeatures::enableLazyParseCSS(bool enable) {
   RuntimeEnabledFeatures::setLazyParseCSSEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableLoadingWithMojo(bool enable) {
+  RuntimeEnabledFeatures::setLoadingWithMojoEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableMediaCapture(bool enable) {
   RuntimeEnabledFeatures::setMediaCaptureEnabled(enable);
 }
@@ -218,10 +222,6 @@ void WebRuntimeFeatures::enableMiddleClickAutoscroll(bool enable) {
   RuntimeEnabledFeatures::setMiddleClickAutoscrollEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableParseHTMLOnMainThread(bool enable) {
-  RuntimeEnabledFeatures::setParseHTMLOnMainThreadEnabled(enable);
-}
-
 void WebRuntimeFeatures::enablePassiveDocumentEventListeners(bool enable) {
   RuntimeEnabledFeatures::setPassiveDocumentEventListenersEnabled(enable);
 }
@@ -258,6 +258,10 @@ void WebRuntimeFeatures::enableTouchEventFeatureDetection(bool enable) {
   RuntimeEnabledFeatures::setTouchEventFeatureDetectionEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableTouchpadAndWheelScrollLatching(bool enable) {
+  RuntimeEnabledFeatures::setTouchpadAndWheelScrollLatchingEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableWebGLDraftExtensions(bool enable) {
   RuntimeEnabledFeatures::setWebGLDraftExtensionsEnabled(enable);
 }
@@ -290,6 +294,10 @@ void WebRuntimeFeatures::enablePreciseMemoryInfo(bool enable) {
   RuntimeEnabledFeatures::setPreciseMemoryInfoEnabled(enable);
 }
 
+void WebRuntimeFeatures::enablePrintBrowser(bool enable) {
+  RuntimeEnabledFeatures::setPrintBrowserEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableCredentialManagerAPI(bool enable) {
   RuntimeEnabledFeatures::setCredentialManagerEnabled(enable);
 }
@@ -308,6 +316,10 @@ void WebRuntimeFeatures::enablePushMessaging(bool enable) {
 
 void WebRuntimeFeatures::enableWebVR(bool enable) {
   RuntimeEnabledFeatures::setWebVREnabled(enable);
+}
+
+void WebRuntimeFeatures::enableWebVRExperimentalRendering(bool enable) {
+  RuntimeEnabledFeatures::setWebVRExperimentalRenderingEnabled(enable);
 }
 
 void WebRuntimeFeatures::enablePresentationAPI(bool enable) {
@@ -378,6 +390,10 @@ void WebRuntimeFeatures::enableRemotePlaybackAPI(bool enable) {
 
 void WebRuntimeFeatures::enableVideoFullscreenOrientationLock(bool enable) {
   RuntimeEnabledFeatures::setVideoFullscreenOrientationLockEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableVideoFullscreenDetection(bool enable) {
+  RuntimeEnabledFeatures::setVideoFullscreenDetectionEnabled(enable);
 }
 
 }  // namespace blink

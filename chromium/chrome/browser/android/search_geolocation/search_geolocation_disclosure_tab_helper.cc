@@ -6,6 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -70,26 +72,25 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(SearchGeolocationDisclosureTabHelper);
 SearchGeolocationDisclosureTabHelper::SearchGeolocationDisclosureTabHelper(
     content::WebContents* contents)
     : content::WebContentsObserver(contents) {
-  consistent_geolocation_enabled_ =
-      base::FeatureList::IsEnabled(features::kConsistentOmniboxGeolocation);
+  consistent_geolocation_disclosure_enabled_ =
+      base::FeatureList::IsEnabled(features::kConsistentOmniboxGeolocation) &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableSearchGeolocationDisclosure);
 }
 
 SearchGeolocationDisclosureTabHelper::~SearchGeolocationDisclosureTabHelper() {}
 
 void SearchGeolocationDisclosureTabHelper::NavigationEntryCommitted(
     const content::LoadCommittedDetails& load_details) {
-  if (consistent_geolocation_enabled_)
-    MaybeShowDisclosure(web_contents()->GetVisibleURL());
+  MaybeShowDisclosure(web_contents()->GetVisibleURL());
 }
 
 void SearchGeolocationDisclosureTabHelper::MaybeShowDisclosure(
     const GURL& gurl) {
-  if (!ShouldShowDisclosureForUrl(gurl))
+  if (!consistent_geolocation_disclosure_enabled_)
     return;
 
-  // Check that the Chrome app has geolocation permission.
-  JNIEnv* env = base::android::AttachCurrentThread();
-  if (!Java_GeolocationHeader_hasGeolocationPermission(env))
+  if (!ShouldShowDisclosureForUrl(gurl))
     return;
 
   // Don't show the infobar if the user has dismissed it, or they've seen it
@@ -133,6 +134,11 @@ void SearchGeolocationDisclosureTabHelper::MaybeShowDisclosure(
   SearchGeolocationService* service =
       SearchGeolocationService::Factory::GetForBrowserContext(GetProfile());
   if (!service->GetDSEGeolocationSetting())
+    return;
+
+  // Check that the Chrome app has geolocation permission.
+  JNIEnv* env = base::android::AttachCurrentThread();
+  if (!Java_GeolocationHeader_hasGeolocationPermission(env))
     return;
 
   // All good, let's show the disclosure and increment the shown count.

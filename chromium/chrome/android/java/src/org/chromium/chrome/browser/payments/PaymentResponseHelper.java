@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.os.Handler;
-
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
@@ -84,25 +82,8 @@ public class PaymentResponseHelper implements NormalizedAddressRequestDelegate {
             // merchant.
             mIsWaitingForShippingNormalization = true;
             PersonalDataManager.getInstance().normalizeAddress(
-                    mSelectedShippingAddress.getProfile().getGUID(),
+                    mSelectedShippingAddress.getProfile(),
                     AutofillAddress.getCountryCode(mSelectedShippingAddress.getProfile()), this);
-        }
-    }
-
-    /**
-     * Called when the intrument details have started loading. Starts a timeout to stop the shipping
-     * address normalization if it takes too long.
-     */
-    public void onInstrumentsDetailsLoading() {
-        if (mIsWaitingForShippingNormalization) {
-            // If the normalization is not completed yet, start a timer to cancel it if it takes too
-            // long.
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    onAddressNormalized(null);
-                }
-            }, PersonalDataManager.getInstance().getNormalizationTimeoutMS());
         }
     }
 
@@ -137,5 +118,10 @@ public class PaymentResponseHelper implements NormalizedAddressRequestDelegate {
 
         // Wait for the payment details before sending the response.
         if (!mIsWaitingForPaymentsDetails) mDelegate.onPaymentResponseReady(mPaymentResponse);
+    }
+
+    @Override
+    public void onCouldNotNormalize(AutofillProfile profile) {
+        onAddressNormalized(null);
     }
 }

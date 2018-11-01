@@ -29,7 +29,7 @@ const char kAlphaAPIName[] = "alpha";
 const char kAlphaAPISpec[] =
     "{"
     "  'types': [{"
-    "    'id': 'objRef',"
+    "    'id': 'alpha.objRef',"
     "    'type': 'object',"
     "    'properties': {"
     "      'prop1': {'type': 'string'},"
@@ -49,7 +49,7 @@ const char kAlphaAPISpec[] =
     "    'name': 'functionWithRefAndCallback',"
     "    'parameters': [{"
     "      'name': 'ref',"
-    "      '$ref': 'objRef'"
+    "      '$ref': 'alpha.objRef'"
     "    }, {"
     "      'name': 'callback',"
     "      'type': 'function'"
@@ -70,6 +70,15 @@ const char kBetaAPISpec[] =
     "  }]"
     "}";
 
+const char kGammaAPIName[] = "gamma";
+const char kGammaAPISpec[] =
+    "{"
+    "  'functions': [{"
+    "    'name': 'functionWithExternalRef',"
+    "    'parameters': [{ 'name': 'someRef', '$ref': 'alpha.objRef' }]"
+    "  }]"
+    "}";
+
 bool AllowAllAPIs(const std::string& name) {
   return true;
 }
@@ -86,7 +95,7 @@ class APIBindingsSystemTestBase : public APIBindingTest {
       const std::string& api_name) = 0;
 
   // Stores the request in |last_request_|.
-  void OnAPIRequest(std::unique_ptr<APIBinding::Request> request,
+  void OnAPIRequest(std::unique_ptr<APIRequestHandler::Request> request,
                     v8::Local<v8::Context> context) {
     ASSERT_FALSE(last_request_);
     last_request_ = std::move(request);
@@ -108,7 +117,8 @@ class APIBindingsSystemTestBase : public APIBindingTest {
         base::Bind(&APIBindingsSystemTestBase::OnAPIRequest,
                    base::Unretained(this)),
         base::Bind(&APIBindingsSystemTestBase::OnEventListenersChanged,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        APILastError(APILastError::GetParent()));
   }
 
   void TearDown() override {
@@ -121,7 +131,7 @@ class APIBindingsSystemTestBase : public APIBindingTest {
   void ValidateLastRequest(const std::string& expected_name,
                            const std::string& expected_arguments);
 
-  const APIBinding::Request* last_request() const {
+  const APIRequestHandler::Request* last_request() const {
     return last_request_.get();
   }
   void reset_last_request() { last_request_.reset(); }
@@ -134,7 +144,7 @@ class APIBindingsSystemTestBase : public APIBindingTest {
 
   // The last request to be received from the APIBindingsSystem, or null if
   // there is none.
-  std::unique_ptr<APIBinding::Request> last_request_;
+  std::unique_ptr<APIRequestHandler::Request> last_request_;
 
   DISALLOW_COPY_AND_ASSIGN(APIBindingsSystemTestBase);
 };
@@ -197,7 +207,9 @@ void APIBindingsSystemTest::SetUp() {
       const char* name;
       const char* spec;
     } api_data[] = {
-        {kAlphaAPIName, kAlphaAPISpec}, {kBetaAPIName, kBetaAPISpec},
+        {kAlphaAPIName, kAlphaAPISpec},
+        {kBetaAPIName, kBetaAPISpec},
+        {kGammaAPIName, kGammaAPISpec},
     };
     for (const auto& api : api_data) {
       std::unique_ptr<base::DictionaryValue> api_schema =
@@ -237,7 +249,7 @@ TEST_F(APIBindingsSystemTest, TestInitializationAndCallbacks) {
     std::unique_ptr<base::ListValue> expected_args =
         ListValueFromString(kResponseArgsJson);
     bindings_system()->CompleteRequest(last_request()->request_id,
-                                       *expected_args);
+                                       *expected_args, std::string());
 
     EXPECT_EQ(ReplaceSingleQuotes(kResponseArgsJson),
               GetStringPropertyFromObject(context->Global(), context,
@@ -259,7 +271,7 @@ TEST_F(APIBindingsSystemTest, TestInitializationAndCallbacks) {
                         "[{'prop1':'alpha','prop2':42}]");
 
     bindings_system()->CompleteRequest(last_request()->request_id,
-                                       base::ListValue());
+                                       base::ListValue(), std::string());
 
     EXPECT_EQ("[]", GetStringPropertyFromObject(context->Global(), context,
                                                 "callbackArguments"));
@@ -301,10 +313,10 @@ TEST_F(APIBindingsSystemTest, TestCustomHooks) {
   v8::Local<v8::Context> context = ContextLocal();
 
   bool did_call = false;
-  auto hook = [](bool* did_call,
-                 const APISignature* signature, v8::Local<v8::Context> context,
+  auto hook = [](bool* did_call, const APISignature* signature,
+                 v8::Local<v8::Context> context,
                  std::vector<v8::Local<v8::Value>>* arguments,
-                 const ArgumentSpec::RefMap& type_refs) {
+                 const APITypeReferenceMap& type_refs) {
     *did_call = true;
     APIBindingHooks::RequestResult result(
         APIBindingHooks::RequestResult::HANDLED);
@@ -391,7 +403,8 @@ TEST_F(APIBindingsSystemTest, TestSetCustomCallback) {
 
     std::unique_ptr<base::ListValue> response =
         ListValueFromString("['alpha','beta']");
-    bindings_system()->CompleteRequest(last_request()->request_id, *response);
+    bindings_system()->CompleteRequest(last_request()->request_id, *response,
+                                       std::string());
 
     EXPECT_EQ(
         "\"alpha.functionWithCallback\"",
@@ -402,6 +415,27 @@ TEST_F(APIBindingsSystemTest, TestSetCustomCallback) {
     EXPECT_EQ("[\"beta\"]",
               GetStringPropertyFromObject(context->Global(), context,
                                           "callbackArguments"));
+  }
+}
+
+// Test that references to other API's types works.
+TEST_F(APIBindingsSystemTest, CrossAPIReferences) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
+
+  // Instantiate gamma API. Note: It's important that we haven't instantiated
+  // alpha API yet, since this tests that we can lazily populate the type
+  // information.
+  v8::Local<v8::Object> gamma_api = bindings_system()->CreateAPIInstance(
+      kGammaAPIName, context, isolate(), base::Bind(&AllowAllAPIs), nullptr);
+  ASSERT_FALSE(gamma_api.IsEmpty());
+
+  {
+    // Test a simple call -> response.
+    const char kTestCall[] = "obj.functionWithExternalRef({prop1: 'foo'});";
+    CallFunctionOnObject(context, gamma_api, kTestCall);
+    ValidateLastRequest("gamma.functionWithExternalRef", "[{'prop1':'foo'}]");
+    reset_last_request();
   }
 }
 

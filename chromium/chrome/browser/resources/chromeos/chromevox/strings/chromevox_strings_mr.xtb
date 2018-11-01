@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">रेडिओ बटण गट</translation>
 <translation id="2471138580042810658">मथळा 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{चौफुली}one{# चौफुली}other{# चौफुली}}</translation>
+<translation id="2523609930580546572">ChromeVox ट्यूटोरियल</translation>
 <translation id="2525706221823668172">Chromebook कीबोर्ड शॉर्टकट</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> रीसेट केली गेली.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
@@ -221,7 +222,6 @@
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">भेट दिलेला दुवा</translation>
 <translation id="3232388865800379423">एक पॉप अप बटण</translation>
-<translation id="323731244387692321">ChromeVox कीबोर्ड मदत उघडा</translation>
 <translation id="3241052487511142956">मागील भेट दिलेला दुवा</translation>
 <translation id="3286390186030710347">स्‍लायडर</translation>
 <translation id="3299925995433437805">पुढील भेट दिलेला दुवा नाही.</translation>
@@ -376,6 +376,7 @@
 <translation id="4372435075475052704">किमान:<ph name="X" /></translation>
 <translation id="4372705107434148843">भाषण थांबवा</translation>
 <translation id="4373197658375206385">दुवा नसलेला मागील आयटम नाही.</translation>
+<translation id="4376316291247992553">ग्राफिक ब्रेल म्हणून पहा</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">रीसेट करा</translation>
 <translation id="4471074325120394300">कोणतेही दुवे नाहीत.</translation>
@@ -719,6 +720,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="7693840228159394336">मागील रेडिओ बटण</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, संकेतशब्द मजकूर बॉक्स</translation>
+<translation id="7776293189010177726">ChromeVox मेनू उघडा</translation>
 <translation id="7805247615045262757">डीफॉल्ट नेव्हिगेशन</translation>
 <translation id="7805768142964895445">स्थिती</translation>
 <translation id="7810781339813764006">पुढील गट</translation>

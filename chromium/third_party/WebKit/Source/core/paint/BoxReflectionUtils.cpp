@@ -13,7 +13,7 @@
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/BoxReflection.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
+#include "platform/graphics/paint/PaintRecordBuilder.h"
 
 namespace blink {
 
@@ -21,7 +21,7 @@ BoxReflection boxReflectionForPaintLayer(const PaintLayer& layer,
                                          const ComputedStyle& style) {
   const StyleReflection* reflectStyle = style.boxReflect();
 
-  LayoutRect frameLayoutRect = toLayoutBox(layer.layoutObject())->frameRect();
+  LayoutRect frameLayoutRect = toLayoutBox(layer.layoutObject()).frameRect();
   FloatRect frameRect(frameLayoutRect);
   BoxReflection::ReflectionDirection direction =
       BoxReflection::VerticalReflection;
@@ -47,7 +47,7 @@ BoxReflection boxReflectionForPaintLayer(const PaintLayer& layer,
       break;
   }
 
-  sk_sp<SkPicture> mask;
+  sk_sp<PaintRecord> mask;
   const NinePieceImage& maskNinePiece = reflectStyle->mask();
   if (maskNinePiece.hasImage()) {
     LayoutRect maskRect(LayoutPoint(), frameLayoutRect.size());
@@ -55,20 +55,20 @@ BoxReflection boxReflectionForPaintLayer(const PaintLayer& layer,
     maskBoundingRect.expand(style.imageOutsets(maskNinePiece));
     FloatRect maskBoundingFloatRect(maskBoundingRect);
 
-    // TODO(jbroman): SkPictureBuilder + DrawingRecorder seems excessive.
-    // If NinePieceImagePainter operated on SkCanvas, we'd only need an
-    // SkPictureRecorder here.
-    SkPictureBuilder recorder(maskBoundingFloatRect);
+    // TODO(jbroman): PaintRecordBuilder + DrawingRecorder seems excessive.
+    // If NinePieceImagePainter operated on SkCanvas, we'd only need a
+    // PictureRecorder here.
+    PaintRecordBuilder builder(maskBoundingFloatRect);
     {
-      GraphicsContext& context = recorder.context();
-      DrawingRecorder drawingRecorder(context, *layer.layoutObject(),
+      GraphicsContext& context = builder.context();
+      DrawingRecorder drawingRecorder(context, layer.layoutObject(),
                                       DisplayItem::kReflectionMask,
                                       maskBoundingFloatRect);
-      NinePieceImagePainter(*layer.layoutObject())
-          .paint(recorder.context(), maskRect, style, maskNinePiece,
+      NinePieceImagePainter(layer.layoutObject())
+          .paint(builder.context(), maskRect, style, maskNinePiece,
                  SkBlendMode::kSrcOver);
     }
-    mask = recorder.endRecording();
+    mask = builder.endRecording();
   }
 
   return BoxReflection(direction, offset, std::move(mask));

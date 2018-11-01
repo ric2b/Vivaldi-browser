@@ -5,8 +5,8 @@
 #include "modules/screen_orientation/ScreenOrientationControllerImpl.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/page/ChromeClient.h"
@@ -42,9 +42,10 @@ ScreenOrientationControllerImpl::ScreenOrientationControllerImpl(
     WebScreenOrientationClient* client)
     : ScreenOrientationController(frame),
       ContextLifecycleObserver(frame.document()),
-      PlatformEventController(frame.page()),
+      PlatformEventController(&frame),
       m_client(client),
       m_dispatchEventTimer(
+          TaskRunnerHelper::get(TaskType::MiscPlatformAPI, &frame),
           this,
           &ScreenOrientationControllerImpl::dispatchEventTimerFired) {}
 
@@ -83,8 +84,8 @@ WebScreenOrientationType ScreenOrientationControllerImpl::computeOrientation(
 void ScreenOrientationControllerImpl::updateOrientation() {
   DCHECK(m_orientation);
   DCHECK(frame());
-  DCHECK(frame()->host());
-  ChromeClient& chromeClient = frame()->host()->chromeClient();
+  DCHECK(frame()->page());
+  ChromeClient& chromeClient = frame()->page()->chromeClient();
   WebScreenInfo screenInfo = chromeClient.screenInfo();
   WebScreenOrientationType orientationType = screenInfo.orientationType;
   if (orientationType == WebScreenOrientationUndefined) {
@@ -118,12 +119,12 @@ void ScreenOrientationControllerImpl::pageVisibilityChanged() {
     return;
 
   DCHECK(frame());
-  DCHECK(frame()->host());
+  DCHECK(frame()->page());
 
   // The orientation type and angle are tied in a way that if the angle has
   // changed, the type must have changed.
   unsigned short currentAngle =
-      frame()->host()->chromeClient().screenInfo().orientationAngle;
+      frame()->page()->chromeClient().screenInfo().orientationAngle;
 
   // FIXME: sendOrientationChangeEvent() currently send an event all the
   // children of the frame, so it should only be called on the frame on
@@ -136,7 +137,7 @@ void ScreenOrientationControllerImpl::pageVisibilityChanged() {
 }
 
 void ScreenOrientationControllerImpl::notifyOrientationChanged() {
-  if (!isVisible())
+  if (!isVisible() || !frame())
     return;
 
   if (isActive())

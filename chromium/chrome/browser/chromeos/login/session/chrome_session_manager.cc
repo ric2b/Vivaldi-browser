@@ -33,7 +33,6 @@
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "components/arc/arc_bridge_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -106,13 +105,7 @@ void StartRestoreAfterCrashSession(Profile* user_profile,
     user_session_mgr->InitializeCRLSetFetcher(user);
     user_session_mgr->InitializeCertificateTransparencyComponents(user);
 
-    if (arc::ArcBridgeService::GetEnabled(
-            base::CommandLine::ForCurrentProcess()) ||
-        arc::ArcBridgeService::GetKioskStarted(
-            base::CommandLine::ForCurrentProcess())) {
-      arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(
-          user_profile);
-    }
+    arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(user_profile);
 
     // Send the PROFILE_PREPARED notification and call SessionStarted()
     // so that the Launcher and other Profile dependent classes are created.
@@ -164,7 +157,7 @@ void ChromeSessionManager::Initialize(
     bool is_running_test) {
   // Keep Chrome alive for mash.
   // TODO(xiyuan): Remove this when session manager is moved out of Chrome.
-  if (chrome::IsRunningInMash() &&
+  if (ash_util::IsRunningInMash() &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           ::switches::kDisableZeroBrowsersOpenForTests)) {
     g_browser_process->platform_part()->RegisterKeepAlive();

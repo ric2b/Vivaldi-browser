@@ -155,8 +155,7 @@ int DragDropController::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source,
-    bool& cancelled) {
+    ui::DragDropTypes::DragEventSource source) {
   if (IsDragDropInProgress())
     return 0;
 

@@ -29,6 +29,15 @@ using ntp_snippets::ContentSuggestion;
 using ntp_snippets::ContentSuggestionsNotificationHelper;
 using ntp_snippets::ContentSuggestionsService;
 using ntp_snippets::KnownCategories;
+using params::ntp_snippets::kNotificationsAlwaysNotifyParam;
+using params::ntp_snippets::kNotificationsDailyLimit;
+using params::ntp_snippets::kNotificationsDefaultDailyLimit;
+using params::ntp_snippets::kNotificationsDefaultPriority;
+using params::ntp_snippets::kNotificationsFeature;
+using params::ntp_snippets::kNotificationsKeepWhenFrontmostParam;
+using params::ntp_snippets::kNotificationsOpenToNTPParam;
+using params::ntp_snippets::kNotificationsPriorityParam;
+using params::ntp_snippets::kNotificationsUseSnippetAsTextParam;
 
 namespace {
 
@@ -61,17 +70,45 @@ bool ShouldNotifyInState(base::android::ApplicationState state) {
   return false;
 }
 
+int DayAsYYYYMMDD() {
+  base::Time::Exploded now{};
+  base::Time::Now().LocalExplode(&now);
+  return (now.year * 10000) + (now.month * 100) + now.day_of_month;
+}
+
+bool HaveQuotaForToday(PrefService* prefs) {
+  int today = DayAsYYYYMMDD();
+  int limit = variations::GetVariationParamByFeatureAsInt(
+      kNotificationsFeature, kNotificationsDailyLimit,
+      kNotificationsDefaultDailyLimit);
+  int sent =
+      prefs->GetInteger(prefs::kContentSuggestionsNotificationsSentDay) == today
+          ? prefs->GetInteger(prefs::kContentSuggestionsNotificationsSentCount)
+          : 0;
+  return sent < limit;
+}
+
+void ConsumeQuota(PrefService* prefs) {
+  int sent =
+      prefs->GetInteger(prefs::kContentSuggestionsNotificationsSentCount);
+  int today = DayAsYYYYMMDD();
+  if (prefs->GetInteger(prefs::kContentSuggestionsNotificationsSentDay) !=
+      today) {
+    prefs->SetInteger(prefs::kContentSuggestionsNotificationsSentDay, today);
+    sent = 0;  // Reset on day change.
+  }
+  prefs->SetInteger(prefs::kContentSuggestionsNotificationsSentCount, sent + 1);
+}
+
 }  // namespace
 
 class ContentSuggestionsNotifierService::NotifyingObserver
     : public ContentSuggestionsService::Observer {
  public:
   NotifyingObserver(ContentSuggestionsService* service,
-                    Profile* profile,
-                    PrefService* prefs)
+                    Profile* profile)
       : service_(service),
         profile_(profile),
-        prefs_(prefs),
         app_status_listener_(base::Bind(&NotifyingObserver::AppStatusChanged,
                                         base::Unretained(this))),
         weak_ptr_factory_(this) {}
@@ -84,6 +121,9 @@ class ContentSuggestionsNotifierService::NotifyingObserver
                    profile_)) {
       DVLOG(1) << "Suppressed notification due to opt-out";
       return;
+    } else if (!HaveQuotaForToday(profile_->GetPrefs())) {
+      DVLOG(1) << "Notification suppressed due to daily limit";
+      return;
     }
     const ContentSuggestion* suggestion = GetSuggestionToNotifyAbout(category);
     if (!suggestion) {
@@ -92,12 +132,19 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     base::Time timeout_at = suggestion->notification_extra()
                                 ? suggestion->notification_extra()->deadline
                                 : base::Time::Max();
+    bool use_snippet = variations::GetVariationParamByFeatureAsBool(
+        kNotificationsFeature, kNotificationsUseSnippetAsTextParam, false);
+    bool open_to_ntp = variations::GetVariationParamByFeatureAsBool(
+        kNotificationsFeature, kNotificationsOpenToNTPParam, false);
     service_->FetchSuggestionImage(
         suggestion->id(),
         base::Bind(&NotifyingObserver::ImageFetched,
                    weak_ptr_factory_.GetWeakPtr(), suggestion->id(),
-                   suggestion->url(), suggestion->title(),
-                   suggestion->publisher_name(), timeout_at));
+                   open_to_ntp ? GURL("chrome://newtab") : suggestion->url(),
+                   suggestion->title(),
+                   use_snippet ? suggestion->snippet_text()
+                               : suggestion->publisher_name(),
+                   timeout_at));
   }
 
   void OnCategoryStatusChanged(Category category,
@@ -123,13 +170,8 @@ class ContentSuggestionsNotifierService::NotifyingObserver
 
   void OnSuggestionInvalidated(
       const ContentSuggestion::ID& suggestion_id) override {
-    // TODO(sfiera): handle concurrent notifications and non-articles properly.
-    if (suggestion_id.category().IsKnownCategory(KnownCategories::ARTICLES) &&
-        (suggestion_id.id_within_category() ==
-         prefs_->GetString(kNotificationIDWithinCategory))) {
-      ContentSuggestionsNotificationHelper::HideNotification(
-          suggestion_id, CONTENT_SUGGESTIONS_HIDE_EXPIRY);
-    }
+    ContentSuggestionsNotificationHelper::HideNotification(
+        suggestion_id, CONTENT_SUGGESTIONS_HIDE_EXPIRY);
   }
 
   void OnFullRefreshRequired() override {
@@ -147,8 +189,7 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     const auto& suggestions = service_->GetSuggestionsForCategory(category);
     // TODO(sfiera): replace with AlwaysNotifyAboutContentSuggestions().
     if (variations::GetVariationParamByFeatureAsBool(
-             kContentSuggestionsNotificationsFeature,
-             kContentSuggestionsNotificationsAlwaysNotifyParam, false)) {
+            kNotificationsFeature, kNotificationsAlwaysNotifyParam, false)) {
       if (category.IsKnownCategory(KnownCategories::ARTICLES) &&
           !suggestions.empty()) {
         return &suggestions[0];
@@ -165,6 +206,11 @@ class ContentSuggestionsNotifierService::NotifyingObserver
   }
 
   void AppStatusChanged(base::android::ApplicationState state) {
+    if (variations::GetVariationParamByFeatureAsBool(
+            kNotificationsFeature, kNotificationsKeepWhenFrontmostParam,
+            false)) {
+      return;
+    }
     if (!ShouldNotifyInState(state)) {
       ContentSuggestionsNotificationHelper::HideAllNotifications(
           CONTENT_SUGGESTIONS_HIDE_FRONTMOST);
@@ -174,7 +220,7 @@ class ContentSuggestionsNotifierService::NotifyingObserver
   void ImageFetched(const ContentSuggestion::ID& id,
                     const GURL& url,
                     const base::string16& title,
-                    const base::string16& publisher,
+                    const base::string16& text,
                     base::Time timeout_at,
                     const gfx::Image& image) {
     if (!ShouldNotifyInState(app_status_listener_.GetState())) {
@@ -183,9 +229,12 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     // check if suggestion is still valid.
     DVLOG(1) << "Fetched " << image.Size().width() << "x"
              << image.Size().height() << " image for " << url.spec();
-    prefs_->ClearPref(kNotificationIDWithinCategory);
+    ConsumeQuota(profile_->GetPrefs());
+    int priority = variations::GetVariationParamByFeatureAsInt(
+        kNotificationsFeature, kNotificationsPriorityParam,
+        kNotificationsDefaultPriority);
     if (ContentSuggestionsNotificationHelper::SendNotification(
-            id, url, title, publisher, CropSquare(image), timeout_at)) {
+            id, url, title, text, CropSquare(image), timeout_at, priority)) {
       RecordContentSuggestionsNotificationImpression(
           id.category().IsKnownCategory(KnownCategories::ARTICLES)
               ? CONTENT_SUGGESTIONS_ARTICLE
@@ -195,7 +244,6 @@ class ContentSuggestionsNotifierService::NotifyingObserver
 
   ContentSuggestionsService* const service_;
   Profile* const profile_;
-  PrefService* const prefs_;
   base::android::ApplicationStatusListener app_status_listener_;
 
   base::WeakPtrFactory<NotifyingObserver> weak_ptr_factory_;
@@ -205,11 +253,8 @@ class ContentSuggestionsNotifierService::NotifyingObserver
 
 ContentSuggestionsNotifierService::ContentSuggestionsNotifierService(
     Profile* profile,
-    ContentSuggestionsService* suggestions,
-    PrefService* prefs)
-    : observer_(base::MakeUnique<NotifyingObserver>(suggestions,
-                                                    profile,
-                                                    profile->GetPrefs())) {
+    ContentSuggestionsService* suggestions)
+    : observer_(base::MakeUnique<NotifyingObserver>(suggestions, profile)) {
   ContentSuggestionsNotificationHelper::FlushCachedMetrics();
   suggestions->AddObserver(observer_.get());
 }
@@ -219,7 +264,13 @@ ContentSuggestionsNotifierService::~ContentSuggestionsNotifierService() =
 
 void ContentSuggestionsNotifierService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterStringPref(kNotificationIDWithinCategory, std::string());
   registry->RegisterIntegerPref(
       prefs::kContentSuggestionsConsecutiveIgnoredPrefName, 0);
+  registry->RegisterIntegerPref(prefs::kContentSuggestionsNotificationsSentDay,
+                                0);
+  registry->RegisterIntegerPref(
+      prefs::kContentSuggestionsNotificationsSentCount, 0);
+
+  // TODO(sfiera): remove after M62; no longer (and never really) used.
+  registry->RegisterStringPref(kNotificationIDWithinCategory, std::string());
 }

@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
 
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/chromeos/arc/arc_support_host.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_item_controller.h"
@@ -60,7 +60,7 @@ class SpinningEffectSource : public gfx::CanvasImageSource {
 ArcAppDeferredLauncherController::ArcAppDeferredLauncherController(
     ChromeLauncherControllerImpl* owner)
     : owner_(owner), weak_ptr_factory_(this) {
-  if (arc::ArcSessionManager::IsAllowedForProfile(owner->profile())) {
+  if (arc::IsArcAllowedForProfile(owner->profile())) {
     observed_profile_ = owner->profile();
     ArcAppListPrefs::Get(observed_profile_)->AddObserver(this);
   }
@@ -141,11 +141,12 @@ void ArcAppDeferredLauncherController::OnAppRemoved(const std::string& app_id) {
   Close(app_id);
 }
 
-void ArcAppDeferredLauncherController::OnArcOptInChanged(bool enabled) {
+void ArcAppDeferredLauncherController::OnArcPlayStoreEnabledChanged(
+    bool enabled) {
   if (enabled)
     return;
 
-  // If Arc was disabled, remove all deferred launch requests.
+  // If ARC was disabled, remove all deferred launch requests.
   while (!app_controller_map_.empty())
     Close(app_controller_map_.begin()->first);
 }
@@ -196,9 +197,9 @@ void ArcAppDeferredLauncherController::RegisterDeferredLaunch(
       ArcAppWindowLauncherController::GetShelfAppIdFromArcAppId(app_id);
   const ash::ShelfID shelf_id = owner_->GetShelfIDForAppID(shelf_app_id);
 
-  // We are allowed to apply new deferred controller only over shortcut.
+  // We are allowed to apply new deferred controller only over non-active items.
   const ash::ShelfItem* item = owner_->GetItem(shelf_id);
-  if (item && item->type != ash::TYPE_APP_SHORTCUT)
+  if (item && item->status != ash::STATUS_CLOSED)
     return;
 
   ArcAppDeferredLauncherItemController* controller =

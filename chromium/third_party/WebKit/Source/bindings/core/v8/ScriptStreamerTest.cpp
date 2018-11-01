@@ -4,6 +4,8 @@
 
 #include "bindings/core/v8/ScriptStreamer.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptStreamerThread.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -17,8 +19,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
-#include <v8.h>
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -34,9 +35,9 @@ class ScriptStreamingTest : public ::testing::Test {
         m_settings(Settings::create()),
         m_resourceRequest("http://www.streaming-test.com/"),
         m_resource(ScriptResource::create(m_resourceRequest, "UTF-8")),
-        m_pendingScript(PendingScript::create(0, m_resource.get())) {
-    m_resource->setStatus(Resource::Pending);
-    m_pendingScript = PendingScript::create(0, m_resource.get());
+        m_pendingScript(PendingScript::createForTesting(m_resource.get())) {
+    m_resource->setStatus(ResourceStatus::Pending);
+    m_pendingScript = PendingScript::createForTesting(m_resource.get());
     ScriptStreamer::setSmallScriptThresholdForTesting(0);
   }
 
@@ -69,7 +70,7 @@ class ScriptStreamingTest : public ::testing::Test {
 
   void finish() {
     m_resource->finish();
-    m_resource->setStatus(Resource::Cached);
+    m_resource->setStatus(ResourceStatus::Cached);
   }
 
   void processTasksUntilStreamingComplete() {
@@ -133,7 +134,9 @@ TEST_F(ScriptStreamingTest, CompilingStreamedScript) {
   EXPECT_TRUE(sourceCode.streamer());
   v8::TryCatch tryCatch(scope.isolate());
   v8::Local<v8::Script> script;
-  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate())
+  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate(),
+                                            SharableCrossOrigin,
+                                            V8CacheOptionsDefault)
                   .ToLocal(&script));
   EXPECT_FALSE(tryCatch.HasCaught());
 }
@@ -170,7 +173,9 @@ TEST_F(ScriptStreamingTest, CompilingStreamedScriptWithParseError) {
   EXPECT_TRUE(sourceCode.streamer());
   v8::TryCatch tryCatch(scope.isolate());
   v8::Local<v8::Script> script;
-  EXPECT_FALSE(V8ScriptRunner::compileScript(sourceCode, scope.isolate())
+  EXPECT_FALSE(V8ScriptRunner::compileScript(sourceCode, scope.isolate(),
+                                             SharableCrossOrigin,
+                                             V8CacheOptionsDefault)
                    .ToLocal(&script));
   EXPECT_TRUE(tryCatch.HasCaught());
 }
@@ -316,7 +321,9 @@ TEST_F(ScriptStreamingTest, ScriptsWithSmallFirstChunk) {
   EXPECT_TRUE(sourceCode.streamer());
   v8::TryCatch tryCatch(scope.isolate());
   v8::Local<v8::Script> script;
-  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate())
+  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate(),
+                                            SharableCrossOrigin,
+                                            V8CacheOptionsDefault)
                   .ToLocal(&script));
   EXPECT_FALSE(tryCatch.HasCaught());
 }
@@ -350,7 +357,9 @@ TEST_F(ScriptStreamingTest, EncodingChanges) {
   EXPECT_TRUE(sourceCode.streamer());
   v8::TryCatch tryCatch(scope.isolate());
   v8::Local<v8::Script> script;
-  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate())
+  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate(),
+                                            SharableCrossOrigin,
+                                            V8CacheOptionsDefault)
                   .ToLocal(&script));
   EXPECT_FALSE(tryCatch.HasCaught());
 }
@@ -384,7 +393,9 @@ TEST_F(ScriptStreamingTest, EncodingFromBOM) {
   EXPECT_TRUE(sourceCode.streamer());
   v8::TryCatch tryCatch(scope.isolate());
   v8::Local<v8::Script> script;
-  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate())
+  EXPECT_TRUE(V8ScriptRunner::compileScript(sourceCode, scope.isolate(),
+                                            SharableCrossOrigin,
+                                            V8CacheOptionsDefault)
                   .ToLocal(&script));
   EXPECT_FALSE(tryCatch.HasCaught());
 }

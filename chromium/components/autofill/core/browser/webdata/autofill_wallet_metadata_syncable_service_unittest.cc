@@ -59,6 +59,12 @@ const char kAddr2SyncTag[] = "address-YWRkcjLvv74=";
 const char kCard1SyncTag[] = "card-Y2FyZDHvv74=";
 const char kCard2SyncTag[] = "card-Y2FyZDLvv74=";
 
+// Local profile GUID in UTF8 and non-UTF8.
+const char kLocalAddr1[] = "e171e3ed-858a-4dd5-9bf3-8517f14ba5fc";
+const char kLocalAddr2[] = "fa232b9a-f248-4e5a-8d76-d46f821c0c5f";
+const char kLocalAddr1Utf8[] =
+    "ZTE3MWUzZWQtODU4YS00ZGQ1LTliZjMtODUxN2YxNGJhNWZj";
+
 // Map values are owned by the caller to GetLocalData.
 ACTION_P2(GetCopiesOf, profiles, cards) {
   for (const auto& profile : *profiles) {
@@ -674,9 +680,9 @@ syncer::SyncChange BuildCardChange(
 // server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreNewMetadataFromServerOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -698,9 +704,9 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // disk when processing on-going sync changes.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesFromServerOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, false));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, false));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -724,9 +730,9 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // processing on-going sync changes.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SendHigherValuesToServerOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -743,7 +749,7 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
                           SyncAddressChangeAndDataMatch(
                               syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
                               sync_pb::WalletMetadataSpecifics::ADDRESS,
-                              kAddr1Utf8, 1, 2, true),
+                              kAddr1Utf8, 2, 2, true),
                           SyncCardChangeAndDataMatch(
                               syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
                               sync_pb::WalletMetadataSpecifics::CARD,
@@ -755,9 +761,9 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // Verify that addition of known metadata is treated the same as an update.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        TreatAdditionOfKnownMetadataAsUpdateOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -774,7 +780,7 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
                           SyncAddressChangeAndDataMatch(
                               syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
                               sync_pb::WalletMetadataSpecifics::ADDRESS,
-                              kAddr1Utf8, 1, 2, true),
+                              kAddr1Utf8, 2, 2, true),
                           SyncCardChangeAndDataMatch(
                               syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
                               sync_pb::WalletMetadataSpecifics::CARD,
@@ -787,9 +793,9 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // no disk writes and no messages sent to the server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreUpdateOfUnknownMetadataOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -811,9 +817,9 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // ignored. There should be no disk writes and no messages sent to the server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreDeleteOfUnknownMetadataOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -835,9 +841,9 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // trigger an undelete message sent to the server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        UndeleteExistingMetadataOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -854,7 +860,7 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
                           SyncAddressChangeAndDataMatch(
                               syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
                               sync_pb::WalletMetadataSpecifics::ADDRESS,
-                              kAddr1Utf8, 1, 2, true),
+                              kAddr1Utf8, 2, 2, true),
                           SyncCardChangeAndDataMatch(
                               syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
                               sync_pb::WalletMetadataSpecifics::CARD,
@@ -867,11 +873,11 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // data, which is used to avoid calling the expensive GetAllSyncData() function.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        CacheIsUpToDateAfterSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   local_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4, false));
   local_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
   local_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr2));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
   remote_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4, false));
   remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
   remote_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr2));
@@ -903,7 +909,7 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // values to the sync server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesLocallyOnLateDataArrival) {
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, false));
   remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
@@ -931,7 +937,7 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // once the data finally arrives.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesLocallyOnLateDataArrivalAfterPartialUpdates) {
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, false));
   remote_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4, false));
   remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
   remote_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr1));
@@ -974,7 +980,7 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // Make sure that if the better data is split across the local and server
 // version, both are updated with the merge results.
 TEST_F(AutofillWalletMetadataSyncableServiceTest, SaveHigherValues_Mixed1) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 20, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 20, true));
   local_.UpdateCardStats(BuildCard(kCard1, 30, 4, ""));
   remote_.UpdateAddressStats(BuildAddress(kAddr1, 10, 2, false));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr1));
@@ -1025,9 +1031,10 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, SaveHigherValues_Mixed2) {
 }
 
 // Verify that if both local and server have a different non empty billing
-// address id, the one with the most recent (bigger) use date is kept.
+// address id refering to a Wallet address, the one with the most recent
+// (bigger) use date is kept.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
-       SaveHigherValues_DifferentBillingAddressId_LocalMostRecent) {
+       DifferentServerBillingAddressId_LocalMostRecent) {
   local_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr1));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr2));
 
@@ -1044,9 +1051,10 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 }
 
 // Verify that if both local and server have a different non empty billing
-// address id, the one with the most recent (bigger) use date is kept.
+// address id refering to a Wallet address, the one with the most recent
+// (bigger) use date is kept.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
-       SaveHigherValues_DifferentBillingAddressId_RemoteMostRecent) {
+       DifferentServerBillingAddressId_RemoteMostRecent) {
   local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr2));
 
@@ -1054,6 +1062,170 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
   // date.
   EXPECT_CALL(local_, UpdateCardStats(
                           AutofillCardMetadataMatches(kCard1, 3, 40, kAddr2)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id refering to a local profile, the one with the most recent (bigger)
+// use date is kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DifferentLocalBillingAddressId_LocalMostRecent) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 40, kLocalAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr2));
+
+  // The value from the local should be kept because it has a more recent use
+  // date.
+  EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
+  EXPECT_CALL(local_, SendChangesToSyncServer(
+                          UnorderedElementsAre(SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 40, kLocalAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id refering to a local profile, the one with the most recent (bigger)
+// use date is kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DifferentLocalBillingAddressId_RemoteMostRecent) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 40, kLocalAddr2));
+
+  // The value from the remote should be kept because it has a more recent use
+  // date.
+  EXPECT_CALL(local_, UpdateCardStats(AutofillCardMetadataMatches(
+                          kCard1, 3, 40, kLocalAddr2)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id, the one refering to a local profile is always kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DifferentBillingAddressId_KeepLocalId_Local) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr2));
+
+  // The billing address from the local version of the card should be kept since
+  // it refers to a local autofill profile.
+  EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
+  EXPECT_CALL(local_, SendChangesToSyncServer(
+                          UnorderedElementsAre(SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 4, kLocalAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id, the one refering to a local profile is always kept, even id the
+// other was used more recently.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DifferentBillingAddressId_KeepLocalId_Remote) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr2));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+
+  // The billing address from the remote version of the card should be kept
+  // since it refers to a local autofill profile.
+  EXPECT_CALL(local_, UpdateCardStats(AutofillCardMetadataMatches(
+                          kCard1, 3, 4, kLocalAddr1)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id, the one refering to a local profile is always kept, even id the
+// other was used more recently. Also makes sure that for the rest of the fields
+// the highest values are kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       SaveHigherValues_DifferentBillingAddressId_KeepLocalId_Local) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 30, 40, kAddr2));
+
+  // The billing address from the local version of the card should be kept since
+  // it refers to a local autofill profile. The highest use stats should
+  // be kept.
+  EXPECT_CALL(local_, UpdateCardStats(AutofillCardMetadataMatches(
+                          kCard1, 30, 40, kLocalAddr1)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(
+                          UnorderedElementsAre(SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 30, 40, kLocalAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id, the one refering to a local profile is always kept. Also makes
+// sure that for the rest of the fields the highest values are kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       SaveHigherValues_DifferentBillingAddressId_KeepLocalId_Remote) {
+  local_.UpdateCardStats(BuildCard(kCard1, 30, 40, kAddr2));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+
+  // The billing address from the remote version of the card should be kept
+  // since it refers to a local autofill profile. The highest use stats should
+  // be kept.
+  EXPECT_CALL(local_, UpdateCardStats(AutofillCardMetadataMatches(
+                          kCard1, 30, 40, kLocalAddr1)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(
+                          UnorderedElementsAre(SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 30, 40, kLocalAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id refering to a Wallet address with the same timestamp, the remote
+// one is kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DifferentServerBillingAddressId_BothSameTimestamp) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr2));
+
+  // The value from the remote should be kept to promote a stable set of values.
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 3, 4, kAddr2)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id refering to a local profile with the same timestamp, the remote
+// one is kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DifferentLocalBillingAddressId_BothSameTimestamp) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr2));
+
+  // The value from the remote should be kept to promote a stable set of values.
+  EXPECT_CALL(local_, UpdateCardStats(AutofillCardMetadataMatches(
+                          kCard1, 3, 4, kLocalAddr2)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if the local card has a use_count of one, its use_date is
+// replaced even if it is more recent (new cards are created with a use_date set
+// to the current time).
+TEST_F(AutofillWalletMetadataSyncableServiceTest, NewLocalCard) {
+  local_.UpdateCardStats(BuildCard(kCard1, 1, 5000, kLocalAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kLocalAddr1));
+
+  EXPECT_CALL(local_, UpdateCardStats(AutofillCardMetadataMatches(
+                          kCard1, 3, 4, kLocalAddr1)));
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
   MergeMetadata(&local_, &remote_);

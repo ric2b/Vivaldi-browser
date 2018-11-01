@@ -22,13 +22,6 @@ namespace ui {
 
 namespace {
 
-void OnGpuMemoryBufferAllocated(gfx::GpuMemoryBufferHandle* ret_handle,
-                                base::WaitableEvent* wait,
-                                const gfx::GpuMemoryBufferHandle& handle) {
-  *ret_handle = handle;
-  wait->Signal();
-}
-
 void NotifyDestructionOnCorrectThread(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     const DestructionCallback& callback,
@@ -58,12 +51,24 @@ ClientGpuMemoryBufferManager::~ClientGpuMemoryBufferManager() {
 
 void ClientGpuMemoryBufferManager::InitThread(mojom::GpuPtrInfo gpu_info) {
   gpu_.Bind(std::move(gpu_info));
+  gpu_.set_connection_error_handler(
+      base::Bind(&ClientGpuMemoryBufferManager::DisconnectGpuOnThread,
+                 base::Unretained(this)));
   weak_ptr_ = weak_ptr_factory_.GetWeakPtr();
 }
 
 void ClientGpuMemoryBufferManager::TearDownThread() {
   weak_ptr_factory_.InvalidateWeakPtrs();
+  DisconnectGpuOnThread();
+}
+
+void ClientGpuMemoryBufferManager::DisconnectGpuOnThread() {
+  if (!gpu_.is_bound())
+    return;
   gpu_.reset();
+  for (auto* waiter : pending_allocation_waiters_)
+    waiter->Signal();
+  pending_allocation_waiters_.clear();
 }
 
 void ClientGpuMemoryBufferManager::AllocateGpuMemoryBufferOnThread(
@@ -73,12 +78,35 @@ void ClientGpuMemoryBufferManager::AllocateGpuMemoryBufferOnThread(
     gfx::GpuMemoryBufferHandle* handle,
     base::WaitableEvent* wait) {
   DCHECK(thread_.task_runner()->BelongsToCurrentThread());
+
+  if (!gpu_) {
+    // The Gpu interface may have been disconnected, in which case we can't
+    // fulfill the request.
+    wait->Signal();
+    return;
+  }
+
   // |handle| and |wait| are both on the stack, and will be alive until |wait|
   // is signaled. So it is safe for OnGpuMemoryBufferAllocated() to operate on
   // these.
+  pending_allocation_waiters_.insert(wait);
   gpu_->CreateGpuMemoryBuffer(
       gfx::GpuMemoryBufferId(++counter_), size, format, usage,
-      base::Bind(&OnGpuMemoryBufferAllocated, handle, wait));
+      base::Bind(
+          &ClientGpuMemoryBufferManager::OnGpuMemoryBufferAllocatedOnThread,
+          base::Unretained(this), handle, wait));
+}
+
+void ClientGpuMemoryBufferManager::OnGpuMemoryBufferAllocatedOnThread(
+    gfx::GpuMemoryBufferHandle* ret_handle,
+    base::WaitableEvent* wait,
+    const gfx::GpuMemoryBufferHandle& handle) {
+  auto it = pending_allocation_waiters_.find(wait);
+  DCHECK(it != pending_allocation_waiters_.end());
+  pending_allocation_waiters_.erase(it);
+
+  *ret_handle = handle;
+  wait->Signal();
 }
 
 void ClientGpuMemoryBufferManager::DeletedGpuMemoryBuffer(
@@ -91,7 +119,9 @@ void ClientGpuMemoryBufferManager::DeletedGpuMemoryBuffer(
                    base::Unretained(this), id, sync_token));
     return;
   }
-  gpu_->DestroyGpuMemoryBuffer(id, sync_token);
+
+  if (gpu_)
+    gpu_->DestroyGpuMemoryBuffer(id, sync_token);
 }
 
 std::unique_ptr<gfx::GpuMemoryBuffer>

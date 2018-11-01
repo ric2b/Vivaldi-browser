@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">Для цього розширення не потрібні спеціальні дозволи.</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1635033183663317347">Установив опікун.</translation>
-<translation id="1652965563555864525">&amp;Вимк. звук</translation>
 <translation id="1723824996674794290">&amp;Нове вікно</translation>
 <translation id="1729533290416704613">Розширення також змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
 <translation id="1789575671122666129">Спливаючі вікна</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">Вибрати &amp;всі</translation>
 <translation id="1965328510789761112">Приватна пам’ять</translation>
 <translation id="1992397118740194946">Не налаштовано</translation>
-<translation id="2011110593081822050">Web Worker: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">Сховати цей плагін</translation>
 <translation id="2087822576218954668">Друк: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Оновити плагін</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">Сповіщення</translation>
 <translation id="2501797496290880632">Введіть комбінацію</translation>
 <translation id="2509857212037838238">Установити плагін <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;Пауза</translation>
 <translation id="2550212893339833758">Змінна пам’ять</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Знову ввімкнути</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">Відмовити</translation>
 <translation id="3936390757709632190">&amp;Відкрити аудіо в новій вкладці</translation>
 <translation id="3943582379552582368">&amp;Назад</translation>
-<translation id="3954582159466790312">Уві&amp;мк. звук</translation>
 <translation id="3979395879372752341">Додано нове розширення (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">Створено таке розширення:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968">&amp;Перейти до <ph name="URL" /></translation>
 <translation id="4595560905247879544">Лише адміністратор (<ph name="CUSTODIAN_NAME" />) може змінювати додатки та розширення.</translation>
 <translation id="4613271546271159013">Розширення змінило сторінку, яка з’являється, коли ви відкриваєте нову вкладку.</translation>
-<translation id="4623537843784569564">Це розширення могло бути неправильно оновлено. Перевстановіть його.</translation>
 <translation id="4677772697204437347">Пам’ять GPU</translation>
 <translation id="4711638718396952945">Відновити налаштування</translation>
 <translation id="4839303808932127586">Збере&amp;гти відео як...</translation>
 <translation id="4851858059374029925">Установити плагін <ph name="PLUGIN_NAME" />? Установлюйте лише ті плагіни, яким ви довіряєте.</translation>
-<translation id="4861833787540810454">&amp;Відтворення</translation>
-<translation id="4883993111890464517">Це розширення могло бути пошкоджено. Перевстановіть його.</translation>
 <translation id="488785315393301722">Показати деталі</translation>
 <translation id="4911714727432509308">Комбінації клавіш не присвоєно жодному розширенню.</translation>
-<translation id="4919987486109157213">Розширення пошкоджено. Перевстановіть його.</translation>
 <translation id="4927301649992043040">Пакування розширення</translation>
 <translation id="49896407730300355">Повернути п&amp;роти годинникової стрілки</translation>
 <translation id="4989966318180235467">Перевірити &amp;фонову сторінку</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">Комбінації клавіш</translation>
 <translation id="6798954102094737107">Плагін: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Залишити зміни</translation>
-<translation id="6844537474943985871">Це розширення могло бути пошкоджено. Видаліть і повторно встановіть його.</translation>
 <translation id="6863910145616405334">Немає плагіну</translation>
 <translation id="6886871292305414135">Відкрити посилання в новій &amp;вкладці</translation>
 <translation id="6900284862687837908">Фоновий додаток: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Нова вкладка</translation>
 <translation id="7564847347806291057">Завершити процес</translation>
-<translation id="7618337809041914424">&amp;Друкувати фрейм…</translation>
 <translation id="7629827748548208700">Вкладка: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Скасувати</translation>
 <translation id="7663719505383602579">Одержувач: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -260,7 +250,6 @@
 <translation id="8916476537757519021">Додатковий анонімний фрейм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Сховати деталі</translation>
 <translation id="9088234649737575428">Плагін <ph name="PLUGIN_NAME" /> заблоковано політикою підприємства</translation>
-<translation id="9101691533782776290">Запустити програму</translation>
 <translation id="9170848237812810038">&amp;Скасувати</translation>
 <translation id="9215293857209265904">Додано розширення "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="9219103736887031265">Зображення</translation>

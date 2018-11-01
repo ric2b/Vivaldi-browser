@@ -127,8 +127,7 @@ void AppListControllerDelegateAsh::LaunchApp(
     AppListSource source,
     int event_flags) {
   ChromeLauncherController::instance()->LaunchApp(
-      extension->id(),
-      AppListSourceToLaunchSource(source),
+      ash::AppLauncherId(extension->id()), AppListSourceToLaunchSource(source),
       event_flags);
   DismissView();
 }
@@ -143,7 +142,8 @@ bool AppListControllerDelegateAsh::ShouldShowUserIcon() {
   return false;
 }
 
-ash::LaunchSource AppListControllerDelegateAsh::AppListSourceToLaunchSource(
+ash::ShelfLaunchSource
+AppListControllerDelegateAsh::AppListSourceToLaunchSource(
     AppListSource source) {
   switch (source) {
     case LAUNCH_FROM_APP_LIST:

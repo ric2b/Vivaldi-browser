@@ -111,6 +111,9 @@ struct CONTENT_EXPORT DownloadCreateInfo {
   // For continuing a download, the ETag of the file.
   std::string etag;
 
+  // If "Accept-Ranges:bytes" header presents in the response header.
+  bool accept_range;
+
   // The file should be opened when the download is done.
   bool open_when_finished;
 

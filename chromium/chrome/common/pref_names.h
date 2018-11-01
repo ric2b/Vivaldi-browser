@@ -14,6 +14,7 @@
 #include "extensions/features/features.h"
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
+#include "rlz/features/features.h"
 
 namespace prefs {
 
@@ -23,12 +24,12 @@ extern const char kArcApps[];
 extern const char kArcBackupRestoreEnabled[];
 extern const char kArcDataRemoveRequested[];
 extern const char kArcEnabled[];
-extern const char kArcPolicyCompliant[];
 extern const char kArcTermsAccepted[];
 extern const char kArcLocationServiceEnabled[];
 extern const char kArcPackages[];
 extern const char kArcSetNotificationsEnabledDeferred[];
 extern const char kArcSignedIn[];
+extern const char kArcCompatibleFilesystemChosen[];
 #endif
 extern const char kChildAccountStatusKnown[];
 extern const char kDefaultApps[];
@@ -36,9 +37,11 @@ extern const char kDisableScreenshots[];
 extern const char kForceEphemeralProfiles[];
 extern const char kHomePageIsNewTabPage[];
 extern const char kHomePage[];
+extern const char kImportantSitesDialogHistory[];
 #if defined(OS_WIN)
 extern const char kLastProfileResetTimestamp[];
 #endif
+extern const char kNewTabPageLocationOverride[];
 extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
 extern const char kSessionExitedCleanly[];
@@ -59,6 +62,10 @@ extern const char kSupervisedUserSecondCustodianProfileURL[];
 extern const char kSupervisedUserSharedSettings[];
 extern const char kSupervisedUserWhitelists[];
 extern const char kURLsToRestoreOnStartup[];
+
+#if BUILDFLAG(ENABLE_RLZ)
+extern const char kRlzPingDelaySeconds[];
+#endif  // BUILDFLAG(ENABLE_RLZ)
 
 // For OS_CHROMEOS we maintain the kApplicationLocale property in both local
 // state and the user's profile.  The global property determines the locale of
@@ -225,6 +232,7 @@ extern const char kLanguageXkbAutoRepeatInterval[];
 // TODO(dmazzoni): move accessibility prefs out of chrome/.
 // http://crbug.com/594887
 extern const char kAccessibilityLargeCursorEnabled[];
+extern const char kAccessibilityLargeCursorDipSize[];
 extern const char kAccessibilityStickyKeysEnabled[];
 extern const char kAccessibilitySpokenFeedbackEnabled[];
 extern const char kAccessibilityHighContrastEnabled[];
@@ -260,6 +268,8 @@ extern const char kSessionUserActivitySeen[];
 extern const char kSessionStartTime[];
 extern const char kSessionLengthLimit[];
 extern const char kSessionWaitForInitialUserActivity[];
+extern const char kLastSessionType[];
+extern const char kLastSessionLength[];
 extern const char kPowerAcScreenDimDelayMs[];
 extern const char kPowerAcScreenOffDelayMs[];
 extern const char kPowerAcScreenLockDelayMs[];
@@ -318,6 +328,7 @@ extern const char kQuickUnlockTimeout[];
 extern const char kPinUnlockMinimumLength[];
 extern const char kPinUnlockMaximumLength[];
 extern const char kPinUnlockWeakPinsAllowed[];
+extern const char kEnableQuickUnlockFingerprint[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -435,7 +446,6 @@ extern const char kNotificationsVibrateEnabled[];
 #endif
 
 extern const char kPushMessagingAppIdentifierMap[];
-extern const char kBackgroundBudgetMap[];
 
 extern const char kGCMProductCategoryForSubtypes[];
 
@@ -447,7 +457,6 @@ extern const char kEasyUnlockProximityRequired[];
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const char kToolbarIconSurfacingBubbleAcknowledged[];
 extern const char kToolbarIconSurfacingBubbleLastShowTime[];
-extern const char kToolbarMigratedComponentActionStatus[];
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -559,6 +568,8 @@ extern const char kNtpCollapsedRecentlyClosedTabs[];
 extern const char kNtpCollapsedSnapshotDocument[];
 extern const char kNtpCollapsedSyncPromo[];
 extern const char kContentSuggestionsConsecutiveIgnoredPrefName[];
+extern const char kContentSuggestionsNotificationsSentDay[];
+extern const char kContentSuggestionsNotificationsSentCount[];
 #endif  // defined(OS_ANDROID)
 extern const char kNtpShownPage[];
 
@@ -737,6 +748,9 @@ extern const char kSystemTimezoneAutomaticDetectionPolicy[];
 
 #if defined(ENABLE_MEDIA_ROUTER)
 extern const char kEnableMediaRouter[];
+#if !defined(OS_ANDROID)
+extern const char kShowCastIconInToolbar[];
+#endif  // !defined(OS_ANDROID)
 #endif  // defined(ENABLE_MEDIA_ROUTER)
 
 #if !defined(OS_ANDROID)
@@ -859,6 +873,7 @@ extern const char kMediaRouterTabMirroringSources[];
 
 extern const char kOriginTrialPublicKey[];
 extern const char kOriginTrialDisabledFeatures[];
+extern const char kOriginTrialDisabledTokens[];
 
 extern const char kComponentUpdatesEnabled[];
 
@@ -872,6 +887,29 @@ extern const char kSearchGeolocationPostDisclosureMetricsRecorded[];
 
 extern const char kGoogleDSEGeolocationSetting[];
 
+extern const char kWebShareVisitedTargets[];
+
+#if defined(OS_WIN)
+extern const char kIOSPromotionEligible[];
+extern const char kIOSPromotionDone[];
+extern const char kIOSPromotionSMSEntryPoint[];
+extern const char kIOSPromotionShownEntryPoints[];
+extern const char kIOSPromotionLastImpression[];
+extern const char kIOSPromotionVariationId[];
+extern const char kNumberSavePasswordsBubbleIOSPromoShown[];
+extern const char kSavePasswordsBubbleIOSPromoDismissed[];
+extern const char kNumberBookmarksBubbleIOSPromoShown[];
+extern const char kBookmarksBubbleIOSPromoDismissed[];
+extern const char kNumberBookmarksFootNoteIOSPromoShown[];
+extern const char kBookmarksFootNoteIOSPromoDismissed[];
+extern const char kNumberHistoryPageIOSPromoShown[];
+extern const char kHistoryPageIOSPromoDismissed[];
+#endif
+
+extern const char kSettingsResetPromptPromptWave[];
+extern const char kSettingsResetPromptLastTriggeredForDefaultSearch[];
+extern const char kSettingsResetPromptLastTriggeredForStartupUrls[];
+extern const char kSettingsResetPromptLastTriggeredForHomepage[];
 }  // namespace prefs
 
 #endif  // CHROME_COMMON_PREF_NAMES_H_

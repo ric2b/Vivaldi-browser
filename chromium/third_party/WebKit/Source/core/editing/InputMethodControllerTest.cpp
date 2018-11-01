@@ -4,6 +4,7 @@
 
 #include "core/editing/InputMethodController.h"
 
+#include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
@@ -15,9 +16,9 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLInputElement.h"
+#include "core/html/HTMLTextAreaElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -175,8 +176,8 @@ TEST_F(InputMethodControllerTest, SetCompositionFromExistingText) {
   controller().setCompositionFromExistingText(underlines, 0, 5);
 
   Range* range = controller().compositionRange();
-  EXPECT_EQ(0, range->startOffset());
-  EXPECT_EQ(5, range->endOffset());
+  EXPECT_EQ(0u, range->startOffset());
+  EXPECT_EQ(5u, range->endOffset());
 
   PlainTextRange plainTextRange(PlainTextRange::create(*div, *range));
   EXPECT_EQ(0u, plainTextRange.start());
@@ -193,8 +194,16 @@ TEST_F(InputMethodControllerTest, SetCompositionAfterEmoji) {
 
   document().updateStyleAndLayout();
   controller().setEditableSelectionOffsets(PlainTextRange(2, 2));
-  EXPECT_EQ(2, frame().selection().start().computeOffsetInContainerNode());
-  EXPECT_EQ(2, frame().selection().end().computeOffsetInContainerNode());
+  EXPECT_EQ(2, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .start()
+                   .computeOffsetInContainerNode());
+  EXPECT_EQ(2, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .end()
+                   .computeOffsetInContainerNode());
 
   controller().setComposition(String("a"), underlines, 1, 1);
   EXPECT_STREQ("\xF0\x9F\x8F\x86\x61", div->innerText().utf8().data());
@@ -399,8 +408,16 @@ TEST_F(InputMethodControllerTest, SelectionOnConfirmExistingText) {
   controller().setCompositionFromExistingText(underlines, 0, 5);
 
   controller().finishComposingText(InputMethodController::KeepSelection);
-  EXPECT_EQ(0, frame().selection().start().computeOffsetInContainerNode());
-  EXPECT_EQ(0, frame().selection().end().computeOffsetInContainerNode());
+  EXPECT_EQ(0, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .start()
+                   .computeOffsetInContainerNode());
+  EXPECT_EQ(0, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .end()
+                   .computeOffsetInContainerNode());
 }
 
 TEST_F(InputMethodControllerTest, DeleteBySettingEmptyComposition) {
@@ -442,8 +459,8 @@ TEST_F(InputMethodControllerTest,
   controller().setCompositionFromExistingText(underlines, 0, 5);
 
   Range* range = controller().compositionRange();
-  EXPECT_EQ(1, range->startOffset());
-  EXPECT_EQ(6, range->endOffset());
+  EXPECT_EQ(1u, range->startOffset());
+  EXPECT_EQ(6u, range->endOffset());
 
   PlainTextRange plainTextRange(PlainTextRange::create(*div, *range));
   EXPECT_EQ(0u, plainTextRange.start());
@@ -788,6 +805,125 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextForMultipleNodes) {
   EXPECT_EQ(2u, controller().getSelectionOffsets().end());
 }
 
+TEST_F(InputMethodControllerTest,
+       DeleteSurroundingTextInCodePointsWithMultiCodeTextOnTheLeft) {
+  HTMLInputElement* input =
+      toHTMLInputElement(insertHTMLElement("<input id='sample'>", "sample"));
+
+  // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text (U+0E01
+  // "ka kai" + U+0E49 "mai tho").
+  // A "black star" is 1 grapheme cluster. It has 1 code point, and its length
+  // is 1 (abbreviated as [1,1,1]). A "trophy": [1,1,2]. The composed text:
+  // [1,2,2].
+  input->setValue(String::fromUTF8(
+      "a\xE2\x98\x85 \xF0\x9F\x8F\x86 \xE0\xB8\x81\xE0\xB9\x89"));
+  document().updateStyleAndLayout();
+  // The cursor is at the end of the text.
+  controller().setEditableSelectionOffsets(PlainTextRange(8, 8));
+
+  controller().deleteSurroundingTextInCodePoints(2, 0);
+  EXPECT_STREQ("a\xE2\x98\x85 \xF0\x9F\x8F\x86 ", input->value().utf8().data());
+  controller().deleteSurroundingTextInCodePoints(4, 0);
+  EXPECT_STREQ("a", input->value().utf8().data());
+
+  // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text
+  input->setValue(String::fromUTF8(
+      "a\xE2\x98\x85 \xF0\x9F\x8F\x86 \xE0\xB8\x81\xE0\xB9\x89"));
+  document().updateStyleAndLayout();
+  // The cursor is at the end of the text.
+  controller().setEditableSelectionOffsets(PlainTextRange(8, 8));
+
+  // TODO(yabinh): We should only delete 1 code point instead of the entire
+  // grapheme cluster (2 code points). The root cause is that we adjust the
+  // selection by grapheme cluster in deleteSurroundingText().
+  controller().deleteSurroundingTextInCodePoints(1, 0);
+  EXPECT_STREQ("a\xE2\x98\x85 \xF0\x9F\x8F\x86 ", input->value().utf8().data());
+}
+
+TEST_F(InputMethodControllerTest,
+       DeleteSurroundingTextInCodePointsWithMultiCodeTextOnTheRight) {
+  HTMLInputElement* input =
+      toHTMLInputElement(insertHTMLElement("<input id='sample'>", "sample"));
+
+  // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text
+  input->setValue(String::fromUTF8(
+      "a\xE2\x98\x85 \xF0\x9F\x8F\x86 \xE0\xB8\x81\xE0\xB9\x89"));
+  document().updateStyleAndLayout();
+  controller().setEditableSelectionOffsets(PlainTextRange(0, 0));
+
+  controller().deleteSurroundingTextInCodePoints(0, 5);
+  EXPECT_STREQ("\xE0\xB8\x81\xE0\xB9\x89", input->value().utf8().data());
+
+  controller().deleteSurroundingTextInCodePoints(0, 1);
+  // TODO(yabinh): Same here. We should only delete 1 code point.
+  EXPECT_STREQ("", input->value().utf8().data());
+}
+
+TEST_F(InputMethodControllerTest,
+       DeleteSurroundingTextInCodePointsWithMultiCodeTextOnBothSides) {
+  HTMLInputElement* input =
+      toHTMLInputElement(insertHTMLElement("<input id='sample'>", "sample"));
+
+  // 'a' + "black star" + SPACE + "trophy" + SPACE + composed text
+  input->setValue(String::fromUTF8(
+      "a\xE2\x98\x85 \xF0\x9F\x8F\x86 \xE0\xB8\x81\xE0\xB9\x89"));
+  document().updateStyleAndLayout();
+  controller().setEditableSelectionOffsets(PlainTextRange(3, 3));
+  controller().deleteSurroundingTextInCodePoints(2, 2);
+  EXPECT_STREQ("a\xE0\xB8\x81\xE0\xB9\x89", input->value().utf8().data());
+}
+
+TEST_F(InputMethodControllerTest, DeleteSurroundingTextInCodePointsWithImage) {
+  Element* div = insertHTMLElement(
+      "<div id='sample' contenteditable>aaa"
+      "<img src='empty.png'>bbb</div>",
+      "sample");
+
+  controller().setEditableSelectionOffsets(PlainTextRange(4, 4));
+  controller().deleteSurroundingTextInCodePoints(1, 1);
+  EXPECT_STREQ("aaabb", div->innerText().utf8().data());
+  EXPECT_EQ(3u, controller().getSelectionOffsets().start());
+  EXPECT_EQ(3u, controller().getSelectionOffsets().end());
+}
+
+TEST_F(InputMethodControllerTest,
+       DeleteSurroundingTextInCodePointsWithInvalidSurrogatePair) {
+  HTMLInputElement* input =
+      toHTMLInputElement(insertHTMLElement("<input id='sample'>", "sample"));
+
+  // 'a' + high surrogate of "trophy" + "black star" + low surrogate of "trophy"
+  // + SPACE
+  const UChar uText[] = {'a', 0xD83C, 0x2605, 0xDFC6, ' ', '\0'};
+  const String& text = String(uText);
+
+  input->setValue(text);
+  document().updateStyleAndLayout();
+  // The invalid high surrogate is encoded as '\xED\xA0\xBC', and invalid low
+  // surrogate is encoded as '\xED\xBF\x86'.
+  EXPECT_STREQ("a\xED\xA0\xBC\xE2\x98\x85\xED\xBF\x86 ",
+               input->value().utf8().data());
+
+  controller().setEditableSelectionOffsets(PlainTextRange(5, 5));
+  // Delete a SPACE.
+  controller().deleteSurroundingTextInCodePoints(1, 0);
+  EXPECT_STREQ("a\xED\xA0\xBC\xE2\x98\x85\xED\xBF\x86",
+               input->value().utf8().data());
+  // Do nothing since there is an invalid surrogate in the requested range.
+  controller().deleteSurroundingTextInCodePoints(2, 0);
+  EXPECT_STREQ("a\xED\xA0\xBC\xE2\x98\x85\xED\xBF\x86",
+               input->value().utf8().data());
+
+  controller().setEditableSelectionOffsets(PlainTextRange(0, 0));
+  // Delete 'a'.
+  controller().deleteSurroundingTextInCodePoints(0, 1);
+  EXPECT_STREQ("\xED\xA0\xBC\xE2\x98\x85\xED\xBF\x86",
+               input->value().utf8().data());
+  // Do nothing since there is an invalid surrogate in the requested range.
+  controller().deleteSurroundingTextInCodePoints(0, 2);
+  EXPECT_STREQ("\xED\xA0\xBC\xE2\x98\x85\xED\xBF\x86",
+               input->value().utf8().data());
+}
+
 TEST_F(InputMethodControllerTest, SetCompositionForInputWithNewCaretPositions) {
   HTMLInputElement* input =
       toHTMLInputElement(insertHTMLElement("<input id='sample'>", "sample"));
@@ -1028,12 +1164,12 @@ TEST_F(InputMethodControllerTest, CompositionInputEventIsComposing) {
   underlines.push_back(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
   editable->focus();
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("foo", underlines, 0, 3);
   EXPECT_STREQ("beforeinput.isComposing:true;input.isComposing:true;",
                document().title().utf8().data());
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().commitText("bar", underlines, 0);
   // Last pair of InputEvent should also be inside composition scope.
   EXPECT_STREQ("beforeinput.isComposing:true;input.isComposing:true;",
@@ -1047,13 +1183,13 @@ TEST_F(InputMethodControllerTest, CompositionInputEventForReplace) {
   Vector<CompositionUnderline> underlines;
   underlines.push_back(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("hell", underlines, 4, 4);
   EXPECT_STREQ("beforeinput.data:hell;input.data:hell;",
                document().title().utf8().data());
 
   // Replace the existing composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("hello", underlines, 0, 0);
   EXPECT_STREQ("beforeinput.data:hello;input.data:hello;",
                document().title().utf8().data());
@@ -1066,13 +1202,13 @@ TEST_F(InputMethodControllerTest, CompositionInputEventForConfirm) {
   Vector<CompositionUnderline> underlines;
   underlines.push_back(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("hello", underlines, 5, 5);
   EXPECT_STREQ("beforeinput.data:hello;input.data:hello;",
                document().title().utf8().data());
 
   // Confirm the ongoing composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().finishComposingText(InputMethodController::KeepSelection);
   EXPECT_STREQ("compositionend.data:hello;", document().title().utf8().data());
 }
@@ -1084,15 +1220,15 @@ TEST_F(InputMethodControllerTest, CompositionInputEventForDelete) {
   Vector<CompositionUnderline> underlines;
   underlines.push_back(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("hello", underlines, 5, 5);
   EXPECT_STREQ("beforeinput.data:hello;input.data:hello;",
                document().title().utf8().data());
 
   // Delete the existing composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("", underlines, 0, 0);
-  EXPECT_STREQ("beforeinput.data:;compositionend.data:;",
+  EXPECT_STREQ("beforeinput.data:;input.data:null;compositionend.data:;",
                document().title().utf8().data());
 }
 
@@ -1104,19 +1240,19 @@ TEST_F(InputMethodControllerTest, CompositionInputEventForInsert) {
   underlines.push_back(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
 
   // Insert new text without previous composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   document().updateStyleAndLayout();
   controller().commitText("hello", underlines, 0);
   EXPECT_STREQ("beforeinput.data:hello;input.data:hello;",
                document().title().utf8().data());
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("n", underlines, 1, 1);
   EXPECT_STREQ("beforeinput.data:n;input.data:n;",
                document().title().utf8().data());
 
   // Insert new text with previous composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   document().updateStyleAndLayout();
   controller().commitText("hello", underlines, 1);
   EXPECT_STREQ(
@@ -1132,21 +1268,21 @@ TEST_F(InputMethodControllerTest, CompositionInputEventForInsertEmptyText) {
   underlines.push_back(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
 
   // Insert empty text without previous composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   document().updateStyleAndLayout();
   controller().commitText("", underlines, 0);
   EXPECT_STREQ("", document().title().utf8().data());
 
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   controller().setComposition("n", underlines, 1, 1);
   EXPECT_STREQ("beforeinput.data:n;input.data:n;",
                document().title().utf8().data());
 
   // Insert empty text with previous composition.
-  document().setTitle(emptyString());
+  document().setTitle(emptyString);
   document().updateStyleAndLayout();
   controller().commitText("", underlines, 1);
-  EXPECT_STREQ("beforeinput.data:;compositionend.data:;",
+  EXPECT_STREQ("beforeinput.data:;input.data:null;compositionend.data:;",
                document().title().utf8().data());
 }
 
@@ -1188,6 +1324,20 @@ TEST_F(InputMethodControllerTest, FinishCompositionRemovedRange) {
 
   controller().finishComposingText(InputMethodController::KeepSelection);
   EXPECT_EQ(WebTextInputTypeTelephone, controller().textInputType());
+}
+
+TEST_F(InputMethodControllerTest, ReflectsSpaceWithoutNbspMangling) {
+  insertHTMLElement("<div id='sample' contenteditable></div>", "sample");
+
+  Vector<CompositionUnderline> underlines;
+  controller().commitText(String("  "), underlines, 0);
+
+  // In a contenteditable, multiple spaces or a space at the edge needs to be
+  // nbsp to affect layout properly, but it confuses some IMEs (particularly
+  // Vietnamese, see crbug.com/663880) to have their spaces reflected back to
+  // them as nbsp.
+  EXPECT_EQ(' ', controller().textInputInfo().value.ascii()[0]);
+  EXPECT_EQ(' ', controller().textInputInfo().value.ascii()[1]);
 }
 
 TEST_F(InputMethodControllerTest, SetCompositionPlainTextWithUnderline) {
@@ -1286,16 +1436,24 @@ TEST_F(InputMethodControllerTest, SelectionWhenFocusChangeFinishesComposition) {
   controller().setComposition("foo", underlines, 3, 3);
 
   EXPECT_TRUE(controller().hasComposition());
-  EXPECT_EQ(0, controller().compositionRange()->startOffset());
-  EXPECT_EQ(3, controller().compositionRange()->endOffset());
-  EXPECT_EQ(3, frame().selection().start().computeOffsetInContainerNode());
+  EXPECT_EQ(0u, controller().compositionRange()->startOffset());
+  EXPECT_EQ(3u, controller().compositionRange()->endOffset());
+  EXPECT_EQ(3, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .start()
+                   .computeOffsetInContainerNode());
 
   // Insert 'test'.
   NonThrowableExceptionState exceptionState;
   document().execCommand("insertText", false, "test", exceptionState);
 
   EXPECT_TRUE(controller().hasComposition());
-  EXPECT_EQ(7, frame().selection().start().computeOffsetInContainerNode());
+  EXPECT_EQ(7, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .start()
+                   .computeOffsetInContainerNode());
 
   // Focus change finishes composition.
   editable->blur();
@@ -1303,7 +1461,28 @@ TEST_F(InputMethodControllerTest, SelectionWhenFocusChangeFinishesComposition) {
 
   // Make sure that caret is still at the end of the inserted text.
   EXPECT_FALSE(controller().hasComposition());
-  EXPECT_EQ(7, frame().selection().start().computeOffsetInContainerNode());
+  EXPECT_EQ(7, frame()
+                   .selection()
+                   .computeVisibleSelectionInDOMTreeDeprecated()
+                   .start()
+                   .computeOffsetInContainerNode());
+}
+
+TEST_F(InputMethodControllerTest, SetEmptyCompositionShouldNotMoveCaret) {
+  HTMLTextAreaElement* textarea =
+      toHTMLTextAreaElement(insertHTMLElement("<textarea id='txt'>", "txt"));
+
+  textarea->setValue("abc\n");
+  document().updateStyleAndLayout();
+  controller().setEditableSelectionOffsets(PlainTextRange(4, 4));
+
+  Vector<CompositionUnderline> underlines;
+  underlines.push_back(CompositionUnderline(0, 3, Color(255, 0, 0), false, 0));
+  controller().setComposition(String("def"), underlines, 0, 3);
+  controller().setComposition(String(""), underlines, 0, 3);
+  controller().commitText(String("def"), underlines, 0);
+
+  EXPECT_STREQ("abc\ndef", textarea->value().utf8().data());
 }
 
 }  // namespace blink

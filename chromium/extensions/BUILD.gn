@@ -18,6 +18,7 @@ group("extensions_resources") {
 
 grit("extensions_resources_grd") {
   source = "extensions_resources.grd"
+  use_qualified_include = true
   outputs = [
     "grit/extensions_resources.h",
     "extensions_resources.pak",
@@ -26,6 +27,10 @@ grit("extensions_resources_grd") {
 
 grit("extensions_browser_resources") {
   source = "browser/resources/extensions_browser_resources.grd"
+
+  # TODO(thakis): Enable, https://crbug.com/401588
+  #use_qualified_include = true
+
   outputs = [
     "grit/extensions_browser_resources.h",
     "grit/extensions_browser_resources_map.cc",
@@ -41,6 +46,7 @@ grit("extensions_browser_resources") {
 
 grit("extensions_renderer_resources") {
   source = "renderer/resources/extensions_renderer_resources.grd"
+  use_qualified_include = true
   outputs = [
     "grit/extensions_renderer_resources.h",
     "extensions_renderer_resources.pak",
@@ -56,6 +62,7 @@ grit("extensions_renderer_resources") {
     "//extensions/common:mojo__generator",
     "//extensions/common/api:mojom__generator",
     "//mojo/common:common_custom_types__generator",
+    "//url/mojo:url_mojom_origin__generator",
   ]
 }
 
@@ -64,6 +71,8 @@ static_library("test_support") {
   sources = [
     "browser/api/cast_channel/cast_test_util.cc",
     "browser/api/cast_channel/cast_test_util.h",
+    "browser/api/declarative/test_rules_registry.cc",
+    "browser/api/declarative/test_rules_registry.h",
     "browser/api/dns/mock_host_resolver_creator.cc",
     "browser/api/dns/mock_host_resolver_creator.h",
     "browser/api/storage/settings_test_util.cc",
@@ -151,10 +160,10 @@ static_library("test_support") {
 
 repack("shell_and_test_pak") {
   sources = [
-    "$root_gen_dir/blink/devtools_resources.pak",
     "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/blink/public/resources/blink_resources.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
+    "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/content/shell/shell_resources.pak",
     "$root_gen_dir/extensions/extensions_browser_resources_100_percent.pak",
@@ -303,8 +312,8 @@ source_set("chrome_extensions_browsertests") {
     "//third_party/icu",
     "//third_party/leveldatabase",
     "//third_party/libaddressinput",
-    "//third_party/libjingle",
     "//third_party/webrtc/modules/desktop_capture",
+    "//third_party/webrtc_overrides",
     "//third_party/widevine/cdm:headers",
     "//ui/accessibility:test_support",
     "//ui/base:test_support",

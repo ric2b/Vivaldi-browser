@@ -8,13 +8,14 @@ namespace vivaldiprefs {
 
 const char kAlwaysLoadPinnedTabAfterRestore[] =
     "vivaldi.always_load_restored_pinned_tabs";
-const char kAutoUpdateEnabled[]="vivaldi.autoupdate_enabled";
+const char kAutoUpdateEnabled[] = "vivaldi.autoupdate_enabled";
 const char kDeferredTabLoadingAfterRestore[] =
     "vivaldi.deferred_tab_loading_after_restore";
 const char kMousegesturesEnabled[] = "mousegestures_enabled";
 const char kPluginsWidevideEnabled[] = "plugins.widevine_enabled";
 const char kRockerGesturesEnabled[] = "vivaldi.rocker_gestures_enabled";
 const char kSmoothScrollingEnabled[] = "smooth_scrolling_enabled";
+const char kVivaldiCaptureDirectory[] = "vivaldi.capture_directory";
 const char kVivaldiHomepage[] = "vivaldi.home_page";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";

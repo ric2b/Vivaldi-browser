@@ -110,8 +110,8 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void setStatusbarText(const String& message) override;
   bool tabsToLinks() override;
   void invalidateRect(const IntRect&) override;
-  void scheduleAnimation(Widget*) override;
-  IntRect viewportToScreen(const IntRect&, const Widget*) const override;
+  void scheduleAnimation(FrameViewBase*) override;
+  IntRect viewportToScreen(const IntRect&, const FrameViewBase*) const override;
   float windowToViewportScalar(const float) const override;
   WebScreenInfo screenInfo() const override;
   WTF::Optional<IntRect> visibleContentRectForPainting() const override;
@@ -136,12 +136,20 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void enumerateChosenDirectory(FileChooser*) override;
   void setCursor(const Cursor&, LocalFrame*) override;
   Cursor lastSetCursorForTesting() const override;
-  void setEventListenerProperties(WebEventListenerClass,
+  // The client keeps track of which touch/mousewheel event types have handlers,
+  // and if they do, whether the handlers are passive and/or blocking. This
+  // allows the client to know which optimizations can be used for the
+  // associated event classes.
+  void setEventListenerProperties(LocalFrame*,
+                                  WebEventListenerClass,
                                   WebEventListenerProperties) override;
   WebEventListenerProperties eventListenerProperties(
+      LocalFrame*,
       WebEventListenerClass) const override;
-  void setHasScrollEventHandlers(bool hasEventHandlers) override;
-  bool hasScrollEventHandlers() const override;
+  void updateEventRectsForSubframeIfNecessary(LocalFrame*);
+  // Informs client about the existence of handlers for scroll events so
+  // appropriate scroll optimizations can be chosen.
+  void setHasScrollEventHandlers(LocalFrame*, bool hasEventHandlers) override;
   void setTouchAction(LocalFrame*, TouchAction) override;
 
   void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override;
@@ -196,9 +204,7 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void textFieldDataListChanged(HTMLInputElement&) override;
   void ajaxSucceeded(LocalFrame*) override;
 
-  void didCancelCompositionOnSelectionChange() override;
-  void resetInputMethod() override;
-  void showVirtualKeyboard() override;
+  void showVirtualKeyboardOnElementFocus() override;
 
   void registerViewportLayers() const override;
 
@@ -206,7 +212,11 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void onMouseDown(Node*) override;
   void didUpdateBrowserControls() const override;
 
-  CompositorProxyClient* createCompositorProxyClient(LocalFrame*) override;
+  CompositorWorkerProxyClient* createCompositorWorkerProxyClient(
+      LocalFrame*) override;
+  AnimationWorkletProxyClient* createAnimationWorkletProxyClient(
+      LocalFrame*) override;
+
   FloatSize elasticOverscroll() const override;
 
   void didObserveNonGetFetchFromScript() const override;
@@ -219,6 +229,8 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void notifyPopupOpeningObservers() const;
 
   void installSupplements(LocalFrame&) override;
+
+  WebLayerTreeView* getWebLayerTreeView(LocalFrame*) override;
 
  private:
   explicit ChromeClientImpl(WebViewImpl*);

@@ -8,10 +8,10 @@
 #include <stdint.h>
 #include <memory>
 
-#include "base/features/scoped_test_feature_override.h"
 #include "base/md5.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_scheduler.h"
 #include "media/audio/clockless_audio_sink.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/demuxer.h"
@@ -23,6 +23,10 @@
 #include "media/base/video_frame.h"
 #include "media/renderers/video_renderer_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/gpu/test/platform_pipeline_test_base.h"
+#endif
 
 namespace media {
 
@@ -58,7 +62,11 @@ class DummyTickClock : public base::TickClock {
 // display or audio device. Both of these devices are simulated since they have
 // little effect on verifying pipeline behavior and allow tests to run faster
 // than real-time.
-class PipelineIntegrationTestBase : public Pipeline::Client {
+class PipelineIntegrationTestBase : public Pipeline::Client
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+        , public PlatformPipelineTestBase
+#endif
+{
  public:
   PipelineIntegrationTestBase();
   virtual ~PipelineIntegrationTestBase();
@@ -70,7 +78,8 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
     kNormal = 0,
     kHashed = 1,
     kClockless = 2,
-    kExpectDemuxerFailure = 4
+    kExpectDemuxerFailure = 4,
+    kUnreliableDuration = 8,
   };
 
   // Starts the pipeline with a file specified by |filename|, optionally with a
@@ -130,12 +139,13 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   }
 
  protected:
-  class DecodingMockVDA;
-
   base::MessageLoop message_loop_;
   base::MD5Context md5_context_;
   bool hashing_enabled_;
   bool clockless_playback_;
+
+  // TaskScheduler is used only for FFmpegDemuxer.
+  std::unique_ptr<base::test::ScopedTaskScheduler> task_scheduler_;
   std::unique_ptr<Demuxer> demuxer_;
   std::unique_ptr<DataSource> data_source_;
   std::unique_ptr<PipelineImpl> pipeline_;
@@ -151,12 +161,6 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   PipelineMetadata metadata_;
   scoped_refptr<VideoFrame> last_frame_;
   base::TimeDelta current_duration_;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  std::unique_ptr<MockGpuVideoAcceleratorFactories>
-      mock_video_accelerator_factories_;
-  std::unique_ptr<DecodingMockVDA> mock_vda_;
-  base::ScopedTestFeatureOverride mse_mpeg_aac_enabler_;
-#endif
 
   PipelineStatus StartInternal(
       std::unique_ptr<DataSource> data_source,
@@ -175,7 +179,7 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
           ScopedVector<VideoDecoder>(),
       ScopedVector<AudioDecoder> prepend_audio_decoders =
           ScopedVector<AudioDecoder>());
-  std::string filename_;
+
   void OnSeeked(base::TimeDelta seek_time, PipelineStatus status);
   void OnStatusCallback(PipelineStatus status);
   void DemuxerEncryptedMediaInitDataCB(EmeInitDataType type,
@@ -186,11 +190,10 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   void QuitAfterCurrentTimeTask(const base::TimeDelta& quit_time);
 
   // Creates Demuxer and sets |demuxer_|.
-  virtual void CreateDemuxer(std::unique_ptr<DataSource> data_source);
+  void CreateDemuxer(std::unique_ptr<DataSource> data_source);
 
   // Creates and returns a Renderer.
   virtual std::unique_ptr<Renderer> CreateRenderer(
-      const base::FilePath& file_path,
       ScopedVector<VideoDecoder> prepend_video_decoders =
           ScopedVector<VideoDecoder>(),
       ScopedVector<AudioDecoder> prepend_audio_decoders =
@@ -202,11 +205,6 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
 
   // Return the media start time from |demuxer_|.
   base::TimeDelta GetStartTime();
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  void EnableMockVDA();
-  void DestroyMockVDA();
-#endif
 
   MOCK_METHOD1(DecryptorAttached, void(bool));
   // Pipeline::Client overrides.

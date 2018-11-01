@@ -79,7 +79,7 @@ Node::InsertionNotificationRequest TextControlElement::insertedInto(
   if (!insertionPoint->isConnected())
     return InsertionDone;
   String initialValue = value();
-  setTextAsOfLastFormControlChangeEvent(initialValue.isNull() ? emptyString()
+  setTextAsOfLastFormControlChangeEvent(initialValue.isNull() ? emptyString
                                                               : initialValue);
   return InsertionDone;
 }
@@ -181,12 +181,12 @@ void TextControlElement::updatePlaceholderVisibility() {
       true);
 }
 
-void TextControlElement::setSelectionStart(int start) {
+void TextControlElement::setSelectionStart(unsigned start) {
   setSelectionRangeForBinding(start, std::max(start, selectionEnd()),
                               selectionDirection());
 }
 
-void TextControlElement::setSelectionEnd(int end) {
+void TextControlElement::setSelectionEnd(unsigned end) {
   setSelectionRangeForBinding(std::min(end, selectionStart()), end,
                               selectionDirection());
 }
@@ -196,7 +196,7 @@ void TextControlElement::setSelectionDirection(const String& direction) {
 }
 
 void TextControlElement::select() {
-  setSelectionRangeForBinding(0, std::numeric_limits<int>::max());
+  setSelectionRangeForBinding(0, std::numeric_limits<unsigned>::max());
   // Avoid SelectionBehaviorOnFocus::Restore, which scrolls containers to show
   // the selection.
   focus(FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
@@ -319,8 +319,8 @@ void TextControlElement::setRangeText(const String& replacement,
 }
 
 void TextControlElement::setSelectionRangeForBinding(
-    int start,
-    int end,
+    unsigned start,
+    unsigned end,
     const String& directionString) {
   TextFieldSelectionDirection direction = SelectionHasNoDirection;
   if (directionString == "forward")
@@ -331,18 +331,16 @@ void TextControlElement::setSelectionRangeForBinding(
     scheduleSelectEvent();
 }
 
-static Position positionForIndex(HTMLElement* innerEditor, int index) {
-  DCHECK_GE(index, 0);
+static Position positionForIndex(HTMLElement* innerEditor, unsigned index) {
   if (index == 0) {
     Node* node = NodeTraversal::next(*innerEditor, innerEditor);
     if (node && node->isTextNode())
       return Position(node, 0);
     return Position(innerEditor, 0);
   }
-  int remainingCharactersToMoveForward = index;
+  unsigned remainingCharactersToMoveForward = index;
   Node* lastBrOrText = innerEditor;
   for (Node& node : NodeTraversal::descendantsOf(*innerEditor)) {
-    DCHECK_GE(remainingCharactersToMoveForward, 0);
     if (node.hasTagName(brTag)) {
       if (remainingCharactersToMoveForward == 0)
         return Position::beforeNode(&node);
@@ -353,7 +351,7 @@ static Position positionForIndex(HTMLElement* innerEditor, int index) {
 
     if (node.isTextNode()) {
       Text& text = toText(node);
-      if (remainingCharactersToMoveForward < static_cast<int>(text.length()))
+      if (remainingCharactersToMoveForward < text.length())
         return Position(&text, remainingCharactersToMoveForward);
       remainingCharactersToMoveForward -= text.length();
       lastBrOrText = &node;
@@ -365,8 +363,8 @@ static Position positionForIndex(HTMLElement* innerEditor, int index) {
   return lastPositionInOrAfterNode(lastBrOrText);
 }
 
-int TextControlElement::indexForPosition(HTMLElement* innerEditor,
-                                         const Position& passedPosition) {
+unsigned TextControlElement::indexForPosition(HTMLElement* innerEditor,
+                                              const Position& passedPosition) {
   if (!innerEditor || !innerEditor->contains(passedPosition.anchorNode()) ||
       passedPosition.isNull())
     return 0;
@@ -374,7 +372,7 @@ int TextControlElement::indexForPosition(HTMLElement* innerEditor,
   if (Position::beforeNode(innerEditor) == passedPosition)
     return 0;
 
-  int index = 0;
+  unsigned index = 0;
   Node* startNode = passedPosition.computeNodeBeforePosition();
   if (!startNode)
     startNode = passedPosition.computeContainerNode();
@@ -396,20 +394,18 @@ int TextControlElement::indexForPosition(HTMLElement* innerEditor,
     }
   }
 
-  DCHECK_GE(index, 0);
   return index;
 }
 
 bool TextControlElement::setSelectionRange(
-    int start,
-    int end,
+    unsigned start,
+    unsigned end,
     TextFieldSelectionDirection direction) {
   if (openShadowRoot() || !isTextControl())
     return false;
-  const int editorValueLength = static_cast<int>(innerEditorValue().length());
-  DCHECK_GE(editorValueLength, 0);
-  end = std::max(std::min(end, editorValueLength), 0);
-  start = std::min(std::max(start, 0), end);
+  const unsigned editorValueLength = innerEditorValue().length();
+  end = std::min(end, editorValueLength);
+  start = std::min(start, end);
   LocalFrame* frame = document().frame();
   if (direction == SelectionHasNoDirection && frame &&
       frame->editor().behavior().shouldConsiderSelectionAsDirectional())
@@ -438,17 +434,16 @@ bool TextControlElement::setSelectionRange(
     DCHECK_EQ(endPosition.anchorNode()->ownerShadowHost(), this);
   }
 #endif  // DCHECK_IS_ON()
-  VisibleSelection newSelection;
-  if (direction == SelectionHasBackwardDirection)
-    newSelection.setWithoutValidation(endPosition, startPosition);
-  else
-    newSelection.setWithoutValidation(startPosition, endPosition);
-  newSelection.setIsDirectional(direction != SelectionHasNoDirection);
-
   frame->selection().setSelection(
-      newSelection,
-      FrameSelection::DoNotAdjustInFlatTree | FrameSelection::CloseTyping |
-          FrameSelection::ClearTypingStyle | FrameSelection::DoNotSetFocus);
+      SelectionInDOMTree::Builder()
+          .collapse(direction == SelectionHasBackwardDirection ? endPosition
+                                                               : startPosition)
+          .extend(direction == SelectionHasBackwardDirection ? startPosition
+                                                             : endPosition)
+          .setIsDirectional(direction != SelectionHasNoDirection)
+          .build(),
+      FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle |
+          FrameSelection::DoNotSetFocus);
   return true;
 }
 
@@ -464,21 +459,19 @@ VisiblePosition TextControlElement::visiblePositionForIndex(int index) const {
   return createVisiblePosition(it.endPosition(), TextAffinity::Upstream);
 }
 
+// TODO(yosin): We should move |TextControlElement::indexForVisiblePosition()|
+// to "AXLayoutObject.cpp" since this funciton is used only there.
 int TextControlElement::indexForVisiblePosition(
     const VisiblePosition& pos) const {
   Position indexPosition = pos.deepEquivalent().parentAnchoredEquivalent();
   if (enclosingTextControl(indexPosition) != this)
     return 0;
-  DCHECK(indexPosition.document());
-  Range* range = Range::create(*indexPosition.document());
-  range->setStart(innerEditorElement(), 0, ASSERT_NO_EXCEPTION);
-  range->setEnd(indexPosition.computeContainerNode(),
-                indexPosition.offsetInContainerNode(), ASSERT_NO_EXCEPTION);
-  return TextIterator::rangeLength(range->startPosition(),
-                                   range->endPosition());
+  DCHECK(indexPosition.isConnected()) << indexPosition;
+  return TextIterator::rangeLength(Position(innerEditorElement(), 0),
+                                   indexPosition);
 }
 
-int TextControlElement::selectionStart() const {
+unsigned TextControlElement::selectionStart() const {
   if (!isTextControl())
     return 0;
   if (document().focusedElement() != this)
@@ -487,14 +480,30 @@ int TextControlElement::selectionStart() const {
   return computeSelectionStart();
 }
 
-int TextControlElement::computeSelectionStart() const {
+unsigned TextControlElement::computeSelectionStart() const {
   DCHECK(isTextControl());
-  if (LocalFrame* frame = document().frame())
-    return indexForPosition(innerEditorElement(), frame->selection().start());
-  return 0;
+  LocalFrame* frame = document().frame();
+  if (!frame)
+    return 0;
+  {
+    // To avoid regression on speedometer benchmark[1] test, we should not
+    // update layout tree in this code block.
+    // [1] http://browserbench.org/Speedometer/
+    DocumentLifecycle::DisallowTransitionScope disallowTransition(
+        document().lifecycle());
+    const SelectionInDOMTree& selection =
+        frame->selection().selectionInDOMTree();
+    if (selection.granularity() == CharacterGranularity) {
+      return indexForPosition(innerEditorElement(),
+                              selection.computeStartPosition());
+    }
+  }
+  const VisibleSelection& visibleSelection =
+      frame->selection().computeVisibleSelectionInDOMTreeDeprecated();
+  return indexForPosition(innerEditorElement(), visibleSelection.start());
 }
 
-int TextControlElement::selectionEnd() const {
+unsigned TextControlElement::selectionEnd() const {
   if (!isTextControl())
     return 0;
   if (document().focusedElement() != this)
@@ -502,11 +511,27 @@ int TextControlElement::selectionEnd() const {
   return computeSelectionEnd();
 }
 
-int TextControlElement::computeSelectionEnd() const {
+unsigned TextControlElement::computeSelectionEnd() const {
   DCHECK(isTextControl());
-  if (LocalFrame* frame = document().frame())
-    return indexForPosition(innerEditorElement(), frame->selection().end());
-  return 0;
+  LocalFrame* frame = document().frame();
+  if (!frame)
+    return 0;
+  {
+    // To avoid regression on speedometer benchmark[1] test, we should not
+    // update layout tree in this code block.
+    // [1] http://browserbench.org/Speedometer/
+    DocumentLifecycle::DisallowTransitionScope disallowTransition(
+        document().lifecycle());
+    const SelectionInDOMTree& selection =
+        frame->selection().selectionInDOMTree();
+    if (selection.granularity() == CharacterGranularity) {
+      return indexForPosition(innerEditorElement(),
+                              selection.computeEndPosition());
+    }
+  }
+  const VisibleSelection& visibleSelection =
+      frame->selection().computeVisibleSelectionInDOMTreeDeprecated();
+  return indexForPosition(innerEditorElement(), visibleSelection.end());
 }
 
 static const AtomicString& directionString(
@@ -543,10 +568,16 @@ TextFieldSelectionDirection TextControlElement::computeSelectionDirection()
   if (!frame)
     return SelectionHasNoDirection;
 
-  const VisibleSelection& selection = frame->selection().selection();
+  // To avoid regression on speedometer benchmark[1] test, we should not
+  // update layout tree in this code block.
+  // [1] http://browserbench.org/Speedometer/
+  DocumentLifecycle::DisallowTransitionScope disallowTransition(
+      document().lifecycle());
+  const SelectionInDOMTree& selection = frame->selection().selectionInDOMTree();
+  const Position& start = selection.computeStartPosition();
   return selection.isDirectional()
-             ? (selection.isBaseFirst() ? SelectionHasForwardDirection
-                                        : SelectionHasBackwardDirection)
+             ? (selection.base() == start ? SelectionHasForwardDirection
+                                          : SelectionHasBackwardDirection)
              : SelectionHasNoDirection;
 }
 
@@ -689,10 +720,13 @@ void TextControlElement::selectionChanged(bool userTriggered) {
   cacheSelection(computeSelectionStart(), computeSelectionEnd(),
                  computeSelectionDirection());
 
-  if (LocalFrame* frame = document().frame()) {
-    if (frame->selection().isRange() && userTriggered)
-      dispatchEvent(Event::createBubble(EventTypeNames::select));
-  }
+  LocalFrame* frame = document().frame();
+  if (!frame || !userTriggered)
+    return;
+  const SelectionInDOMTree& selection = frame->selection().selectionInDOMTree();
+  if (selection.selectionTypeWithLegacyGranularity() != RangeSelection)
+    return;
+  dispatchEvent(Event::createBubble(EventTypeNames::select));
 }
 
 void TextControlElement::scheduleSelectEvent() {
@@ -773,7 +807,7 @@ String TextControlElement::innerEditorValue() const {
   DCHECK(!openShadowRoot());
   HTMLElement* innerEditor = innerEditorElement();
   if (!innerEditor || !isTextControl())
-    return emptyString();
+    return emptyString;
 
   StringBuilder result;
   for (Node& node : NodeTraversal::inclusiveDescendantsOf(*innerEditor)) {

@@ -29,17 +29,22 @@ class GURL;
     didCommitNavigationWithDetails:
         (const web::LoadCommittedDetails&)load_details;
 
+// Invoked by WebStateObserverBridge::DidFinishNavigation.
+- (void)webState:(web::WebState*)webState
+    didFinishNavigation:(web::NavigationContext*)navigation;
+
 // Invoked by WebStateObserverBridge::PageLoaded.
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success;
 
 // Invoked by WebStateObserverBridge::InterstitialDismissed.
 - (void)webStateDidDismissInterstitial:(web::WebState*)webState;
 
-// Invoked by WebStateObserverBridge::UrlHashChanged.
-- (void)webStateDidChangeURLHash:(web::WebState*)webState;
+// Invoked by WebStateObserverBridge::LoadProgressChanged.
+- (void)webState:(web::WebState*)webState
+    didChangeLoadingProgress:(double)progress;
 
-// Invoked by WebStateObserverBridge::HistoryStateChanged.
-- (void)webStateDidChangeHistoryState:(web::WebState*)webState;
+// Invoked by WebStateObserverBridge::TitleWasSet.
+- (void)webStateDidChangeTitle:(web::WebState*)webState;
 
 // Invoked by WebStateObserverBridge::DocumentSubmitted.
 - (void)webState:(web::WebState*)webState
@@ -93,11 +98,12 @@ class WebStateObserverBridge : public web::WebStateObserver {
   void ProvisionalNavigationStarted(const GURL& url) override;
   void NavigationItemCommitted(
       const LoadCommittedDetails& load_details) override;
+  void DidFinishNavigation(NavigationContext* navigation_context) override;
   void PageLoaded(
       web::PageLoadCompletionStatus load_completion_status) override;
-  void InsterstitialDismissed() override;
-  void UrlHashChanged() override;
-  void HistoryStateChanged() override;
+  void InterstitialDismissed() override;
+  void LoadProgressChanged(double progress) override;
+  void TitleWasSet() override;
   void DocumentSubmitted(const std::string& form_name,
                          bool user_initiated) override;
   void FormActivityRegistered(const std::string& form_name,

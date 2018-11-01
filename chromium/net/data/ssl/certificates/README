@@ -10,6 +10,8 @@ unit tests.
 - google.single.der
 - google.single.pem
 - thawte.single.pem : Certificates for testing parsing of different formats.
+- trustcenter.websecurity.symantec.com.pem :
+     Certificate for testing EV with multiple OIDs. Regression test for crbug.com/705285
 
 - googlenew.chain.pem : The refreshed Google certificate
      (valid until Sept 30 2013).
@@ -304,6 +306,8 @@ unit tests.
 ===== From net/data/ssl/scripts/generate-multi-root-BFE-keychain.sh
 - multi-root-BFE.keychain: An OSX Keychain containing the generated
   certificates "multi-root-B-by-F.pem" and "multi-root-F-by-E.pem".
+- multi-root.keychain: An OSX Keychain containing the generated
+  certificates multi-root-*-by-*.pem
 
 ===== From net/data/ssl/scripts/generate-duplicate-cn-certs.sh
 - duplicate_cn_1.p12

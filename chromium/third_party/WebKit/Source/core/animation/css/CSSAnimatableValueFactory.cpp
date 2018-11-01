@@ -303,7 +303,8 @@ static PassRefPtr<AnimatableValue> createFromTransformProperties(
     double zoom,
     PassRefPtr<TransformOperation> initialTransform) {
   TransformOperations operation;
-  operation.operations().push_back(transform ? transform : initialTransform);
+  if (transform || initialTransform)
+    operation.operations().push_back(transform ? transform : initialTransform);
   return AnimatableTransform::create(operation, transform ? zoom : 1);
 }
 
@@ -493,6 +494,8 @@ PassRefPtr<AnimatableValue> CSSAnimatableValueFactory::create(
       return createFromLengthPoint(style.objectPosition(), style);
     case CSSPropertyOpacity:
       return createFromDouble(style.opacity());
+    case CSSPropertyOrder:
+      return createFromDouble(style.order());
     case CSSPropertyOrphans:
       return createFromDouble(style.orphans());
     case CSSPropertyOutlineColor:
@@ -609,26 +612,16 @@ PassRefPtr<AnimatableValue> CSSAnimatableValueFactory::create(
       return AnimatableTransform::create(style.transform(),
                                          style.effectiveZoom());
     case CSSPropertyTranslate: {
-      DEFINE_STATIC_REF(TranslateTransformOperation, initialTranslate,
-                        TranslateTransformOperation::create(
-                            Length(0, Fixed), Length(0, Fixed), 0,
-                            TransformOperation::Translate3D));
-      return createFromTransformProperties(
-          style.translate(), style.effectiveZoom(), initialTranslate);
+      return createFromTransformProperties(style.translate(),
+                                           style.effectiveZoom(), nullptr);
     }
     case CSSPropertyRotate: {
-      DEFINE_STATIC_REF(RotateTransformOperation, initialRotate,
-                        RotateTransformOperation::create(
-                            0, 0, 1, 0, TransformOperation::Rotate3D));
-      return createFromTransformProperties(
-          style.rotate(), style.effectiveZoom(), initialRotate);
+      return createFromTransformProperties(style.rotate(),
+                                           style.effectiveZoom(), nullptr);
     }
     case CSSPropertyScale: {
-      DEFINE_STATIC_REF(ScaleTransformOperation, initialScale,
-                        ScaleTransformOperation::create(
-                            1, 1, 1, TransformOperation::Scale3D));
       return createFromTransformProperties(style.scale(), style.effectiveZoom(),
-                                           initialScale);
+                                           nullptr);
     }
     case CSSPropertyOffsetAnchor:
       return createFromLengthPoint(style.offsetAnchor(), style);
@@ -660,7 +653,7 @@ PassRefPtr<AnimatableValue> CSSAnimatableValueFactory::create(
     case CSSPropertyWordSpacing:
       return createFromPropertyLength(property, style);
     case CSSPropertyVerticalAlign:
-      if (style.verticalAlign() == EVerticalAlign::Length)
+      if (style.verticalAlign() == EVerticalAlign::kLength)
         return createFromLength(style.getVerticalAlignLength(), style);
       return AnimatableUnknown::create(
           CSSIdentifierValue::create(style.verticalAlign()));

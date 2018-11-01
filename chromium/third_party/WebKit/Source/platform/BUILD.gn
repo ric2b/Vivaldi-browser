@@ -20,49 +20,10 @@ blink_platform_msa_files = [ "graphics/cpu/mips/WebGLImageConversionMSA.h" ]
 
 blink_platform_sse_files = [ "graphics/cpu/x86/WebGLImageConversionSSE.h" ]
 
-component("blink_common") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ "//third_party/WebKit/*" ]
-  sources = [
-    "../web/WebInputEvent.cpp",
-    "exported/FilePathConversion.cpp",
-    "exported/URLConversion.cpp",
-    "exported/WebCString.cpp",
-    "exported/WebCoalescedInputEvent.cpp",
-    "exported/WebString.cpp",
-    "exported/linux/WebFontRenderStyle.cpp",
-  ]
-  if (is_android) {
-    set_sources_assignment_filter([])
-    sources += [ "exported/linux/WebFontRenderStyle.cpp" ]
-  }
-
-  defines = [
-    "BLINK_COMMON_IMPLEMENTATION=1",
-    "INSIDE_BLINK",
-  ]
-
-  configs += [
-    "//build/config/compiler:wexit_time_destructors",
-    "//third_party/WebKit/Source:config",
-    "//third_party/WebKit/Source:non_test_config",
-  ]
-
-  deps = [
-    "//base",
-    "//third_party/WebKit/Source/wtf",
-    "//url",
-  ]
-
-  public_deps = [
-    "//skia",
-  ]
-}
-
 action("font_family_names") {
   script = "../build/scripts/make_names.py"
 
-  font_family_names_in = "fonts/FontFamilyNames.in"
+  font_family_names_in = "fonts/FontFamilyNames.json5"
   inputs = make_names_files + [ font_family_names_in ]
 
   outputs = [
@@ -80,7 +41,7 @@ action("font_family_names") {
 action("http_names") {
   script = "../build/scripts/make_names.py"
 
-  http_names_in = "network/HTTPNames.in"
+  http_names_in = "network/HTTPNames.json5"
   inputs = make_names_files + [ http_names_in ]
 
   outputs = [
@@ -98,9 +59,9 @@ action("http_names") {
 action("runtime_enabled_features") {
   script = "../build/scripts/make_runtime_features.py"
 
-  runtime_enabled_features_in = "RuntimeEnabledFeatures.in"
-  inputs = scripts_for_in_files + [
-             runtime_enabled_features_in,
+  runtime_enabled_features_json5 = "RuntimeEnabledFeatures.json5"
+  inputs = scripts_for_json5_files + [
+             runtime_enabled_features_json5,
              "../build/scripts/templates/RuntimeEnabledFeatures.cpp.tmpl",
              "../build/scripts/templates/RuntimeEnabledFeatures.h.tmpl",
            ]
@@ -111,7 +72,7 @@ action("runtime_enabled_features") {
   ]
 
   args = [
-    rebase_path(runtime_enabled_features_in, root_build_dir),
+    rebase_path(runtime_enabled_features_json5, root_build_dir),
     "--output_dir",
     rebase_path(blink_platform_output_dir, root_build_dir),
   ]
@@ -192,7 +153,6 @@ group("make_platform_generated") {
   visibility = []  # Allow re-assignment of list.
   visibility = [ "//third_party/WebKit/Source/*" ]
   public_deps = [
-    ":blink_common",
     ":character_data",
     ":color_data",
     ":font_family_names",
@@ -263,6 +223,8 @@ component("platform") {
     "FileMetadata.cpp",
     "FileMetadata.h",
     "FileSystemType.h",
+    "FrameViewBase.cpp",
+    "FrameViewBase.h",
     "Histogram.cpp",
     "Histogram.h",
     "HostWindow.h",
@@ -301,14 +263,10 @@ component("platform") {
     "PartitionAllocMemoryDumpProvider.cpp",
     "PartitionAllocMemoryDumpProvider.h",
     "PasteMode.h",
-    "PlatformEvent.h",
     "PlatformInstrumentation.cpp",
     "PlatformInstrumentation.h",
-    "PlatformMouseEvent.h",
     "PlatformResourceLoader.cpp",
     "PlatformResourceLoader.h",
-    "PlatformTouchEvent.h",
-    "PlatformTouchPoint.h",
     "PluginScriptForbiddenScope.cpp",
     "PluginScriptForbiddenScope.h",
     "PopupMenu.h",
@@ -353,9 +311,8 @@ component("platform") {
     "WebThread.cpp",
     "WebThreadSupportingGC.cpp",
     "WebThreadSupportingGC.h",
+    "WebTouchEvent.cpp",
     "WebURLLoader.cpp",
-    "Widget.cpp",
-    "Widget.h",
     "WindowsKeyboardCodes.h",
     "animation/AnimationTranslationUtil.cpp",
     "animation/AnimationTranslationUtil.h",
@@ -407,14 +364,10 @@ component("platform") {
     "audio/AudioDestination.cpp",
     "audio/AudioDestination.h",
     "audio/AudioDestinationConsumer.h",
-    "audio/AudioFIFO.cpp",
-    "audio/AudioFIFO.h",
     "audio/AudioFileReader.h",
     "audio/AudioIOCallback.h",
     "audio/AudioProcessor.cpp",
     "audio/AudioProcessor.h",
-    "audio/AudioPullFIFO.cpp",
-    "audio/AudioPullFIFO.h",
     "audio/AudioResampler.cpp",
     "audio/AudioResampler.h",
     "audio/AudioResamplerKernel.cpp",
@@ -461,6 +414,8 @@ component("platform") {
     "audio/MultiChannelResampler.h",
     "audio/Panner.cpp",
     "audio/Panner.h",
+    "audio/PushPullFIFO.cpp",
+    "audio/PushPullFIFO.h",
     "audio/Reverb.cpp",
     "audio/Reverb.h",
     "audio/ReverbAccumulationBuffer.cpp",
@@ -493,8 +448,6 @@ component("platform") {
     "clipboard/ClipboardMimeTypes.h",
     "clipboard/ClipboardUtilities.cpp",
     "clipboard/ClipboardUtilities.h",
-    "clipboard/ClipboardUtilitiesPosix.cpp",
-    "clipboard/ClipboardUtilitiesWin.cpp",
     "cpu/mips/CommonMacrosMSA.h",
     "credentialmanager/PlatformCredential.cpp",
     "credentialmanager/PlatformCredential.h",
@@ -502,15 +455,20 @@ component("platform") {
     "credentialmanager/PlatformFederatedCredential.h",
     "credentialmanager/PlatformPasswordCredential.cpp",
     "credentialmanager/PlatformPasswordCredential.h",
+    "exported/FilePathConversion.cpp",
     "exported/InterfaceRegistry.cpp",
     "exported/Platform.cpp",
     "exported/ServiceRegistry.cpp",
+    "exported/URLConversion.cpp",
     "exported/WebActiveGestureAnimation.cpp",
     "exported/WebActiveGestureAnimation.h",
     "exported/WebAudioBus.cpp",
     "exported/WebAudioDevice.cpp",
     "exported/WebBlobData.cpp",
+    "exported/WebCString.cpp",
+    "exported/WebCache.cpp",
     "exported/WebCanvasCaptureHandler.cpp",
+    "exported/WebCoalescedInputEvent.cpp",
     "exported/WebContentDecryptionModule.cpp",
     "exported/WebContentDecryptionModuleAccess.cpp",
     "exported/WebContentDecryptionModuleResult.cpp",
@@ -554,6 +512,8 @@ component("platform") {
     "exported/WebPrerender.cpp",
     "exported/WebPrerenderingSupport.cpp",
     "exported/WebPresentationAvailabilityObserver.cpp",
+    "exported/WebPresentationConnection.cpp",
+    "exported/WebPresentationConnectionCallbacks.cpp",
     "exported/WebPresentationController.cpp",
     "exported/WebPresentationReceiver.cpp",
     "exported/WebRTCAnswerOptions.cpp",
@@ -582,6 +542,7 @@ component("platform") {
     "exported/WebSpeechSynthesizerClientImpl.cpp",
     "exported/WebSpeechSynthesizerClientImpl.h",
     "exported/WebStorageQuotaCallbacks.cpp",
+    "exported/WebString.cpp",
     "exported/WebTextRun.cpp",
     "exported/WebThreadSafeData.cpp",
     "exported/WebURL.cpp",
@@ -593,6 +554,7 @@ component("platform") {
     "exported/WebURLResponse.cpp",
     "exported/WrappedResourceRequest.h",
     "exported/WrappedResourceResponse.h",
+    "exported/linux/WebFontRenderStyle.cpp",
     "feature_policy/FeaturePolicy.cpp",
     "feature_policy/FeaturePolicy.h",
     "fonts/AcceptLanguagesResolver.cpp",
@@ -646,7 +608,6 @@ component("platform") {
     "fonts/SmallCapsIterator.h",
     "fonts/SymbolsIterator.cpp",
     "fonts/SymbolsIterator.h",
-    "fonts/TextBlob.h",
     "fonts/UTF16TextIterator.cpp",
     "fonts/UTF16TextIterator.h",
     "fonts/UnicodeRangeSet.cpp",
@@ -865,14 +826,14 @@ component("platform") {
     "graphics/PaintGeneratedImage.h",
     "graphics/PaintInvalidationReason.cpp",
     "graphics/PaintInvalidationReason.h",
+    "graphics/PaintRecordPattern.cpp",
+    "graphics/PaintRecordPattern.h",
     "graphics/Path.cpp",
     "graphics/Path.h",
     "graphics/PathTraversalState.cpp",
     "graphics/PathTraversalState.h",
     "graphics/Pattern.cpp",
     "graphics/Pattern.h",
-    "graphics/PicturePattern.cpp",
-    "graphics/PicturePattern.h",
     "graphics/PictureSnapshot.cpp",
     "graphics/PictureSnapshot.h",
     "graphics/PlaceholderImage.cpp",
@@ -1005,18 +966,27 @@ component("platform") {
     "graphics/paint/FilterDisplayItem.h",
     "graphics/paint/FloatClipDisplayItem.cpp",
     "graphics/paint/FloatClipDisplayItem.h",
+    "graphics/paint/FloatClipRect.h",
     "graphics/paint/ForeignLayerDisplayItem.cpp",
     "graphics/paint/ForeignLayerDisplayItem.h",
     "graphics/paint/GeometryMapper.cpp",
     "graphics/paint/GeometryMapper.h",
     "graphics/paint/PaintArtifact.cpp",
     "graphics/paint/PaintArtifact.h",
+    "graphics/paint/PaintCanvas.h",
     "graphics/paint/PaintChunk.h",
     "graphics/paint/PaintChunkProperties.h",
     "graphics/paint/PaintChunker.cpp",
     "graphics/paint/PaintChunker.h",
     "graphics/paint/PaintController.cpp",
     "graphics/paint/PaintController.h",
+    "graphics/paint/PaintFlags.h",
+    "graphics/paint/PaintRecord.h",
+    "graphics/paint/PaintRecordBuilder.cpp",
+    "graphics/paint/PaintRecordBuilder.h",
+    "graphics/paint/PaintRecorder.h",
+    "graphics/paint/PaintShader.h",
+    "graphics/paint/PaintSurface.h",
     "graphics/paint/PropertyTreeState.cpp",
     "graphics/paint/PropertyTreeState.h",
     "graphics/paint/RasterInvalidationTracking.cpp",
@@ -1026,8 +996,6 @@ component("platform") {
     "graphics/paint/ScrollDisplayItem.h",
     "graphics/paint/ScrollPaintPropertyNode.cpp",
     "graphics/paint/ScrollPaintPropertyNode.h",
-    "graphics/paint/SkPictureBuilder.cpp",
-    "graphics/paint/SkPictureBuilder.h",
     "graphics/paint/SubsequenceDisplayItem.h",
     "graphics/paint/SubsequenceRecorder.cpp",
     "graphics/paint/SubsequenceRecorder.h",
@@ -1095,6 +1063,8 @@ component("platform") {
     "mac/BlockExceptions.mm",
     "mac/ColorMac.h",
     "mac/ColorMac.mm",
+    "mac/GraphicsContextCanvas.h",
+    "mac/GraphicsContextCanvas.mm",
     "mac/KillRingMac.mm",
     "mac/LocalCurrentGraphicsContext.h",
     "mac/LocalCurrentGraphicsContext.mm",
@@ -1185,6 +1155,7 @@ component("platform") {
     "scheduler/base/intrusive_heap.h",
     "scheduler/base/lazy_now.cc",
     "scheduler/base/lazy_now.h",
+    "scheduler/base/moveable_auto_lock.h",
     "scheduler/base/pollable_thread_safe_flag.cc",
     "scheduler/base/pollable_thread_safe_flag.h",
     "scheduler/base/queueing_time_estimator.cc",
@@ -1396,10 +1367,16 @@ component("platform") {
     "weborigin/SecurityOriginHash.h",
     "weborigin/SecurityPolicy.cpp",
     "weborigin/SecurityPolicy.h",
+    "weborigin/SecurityViolationReportingPolicy.h",
     "weborigin/Suborigin.cpp",
     "weborigin/Suborigin.h",
     "weborigin/URLSecurityOriginMap.h",
   ]
+
+  if (is_android) {
+    set_sources_assignment_filter([])
+    sources += [ "exported/linux/WebFontRenderStyle.cpp" ]
+  }
 
   sources -= blink_platform_neon_files
   sources -= blink_platform_msa_files
@@ -1435,6 +1412,7 @@ component("platform") {
     "//base",
     "//cc",
     "//cc/animation",
+    "//cc/paint",
     "//gpu/command_buffer/client:client",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_interface",
@@ -1454,7 +1432,6 @@ component("platform") {
     "//v8",
   ]
   deps = [
-    ":blink_common",
     "//cc/surfaces:surfaces",
     "//components/link_header_util:link_header_util",
     "//components/mime_util:mime_util",
@@ -1462,6 +1439,7 @@ component("platform") {
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:wtf_support",
     "//third_party/WebKit/Source/platform/heap",
+    "//third_party/WebKit/Source/platform/loader",
     "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/WebKit/public:offscreen_canvas_mojo_bindings_blink",
     "//third_party/ced",
@@ -1503,9 +1481,8 @@ component("platform") {
   }
 
   if (is_win) {
+    sources += [ "clipboard/ClipboardUtilitiesWin.cpp" ]
     sources -= [
-      "clipboard/ClipboardUtilitiesPosix.cpp",
-
       # Uses LocaleWin instead.
       "text/LocaleICU.cpp",
       "text/LocaleICU.h",
@@ -1515,10 +1492,7 @@ component("platform") {
       "/wd4724",  # Modulo by 0.
     ]
   } else {
-    sources -= [
-      "clipboard/ClipboardUtilitiesWin.cpp",
-      "text/LocaleWin.cpp",
-    ]
+    sources -= [ "text/LocaleWin.cpp" ]
   }
 
   if (is_android) {
@@ -1582,6 +1556,13 @@ static_library("test_support") {
   testonly = true
 
   sources = [
+    "loader/testing/FetchTestingPlatformSupport.cpp",
+    "loader/testing/FetchTestingPlatformSupport.h",
+    "loader/testing/MockFetchContext.h",
+    "loader/testing/MockResource.cpp",
+    "loader/testing/MockResource.h",
+    "loader/testing/MockResourceClient.cpp",
+    "loader/testing/MockResourceClient.h",
     "network/mime/MockMimeRegistry.h",
     "scheduler/base/task_queue_manager_delegate_for_test.cc",
     "scheduler/base/test_time_source.cc",
@@ -1595,6 +1576,8 @@ static_library("test_support") {
     "scroll/ScrollbarTestSuite.h",
     "testing/CompositorTest.cpp",
     "testing/CompositorTest.h",
+    "testing/EmptyWebMediaPlayer.cpp",
+    "testing/EmptyWebMediaPlayer.h",
     "testing/FakeDisplayItemClient.h",
     "testing/FakeGraphicsLayer.h",
     "testing/FakeGraphicsLayerClient.h",
@@ -1614,6 +1597,8 @@ static_library("test_support") {
     "testing/PictureMatchers.h",
     "testing/PlatformTestPrinters.cpp",
     "testing/RuntimeEnabledFeaturesTestHelpers.h",
+    "testing/ScopedMockedURL.cpp",
+    "testing/ScopedMockedURL.h",
     "testing/TestPaintArtifact.cpp",
     "testing/TestPaintArtifact.h",
     "testing/TestingPlatformSupport.cpp",
@@ -1689,8 +1674,8 @@ test("blink_platform_unittests") {
     "animation/CompositorAnimationTimelineTest.cpp",
     "animation/CompositorFloatAnimationCurveTest.cpp",
     "animation/TimingFunctionTest.cpp",
+    "audio/PushPullFIFOTest.cpp",
     "blob/BlobDataTest.cpp",
-    "clipboard/ClipboardUtilitiesTest.cpp",
     "exported/FilePathConversionTest.cpp",
     "exported/WebStringTest.cpp",
     "feature_policy/FeaturePolicyTest.cpp",
@@ -1742,6 +1727,7 @@ test("blink_platform_unittests") {
     "graphics/paint/DisplayItemClientTest.cpp",
     "graphics/paint/DisplayItemListTest.cpp",
     "graphics/paint/DisplayItemTest.cpp",
+    "graphics/paint/FloatClipRectTest.cpp",
     "graphics/paint/GeometryMapperTest.cpp",
     "graphics/paint/PaintChunkTest.cpp",
     "graphics/paint/PaintChunkerTest.cpp",
@@ -1762,6 +1748,16 @@ test("blink_platform_unittests") {
     "instrumentation/tracing/web_process_memory_dump_test.cc",
     "json/JSONParserTest.cpp",
     "json/JSONValuesTest.cpp",
+    "loader/fetch/ClientHintsPreferencesTest.cpp",
+    "loader/fetch/CrossOriginAccessControlTest.cpp",
+    "loader/fetch/FetchUtilsTest.cpp",
+    "loader/fetch/MemoryCacheCorrectnessTest.cpp",
+    "loader/fetch/MemoryCacheTest.cpp",
+    "loader/fetch/RawResourceTest.cpp",
+    "loader/fetch/ResourceFetcherTest.cpp",
+    "loader/fetch/ResourceLoaderOptionsTest.cpp",
+    "loader/fetch/ResourceTest.cpp",
+    "mac/GraphicsContextCanvasTest.mm",
     "mac/VersionUtilMacTest.mm",
     "mojo/CommonCustomTypesStructTraitsTest.cpp",
     "mojo/GeometryStructTraitsTest.cpp",
@@ -1770,6 +1766,7 @@ test("blink_platform_unittests") {
     "network/HTTPParsersTest.cpp",
     "network/LinkHeaderTest.cpp",
     "network/NetworkUtilsTest.cpp",
+    "network/ParsedContentTypeTest.cpp",
     "network/ResourceRequestTest.cpp",
     "network/mime/MIMETypeRegistryTest.cpp",
     "scheduler/base/intrusive_heap_unittest.cc",
@@ -1807,6 +1804,7 @@ test("blink_platform_unittests") {
     "text/DateTimeFormatTest.cpp",
     "text/HyphenationTest.cpp",
     "text/ICUErrorTest.cpp",
+    "text/PlatformLocaleTest.cpp",
     "text/SegmentedStringTest.cpp",
     "text/TextBreakIteratorTest.cpp",
     "text/TextEncodingDetectorTest.cpp",
@@ -1850,7 +1848,6 @@ test("blink_platform_unittests") {
   ]
 
   deps = [
-    ":blink_common",
     ":platform",
     ":test_support",
     "//base",
@@ -1892,7 +1889,6 @@ test("image_decode_bench") {
   ]
 
   deps = [
-    ":blink_common",
     ":platform",
     "//third_party/WebKit/Source/wtf",
     "//ui/gfx:test_support",
@@ -1921,7 +1917,6 @@ test("blink_platform_perftests") {
   ]
 
   deps = [
-    ":blink_common",
     ":platform",
     "//base",
     "//base/test:test_support",
@@ -1944,7 +1939,6 @@ group("blink_platform_unittests_data") {
 if (current_cpu == "arm") {
   source_set("blink_arm_neon") {
     sources = blink_platform_neon_files
-
     # The *NEON.cpp files fail to compile when -mthumb is passed. Force
     # them to build in ARM mode.
     # See https://bugs.webkit.org/show_bug.cgi?id=62916.
@@ -1955,28 +1949,18 @@ if (current_cpu == "arm") {
     #        'cflags!': ['-mthumb'],
     #      }],
     #    ],
-
-    deps = [
-      ":blink_common",
-    ]
   }
 }
 
 if (current_cpu == "mipsel" || current_cpu == "mips64el") {
   source_set("blink_mips_msa") {
     sources = blink_platform_msa_files
-    deps = [
-      ":blink_common",
-    ]
   }
 }
 
 if (current_cpu == "x86" || current_cpu == "x64") {
   source_set("blink_x86_sse") {
     sources = blink_platform_sse_files
-    deps = [
-      ":blink_common",
-    ]
   }
 }
 
@@ -2003,9 +1987,8 @@ fuzzer_test("mhtml_parser_fuzzer") {
     "mhtml/MHTMLFuzzer.cpp",
   ]
   deps = [
-    ":blink_common",
+    ":blink_fuzzer_test_support",
     ":platform",
-    ":test_support",
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/mhtml.dict"
   seed_corpus = "//third_party/WebKit/LayoutTests/mhtml"
@@ -2037,7 +2020,11 @@ fuzzer_test("blink_png_decoder_fuzzer") {
     "//third_party/libpng",
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/png.dict"
-  seed_corpus = "//third_party/WebKit/LayoutTests/images/resources/pngfuzz"
+  seed_corpuses = [
+    "//cc/test/data",
+    "//third_party/WebKit/LayoutTests/images/png-suite/samples",
+    "//third_party/WebKit/LayoutTests/images/resources/pngfuzz",
+  ]
 }
 
 # Fuzzer for blink::JSONParser.

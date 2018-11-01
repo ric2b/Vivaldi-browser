@@ -2,7 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/nacl/config.gni")
+import("//chrome/common/features.gni")
+import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/service_manifest.gni")
+
+assert(enable_package_mash_services)
 
 source_set("mash") {
   sources = [
@@ -10,11 +15,14 @@ source_set("mash") {
     "mash_runner.h",
   ]
   deps = [
+    ":chrome_mash_catalog",
     "//base:i18n",
+    "//chrome/common:constants",
     "//components/tracing:startup_tracing",
     "//content/public/common",
+    "//mash/common",
     "//mash/package",
-    "//mash/session/public/interfaces:constants",
+    "//mash/quick_launch/public/interfaces:constants",
     "//services/catalog/public/interfaces",
     "//services/service_manager",
     "//services/service_manager/background:lib",
@@ -25,25 +33,16 @@ source_set("mash") {
     "//services/service_manager/runner/common",
     "//services/service_manager/runner/host:lib",
     "//services/service_manager/standalone",
+    "//services/ui/public/interfaces:constants",
     "//url",
-  ]
-  data_deps = [
-    ":mash_manifest",
-    "//chrome/app:service_manifests",
   ]
 
   if (is_chromeos) {
-    sources += [
-      "mash_crash_reporter_client.cc",
-      "mash_crash_reporter_client.h",
-    ]
-    deps += [
-      "//ash/resources",
-      "//components/crash/content/app",
-      "//components/crash/core/common",
-      "//components/upload_list",
-      "//components/version_info:generate_version_info",
-    ]
+    deps += [ "//ash/resources" ]
+  }
+
+  if (is_posix) {
+    deps += [ "//chrome/app:shutdown_signal_handlers" ]
   }
 
   if (is_linux && !is_android) {
@@ -54,34 +53,49 @@ source_set("mash") {
 service_manifest("mash_manifest") {
   name = "chrome_mash"
   source = "chrome_mash_manifest.json"
-  deps = [
+  packaged_services = [
     "//ash/autoclick/mus:manifest",
     "//ash/touch_hud/mus:manifest",
     "//mash/catalog_viewer:manifest",
     "//mash/quick_launch:manifest",
-    "//mash/session:manifest",
     "//mash/task_viewer:manifest",
     "//services/ui:manifest",
     "//services/ui/ime/test_ime_driver:manifest",
   ]
-  packaged_services = [
-    "accessibility_autoclick",
-    "catalog_viewer",
-    "mash_session",
-    "quick_launch",
-    "task_viewer",
-    "test_ime_driver",
-    "touch_hud",
-    "ui",
-  ]
 
   if (is_chromeos) {
-    deps += [ "//ash/mus:manifest" ]
-    packaged_services += [ "ash" ]
+    packaged_services += [ "//ash/mus:manifest" ]
   }
 
   if (is_linux && !is_android) {
-    deps += [ "//components/font_service:manifest" ]
-    packaged_services += [ "font_service" ]
+    packaged_services += [ "//components/font_service:manifest" ]
   }
+
+  if (enable_nacl) {
+    packaged_services += [ "//components/nacl/loader:nacl_loader_manifest" ]
+    if (is_win && target_cpu == "x86") {
+      packaged_services += [ "//components/nacl/broker:nacl_broker_manifest" ]
+    }
+  }
+}
+
+catalog("catalog") {
+  embedded_services = [ ":mash_manifest" ]
+  catalog_deps = [ "//chrome/app:catalog_for_mash" ]
+  standalone_services = [
+    "//mash/example/views_examples:manifest",
+    "//mash/simple_wm:manifest",
+  ]
+}
+
+catalog_cpp_source("chrome_mash_catalog") {
+  catalog = ":catalog"
+  generated_function_name = "CreateChromeMashCatalog"
+}
+
+source_set("mash_service_overrides") {
+  testonly = true
+  data = [
+    "mash_service_overrides.json",
+  ]
 }

@@ -21,16 +21,13 @@ using content::WebUIController;
 // may be NULL (for example, if the URL refers to an non-existent extension).
 typedef WebUIController* (*WebUIFactoryFunction)(WebUI* web_ui,
                                                  const GURL& url);
-namespace vivaldi
-{
-
+namespace vivaldi {
 
 // Template for defining WebUIFactoryFunction.
-template<class T>
+template <class T>
 WebUIController* NewVivaldiWebUI(WebUI* web_ui, const GURL& url) {
   return new T(web_ui);
 }
-
 
 // Returns a function that can be used to create the right type of WebUI for a
 // tab, based on its URL. Returns NULL if the URL doesn't have WebUI associated
@@ -55,12 +52,13 @@ bool NeedsExtensionWebUI(Profile* profile, const GURL& url) {
     return false;
 
   const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(profile)->enabled_extensions().
-          GetExtensionOrAppByURL(url);
+      extensions::ExtensionRegistry::Get(profile)
+          ->enabled_extensions()
+          .GetExtensionOrAppByURL(url);
   // Allow bindings for all packaged extensions and component hosted apps.
   return extension &&
-      (!extension->is_hosted_app() ||
-       extension->location() == extensions::Manifest::COMPONENT);
+         (!extension->is_hosted_app() ||
+          extension->location() == extensions::Manifest::COMPONENT);
 }
 #endif
 
@@ -108,10 +106,8 @@ VivaldiWebUIControllerFactory* VivaldiWebUIControllerFactory::GetInstance() {
   return base::Singleton<VivaldiWebUIControllerFactory>::get();
 }
 
-VivaldiWebUIControllerFactory::VivaldiWebUIControllerFactory() {
-}
+VivaldiWebUIControllerFactory::VivaldiWebUIControllerFactory() {}
 
-VivaldiWebUIControllerFactory::~VivaldiWebUIControllerFactory() {
-}
-}
+VivaldiWebUIControllerFactory::~VivaldiWebUIControllerFactory() {}
 
+}  // namespace vivaldi

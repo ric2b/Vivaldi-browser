@@ -502,7 +502,7 @@ TEST_F(BackFwdMenuModelTest, EscapeLabel) {
 TEST_F(BackFwdMenuModelTest, FaviconLoadTest) {
   ASSERT_TRUE(profile()->CreateHistoryService(true, false));
   profile()->CreateFaviconService();
-  Browser::CreateParams native_params(profile());
+  Browser::CreateParams native_params(profile(), true);
   std::unique_ptr<Browser> browser(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
   FaviconDelegate favicon_delegate;
@@ -565,6 +565,4 @@ TEST_F(BackFwdMenuModelTest, FaviconLoadTest) {
 
   // Make sure the browser deconstructor doesn't have problems.
   browser->tab_strip_model()->CloseAllTabs();
-  // This is required to prevent the message loop from hanging.
-  profile()->DestroyHistoryService();
 }

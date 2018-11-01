@@ -4,37 +4,29 @@
 
 #import "ios/chrome/browser/payments/payment_items_display_coordinator.h"
 
-#import "base/ios/weak_nsobject.h"
-#include "base/mac/scoped_nsobject.h"
+#include "base/logging.h"
 #include "ios/web/public/payments/payment_request.h"
 
-@interface PaymentItemsDisplayCoordinator ()<
-    PaymentItemsDisplayViewControllerDelegate> {
-  base::WeakNSProtocol<id<PaymentItemsDisplayCoordinatorDelegate>> _delegate;
-  base::scoped_nsobject<PaymentItemsDisplayViewController> _viewController;
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
+@interface PaymentItemsDisplayCoordinator () {
+  PaymentItemsDisplayViewController* _viewController;
 }
 
 @end
 
 @implementation PaymentItemsDisplayCoordinator
 
-@synthesize total = _total;
-@synthesize paymentItems = _paymentItems;
-@synthesize payButtonEnabled = _payButtonEnabled;
-
-- (id<PaymentItemsDisplayCoordinatorDelegate>)delegate {
-  return _delegate.get();
-}
-
-- (void)setDelegate:(id<PaymentItemsDisplayCoordinatorDelegate>)delegate {
-  _delegate.reset(delegate);
-}
+@synthesize paymentRequest = _paymentRequest;
+@synthesize delegate = _delegate;
 
 - (void)start {
-  _viewController.reset([[PaymentItemsDisplayViewController alloc]
-      initWithPayButtonEnabled:_payButtonEnabled]);
-  [_viewController setTotal:_total];
-  [_viewController setPaymentItems:_paymentItems];
+  BOOL payButtonEnabled = _paymentRequest->selected_credit_card() != nil;
+  _viewController = [[PaymentItemsDisplayViewController alloc]
+      initWithPaymentRequest:_paymentRequest
+            payButtonEnabled:payButtonEnabled];
   [_viewController setDelegate:self];
   [_viewController loadModel];
 
@@ -47,7 +39,7 @@
 - (void)stop {
   [[self baseViewController].navigationController
       popViewControllerAnimated:YES];
-  _viewController.reset();
+  _viewController = nil;
 }
 
 #pragma mark - PaymentItemsDisplayViewControllerDelegate

@@ -11,6 +11,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/bindings_export.h"
@@ -150,6 +151,10 @@ class MOJO_CPP_BINDINGS_EXPORT Connector
     return task_runner_.get();
   }
 
+  // Sets the tag used by the heap profiler.
+  // |tag| must be a const string literal.
+  void SetWatcherHeapProfilerTag(const char* tag);
+
  private:
   // Callback of mojo::Watcher.
   void OnWatcherHandleReady(MojoResult result);
@@ -193,7 +198,7 @@ class MOJO_CPP_BINDINGS_EXPORT Connector
 
   // If sending messages is allowed from multiple threads, |lock_| is used to
   // protect modifications to |message_pipe_| and |drop_writes_|.
-  std::unique_ptr<base::Lock> lock_;
+  base::Optional<base::Lock> lock_;
 
   std::unique_ptr<SyncHandleWatcher> sync_watcher_;
   bool allow_woken_up_by_others_ = false;
@@ -205,6 +210,10 @@ class MOJO_CPP_BINDINGS_EXPORT Connector
 
   base::Lock connected_lock_;
   bool connected_ = true;
+
+  // The tag used to track heap allocations that originated from a Watcher
+  // notification.
+  const char* heap_profiler_tag_ = nullptr;
 
   // Create a single weak ptr and use it everywhere, to avoid the malloc/free
   // cost of creating a new weak ptr whenever it is needed.

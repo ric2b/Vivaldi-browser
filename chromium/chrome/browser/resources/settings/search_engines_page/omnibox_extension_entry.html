@@ -3,9 +3,9 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="/extension_control_browser_proxy.html">
-<link rel="import" href="/search_engines_page/search_engine_entry_css.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../extension_control_browser_proxy.html">
+<link rel="import" href="search_engine_entry_css.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-omnibox-extension-entry">
   <template>
@@ -26,7 +26,7 @@
       </div>
       <div class="keyword-column">[[engine.keyword]]</div>
       <paper-icon-button icon="cr:more-vert" tabindex$="[[tabindex]]"
-          on-tap="onDotsTap_">
+          on-tap="onDotsTap_" title="$i18n{moreActions}">
       </paper-icon-button>
       <dialog is="cr-action-menu">
         <button class="dropdown-item" role="option" on-tap="onManageTap_"

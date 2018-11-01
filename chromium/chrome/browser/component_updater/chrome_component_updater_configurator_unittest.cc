@@ -62,7 +62,7 @@ TEST_F(ChromeComponentUpdaterConfiguratorTest, TestFastUpdate) {
                                                            pref_service()));
 
   CHECK_EQ(10, config->InitialDelay());
-  CHECK_EQ(6 * 60 * 60, config->NextCheckDelay());
+  CHECK_EQ(5 * 60 * 60, config->NextCheckDelay());
   CHECK_EQ(1, config->StepDelay());
   CHECK_EQ(2, config->OnDemandDelay());
   CHECK_EQ(10, config->UpdateDelay());
@@ -157,17 +157,17 @@ TEST_F(ChromeComponentUpdaterConfiguratorTest, TestEnabledComponentUpdates) {
 
   // Tests the component updates are disabled.
   pref_service()->SetManagedPref("component_updates.component_updates_enabled",
-                                 new base::FundamentalValue(false));
+                                 new base::Value(false));
   EXPECT_FALSE(config->EnabledComponentUpdates());
 
   // Tests the component updates are enabled.
   pref_service()->SetManagedPref("component_updates.component_updates_enabled",
-                                 new base::FundamentalValue(true));
+                                 new base::Value(true));
   EXPECT_TRUE(config->EnabledComponentUpdates());
 
   // Sanity check setting the preference back to |false| and then removing it.
   pref_service()->SetManagedPref("component_updates.component_updates_enabled",
-                                 new base::FundamentalValue(false));
+                                 new base::Value(false));
   EXPECT_FALSE(config->EnabledComponentUpdates());
   pref_service()->RemoveManagedPref(
       "component_updates.component_updates_enabled");

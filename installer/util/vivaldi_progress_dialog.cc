@@ -1,29 +1,30 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
 
 #include "installer/util/vivaldi_progress_dialog.h"
-#include "chrome/installer/setup/setup_resource.h"
-#include "base/logging.h"
 #include <CommCtrl.h>
+#include "base/logging.h"
+#include "chrome/installer/setup/setup_resource.h"
 
-#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+#pragma comment( \
+    linker,      \
+    "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")  // NOLINT
 
 namespace installer {
 
 VivaldiProgressDialog* VivaldiProgressDialog::this_ = NULL;
 
 VivaldiProgressDialog::VivaldiProgressDialog(HINSTANCE instance)
-  : hdlg_(NULL)
-  , hwnd_progress_(NULL)
-  , thread_handle_(NULL)
-  , thread_id_(0)
-  , instance_(instance) {
+    : hdlg_(NULL),
+      hwnd_progress_(NULL),
+      thread_handle_(NULL),
+      thread_id_(0),
+      instance_(instance) {
   this_ = this;
   dlg_event_ = CreateEvent(NULL, FALSE, FALSE, NULL);
   DCHECK(dlg_event_);
 }
 
-VivaldiProgressDialog::~VivaldiProgressDialog() {
-}
+VivaldiProgressDialog::~VivaldiProgressDialog() {}
 
 bool VivaldiProgressDialog::ShowModeless() {
   thread_handle_ = CreateThread(NULL, 0, DlgThreadProc, this, 0, &thread_id_);
@@ -38,8 +39,7 @@ void VivaldiProgressDialog::FinishProgress(int delay) {
   if (hdlg_ == NULL)
     return;
   SetMarqueeMode(false);
-  if (delay > 0)
-  {
+  if (delay > 0) {
     SetProgressValue(100);
     Sleep(delay);
   }
@@ -67,7 +67,7 @@ void VivaldiProgressDialog::SetMarqueeMode(bool marquee_mode) {
   }
 }
 
-//static
+// static
 INT_PTR CALLBACK VivaldiProgressDialog::DlgProc(HWND hdlg,
                                                 UINT msg,
                                                 WPARAM wparam,
@@ -97,11 +97,11 @@ INT_PTR CALLBACK VivaldiProgressDialog::DlgProc(HWND hdlg,
   return (INT_PTR)FALSE;
 }
 
-//static
+// static
 DWORD WINAPI VivaldiProgressDialog::DlgThreadProc(LPVOID lparam) {
   IsGUIThread(TRUE);  // make sure we have a UI thread with a message loop
   DialogBox(this_->instance_, MAKEINTRESOURCE(IDD_DIALOG2), NULL, DlgProc);
   return 0;
 }
 
-} // namespace installer
+}  // namespace installer

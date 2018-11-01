@@ -101,7 +101,7 @@ class TestingDeviceCloudPolicyManagerChromeOS
       : DeviceCloudPolicyManagerChromeOS(std::move(store),
                                          task_runner,
                                          state_keys_broker) {
-    set_is_component_policy_enabled_for_testing(false);
+    set_component_policy_disabled_for_testing(true);
   }
 
   ~TestingDeviceCloudPolicyManagerChromeOS() override {}
@@ -113,8 +113,7 @@ class DeviceCloudPolicyManagerChromeOSTest
  protected:
   DeviceCloudPolicyManagerChromeOSTest()
       : fake_cryptohome_client_(new chromeos::FakeCryptohomeClient()),
-        state_keys_broker_(&fake_session_manager_client_,
-                           base::ThreadTaskRunnerHandle::Get()),
+        state_keys_broker_(&fake_session_manager_client_),
         store_(NULL) {
     fake_statistics_provider_.SetMachineStatistic(
         chromeos::system::kSerialNumberKey, "test_sn");
@@ -230,7 +229,7 @@ class DeviceCloudPolicyManagerChromeOSTest
     bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
         .Set(key::kDeviceMetricsReportingEnabled, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::FundamentalValue>(false), nullptr);
+             base::MakeUnique<base::Value>(false), nullptr);
     EXPECT_TRUE(manager_->policies().Equals(bundle));
   }
 
@@ -270,6 +269,7 @@ class DeviceCloudPolicyManagerChromeOSTest
   SchemaRegistry schema_registry_;
   std::unique_ptr<TestingDeviceCloudPolicyManagerChromeOS> manager_;
   std::unique_ptr<DeviceCloudPolicyInitializer> initializer_;
+
  private:
   DISALLOW_COPY_AND_ASSIGN(DeviceCloudPolicyManagerChromeOSTest);
 };
@@ -504,7 +504,7 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentTest
                                        : EnrollmentConfig::MODE_MANUAL;
     std::string token = with_cert ? "" : "auth token";
     initializer_->StartEnrollment(
-        &device_management_service_, enrollment_config, token,
+        &device_management_service_, nullptr, enrollment_config, token,
         base::Bind(&DeviceCloudPolicyManagerChromeOSEnrollmentTest::Done,
                    base::Unretained(this)));
     base::RunLoop().RunUntilIdle();

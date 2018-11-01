@@ -27,12 +27,12 @@
 #include "core/loader/resource/CSSStyleSheetResource.h"
 
 #include "core/css/StyleSheetContents.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceClientWalker.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
 #include "platform/SharedBuffer.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceClientWalker.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
@@ -114,7 +114,7 @@ const String CSSStyleSheetResource::sheetText(
   if (!m_decodedSheetText.isNull()) {
     // We should have the decoded sheet text cached when the resource is fully
     // loaded.
-    DCHECK_EQ(getStatus(), Resource::Cached);
+    DCHECK_EQ(getStatus(), ResourceStatus::Cached);
 
     return m_decodedSheetText;
   }

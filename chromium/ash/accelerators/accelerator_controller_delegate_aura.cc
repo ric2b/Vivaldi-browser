@@ -22,12 +22,12 @@
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
 #include "ash/debug.h"
+#include "ash/display/display_configuration_controller.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
-#include "ash/rotator/screen_rotation_animator.h"
 #include "ash/rotator/window_rotation.h"
 #include "ash/screenshot_delegate.h"
 #include "ash/shell.h"
@@ -41,8 +41,8 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
@@ -55,11 +55,6 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notifier_settings.h"
-
-#if defined(OS_CHROMEOS)
-#include "ash/display/display_configuration_controller.h"
-#include "base/sys_info.h"
-#endif  // defined(OS_CHROMEOS)
 
 namespace ash {
 namespace {
@@ -164,20 +159,20 @@ void HandleRotateScreen() {
   if (Shell::GetInstance()->display_manager()->IsInUnifiedMode())
     return;
 
-  base::RecordAction(UserMetricsAction("Accel_Rotate_Window"));
+  base::RecordAction(UserMetricsAction("Accel_Rotate_Screen"));
   gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestPoint(point);
   const display::ManagedDisplayInfo& display_info =
       Shell::GetInstance()->display_manager()->GetDisplayInfo(display.id());
-  ScreenRotationAnimator(display.id())
-      .Rotate(GetNextRotation(display_info.GetActiveRotation()),
-              display::Display::ROTATION_SOURCE_USER);
+  Shell::GetInstance()->display_configuration_controller()->SetDisplayRotation(
+      display.id(), GetNextRotation(display_info.GetActiveRotation()),
+      display::Display::ROTATION_SOURCE_USER);
 }
 
 // Rotate the active window.
 void HandleRotateActiveWindow() {
-  base::RecordAction(UserMetricsAction("Accel_Rotate_Window"));
+  base::RecordAction(UserMetricsAction("Accel_Rotate_Active_Window"));
   aura::Window* active_window = wm::GetActiveWindow();
   if (active_window) {
     // The rotation animation bases its target transform on the current
@@ -232,7 +227,6 @@ bool CanHandleUnpin() {
          window_state->GetStateType() == wm::WINDOW_STATE_TYPE_PINNED;
 }
 
-#if defined(OS_CHROMEOS)
 void HandleSwapPrimaryDisplay() {
   base::RecordAction(UserMetricsAction("Accel_Swap_Primary_Display"));
 
@@ -265,8 +259,6 @@ void HandleTouchHudModeChange() {
   controller->touch_hud_debug()->ChangeToNextMode();
 }
 
-#endif  // defined(OS_CHROMEOS)
-
 }  // namespace
 
 AcceleratorControllerDelegateAura::AcceleratorControllerDelegateAura() {}
@@ -287,9 +279,15 @@ bool AcceleratorControllerDelegateAura::HandlesAction(
     case DEBUG_TOGGLE_SHOW_DEBUG_BORDERS:
     case DEBUG_TOGGLE_SHOW_FPS_COUNTER:
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
+    case DEV_ADD_REMOVE_DISPLAY:
     case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
+    case LOCK_PRESSED:
+    case LOCK_RELEASED:
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
+    case POWER_PRESSED:
+    case POWER_RELEASED:
     case ROTATE_SCREEN:
     case ROTATE_WINDOW:
     case SCALE_UI_DOWN:
@@ -297,26 +295,16 @@ bool AcceleratorControllerDelegateAura::HandlesAction(
     case SCALE_UI_UP:
     case SHOW_MESSAGE_CENTER_BUBBLE:
     case SHOW_SYSTEM_TRAY_BUBBLE:
+    case SWAP_PRIMARY_DISPLAY:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
-    case UNPIN:
-      return true;
-
-#if defined(OS_CHROMEOS)
-    case DEV_ADD_REMOVE_DISPLAY:
-    case DEV_TOGGLE_UNIFIED_DESKTOP:
-    case LOCK_PRESSED:
-    case LOCK_RELEASED:
-    case POWER_PRESSED:
-    case POWER_RELEASED:
-    case SWAP_PRIMARY_DISPLAY:
     case TOGGLE_MIRROR_MODE:
     case TOUCH_HUD_CLEAR:
     case TOUCH_HUD_MODE_CHANGE:
     case TOUCH_HUD_PROJECTION_TOGGLE:
+    case UNPIN:
       return true;
-#endif
 
     default:
       break;
@@ -334,7 +322,9 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     case DEBUG_TOGGLE_SHOW_FPS_COUNTER:
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
       return debug::DebugAcceleratorsEnabled();
+    case DEV_ADD_REMOVE_DISPLAY:
     case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
       return debug::DeveloperAcceleratorsEnabled();
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
@@ -347,34 +337,25 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
       return CanHandleUnpin();
 
     // Following are always enabled:
+    case LOCK_PRESSED:
+    case LOCK_RELEASED:
+    case POWER_PRESSED:
+    case POWER_RELEASED:
     case ROTATE_SCREEN:
     case ROTATE_WINDOW:
     case SHOW_SYSTEM_TRAY_BUBBLE:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
+    case TOGGLE_MIRROR_MODE:
+    case TOUCH_HUD_PROJECTION_TOGGLE:
       return true;
-
-#if defined(OS_CHROMEOS)
-    case DEV_ADD_REMOVE_DISPLAY:
-    case DEV_TOGGLE_UNIFIED_DESKTOP:
-      return debug::DeveloperAcceleratorsEnabled();
 
     case SWAP_PRIMARY_DISPLAY:
       return display::Screen::GetScreen()->GetNumDisplays() > 1;
     case TOUCH_HUD_CLEAR:
     case TOUCH_HUD_MODE_CHANGE:
       return CanHandleTouchHud();
-
-    // Following are always enabled.
-    case LOCK_PRESSED:
-    case LOCK_RELEASED:
-    case POWER_PRESSED:
-    case POWER_RELEASED:
-    case TOGGLE_MIRROR_MODE:
-    case TOUCH_HUD_PROJECTION_TOGGLE:
-      return true;
-#endif
 
     default:
       NOTREACHED();
@@ -399,14 +380,39 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
       debug::ToggleShowPaintRects();
       break;
+    case DEV_ADD_REMOVE_DISPLAY:
+      Shell::GetInstance()->display_manager()->AddRemoveDisplay();
+      break;
     case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
       Shell::GetPrimaryRootWindowController()->ash_host()->ToggleFullScreen();
+      break;
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
+      Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(
+          !Shell::GetInstance()->display_manager()->unified_desktop_enabled());
+      break;
+    case LOCK_PRESSED:
+    case LOCK_RELEASED:
+      Shell::GetInstance()->power_button_controller()->OnLockButtonEvent(
+          action == LOCK_PRESSED, base::TimeTicks());
       break;
     case MAGNIFY_SCREEN_ZOOM_IN:
       HandleMagnifyScreen(1);
       break;
     case MAGNIFY_SCREEN_ZOOM_OUT:
       HandleMagnifyScreen(-1);
+      break;
+    case POWER_PRESSED:  // fallthrough
+    case POWER_RELEASED:
+      if (!base::SysInfo::IsRunningOnChromeOS()) {
+        // There is no powerd, the Chrome OS power manager, in linux desktop,
+        // so call the PowerButtonController here.
+        Shell::GetInstance()->power_button_controller()->OnPowerButtonEvent(
+            action == POWER_PRESSED, base::TimeTicks());
+      }
+      // We don't do anything with these at present on the device,
+      // (power button events are reported to us from powerm via
+      // D-BUS), but we consume them to prevent them from getting
+      // passed to apps -- see http://crbug.com/146609.
       break;
     case ROTATE_SCREEN:
       HandleRotateScreen();
@@ -426,6 +432,9 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case SHOW_SYSTEM_TRAY_BUBBLE:
       HandleShowSystemTrayBubble();
       break;
+    case SWAP_PRIMARY_DISPLAY:
+      HandleSwapPrimaryDisplay();
+      break;
     case TAKE_PARTIAL_SCREENSHOT:
       HandleTakePartialScreenshot(screenshot_delegate_.get());
       break;
@@ -434,38 +443,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
       break;
     case TAKE_WINDOW_SCREENSHOT:
       HandleTakeWindowScreenshot(screenshot_delegate_.get());
-      break;
-    case UNPIN:
-      accelerators::Unpin();
-      break;
-#if defined(OS_CHROMEOS)
-    case DEV_ADD_REMOVE_DISPLAY:
-      Shell::GetInstance()->display_manager()->AddRemoveDisplay();
-      break;
-    case DEV_TOGGLE_UNIFIED_DESKTOP:
-      Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(
-          !Shell::GetInstance()->display_manager()->unified_desktop_enabled());
-      break;
-    case LOCK_PRESSED:
-    case LOCK_RELEASED:
-      Shell::GetInstance()->power_button_controller()->OnLockButtonEvent(
-          action == LOCK_PRESSED, base::TimeTicks());
-      break;
-    case POWER_PRESSED:  // fallthrough
-    case POWER_RELEASED:
-      if (!base::SysInfo::IsRunningOnChromeOS()) {
-        // There is no powerd, the Chrome OS power manager, in linux desktop,
-        // so call the PowerButtonController here.
-        Shell::GetInstance()->power_button_controller()->OnPowerButtonEvent(
-            action == POWER_PRESSED, base::TimeTicks());
-      }
-      // We don't do anything with these at present on the device,
-      // (power button events are reported to us from powerm via
-      // D-BUS), but we consume them to prevent them from getting
-      // passed to apps -- see http://crbug.com/146609.
-      break;
-    case SWAP_PRIMARY_DISPLAY:
-      HandleSwapPrimaryDisplay();
       break;
     case TOGGLE_MIRROR_MODE:
       HandleToggleMirrorMode();
@@ -479,7 +456,9 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case TOUCH_HUD_PROJECTION_TOGGLE:
       accelerators::ToggleTouchHudProjection();
       break;
-#endif
+    case UNPIN:
+      accelerators::Unpin();
+      break;
     default:
       break;
   }

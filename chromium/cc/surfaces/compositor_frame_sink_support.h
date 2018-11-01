@@ -5,63 +5,78 @@
 #ifndef CC_SURFACES_COMPOSITOR_FRAME_SINK_SUPPORT_H_
 #define CC_SURFACES_COMPOSITOR_FRAME_SINK_SUPPORT_H_
 
+#include <memory>
+#include <unordered_set>
+#include <vector>
+
 #include "base/compiler_specific.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/display.h"
-#include "cc/surfaces/display_client.h"
+#include "cc/surfaces/referenced_surface_tracker.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_factory_client.h"
+#include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surfaces_export.h"
 
 namespace cc {
 
 class CompositorFrameSinkSupportClient;
-class Display;
 class SurfaceManager;
 
 class CC_SURFACES_EXPORT CompositorFrameSinkSupport
-    : public NON_EXPORTED_BASE(DisplayClient),
-      public SurfaceFactoryClient,
+    : public SurfaceFactoryClient,
       public BeginFrameObserver {
  public:
-  CompositorFrameSinkSupport(
-      CompositorFrameSinkSupportClient* client,
-      SurfaceManager* surface_manager,
-      const FrameSinkId& frame_sink_id,
-      std::unique_ptr<Display> display,
-      std::unique_ptr<BeginFrameSource> display_begin_frame_source);
+  CompositorFrameSinkSupport(CompositorFrameSinkSupportClient* client,
+                             SurfaceManager* surface_manager,
+                             const FrameSinkId& frame_sink_id,
+                             bool is_root,
+                             bool handles_frame_sink_id_invalidation,
+                             bool needs_sync_points);
 
   ~CompositorFrameSinkSupport() override;
 
   const FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
+  Surface* current_surface_for_testing() {
+    return surface_factory_.current_surface_for_testing();
+  }
+
+  const ReferencedSurfaceTracker& ReferenceTrackerForTesting() const {
+    return reference_tracker_;
+  }
+
   void EvictFrame();
   void SetNeedsBeginFrame(bool needs_begin_frame);
-  void SubmitCompositorFrame(const LocalFrameId& local_frame_id,
+  void DidFinishFrame(const BeginFrameAck& ack);
+  void SubmitCompositorFrame(const LocalSurfaceId& local_surface_id,
                              CompositorFrame frame);
-  void Require(const LocalFrameId& local_frame_id,
-               const SurfaceSequence& sequence);
-  void Satisfy(const SurfaceSequence& sequence);
-  void AddChildFrameSink(const FrameSinkId& child_frame_sink_id);
-  void RemoveChildFrameSink(const FrameSinkId& child_frame_sink_id);
-
-  Display* display() { return display_.get(); }
+  void RequestCopyOfSurface(std::unique_ptr<CopyOutputRequest> request);
+  void ForceReclaimResources();
+  void ClaimTemporaryReference(const SurfaceId& surface_id);
 
  private:
+  // Update surface references with SurfaceManager for current CompositorFrame
+  // that has |local_surface_id|. UpdateReferences() must be called on
+  // |reference_tracker_| before calling this. Will add and remove top-level
+  // root references if |display_| is not null.
+  void UpdateSurfaceReferences(const SurfaceId& last_surface_id,
+                               const LocalSurfaceId& local_surface_id);
+
+  void AddTopLevelRootReference(const SurfaceId& surface_id);
+  void RemoveTopLevelRootReference(const SurfaceId& surface_id);
+
   void DidReceiveCompositorFrameAck();
 
-  // DisplayClient implementation.
-  void DisplayOutputSurfaceLost() override;
-  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              const RenderPassList& render_passes) override;
-  void DisplayDidDrawAndSwap() override;
-
   // SurfaceFactoryClient implementation.
+  void ReferencedSurfacesChanged(
+      const LocalSurfaceId& local_surface_id,
+      const std::vector<SurfaceId>* active_referenced_surfaces,
+      const std::vector<SurfaceId>* pending_referenced_surfaces) override;
   void ReturnResources(const ReturnedResourceArray& resources) override;
   void SetBeginFrameSource(BeginFrameSource* begin_frame_source) override;
-  void WillDrawSurface(const LocalFrameId& local_frame_id,
+  void WillDrawSurface(const LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
 
   // BeginFrameObserver implementation.
@@ -77,13 +92,6 @@ class CC_SURFACES_EXPORT CompositorFrameSinkSupport
 
   const FrameSinkId frame_sink_id_;
 
-  // GpuCompositorFrameSink holds a Display and its BeginFrameSource if it
-  // created with non-null gpu::SurfaceHandle. In the window server, the display
-  // root window's CompositorFrameSink will have a valid gpu::SurfaceHandle.
-  std::unique_ptr<BeginFrameSource> display_begin_frame_source_;
-  std::unique_ptr<Display> display_;
-
-  LocalFrameId local_frame_id_;
   SurfaceFactory surface_factory_;
   // Counts the number of CompositorFrames that have been submitted and have not
   // yet received an ACK.
@@ -102,8 +110,23 @@ class CC_SURFACES_EXPORT CompositorFrameSinkSupport
   // Whether or not a frame observer has been added.
   bool added_frame_observer_ = false;
 
-  // The set of BeginFrame children of this CompositorFrameSink.
-  std::unordered_set<FrameSinkId, FrameSinkIdHash> child_frame_sinks_;
+  // Track the surface references for the surface corresponding to this
+  // compositor frame sink.
+  ReferencedSurfaceTracker reference_tracker_;
+
+  const bool is_root_;
+
+  // TODO(staraz): Remove this flag once ui::Compositor no longer needs to call
+  // RegisterFrameSinkId().
+  // A surfaceSequence's validity is bound to the lifetime of the parent
+  // FrameSink that created it. We track the lifetime of FrameSinks through
+  // RegisterFrameSinkId and InvalidateFrameSinkId. During startup and GPU
+  // restart, a SurfaceSequence created by the top most layer compositor may be
+  // used prior to the creation of the associated CompositorFrameSinkSupport.
+  // CompositorFrameSinkSupport is created asynchronously when a new GPU channel
+  // is established. Once we switch to SurfaceReferences, this ordering concern
+  // goes away and we can remove this bool.
+  const bool handles_frame_sink_id_invalidation_;
 
   base::WeakPtrFactory<CompositorFrameSinkSupport> weak_factory_;
 

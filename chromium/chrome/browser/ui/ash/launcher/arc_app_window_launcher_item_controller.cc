@@ -10,9 +10,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_v2app.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
@@ -20,7 +18,7 @@
 ArcAppWindowLauncherItemController::ArcAppWindowLauncherItemController(
     const std::string& arc_app_id,
     ChromeLauncherController* controller)
-    : AppWindowLauncherItemController(arc_app_id, "", controller) {}
+    : AppWindowLauncherItemController(arc_app_id, std::string(), controller) {}
 
 ArcAppWindowLauncherItemController::~ArcAppWindowLauncherItemController() {}
 
@@ -36,24 +34,32 @@ bool ArcAppWindowLauncherItemController::HasAnyTasks() const {
   return !task_ids_.empty();
 }
 
-ash::ShelfItemDelegate::PerformedAction
-ArcAppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
+ash::ShelfAction ArcAppWindowLauncherItemController::ItemSelected(
+    ui::EventType event_type,
+    int event_flags,
+    int64_t display_id,
+    ash::ShelfLaunchSource source) {
   if (window_count()) {
-    return AppWindowLauncherItemController::ItemSelected(event);
-  } else {
-    if (task_ids_.empty()) {
-      NOTREACHED();
-      return kNoAction;
-    }
-    arc::SetTaskActive(*task_ids_.begin());
-    return kNewWindowCreated;
+    return AppWindowLauncherItemController::ItemSelected(
+        event_type, event_flags, display_id, source);
   }
+
+  if (task_ids_.empty()) {
+    NOTREACHED();
+    return ash::SHELF_ACTION_NONE;
+  }
+  arc::SetTaskActive(*task_ids_.begin());
+  return ash::SHELF_ACTION_NEW_WINDOW_CREATED;
 }
 
-ChromeLauncherAppMenuItems
-ArcAppWindowLauncherItemController::GetApplicationList(int event_flags) {
-  ChromeLauncherAppMenuItems items =
-      AppWindowLauncherItemController::GetApplicationList(event_flags);
+void ArcAppWindowLauncherItemController::ExecuteCommand(uint32_t command_id,
+                                                        int32_t event_flags) {
+  ActivateIndexedApp(command_id);
+}
+
+ash::ShelfAppMenuItemList ArcAppWindowLauncherItemController::GetAppMenuItems(
+    int event_flags) {
+  ash::ShelfAppMenuItemList items;
   base::string16 app_title = LauncherControllerHelper::GetAppTitle(
       launcher_controller()->profile(), app_id());
   for (auto it = windows().begin(); it != windows().end(); ++it) {
@@ -61,11 +67,11 @@ ArcAppWindowLauncherItemController::GetApplicationList(int event_flags) {
     size_t i = std::distance(windows().begin(), it);
     gfx::Image image;
     aura::Window* window = (*it)->GetNativeWindow();
-    items.push_back(base::MakeUnique<ChromeLauncherAppMenuItemV2App>(
+    items.push_back(base::MakeUnique<ash::ShelfApplicationMenuItem>(
+        base::checked_cast<uint32_t>(i),
         ((window && !window->GetTitle().empty()) ? window->GetTitle()
                                                  : app_title),
-        &image, app_id(), launcher_controller(), i,
-        i == 0 /* has_leading_separator */));
+        &image));
   }
   return items;
 }

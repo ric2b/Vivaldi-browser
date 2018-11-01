@@ -160,6 +160,8 @@ class ModuleSystem : public ObjectBackedNativeHandler,
   void OnNativeBindingCreated(const std::string& api_name,
                               v8::Local<v8::Value> api_bridge_value);
 
+  void SetGetInternalAPIHook(v8::Local<v8::FunctionTemplate> get_internal_api);
+
  protected:
   friend class ModuleSystemTestEnvironment;
   friend class ScriptContext;
@@ -265,6 +267,9 @@ class ModuleSystem : public ObjectBackedNativeHandler,
   // name, or due to OverrideNativeHandlerForTest. This is needed so that they
   // can be later Invalidated. It should only happen in tests.
   std::vector<std::unique_ptr<NativeHandler>> clobbered_native_handlers_;
+
+  // The template to be used for retrieving an internal API.
+  v8::Eternal<v8::FunctionTemplate> get_internal_api_;
 
   base::WeakPtrFactory<ModuleSystem> weak_factory_;
 

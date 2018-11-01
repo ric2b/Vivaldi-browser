@@ -18,6 +18,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -47,11 +48,15 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/metrics/proto/ukm/entry.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/test_rappor_service.h"
 #include "components/security_state/core/security_state.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/ukm/test_ukm_service.h"
+#include "components/ukm/ukm_entry.h"
+#include "components/ukm/ukm_source.h"
 #include "components/variations/variations_associated_data.h"
-#include "grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -774,6 +779,17 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestAutofillExternalDelegate);
 };
 
+// Finds the specified UKM metric by |name| in the specified UKM |metrics|.
+const ukm::Entry_Metric* FindMetric(
+    const char* name,
+    const google::protobuf::RepeatedPtrField<ukm::Entry_Metric>& metrics) {
+  for (const auto& metric : metrics) {
+    if (metric.metric_hash() == base::HashMetricName(name))
+      return &metric;
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 class AutofillManagerTest : public testing::Test {
@@ -815,32 +831,6 @@ class AutofillManagerTest : public testing::Test {
     personal_data_.SetPrefService(NULL);
 
     request_context_ = nullptr;
-  }
-
-  void EnableCreditCardSigninPromoFeatureWithLimit(int impression_limit) {
-    const std::string kTrialName = "MyTrial";
-    const std::string kGroupName = "Group1";
-
-    scoped_refptr<base::FieldTrial> trial(
-        base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName));
-    std::map<std::string, std::string> params;
-    params[kCreditCardSigninPromoImpressionLimitParamKey] =
-        base::IntToString(impression_limit);
-    ASSERT_TRUE(
-        variations::AssociateVariationParams(kTrialName, kGroupName, params));
-
-    // Enable the feature.
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->RegisterFieldTrialOverride(
-        kAutofillCreditCardSigninPromo.name,
-        base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
-    scoped_feature_list_.InitWithFeatureList(std::move(feature_list));
-
-    // Double-checking our params made it.
-    std::map<std::string, std::string> actualParams;
-    EXPECT_TRUE(variations::GetVariationParamsByFeature(
-        kAutofillCreditCardSigninPromo, &actualParams));
-    EXPECT_EQ(params, actualParams);
   }
 
   void GetAutofillSuggestions(int query_id,
@@ -1022,6 +1012,39 @@ class AutofillManagerTest : public testing::Test {
   void SetHttpWarningEnabled() {
     scoped_feature_list_.InitAndEnableFeature(
         security_state::kHttpFormWarningFeature);
+  }
+
+  void EnableUkmLogging() {
+    scoped_feature_list_.InitAndEnableFeature(kAutofillUkmLogging);
+  }
+
+  void ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::CardUploadDecisionMetric upload_decision) {
+    ukm::TestUkmService* ukm_service = autofill_client_.GetTestUkmService();
+
+    // Check that one source is logged.
+    ASSERT_EQ(1U, ukm_service->sources_count());
+    const ukm::UkmSource* source = ukm_service->GetSource(0);
+
+    // Check that one entry is logged.
+    EXPECT_EQ(1U, ukm_service->entries_count());
+    const ukm::UkmEntry* entry = ukm_service->GetEntry(0);
+    EXPECT_EQ(source->id(), entry->source_id());
+
+    ukm::Entry entry_proto;
+    entry->PopulateProto(&entry_proto);
+    EXPECT_EQ(source->id(), entry_proto.source_id());
+
+    // Check if there is an entry for card upload decisions.
+    EXPECT_EQ(base::HashMetricName(internal::kUKMCardUploadDecisionEntryName),
+              entry_proto.event_hash());
+    EXPECT_EQ(1, entry_proto.metrics_size());
+
+    // Check that the expected upload decision is logged.
+    const ukm::Entry_Metric* metric = FindMetric(
+        internal::kUKMCardUploadDecisionMetricName, entry_proto.metrics());
+    ASSERT_NE(nullptr, metric);
+    EXPECT_EQ(static_cast<int>(upload_decision), metric->value());
   }
 
  protected:
@@ -1690,9 +1713,6 @@ TEST_F(AutofillManagerTest,
 // are no credit card suggestions and the promo is active. See the tests in
 // AutofillExternalDelegateTest that test whether the promo is added.
 TEST_F(AutofillManagerTest, GetCreditCardSuggestions_OnlySigninPromo) {
-  // Enable the signin promo feature with no impression limit.
-  EnableCreditCardSigninPromoFeatureWithLimit(0);
-
   // Make sure there are no credit cards.
   personal_data_.ClearCreditCards();
 
@@ -4497,6 +4517,7 @@ TEST_F(AutofillManagerTest, FillInUpdatedExpirationDate) {
 #define MAYBE_UploadCreditCard UploadCreditCard
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4528,6 +4549,8 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard) {
   // Verify that the correct histogram entry (and only that) was logged.
   histogram_tester.ExpectUniqueSample("Autofill.CardUploadDecisionExpanded",
                                       AutofillMetrics::UPLOAD_OFFERED, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_OFFERED);
 }
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
@@ -4578,6 +4601,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_FeatureNotEnabled) {
 #define MAYBE_UploadCreditCard_CvcUnavailable UploadCreditCard_CvcUnavailable
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcUnavailable) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4612,6 +4636,8 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcUnavailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC);
 
   rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
@@ -4631,6 +4657,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcUnavailable) {
 #define MAYBE_UploadCreditCard_CvcInvalidLength UploadCreditCard_CvcInvalidLength
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcInvalidLength) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4665,6 +4692,8 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcInvalidLength) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC);
 
   rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
@@ -4684,6 +4713,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcInvalidLength) {
 #define MAYBE_UploadCreditCard_MultipleCvcFields UploadCreditCard_MultipleCvcFields
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_MultipleCvcFields) {
+  EnableUkmLogging();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Remove the profiles that were created in the TestPersonalDataManager
@@ -4740,6 +4770,8 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_MultipleCvcFields) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_OFFERED, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_OFFERED);
 }
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
@@ -4749,6 +4781,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_MultipleCvcFields) {
 #define MAYBE_UploadCreditCard_NoProfileAvailable UploadCreditCard_NoProfileAvailable
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoProfileAvailable) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4777,6 +4810,9 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoProfileAvailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS);
 
   rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
@@ -4791,11 +4827,65 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoProfileAvailable) {
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
 #if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_CvcUnavailableAndNoProfileAvailable DISABLED_UploadCreditCard_CvcUnavailableAndNoProfileAvailable
+#else
+#define MAYBE_UploadCreditCard_CvcUnavailableAndNoProfileAvailable UploadCreditCard_CvcUnavailableAndNoProfileAvailable
+#endif
+TEST_F(AutofillManagerTest,
+       MAYBE_UploadCreditCard_CvcUnavailableAndNoProfileAvailable) {
+  EnableUkmLogging();
+  personal_data_.ClearAutofillProfiles();
+  autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Don't fill or submit an address form.
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("");  // CVC MISSING
+
+  base::HistogramTester histogram_tester;
+
+  // Neither a local save nor an upload should happen in this case.
+  // Note that AutofillManager should *check* for both no CVC and no address
+  // profile, but the no CVC case should have priority over being reported.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_, _)).Times(0);
+  FormSubmitted(credit_card_form);
+  EXPECT_FALSE(autofill_manager_->credit_card_was_uploaded());
+
+  // Verify that the correct histogram entry (and only that) was logged.
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CardUploadDecisionExpanded",
+      AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC);
+
+  rappor::TestRapporServiceImpl* rappor_service =
+      autofill_client_.test_rappor_service();
+  EXPECT_EQ(1, rappor_service->GetReportsCount());
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
+      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
+  EXPECT_EQ("myform.com", sample);
+  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
+}
+
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
 #define MAYBE_UploadCreditCard_NoNameAvailable DISABLED_UploadCreditCard_NoNameAvailable
 #else
 #define MAYBE_UploadCreditCard_NoNameAvailable UploadCreditCard_NoNameAvailable
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoNameAvailable) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4830,6 +4920,9 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoNameAvailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME);
 
   rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
@@ -4849,6 +4942,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoNameAvailable) {
 #define MAYBE_UploadCreditCard_ZipCodesConflict UploadCreditCard_ZipCodesConflict
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesConflict) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4891,6 +4985,9 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesConflict) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_ZIPS, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_ZIPS);
 }
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
@@ -4900,6 +4997,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesConflict) {
 #define MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch UploadCreditCard_ZipCodesHavePrefixMatch
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4942,6 +5040,8 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_OFFERED, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_OFFERED);
 }
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
@@ -4951,6 +5051,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch) {
 #define MAYBE_UploadCreditCard_NoZipCodeAvailable UploadCreditCard_NoZipCodeAvailable
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoZipCodeAvailable) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4992,6 +5093,9 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoZipCodeAvailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ZIP_CODE, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ZIP_CODE);
 }
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
@@ -5001,6 +5105,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoZipCodeAvailable) {
 #define MAYBE_UploadCreditCard_NamesMatchLoosely UploadCreditCard_NamesMatchLoosely
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesMatchLoosely) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -5046,6 +5151,8 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesMatchLoosely) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_OFFERED, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(AutofillMetrics::UPLOAD_OFFERED);
 }
 
 // TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
@@ -5055,6 +5162,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesMatchLoosely) {
 #define MAYBE_UploadCreditCard_NamesHaveToMatch UploadCreditCard_NamesHaveToMatch
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesHaveToMatch) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -5097,6 +5205,9 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesHaveToMatch) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES);
 
   rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
@@ -5116,6 +5227,7 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesHaveToMatch) {
 #define MAYBE_UploadCreditCard_UploadDetailsFails UploadCreditCard_UploadDetailsFails
 #endif
 TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_UploadDetailsFails) {
+  EnableUkmLogging();
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -5154,6 +5266,9 @@ TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_UploadDetailsFails) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_GET_UPLOAD_DETAILS_FAILED, 1);
+  // Verify that the correct UKM was logged.
+  ExpectUniqueCardUploadDecisionUkm(
+      AutofillMetrics::UPLOAD_NOT_OFFERED_GET_UPLOAD_DETAILS_FAILED);
 }
 
 // Verify that typing "gmail" will match "theking@gmail.com" and
@@ -5271,56 +5386,9 @@ TEST_F(AutofillManagerTest, NoCreditCardSuggestionsForNonPrefixTokenMatch) {
 }
 
 // Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
-// card form, with no impression limit and the feature enabled.
-TEST_F(AutofillManagerTest,
-       ShouldShowCreditCardSigninPromo_CreditCardField_NoLimit) {
-  // Enable the feature with no impression limit.
-  EnableCreditCardSigninPromoFeatureWithLimit(0);
-
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-
-  FormFieldData field;
-  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
-
-  // The result will depend on what ShouldShowSigninPromo(). We control its
-  // output and verify that both cases behave as expected.
-  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
-      .WillOnce(testing::Return(true));
-  EXPECT_TRUE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
-
-  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
-      .WillOnce(testing::Return(false));
-  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
-}
-
-// Test that ShouldShowCreditCardSigninPromo doesn't show for a credit card form
-// when the feature is off.
-TEST_F(AutofillManagerTest,
-       ShouldShowCreditCardSigninPromo_CreditCardField_FeatureOff) {
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
-
-  FormFieldData field;
-  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
-
-  // Returns false without calling ShouldShowSigninPromo().
-  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo()).Times(0);
-  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
-}
-
-// Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
-// card form with an impression limit and no impressions yet.
+// card form with an impression limit of three and no impressions yet.
 TEST_F(AutofillManagerTest,
        ShouldShowCreditCardSigninPromo_CreditCardField_UnmetLimit) {
-  // Enable the feature with an impression limit.
-  EnableCreditCardSigninPromoFeatureWithLimit(10);
   // No impressions yet.
   ASSERT_EQ(0, autofill_client_.GetPrefs()->GetInteger(
                    prefs::kAutofillCreditCardSigninPromoImpressionCount));
@@ -5357,9 +5425,6 @@ TEST_F(AutofillManagerTest,
 // card form with an impression limit that has been attained already.
 TEST_F(AutofillManagerTest,
        ShouldShowCreditCardSigninPromo_CreditCardField_WithAttainedLimit) {
-  // Enable the feature with an impression limit.
-  EnableCreditCardSigninPromoFeatureWithLimit(10);
-
   // Set up our form data.
   FormData form;
   CreateTestCreditCardFormData(&form, true, false);
@@ -5371,7 +5436,8 @@ TEST_F(AutofillManagerTest,
 
   // Set the impression count to the same value as the limit.
   autofill_client_.GetPrefs()->SetInteger(
-      prefs::kAutofillCreditCardSigninPromoImpressionCount, 10);
+      prefs::kAutofillCreditCardSigninPromoImpressionCount,
+      kCreditCardSigninPromoImpressionLimit);
 
   // Both calls will now return false, regardless of the mock implementation of
   // ShouldShowSigninPromo().
@@ -5384,8 +5450,70 @@ TEST_F(AutofillManagerTest,
   EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
 
   // Number of impressions stay the same.
-  EXPECT_EQ(10, autofill_client_.GetPrefs()->GetInteger(
-                    prefs::kAutofillCreditCardSigninPromoImpressionCount));
+  EXPECT_EQ(kCreditCardSigninPromoImpressionLimit,
+            autofill_client_.GetPrefs()->GetInteger(
+                prefs::kAutofillCreditCardSigninPromoImpressionCount));
+}
+
+// Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
+// card form on a non-secure page.
+TEST_F(AutofillManagerTest,
+       ShouldShowCreditCardSigninPromo_CreditCardField_NonSecureContext) {
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, false, false);
+  form.origin = GURL("http://myform.com/form.html");
+  form.action = GURL("https://myform.com/submit.html");
+  autofill_client_.set_form_origin(form.origin);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+
+  // Both calls will now return false, regardless of the mock implementation of
+  // ShouldShowSigninPromo().
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(true));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(false));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // Number of impressions should remain at zero.
+  EXPECT_EQ(0, autofill_client_.GetPrefs()->GetInteger(
+                   prefs::kAutofillCreditCardSigninPromoImpressionCount));
+}
+
+// Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
+// card form targeting a non-secure page.
+TEST_F(AutofillManagerTest,
+       ShouldShowCreditCardSigninPromo_CreditCardField_NonSecureAction) {
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, false, false);
+  form.origin = GURL("https://myform.com/form.html");
+  form.action = GURL("http://myform.com/submit.html");
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+
+  // Both calls will now return false, regardless of the mock implementation of
+  // ShouldShowSigninPromo().
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(true));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(false));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // Number of impressions should remain at zero.
+  EXPECT_EQ(0, autofill_client_.GetPrefs()->GetInteger(
+                   prefs::kAutofillCreditCardSigninPromoImpressionCount));
 }
 
 // Test that ShouldShowCreditCardSigninPromo behaves as expected for an address

@@ -40,4 +40,4 @@ KeyedService* VivaldiSigninClientFactory::BuildServiceInstanceFor(
       profile, SigninErrorControllerFactory::GetForProfile(profile));
   return client;
 }
-}
+}  // namespace vivaldi

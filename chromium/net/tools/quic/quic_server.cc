@@ -13,8 +13,6 @@
 
 #include <memory>
 
-#include "net/base/ip_endpoint.h"
-#include "net/base/sockaddr_storage.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_crypto_stream.h"
@@ -34,7 +32,9 @@
 #ifndef SO_RXQ_OVFL
 #define SO_RXQ_OVFL 40
 #endif
+
 namespace net {
+
 namespace {
 
 // Specifies the directory used during QuicHttpResponseCache
@@ -67,6 +67,7 @@ QuicServer::QuicServer(
       fd_(-1),
       packets_dropped_(0),
       overflow_supported_(false),
+      silent_close_(false),
       config_(config),
       crypto_config_(kSourceAddressTokenSecret,
                      QuicRandom::GetInstance(),
@@ -111,7 +112,7 @@ QuicServer::~QuicServer() {}
 bool QuicServer::CreateUDPSocketAndListen(const QuicSocketAddress& address) {
   fd_ = QuicSocketUtils::CreateUDPSocket(address, &overflow_supported_);
   if (fd_ < 0) {
-    LOG(ERROR) << "CreateSocket() failed: " << strerror(errno);
+    QUIC_LOG(ERROR) << "CreateSocket() failed: " << strerror(errno);
     return false;
   }
 
@@ -161,9 +162,11 @@ void QuicServer::WaitForEvents() {
 }
 
 void QuicServer::Shutdown() {
-  // Before we shut down the epoll server, give all active sessions a chance to
-  // notify clients that they're closing.
-  dispatcher_->Shutdown();
+  if (!silent_close_) {
+    // Before we shut down the epoll server, give all active sessions a chance
+    // to notify clients that they're closing.
+    dispatcher_->Shutdown();
+  }
 
   close(fd_);
   fd_ = -1;
@@ -174,7 +177,7 @@ void QuicServer::OnEvent(int fd, EpollEvent* event) {
   event->out_ready_mask = 0;
 
   if (event->in_events & EPOLLIN) {
-    DVLOG(1) << "EPOLLIN";
+    QUIC_DVLOG(1) << "EPOLLIN";
 
     if (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop) {
       dispatcher_->ProcessBufferedChlos(kNumSessionsToCreatePerSocketEvent);

@@ -12,7 +12,6 @@ namespace blink {
 
 class LayoutBox;
 class LayoutRect;
-class LayoutSize;
 struct PaintInvalidatorContext;
 
 class BoxPaintInvalidator {
@@ -41,11 +40,8 @@ class BoxPaintInvalidator {
                                     const LayoutRect& oldRect,
                                     const LayoutRect& newRect);
 
-  bool needsToSavePreviousBoxGeometries();
+  bool needsToSavePreviousContentBoxSizeOrLayoutOverflowRect();
   void savePreviousBoxGeometriesIfNeeded();
-  LayoutSize previousBorderBoxSize();
-  LayoutRect previousContentBoxRect();
-  LayoutRect previousLayoutOverflowRect();
 
   const LayoutBox& m_box;
   const PaintInvalidatorContext& m_context;

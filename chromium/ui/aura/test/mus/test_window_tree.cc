@@ -244,8 +244,9 @@ void TestWindowTree::SetFocus(uint32_t change_id, uint32_t window_id) {
 
 void TestWindowTree::SetCanFocus(uint32_t window_id, bool can_focus) {}
 
-void TestWindowTree::SetCanAcceptEvents(uint32_t window_id,
-                                        bool can_accept_events) {}
+void TestWindowTree::SetEventTargetingPolicy(
+    uint32_t window_id,
+    ui::mojom::EventTargetingPolicy policy) {}
 
 void TestWindowTree::SetPredefinedCursor(uint32_t change_id,
                                          uint32_t window_id,
@@ -267,6 +268,11 @@ void TestWindowTree::OnWindowInputEventAck(uint32_t event_id,
 }
 
 void TestWindowTree::DeactivateWindow(uint32_t window_id) {}
+
+void TestWindowTree::StackAbove(uint32_t change_id, uint32_t above_id,
+                                uint32_t below_id) {}
+
+void TestWindowTree::StackAtTop(uint32_t change_id, uint32_t window_id) {}
 
 void TestWindowTree::GetWindowManagerClient(
     mojo::AssociatedInterfaceRequest<ui::mojom::WindowManagerClient> internal) {

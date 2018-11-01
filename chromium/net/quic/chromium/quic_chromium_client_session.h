@@ -126,6 +126,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       TransportSecurityState* transport_security_state,
       std::unique_ptr<QuicServerInfo> server_info,
       const QuicServerId& server_id,
+      bool require_confirmation,
       int yield_after_packets,
       QuicTime::Delta yield_after_duration,
       int cert_verify_flags,
@@ -213,8 +214,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
                                  std::vector<uint8_t>* out) override;
 
   // Performs a crypto handshake with the server.
-  int CryptoConnect(bool require_confirmation,
-                    const CompletionCallback& callback);
+  int CryptoConnect(const CompletionCallback& callback);
 
   // Resumes a crypto handshake with the server after a timeout.
   int ResumeCryptoConnect(const CompletionCallback& callback);
@@ -316,6 +316,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   const LoadTimingInfo::ConnectTiming& GetConnectTiming();
 
   QuicVersion GetQuicVersion() const;
+
+  // Returns the estimate of dynamically allocated memory in bytes.
+  // See base/trace_event/memory_usage_estimator.h.
+  // TODO(xunjieli): It only tracks |packet_readers_|. Write a better estimate.
+  size_t EstimateMemoryUsage() const;
 
  protected:
   // QuicSession methods:

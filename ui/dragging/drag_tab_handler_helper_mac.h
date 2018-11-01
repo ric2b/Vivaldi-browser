@@ -14,5 +14,4 @@ void populateCustomData(TabDragDataCollection& data);
 
 }  // namespace vivaldi
 
-
 #endif  // UI_DRAGGING_DRAG_TAB_HANDLER_HELPER_MAC_H_

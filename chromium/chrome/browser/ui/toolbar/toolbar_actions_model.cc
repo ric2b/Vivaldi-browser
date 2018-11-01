@@ -14,7 +14,6 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -54,8 +53,8 @@ ToolbarActionsModel::ToolbarActionsModel(
       extension_registry_(extensions::ExtensionRegistry::Get(profile_)),
       extension_action_manager_(
           extensions::ExtensionActionManager::Get(profile_)),
-      component_migration_helper_(
-          new extensions::ComponentMigrationHelper(profile_, this)),
+      component_actions_factory_(
+          base::MakeUnique<ComponentToolbarActionsFactory>(profile_)),
       actions_initialized_(false),
       // NOTE(andre@vivaldi.com) : In Vivaldi we don't use ToolbarActionsModel,
       // but still use the other parts of the !extension_action_redesign() code
@@ -68,8 +67,6 @@ ToolbarActionsModel::ToolbarActionsModel(
       extension_action_observer_(this),
       extension_registry_observer_(this),
       weak_ptr_factory_(this) {
-  ComponentToolbarActionsFactory::GetInstance()->RegisterComponentMigrations(
-      component_migration_helper_.get());
   extensions::ExtensionSystem::Get(profile_)->ready().Post(
       FROM_HERE, base::Bind(&ToolbarActionsModel::OnReady,
                             weak_ptr_factory_.GetWeakPtr()));
@@ -195,15 +192,15 @@ ToolbarActionsModel::CreateActionForItem(Browser* browser,
       DCHECK(extension);
 
       // Create and add an ExtensionActionViewController for the extension.
-      result.reset(new ExtensionActionViewController(
+      result = base::MakeUnique<ExtensionActionViewController>(
           extension, browser,
-          extension_action_manager_->GetExtensionAction(*extension), bar));
+          extension_action_manager_->GetExtensionAction(*extension), bar);
       break;
     }
     case COMPONENT_ACTION: {
       DCHECK(use_redesign_);
-      result = ComponentToolbarActionsFactory::GetInstance()
-                   ->GetComponentToolbarActionForId(item.id, browser, bar);
+      result = component_actions_factory_->GetComponentToolbarActionForId(
+          item.id, browser, bar);
       break;
     }
     case UNKNOWN_ACTION:
@@ -317,11 +314,9 @@ void ToolbarActionsModel::OnReady() {
     observer.OnToolbarModelInitialized();
 
   if (use_redesign_) {
-    // Handle component action migrations.  We must make sure that observers are
-    // notified of initialization first, so that the associated widgets are
-    // created.
-    ComponentToolbarActionsFactory::GetInstance()->HandleComponentMigrations(
-        component_migration_helper_.get(), profile_);
+    component_actions_factory_->UnloadMigratedExtensions(
+        extensions::ExtensionSystem::Get(profile_)->extension_service(),
+        extension_registry_);
   }
 }
 
@@ -489,6 +484,11 @@ ToolbarActionsModel::GetExtensionMessageBubbleController(Browser* browser) {
   return controller;
 }
 
+void ToolbarActionsModel::SetMockActionsFactoryForTest(
+    std::unique_ptr<ComponentToolbarActionsFactory> mock_factory) {
+  component_actions_factory_ = std::move(mock_factory);
+}
+
 void ToolbarActionsModel::RemoveExtension(
     const extensions::Extension* extension) {
   RemoveItem(ToolbarItem(extension->id(), EXTENSION_ACTION));
@@ -542,8 +542,7 @@ void ToolbarActionsModel::Populate() {
 
   // Next, add the component action ids.
   std::set<std::string> component_ids =
-      ComponentToolbarActionsFactory::GetInstance()->GetInitialComponentIds(
-          profile_);
+      component_actions_factory_->GetInitialComponentIds();
   for (const std::string& id : component_ids)
     all_actions.push_back(ToolbarItem(id, COMPONENT_ACTION));
 
@@ -673,12 +672,12 @@ bool ToolbarActionsModel::HasComponentAction(
 }
 
 void ToolbarActionsModel::AddComponentAction(const std::string& action_id) {
+  DCHECK(use_redesign_);
   if (!actions_initialized_) {
-    // TODO(crbug.com/660972): Add these component actions at initialization.
+    component_actions_factory_->OnAddComponentActionBeforeInit(action_id);
     return;
   }
 
-  DCHECK(use_redesign_);
   ToolbarItem component_item(action_id, COMPONENT_ACTION);
   DCHECK(!HasItem(component_item));
   AddItem(component_item);
@@ -686,6 +685,10 @@ void ToolbarActionsModel::AddComponentAction(const std::string& action_id) {
 
 void ToolbarActionsModel::RemoveComponentAction(const std::string& action_id) {
   DCHECK(use_redesign_);
+  if (!actions_initialized_) {
+    component_actions_factory_->OnRemoveComponentActionBeforeInit(action_id);
+    return;
+  }
   // If the action was visible and there are overflowed actions, we reduce the
   // visible count so that we don't pop out a previously-hidden action.
   if (IsActionVisible(action_id) && !all_icons_visible())
@@ -711,8 +714,7 @@ void ToolbarActionsModel::IncognitoPopulate() {
   visible_icon_count_ = 0;
 
   std::set<std::string> component_ids =
-      ComponentToolbarActionsFactory::GetInstance()->GetInitialComponentIds(
-          profile_);
+      component_actions_factory_->GetInitialComponentIds();
   for (std::vector<ToolbarItem>::const_iterator iter =
            original_model->toolbar_items_.begin();
        iter != original_model->toolbar_items_.end(); ++iter) {

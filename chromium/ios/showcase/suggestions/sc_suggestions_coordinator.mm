@@ -4,18 +4,18 @@
 
 #import "ios/showcase/suggestions/sc_suggestions_coordinator.h"
 
-#import "ios/chrome/browser/ui/suggestions/suggestions_commands.h"
-#import "ios/chrome/browser/ui/suggestions/suggestions_view_controller.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/showcase/common/protocol_alerter.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface SCSuggestionsCoordinator ()<SuggestionsCommands>
+@interface SCSuggestionsCoordinator ()
 
 @property(nonatomic, strong)
-    SuggestionsViewController* suggestionViewController;
+    ContentSuggestionsViewController* suggestionViewController;
 @property(nonatomic, strong) ProtocolAlerter* alerter;
 
 @end
@@ -30,33 +30,18 @@
 
 - (void)start {
   self.alerter = [[ProtocolAlerter alloc]
-      initWithProtocols:@[ @protocol(SuggestionsCommands) ]];
+      initWithProtocols:@[ @protocol(ContentSuggestionsCommands) ]];
   self.alerter.baseViewController = self.baseViewController;
 
-  _suggestionViewController = [[SuggestionsViewController alloc]
-      initWithStyle:CollectionViewControllerStyleDefault];
+  _suggestionViewController = [[ContentSuggestionsViewController alloc]
+      initWithStyle:CollectionViewControllerStyleDefault
+         dataSource:nil];
 
-  _suggestionViewController.suggestionCommandHandler = self;
+  _suggestionViewController.suggestionCommandHandler =
+      reinterpret_cast<id<ContentSuggestionsCommands>>(self.alerter);
 
   [self.baseViewController pushViewController:_suggestionViewController
                                      animated:YES];
-}
-
-#pragma mark - SuggestionsCommands
-
-- (void)addEmptyItem {
-  [self.suggestionViewController addTextItem:@"Button clicked"
-                                    subtitle:@"Item Added!"
-                                   toSection:5];
-}
-
-- (void)openReadingList {
-  [static_cast<id<SuggestionsCommands>>(self.alerter) openReadingList];
-}
-
-- (void)openFirstPageOfReadingList {
-  [static_cast<id<SuggestionsCommands>>(self.alerter)
-      openFirstPageOfReadingList];
 }
 
 @end

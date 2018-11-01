@@ -50,8 +50,6 @@ const char kGPURenderer[] = "gpu-gl-renderer";
 #endif
 
 #if defined(OS_WIN)
-const char kHungAudioThreadDetails[] = "hung-audio-thread-details";
-
 const char kHungRendererOutstandingAckCount[] = "hung-outstanding-acks";
 const char kHungRendererOutstandingEventType[] = "hung-outstanding-event-type";
 const char kHungRendererLastEventType[] = "hung-last-event-type";
@@ -60,7 +58,7 @@ const char kHungRendererReason[] = "hung-reason";
 const char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
 const char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
 
-const char kEnrolledToDomain[] = "enrolled-to-domain";
+const char kIsEnterpriseManaged[] = "is-enterprise-managed";
 #endif
 
 const char kInputEventFilterSendFailure[] = "input-event-filter-send-failure";
@@ -89,12 +87,9 @@ const char kSendAction[] = "sendaction";
 
 const char kNSEvent[] = "nsevent";
 
-}  // namespace mac
-#endif
+const char kToolbarNibInfo[] = "toolbar-nib-info";
 
-#if BUILDFLAG(ENABLE_KASKO)
-const char kKaskoGuid[] = "kasko-guid";
-const char kKaskoEquivalentGuid[] = "kasko-equivalent-guid";
+}  // namespace mac
 #endif
 
 const char kViewCount[] = "view-count";
@@ -105,156 +100,153 @@ size_t RegisterChromeCrashKeys() {
   // The following keys may be chunked by the underlying crash logging system,
   // but ultimately constitute a single key-value pair.
   //
-  // If you're adding keys here, please also add them to the following list:
-  // chrome/app/chrome_crash_reporter_client_win.cc::RegisterCrashKeysHelper().
+  // If you're adding keys here, please also add them to the following lists:
+  // chrome/app/chrome_crash_reporter_client_win.cc::RegisterCrashKeysHelper(),
+  // android_webview/common/crash_reporter/crash_keys.cc::
+  //     RegisterWebViewCrashKeys().
   base::debug::CrashKey fixed_keys[] = {
 #if defined(OS_MACOSX) || defined(OS_WIN)
-    { kMetricsClientId, kSmallSize },
+    {kMetricsClientId, kSmallSize},
 #else
-    { kClientId, kSmallSize },
+    {kClientId, kSmallSize},
 #endif
-    { kChannel, kSmallSize },
-    { kActiveURL, kLargeSize },
-    { kNumVariations, kSmallSize },
-    { kVariations, kLargeSize },
-    { kNumExtensionsCount, kSmallSize },
-    { kShutdownType, kSmallSize },
-    { kBrowserUnpinTrace, kMediumSize },
+    {kChannel, kSmallSize},
+    {kActiveURL, kLargeSize},
+    {kNumVariations, kSmallSize},
+    {kVariations, kHugeSize},
+    {kNumExtensionsCount, kSmallSize},
+    {kShutdownType, kSmallSize},
+    {kBrowserUnpinTrace, kMediumSize},
 #if !defined(OS_ANDROID)
-    { kGPUVendorID, kSmallSize },
-    { kGPUDeviceID, kSmallSize },
+    {kGPUVendorID, kSmallSize},
+    {kGPUDeviceID, kSmallSize},
 #endif
-    { kGPUDriverVersion, kSmallSize },
-    { kGPUPixelShaderVersion, kSmallSize },
-    { kGPUVertexShaderVersion, kSmallSize },
+    {kGPUDriverVersion, kSmallSize},
+    {kGPUPixelShaderVersion, kSmallSize},
+    {kGPUVertexShaderVersion, kSmallSize},
 #if defined(OS_MACOSX)
-    { kGPUGLVersion, kSmallSize },
+    {kGPUGLVersion, kSmallSize},
 #elif defined(OS_POSIX)
-    { kGPUVendor, kSmallSize },
-    { kGPURenderer, kSmallSize },
+    {kGPUVendor, kSmallSize},
+    {kGPURenderer, kSmallSize},
 #endif
 
     // content/:
-    { "bad_message_reason", kSmallSize },
-    { "discardable-memory-allocated", kSmallSize },
-    { "discardable-memory-free", kSmallSize },
-    { kFontKeyName, kSmallSize},
-    { "mojo-message-error", kMediumSize },
-    { "ppapi_path", kMediumSize },
-    { "subresource_url", kLargeSize },
-    { "total-discardable-memory-allocated", kSmallSize },
+    {"bad_message_reason", kSmallSize},
+    {"discardable-memory-allocated", kSmallSize},
+    {"discardable-memory-free", kSmallSize},
+    {kFontKeyName, kSmallSize},
+    {"mojo-message-error", kMediumSize},
+    {"ppapi_path", kMediumSize},
+    {"subresource_url", kLargeSize},
+    {"total-discardable-memory-allocated", kSmallSize},
 #if defined(OS_WIN)
-    { kHungRendererOutstandingAckCount, kSmallSize },
-    { kHungRendererOutstandingEventType, kSmallSize },
-    { kHungRendererLastEventType, kSmallSize },
-    { kHungRendererReason, kSmallSize },
-    { kThirdPartyModulesLoaded, kSmallSize },
-    { kThirdPartyModulesNotLoaded, kSmallSize },
-    { kEnrolledToDomain, kSmallSize },
+    {kHungRendererOutstandingAckCount, kSmallSize},
+    {kHungRendererOutstandingEventType, kSmallSize},
+    {kHungRendererLastEventType, kSmallSize},
+    {kHungRendererReason, kSmallSize},
+    {kThirdPartyModulesLoaded, kSmallSize},
+    {kThirdPartyModulesNotLoaded, kSmallSize},
+    {kIsEnterpriseManaged, kSmallSize},
 #endif
-    { kInputEventFilterSendFailure, kSmallSize },
+    {kInputEventFilterSendFailure, kSmallSize},
 #if defined(OS_CHROMEOS)
-    { kNumberOfUsers, kSmallSize },
+    {kNumberOfUsers, kSmallSize},
     // Temporary for https://crbug.com/660960
-    { kLastGoodCloseStack, kMediumSize },
+    {kLastGoodCloseStack, kMediumSize},
+    // Temporary for https://crbug.com/629521
+    {"mmap_params", kSmallSize},
+    {"buffer_size", kSmallSize},
+    {"errno", kSmallSize},
 #endif
 #if defined(OS_MACOSX)
-    { mac::kFirstNSException, kMediumSize },
-    { mac::kFirstNSExceptionTrace, kMediumSize },
-    { mac::kLastNSException, kMediumSize },
-    { mac::kLastNSExceptionTrace, kMediumSize },
-    { mac::kNSException, kMediumSize },
-    { mac::kNSExceptionTrace, kMediumSize },
-    { mac::kSendAction, kMediumSize },
-    { mac::kNSEvent, kMediumSize },
-    { mac::kZombie, kMediumSize },
-    { mac::kZombieTrace, kMediumSize },
+    {mac::kFirstNSException, kMediumSize},
+    {mac::kFirstNSExceptionTrace, kMediumSize},
+    {mac::kLastNSException, kMediumSize},
+    {mac::kLastNSExceptionTrace, kMediumSize},
+    {mac::kNSException, kMediumSize},
+    {mac::kNSExceptionTrace, kMediumSize},
+    {mac::kSendAction, kMediumSize},
+    {mac::kNSEvent, kMediumSize},
+    {mac::kToolbarNibInfo, kMediumSize},
+    {mac::kZombie, kMediumSize},
+    {mac::kZombieTrace, kMediumSize},
     // content/:
-    { "channel_error_bt", kMediumSize },
-    { "remove_route_bt", kMediumSize },
-    { "rwhvm_window", kMediumSize },
+    {"channel_error_bt", kMediumSize},
+    {"remove_route_bt", kMediumSize},
+    {"rwhvm_window", kMediumSize},
     // media/:
 #endif
-#if BUILDFLAG(ENABLE_KASKO)
-    { kKaskoGuid, kSmallSize },
-    { kKaskoEquivalentGuid, kSmallSize },
-#endif
-    { kBug464926CrashKey, kSmallSize },
-    { kViewCount, kSmallSize },
+    {kBug464926CrashKey, kSmallSize},
+    {kViewCount, kSmallSize},
 
     // media/:
-#if defined(OS_WIN)
-    { kHungAudioThreadDetails, kSmallSize },
-#endif
-    { kZeroEncodeDetails, kSmallSize },
+    {kZeroEncodeDetails, kSmallSize},
 
     // gin/:
-    { "v8-ignition", kSmallSize },
+    {"v8-ignition", kSmallSize},
 
     // sandbox/:
 #if defined(OS_LINUX)
-    { "seccomp-sigsys", kMediumSize },
+    {"seccomp-sigsys", kMediumSize},
 #endif
 
     // Temporary for http://crbug.com/575245.
-    { "swapout_frame_id", kSmallSize },
-    { "swapout_proxy_id", kSmallSize },
-    { "swapout_view_id", kSmallSize },
-    { "commit_frame_id", kSmallSize },
-    { "commit_proxy_id", kSmallSize },
-    { "commit_view_id", kSmallSize },
-    { "commit_main_render_frame_id", kSmallSize },
-    { "newproxy_proxy_id", kSmallSize },
-    { "newproxy_view_id", kSmallSize },
-    { "newproxy_opener_id", kSmallSize },
-    { "newproxy_parent_id", kSmallSize },
-    { "rvinit_view_id", kSmallSize },
-    { "rvinit_proxy_id", kSmallSize },
-    { "rvinit_main_frame_id", kSmallSize },
-    { "initrf_frame_id", kSmallSize },
-    { "initrf_proxy_id", kSmallSize },
-    { "initrf_view_id", kSmallSize },
-    { "initrf_main_frame_id", kSmallSize },
-    { "initrf_view_is_live", kSmallSize },
+    {"swapout_frame_id", kSmallSize},
+    {"swapout_proxy_id", kSmallSize},
+    {"swapout_view_id", kSmallSize},
+    {"commit_frame_id", kSmallSize},
+    {"commit_proxy_id", kSmallSize},
+    {"commit_view_id", kSmallSize},
+    {"commit_main_render_frame_id", kSmallSize},
+    {"newproxy_proxy_id", kSmallSize},
+    {"newproxy_view_id", kSmallSize},
+    {"newproxy_opener_id", kSmallSize},
+    {"newproxy_parent_id", kSmallSize},
+    {"rvinit_view_id", kSmallSize},
+    {"rvinit_proxy_id", kSmallSize},
+    {"rvinit_main_frame_id", kSmallSize},
+    {"initrf_frame_id", kSmallSize},
+    {"initrf_proxy_id", kSmallSize},
+    {"initrf_view_id", kSmallSize},
+    {"initrf_main_frame_id", kSmallSize},
+    {"initrf_view_is_live", kSmallSize},
 
     // Temporary for https://crbug.com/591478.
-    { "initrf_parent_proxy_exists", kSmallSize },
-    { "initrf_render_view_is_live", kSmallSize },
-    { "initrf_parent_is_in_same_site_instance", kSmallSize},
-    { "initrf_parent_process_is_live", kSmallSize},
-    { "initrf_root_is_in_same_site_instance", kSmallSize},
-    { "initrf_root_is_in_same_site_instance_as_parent", kSmallSize},
-    { "initrf_root_process_is_live", kSmallSize},
-    { "initrf_root_proxy_is_live", kSmallSize},
+    {"initrf_parent_proxy_exists", kSmallSize},
+    {"initrf_render_view_is_live", kSmallSize},
+    {"initrf_parent_is_in_same_site_instance", kSmallSize},
+    {"initrf_parent_process_is_live", kSmallSize},
+    {"initrf_root_is_in_same_site_instance", kSmallSize},
+    {"initrf_root_is_in_same_site_instance_as_parent", kSmallSize},
+    {"initrf_root_process_is_live", kSmallSize},
+    {"initrf_root_proxy_is_live", kSmallSize},
 
     // Temporary for https://crbug.com/626802.
-    { "newframe_routing_id", kSmallSize },
-    { "newframe_proxy_id", kSmallSize },
-    { "newframe_opener_id", kSmallSize },
-    { "newframe_parent_id", kSmallSize },
-    { "newframe_widget_id", kSmallSize },
-    { "newframe_widget_hidden", kSmallSize },
-    { "newframe_replicated_origin", kSmallSize },
-    { "newframe_oopifs_possible", kSmallSize },
+    {"newframe_routing_id", kSmallSize},
+    {"newframe_proxy_id", kSmallSize},
+    {"newframe_opener_id", kSmallSize},
+    {"newframe_parent_id", kSmallSize},
+    {"newframe_widget_id", kSmallSize},
+    {"newframe_widget_hidden", kSmallSize},
+    {"newframe_replicated_origin", kSmallSize},
+    {"newframe_oopifs_possible", kSmallSize},
 
     // Temporary for https://crbug.com/630103.
-    { "origin_mismatch_url", crash_keys::kLargeSize },
-    { "origin_mismatch_origin", crash_keys::kMediumSize },
-    { "origin_mismatch_transition", crash_keys::kSmallSize },
-    { "origin_mismatch_redirects", crash_keys::kSmallSize },
-    { "origin_mismatch_same_page", crash_keys::kSmallSize },
+    {"origin_mismatch_url", crash_keys::kLargeSize},
+    {"origin_mismatch_origin", crash_keys::kMediumSize},
+    {"origin_mismatch_transition", crash_keys::kSmallSize},
+    {"origin_mismatch_redirects", crash_keys::kSmallSize},
+    {"origin_mismatch_same_page", crash_keys::kSmallSize},
 
     // Temporary for https://crbug.com/612711.
-    { "aci_wrong_sp_extension_id", kSmallSize },
-
-    // Temporary for https://crbug.com/616149.
-    { "existing_extension_pref_value_type", crash_keys::kSmallSize },
+    {"aci_wrong_sp_extension_id", kSmallSize},
 
     // Temporary for https://crbug.com/668633.
-    { "swdh_set_hosted_version_worker_pid", crash_keys::kSmallSize },
-    { "swdh_set_hosted_version_host_pid", crash_keys::kSmallSize },
-    { "swdh_set_hosted_version_is_new_process", crash_keys::kSmallSize },
-    { "swdh_set_hosted_version_restart_count", crash_keys::kSmallSize },
+    {"swdh_set_hosted_version_worker_pid", crash_keys::kSmallSize},
+    {"swdh_set_hosted_version_host_pid", crash_keys::kSmallSize},
+    {"swdh_set_hosted_version_is_new_process", crash_keys::kSmallSize},
+    {"swdh_set_hosted_version_restart_count", crash_keys::kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

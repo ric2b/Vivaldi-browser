@@ -4,6 +4,8 @@
 
 #include "extensions/api/thumbnails/thumbnails_api.h"
 
+#include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,9 +15,9 @@
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/path_service.h"
 #include "base/values.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,11 +33,12 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/tabs/tabs_private_api.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/schema/thumbnails.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -91,16 +94,14 @@ bool ThumbnailsIsThumbnailAvailableFunction::RunAsync() {
 }
 
 ThumbnailsIsThumbnailAvailableFunction::
-    ThumbnailsIsThumbnailAvailableFunction() {
-}
+    ThumbnailsIsThumbnailAvailableFunction() {}
 
 ThumbnailsIsThumbnailAvailableFunction::
-    ~ThumbnailsIsThumbnailAvailableFunction() {
-}
+    ~ThumbnailsIsThumbnailAvailableFunction() {}
 
 void ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete(
-  const SkBitmap& bitmap,
-  content::ReadbackResponse response) {
+    const SkBitmap& bitmap,
+    content::ReadbackResponse response) {
   if (response == content::READBACK_SUCCESS) {
     OnCaptureSuccess(bitmap);
     return;
@@ -109,25 +110,25 @@ void ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete(
   // information here?
   std::string reason;
   switch (response) {
-  case content::READBACK_FAILED:
-    reason = "READBACK_FAILED";
-    break;
-  case content::READBACK_SURFACE_UNAVAILABLE:
-    reason = "READBACK_SURFACE_UNAVAILABLE";
-    break;
-  case content::READBACK_BITMAP_ALLOCATION_FAILURE:
-    reason = "READBACK_BITMAP_ALLOCATION_FAILURE";
-    break;
-  default:
-    reason = "<unknown>";
+    case content::READBACK_FAILED:
+      reason = "READBACK_FAILED";
+      break;
+    case content::READBACK_SURFACE_UNAVAILABLE:
+      reason = "READBACK_SURFACE_UNAVAILABLE";
+      break;
+    case content::READBACK_BITMAP_ALLOCATION_FAILURE:
+      reason = "READBACK_BITMAP_ALLOCATION_FAILURE";
+      break;
+    default:
+      reason = "<unknown>";
   }
   OnCaptureFailure(FAILURE_REASON_UNKNOWN);
 }
 
 bool ThumbnailsCaptureUIFunction::CaptureAsync(
-  content::WebContents* web_contents,
-  gfx::Rect& capture_area,
-  const content::ReadbackRequestCallback callback) {
+    content::WebContents* web_contents,
+    const gfx::Rect& capture_area,
+    const content::ReadbackRequestCallback callback) {
   if (!web_contents)
     return false;
 
@@ -145,11 +146,11 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
     const gfx::NativeView native_view = view->GetNativeView();
     display::Screen* const screen = display::Screen::GetScreen();
     const float scale =
-      screen->GetDisplayNearestWindow(native_view).device_scale_factor();
+        screen->GetDisplayNearestWindow(native_view).device_scale_factor();
     if (scale > 1.0f)
       bitmap_size = gfx::ScaleToCeiledSize(bitmap_size, scale);
 
-    host->CopyFromBackingStore(capture_area, bitmap_size, callback,
+    view->CopyFromSurface(capture_area, bitmap_size, callback,
                                kN32_SkColorType);
   }
   return true;
@@ -157,23 +158,27 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
 
 bool ThumbnailsCaptureUIFunction::RunAsync() {
   std::unique_ptr<vivaldi::thumbnails::CaptureUI::Params> params(
-    vivaldi::thumbnails::CaptureUI::Params::Create(*args_));
+      vivaldi::thumbnails::CaptureUI::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (params->params.encode_format.get()) {
-    image_format_ =
-      *params->params.encode_format == "jpg"
-      ? ImageFormat::IMAGE_FORMAT_JPEG
-      : ImageFormat::IMAGE_FORMAT_PNG;
+    image_format_ = *params->params.encode_format == "jpg"
+                        ? ImageFormat::IMAGE_FORMAT_JPEG
+                        : ImageFormat::IMAGE_FORMAT_PNG;
   }
   if (params->params.encode_quality.get()) {
     encode_quality_ = *params->params.encode_quality.get();
   }
-  if (params->params.save_to_base_path.get()) {
-    base_path_ = *params->params.save_to_base_path;
+  if (params->params.save_to_disk.get()) {
+    save_to_disk_ = *params->params.save_to_disk;
   }
-  if (!base_path_.empty() && params->params.show_file_in_path) {
-    show_file_in_path_ = *params->params.show_file_in_path;
+  if (save_to_disk_) {
+    if (params->params.show_file_in_path) {
+      show_file_in_path_ = *params->params.show_file_in_path;
+    }
+    const PrefService* user_prefs = GetProfile()->GetPrefs();
+    save_folder_ =
+        user_prefs->GetString(vivaldiprefs::kVivaldiCaptureDirectory);
   }
   if (params->params.encode_to_data_url.get()) {
     encode_to_data_url_ = *params->params.encode_to_data_url;
@@ -189,9 +194,9 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
                      params->params.width, params->params.height);
       content::WebContents* contents = app_window->web_contents();
       return CaptureAsync(
-        contents, rect,
-        base::Bind(&ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete,
-                   this));
+          contents, rect,
+          base::Bind(&ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete,
+                     this));
     }
   }
   return false;
@@ -214,14 +219,14 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     SendResponse(true);
     return;
   }
-  bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_,
+  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_,
                               final_size, 100, encode_quality_, false);
   if (!encoded) {
     error_ = "Failed to capture ui: data could not be encoded";
     SendResponse(false);
     return;
   }
-  if (base_path_.empty()) {
+  if (save_to_disk_ == false) {
     // If the base path is not set, we want to encode the image as a data url.
     base::StringPiece base64_input(reinterpret_cast<const char*>(&data[0]),
                                    data.size());
@@ -236,9 +241,8 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     }
   } else {
     base::ThreadRestrictions::ScopedAllowIO allow_io;
-    base::FilePath path;
-    PathService::Get(chrome::DIR_USER_PICTURES, &path);
-    path = path.AppendASCII(base_path_);
+    base::FilePath path = base::FilePath::FromUTF8Unsafe(save_folder_);
+
     if (!base::PathExists(path)) {
       base::CreateDirectory(path);
     }
@@ -267,46 +271,38 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
 void ThumbnailsCaptureUIFunction::OnCaptureFailure(FailureReason reason) {
   const char* reason_description = "internal error";
   switch (reason) {
-  case FAILURE_REASON_UNKNOWN:
-    reason_description = "unknown error";
-    break;
-  case FAILURE_REASON_ENCODING_FAILED:
-    reason_description = "encoding failed";
-    break;
-  case FAILURE_REASON_VIEW_INVISIBLE:
-    reason_description = "view is invisible";
-    break;
+    case FAILURE_REASON_UNKNOWN:
+      reason_description = "unknown error";
+      break;
+    case FAILURE_REASON_ENCODING_FAILED:
+      reason_description = "encoding failed";
+      break;
+    case FAILURE_REASON_VIEW_INVISIBLE:
+      reason_description = "view is invisible";
+      break;
   }
   error_ = ErrorUtils::FormatErrorMessage("Failed to capture tab: *",
                                           reason_description);
   SendResponse(false);
 }
 
+ThumbnailsCaptureUIFunction::ThumbnailsCaptureUIFunction() {}
 
-ThumbnailsCaptureUIFunction::ThumbnailsCaptureUIFunction() {
-}
+ThumbnailsCaptureUIFunction::~ThumbnailsCaptureUIFunction() {}
 
-ThumbnailsCaptureUIFunction::~ThumbnailsCaptureUIFunction() {
-}
+ThumbnailsCaptureTabFunction::ThumbnailsCaptureTabFunction() {}
 
-
-
-ThumbnailsCaptureTabFunction::ThumbnailsCaptureTabFunction() {
-}
-
-ThumbnailsCaptureTabFunction::~ThumbnailsCaptureTabFunction() {
-}
+ThumbnailsCaptureTabFunction::~ThumbnailsCaptureTabFunction() {}
 
 bool ThumbnailsCaptureTabFunction::RunAsync() {
   std::unique_ptr<vivaldi::thumbnails::CaptureTab::Params> params(
-    vivaldi::thumbnails::CaptureTab::Params::Create(*args_));
+      vivaldi::thumbnails::CaptureTab::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (params->params.encode_format.get()) {
-    image_format_ =
-      *params->params.encode_format == "jpg"
-      ? ImageFormat::IMAGE_FORMAT_JPEG
-      : ImageFormat::IMAGE_FORMAT_PNG;
+    image_format_ = *params->params.encode_format == "jpg"
+                        ? ImageFormat::IMAGE_FORMAT_JPEG
+                        : ImageFormat::IMAGE_FORMAT_PNG;
   }
   if (params->params.encode_quality.get()) {
     encode_quality_ = *params->params.encode_quality.get();
@@ -320,24 +316,29 @@ bool ThumbnailsCaptureTabFunction::RunAsync() {
   if (params->params.height.get()) {
     height_ = *params->params.height;
   }
-  if (params->params.save_to_base_path.get()) {
-    base_path_ = *params->params.save_to_base_path;
+  if (params->params.save_to_disk.get()) {
+    save_to_disk_ = *params->params.save_to_disk;
   }
   if (capture_full_page_ == true && height_ == 0) {
     // Some sanity value so we don't capture an endless page.
     height_ = kMaximumPageHeight;
   }
   height_ = std::min(kMaximumPageHeight, height_);
-  if (!base_path_.empty() && params->params.show_file_in_path) {
-    show_file_in_path_  = *params->params.show_file_in_path;
+  if (save_to_disk_) {
+    if (params->params.show_file_in_path) {
+      show_file_in_path_ = *params->params.show_file_in_path;
+    }
+    const PrefService* user_prefs = GetProfile()->GetPrefs();
+    save_folder_ =
+        user_prefs->GetString(vivaldiprefs::kVivaldiCaptureDirectory);
   }
   if (params->params.copy_to_clipboard.get()) {
     copy_to_clipboard_ = *params->params.copy_to_clipboard;
   }
   int tab_id = params->tab_id;
   if (tab_id) {
-    content::WebContents *tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
+    content::WebContents* tabstrip_contents =
+        ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
     if (tabstrip_contents) {
       extensions::VivaldiPrivateTabObserver* private_tabs =
           extensions::VivaldiPrivateTabObserver::FromWebContents(
@@ -378,21 +379,22 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   std::unique_ptr<base::SharedMemory> bitmap_buffer(
-    new base::SharedMemory(handle, true));
+      new base::SharedMemory(handle, true));
   bool resize_needed = capture_full_page_ == false;
 
   SkBitmap bitmap;
   // Let Skia do some sanity checking for (no negative widths/heights, no
   // overflows while calculating bytes per row, etc).
-  if (!bitmap.setInfo(
-    SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()))) {
+  if (!bitmap.setInfo(SkImageInfo::MakeN32Premul(image_size.width(),
+                                                 image_size.height()))) {
     DispatchError(
         "Failed to capture tab: Sanity check failed on captured image data");
     return;
   }
   // Make sure the size is representable as a signed 32-bit int, so
   // SkBitmap::getSize() won't be truncated.
-  if (!sk_64_isS32(bitmap.computeSize64()) || !bitmap_buffer->Map(bitmap.getSize())) {
+  if (!sk_64_isS32(bitmap.computeSize64()) ||
+      !bitmap_buffer->Map(bitmap.getSize())) {
     DispatchError("Failed to capture tab: size mismatch");
     return;
   }
@@ -409,10 +411,10 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
   std::string return_data;
   if (copy_to_clipboard_) {
     BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(
-        &ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread,
-        this, bitmap, return_data, callback_id));
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(
+            &ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread,
+            this, bitmap, return_data, callback_id));
     return;
   }
 
@@ -424,13 +426,13 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
   gfx::Size final_size(bitmap.width(), bitmap.height());
   std::vector<unsigned char> data;
   std::string mime_type;
-  bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_,
+  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_,
                               final_size, 100, encode_quality_, resize_needed);
   if (!encoded) {
     DispatchError("Failed to capture tab: data could not be encoded");
     return;
   }
-  if (base_path_.empty()) {
+  if (save_to_disk_ == false) {
     // If the base path is not set, we want to encode the image as a data url.
     base::StringPiece base64_input(reinterpret_cast<const char*>(&data[0]),
                                    data.size());
@@ -442,9 +444,8 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
       return_data.insert(0, "data:image/jpg;base64,");
     }
   } else {
-    base::FilePath path;
-    PathService::Get(chrome::DIR_USER_PICTURES, &path);
-    path = path.AppendASCII(base_path_);
+    base::FilePath path = base::FilePath::FromUTF8Unsafe(save_folder_);
+
     if (!base::PathExists(path)) {
       base::CreateDirectory(path);
     }

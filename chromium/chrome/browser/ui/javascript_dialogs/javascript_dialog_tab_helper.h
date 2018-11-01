@@ -41,7 +41,7 @@ class JavaScriptDialogTabHelper
   // JavaScriptDialogManager:
   void RunJavaScriptDialog(content::WebContents* web_contents,
                            const GURL& origin_url,
-                           content::JavaScriptMessageType message_type,
+                           content::JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
                            const DialogClosedCallback& callback,
@@ -53,7 +53,6 @@ class JavaScriptDialogTabHelper
                               bool accept,
                               const base::string16* prompt_override) override;
   void CancelDialogs(content::WebContents* web_contents,
-                     bool suppress_callbacks,
                      bool reset_state) override;
 
   // WebContentsObserver:
@@ -89,8 +88,8 @@ class JavaScriptDialogTabHelper
   base::WeakPtr<JavaScriptDialog> dialog_;
 
   // The type of dialog being displayed. Only valid when |dialog_| is non-null.
-  content::JavaScriptMessageType message_type_ =
-      content::JavaScriptMessageType::JAVASCRIPT_MESSAGE_TYPE_ALERT;
+  content::JavaScriptDialogType dialog_type_ =
+      content::JavaScriptDialogType::JAVASCRIPT_DIALOG_TYPE_ALERT;
 
   // The callback provided for when the dialog is closed. Usually the dialog
   // itself calls it, but in the cases where the dialog is closed not by the

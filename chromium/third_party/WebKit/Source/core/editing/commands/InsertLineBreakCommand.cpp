@@ -30,7 +30,7 @@
 #include "core/dom/Text.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EditingUtilities.h"
-#include "core/editing/FrameSelection.h"
+#include "core/editing/Editor.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrame.h"
@@ -177,8 +177,6 @@ void InsertLineBreakCommand::doApply(EditingState* editingState) {
       Position positionBeforeTextNode(Position::inParentBeforeNode(*textNode));
       // Clear out all whitespace and insert one non-breaking space
       deleteInsignificantTextDownstream(endingPosition);
-      DCHECK(!textNode->layoutObject() ||
-             textNode->layoutObject()->style()->collapseWhiteSpace());
       // Deleting insignificant whitespace will remove textNode if it contains
       // nothing but insignificant whitespace.
       if (textNode->isConnected()) {
@@ -200,7 +198,7 @@ void InsertLineBreakCommand::doApply(EditingState* editingState) {
 
   // Handle the case where there is a typing style.
 
-  EditingStyle* typingStyle = document().frame()->selection().typingStyle();
+  EditingStyle* typingStyle = document().frame()->editor().typingStyle();
 
   if (typingStyle && !typingStyle->isEmpty()) {
     // Apply the typing style to the inserted line break, so that if the

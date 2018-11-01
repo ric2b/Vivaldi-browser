@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//ppapi/features/features.gni")
+
 # See //content/BUILD.gn for how this works.
 group("child") {
   if (is_component_build) {
@@ -13,10 +15,10 @@ group("child") {
       ":child_sources",
     ]
     if (!is_android) {
-      public_deps += [
-        "//content/gpu",
-        "//content/ppapi_plugin",
-      ]
+      public_deps += [ "//content/gpu" ]
+    }
+    if (enable_plugins) {
+      public_deps += [ "//content/ppapi_plugin" ]
     }
   }
 }
@@ -26,6 +28,7 @@ source_set("child_sources") {
   visibility = [ "//content/*" ]
 
   sources = [
+    "child_process_sandbox_support_linux.h",
     "child_thread.h",
     "fixed_received_data.cc",
     "fixed_received_data.h",
@@ -45,6 +48,7 @@ source_set("child_sources") {
     "//content/child",  # Must not be public_deps!
     "//content/public/common:common_sources",
     "//gin",
+    "//ppapi/c",
   ]
 
   allow_circular_includes_from = [

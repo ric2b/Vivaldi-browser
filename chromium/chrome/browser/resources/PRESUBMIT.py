@@ -91,33 +91,32 @@ def IsBoolean(new_content_lines, metric_name, input_api):
       any(input_api.re.search(type_re, match.group(i)) for i in (1, 3)))
 
 
+def RunVulcanizeTests(input_api, output_api):
+  presubmit_path = input_api.PresubmitLocalPath()
+  tests = [input_api.os_path.join(presubmit_path, 'vulcanize_gn_test.py')]
+  return input_api.canned_checks.RunUnitTests(input_api, output_api, tests)
+
+
+def _CheckChangeOnUploadOrCommit(input_api, output_api):
+  results = CheckUserActionUpdate(input_api, output_api, ACTION_XML_PATH)
+  affected = input_api.AffectedFiles()
+  if any(f for f in affected if f.LocalPath().endswith('vulcanize_gn.py')):
+    results += RunVulcanizeTests(input_api, output_api)
+  return results
+
+
 def CheckChangeOnUpload(input_api, output_api):
-  return CheckUserActionUpdate(input_api, output_api, ACTION_XML_PATH)
+  return _CheckChangeOnUploadOrCommit(input_api, output_api)
 
 
 def CheckChangeOnCommit(input_api, output_api):
-  return CheckUserActionUpdate(input_api, output_api, ACTION_XML_PATH)
+  return _CheckChangeOnUploadOrCommit(input_api, output_api)
 
 
 def PostUploadHook(cl, change, output_api):
-  rietveld_obj = cl.RpcServer()
-  description = rietveld_obj.get_description(cl.issue)
-
-  existing_bots = (change.CQ_INCLUDE_TRYBOTS or '').split(';')
-  clean_bots = set(filter(None, map(lambda s: s.strip(), existing_bots)))
-  new_bots = clean_bots | set(
-      ['master.tryserver.chromium.linux:closure_compilation'])
-  new_tag = 'CQ_INCLUDE_TRYBOTS=%s' % ';'.join(new_bots)
-
-  if clean_bots:
-    tag_reg = '^CQ_INCLUDE_TRYBOTS=.*$'
-    new_description = re.sub(tag_reg, new_tag, description, flags=re.M | re.I)
-  else:
-    new_description = description + '\n' + new_tag
-
-  if new_description == description:
-    return []
-
-  rietveld_obj.update_description(cl.issue, new_description)
-  return [output_api.PresubmitNotifyResult(
-      'Automatically added optional Closure bots to run on CQ.')]
+  return output_api.EnsureCQIncludeTrybotsAreAdded(
+    cl,
+    [
+      'master.tryserver.chromium.linux:closure_compilation',
+    ],
+    'Automatically added optional Closure bots to run on CQ.')

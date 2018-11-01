@@ -1,41 +1,6 @@
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
-// VideoCaptureController is the glue between a VideoCaptureDevice and all
-// VideoCaptureHosts that have connected to it. A controller exists on behalf of
-// one (and only one) VideoCaptureDevice; both are owned by the
-// VideoCaptureManager.
-//
-// The VideoCaptureController is responsible for:
-//
-//   * Allocating and keeping track of shared memory buffers, and filling them
-//     with I420 video frames for IPC communication between VideoCaptureHost (in
-//     the browser process) and VideoCaptureMessageFilter (in the renderer
-//     process).
-//   * Broadcasting the events from a single VideoCaptureDevice, fanning them
-//     out to multiple clients.
-//   * Keeping track of the clients on behalf of the VideoCaptureManager, making
-//     it possible for the Manager to delete the Controller and its Device when
-//     there are no clients left.
-//
-// Interactions between VideoCaptureController and other classes:
-//
-//   * VideoCaptureController indirectly observes a VideoCaptureDevice
-//     by means of its proxy, VideoCaptureDeviceClient, which implements
-//     the VideoCaptureDevice::Client interface. The proxy forwards
-//     observed events to the VideoCaptureController on the IO thread.
-//   * A VideoCaptureController interacts with its clients (VideoCaptureHosts)
-//     via the VideoCaptureControllerEventHandler interface.
-//   * Conversely, a VideoCaptureControllerEventHandler (typically,
-//     VideoCaptureHost) will interact directly with VideoCaptureController to
-//     return leased buffers by means of the ReturnBuffer() public method of
-//     VCC.
-//   * VideoCaptureManager (which owns the VCC) interacts directly with
-//     VideoCaptureController through its public methods, to add and remove
-//     clients.
-//
-// VideoCaptureController is not thread safe and operates on the IO thread only.
 
 #ifndef CONTENT_BROWSER_RENDERER_HOST_MEDIA_VIDEO_CAPTURE_CONTROLLER_H_
 #define CONTENT_BROWSER_RENDERER_HOST_MEDIA_VIDEO_CAPTURE_CONTROLLER_H_
@@ -54,23 +19,16 @@
 #include "media/capture/video/video_frame_receiver.h"
 #include "media/capture/video_capture_types.h"
 
-namespace media {
-class FrameBufferPool;
-}
-
 namespace content {
 
+// Implementation of media::VideoFrameReceiver that distributes received frames
+// to potentially multiple connected clients.
 class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
  public:
   VideoCaptureController();
   ~VideoCaptureController() override;
 
   base::WeakPtr<VideoCaptureController> GetWeakPtrForIOThread();
-
-  // A FrameBufferPool may optionally be set in order to receive notifications
-  // when a frame is starting to get consumed and has finished getting consumed.
-  void SetFrameBufferPool(
-      std::unique_ptr<media::FrameBufferPool> frame_buffer_pool);
 
   // Factory code creating instances of VideoCaptureController may optionally
   // set a VideoFrameConsumerFeedbackObserver. Setting the observer is done in
@@ -129,42 +87,69 @@ class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
   bool has_received_frames() const { return has_received_frames_; }
 
   // Implementation of media::VideoFrameReceiver interface:
-  void OnIncomingCapturedVideoFrame(
-      media::VideoCaptureDevice::Client::Buffer buffer,
-      scoped_refptr<media::VideoFrame> frame) override;
+  void OnNewBufferHandle(
+      int buffer_id,
+      std::unique_ptr<media::VideoCaptureDevice::Client::Buffer::HandleProvider>
+          handle_provider) override;
+  void OnFrameReadyInBuffer(
+      int buffer_id,
+      int frame_feedback_id,
+      std::unique_ptr<
+          media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
+          buffer_read_permission,
+      media::mojom::VideoFrameInfoPtr frame_info) override;
+  void OnBufferRetired(int buffer_id) override;
   void OnError() override;
   void OnLog(const std::string& message) override;
-  void OnBufferDestroyed(int buffer_id_to_drop) override;
+  void OnStarted() override;
 
  private:
   struct ControllerClient;
   typedef std::list<std::unique_ptr<ControllerClient>> ControllerClients;
 
-  class BufferState {
+  class BufferContext {
    public:
-    explicit BufferState(
+    BufferContext(
+        int buffer_context_id,
         int buffer_id,
-        int frame_feedback_id,
         media::VideoFrameConsumerFeedbackObserver* consumer_feedback_observer,
-        media::FrameBufferPool* frame_buffer_pool);
-    ~BufferState();
-    BufferState(const BufferState& other);
+        mojo::ScopedSharedBufferHandle handle);
+    ~BufferContext();
+    BufferContext(BufferContext&& other);
+    BufferContext& operator=(BufferContext&& other);
+    int buffer_context_id() const { return buffer_context_id_; }
+    int buffer_id() const { return buffer_id_; }
+    bool is_retired() const { return is_retired_; }
+    void set_is_retired() { is_retired_ = true; }
+    void set_frame_feedback_id(int id) { frame_feedback_id_ = id; }
+    void set_consumer_feedback_observer(
+        media::VideoFrameConsumerFeedbackObserver* consumer_feedback_observer) {
+      consumer_feedback_observer_ = consumer_feedback_observer;
+    }
+    void set_read_permission(
+        std::unique_ptr<
+            media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
+            buffer_read_permission) {
+      buffer_read_permission_ = std::move(buffer_read_permission);
+    }
     void RecordConsumerUtilization(double utilization);
     void IncreaseConsumerCount();
     void DecreaseConsumerCount();
-    bool HasZeroConsumerHoldCount();
-    void SetFrameFeedbackId(int id);
-    void SetConsumerFeedbackObserver(
-        media::VideoFrameConsumerFeedbackObserver* consumer_feedback_observer);
-    void SetFrameBufferPool(media::FrameBufferPool* frame_buffer_pool);
+    bool HasConsumers() const { return consumer_hold_count_ > 0; }
+    mojo::ScopedSharedBufferHandle CloneHandle();
 
    private:
-    const int buffer_id_;
+    int buffer_context_id_;
+    int buffer_id_;
+    bool is_retired_;
     int frame_feedback_id_;
     media::VideoFrameConsumerFeedbackObserver* consumer_feedback_observer_;
-    media::FrameBufferPool* frame_buffer_pool_;
+    mojo::ScopedSharedBufferHandle buffer_handle_;
     double max_consumer_utilization_;
     int consumer_hold_count_;
+    std::unique_ptr<
+        media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
+        buffer_read_permission_;
   };
 
   // Find a client of |id| and |handler| in |clients|.
@@ -176,12 +161,21 @@ class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
   ControllerClient* FindClient(int session_id,
                                const ControllerClients& clients);
 
-  std::unique_ptr<media::FrameBufferPool> frame_buffer_pool_;
+  std::vector<BufferContext>::iterator FindBufferContextFromBufferContextId(
+      int buffer_context_id);
+  std::vector<BufferContext>::iterator FindUnretiredBufferContextFromBufferId(
+      int buffer_id);
+
+  void OnClientFinishedConsumingBuffer(ControllerClient* client,
+                                       int buffer_id,
+                                       double consumer_resource_utilization);
+  void ReleaseBufferContext(
+      const std::vector<BufferContext>::iterator& buffer_state_iter);
 
   std::unique_ptr<media::VideoFrameConsumerFeedbackObserver>
       consumer_feedback_observer_;
 
-  std::map<int, BufferState> buffer_id_to_state_map_;
+  std::vector<BufferContext> buffer_contexts_;
 
   // All clients served by this controller.
   ControllerClients controller_clients_;
@@ -189,6 +183,8 @@ class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
   // Takes on only the states 'STARTED' and 'ERROR'. 'ERROR' is an absorbing
   // state which stops the flow of data to clients.
   VideoCaptureState state_;
+
+  int next_buffer_context_id_ = 0;
 
   // True if the controller has received a video frame from the device.
   bool has_received_frames_;

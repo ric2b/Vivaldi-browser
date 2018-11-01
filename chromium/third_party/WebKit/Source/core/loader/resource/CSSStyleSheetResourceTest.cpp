@@ -16,15 +16,15 @@
 #include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSParserSelector.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchContext.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/loader/resource/ImageResource.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
+#include "platform/loader/fetch/FetchContext.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -76,7 +76,7 @@ TEST_F(CSSStyleSheetResourceTest, DuplicateResourceNotCached) {
   CSSStyleSheetResource* cssResource =
       CSSStyleSheetResource::createForTest(ResourceRequest(cssURL), "utf-8");
   cssResource->responseReceived(
-      ResourceResponse(cssURL, "style/css", 0, nullAtom, String()), nullptr);
+      ResourceResponse(cssURL, "style/css", 0, nullAtom), nullptr);
   cssResource->finish();
 
   CSSParserContext* parserContext = CSSParserContext::create(HTMLStandardMode);

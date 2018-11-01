@@ -5,18 +5,18 @@
 // Message definition file, included multiple times, hence no include guard.
 
 #include "base/time/time.h"
-#include "components/subresource_filter/content/common/document_load_statistics.h"
-#include "components/subresource_filter/core/common/activation_state.h"
+#include "components/subresource_filter/core/common/activation_level.h"
+#include "components/subresource_filter/core/common/document_load_statistics.h"
 #include "content/public/common/common_param_traits_macros.h"
-#include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message.h"
+#include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
 #include "url/ipc/url_param_traits.h"
 
 #define IPC_MESSAGE_START SubresourceFilterMsgStart
 
-IPC_ENUM_TRAITS_MAX_VALUE(subresource_filter::ActivationState,
-                          subresource_filter::ActivationState::LAST);
+IPC_ENUM_TRAITS_MAX_VALUE(subresource_filter::ActivationLevel,
+                          subresource_filter::ActivationLevel::LAST);
 
 IPC_STRUCT_TRAITS_BEGIN(subresource_filter::DocumentLoadStatistics)
   IPC_STRUCT_TRAITS_MEMBER(num_loads_total)
@@ -37,13 +37,20 @@ IPC_STRUCT_TRAITS_END()
 IPC_MESSAGE_CONTROL1(SubresourceFilterMsg_SetRulesetForProcess,
                      IPC::PlatformFileForTransit /* ruleset_file */);
 
-// Instructs the renderer to activate subresource filtering for the currently
-// ongoing provisional document load in a frame. The message must arrive after
-// the provisional load starts, but before it is committed on the renderer side.
-// If no message arrives, the default behavior is ActivationState::DISABLED.
-IPC_MESSAGE_ROUTED3(SubresourceFilterMsg_ActivateForProvisionalLoad,
-                    subresource_filter::ActivationState /* activation_state */,
-                    GURL /* url */,
+// Instructs the renderer to activate subresource filtering at the specified
+// |activation_level| for the document load committed next in a frame.
+//
+// Without browser-side navigation, the message must arrive just before the
+// provisional load is committed on the renderer side. In practice, it is often
+// sent after the provisional load has already started, but this is not a
+// requirement. The message will have no effect if the provisional load fails.
+//
+// With browser-side navigation enabled, the message must arrive just before
+// FrameMsg_CommitNavigation.
+//
+// If no message arrives, the default behavior is ActivationLevel::DISABLED.
+IPC_MESSAGE_ROUTED2(SubresourceFilterMsg_ActivateForNextCommittedLoad,
+                    subresource_filter::ActivationLevel /* activation_level */,
                     bool /* measure_performance */);
 
 // ----------------------------------------------------------------------------

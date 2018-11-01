@@ -24,8 +24,7 @@ GpuBrowserCompositorOutputSurface::GpuBrowserCompositorOutputSurface(
     scoped_refptr<ui::ContextProviderCommandBuffer> context,
     const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
-        overlay_candidate_validator,
-    bool support_stencil)
+        overlay_candidate_validator)
     : BrowserCompositorOutputSurface(std::move(context),
                                      update_vsync_parameters_callback,
                                      std::move(overlay_candidate_validator)),
@@ -34,14 +33,21 @@ GpuBrowserCompositorOutputSurface::GpuBrowserCompositorOutputSurface(
     capabilities_.flipped_output_surface =
         context_provider()->ContextCapabilities().flips_vertically;
   }
-  // TODO(reveman): Check context as there's no guarantee we support this
-  // even if we request it.
-  capabilities_.supports_stencil = support_stencil;
+  capabilities_.supports_stencil =
+      context_provider()->ContextCapabilities().num_stencil_bits > 0;
 }
 
 GpuBrowserCompositorOutputSurface::~GpuBrowserCompositorOutputSurface() {
   GetCommandBufferProxy()->SetUpdateVSyncParametersCallback(
       UpdateVSyncParametersCallback());
+}
+
+void GpuBrowserCompositorOutputSurface::SetNeedsVSync(bool needs_vsync) {
+#if defined(OS_WIN)
+  GetCommandBufferProxy()->SetNeedsVSync(needs_vsync);
+#else
+  NOTREACHED();
+#endif  // defined(OS_WIN)
 }
 
 void GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
@@ -59,6 +65,7 @@ void GpuBrowserCompositorOutputSurface::OnReflectorChanged() {
     reflector_texture_.reset(new ReflectorTexture(context_provider()));
     reflector_->OnSourceTextureMailboxUpdated(reflector_texture_->mailbox());
   }
+  reflector_texture_defined_ = false;
 }
 
 void GpuBrowserCompositorOutputSurface::BindToClient(
@@ -90,6 +97,8 @@ void GpuBrowserCompositorOutputSurface::Reshape(
     const gfx::ColorSpace& color_space,
     bool has_alpha,
     bool use_stencil) {
+  size_ = size;
+  has_set_draw_rectangle_since_last_resize_ = false;
   context_provider()->ContextGL()->ResizeCHROMIUM(
       size.width(), size.height(), device_scale_factor, has_alpha);
 }
@@ -98,22 +107,29 @@ void GpuBrowserCompositorOutputSurface::SwapBuffers(
     cc::OutputSurfaceFrame frame) {
   GetCommandBufferProxy()->SetLatencyInfo(frame.latency_info);
 
-  gfx::Rect swap_rect = frame.sub_buffer_rect;
   gfx::Size surface_size = frame.size;
   if (reflector_) {
-    if (swap_rect == gfx::Rect(surface_size)) {
+    if (frame.sub_buffer_rect && reflector_texture_defined_) {
+      reflector_texture_->CopyTextureSubImage(*frame.sub_buffer_rect);
+      reflector_->OnSourcePostSubBuffer(*frame.sub_buffer_rect, surface_size);
+    } else {
       reflector_texture_->CopyTextureFullImage(surface_size);
       reflector_->OnSourceSwapBuffers(surface_size);
-    } else {
-      reflector_texture_->CopyTextureSubImage(swap_rect);
-      reflector_->OnSourcePostSubBuffer(swap_rect, surface_size);
+      reflector_texture_defined_ = true;
     }
   }
 
-  if (swap_rect == gfx::Rect(frame.size))
+  set_draw_rectangle_for_frame_ = false;
+
+  if (frame.sub_buffer_rect) {
+    DCHECK(frame.content_bounds.empty());
+    context_provider_->ContextSupport()->PartialSwapBuffers(
+        *frame.sub_buffer_rect);
+  } else if (!frame.content_bounds.empty()) {
+    context_provider_->ContextSupport()->SwapWithBounds(frame.content_bounds);
+  } else {
     context_provider_->ContextSupport()->Swap();
-  else
-    context_provider_->ContextSupport()->PartialSwapBuffers(swap_rect);
+  }
 }
 
 uint32_t GpuBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
@@ -137,6 +153,19 @@ bool GpuBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle() const {
 void GpuBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
     bool suspended) {}
 #endif
+
+void GpuBrowserCompositorOutputSurface::SetDrawRectangle(
+    const gfx::Rect& rect) {
+  if (set_draw_rectangle_for_frame_)
+    return;
+  DCHECK(gfx::Rect(size_).Contains(rect));
+  DCHECK(has_set_draw_rectangle_since_last_resize_ ||
+         (gfx::Rect(size_) == rect));
+  set_draw_rectangle_for_frame_ = true;
+  has_set_draw_rectangle_since_last_resize_ = true;
+  context_provider()->ContextGL()->SetDrawRectangleCHROMIUM(
+      rect.x(), rect.y(), rect.width(), rect.height());
+}
 
 gpu::CommandBufferProxyImpl*
 GpuBrowserCompositorOutputSurface::GetCommandBufferProxy() {

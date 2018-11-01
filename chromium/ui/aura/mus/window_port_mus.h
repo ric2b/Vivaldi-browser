@@ -13,12 +13,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "cc/surfaces/surface_info.h"
+#include "services/ui/public/cpp/window_compositor_frame_sink.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/aura/mus/mus_types.h"
-#include "ui/aura/mus/window_compositor_frame_sink.h"
 #include "ui/aura/mus/window_mus.h"
 #include "ui/aura/window_port.h"
 #include "ui/gfx/geometry/rect.h"
@@ -56,18 +56,21 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   ui::mojom::Cursor predefined_cursor() const { return predefined_cursor_; }
   void SetPredefinedCursor(ui::mojom::Cursor cursor_id);
 
+  // Sets the EventTargetingPolicy, default is TARGET_AND_DESCENDANTS.
+  void SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy policy);
+
   // Embeds a new client in this Window. See WindowTreeClient::Embed() for
   // details on arguments.
   void Embed(ui::mojom::WindowTreeClientPtr client,
              uint32_t flags,
              const ui::mojom::WindowTree::EmbedCallback& callback);
 
-  std::unique_ptr<WindowCompositorFrameSink> RequestCompositorFrameSink(
+  std::unique_ptr<ui::WindowCompositorFrameSink> RequestCompositorFrameSink(
       scoped_refptr<cc::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
   void AttachCompositorFrameSink(
-      std::unique_ptr<WindowCompositorFrameSinkBinding>
+      std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
           compositor_frame_sink_binding);
 
  private:
@@ -228,10 +231,10 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void OnVisibilityChanged(bool visible) override;
   void OnDidChangeBounds(const gfx::Rect& old_bounds,
                          const gfx::Rect& new_bounds) override;
-  std::unique_ptr<WindowPortPropertyData> OnWillChangeProperty(
+  std::unique_ptr<ui::PropertyData> OnWillChangeProperty(
       const void* key) override;
   void OnPropertyChanged(const void* key,
-                         std::unique_ptr<WindowPortPropertyData> data) override;
+                         std::unique_ptr<ui::PropertyData> data) override;
 
   WindowTreeClient* window_tree_client_;
 

@@ -21,13 +21,11 @@
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/views_delegate.h"
 
 namespace views {
 
 namespace {
-
-// Minimum size to reserve for the button contents.
-const int kMinWidth = 48;
 
 LabelButton* CreateButton(ButtonListener* listener,
                           const base::string16& text,
@@ -135,8 +133,8 @@ std::unique_ptr<views::InkDropRipple> MdTextButton::CreateInkDropRipple()
           ink_drop_visible_opacity()));
 }
 
-void MdTextButton::StateChanged() {
-  LabelButton::StateChanged();
+void MdTextButton::StateChanged(ButtonState old_state) {
+  LabelButton::StateChanged(old_state);
   UpdateColors();
 }
 
@@ -195,7 +193,9 @@ MdTextButton::MdTextButton(ButtonListener* listener)
   set_has_ink_drop_action_on_click(true);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetFocusForPlatform();
-  SetMinSize(gfx::Size(kMinWidth, 0));
+  const int minimum_width =
+      ViewsDelegate::GetInstance()->GetButtonMinimumWidth();
+  SetMinSize(gfx::Size(minimum_width, 0));
   SetFocusPainter(nullptr);
   label()->SetAutoColorReadabilityEnabled(false);
   set_request_focus_on_press(false);
@@ -205,7 +205,7 @@ MdTextButton::MdTextButton(ButtonListener* listener)
 
   // Paint to a layer so that the canvas is snapped to pixel boundaries (useful
   // for fractional DSF).
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 }
 
@@ -240,9 +240,10 @@ void MdTextButton::UpdatePadding() {
 
   // TODO(estade): can we get rid of the platform style border hoopla if
   // we apply the MD treatment to all buttons, even GTK buttons?
-  const int kHorizontalPadding = 16;
-  SetBorder(CreateEmptyBorder(top_padding, kHorizontalPadding, bottom_padding,
-                              kHorizontalPadding));
+  const int horizontal_padding =
+      ViewsDelegate::GetInstance()->GetButtonHorizontalPadding();
+  SetBorder(CreateEmptyBorder(top_padding, horizontal_padding, bottom_padding,
+                              horizontal_padding));
 }
 
 void MdTextButton::UpdateColors() {

@@ -35,6 +35,7 @@
 #include "base/files/file_descriptor_watcher_posix.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
 #include "base/vivaldi_switches.h"
 
 namespace base {
@@ -184,7 +185,8 @@ int LaunchUnitTestsInternal(const RunTestSuiteCallback& run_test_suite,
                             int default_batch_limit,
                             bool use_job_objects,
                             const Closure& gtest_init) {
-  CommandLine::ForCurrentProcess()->AppendSwitchNoDup(switches::kDisableVivaldi);
+  vivaldi::CommandLineAppendSwitchNoDup(CommandLine::ForCurrentProcess(),
+                                        switches::kDisableVivaldi);
 
 #if defined(OS_ANDROID)
   // We can't easily fork on Android, just run the test suite directly.

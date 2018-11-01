@@ -47,7 +47,6 @@ ServiceProcessLauncher::ServiceProcessLauncher(
       delegate_(delegate),
       start_sandboxed_(false),
       service_path_(service_path),
-      child_token_(mojo::edk::GenerateRandomToken()),
       start_child_process_event_(
           base::WaitableEvent::ResetPolicy::AUTOMATIC,
           base::WaitableEvent::InitialState::NOT_SIGNALED),
@@ -90,8 +89,8 @@ mojom::ServicePtr ServiceProcessLauncher::Start(
   mojo_ipc_channel_->PrepareToPassClientHandleToChildProcess(
       child_command_line.get(), &handle_passing_info_);
 
-  mojom::ServicePtr client =
-      PassServiceRequestOnCommandLine(child_command_line.get(), child_token_);
+  mojom::ServicePtr client = PassServiceRequestOnCommandLine(
+      &process_connection_, child_command_line.get());
   launch_process_runner_->PostTaskAndReply(
       FROM_HERE,
       base::Bind(&ServiceProcessLauncher::DoLaunch, base::Unretained(this),
@@ -131,24 +130,6 @@ void ServiceProcessLauncher::DoLaunch(
   }
 
   base::LaunchOptions options;
-
-  base::FilePath exe_dir;
-  base::PathService::Get(base::DIR_EXE, &exe_dir);
-  options.current_directory = exe_dir;
-
-  // The service should look for ICU data next to the service runner's
-  // executable rather than its own.
-  child_command_line->AppendSwitchPath(switches::kIcuDataDir, exe_dir);
-
-#if defined(OS_POSIX)
-  // We need the dynamic loader to be able to locate things like libbase.so
-  // in component builds, as well as some other dynamic runtime dependencies in
-  // other build environments (e.g. libosmesa.so). For this we set
-  // LD_LIBRARY_PATH to the service runner's executable path where such
-  // artifacts are typically expected to reside.
-  options.environ["LD_LIBRARY_PATH"] = exe_dir.value();
-#endif
-
 #if defined(OS_WIN)
   options.handles_to_inherit = &handle_passing_info_;
 #if defined(OFFICIAL_BUILD)
@@ -215,11 +196,8 @@ void ServiceProcessLauncher::DoLaunch(
 
     if (mojo_ipc_channel_.get()) {
       mojo_ipc_channel_->ChildProcessLaunched();
-      mojo::edk::ChildProcessLaunched(
-          child_process_.Handle(),
-          mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(
-              mojo_ipc_channel_->PassServerHandle().release().handle)),
-          child_token_);
+      process_connection_.Connect(child_process_.Handle(),
+                                  mojo_ipc_channel_->PassServerHandle());
     }
   }
   start_child_process_event_.Signal();

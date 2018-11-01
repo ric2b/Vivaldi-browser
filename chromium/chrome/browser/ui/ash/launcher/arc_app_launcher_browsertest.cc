@@ -9,6 +9,10 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
@@ -19,7 +23,7 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
-#include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_util.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ui/events/event_constants.h"
 
@@ -53,8 +57,8 @@ struct TypeConverter<arc::mojom::ShortcutInfoPtr, arc::mojom::ShortcutInfo> {
 
 namespace {
 
-constexpr char kTestAppName[] = "Test Arc App";
-constexpr char kTestAppName2[] = "Test Arc App 2";
+constexpr char kTestAppName[] = "Test ARC App";
+constexpr char kTestAppName2[] = "Test ARC App 2";
 constexpr char kTestShortcutName[] = "Test Shortcut";
 constexpr char kTestShortcutName2[] = "Test Shortcut 2";
 constexpr char kTestAppPackage[] = "test.arc.app.package";
@@ -157,16 +161,17 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
   // content::BrowserTestBase:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(chromeos::switches::kEnableArc);
+    arc::SetArcAvailableCommandLineForTesting(command_line);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
     arc::ArcSessionManager::DisableUIForTesting();
+    arc::ArcAuthNotification::DisableForTesting();
   }
 
   void SetUpOnMainThread() override {
-    arc::ArcSessionManager::Get()->EnableArc();
+    arc::SetArcPlayStoreEnabledForProfile(profile(), true);
   }
 
   void InstallTestApps(const std::string& package_name, bool multi_app) {
@@ -243,7 +248,7 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
 
   void StartInstance() {
     if (arc_session_manager()->profile() != profile())
-      arc_session_manager()->OnPrimaryUserProfilePrepared(profile());
+      arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(profile());
     app_instance_observer()->OnInstanceReady();
   }
 
@@ -296,7 +301,7 @@ class ArcAppDeferredLauncherBrowserTest
   DISALLOW_COPY_AND_ASSIGN(ArcAppDeferredLauncherBrowserTest);
 };
 
-// This tests simulates normal workflow for starting Arc app in deferred mode.
+// This tests simulates normal workflow for starting ARC app in deferred mode.
 IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherBrowserTest, StartAppDeferred) {
   // Install app to remember existing apps.
   StartInstance();
@@ -330,7 +335,7 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherBrowserTest, StartAppDeferred) {
   else
     EXPECT_FALSE(shelf_delegate()->GetShelfIDForAppID(app_id));
 
-  // Launching non-ready Arc app creates item on shelf and spinning animation.
+  // Launching non-ready ARC app creates item on shelf and spinning animation.
   arc::LaunchApp(profile(), app_id, ui::EF_LEFT_MOUSE_BUTTON);
   const ash::ShelfID shelf_id = shelf_delegate()->GetShelfIDForAppID(app_id);
   EXPECT_TRUE(shelf_id);
@@ -340,7 +345,7 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherBrowserTest, StartAppDeferred) {
 
   switch (test_action()) {
     case TEST_ACTION_START:
-      // Now simulates that Arc is started and app list is refreshed. This
+      // Now simulates that ARC is started and app list is refreshed. This
       // should stop animation and delete icon from the shelf.
       InstallTestApps(kTestAppPackage, false);
       SendPackageAdded(kTestAppPackage, false);
@@ -459,7 +464,7 @@ IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, AppListShown) {
   app_list_service->DismissAppList();
 }
 
-// Test AppListControllerDelegate::IsAppOpen for Arc apps.
+// Test AppListControllerDelegate::IsAppOpen for ARC apps.
 IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, IsAppOpen) {
   StartInstance();
   InstallTestApps(kTestAppPackage, false);
@@ -544,7 +549,7 @@ IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, ShelfGroup) {
   app_host()->OnTaskDestroyed(3);
   EXPECT_FALSE(GetAppItemController(shelf_id2));
 
-  // Disable Arc, this removes app and as result kills shelf group 3.
-  arc::ArcSessionManager::Get()->DisableArc();
+  // Disable ARC, this removes app and as result kills shelf group 3.
+  arc::SetArcPlayStoreEnabledForProfile(profile(), false);
   EXPECT_FALSE(GetAppItemController(shelf_id3));
 }

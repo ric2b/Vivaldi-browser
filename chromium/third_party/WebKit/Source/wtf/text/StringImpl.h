@@ -205,7 +205,12 @@ class WTF_EXPORT StringImpl {
         m_isStatic(true) {}
 
  public:
+  static StringImpl* empty;
+  static StringImpl* empty16Bit;
+
   ~StringImpl();
+
+  static void initStatics();
 
   static StringImpl* createStatic(const char* string,
                                   unsigned length,
@@ -324,9 +329,6 @@ class WTF_EXPORT StringImpl {
       destroyIfNotStatic();
   }
 
-  static StringImpl* empty();
-  static StringImpl* empty16Bit();
-
   // FIXME: Does this really belong in StringImpl?
   template <typename T>
   static void copyChars(T* destination,
@@ -379,6 +381,7 @@ class WTF_EXPORT StringImpl {
   PassRefPtr<StringImpl> lower();
   PassRefPtr<StringImpl> lowerASCII();
   PassRefPtr<StringImpl> upper();
+  PassRefPtr<StringImpl> upperASCII();
   PassRefPtr<StringImpl> lower(const AtomicString& localeIdentifier);
   PassRefPtr<StringImpl> upper(const AtomicString& localeIdentifier);
 

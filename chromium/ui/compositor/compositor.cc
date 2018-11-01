@@ -28,11 +28,12 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/surface_id_allocator.h"
+#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
-#include "cc/trees/layer_tree_host_in_process.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/compositor_vsync_manager.h"
@@ -80,9 +81,7 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
       context_factory_private_(context_factory_private),
       root_layer_(NULL),
       widget_(gfx::kNullAcceleratedWidget),
-#if defined(USE_AURA)
-      window_(nullptr),
-#endif
+      committed_frame_number_(0),
       widget_valid_(false),
       compositor_frame_sink_requested_(false),
       frame_sink_id_(frame_sink_id),
@@ -109,7 +108,7 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
   settings.layers_always_allowed_lcd_text = true;
   // Use occlusion to allow more overlapping windows to take less memory.
   settings.use_occlusion_for_tile_prioritization = true;
-  settings.renderer_settings.refresh_rate =
+  refresh_rate_ = settings.renderer_settings.refresh_rate =
       context_factory_->DoesCreateTestContexts() ? kTestRefreshRate
                                                  : kDefaultRefreshRate;
   settings.main_frame_before_activation_enabled = false;
@@ -164,7 +163,10 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
 
   settings.enable_color_correct_rendering =
       command_line->HasSwitch(cc::switches::kEnableColorCorrectRendering) ||
-      command_line->HasSwitch(cc::switches::kEnableTrueColorRendering);
+      command_line->HasSwitch(cc::switches::kEnableTrueColorRendering) ||
+      command_line->HasSwitch(switches::kEnableHDROutput);
+  settings.renderer_settings.enable_color_correct_rendering =
+      settings.enable_color_correct_rendering;
 
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
@@ -196,13 +198,13 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
 
   animation_host_ = cc::AnimationHost::CreateMainInstance();
 
-  cc::LayerTreeHostInProcess::InitParams params;
+  cc::LayerTreeHost::InitParams params;
   params.client = this;
   params.task_graph_runner = context_factory_->GetTaskGraphRunner();
   params.settings = &settings;
   params.main_task_runner = task_runner_;
   params.mutator_host = animation_host_.get();
-  host_ = cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
+  host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
 
@@ -210,7 +212,7 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
       cc::AnimationTimeline::Create(cc::AnimationIdProvider::NextTimelineId());
   animation_host_->AddAnimationTimeline(animation_timeline_.get());
 
-  host_->GetLayerTree()->SetRootLayer(root_web_layer_);
+  host_->SetRootLayer(root_web_layer_);
   host_->SetFrameSinkId(frame_sink_id_);
   host_->SetVisible(true);
 
@@ -305,8 +307,7 @@ cc::AnimationTimeline* Compositor::GetAnimationTimeline() const {
 
 void Compositor::SetHostHasTransparentBackground(
     bool host_has_transparent_background) {
-  host_->GetLayerTree()->set_has_transparent_background(
-      host_has_transparent_background);
+  host_->set_has_transparent_background(host_has_transparent_background);
 }
 
 void Compositor::ScheduleFullRedraw() {
@@ -314,8 +315,7 @@ void Compositor::ScheduleFullRedraw() {
   // will also commit.  This should probably just redraw the screen
   // from damage and not commit.  ScheduleDraw/ScheduleRedraw need
   // better names.
-  host_->SetNeedsRedrawRect(
-      gfx::Rect(host_->GetLayerTree()->device_viewport_size()));
+  host_->SetNeedsRedrawRect(gfx::Rect(host_->device_viewport_size()));
   host_->SetNeedsCommit();
 }
 
@@ -339,7 +339,7 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
   DCHECK_GT(scale, 0);
   if (!size_in_pixel.IsEmpty()) {
     size_ = size_in_pixel;
-    host_->GetLayerTree()->SetViewportSize(size_in_pixel);
+    host_->SetViewportSize(size_in_pixel);
     root_web_layer_->SetBounds(size_in_pixel);
     // TODO(fsamuel): Get rid of ContextFactoryPrivate.
     if (context_factory_private_)
@@ -347,15 +347,21 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
   }
   if (device_scale_factor_ != scale) {
     device_scale_factor_ = scale;
-    host_->GetLayerTree()->SetDeviceScaleFactor(scale);
+    host_->SetDeviceScaleFactor(scale);
     if (root_layer_)
       root_layer_->OnDeviceScaleFactorChanged(scale);
   }
 }
 
 void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
-  host_->GetLayerTree()->SetDeviceColorSpace(color_space);
-  color_space_ = color_space;
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableHDROutput)) {
+    color_space_ = gfx::ColorSpace::CreateSCRGBLinear();
+  } else {
+    color_space_ = color_space;
+  }
+  // TODO(Hubbe): Should maybe be color_space_, but currently that crashes skia.
+  host_->SetDeviceColorSpace(color_space);
   // Color space is reset when the output surface is lost, so this must also be
   // updated then.
   // TODO(fsamuel): Get rid of this.
@@ -364,7 +370,7 @@ void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
 }
 
 void Compositor::SetBackgroundColor(SkColor color) {
-  host_->GetLayerTree()->set_background_color(color);
+  host_->set_background_color(color);
   ScheduleDraw();
 }
 
@@ -392,6 +398,9 @@ bool Compositor::GetScrollOffsetForLayer(int layer_id,
 
 void Compositor::SetAuthoritativeVSyncInterval(
     const base::TimeDelta& interval) {
+  DCHECK_GT(interval.InMillisecondsF(), 0);
+  refresh_rate_ =
+      base::Time::kMillisecondsPerSecond / interval.InMillisecondsF();
   if (context_factory_private_)
     context_factory_private_->SetAuthoritativeVSyncInterval(this, interval);
   vsync_manager_->SetAuthoritativeVSyncInterval(interval);
@@ -403,6 +412,9 @@ void Compositor::SetDisplayVSyncParameters(base::TimeTicks timebase,
     // TODO(brianderson): We should not be receiving 0 intervals.
     interval = cc::BeginFrameArgs::DefaultInterval();
   }
+  DCHECK_GT(interval.InMillisecondsF(), 0);
+  refresh_rate_ =
+      base::Time::kMillisecondsPerSecond / interval.InMillisecondsF();
 
   if (context_factory_private_) {
     context_factory_private_->SetDisplayVSyncParameters(this, timebase,
@@ -434,16 +446,6 @@ gfx::AcceleratedWidget Compositor::widget() const {
   DCHECK(widget_valid_);
   return widget_;
 }
-
-#if defined(USE_AURA)
-void Compositor::SetWindow(ui::Window* window) {
-  window_ = window;
-}
-
-ui::Window* Compositor::window() const {
-  return window_;
-}
-#endif
 
 scoped_refptr<CompositorVSyncManager> Compositor::vsync_manager() const {
   return vsync_manager_;
@@ -519,6 +521,7 @@ void Compositor::DidCommit() {
 }
 
 void Compositor::DidReceiveCompositorFrameAck() {
+  ++committed_frame_number_;
   for (auto& observer : observer_list_)
     observer.OnCompositingEnded(this);
 }

@@ -27,10 +27,13 @@ class CSSTransformNonInterpolableValue : public NonInterpolableValue {
 
   static PassRefPtr<CSSTransformNonInterpolableValue> create(
       CSSTransformNonInterpolableValue&& start,
-      CSSTransformNonInterpolableValue&& end) {
+      double startFraction,
+      CSSTransformNonInterpolableValue&& end,
+      double endFraction) {
     return adoptRef(new CSSTransformNonInterpolableValue(
-        false, std::move(start.transform()), std::move(end.transform()),
-        start.isAdditive(), end.isAdditive()));
+        false, start.getInterpolatedTransform(startFraction),
+        end.getInterpolatedTransform(endFraction), start.isAdditive(),
+        end.isAdditive()));
   }
 
   PassRefPtr<CSSTransformNonInterpolableValue> composite(
@@ -59,15 +62,15 @@ class CSSTransformNonInterpolableValue : public NonInterpolableValue {
   void setSingleAdditive() {
     DCHECK(m_isSingle);
     m_isStartAdditive = true;
+    m_isEndAdditive = true;
   }
 
   TransformOperations getInterpolatedTransform(double progress) const {
-    DCHECK(!m_isStartAdditive && !m_isEndAdditive);
-    DCHECK(!m_isSingle || progress == 0);
     if (progress == 0)
       return m_start;
     if (progress == 1)
       return m_end;
+    DCHECK(!isAdditive());
     return m_end.blend(m_start, progress);
   }
 
@@ -89,13 +92,10 @@ class CSSTransformNonInterpolableValue : public NonInterpolableValue {
     DCHECK(m_isSingle);
     return m_start;
   }
-  TransformOperations& transform() {
-    DCHECK(m_isSingle);
-    return m_start;
-  }
   bool isAdditive() const {
-    DCHECK(m_isSingle);
-    return m_isStartAdditive;
+    bool result = m_isStartAdditive || m_isEndAdditive;
+    DCHECK(!result || m_isSingle);
+    return result;
   }
 
   Vector<RefPtr<TransformOperation>> concat(const TransformOperations& a,
@@ -175,8 +175,9 @@ InterpolationValue CSSTransformInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSTransformInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState& state,
+    const StyleResolverState* state,
     ConversionCheckers& conversionCheckers) const {
+  DCHECK(state);
   if (value.isValueList()) {
     CSSLengthArray lengthArray;
     for (const CSSValue* item : toCSSValueList(value)) {
@@ -195,14 +196,15 @@ InterpolationValue CSSTransformInterpolationType::maybeConvertValue(
       }
     }
     std::unique_ptr<InterpolationType::ConversionChecker> lengthUnitsChecker =
-        LengthUnitsChecker::maybeCreate(std::move(lengthArray), state);
+        LengthUnitsChecker::maybeCreate(std::move(lengthArray), *state);
 
     if (lengthUnitsChecker)
       conversionCheckers.push_back(std::move(lengthUnitsChecker));
   }
 
+  DCHECK(state);
   TransformOperations transform = TransformBuilder::createTransformOperations(
-      value, state.cssToLengthConversionData());
+      value, state->cssToLengthConversionData());
   return convertTransform(std::move(transform));
 }
 
@@ -215,19 +217,22 @@ void CSSTransformInterpolationType::additiveKeyframeHook(
 PairwiseInterpolationValue CSSTransformInterpolationType::maybeMergeSingles(
     InterpolationValue&& start,
     InterpolationValue&& end) const {
+  double startFraction = toInterpolableNumber(*start.interpolableValue).value();
+  double endFraction = toInterpolableNumber(*end.interpolableValue).value();
   return PairwiseInterpolationValue(
       InterpolableNumber::create(0), InterpolableNumber::create(1),
       CSSTransformNonInterpolableValue::create(
           std::move(
               toCSSTransformNonInterpolableValue(*start.nonInterpolableValue)),
-          std::move(
-              toCSSTransformNonInterpolableValue(*end.nonInterpolableValue))));
+          startFraction, std::move(toCSSTransformNonInterpolableValue(
+                             *end.nonInterpolableValue)),
+          endFraction));
 }
 
 InterpolationValue
 CSSTransformInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  return convertTransform(state.style()->transform());
+    const ComputedStyle& style) const {
+  return convertTransform(style.transform());
 }
 
 void CSSTransformInterpolationType::composite(

@@ -1,14 +1,16 @@
 // Copyright (c) 2013-2016 Vivaldi Technologies AS. All rights reserved
 
-#ifndef  VIVALDI_IMPORTER_VIV_OPERA_READER_H_
-#define VIVALDI_IMPORTER_VIV_OPERA_READER_H_
+#ifndef IMPORTER_VIV_OPERA_READER_H_
+#define IMPORTER_VIV_OPERA_READER_H_
+
+#include <string>
 
 #include "base/files/file_path.h"
 #include "base/values.h"
 
 class OperaAdrFileReader {
  public:
-  bool LoadFile(base::FilePath& file);
+  bool LoadFile(const base::FilePath& file);
 
  protected:
   virtual void HandleEntry(const std::string& category,
@@ -21,4 +23,4 @@ class OperaAdrFileReader {
   DISALLOW_COPY_AND_ASSIGN(OperaAdrFileReader);
 };
 
-#endif // VIVALDI_IMPORTER_VIV_OPERA_READER_H_
+#endif  // IMPORTER_VIV_OPERA_READER_H_

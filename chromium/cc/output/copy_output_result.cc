@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #include "cc/resources/texture_mailbox.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace cc {
 

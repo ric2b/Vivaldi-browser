@@ -21,6 +21,8 @@
 // have the linker merge the sections, saving us ~500 bytes.
 #pragma comment(linker, "/MERGE:.rdata=.text")
 
+#include "chrome/installer/mini_installer/mini_installer.h"
+
 #include <windows.h>
 
 // #define needed to link in RtlGenRandom(), a.k.a. SystemFunction036.  See the
@@ -35,33 +37,18 @@
 #include <stdlib.h>
 #include <stddef.h>
 
+#include <initializer_list>
+
 #include "chrome/installer/mini_installer/appid.h"
 #include "chrome/installer/mini_installer/configuration.h"
 #include "chrome/installer/mini_installer/decompress.h"
-#include "chrome/installer/mini_installer/exit_code.h"
 #include "chrome/installer/mini_installer/mini_installer_constants.h"
-#include "chrome/installer/mini_installer/mini_string.h"
 #include "chrome/installer/mini_installer/pe_resource.h"
 #include "chrome/installer/mini_installer/regkey.h"
 
 namespace mini_installer {
 
 typedef StackString<MAX_PATH> PathString;
-typedef StackString<MAX_PATH * 4> CommandString;
-
-struct ProcessExitResult {
-  DWORD exit_code;
-  DWORD windows_error;
-
-  explicit ProcessExitResult(DWORD exit) : exit_code(exit), windows_error(0) {}
-  ProcessExitResult(DWORD exit, DWORD win)
-      : exit_code(exit), windows_error(win) {
-  }
-
-  bool IsSuccess() {
-    return exit_code == SUCCESS_EXIT_CODE;
-  }
-};
 
 // This structure passes data back and forth for the processing
 // of resource callbacks.
@@ -74,11 +61,14 @@ struct Context {
   PathString* setup_resource_path;
 };
 
+// TODO(grt): Frame this in terms of whether or not the brand supports
+// integation with Omaha, where Google Update is the Google-specific fork of
+// the open-source Omaha project.
 #if defined(GOOGLE_CHROME_BUILD)
 // Opens the Google Update ClientState key. If |binaries| is false, opens the
 // key for Google Chrome or Chrome SxS (canary). If |binaries| is true and an
 // existing multi-install Chrome is being updated, opens the key for the
-// binaries; otherwise, returns false.
+// multi-install binaries; otherwise, returns false.
 bool OpenInstallStateKey(const Configuration& configuration,
                          bool binaries,
                          RegKey* key) {
@@ -106,10 +96,10 @@ void WriteInstallResults(const Configuration& configuration,
 
   // Write the value in Chrome ClientState key and in the binaries' if an
   // existing multi-install Chrome is being updated.
-  for (int i = 0; i < 2; ++i) {
+  for (bool binaries : {false, true}) {
     RegKey key;
     DWORD value;
-    if (OpenInstallStateKey(configuration, i != 0, &key)) {
+    if (OpenInstallStateKey(configuration, binaries, &key)) {
       if (key.ReadDWValue(kInstallerResultRegistryValue, &value) !=
               ERROR_SUCCESS ||
           value == 0) {
@@ -130,9 +120,9 @@ void WriteInstallResults(const Configuration& configuration,
 void SetInstallerFlags(const Configuration& configuration) {
   StackString<128> value;
 
-  for (int i = 0; i < 2; ++i) {
+  for (bool binaries : {false, true}) {
     RegKey key;
-    if (!OpenInstallStateKey(configuration, i != 0, &key))
+    if (!OpenInstallStateKey(configuration, binaries, &key))
       continue;
 
     LONG ret = key.ReadSZValue(kApRegistryValue, value.get(), value.capacity());
@@ -232,56 +222,47 @@ ProcessExitResult RunProcessAndWait(const wchar_t* exe_path, wchar_t* cmdline) {
   return ProcessExitResult(exit_code);
 }
 
-// Appends any command line params passed to mini_installer to the given buffer
-// so that they can be passed on to setup.exe.
-// |buffer| is unchanged in case of error.
-void AppendCommandLineFlags(const Configuration& configuration,
+void AppendCommandLineFlags(const wchar_t* command_line,
                             CommandString* buffer) {
-  PathString full_exe_path;
-  size_t len = ::GetModuleFileName(
-      NULL, full_exe_path.get(), static_cast<DWORD>(full_exe_path.capacity()));
-  if (!len || len >= full_exe_path.capacity())
-    return;
-
-  const wchar_t* exe_name =
-      GetNameFromPathExt(full_exe_path.get(), static_cast<DWORD>(len));
-
-  // - configuration.program() returns the first command line argument
-  //   passed into the program (that the user probably typed in this case).
-  //       "mini_installer.exe"
-  //       "mini_installer"
-  //       "out\Release\mini_installer"
-  // - |exe_name| is the executable file of the current process.
-  //       "mini_installer.exe"
-  //
-  // Note that there are three possibilities to handle here.
-  // Receive a cmdline containing:
-  // 1) executable name WITH extension
-  // 2) executable name with NO extension
-  // 3) NO executable name as part of cmdline
-  const wchar_t* cmd_to_append = L"";
-  const wchar_t* arg0 = configuration.program();
-  if (!arg0)
-    return;
-  const wchar_t* arg0_base_name = GetNameFromPathExt(arg0, ::lstrlen(arg0));
-  if (!StrStartsWith(exe_name, arg0_base_name)) {
-    // State 3: NO executable name as part of cmdline.
-    buffer->append(L" ");
-    cmd_to_append = configuration.command_line();
-  } else if (configuration.argument_count() > 1) {
-    // State 1 or 2: Executable name is in cmdline.
-    // - Append everything AFTER the executable name.
-    //   (Using arg0_base_name here to make sure to match with or without
-    //   extension.  Then move to the space following the token.)
-    const wchar_t* tmp = SearchStringI(configuration.command_line(),
-                                       arg0_base_name);
-    tmp = SearchStringI(tmp, L" ");
-    cmd_to_append = tmp;
+  // The program name (the first argument parsed by CommandLineToArgvW) is
+  // delimited by whitespace or a double quote based on the first character of
+  // the full command line string. Use the same logic here to scan past the
+  // program name in the program's command line (obtained during startup from
+  // GetCommandLine). See
+  // http://www.windowsinspired.com/how-a-windows-programs-splits-its-command-line-into-individual-arguments/
+  // for gory details regarding how CommandLineToArgvW works.
+  wchar_t a_char = 0;
+  if (*command_line == L'"') {
+    // Scan forward past the closing double quote.
+    ++command_line;
+    while (true) {
+      a_char = *command_line;
+      if (!a_char)
+        break;
+      ++command_line;
+      if (a_char == L'"') {
+        a_char = *command_line;
+        break;
+      }
+    }  // postcondition: |a_char| contains the character at *command_line.
+  } else {
+    // Scan forward for the first space or tab character.
+    while (true) {
+      a_char = *command_line;
+      if (!a_char || a_char == L' ' || a_char == L'\t')
+        break;
+      ++command_line;
+    }  // postcondition: |a_char| contains the character at *command_line.
   }
 
-  buffer->append(cmd_to_append);
-}
+  if (!a_char)
+    return;
 
+  // Append a space if |command_line| doesn't begin with one.
+  if (a_char != ' ' && a_char != '\t' && !buffer->append(L" "))
+    return;
+  buffer->append(command_line);
+}
 
 // Windows defined callback used in the EnumResourceNames call. For each
 // matching resource found, the callback is invoked and at this point we write
@@ -407,7 +388,7 @@ ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
 
     // Get any command line option specified for mini_installer and pass them
     // on to setup.exe.
-    AppendCommandLineFlags(configuration, &cmd_line);
+    AppendCommandLineFlags(configuration.command_line(), &cmd_line);
 
     if (exit_code.IsSuccess())
       exit_code = RunProcessAndWait(exe_path.get(), cmd_line.get());
@@ -506,7 +487,8 @@ ProcessExitResult RunSetup(const Configuration& configuration,
 
   // Get any command line option specified for mini_installer and pass them
   // on to setup.exe
-  AppendCommandLineFlags(configuration, &cmd_line);
+  AppendCommandLineFlags(configuration.command_line(), &cmd_line);
+
   // Enable Vivaldi install GUI.
   cmd_line.append(L" --vivaldi");
   if (cmd_line.findi(L"--do-not-launch-chrome") == NULL) {
@@ -830,8 +812,6 @@ bool ShouldDeleteExtractedFiles() {
   return true;
 }
 
-// Main function. First gets a working dir, unpacks the resources and finally
-// executes setup.exe to do the install/upgrade.
 ProcessExitResult WMain(HMODULE module) {
   // Always start with deleting potential leftovers from previous installations.
   // This can make the difference between success and failure.  We've seen
@@ -894,47 +874,3 @@ ProcessExitResult WMain(HMODULE module) {
 }
 
 }  // namespace mini_installer
-
-
-extern "C" {
-int MainEntryPoint() {
-  mini_installer::ProcessExitResult result =
-      mini_installer::WMain(::GetModuleHandle(NULL));
-
-  ::ExitProcess(result.exit_code);
-}
-}
-
-#if defined(ADDRESS_SANITIZER)
-// Executables instrumented with ASAN need CRT functions. We do not use
-// the /ENTRY switch for ASAN instrumented executable and a "main" function
-// is required.
-int WINAPI WinMain(HINSTANCE hInstance,
-                   HINSTANCE hPrevInstance,
-                   LPSTR lpCmdLine,
-                   int nCmdShow) {
-  MainEntryPoint();
-  return 0;
-}
-#endif
-
-// VC Express editions don't come with the memset CRT obj file and linking to
-// the obj files between versions becomes a bit problematic. Therefore,
-// simply implement memset.
-//
-// This also avoids having to explicitly set the __sse2_available hack when
-// linking with both the x64 and x86 obj files which is required when not
-// linking with the std C lib in certain instances (including Chromium) with
-// MSVC.  __sse2_available determines whether to use SSE2 intructions with
-// std C lib routines, and is set by MSVC's std C lib implementation normally.
-extern "C" {
-#pragma function(memset)
-void* memset(void* dest, int c, size_t count) {
-  void* start = dest;
-  while (count--) {
-    *reinterpret_cast<char*>(dest) = static_cast<char>(c);
-    dest = reinterpret_cast<char*>(dest) + 1;
-  }
-  return start;
-}
-}  // extern "C"

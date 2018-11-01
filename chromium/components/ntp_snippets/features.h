@@ -19,6 +19,7 @@ class Clock;
 namespace ntp_snippets {
 
 // Features to turn individual providers/categories on/off.
+// TODO(jkrcal): Rename to kRemoteSuggestionsFeature.
 extern const base::Feature kArticleSuggestionsFeature;
 extern const base::Feature kBookmarkSuggestionsFeature;
 extern const base::Feature kRecentOfflineTabSuggestionsFeature;
@@ -32,18 +33,8 @@ extern const base::Feature kSaveToOfflineFeature;
 // Feature to allow offline badges to appear on snippets.
 extern const base::Feature kOfflineBadgeFeature;
 
-// Feature to allow dismissing sections.
-extern const base::Feature kSectionDismissalFeature;
-
-// Global toggle for the whole content suggestions feature. If this is set to
-// false, all the per-provider features are ignored.
-extern const base::Feature kContentSuggestionsFeature;
-
 // Feature to allow UI as specified here: https://crbug.com/660837.
 extern const base::Feature kIncreasedVisibility;
-
-// Feature to enable the Fetch More action
-extern const base::Feature kFetchMoreFeature;
 
 // Feature to prefer AMP URLs over regular URLs when available.
 extern const base::Feature kPreferAmpUrlsFeature;
@@ -51,9 +42,8 @@ extern const base::Feature kPreferAmpUrlsFeature;
 // Feature to choose a category ranker.
 extern const base::Feature kCategoryRanker;
 
-// Parameter for a kCategoryRanker feature flag.
+// Parameter and its values for the kCategoryRanker feature flag.
 extern const char kCategoryRankerParameter[];
-// Possible values of the parameter above.
 extern const char kCategoryRankerConstantRanker[];
 extern const char kCategoryRankerClickBasedRanker[];
 
@@ -69,6 +59,22 @@ CategoryRankerChoice GetSelectedCategoryRanker();
 std::unique_ptr<CategoryRanker> BuildSelectedCategoryRanker(
     PrefService* pref_service,
     std::unique_ptr<base::Clock> clock);
+
+// Feature to choose a default category order.
+extern const base::Feature kCategoryOrder;
+
+// Parameter and its values for the kCategoryOrder feature flag.
+extern const char kCategoryOrderParameter[];
+extern const char kCategoryOrderGeneral[];
+extern const char kCategoryOrderEmergingMarketsOriented[];
+
+enum class CategoryOrderChoice {
+  GENERAL,
+  EMERGING_MARKETS_ORIENTED,
+};
+
+// Returns which category order to use according to kCategoryOrder feature.
+CategoryOrderChoice GetSelectedCategoryOrder();
 
 }  // namespace ntp_snippets
 

@@ -26,6 +26,7 @@
 #include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
 #include "core/dom/AXObjectCache.h"
+#include "core/dom/AnimationWorkletProxyClient.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/NavigationPolicy.h"
@@ -49,8 +50,8 @@ namespace blink {
 class AXObject;
 class ColorChooser;
 class ColorChooserClient;
+class CompositorWorkerProxyClient;
 class CompositorAnimationTimeline;
-class CompositorProxyClient;
 class DateTimeChooser;
 class DateTimeChooserClient;
 class Element;
@@ -72,6 +73,7 @@ class WebDragData;
 class WebFrameScheduler;
 class WebImage;
 class WebLayer;
+class WebLayerTreeView;
 
 struct CompositedSelection;
 struct DateTimeChooserParameters;
@@ -257,12 +259,14 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void updateCompositedSelection(LocalFrame*,
                                          const CompositedSelection&) {}
 
-  virtual void setEventListenerProperties(WebEventListenerClass,
+  virtual void setEventListenerProperties(LocalFrame*,
+                                          WebEventListenerClass,
                                           WebEventListenerProperties) = 0;
   virtual WebEventListenerProperties eventListenerProperties(
+      LocalFrame*,
       WebEventListenerClass) const = 0;
-  virtual void setHasScrollEventHandlers(bool) = 0;
-  virtual bool hasScrollEventHandlers() const = 0;
+  virtual void updateEventRectsForSubframeIfNecessary(LocalFrame*) = 0;
+  virtual void setHasScrollEventHandlers(LocalFrame*, bool) = 0;
 
   virtual void setTouchAction(LocalFrame*, TouchAction) = 0;
 
@@ -307,10 +311,9 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void ajaxSucceeded(LocalFrame*) {}
 
   // Input method editor related functions.
-  virtual void didCancelCompositionOnSelectionChange() {}
   virtual void resetInputMethod() {}
   virtual void didUpdateTextOfFocusedElementByNonUserInput(LocalFrame&) {}
-  virtual void showVirtualKeyboard() {}
+  virtual void showVirtualKeyboardOnElementFocus() {}
 
   virtual void registerViewportLayers() const {}
 
@@ -323,7 +326,10 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void registerPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void unregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
 
-  virtual CompositorProxyClient* createCompositorProxyClient(LocalFrame*) = 0;
+  virtual CompositorWorkerProxyClient* createCompositorWorkerProxyClient(
+      LocalFrame*) = 0;
+  virtual AnimationWorkletProxyClient* createAnimationWorkletProxyClient(
+      LocalFrame*) = 0;
 
   virtual FloatSize elasticOverscroll() const { return FloatSize(); }
 
@@ -340,6 +346,8 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual double lastFrameTimeMonotonic() const { return 0.0; }
 
   virtual void installSupplements(LocalFrame&) {}
+
+  virtual WebLayerTreeView* getWebLayerTreeView(LocalFrame*) { return nullptr; }
 
   DECLARE_TRACE();
 

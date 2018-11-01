@@ -11,21 +11,24 @@
 #include "core/layout/ng/ng_box_fragment.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment_builder.h"
-#include "core/layout/ng/ng_line_builder.h"
 #include "core/layout/ng/ng_layout_inline_items_builder.h"
+#include "core/layout/ng/ng_line_builder.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "core/layout/ng/ng_physical_text_fragment.h"
 #include "core/layout/ng/ng_text_fragment.h"
 #include "core/layout/ng/ng_text_layout_algorithm.h"
 #include "core/style/ComputedStyle.h"
+#include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/shaping/CachingWordShapeIterator.h"
 #include "platform/fonts/shaping/CachingWordShaper.h"
+#include "platform/fonts/shaping/HarfBuzzShaper.h"
+#include "platform/fonts/shaping/ShapeResultBuffer.h"
 #include "wtf/text/CharacterNames.h"
 
 namespace blink {
 
 NGInlineNode::NGInlineNode(LayoutObject* start_inline,
-                           ComputedStyle* block_style)
+                           const ComputedStyle* block_style)
     : NGLayoutInputNode(NGLayoutInputNodeType::kLegacyInline),
       start_inline_(start_inline),
       last_inline_(nullptr),
@@ -56,6 +59,11 @@ void NGInlineNode::PrepareLayout() {
   if (is_bidi_enabled_)
     SegmentText();
   ShapeText();
+}
+
+void NGInlineNode::InvalidatePrepareLayout() {
+  text_content_ = String();
+  items_.clear();
 }
 
 // Depth-first-scan of all LayoutInline and LayoutText nodes that make up this
@@ -188,62 +196,94 @@ void NGLayoutInlineItem::SetEndOffset(unsigned end_offset) {
 }
 
 LayoutUnit NGLayoutInlineItem::InlineSize() const {
-  LayoutUnit inline_size;
-  for (const auto& result : shape_results_)
-    inline_size += result->width();
-  return inline_size;
+  return InlineSize(start_offset_, end_offset_);
+}
+
+LayoutUnit NGLayoutInlineItem::InlineSize(unsigned start, unsigned end) const {
+  DCHECK(start >= StartOffset() && start <= end && end <= EndOffset());
+
+  if (start == end)
+    return LayoutUnit();
+
+  if (!style_ || !shape_result_) {
+    // Bidi controls do not have widths.
+    // TODO(kojii): Atomic inline not supported yet.
+    return LayoutUnit();
+  }
+
+  if (start == start_offset_ && end == end_offset_)
+    return LayoutUnit(shape_result_->width());
+
+  return LayoutUnit(ShapeResultBuffer::getCharacterRange(
+                        shape_result_, Direction(), shape_result_->width(),
+                        start - StartOffset(), end - StartOffset())
+                        .width());
+}
+
+void NGLayoutInlineItem::GetFallbackFonts(
+    HashSet<const SimpleFontData*>* fallback_fonts,
+    unsigned start,
+    unsigned end) const {
+  DCHECK(start >= StartOffset() && start <= end && end <= EndOffset());
+
+  // TODO(kojii): Implement |start| and |end|.
+  shape_result_->fallbackFonts(fallback_fonts);
 }
 
 void NGInlineNode::ShapeText() {
-  // TODO(layout-dev): Should pass the entire range to the shaper as context
-  // and then shape each item based on the relevant font.
+  // TODO(eae): Add support for shaping latin-1 text?
+  text_content_.ensure16Bit();
+
+  // Shape each item with the full context of the entire node.
+  HarfBuzzShaper shaper(text_content_.characters16(), text_content_.length());
   for (auto& item : items_) {
     // Skip object replacement characters and bidi control characters.
     if (!item.style_)
       continue;
-    StringView item_text(text_content_, item.start_offset_,
-                         item.end_offset_ - item.start_offset_);
-    const Font& item_font = item.style_->font();
-    ShapeCache* shape_cache = item_font.shapeCache();
 
-    TextRun item_run(item_text);
-    CachingWordShapeIterator iterator(shape_cache, item_run, &item_font);
-    RefPtr<const ShapeResult> word_result;
-    while (iterator.next(&word_result)) {
-      item.shape_results_.push_back(word_result.get());
-    };
+    item.shape_result_ = shaper.shape(&item.Style()->font(), item.Direction(),
+                                      item.StartOffset(), item.EndOffset());
   }
 }
 
-bool NGInlineNode::Layout(NGConstraintSpace* constraint_space,
-                          NGFragment** out) {
+RefPtr<NGLayoutResult> NGInlineNode::Layout(NGConstraintSpace*, NGBreakToken*) {
   ASSERT_NOT_REACHED();
-  *out = nullptr;
-  return true;
+  return nullptr;
 }
 
-bool NGInlineNode::LayoutInline(NGConstraintSpace* constraint_space,
+void NGInlineNode::LayoutInline(NGConstraintSpace* constraint_space,
                                 NGLineBuilder* line_builder) {
-  PrepareLayout();
+  if (!IsPrepareLayoutFinished())
+    PrepareLayout();
 
-  // NOTE: We don't need to change the coordinate system here as we are an
-  // inline.
-  NGConstraintSpace* child_constraint_space =
-      NGConstraintSpaceBuilder(constraint_space->WritingMode())
-          .SetTextDirection(constraint_space->Direction())
-          .ToConstraintSpace();
+  if (text_content_.isEmpty())
+    return;
 
-  if (!layout_algorithm_)
-    // TODO(layout-dev): If an atomic inline run the appropriate algorithm.
-    layout_algorithm_ = new NGTextLayoutAlgorithm(this, child_constraint_space);
+  NGTextLayoutAlgorithm(this, constraint_space).LayoutInline(line_builder);
+}
 
-  if (!toNGTextLayoutAlgorithm(layout_algorithm_)->LayoutInline(line_builder)) {
-    return false;
-  }
+MinAndMaxContentSizes NGInlineNode::ComputeMinAndMaxContentSizes() {
+  // Compute the max of inline sizes of all line boxes with 0 available inline
+  // size. This gives the min-content, the width where lines wrap at every break
+  // opportunity.
+  NGWritingMode writing_mode =
+      FromPlatformWritingMode(BlockStyle()->getWritingMode());
+  RefPtr<NGConstraintSpace> constraint_space =
+      NGConstraintSpaceBuilder(writing_mode)
+          .SetTextDirection(BlockStyle()->direction())
+          .SetAvailableSize({LayoutUnit(), NGSizeIndefinite})
+          .ToConstraintSpace(writing_mode);
+  NGLineBuilder line_builder(this, constraint_space.get());
+  LayoutInline(constraint_space.get(), &line_builder);
+  MinAndMaxContentSizes sizes;
+  sizes.min_content = line_builder.MaxInlineSize();
 
-  // Reset algorithm for future use
-  layout_algorithm_ = nullptr;
-  return true;
+  // max-content is the width without any line wrapping.
+  // TODO(kojii): Implement hard breaks (<br> etc.) to break.
+  for (const auto& item : items_)
+    sizes.max_content += item.InlineSize();
+
+  return sizes;
 }
 
 NGInlineNode* NGInlineNode::NextSibling() {
@@ -255,6 +295,10 @@ NGInlineNode* NGInlineNode::NextSibling() {
                         : nullptr;
   }
   return next_sibling_;
+}
+
+LayoutObject* NGInlineNode::GetLayoutObject() {
+  return GetLayoutBlockFlow();
 }
 
 // Find the first LayoutBlockFlow in the ancestor chain of |start_inilne_|.
@@ -303,7 +347,6 @@ void NGInlineNode::GetLayoutTextOffsets(
 
 DEFINE_TRACE(NGInlineNode) {
   visitor->trace(next_sibling_);
-  visitor->trace(layout_algorithm_);
   NGLayoutInputNode::trace(visitor);
 }
 

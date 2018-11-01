@@ -43,10 +43,10 @@ class ObjectIdInvalidationMap;
 // interface will handle crossing threads if necessary.
 class SyncEngine : public ModelTypeConfigurer {
  public:
-  typedef SyncStatus Status;
-  typedef base::Callback<std::unique_ptr<HttpPostProviderFactory>(
-      CancelationSignal*)>
-      HttpPostProviderFactoryGetter;
+  using Status = SyncStatus;
+  using HttpPostProviderFactoryGetter =
+      base::Callback<std::unique_ptr<HttpPostProviderFactory>(
+          CancelationSignal*)>;
 
   // Utility struct for holding initialization options.
   struct InitParams {
@@ -57,6 +57,7 @@ class SyncEngine : public ModelTypeConfigurer {
     scoped_refptr<base::SingleThreadTaskRunner> sync_task_runner;
     SyncEngineHost* host = nullptr;
     std::unique_ptr<SyncBackendRegistrar> registrar;
+    std::unique_ptr<SyncEncryptionHandler::Observer> encryption_observer_proxy;
     scoped_refptr<ExtensionsActivity> extensions_activity;
     WeakHandle<JsEventHandler> event_handler;
     GURL service_url;
@@ -96,6 +97,11 @@ class SyncEngine : public ModelTypeConfigurer {
   // Updates the engine's SyncCredentials.
   virtual void UpdateCredentials(const SyncCredentials& credentials) = 0;
 
+  // Switches sync engine into configuration mode. In this mode only initial
+  // data for newly enabled types is downloaded from server. No local changes
+  // are committed to server.
+  virtual void StartConfiguration() = 0;
+
   // This starts the sync engine running a Syncer object to communicate with
   // sync servers. Until this is called, no changes will leave or enter this
   // browser from the cloud / sync servers.
@@ -114,14 +120,11 @@ class SyncEngine : public ModelTypeConfigurer {
   virtual void SetEncryptionPassphrase(const std::string& passphrase,
                                        bool is_explicit) = 0;
 
-  // Use the provided passphrase to asynchronously attempt decryption. Returns
-  // false immediately if the passphrase could not be used to decrypt a locally
-  // cached copy of encrypted keys; returns true otherwise. If new encrypted
-  // keys arrive during the asynchronous call, OnPassphraseRequired may be
-  // triggered at a later time. It is an error to call this when there are no
-  // pending keys.
-  virtual bool SetDecryptionPassphrase(const std::string& passphrase)
-      WARN_UNUSED_RESULT = 0;
+  // Use the provided passphrase to asynchronously attempt decryption. If new
+  // encrypted keys arrive during the asynchronous call, OnPassphraseRequired
+  // may be triggered at a later time. It is an error to call this when there
+  // are no pending keys.
+  virtual void SetDecryptionPassphrase(const std::string& passphrase) = 0;
 
   // Kick off shutdown procedure. Attempts to cut short any long-lived or
   // blocking sync thread tasks so that the shutdown on sync thread task that
@@ -147,17 +150,6 @@ class SyncEngine : public ModelTypeConfigurer {
   // items that have not yet been synced with the server.
   // ONLY CALL THIS IF OnInitializationComplete was called!
   virtual bool HasUnsyncedItems() const = 0;
-
-  // Whether or not we are syncing encryption keys.
-  virtual bool IsNigoriEnabled() const = 0;
-
-  // Returns the type of passphrase being used to encrypt data. See
-  // sync_encryption_handler.h.
-  virtual PassphraseType GetPassphraseType() const = 0;
-
-  // If an explicit passphrase is in use, returns the time at which that
-  // passphrase was set (if available).
-  virtual base::Time GetExplicitPassphraseTime() const = 0;
 
   // True if the cryptographer has any keys available to attempt decryption.
   // Could mean we've downloaded and loaded Nigori objects, or we bootstrapped

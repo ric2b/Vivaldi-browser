@@ -1,49 +1,50 @@
 // Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
 
-
 #include <stack>
 #include <string>
 #include <vector>
 
-#include "chrome/browser/importer/importer_list.h"
-
+#include "app/vivaldi_resources.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_tokenizer.h"
-#include "base/path_service.h"
-#include "chrome/common/ini_parser.h"
+#include "chrome/browser/importer/importer_list.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
-#include "chrome/browser/shell_integration.h"
-#include "ui/base/l10n/l10n_util.h"
-
-#include "app/vivaldi_resources.h"
-#include "importer/chromium_importer.h"
+#include "chrome/common/ini_parser.h"
 #include "importer/chrome_bookmark_reader.h"
+#include "importer/chromium_importer.h"
+#include "ui/base/l10n/l10n_util.h"
 
 class ChromeBookmarkReader : public ChromeBookmarkFileReader {
  public:
   ChromeBookmarkReader() {}
   ~ChromeBookmarkReader() override {}
 
-  void AddBookmark(const std::vector<base::string16> &current_folder,
-                   const base::DictionaryValue &entries, bool is_folder,
-                   base::string16 *item_name = NULL);
+  void AddBookmark(const std::vector<base::string16>& current_folder,
+                   const base::DictionaryValue& entries,
+                   bool is_folder,
+                   base::string16* item_name = NULL);
 
-  const std::vector<ImportedBookmarkEntry> &Bookmarks() const {
+  const std::vector<ImportedBookmarkEntry>& Bookmarks() const {
     return bookmarks_;
   }
 
-  void ClearBookmarks() { bookmarks_.clear(); current_folder_.clear(); }
+  void ClearBookmarks() {
+    bookmarks_.clear();
+    current_folder_.clear();
+  }
 
  protected:
-  void HandleEntry(const std::string &category,
-                   const base::DictionaryValue &entries) override;
+  void HandleEntry(const std::string& category,
+                   const base::DictionaryValue& entries) override;
 
  private:
   std::vector<base::string16> current_folder_;
@@ -66,9 +67,10 @@ void ChromeBookmarkReader::HandleEntry(const std::string& category,
 }
 
 void ChromeBookmarkReader::AddBookmark(
-    const std::vector<base::string16> &current_folder,
-    const base::DictionaryValue &entries, bool is_folder,
-    base::string16 *item_name) {
+    const std::vector<base::string16>& current_folder,
+    const base::DictionaryValue& entries,
+    bool is_folder,
+    base::string16* item_name) {
   std::string temp;
   base::string16 name;
   base::string16 url;
@@ -106,7 +108,7 @@ void ChromeBookmarkReader::AddBookmark(
   }
   const base::Value* meta_info;
   if (entries.Get("meta_info", &meta_info)) {
-    const base::DictionaryValue *dict;
+    const base::DictionaryValue* dict;
     if (meta_info->GetAsDictionary(&dict)) {
       if (!dict->GetString("Nickname", &nickname)) {
         nickname.clear();
@@ -140,12 +142,11 @@ void ChromiumImporter::ImportBookMarks() {
   reader.LoadFile(file);
 
   if (!reader.Bookmarks().empty() && !cancelled()) {
-    const base::string16 &first_folder_name =
+    const base::string16& first_folder_name =
         bridge_->GetLocalizedString(IDS_IMPORTED_BOOKMARKS);
 
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);
 
-  //  reader.ClearBookmarks();
+    //  reader.ClearBookmarks();
   }
 }
-

@@ -27,16 +27,24 @@
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
+#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/policy/profile_policy_connector_factory.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/disks/disk_mount_manager.h"
@@ -246,8 +254,10 @@ bool ReadAndroidStatus(
 // case we won't report its status).
 std::unique_ptr<policy::DeviceLocalAccount> GetCurrentKioskDeviceLocalAccount(
     chromeos::CrosSettings* settings) {
-  if (!user_manager::UserManager::Get()->IsLoggedInAsKioskApp())
+  if (!user_manager::UserManager::Get()->IsLoggedInAsKioskApp() &&
+      !user_manager::UserManager::Get()->IsLoggedInAsArcKioskApp()) {
     return std::unique_ptr<policy::DeviceLocalAccount>();
+  }
   const user_manager::User* const user =
       user_manager::UserManager::Get()->GetActiveUser();
   const std::vector<policy::DeviceLocalAccount> accounts =
@@ -480,9 +490,6 @@ DeviceStatusCollector::DeviceStatusCollector(
   running_kiosk_app_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kReportRunningKioskApp, callback);
 
-  report_arc_status_pref_.Init(prefs::kReportArcStatusEnabled, local_state_,
-      callback);
-
   // Fetch the current values of the policies.
   UpdateReportingSettings();
 
@@ -509,7 +516,11 @@ DeviceStatusCollector::~DeviceStatusCollector() {
 void DeviceStatusCollector::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kDeviceActivityTimes,
                                    new base::DictionaryValue);
-  registry->RegisterBooleanPref(prefs::kReportArcStatusEnabled, true);
+}
+
+// static
+void DeviceStatusCollector::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(prefs::kReportArcStatusEnabled, false);
 }
 
 void DeviceStatusCollector::CheckIdleState() {
@@ -562,9 +573,6 @@ void DeviceStatusCollector::UpdateReportingSettings() {
                                   &report_kiosk_session_status_)) {
     report_kiosk_session_status_ = true;
   }
-
-  report_android_status_ =
-      local_state_->GetBoolean(prefs::kReportArcStatusEnabled);
 
   if (!report_hardware_status_) {
     ClearCachedResourceUsage();
@@ -686,9 +694,15 @@ DeviceStatusCollector::GetAutoLaunchedKioskSessionInfo() {
       GetCurrentKioskDeviceLocalAccount(cros_settings_);
   if (account) {
     chromeos::KioskAppManager::App current_app;
-    if (chromeos::KioskAppManager::Get()->GetApp(account->kiosk_app_id,
+    bool regular_app_auto_launched_with_zero_delay =
+        chromeos::KioskAppManager::Get()->GetApp(account->kiosk_app_id,
                                                  &current_app) &&
-        current_app.was_auto_launched_with_zero_delay) {
+        current_app.was_auto_launched_with_zero_delay;
+    bool arc_app_auto_launched_with_zero_delay =
+        chromeos::ArcKioskAppManager::Get()
+            ->current_app_was_auto_launched_with_zero_delay();
+    if (regular_app_auto_launched_with_zero_delay ||
+        arc_app_auto_launched_with_zero_delay) {
       return account;
     }
   }
@@ -985,6 +999,11 @@ bool DeviceStatusCollector::GetHardwareStatus(
     status->add_cpu_utilization_pct(usage.cpu_usage_percent);
     status->add_system_ram_free(usage.bytes_of_ram_free);
   }
+
+  // Get the current device sound volume level.
+  chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
+  status->set_sound_volume(audio_handler->GetOutputVolumePercent());
+
   return true;
 }
 
@@ -1132,15 +1151,58 @@ void DeviceStatusCollector::GetDeviceStatus(
     state->ResetDeviceStatus();
 }
 
+std::string DeviceStatusCollector::GetDMTokenForProfile(Profile* profile) {
+  CloudPolicyManager* user_cloud_policy_manager =
+      UserPolicyManagerFactoryChromeOS::GetCloudPolicyManagerForProfile(
+          profile);
+  if (!user_cloud_policy_manager) {
+    NOTREACHED();
+    return std::string();
+  }
+
+  auto* cloud_policy_client = user_cloud_policy_manager->core()->client();
+  std::string dm_token = cloud_policy_client->dm_token();
+
+  return dm_token;
+}
+
+bool DeviceStatusCollector::GetSessionStatusForUser(
+    scoped_refptr<GetStatusState> state,
+    em::SessionStatusReportRequest* status,
+    const user_manager::User* user) {
+  Profile* const profile =
+      chromeos::ProfileHelper::Get()->GetProfileByUser(user);
+  if (!profile)
+    return false;
+
+  bool anything_reported_user = false;
+  bool report_android_status =
+      profile->GetPrefs()->GetBoolean(prefs::kReportArcStatusEnabled);
+
+  if (report_android_status)
+    anything_reported_user |= GetAndroidStatus(status, state);
+  if (anything_reported_user && !user->IsDeviceLocalAccount())
+    status->set_user_dm_token(GetDMTokenForProfile(profile));
+  return anything_reported_user;
+}
+
 void DeviceStatusCollector::GetSessionStatus(
     scoped_refptr<GetStatusState> state) {
   em::SessionStatusReportRequest* status = state->session_status();
   bool anything_reported = false;
 
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  const user_manager::User* const primary_user = user_manager->GetPrimaryUser();
+
   if (report_kiosk_session_status_)
     anything_reported |= GetKioskSessionStatus(status);
-  if (report_android_status_)
-    anything_reported |= GetAndroidStatus(status, state);
+
+  // Only report user data for affiliated users. Note that device-local
+  // accounts are also affiliated.
+  // Currently we only report for the primary user.
+  if (primary_user && primary_user->IsAffiliated()) {
+    anything_reported |= GetSessionStatusForUser(state, status, primary_user);
+  }
 
   // Wipe pointer if we didn't actually add any data.
   if (!anything_reported)

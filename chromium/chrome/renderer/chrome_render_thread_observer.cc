@@ -47,13 +47,13 @@
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/render_view_visitor.h"
 #include "extensions/features/features.h"
-#include "media/base/media_resources.h"
+#include "media/base/localized_strings.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_module.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
-#include "third_party/WebKit/public/web/WebCache.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
@@ -263,7 +263,7 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
   // that can commit synchronously.  No code should be runnable in these pages,
   // so it should not need to access anything nor should it allow javascript
   // URLs since it should never be visible to the user.
-  WebString native_scheme(base::ASCIIToUTF16(chrome::kChromeNativeScheme));
+  WebString native_scheme(WebString::fromASCII(chrome::kChromeNativeScheme));
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(native_scheme);
   WebSecurityPolicy::registerURLSchemeAsEmptyDocument(native_scheme);
   WebSecurityPolicy::registerURLSchemeAsNotAllowingJavascriptURLs(
@@ -286,16 +286,6 @@ void ChromeRenderThreadObserver::UnregisterMojoInterfaces(
     content::AssociatedInterfaceRegistry* associated_interfaces) {
   associated_interfaces->RemoveInterface(
       chrome::mojom::RendererConfiguration::Name_);
-}
-
-bool ChromeRenderThreadObserver::OnControlMessageReceived(
-    const IPC::Message& message) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(ChromeRenderThreadObserver, message)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_SetFieldTrialGroup, OnSetFieldTrialGroup)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
 }
 
 void ChromeRenderThreadObserver::OnRenderProcessShutdown() {
@@ -324,15 +314,15 @@ void ChromeRenderThreadObserver::SetContentSettingRules(
   content_setting_rules_ = rules;
 }
 
-void ChromeRenderThreadObserver::OnRendererConfigurationAssociatedRequest(
-    chrome::mojom::RendererConfigurationAssociatedRequest request) {
-  renderer_configuration_bindings_.AddBinding(this, std::move(request));
-}
-
-void ChromeRenderThreadObserver::OnSetFieldTrialGroup(
+void ChromeRenderThreadObserver::SetFieldTrialGroup(
     const std::string& trial_name,
     const std::string& group_name) {
   field_trial_syncer_.OnSetFieldTrialGroup(trial_name, group_name);
+}
+
+void ChromeRenderThreadObserver::OnRendererConfigurationAssociatedRequest(
+    chrome::mojom::RendererConfigurationAssociatedRequest request) {
+  renderer_configuration_bindings_.AddBinding(this, std::move(request));
 }
 
 const RendererContentSettingRules*

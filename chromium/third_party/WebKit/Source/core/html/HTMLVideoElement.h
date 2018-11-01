@@ -33,8 +33,6 @@
 #include "core/imagebitmap/ImageBitmapSource.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
-class SkPaint;
-
 namespace gpu {
 namespace gles2 {
 class GLES2Interface;
@@ -44,6 +42,7 @@ class GLES2Interface;
 namespace blink {
 class ExceptionState;
 class ImageBitmapOptions;
+class MediaCustomControlsFullscreenDetector;
 
 class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
                                            public CanvasImageSource,
@@ -53,6 +52,10 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
  public:
   static HTMLVideoElement* create(Document&);
   DECLARE_VIRTUAL_TRACE();
+
+  // Node override.
+  Node::InsertionNotificationRequest insertedInto(ContainerNode*) override;
+  void removedFrom(ContainerNode*) override;
 
   unsigned videoWidth() const;
   unsigned videoHeight() const;
@@ -69,12 +72,13 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   unsigned webkitDroppedFrameCount() const;
 
   // Used by canvas to gain raw pixel access
-  void paintCurrentFrame(SkCanvas*, const IntRect&, const SkPaint*) const;
+  void paintCurrentFrame(PaintCanvas*, const IntRect&, const PaintFlags*) const;
 
   // Used by WebGL to do GPU-GPU textures copy if possible.
-  // The caller is responsible for allocating the destination texture.
   bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
                                          GLuint texture,
+                                         GLenum internalFormat,
+                                         GLenum type,
                                          bool premultiplyAlpha,
                                          bool flipY);
 
@@ -122,8 +126,20 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
                                   const ImageBitmapOptions&,
                                   ExceptionState&) override;
 
+  // WebMediaPlayerClient implementation.
+  void onBecamePersistentVideo(bool) final;
+
+  bool isPersistent() const;
+
  private:
+  friend class MediaCustomControlsFullscreenDetectorTest;
+  friend class HTMLMediaElementEventListenersTest;
+  friend class HTMLVideoElementPersistentTest;
+
   HTMLVideoElement(Document&);
+
+  // SuspendableObject functions.
+  void contextDestroyed(ExecutionContext*) final;
 
   bool layoutObjectIsNeeded(const ComputedStyle&) override;
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
@@ -141,8 +157,12 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   void setDisplayMode(DisplayMode) override;
 
   Member<HTMLImageLoader> m_imageLoader;
+  Member<MediaCustomControlsFullscreenDetector>
+      m_customControlsFullscreenDetector;
 
   AtomicString m_defaultPosterURL;
+
+  bool m_isPersistent = false;
 };
 
 }  // namespace blink

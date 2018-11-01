@@ -1,7 +1,10 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef __EXTENSIONS_VIVALDI_EXTENSIONS_CLIENT_H
-#define __EXTENSIONS_VIVALDI_EXTENSIONS_CLIENT_H
+#ifndef EXTENSIONS_VIVALDI_EXTENSIONS_CLIENT_H_
+#define EXTENSIONS_VIVALDI_EXTENSIONS_CLIENT_H_
+
+#include <memory>
+#include <string>
 
 #include "chrome/common/extensions/chrome_extensions_client.h"
 #include "extensions/permissions/vivaldi_api_permissions.h"
@@ -32,6 +35,6 @@ class VivaldiExtensionsClient : public ChromeExtensionsClient {
   DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionsClient);
 };
 
-} // namespace extensions
+}  // namespace extensions
 
-#endif // __EXTENSIONS_VIVALDI_EXTENSIONS_CLIENT_H
+#endif  // EXTENSIONS_VIVALDI_EXTENSIONS_CLIENT_H_

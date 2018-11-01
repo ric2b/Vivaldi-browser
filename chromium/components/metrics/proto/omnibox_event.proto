@@ -16,7 +16,13 @@ import "omnibox_input_type.proto";
 
 // Next tag: 17
 message OmniboxEventProto {
-  // The timestamp for the event, in seconds since the epoch.
+  // The timestamp for the event, in seconds.
+  // This value comes from Chromium's TimeTicks::Now(), which is an abstract
+  // time value that is guaranteed to always be non-decreasing (regardless of
+  // Daylight Saving Time or any other changes to the system clock).
+  // These numbers are only comparable within a session.  To sequence events
+  // across sessions, order by the |session_id| from the
+  // ChromeUserMetricsExtension message.
   optional int64 time = 1;
 
   // The id of the originating tab for this omnibox interaction.
@@ -165,9 +171,9 @@ message OmniboxEventProto {
     // This enum value is currently only used by Android GSA. It represents
     // a suggestion powered by a Chrome content provider.
     ON_DEVICE_CHROME = 13;
-    CLIPBOARD_URL = 14;  // Suggestion coming from clipboard (iOS only).
+    CLIPBOARD_URL = 14;    // Suggestion coming from clipboard (iOS only).
     PHYSICAL_WEB = 15;     // Suggestions triggered by URLs broadcast by nearby
-                           // devices (iOS only).
+                           // devices (iOS and Android).
   }
 
   // The result set displayed on the completion popup
@@ -200,7 +206,8 @@ message OmniboxEventProto {
       EXTENSION_APP = 11;         // DEPRECATED. An Extension App with a
                                   // title/url that contains the input.
       CONTACT = 12;               // One of the user's contacts
-      BOOKMARK_TITLE = 13;        // A bookmark whose title contains the input.
+      BOOKMARK_TITLE = 13;        // A bookmark with a title/url that contains
+                                  // the input.
       SEARCH_SUGGEST_ENTITY = 14; // A suggested search for an entity.
       SEARCH_SUGGEST_TAIL = 15;   // A suggested search to complete the tail
                                   // of the query.
@@ -229,8 +236,8 @@ message OmniboxEventProto {
       PHYSICAL_WEB            = 25; // A Physical Web nearby URL.
       PHYSICAL_WEB_OVERFLOW   = 26; // An item representing multiple Physical
                                     // Web nearby URLs.
-      BOOKMARK_NICK = 10000;        // A bookmark whose nickname contains the input.
-      BOOKMARK_DESCRIPTION = 1001;  // A bookmark whose description contains the input.
+ //     BOOKMARK_NICK = 10000;        // A bookmark whose nickname contains the input.
+ //     BOOKMARK_DESCRIPTION = 1001;  // A bookmark whose description contains the input.
     }
     optional ResultType result_type = 2;
 

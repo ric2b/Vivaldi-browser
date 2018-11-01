@@ -27,8 +27,6 @@
 #include <memory>
 #include <utility>
 
-class SkPicture;
-
 namespace blink {
 
 static const size_t kInitialDisplayItemListCapacityBytes = 512;
@@ -172,20 +170,22 @@ class PLATFORM_EXPORT PaintController {
   DisplayItemList& newDisplayItemList() { return m_newDisplayItemList; }
 
   void appendDebugDrawingAfterCommit(const DisplayItemClient&,
-                                     sk_sp<SkPicture>,
+                                     sk_sp<PaintRecord>,
                                      const LayoutSize& offsetFromLayoutObject);
 
   void showDebugData() const { showDebugDataInternal(false); }
 #ifndef NDEBUG
-  void showDebugDataWithPictures() const { showDebugDataInternal(true); }
+  void showDebugDataWithRecords() const { showDebugDataInternal(true); }
 #endif
 
 #if DCHECK_IS_ON()
   void assertDisplayItemClientsAreLive();
 
-  enum Usage { ForNormalUsage, ForSkPictureBuilder };
+  enum Usage { ForNormalUsage, ForPaintRecordBuilder };
   void setUsage(Usage usage) { m_usage = usage; }
-  bool isForSkPictureBuilder() const { return m_usage == ForSkPictureBuilder; }
+  bool isForPaintRecordBuilder() const {
+    return m_usage == ForPaintRecordBuilder;
+  }
 #endif
 
   void setTracksRasterInvalidations(bool value);
@@ -236,9 +236,9 @@ class PLATFORM_EXPORT PaintController {
   void processNewItem(DisplayItem&);
   DisplayItem& moveItemFromCurrentListToNewList(size_t);
 
-  void showDebugDataInternal(bool showPictures) const;
+  void showDebugDataInternal(bool showPaintRecords) const;
   String displayItemListAsDebugString(const DisplayItemList&,
-                                      bool showPictures) const;
+                                      bool showPaintRecords) const;
 
   // Maps clients to indices of display items or chunks of each client.
   using IndicesByClientMap = HashMap<const DisplayItemClient*, Vector<size_t>>;
@@ -353,7 +353,7 @@ class PLATFORM_EXPORT PaintController {
   // This is used to check duplicated ids during createAndAppend().
   IndicesByClientMap m_newDisplayItemIndicesByClient;
 
-  Usage m_usage;
+  Usage m_usage = ForNormalUsage;
 #endif
 
   // These are set in useCachedDrawingIfPossible() and

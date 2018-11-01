@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "chrome/browser/permissions/permission_request.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents_delegate.h"
 
 class Profile;
@@ -25,27 +24,25 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
+namespace policy {
+class MediaStreamDevicesControllerBrowserTest;
+}
+
 class MediaStreamDevicesController : public PermissionRequest {
  public:
-  MediaStreamDevicesController(content::WebContents* web_contents,
-                               const content::MediaStreamRequest& request,
-                               const content::MediaResponseCallback& callback);
-
-  ~MediaStreamDevicesController() override;
+  static void RequestPermissions(
+      content::WebContents* web_contents,
+      const content::MediaStreamRequest& request,
+      const content::MediaResponseCallback& callback);
 
   // Registers the prefs backing the audio and video policies.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-  bool IsAllowedForAudio() const;
-  bool IsAllowedForVideo() const;
+  ~MediaStreamDevicesController() override;
+
   bool IsAskingForAudio() const;
   bool IsAskingForVideo() const;
   base::string16 GetMessageText() const;
-
-  // Returns the PermissionsType associated with the provided
-  // ContentSettingsType. |content_type| must be a media stream type.
-  content::PermissionType GetPermissionTypeForContentSettingsType(
-      ContentSettingsType content_type) const;
 
   // Forces the permissions to be denied (without being persisted) regardless
   // of what the previous state was.  If the user had previously allowed the
@@ -69,6 +66,16 @@ class MediaStreamDevicesController : public PermissionRequest {
   PermissionRequestType GetPermissionRequestType() const override;
 
  private:
+  friend class MediaStreamDevicesControllerTest;
+  friend class policy::MediaStreamDevicesControllerBrowserTest;
+
+  MediaStreamDevicesController(content::WebContents* web_contents,
+                               const content::MediaStreamRequest& request,
+                               const content::MediaResponseCallback& callback);
+
+  bool IsAllowedForAudio() const;
+  bool IsAllowedForVideo() const;
+
   // Returns a list of devices available for the request for the given
   // audio/video permission settings.
   content::MediaStreamDevices GetDevices(ContentSetting audio_setting,

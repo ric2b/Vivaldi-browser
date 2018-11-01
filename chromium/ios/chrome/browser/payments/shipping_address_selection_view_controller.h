@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 #include "ios/web/public/payments/payment_request.h"
 
@@ -16,12 +17,17 @@ class AutofillProfile;
 
 @class ShippingAddressSelectionViewController;
 
+// Delegate protocol for ShippingAddressSelectionViewController.
 @protocol ShippingAddressSelectionViewControllerDelegate<NSObject>
 
+// Notifies the delegate that the user has selected a shipping address.
 - (void)shippingAddressSelectionViewController:
             (ShippingAddressSelectionViewController*)controller
-                       selectedShippingAddress:
-                           (autofill::AutofillProfile*)shippingAddress;
+                      didSelectShippingAddress:
+                          (autofill::AutofillProfile*)shippingAddress;
+
+// Notifies the delegate that the user has chosen to return to the previous
+// screen without making a selection.
 - (void)shippingAddressSelectionViewControllerDidReturn:
     (ShippingAddressSelectionViewController*)controller;
 
@@ -32,19 +38,24 @@ class AutofillProfile;
 // delegate. Also offers a button to add a shipping address.
 @interface ShippingAddressSelectionViewController : CollectionViewController
 
-// The available shipping addresses to fulfill the payment request.
-@property(nonatomic, assign) std::vector<autofill::AutofillProfile*>
-    shippingAddresses;
+// Whether or not the view is in a pending state.
+@property(nonatomic, assign, getter=isPending) BOOL pending;
 
-// The shipping address selected by the user, if any.
-@property(nonatomic, assign) autofill::AutofillProfile* selectedShippingAddress;
+// The error message to display, if any.
+@property(nonatomic, copy) NSString* errorMessage;
 
 // The delegate to be notified when the user selects a shipping address or
 // returns without selecting one.
-@property(nonatomic, weak) id<ShippingAddressSelectionViewControllerDelegate>
-    delegate;
+@property(nonatomic, weak)
+    id<ShippingAddressSelectionViewControllerDelegate> delegate;
 
-- (instancetype)init NS_DESIGNATED_INITIALIZER;
+// Initializes this object with an instance of PaymentRequest which owns an
+// instance of web::PaymentRequest as provided by the page invoking the Payment
+// Request API. This object will not take ownership of |paymentRequest|.
+- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;

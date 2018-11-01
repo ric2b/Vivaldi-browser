@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.download;
 
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
+import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.util.IntentUtils;
 
 /**
@@ -32,6 +32,7 @@ public class DownloadBroadcastReceiver extends BroadcastReceiver {
             case DownloadNotificationService.ACTION_DOWNLOAD_CANCEL:
             case DownloadNotificationService.ACTION_DOWNLOAD_PAUSE:
             case DownloadNotificationService.ACTION_DOWNLOAD_OPEN:
+            case DownloadNotificationService.ACTION_DOWNLOAD_UPDATE_SUMMARY_ICON:
                 performDownloadOperation(context, intent);
                 break;
             default:
@@ -45,6 +46,10 @@ public class DownloadBroadcastReceiver extends BroadcastReceiver {
      * @param intent Intent from the android DownloadManager.
      */
     private void openDownload(final Context context, Intent intent) {
+        int notificationId = IntentUtils.safeGetIntExtra(
+                intent, NotificationConstants.EXTRA_NOTIFICATION_ID, -1);
+        DownloadNotificationService.hideDanglingSummaryNotification(context, notificationId);
+
         long ids[] =
                 intent.getLongArrayExtra(DownloadManager.EXTRA_NOTIFICATION_CLICK_DOWNLOAD_IDS);
         if (ids == null || ids.length == 0) {
@@ -75,10 +80,7 @@ public class DownloadBroadcastReceiver extends BroadcastReceiver {
      */
     private void performDownloadOperation(final Context context, Intent intent) {
         if (DownloadNotificationService.isDownloadOperationIntent(intent)) {
-            Intent launchIntent = new Intent(intent);
-            launchIntent.setComponent(new ComponentName(
-                    context.getPackageName(), DownloadNotificationService.class.getName()));
-            context.startService(launchIntent);
+            DownloadNotificationService.startDownloadNotificationService(context, intent);
         }
     }
 }

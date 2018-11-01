@@ -31,12 +31,14 @@
 #ifndef KeyframeEffectModel_h
 #define KeyframeEffectModel_h
 
+#include <memory>
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/EffectModel.h"
 #include "core/animation/InterpolationEffect.h"
 #include "core/animation/PropertyHandle.h"
 #include "core/animation/StringKeyframe.h"
+#include "core/animation/TransitionKeyframe.h"
 #include "core/animation/animatable/AnimatableValueKeyframe.h"
 #include "platform/animation/TimingFunction.h"
 #include "platform/heap/Handle.h"
@@ -44,7 +46,6 @@
 #include "wtf/HashSet.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
-#include <memory>
 
 namespace blink {
 
@@ -83,9 +84,9 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   void setFrames(KeyframeVector& keyframes);
 
   const PropertySpecificKeyframeVector& getPropertySpecificKeyframes(
-      PropertyHandle property) const {
+      const PropertyHandle& property) const {
     ensureKeyframeGroups();
-    return m_keyframeGroups->get(property)->keyframes();
+    return m_keyframeGroups->at(property)->keyframes();
   }
 
   using KeyframeGroupMap =
@@ -105,6 +106,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 
   virtual bool isAnimatableValueKeyframeEffectModel() const { return false; }
   virtual bool isStringKeyframeEffectModel() const { return false; }
+  virtual bool isTransitionKeyframeEffectModel() const { return false; }
 
   bool hasSyntheticKeyframes() const {
     ensureKeyframeGroups();
@@ -128,7 +130,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
     return normalizedKeyframes(keyframes);
   }
 
-  bool affects(PropertyHandle property) const override {
+  bool affects(const PropertyHandle& property) const override {
     ensureKeyframeGroups();
     return m_keyframeGroups->contains(property);
   }
@@ -187,6 +189,7 @@ class KeyframeEffectModel final : public KeyframeEffectModelBase {
 
   virtual bool isAnimatableValueKeyframeEffectModel() const { return false; }
   virtual bool isStringKeyframeEffectModel() const { return false; }
+  virtual bool isTransitionKeyframeEffectModel() const { return false; }
 };
 
 using KeyframeVector = KeyframeEffectModelBase::KeyframeVector;
@@ -205,6 +208,11 @@ using StringKeyframeVector = StringKeyframeEffectModel::KeyframeVector;
 using StringPropertySpecificKeyframeVector =
     StringKeyframeEffectModel::PropertySpecificKeyframeVector;
 
+using TransitionKeyframeEffectModel = KeyframeEffectModel<TransitionKeyframe>;
+using TransitionKeyframeVector = TransitionKeyframeEffectModel::KeyframeVector;
+using TransitionPropertySpecificKeyframeVector =
+    TransitionKeyframeEffectModel::PropertySpecificKeyframeVector;
+
 DEFINE_TYPE_CASTS(KeyframeEffectModelBase,
                   EffectModel,
                   value,
@@ -220,6 +228,11 @@ DEFINE_TYPE_CASTS(StringKeyframeEffectModel,
                   value,
                   value->isStringKeyframeEffectModel(),
                   value.isStringKeyframeEffectModel());
+DEFINE_TYPE_CASTS(TransitionKeyframeEffectModel,
+                  KeyframeEffectModelBase,
+                  value,
+                  value->isTransitionKeyframeEffectModel(),
+                  value.isTransitionKeyframeEffectModel());
 
 inline const AnimatableValueKeyframeEffectModel*
 toAnimatableValueKeyframeEffectModel(const EffectModel* base) {
@@ -241,6 +254,11 @@ inline StringKeyframeEffectModel* toStringKeyframeEffectModel(
   return toStringKeyframeEffectModel(toKeyframeEffectModelBase(base));
 }
 
+inline TransitionKeyframeEffectModel* toTransitionKeyframeEffectModel(
+    EffectModel* base) {
+  return toTransitionKeyframeEffectModel(toKeyframeEffectModelBase(base));
+}
+
 template <>
 inline bool KeyframeEffectModel<
     AnimatableValueKeyframe>::isAnimatableValueKeyframeEffectModel() const {
@@ -250,6 +268,12 @@ inline bool KeyframeEffectModel<
 template <>
 inline bool KeyframeEffectModel<StringKeyframe>::isStringKeyframeEffectModel()
     const {
+  return true;
+}
+
+template <>
+inline bool KeyframeEffectModel<
+    TransitionKeyframe>::isTransitionKeyframeEffectModel() const {
   return true;
 }
 

@@ -45,6 +45,7 @@
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
+#include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-encoders/JPEGImageEncoder.h"
 #include "platform/image-encoders/PNGImageEncoder.h"
@@ -53,7 +54,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "skia/ext/texture_handle.h"
-#include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkSwizzle.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
@@ -80,9 +80,15 @@ std::unique_ptr<ImageBuffer> ImageBuffer::create(
     OpacityMode opacityMode,
     ImageInitializationMode initializationMode,
     sk_sp<SkColorSpace> colorSpace) {
-  std::unique_ptr<ImageBufferSurface> surface(
-      WTF::wrapUnique(new UnacceleratedImageBufferSurface(
-          size, opacityMode, initializationMode, std::move(colorSpace))));
+  SkColorType colorType = kN32_SkColorType;
+  if (colorSpace && SkColorSpace::Equals(colorSpace.get(),
+                                         SkColorSpace::MakeSRGBLinear().get()))
+    colorType = kRGBA_F16_SkColorType;
+
+  std::unique_ptr<ImageBufferSurface> surface(WTF::wrapUnique(
+      new UnacceleratedImageBufferSurface(size, opacityMode, initializationMode,
+                                          std::move(colorSpace), colorType)));
+
   if (!surface->isValid())
     return nullptr;
   return WTF::wrapUnique(new ImageBuffer(std::move(surface)));
@@ -122,7 +128,7 @@ bool ImageBuffer::canCreateImageBuffer(const IntSize& size) {
   return true;
 }
 
-SkCanvas* ImageBuffer::canvas() const {
+PaintCanvas* ImageBuffer::canvas() const {
   return m_surface->canvas();
 }
 
@@ -142,18 +148,12 @@ bool ImageBuffer::isSurfaceValid() const {
   return m_surface->isValid();
 }
 
-bool ImageBuffer::isDirty() {
-  return m_client ? m_client->isDirty() : false;
+void ImageBuffer::finalizeFrame() {
+  m_surface->finalizeFrame();
 }
 
-void ImageBuffer::didFinalizeFrame() {
-  if (m_client)
-    m_client->didFinalizeFrame();
-}
-
-void ImageBuffer::finalizeFrame(const FloatRect& dirtyRect) {
-  m_surface->finalizeFrame(dirtyRect);
-  didFinalizeFrame();
+void ImageBuffer::doPaintInvalidation(const FloatRect& dirtyRect) {
+  m_surface->doPaintInvalidation(dirtyRect);
 }
 
 bool ImageBuffer::restoreSurface() const {
@@ -165,7 +165,7 @@ void ImageBuffer::notifySurfaceInvalid() {
     m_client->notifySurfaceInvalid();
 }
 
-void ImageBuffer::resetCanvas(SkCanvas* canvas) const {
+void ImageBuffer::resetCanvas(PaintCanvas* canvas) const {
   if (m_client)
     m_client->restoreCanvasMatrixClipStack(canvas);
 }
@@ -259,12 +259,12 @@ bool ImageBuffer::copyToPlatformTexture(SnapshotReason reason,
   // semantics are reversed.
   // It is expected that callers of this method have already allocated
   // the platform texture with the appropriate size.
-  gl->CopySubTextureCHROMIUM(sourceTexture, 0, texture, 0, destPoint.x(),
-                             destPoint.y(), sourceSubRectangle.x(),
-                             sourceSubRectangle.y(), sourceSubRectangle.width(),
-                             sourceSubRectangle.height(),
-                             flipY ? GL_FALSE : GL_TRUE, GL_FALSE,
-                             premultiplyAlpha ? GL_FALSE : GL_TRUE);
+  gl->CopySubTextureCHROMIUM(
+      sourceTexture, 0, GL_TEXTURE_2D, texture, 0, destPoint.x(), destPoint.y(),
+      sourceSubRectangle.x(), sourceSubRectangle.y(),
+      sourceSubRectangle.width(), sourceSubRectangle.height(),
+      flipY ? GL_FALSE : GL_TRUE, GL_FALSE,
+      premultiplyAlpha ? GL_FALSE : GL_TRUE);
 
   gl->DeleteTextures(1, &sourceTexture);
 
@@ -335,20 +335,22 @@ void ImageBuffer::flushGpu(FlushReason reason) {
 bool ImageBuffer::getImageData(Multiply multiplied,
                                const IntRect& rect,
                                WTF::ArrayBufferContents& contents) const {
-  CheckedNumeric<int> dataSize = 4;
+  uint8_t bytesPerPixel = 4;
+  if (m_surface->colorSpace())
+    bytesPerPixel = SkColorTypeBytesPerPixel(m_surface->colorType());
+  CheckedNumeric<int> dataSize = bytesPerPixel;
   dataSize *= rect.width();
   dataSize *= rect.height();
   if (!dataSize.IsValid())
     return false;
 
   if (!isSurfaceValid()) {
-    size_t allocSizeInBytes = rect.width() * rect.height() * 4;
-    void* data;
-    WTF::ArrayBufferContents::allocateMemoryOrNull(
-        allocSizeInBytes, WTF::ArrayBufferContents::ZeroInitialize, data);
+    size_t allocSizeInBytes = rect.width() * rect.height() * bytesPerPixel;
+    auto data = WTF::ArrayBufferContents::createDataHandle(
+        allocSizeInBytes, WTF::ArrayBufferContents::ZeroInitialize);
     if (!data)
       return false;
-    WTF::ArrayBufferContents result(data, allocSizeInBytes,
+    WTF::ArrayBufferContents result(std::move(data), allocSizeInBytes,
                                     WTF::ArrayBufferContents::NotShared);
     result.transfer(contents);
     return true;
@@ -371,16 +373,15 @@ bool ImageBuffer::getImageData(Multiply multiplied,
       || rect.x() < 0 || rect.y() < 0 ||
       rect.maxX() > m_surface->size().width() ||
       rect.maxY() > m_surface->size().height();
-  size_t allocSizeInBytes = rect.width() * rect.height() * 4;
-  void* data;
+  size_t allocSizeInBytes = rect.width() * rect.height() * bytesPerPixel;
   WTF::ArrayBufferContents::InitializationPolicy initializationPolicy =
       mayHaveStrayArea ? WTF::ArrayBufferContents::ZeroInitialize
                        : WTF::ArrayBufferContents::DontInitialize;
-  WTF::ArrayBufferContents::allocateMemoryOrNull(allocSizeInBytes,
-                                                 initializationPolicy, data);
+  auto data = WTF::ArrayBufferContents::createDataHandle(allocSizeInBytes,
+                                                         initializationPolicy);
   if (!data)
     return false;
-  WTF::ArrayBufferContents result(data, allocSizeInBytes,
+  WTF::ArrayBufferContents result(std::move(data), allocSizeInBytes,
                                   WTF::ArrayBufferContents::NotShared);
 
   // Skia does not support unpremultiplied read with an F16 to 8888 conversion
@@ -393,12 +394,19 @@ bool ImageBuffer::getImageData(Multiply multiplied,
   // use N32 at this time.
   SkColorType colorType =
       useF16Workaround ? kN32_SkColorType : kRGBA_8888_SkColorType;
-  SkImageInfo info =
-      SkImageInfo::Make(rect.width(), rect.height(), colorType, alphaType,
-                        SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named));
 
-  snapshot->readPixels(info, result.data(), 4 * rect.width(), rect.x(),
-                       rect.y());
+  // Only use sRGB when the surface has a color space.  Converting untagged
+  // pixels to a particular color space is not well-defined in Skia.
+  sk_sp<SkColorSpace> colorSpace = nullptr;
+  if (m_surface->colorSpace()) {
+    colorSpace = SkColorSpace::MakeSRGB();
+  }
+
+  SkImageInfo info = SkImageInfo::Make(rect.width(), rect.height(), colorType,
+                                       alphaType, std::move(colorSpace));
+
+  snapshot->readPixels(info, result.data(), bytesPerPixel * rect.width(),
+                       rect.x(), rect.y());
 
   if (useF16Workaround) {
     uint32_t* pixel = (uint32_t*)result.data();
@@ -432,6 +440,9 @@ void ImageBuffer::putByteArray(Multiply multiplied,
                                const IntPoint& destPoint) {
   if (!isSurfaceValid())
     return;
+  uint8_t bytesPerPixel = 4;
+  if (m_surface->colorSpace())
+    bytesPerPixel = SkColorTypeBytesPerPixel(m_surface->colorType());
 
   DCHECK_GT(sourceRect.width(), 0);
   DCHECK_GT(sourceRect.height(), 0);
@@ -450,14 +461,33 @@ void ImageBuffer::putByteArray(Multiply multiplied,
   DCHECK_GE(originY, 0);
   DCHECK_LT(originY, sourceRect.maxY());
 
-  const size_t srcBytesPerRow = 4 * sourceSize.width();
-  const void* srcAddr = source + originY * srcBytesPerRow + originX * 4;
-  SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType
-                                                        : kUnpremul_SkAlphaType;
-  SkImageInfo info = SkImageInfo::Make(
-      sourceRect.width(), sourceRect.height(), kRGBA_8888_SkColorType,
-      alphaType, SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named));
+  const size_t srcBytesPerRow = bytesPerPixel * sourceSize.width();
+  const void* srcAddr =
+      source + originY * srcBytesPerRow + originX * bytesPerPixel;
 
+  SkAlphaType alphaType;
+  if (Opaque == m_surface->getOpacityMode()) {
+    // If the surface is opaque, tell it that we are writing opaque
+    // pixels.  Writing non-opaque pixels to opaque is undefined in
+    // Skia.  There is some discussion about whether it should be
+    // defined in skbug.com/6157.  For now, we can get the desired
+    // behavior (memcpy) by pretending the write is opaque.
+    alphaType = kOpaque_SkAlphaType;
+  } else {
+    alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType
+                                              : kUnpremul_SkAlphaType;
+  }
+
+  SkImageInfo info;
+  if (m_surface->colorSpace()) {
+    info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(),
+                             m_surface->colorType(), alphaType,
+                             m_surface->colorSpace());
+  } else {
+    info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(),
+                             kRGBA_8888_SkColorType, alphaType,
+                             SkColorSpace::MakeSRGB());
+  }
   m_surface->writePixels(info, srcAddr, srcBytesPerRow, destX, destY);
 }
 
@@ -465,7 +495,8 @@ void ImageBuffer::updateGPUMemoryUsage() const {
   if (this->isAccelerated()) {
     // If image buffer is accelerated, we should keep track of GPU memory usage.
     int gpuBufferCount = 2;
-    CheckedNumeric<intptr_t> checkedGPUUsage = 4 * gpuBufferCount;
+    CheckedNumeric<intptr_t> checkedGPUUsage =
+        SkColorTypeBytesPerPixel(m_surface->colorType()) * gpuBufferCount;
     checkedGPUUsage *= this->size().width();
     checkedGPUUsage *= this->size().height();
     intptr_t gpuMemoryUsage =
@@ -519,7 +550,8 @@ void ImageBuffer::disableAcceleration() {
   std::unique_ptr<ImageBufferSurface> surface =
       WTF::wrapUnique(new RecordingImageBufferSurface(
           m_surface->size(), std::move(surfaceFactory),
-          m_surface->getOpacityMode(), m_surface->colorSpace()));
+          m_surface->getOpacityMode(), m_surface->colorSpace(),
+          m_surface->colorType()));
   setSurface(std::move(surface));
 }
 
@@ -527,13 +559,19 @@ void ImageBuffer::setSurface(std::unique_ptr<ImageBufferSurface> surface) {
   sk_sp<SkImage> image =
       m_surface->newImageSnapshot(PreferNoAcceleration, SnapshotReasonPaint);
 
+  // image can be null if alloaction failed in which case we should just
+  // abort the surface switch to reatain the old surface which is still
+  // functional.
+  if (!image)
+    return;
+
   if (surface->isRecording()) {
     // Using a GPU-backed image with RecordingImageBufferSurface
     // will fail at playback time.
     image = image->makeNonTextureImage();
   }
-
   surface->canvas()->drawImage(image.get(), 0, 0);
+
   surface->setImageBuffer(this);
   if (m_client)
     m_client->restoreCanvasMatrixClipStack(surface->canvas());

@@ -66,7 +66,6 @@
 #include "net/http/http_cache.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "ppapi/shared_impl/file_type_conversion.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -219,7 +218,7 @@ void RenderMessageFilter::CreateNewWindow(
       render_process_id_, params->opener_render_frame_id, params->opener_url,
       params->opener_top_level_frame_url, params->opener_security_origin,
       params->window_container_type, params->target_url, params->referrer,
-      params->frame_name, params->disposition, params->features,
+      params->frame_name, params->disposition, *params->features,
       params->user_gesture, params->opener_suppressed, resource_context_,
       &no_javascript_access);
 

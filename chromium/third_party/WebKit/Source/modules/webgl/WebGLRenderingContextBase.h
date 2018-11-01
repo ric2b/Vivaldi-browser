@@ -603,8 +603,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   friend class ScopedDrawingBufferBinder;
   friend class ScopedTexture2DRestorer;
   friend class ScopedFramebufferRestorer;
-  // To allow V8WebGL[2]RenderingContext to call visitChildDOMWrappers.
-  friend class V8WebGLRenderingContext;
   friend class ScopedUnpackParametersResetRestore;
 
   WebGLRenderingContextBase(HTMLCanvasElement*,
@@ -627,6 +625,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool paintRenderingResultsToCanvas(SourceDrawingBuffer) override;
   WebLayer* platformLayer() const override;
   void stop() override;
+  void finalizeFrame() override;
 
   // DrawingBuffer::Client implementation.
   bool DrawingBufferClientIsBoundForDraw() override;
@@ -648,10 +647,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // Query if depth_stencil buffer is supported.
   bool isDepthStencilSupported() { return m_isDepthStencilSupported; }
 
-  // Helper to return the size in bytes of OpenGL data types
-  // like GL_FLOAT, GL_INT, etc.
-  unsigned sizeInBytes(GLenum type) const;
-
   // Check if each enabled vertex attribute is bound to a buffer.
   bool validateRenderingState(const char*);
 
@@ -665,9 +660,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   virtual void resetUnpackParameters();
   // Restore the client unpack parameters.
   virtual void restoreUnpackParameters();
-
-  virtual void visitChildDOMWrappers(v8::Isolate*,
-                                     const v8::Persistent<v8::Object>&);
 
   PassRefPtr<Image> drawImageIntoBuffer(PassRefPtr<Image>,
                                         int width,
@@ -691,11 +683,12 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // real ones, it's likely that there's no JavaScript on the stack, but that
   // might be dependent on how exactly the platform discovers that the context
   // was lost. For better portability we always defer the dispatch of the event.
-  Timer<WebGLRenderingContextBase> m_dispatchContextLostEventTimer;
+  TaskRunnerTimer<WebGLRenderingContextBase> m_dispatchContextLostEventTimer;
   bool m_restoreAllowed;
-  Timer<WebGLRenderingContextBase> m_restoreTimer;
+  TaskRunnerTimer<WebGLRenderingContextBase> m_restoreTimer;
 
   bool m_markedCanvasDirty;
+  bool m_animationFrameInProgress;
 
   // List of bound VBO's. Used to maintain info about sizes for ARRAY_BUFFER and
   // stored values for ELEMENT_ARRAY_BUFFER
@@ -1636,9 +1629,11 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
  private:
   WebGLRenderingContextBase(HTMLCanvasElement*,
                             OffscreenCanvas*,
+                            RefPtr<WebTaskRunner>,
                             std::unique_ptr<WebGraphicsContext3DProvider>,
                             const CanvasContextCreationAttributes&,
                             unsigned);
+  static bool supportOwnOffscreenSurface(ExecutionContext*);
   static std::unique_ptr<WebGraphicsContext3DProvider>
   createContextProviderInternal(HTMLCanvasElement*,
                                 ScriptState*,

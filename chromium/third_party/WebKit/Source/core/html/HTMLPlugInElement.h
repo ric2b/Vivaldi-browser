@@ -27,15 +27,14 @@
 #include "bindings/core/v8/SharedPersistent.h"
 #include "core/CoreExport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-
-#include <v8.h>
+#include "v8/include/v8.h"
 
 namespace blink {
 
+class FrameViewBase;
 class HTMLImageLoader;
 class LayoutPart;
 class LayoutEmbeddedItem;
-class Widget;
 
 enum PreferPlugInsForImagesOption {
   ShouldPreferPlugInsForImages,
@@ -51,7 +50,7 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   // TODO(dcheng): Consider removing this, since HTMLEmbedElementLegacyCall
   // and HTMLObjectElementLegacyCall usage is extremely low.
   SharedPersistent<v8::Object>* pluginWrapper();
-  Widget* pluginWidget() const;
+  FrameViewBase* pluginWidget() const;
   bool canProcessDrag() const;
   const String& url() const { return m_url; }
 
@@ -158,7 +157,7 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   bool allowedToLoadObject(const KURL&, const String& mimeType);
   bool wouldLoadAsNetscapePlugin(const String& url, const String& serviceType);
 
-  void setPersistedPluginWidget(Widget*);
+  void setPersistedPluginWidget(FrameViewBase*);
 
   bool requestObjectInternal(const String& url,
                              const String& mimeType,
@@ -178,7 +177,7 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   // prevent confusing code which may assume that widget() != null
   // means the frame is active, we save off m_widget here while
   // the plugin is persisting but not being displayed.
-  Member<Widget> m_persistedPluginWidget;
+  Member<FrameViewBase> m_persistedPluginWidget;
 };
 
 inline bool isHTMLPlugInElement(const HTMLElement& element) {

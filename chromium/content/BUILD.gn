@@ -118,14 +118,16 @@ grit("resources") {
   ]
   grit_flags = [
     "-E",
-    "root_out_dir=" + rebase_path(root_out_dir, root_build_dir),
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
   ]
   deps = [
     "//content/public/app:browser_manifest",
     "//content/public/app:gpu_manifest",
+    "//content/public/app:packaged_services_manifest",
     "//content/public/app:plugin_manifest",
     "//content/public/app:renderer_manifest",
     "//content/public/app:utility_manifest",
+    "//mojo/public/js:bindings",
     "//services/catalog:manifest",
   ]
 }

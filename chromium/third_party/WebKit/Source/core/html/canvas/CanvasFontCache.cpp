@@ -60,7 +60,7 @@ bool CanvasFontCache::getFontUsingDefaultStyle(const String& fontString,
   if (i != m_fontsResolvedUsingDefaultStyle.end()) {
     ASSERT(m_fontLRUList.contains(fontString));
     m_fontLRUList.remove(fontString);
-    m_fontLRUList.add(fontString);
+    m_fontLRUList.insert(fontString);
     resolvedFont = i->value;
     return true;
   }
@@ -73,7 +73,7 @@ bool CanvasFontCache::getFontUsingDefaultStyle(const String& fontString,
   RefPtr<ComputedStyle> fontStyle =
       ComputedStyle::clone(*m_defaultFontStyle.get());
   m_document->ensureStyleResolver().computeFont(fontStyle.get(), *parsedStyle);
-  m_fontsResolvedUsingDefaultStyle.add(fontString, fontStyle->font());
+  m_fontsResolvedUsingDefaultStyle.insert(fontString, fontStyle->font());
   resolvedFont = m_fontsResolvedUsingDefaultStyle.find(fontString)->value;
   return true;
 }
@@ -85,7 +85,7 @@ MutableStylePropertySet* CanvasFontCache::parseFont(const String& fontString) {
     ASSERT(m_fontLRUList.contains(fontString));
     parsedStyle = i->value;
     m_fontLRUList.remove(fontString);
-    m_fontLRUList.add(fontString);
+    m_fontLRUList.insert(fontString);
   } else {
     parsedStyle = MutableStylePropertySet::create(HTMLStandardMode);
     CSSParser::parseValue(parsedStyle, CSSPropertyFont, fontString, true);
@@ -99,15 +99,15 @@ MutableStylePropertySet* CanvasFontCache::parseFont(const String& fontString) {
     if (fontValue &&
         (fontValue->isInitialValue() || fontValue->isInheritedValue()))
       return nullptr;
-    m_fetchedFonts.add(fontString, parsedStyle);
-    m_fontLRUList.add(fontString);
+    m_fetchedFonts.insert(fontString, parsedStyle);
+    m_fontLRUList.insert(fontString);
     // Hard limit is applied here, on the fly, while the soft limit is
     // applied at the end of the task.
     if (m_fetchedFonts.size() > hardMaxFonts()) {
       ASSERT(m_fetchedFonts.size() == hardMaxFonts() + 1);
       ASSERT(m_fontLRUList.size() == hardMaxFonts() + 1);
-      m_fetchedFonts.remove(m_fontLRUList.first());
-      m_fontsResolvedUsingDefaultStyle.remove(m_fontLRUList.first());
+      m_fetchedFonts.erase(m_fontLRUList.first());
+      m_fontsResolvedUsingDefaultStyle.erase(m_fontLRUList.first());
       m_fontLRUList.removeFirst();
     }
   }
@@ -120,8 +120,8 @@ void CanvasFontCache::didProcessTask() {
   ASSERT(m_pruningScheduled);
   ASSERT(m_mainCachePurgePreventer);
   while (m_fetchedFonts.size() > maxFonts()) {
-    m_fetchedFonts.remove(m_fontLRUList.first());
-    m_fontsResolvedUsingDefaultStyle.remove(m_fontLRUList.first());
+    m_fetchedFonts.erase(m_fontLRUList.first());
+    m_fontsResolvedUsingDefaultStyle.erase(m_fontLRUList.first());
     m_fontLRUList.removeFirst();
   }
   m_mainCachePurgePreventer.reset();

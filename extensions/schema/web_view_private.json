@@ -281,6 +281,42 @@
             "name": "instanceId"
           }
         ]
+      },
+      {
+        "name": "sendRequest",
+        "type": "function",
+        "description": "Navigates the webview to a given URL but with greater control over the sent request.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          },
+          {
+            "type": "string",
+            "name": "url",
+            "description": "The URL of the page to navigate to."
+          },
+          {
+            "type": "boolean",
+            "name": "wasTyped",
+            "description":  "Whether the URL was typed out by the user."
+          },
+          {
+            "type": "boolean",
+            "name": "usePost",
+            "description": "Whether to perform the navigation via POST."
+          },
+          {
+            "type": "string",
+            "name": "postData",
+            "description": "When using POST, this will be the body of the request."
+          },
+          {
+            "type": "string",
+            "name": "extraHeaders",
+            "description": "Extra headers to pass with the request. See OpenURLParams in chromium code."
+          }
+        ]
       }
     ]
   }

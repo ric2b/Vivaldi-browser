@@ -128,6 +128,12 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
         mToolbarButtons = new TintedImageButton[] {mBackButton, mForwardButton, mReloadButton};
     }
 
+    @Override
+    protected int getProgressBarTopMargin() {
+        int tabStripHeight = getResources().getDimensionPixelSize(R.dimen.tab_strip_height);
+        return super.getProgressBarTopMargin() + tabStripHeight;
+    }
+
     /**
      * Sets up key listeners after native initialization is complete, so that we can invoke
      * native functions.
@@ -327,8 +333,11 @@ public class ToolbarTablet extends ToolbarLayout implements OnClickListener {
         super.onTabOrModelChanged();
         boolean incognito = isIncognito();
         if (mUseLightColorAssets == null || mUseLightColorAssets != incognito) {
-            setBackgroundResource(incognito
-                    ? R.color.incognito_primary_color : R.color.default_primary_color);
+            int colorResource =
+                    incognito ? R.color.incognito_primary_color : R.color.default_primary_color;
+            setBackgroundResource(colorResource);
+            getProgressBar().setThemeColor(
+                    ApiCompatibilityUtils.getColor(getResources(), colorResource), isIncognito());
 
             mMenuButton.setTint(incognito ? mLightModeTint : mDarkModeTint);
             mHomeButton.setTint(incognito ? mLightModeTint : mDarkModeTint);

@@ -5,6 +5,9 @@
 
 #include "sync/vivaldi_signin_client.h"
 
+#include <memory>
+#include <string>
+
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"

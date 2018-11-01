@@ -10,10 +10,16 @@ static_library("tether") {
     "ble_advertisement_device_queue.h",
     "ble_advertiser.cc",
     "ble_advertiser.h",
+    "ble_connection_manager.cc",
+    "ble_connection_manager.h",
     "ble_constants.cc",
     "ble_constants.h",
     "ble_scanner.cc",
     "ble_scanner.h",
+    "connect_tethering_operation.cc",
+    "connect_tethering_operation.h",
+    "host_scan_device_prioritizer.cc",
+    "host_scan_device_prioritizer.h",
     "host_scan_scheduler.cc",
     "host_scan_scheduler.h",
     "host_scanner.cc",
@@ -22,12 +28,23 @@ static_library("tether") {
     "initializer.h",
     "local_device_data_provider.cc",
     "local_device_data_provider.h",
+    "message_transfer_operation.cc",
+    "message_transfer_operation.h",
+    "message_wrapper.cc",
+    "message_wrapper.h",
+    "pref_names.cc",
+    "pref_names.h",
+    "tether_host_fetcher.cc",
+    "tether_host_fetcher.h",
   ]
 
   deps = [
     "//base",
     "//chromeos",
+    "//chromeos/components/tether/proto",
     "//components/cryptauth",
+    "//components/cryptauth/ble",
+    "//components/prefs",
     "//components/proximity_auth/logging",
     "//device/bluetooth",
   ]
@@ -41,6 +58,8 @@ static_library("test_support") {
   testonly = true
 
   sources = [
+    "fake_ble_connection_manager.cc",
+    "fake_ble_connection_manager.h",
     "mock_local_device_data_provider.cc",
     "mock_local_device_data_provider.h",
   ]
@@ -62,9 +81,15 @@ source_set("unit_tests") {
   sources = [
     "ble_advertisement_device_queue_unittest.cc",
     "ble_advertiser_unittest.cc",
+    "ble_connection_manager_unittest.cc",
     "ble_scanner_unittest.cc",
+    "connect_tethering_operation_unittest.cc",
+    "host_scan_device_prioritizer_unittest.cc",
     "host_scan_scheduler_unittest.cc",
     "local_device_data_provider_unittest.cc",
+    "message_transfer_operation_unittest.cc",
+    "message_wrapper_unittest.cc",
+    "tether_host_fetcher_unittest.cc",
   ]
 
   deps = [
@@ -72,8 +97,11 @@ source_set("unit_tests") {
     ":tether",
     "//base/test:test_support",
     "//chromeos",
+    "//chromeos/components/tether/proto",
     "//components/cryptauth",
     "//components/cryptauth:test_support",
+    "//components/cryptauth/ble",
+    "//components/prefs:test_support",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
     "//testing/gmock",

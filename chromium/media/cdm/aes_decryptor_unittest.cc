@@ -27,6 +27,7 @@
 #include "media/cdm/cdm_file_io.h"
 #include "media/cdm/external_clear_key_test_helper.h"
 #include "media/cdm/simple_cdm_allocator.h"
+#include "media/media_features.h"
 #include "ppapi/features/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest-param-test.h"
@@ -34,6 +35,7 @@
 #include "url/gurl.h"
 
 using ::testing::_;
+using ::testing::AtMost;
 using ::testing::Gt;
 using ::testing::IsNull;
 using ::testing::NotNull;
@@ -50,6 +52,9 @@ MATCHER(IsJSONDictionary, "") {
   std::string result(arg.begin(), arg.end());
   std::unique_ptr<base::Value> root(base::JSONReader().ReadToValue(result));
   return (root.get() && root->GetType() == base::Value::Type::DICTIONARY);
+}
+MATCHER(IsNullTime, "") {
+  return arg.is_null();
 }
 
 namespace media {
@@ -363,6 +368,12 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
       EXPECT_CALL(cdm_client_, OnSessionKeysChangeCalled(_, _)).Times(0);
     }
 
+    // AesDecryptor never calls OnSessionExpirationUpdate() since Clear Key key
+    // system doesn't need it. But ClearKeyCdm does call it for testing purpose.
+    EXPECT_CALL(cdm_client_,
+                OnSessionExpirationUpdate(session_id, IsNullTime()))
+        .Times(AtMost(1));
+
     cdm_->UpdateSession(session_id,
                         std::vector<uint8_t>(key.begin(), key.end()),
                         CreatePromise(expected_result));
@@ -537,7 +548,7 @@ TEST_P(AesDecryptorTest, CreateSessionWithCencInitData) {
       0x00, 0x00, 0x00, 0x00  // datasize
   };
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
       CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::CENC,

@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Raadionuppude rühm</translation>
 <translation id="2471138580042810658">6. pealkiri</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{tärn}other{# tärni}}</translation>
+<translation id="2523609930580546572">ChromeVoxi õpetused</translation>
 <translation id="2525706221823668172">Chromebooki klaviatuuri otseteed</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> on lähtestatud.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
@@ -222,7 +223,6 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">Külastatud link</translation>
 <translation id="3232388865800379423">Hüpiknupp</translation>
-<translation id="323731244387692321">ChromeVoxi klaviatuuri abi avamine</translation>
 <translation id="3241052487511142956">Eelmine külastatud link</translation>
 <translation id="3286390186030710347">Liugur</translation>
 <translation id="3299925995433437805">Järgmist külastatud linki pole.</translation>
@@ -377,6 +377,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="4372435075475052704">min: <ph name="X" /></translation>
 <translation id="4372705107434148843">Kõne lõpetam</translation>
 <translation id="4373197658375206385">Kõik eelmised üksused on lingid.</translation>
+<translation id="4376316291247992553">Graafika kuvatakse punktkirjas</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">lähtesta</translation>
 <translation id="4471074325120394300">Linke ei ole.</translation>
@@ -719,6 +720,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="7693840228159394336">Eelmine raadionupp</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, parooli tekstikast</translation>
+<translation id="7776293189010177726">ChromeVoxi menüüde avamine</translation>
 <translation id="7805247615045262757">vaikimisi navigeerimine</translation>
 <translation id="7805768142964895445">Olek</translation>
 <translation id="7810781339813764006">Järgmine rühm</translation>

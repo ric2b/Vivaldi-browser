@@ -5,7 +5,7 @@
 <translation id="1049795001945932310">Ρυθμίσεις &amp;γλώσσας</translation>
 <translation id="1056898198331236512">Προειδοποίηση</translation>
 <translation id="1084824384139382525">Αντιγραφή διεύθυνσης &amp;συνδέσμου</translation>
-<translation id="114140604515785785">Κατάλογος ρίζας επέκτασης: </translation>
+<translation id="114140604515785785">Κατάλογος ρίζας επέκτασης:</translation>
 <translation id="1163931534039071049">&amp;Προβολή κώδικα πλαισίου</translation>
 <translation id="1165039591588034296">Σφάλμα</translation>
 <translation id="1175364870820465910">&amp;Εκτύπωση...</translation>
@@ -16,15 +16,19 @@
 <translation id="1368832886055348810">Από αριστερά προς τα δεξιά</translation>
 <translation id="1465176863081977902">Α&amp;ντιγραφή Διεύθυνσης Ήχου</translation>
 <translation id="1476607407192946488">Ρυθμίσεις &amp;γλώσσας</translation>
+<translation id="1507705801791187716">Υπέροχα, δεν υπάρχουν σφάλματα!</translation>
+<translation id="1515163294334130951">Εκκίνηση</translation>
 <translation id="1546280085599573572">Αυτή η επέκταση άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας.</translation>
 <translation id="1588438908519853928">Κανονική λειτουργία</translation>
+<translation id="159359590073980872">Προσωρινή Μνήμη Εικόνας</translation>
 <translation id="1616206807336925449">Αυτή η επέκταση δεν απαιτεί ειδικά δικαιώματα.</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
+<translation id="1627276047960621195">Περιγραφές Αρχείων</translation>
 <translation id="1635033183663317347">Εγκαταστάθηκε από τον κηδεμόνα σας.</translation>
-<translation id="1652965563555864525">&amp;Σίγαση</translation>
 <translation id="1723824996674794290">&amp;Νέο παράθυρο</translation>
 <translation id="1725149567830788547">Εμφάνιση &amp;Στοιχείων Ελέγχου</translation>
 <translation id="1729533290416704613">Επίσης, ελέγχει τη σελίδα που εμφανίζεται όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
+<translation id="176587472219019965">&amp;Νέο παράθυρο</translation>
 <translation id="1769104665586091481">Άνοιγμα Συνδέσμου σε Νέο Παρά&amp;θυρο</translation>
 <translation id="1789575671122666129">Αναδυόμενα παράθυρα</translation>
 <translation id="1815083418640426271">Επικόλληση ως Απλό Κείμενο</translation>
@@ -32,14 +36,15 @@
 <translation id="1859234291848436338">Κατεύθυνση γραφής</translation>
 <translation id="1901303067676059328">Επιλογή όλ&amp;ων</translation>
 <translation id="1965328510789761112">Ιδιωτική μνήμη</translation>
+<translation id="1989112275319619282">Επιλογή</translation>
 <translation id="1992397118740194946">Δεν έχει οριστεί</translation>
-<translation id="2011110593081822050">Web Worker: <ph name="WORKER_NAME" /></translation>
 <translation id="2019718679933488176">&amp;Άνοιγμα Ήχου σε Νέα Καρτέλα</translation>
 <translation id="2076269580855484719">Απόκρυψη αυτής της προσθήκης</translation>
 <translation id="2087822576218954668">Εκτύπωση: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Επαναφόρτωση &amp;Πλαισίου</translation>
 <translation id="2129825002735785149">Ενημέρωση προσθήκης</translation>
 <translation id="2147827593068025794">Συγχρονισμός παρασκηνίου</translation>
+<translation id="2148892889047469596">Μετάδοση καρτέλας</translation>
 <translation id="215753907730220065">Έξοδος από πλήρη οθόνη</translation>
 <translation id="2177950615300672361">Καρτέλα ανώνυμης περιήγησης: <ph name="TAB_NAME" /></translation>
 <translation id="2187317261103489799">Εντοπισμός (προεπιλογή)</translation>
@@ -51,6 +56,7 @@
 <translation id="2327492829706409234">Ενεργοποίηση εφαρμογής</translation>
 <translation id="2344028582131185878">Αυτόματες λήψεις</translation>
 <translation id="2348176352564285430">Εφαρμογή: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2357949918965361754">Μπορείτε να χρησιμοποιήσετε αυτήν τη λειτουργία για να εμφανίσετε το περιεχόμενο από το Vivaldi στην τηλεόρασή σας ή άλλες συσκευές.</translation>
 <translation id="2378982052244864789">Επιλέξτε τον κατάλογο επεκτάσεων.</translation>
 <translation id="241082044617551207">Άγνωστη προσθήκη</translation>
 <translation id="2423578206845792524">Αποθήκευση εικόνας &amp;ως...</translation>
@@ -60,12 +66,13 @@
 <translation id="2482878487686419369">Ειδοποιήσεις</translation>
 <translation id="2501797496290880632">Πληκτρολογήστε μια συντόμευση</translation>
 <translation id="2509857212037838238">Εγκατάσταση <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;Παύση</translation>
 <translation id="2550212893339833758">Μνήμη ανταλλαγής</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Εκ νέου ενεργοποίηση</translation>
+<translation id="2721037002783622288">&amp;Αναζήτηση <ph name="SEARCH_ENGINE" /> για εικόνα</translation>
 <translation id="2785873697295365461">Περιγραφές αρχείων</translation>
 <translation id="2809586584051668049">και ακόμη <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2847759467426165163">Μετάδοση σε</translation>
 <translation id="2850541429955027218">Προσθήκη θέματος</translation>
 <translation id="2861941300086904918">Πρόγραμμα διαχείρισης ασφαλείας Native Client</translation>
 <translation id="2868746137289129307">Αυτή η επέκταση δεν είναι ενημερωμένη και έχει απενεργοποιηθεί από την εταιρική πολιτική. Ενδέχεται να ενεργοποιηθεί αυτόματα όταν υπάρχει διαθέσιμη μια νεότερη έκδοση.</translation>
@@ -73,15 +80,21 @@
 <translation id="2941112035454246133">Χαμηλή</translation>
 <translation id="2972581237482394796">&amp;Επανάληψη ενέργειας</translation>
 <translation id="299483336428448530">Εγκαταστάθηκε από το γονέα σας.</translation>
+<translation id="3003623123441819449">Προσωρινή μνήμη CSS</translation>
 <translation id="3021678814754966447">&amp;Προβολή Κώδικα Πλαισίου</translation>
+<translation id="3031601332414921114">Συνέχιση εκτύπωσης</translation>
 <translation id="3080207940057008665">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε ένα θέμα, το οποίο ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
+<translation id="3084548735795614657">Αποθέστε για εγκατάσταση</translation>
 <translation id="3122464029669770682">Κεντρική μονάδα επεξεργασίας</translation>
 <translation id="3124111068741548686">Χειρισμοί ΧΡΗΣΤΗ</translation>
 <translation id="3222066309010235055">Απόδοση λειτουργίας εκ των προτέρων: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Μικρόφωνο</translation>
+<translation id="32279126412636473">Επαναφόρτωση (⌘R)</translation>
 <translation id="3241680850019875542">Επιλέξτε τον κατάλογο ρίζας της επέκτασης που θέλετε να στοιβάξετε. Για να ενημερώσετε μια επέκταση, επιλέξτε επίσης το αρχείο ιδιωτικού κλειδιού που θα επαναχρησιμοποιηθεί.</translation>
 <translation id="3280237271814976245">Αποθήκευση &amp;ως...</translation>
+<translation id="3285322247471302225">Νέα καρτέλα</translation>
 <translation id="3288047731229977326">Οι επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή μπορούν να βλάψουν τον υπολογιστή σας. Εάν δεν είστε προγραμματιστής, θα πρέπει να απενεργοποιήσετε αυτές τις επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή για να διατηρήσετε την ασφάλειά σας.</translation>
+<translation id="329838636886466101">Επιδιόρθωση</translation>
 <translation id="33022249435934718">Χειρισμοί GDI</translation>
 <translation id="3319048459796106952">Νέο &amp;παράθυρο ανώνυμης περιήγησης</translation>
 <translation id="3347086966102161372">Α&amp;ντιγραφή της διεύθυνσης εικόνας</translation>
@@ -99,6 +112,7 @@
 <translation id="3760460896538743390">Έλεγχος &amp;Σελίδας Παρασκηνίου</translation>
 <translation id="3789841737615482174">Εγκατάσταση</translation>
 <translation id="3798449238516105146">Έκδοση</translation>
+<translation id="3862134173397075045">Καλώς ήρθατε στην εμπειρία Cast στο Vivaldi!</translation>
 <translation id="3866249974567520381">Περιγραφή</translation>
 <translation id="3905761538810670789">Επισκευή εφαρμογής</translation>
 <translation id="3908393983276948098">Η προσθήκη <ph name="PLUGIN_NAME" /> δεν είναι ενημερωμένη</translation>
@@ -107,10 +121,9 @@
 <translation id="3927932062596804919">Άρνηση</translation>
 <translation id="3936390757709632190">&amp;Άνοιγμα ήχου σε νέα καρτέλα</translation>
 <translation id="3943582379552582368">&amp;Πίσω</translation>
-<translation id="3954582159466790312">Κατάργηση &amp;σίγασης</translation>
+<translation id="3948116654032448504">&amp;Αναζήτηση <ph name="SEARCH_ENGINE" /> για εικόνα</translation>
 <translation id="3979395879372752341">Προστέθηκε νέα επέκταση (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
-<translation id="4059285154003114015">Ε&amp;κτύπωση Πλαισίου…</translation>
 <translation id="4087089424473531098">Δημιουργήθηκε η επέκταση:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -129,28 +142,31 @@
 <translation id="4256316378292851214">Αποθήκευση&amp; Βίντεο ως...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (πραγματικά <ph name="NUM_KILOBYTES_LIVE" />K)</translation>
 <translation id="4312866146174492540">Αποκλεισμός (προεπιλογή)</translation>
+<translation id="4348766275249686434">Συλλέξτε τα λάθη</translation>
+<translation id="4363771538994847871">Δεν βρέθηκαν προορισμοί μετάδοσης. Χρειάζεστε βοήθεια;</translation>
 <translation id="4384652540891215547">Ενεργοποίηση επέκτασης</translation>
 <translation id="4394049700291259645">Απενεργοποίηση</translation>
+<translation id="4414232939543644979">Νέο παράθυρο για ανώνυμη περιήγηση</translation>
 <translation id="4423482519432579560">&amp;Ορθογραφικός έλεγχος</translation>
 <translation id="4478664379124702289">Αποθήκευση Συν&amp;δέσμου ως...</translation>
 <translation id="4522570452068850558">Λεπτομέρειες</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4557136421275541763">Προειδοποίηση:</translation>
+<translation id="4579581181964204535">Δεν είναι δυνατή η μετάδοση <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Μετάβαση σε <ph name="URL" /></translation>
 <translation id="4595560905247879544">Οι εφαρμογές και οι επεκτάσεις μπορούν να τροποποιηθούν μόνο από τον διαχειριστή(<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Κάποια επέκταση άλλαξε το περιεχόμενο της σελίδας όταν ανοίγετε μια νέα καρτέλα.</translation>
-<translation id="4623537843784569564">Αυτή η επέκταση μάλλον δεν ενημερώθηκε σωστά. Δοκιμάστε να την εγκαταστήσετε ξανά.</translation>
 <translation id="4643612240819915418">&amp;Άνοιγμα Βίντεο σε Νέα Καρτέλα</translation>
 <translation id="4677772697204437347">Μνήμη GPU</translation>
+<translation id="4688541352655220763">Μπορείτε να χρησιμοποιήσετε αυτήν τη λειτουργία για την προβολή περιεχομένου από το Vivaldi στην τηλεόραση ή σε άλλες συσκευές σας.</translation>
 <translation id="4711638718396952945">Επαναφορά ρυθμίσεων</translation>
 <translation id="4839303808932127586">Αποθήκευση&amp; βίντεο ως...</translation>
+<translation id="4850258771229959924">Προβολή στα Εργαλεία για Προγραμματιστές</translation>
 <translation id="4851858059374029925">Να εγκατασταθεί η προσθήκη <ph name="PLUGIN_NAME" />; Φροντίστε να εγκαθιστάτε μόνο αξιόπιστες προσθήκες.</translation>
-<translation id="4861833787540810454">&amp;Αναπαραγωγή</translation>
-<translation id="4883993111890464517">Η επέκταση μπορεί να έχει καταστραφεί. Δοκιμάστε να την εγκαταστήσετε ξανά.</translation>
 <translation id="488785315393301722">Εμφάνιση λεπτομερειών</translation>
 <translation id="4911714727432509308">Δεν έχουν εκχωρηθεί συντομεύσεις πληκτρολογίου σε επεκτάσεις.</translation>
-<translation id="4919987486109157213">Η επέκταση έχει καταστραφεί. Δοκιμάστε να την εγκαταστήσετε ξανά.</translation>
 <translation id="4927301649992043040">Στοίβαξη επέκτασης</translation>
+<translation id="4927753642311223124">Δεν υπάρχει τίποτα να δεις, φύγε από εδώ.</translation>
 <translation id="49896407730300355">Περιστροφή προς τα &amp;αριστερά</translation>
 <translation id="4989966318180235467">Έλεγχος &amp;σελίδας παρασκηνίου</translation>
 <translation id="5027562294707732951">Προσθήκη επέκτασης</translation>
@@ -158,13 +174,16 @@
 <translation id="5116628073786783676">Αποθή&amp;κευση Ήχου ως...</translation>
 <translation id="5143374789336132547">Η επέκταση <ph name="EXTENSION_NAME" /> άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας.</translation>
 <translation id="5154917547274118687">Μνήμη</translation>
+<translation id="5171343362375269016">Μνήμη ανταλλαγής</translation>
 <translation id="5233019165164992427">NaCl Εντοπισμός σφαλμάτων θύρας</translation>
 <translation id="5233231016133573565">Αναγνωριστικό διαδικασίας</translation>
 <translation id="5233638681132016545">Νέα καρτέλα</translation>
+<translation id="5233736638227740678">&amp;Επικόλληση</translation>
 <translation id="52912272896845572">Το ιδιωτικό κλειδί δεν είναι έγκυρο.</translation>
 <translation id="5301954838959518834">Εντάξει, το κατάλαβα</translation>
-<translation id="5311260548612583999">Αρχείο ιδ. κλειδιού (προαιρετικό): </translation>
+<translation id="5311260548612583999">Αρχείο ιδ. κλειδιού (προαιρετικό):</translation>
 <translation id="5329858601952122676">&amp;Διαγραφή</translation>
+<translation id="5334142896108694079">Προσωρινή μνήμη Δέσμης Ενεργειών</translation>
 <translation id="5355926466126177564">Η επέκταση "<ph name="EXTENSION_NAME" />" άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
 <translation id="5362741141255528695">Επιλέξτε το αρχείο ιδιωτικού κλειδιού.</translation>
 <translation id="5370819323174483825">Ε&amp;πανάληψη φόρτωσης</translation>
@@ -172,15 +191,19 @@
 <translation id="5483785310822538350">Ανάκληση πρόσβασης στο αρχείο και τη συσκευή</translation>
 <translation id="5485102783864353244">Προσθήκη εφαρμογής</translation>
 <translation id="5486561344817861625">Προσομοίωση Επανεκκίνησης Προγράμματος Περιήγησης</translation>
+<translation id="5488468185303821006">Να επιτρέπεται στην ανώνυμη περιήγηση</translation>
 <translation id="5509693895992845810">Αποθήκευση &amp;ως...</translation>
 <translation id="5521078259930077036">Είναι αυτή η αρχική σελίδα που περιμένατε;</translation>
 <translation id="5532223876348815659">Γενικές</translation>
 <translation id="5542132724887566711">Προφίλ</translation>
 <translation id="5556459405103347317">Επαναφόρτωση</translation>
 <translation id="5575473780076478375">Επέκταση ανώνυμης περιήγησης: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5623842676595125836">Αρχείο Καταγραφής</translation>
 <translation id="5627086634964711283">Επίσης, ελέγχει τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας.</translation>
 <translation id="5646376287012673985">Τοποθεσία</translation>
+<translation id="5707185214361380026">Αποτυχία φόρτωσης επέκτασης από:</translation>
 <translation id="5715711091495208045">Μεσάζων προσθηκών: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5729996640881880439">Συγγνώμη, δεν μπορούμε να δείξουμε τον κώδικα για αυτό το σφάλμα.</translation>
 <translation id="5764483294734785780">Αποθή&amp;κευση ήχου ως...</translation>
 <translation id="5778550464785688721">Πλήρης έλεγχος συσκευών MIDI</translation>
 <translation id="5780973441651030252">Προτεραιότητα διεργασίας</translation>
@@ -192,12 +215,16 @@
 <translation id="5956585768868398362">Είναι αυτή η σελίδα αναζήτησης που περιμένατε;</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> μέγιστη τιμή)</translation>
 <translation id="5965661248935608907">Επίσης, ελέγχει τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας ή όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
+<translation id="6040143037577758943">Κλείσιμο</translation>
 <translation id="6101226222197207147">Προστέθηκε νέα εφαρμογή (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Η σύνδεσή σας στο διαδίκτυο παρακολουθείται</translation>
 <translation id="6124650939968185064">Οι ακόλουθες επεκτάσεις εξαρτώνται από αυτήν την επέκταση:</translation>
 <translation id="6156863943908443225">Προσωρινή μνήμη σεναρίου</translation>
+<translation id="6169666352732958425">Αδυναμία μετάδοσης επιφάνειας εργασίας.</translation>
+<translation id="6171948306033499786">Παύση εκτύπωσης</translation>
 <translation id="6196854373336333322">Η επέκταση "<ph name="EXTENSION_NAME" />" ελέγχει τις ρυθμίσεις διακομιστή μεσολάβησης. Αυτό σημαίνει ότι μπορεί να αλλάξει, να διακόψει ή να παρακολουθήσει όλες τις ενέργειες που εκτελείτε στο διαδίκτυο. Εάν δεν είστε βέβαιοι για το λόγο αυτής της αλλαγής, πιθανότατα να μην την επιθυμούσατε.</translation>
 <translation id="6206311232642889873">Αντι&amp;γραφή Εικόνας</translation>
+<translation id="6220413761270491930">Σφάλμα κατά τη Φόρτωση Επέκτασης</translation>
 <translation id="6239558157302047471">Επαναφόρτωση &amp;πλαισίου</translation>
 <translation id="6247802389331535091">Σύστημα: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">Χειρισμοί GDI</translation>
@@ -214,32 +241,41 @@
 <translation id="6518014396551869914">Αντι&amp;γραφή εικόνας</translation>
 <translation id="6550675742724504774">Επιλογές</translation>
 <translation id="6639554308659482635">Μνήμη SQLite</translation>
+<translation id="6655190889273724601">Λειτουργία προγραμματιστή</translation>
 <translation id="6691936601825168937">&amp;Προώθηση</translation>
+<translation id="6700480081846086223">Μετάδοση <ph name="HOST_NAME" /></translation>
 <translation id="6786747875388722282">Επεκτάσεις</translation>
 <translation id="6787839852456839824">Συντομεύσεις πληκτρολογίου</translation>
 <translation id="6798954102094737107">Προσθήκη: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Διατήρηση αλλαγών</translation>
-<translation id="6844537474943985871">Αυτή η επέκταση ενδεχομένως να έχει καταστραφεί. Δοκιμάστε να την απεγκαταστήσετε και έπειτα να την εγκαταστήσετε ξανά.</translation>
+<translation id="682123305478866682">Μετάδοση επιφάνειας εργασίας</translation>
+<translation id="6841186874966388268">Σφάλματα</translation>
 <translation id="6863910145616405334">Η προσθήκη δεν βρέθηκε</translation>
 <translation id="6886871292305414135">Άνοιγμα συνδέσμου σε νέα καρτέ&amp;λα</translation>
 <translation id="6900284862687837908">Εφαρμογή παρασκηνίου: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Ανάκληση πρόσβασης σε αρχεία</translation>
+<translation id="6943176775188458830">Ακύρωση εκτύπωσης</translation>
 <translation id="6974053822202609517">Από δεξιά προς τα αριστερά</translation>
+<translation id="6985276906761169321">ID:</translation>
 <translation id="7013485839273047434">Αποκτήστε περισσότερες επεκτάσεις</translation>
 <translation id="708060913198414444">Α&amp;ντιγραφή διεύθυνσης ήχου</translation>
 <translation id="7105578512429498960">Εγκαταστήστε την προσθήκη <ph name="PLUGIN_NAME" /> για προβολή αυτού του περιεχομένου</translation>
 <translation id="7144878232160441200">Δοκιμάστε ξανά</translation>
+<translation id="7175353351958621980">Φορτώθηκε από:</translation>
 <translation id="7206693748120342859">Γίνεται λήψη της προσθήκης <ph name="PLUGIN_NAME" />…</translation>
+<translation id="7223775956298141902">Δεν έχετε επεκτάσεις :-(</translation>
 <translation id="7287143125007575591">Δεν επιτρέπεται η πρόσβαση.</translation>
+<translation id="7293919849802650062">Καλώς ήρθατε στην εμπειρία Μετάδοσης στο Vivaldi!</translation>
 <translation id="7309257895202129721">Εμφάνιση &amp;στοιχείων ελέγχου</translation>
+<translation id="7346909386216857016">Εντάξει, το κατάλαβα</translation>
 <translation id="7361297102842600584">Κάντε δεξί κλικ για εκτέλεση της προσθήκης <ph name="PLUGIN_NAME" /></translation>
 <translation id="7401543881546089382">Διαγραφή συντόμευσης</translation>
+<translation id="7412226954991670867">Μνήμη GPU</translation>
 <translation id="7421925624202799674">&amp;Προβολή Κώδικα Σελίδας</translation>
-<translation id="7427348830195639090"> σελίδα: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7427348830195639090">Σελίδα παρασκηνίου: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Νέα καρτέλα</translation>
 <translation id="7564847347806291057">Τερματισμός διαδικασίας</translation>
-<translation id="7618337809041914424">Ε&amp;κτύπωση πλαισίου…</translation>
 <translation id="7629827748548208700">Καρτέλα: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Ακύρωση</translation>
 <translation id="7663719505383602579">Δέκτης: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -250,6 +286,7 @@
 <translation id="7786889348652477777">Ε&amp;πανάληψη Φόρτωσης Εφαρμογής</translation>
 <translation id="7791543448312431591">Προσθήκη</translation>
 <translation id="7800518121066352902">Περιστροφή προς τα &amp;Αριστερά</translation>
+<translation id="7814458197256864873">&amp;Αντιγραφή</translation>
 <translation id="7818135753970109980">Προστέθηκε νέο θέμα (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Α&amp;ντιγραφή διεύθυνσης βίντεο</translation>
 <translation id="7849264908733290972">Άνοιγμα Ε&amp;ικόνας σε Νέα Καρτέλα</translation>
@@ -257,9 +294,11 @@
 <translation id="786073089922909430">Υπηρεσία: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Βοηθητικό πρόγραμμα: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">Α&amp;ντιγραφή Διεύθυνσης Βίντεο</translation>
+<translation id="7965010376480416255">Κοινόχρηστη μνήμη</translation>
 <translation id="7966241909927244760">Α&amp;ντιγραφή της Διεύθυνσης Εικόνας</translation>
 <translation id="7978412674231730200">Ιδιωτικό κλειδί</translation>
 <translation id="7982789257301363584">Δίκτυο</translation>
+<translation id="7997826902155442747">Προτεραιότητα Διεργασίας</translation>
 <translation id="7999229196265990314">Δημιουργήθηκαν τα παρακάτω αρχεία:
 
 Επέκταση: <ph name="EXTENSION_FILE" />
@@ -267,6 +306,7 @@
 
 Διατηρείτε το αρχείο κλειδιού σε ασφαλές μέρος. Θα το χρειαστείτε για τη δημιουργία νέων εκδόσεων της επέκτασής σας.</translation>
 <translation id="8004582292198964060">Πρόγραμμα περιήγησης</translation>
+<translation id="8032244173881942855">Δεν είναι δυνατή η μετάδοση της καρτέλας.</translation>
 <translation id="8037357227543935929">Να γίνεται ερώτηση (προεπιλογή)</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;Ορθογραφικός έλεγχος στα πεδία κειμένου</translation>
@@ -281,22 +321,30 @@
 <translation id="8512476990829870887">Τερματισμός Διαδικασίας</translation>
 <translation id="8546306075665861288">Προσωρινή μνήμη εικόνας</translation>
 <translation id="8584280235376696778">&amp;Άνοιγμα βίντεο σε νέα καρτέλα</translation>
+<translation id="8605428685123651449">Μνήμη SQLite</translation>
 <translation id="8615618338313291042">Εφαρμογή ανώνυμης περιήγησης: <ph name="APP_NAME" /></translation>
+<translation id="8627151598708688654">Επιλογή πηγής</translation>
 <translation id="862750493060684461">Προσωρινή μνήμη CSS</translation>
 <translation id="8661290697478713397">Άνοιγμα Συνδέσμου σε Ιδιωτικό Παράθυρο</translation>
 <translation id="8664389313780386848">&amp;Προβολή κώδικα σελίδας</translation>
 <translation id="8719653885894320876">Η λήψη της προσθήκης <ph name="PLUGIN_NAME" /> απέτυχε</translation>
 <translation id="873545264931343897">Μόλις ολοκληρωθεί η ενημέρωση της προσθήκης <ph name="PLUGIN_NAME" />, επαναλάβετε τη φόρτωση της σελίδας για να την ενεργοποιήσετε</translation>
+<translation id="8757090071857742562">Δεν είναι δυνατή η μετάδοση της επιφάνειας εργασίας. Ελέγξτε για να διαπιστώσετε εάν έχετε επιβεβαιώσει την εντολή έναρξης της κοινής χρήσης της οθόνης σας.</translation>
 <translation id="8763204422633679667">Μόλις ολοκληρωθεί η εγκατάσταση της προσθήκης <ph name="PLUGIN_NAME" />, επαναλάβετε τη φόρτωση της σελίδας για να την ενεργοποιήσετε</translation>
 <translation id="8798099450830957504">Προεπιλογή</translation>
 <translation id="8808478386290700967">Ηλεκτρονικό κατάστημα</translation>
+<translation id="8845001906332463065">Ζήτα βοήθεια</translation>
 <translation id="8859174528519900719">Υποπλαίσιο: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Άνοιγμα συνδέσμου σε νέο παρά&amp;θυρο</translation>
+<translation id="8910146161325739742">Κοινή χρήση της οθόνης σας</translation>
 <translation id="8916476537757519021">Υποπλαίσιο ανώνυμης περιήγησης: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8938356204940892126">Τα παρατάω</translation>
+<translation id="895944840846194039">Μνήμη JavaScript</translation>
 <translation id="8962083179518285172">Απόκρυψη λεπτομερειών</translation>
+<translation id="9003647077635673607">Να επιτρέπεται σε όλους τους ιστότοπους</translation>
 <translation id="9027459031423301635">Άνοιγμα Συνδέσμου σε Νέα Καρτέ&amp;λα</translation>
 <translation id="9088234649737575428">Η προσθήκη <ph name="PLUGIN_NAME" /> αποκλείστηκε λόγω επιχειρηματικής πολιτικής</translation>
-<translation id="9101691533782776290">Εκκίνηση εφαρμογής</translation>
+<translation id="9153341767479566106">Άλλες επεκτάσεις που απέτυχαν να φορτωθούν:</translation>
 <translation id="9170848237812810038">Αναί&amp;ρεση</translation>
 <translation id="9215293857209265904">Προστέθηκε η επέκταση "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="9219103736887031265">Εικόνες</translation>

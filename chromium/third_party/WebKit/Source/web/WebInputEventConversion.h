@@ -31,49 +31,28 @@
 #ifndef WebInputEventConversion_h
 #define WebInputEventConversion_h
 
-#include "platform/PlatformMouseEvent.h"
-#include "platform/PlatformTouchEvent.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebInputEvent.h"
+#include "public/platform/WebKeyboardEvent.h"
 #include "public/platform/WebMouseWheelEvent.h"
+#include "public/platform/WebTouchEvent.h"
 #include "web/WebExport.h"
 #include "wtf/Compiler.h"
 #include <vector>
 
 namespace blink {
 
+class FrameViewBase;
 class KeyboardEvent;
 class MouseEvent;
 class LayoutItem;
 class TouchEvent;
 class WebGestureEvent;
-class WebMouseEvent;
 class WebKeyboardEvent;
-class WebTouchEvent;
-class Widget;
 
 // These classes are used to convert from WebInputEvent subclasses to
 // corresponding WebCore events.
 
-class WEB_EXPORT PlatformMouseEventBuilder
-    : NON_EXPORTED_BASE(public PlatformMouseEvent) {
- public:
-  PlatformMouseEventBuilder(Widget*, const WebMouseEvent&);
-};
-
-// Converts a WebTouchPoint to a PlatformTouchPoint.
-class WEB_EXPORT PlatformTouchPointBuilder
-    : NON_EXPORTED_BASE(public PlatformTouchPoint) {
- public:
-  PlatformTouchPointBuilder(Widget*, const WebTouchPoint&);
-};
-
-// Converts a WebTouchEvent to a PlatformTouchEvent.
-class WEB_EXPORT PlatformTouchEventBuilder
-    : NON_EXPORTED_BASE(public PlatformTouchEvent) {
- public:
-  PlatformTouchEventBuilder(Widget*, const WebTouchEvent&);
-};
 
 class WEB_EXPORT WebMouseEventBuilder
     : NON_EXPORTED_BASE(public WebMouseEvent) {
@@ -82,8 +61,12 @@ class WEB_EXPORT WebMouseEventBuilder
   // NOTE: This is only implemented for mousemove, mouseover, mouseout,
   // mousedown and mouseup. If the event mapping fails, the event type will
   // be set to Undefined.
-  WebMouseEventBuilder(const Widget*, const LayoutItem, const MouseEvent&);
-  WebMouseEventBuilder(const Widget*, const LayoutItem, const TouchEvent&);
+  WebMouseEventBuilder(const FrameViewBase*,
+                       const LayoutItem,
+                       const MouseEvent&);
+  WebMouseEventBuilder(const FrameViewBase*,
+                       const LayoutItem,
+                       const TouchEvent&);
 };
 
 // Converts a KeyboardEvent to a corresponding WebKeyboardEvent.
@@ -107,17 +90,23 @@ class WEB_EXPORT WebTouchEventBuilder
 
 // Return a new transformed WebGestureEvent by applying the Widget's scale
 // and translation.
-WEB_EXPORT WebGestureEvent TransformWebGestureEvent(Widget*,
+WEB_EXPORT WebGestureEvent TransformWebGestureEvent(FrameViewBase*,
                                                     const WebGestureEvent&);
-WEB_EXPORT WebMouseWheelEvent
-TransformWebMouseWheelEvent(Widget*, const WebMouseWheelEvent&);
+WEB_EXPORT WebMouseEvent TransformWebMouseEvent(FrameViewBase*,
+                                                const WebMouseEvent&);
 
-Vector<PlatformMouseEvent> WEB_EXPORT
-createPlatformMouseEventVector(Widget*,
-                               const std::vector<const WebInputEvent*>&);
-Vector<PlatformTouchEvent> WEB_EXPORT
-createPlatformTouchEventVector(Widget*,
-                               const std::vector<const WebInputEvent*>&);
+WEB_EXPORT WebMouseWheelEvent
+TransformWebMouseWheelEvent(FrameViewBase*, const WebMouseWheelEvent&);
+
+WEB_EXPORT WebTouchEvent TransformWebTouchEvent(FrameViewBase*,
+                                                const WebTouchEvent&);
+
+Vector<WebMouseEvent> WEB_EXPORT
+TransformWebMouseEventVector(FrameViewBase*,
+                             const std::vector<const WebInputEvent*>&);
+Vector<WebTouchEvent> WEB_EXPORT
+TransformWebTouchEventVector(FrameViewBase*,
+                             const std::vector<const WebInputEvent*>&);
 
 }  // namespace blink
 

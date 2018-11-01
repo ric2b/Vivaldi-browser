@@ -6,9 +6,10 @@
 // https://w3c.github.io/sensors/#sensor0
 
 enum SensorState {
-  "idle",
+  "unconnected",
   "activating",
-  "active",
+  "activated",
+  "idle",
   "errored"
 };
 
@@ -18,10 +19,10 @@ enum SensorState {
     RuntimeEnabled=Sensor,
 ] interface Sensor : EventTarget {
     readonly attribute SensorState state;
-    readonly attribute SensorReading? reading;
+    [CallWith=ScriptState] readonly attribute DOMHighResTimeStamp? timestamp;
 
-    [CallWith=ScriptState, RaisesException, MeasureAs=GenericSensorStart] void start();
-    [CallWith=ScriptState, RaisesException, MeasureAs=GenericSensorStop] void stop();
+    [MeasureAs=GenericSensorStart] void start();
+    [MeasureAs=GenericSensorStop] void stop();
 
     attribute EventHandler onerror;
     attribute EventHandler onchange;

@@ -32,13 +32,12 @@
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "platform/graphics/ColorBehavior.h"
+#include "public/platform/WebThread.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/StringHash.h"
-
-class SkCanvas;
 
 namespace blink {
 
@@ -51,12 +50,21 @@ class WebLayer;
 enum CanvasColorSpace {
   kLegacyCanvasColorSpace,
   kSRGBCanvasColorSpace,
-  kLinearRGBCanvasColorSpace,
+  kRec2020CanvasColorSpace,
+  kP3CanvasColorSpace,
+};
+
+enum CanvasPixelFormat {
+  kRGBA8CanvasPixelFormat,
+  kRGB10A2CanvasPixelFormat,
+  kRGBA12CanvasPixelFormat,
+  kF16CanvasPixelFormat,
 };
 
 class CORE_EXPORT CanvasRenderingContext
     : public GarbageCollectedFinalized<CanvasRenderingContext>,
-      public ScriptWrappable {
+      public ScriptWrappable,
+      public WebThread::TaskObserver {
   WTF_MAKE_NONCOPYABLE(CanvasRenderingContext);
   USING_PRE_FINALIZER(CanvasRenderingContext, dispose);
 
@@ -86,9 +94,19 @@ class CORE_EXPORT CanvasRenderingContext
 
   CanvasColorSpace colorSpace() const { return m_colorSpace; };
   WTF::String colorSpaceAsString() const;
-  sk_sp<SkColorSpace> skColorSpace() const;
+  CanvasPixelFormat pixelFormat() const { return m_pixelFormat; };
+  WTF::String pixelFormatAsString() const;
+  bool linearPixelMath() const { return m_linearPixelMath; };
+
+  // The color space in which the the content should be interpreted by the
+  // compositor. This is always defined.
+  gfx::ColorSpace gfxColorSpace() const;
+  // The color space that should be used for SkSurface creation. This may
+  // be nullptr.
+  sk_sp<SkColorSpace> skSurfaceColorSpace() const;
   SkColorType colorType() const;
   ColorBehavior colorBehaviorForMediaDrawnToCanvas() const;
+  bool skSurfacesUseColorSpace() const;
 
   virtual PassRefPtr<Image> getImage(AccelerationHint,
                                      SnapshotReason) const = 0;
@@ -103,6 +121,7 @@ class CORE_EXPORT CanvasRenderingContext
     NOTREACHED();
   }
   virtual bool isPaintable() const = 0;
+  virtual void didDraw(const SkIRect& dirtyRect);
 
   // Return true if the content is updated.
   virtual bool paintRenderingResultsToCanvas(SourceDrawingBuffer) {
@@ -125,9 +144,18 @@ class CORE_EXPORT CanvasRenderingContext
   };
   virtual void loseContext(LostContextMode) {}
 
+  // This method gets called at the end of script tasks that modified
+  // the contents of the canvas (called didDraw). It marks the completion
+  // of a presentable frame.
+  virtual void finalizeFrame() {}
+
+  // WebThread::TaskObserver implementation
+  void didProcessTask() override;
+  void willProcessTask() final {}
+
   // Canvas2D-specific interface
   virtual bool is2d() const { return false; }
-  virtual void restoreCanvasMatrixClipStack(SkCanvas*) const {}
+  virtual void restoreCanvasMatrixClipStack(PaintCanvas*) const {}
   virtual void reset() {}
   virtual void clearRect(double x, double y, double width, double height) {}
   virtual void didSetSurfaceSize() {}
@@ -144,7 +172,6 @@ class CORE_EXPORT CanvasRenderingContext
   virtual String getIdFromControl(const Element* element) { return String(); }
   virtual bool isAccelerationOptimalForCanvasContent() const { return true; }
   virtual void resetUsageTracking(){};
-  virtual void incrementFrameCount(){};
 
   // WebGL-specific interface
   virtual bool is3d() const { return false; }
@@ -192,7 +219,10 @@ class CORE_EXPORT CanvasRenderingContext
   HashSet<String> m_cleanURLs;
   HashSet<String> m_dirtyURLs;
   CanvasColorSpace m_colorSpace;
+  CanvasPixelFormat m_pixelFormat;
+  bool m_linearPixelMath = false;
   CanvasContextCreationAttributes m_creationAttributes;
+  bool m_finalizeFrameScheduled = false;
 };
 
 }  // namespace blink

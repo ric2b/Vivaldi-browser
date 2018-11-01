@@ -6,12 +6,12 @@
 
 #include <vector>
 
-#include "base/strings/stringprintf.h"
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/spdy_utils.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_socket_address.h"
+#include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_quic_spdy_client_stream.h"
 #include "net/quic/test_tools/quic_config_peer.h"
@@ -23,7 +23,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using google::protobuf::implicit_cast;
-using base::StringPrintf;
 using std::string;
 using testing::AnyNumber;
 using testing::Invoke;
@@ -66,7 +65,7 @@ class TestQuicClientSession : public QuicClientSession {
 class QuicClientSessionTest : public ::testing::TestWithParam<QuicVersion> {
  protected:
   QuicClientSessionTest()
-      : crypto_config_(CryptoTestUtils::ProofVerifierForTesting()),
+      : crypto_config_(crypto_test_utils::ProofVerifierForTesting()),
         promised_stream_id_(kServerDataStreamId1),
         associated_stream_id_(kClientDataStreamId1) {
     Initialize();
@@ -105,11 +104,11 @@ class QuicClientSessionTest : public ::testing::TestWithParam<QuicVersion> {
     session_->CryptoConnect();
     QuicCryptoClientStream* stream =
         static_cast<QuicCryptoClientStream*>(session_->GetCryptoStream());
-    CryptoTestUtils::FakeServerOptions options;
+    crypto_test_utils::FakeServerOptions options;
     QuicConfig config = DefaultQuicConfig();
     config.SetMaxIncomingDynamicStreamsToSend(server_max_incoming_streams);
-    CryptoTestUtils::HandshakeWithFakeServer(&config, &helper_, &alarm_factory_,
-                                             connection_, stream, options);
+    crypto_test_utils::HandshakeWithFakeServer(
+        &config, &helper_, &alarm_factory_, connection_, stream, options);
   }
 
   QuicCryptoClientConfig crypto_config_;
@@ -152,7 +151,7 @@ TEST_P(QuicClientSessionTest, NoEncryptionAfterInitialEncryption) {
   // an inchoate CHLO to be sent and will leave the encryption level
   // at NONE.
   CryptoHandshakeMessage rej;
-  CryptoTestUtils::FillInDummyReject(&rej, /* stateless */ false);
+  crypto_test_utils::FillInDummyReject(&rej, /* stateless */ false);
   EXPECT_TRUE(session_->IsEncryptionEstablished());
   session_->GetCryptoStream()->OnHandshakeMessage(rej);
   EXPECT_FALSE(session_->IsEncryptionEstablished());
@@ -294,7 +293,7 @@ TEST_P(QuicClientSessionTest, InvalidFramedPacketReceived) {
   QuicConnectionId connection_id = session_->connection()->connection_id();
   QuicVersionVector versions = {GetParam()};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
-      connection_id, false, false, false, kDefaultPathId, 100, "data",
+      connection_id, false, false, kDefaultPathId, 100, "data",
       PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, &versions,
       Perspective::IS_SERVER));
   std::unique_ptr<QuicReceivedPacket> received(
@@ -407,7 +406,7 @@ TEST_P(QuicClientSessionTest, PushPromiseDuplicateUrl) {
 
 TEST_P(QuicClientSessionTest, ReceivingPromiseEnhanceYourCalm) {
   for (size_t i = 0u; i < session_->get_max_promises(); i++) {
-    push_promise_[":path"] = StringPrintf("/bar%zu", i);
+    push_promise_[":path"] = QuicStringPrintf("/bar%zu", i);
 
     QuicStreamId id = promised_stream_id_ + i * 2;
 
@@ -421,7 +420,7 @@ TEST_P(QuicClientSessionTest, ReceivingPromiseEnhanceYourCalm) {
 
   // One more promise, this should be refused.
   int i = session_->get_max_promises();
-  push_promise_[":path"] = StringPrintf("/bar%d", i);
+  push_promise_[":path"] = QuicStringPrintf("/bar%d", i);
 
   QuicStreamId id = promised_stream_id_ + i * 2;
   EXPECT_CALL(*connection_, SendRstStream(id, QUIC_REFUSED_STREAM, 0));

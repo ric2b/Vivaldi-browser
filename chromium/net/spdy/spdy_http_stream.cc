@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <list>
+#include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -36,6 +38,7 @@ SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
     : MultiplexedHttpStream(MultiplexedSessionHandle(spdy_session)),
       spdy_session_(spdy_session),
       is_reused_(spdy_session_->IsReused()),
+      stream_(nullptr),
       stream_closed_(false),
       closed_stream_status_(ERR_FAILED),
       closed_stream_id_(0),
@@ -55,9 +58,9 @@ SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
 }
 
 SpdyHttpStream::~SpdyHttpStream() {
-  if (stream_.get()) {
+  if (stream_) {
     stream_->DetachDelegate();
-    DCHECK(!stream_.get());
+    DCHECK(!stream_);
   }
 }
 
@@ -77,7 +80,7 @@ int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
       return error;
 
     // |stream_| may be NULL even if OK was returned.
-    if (stream_.get()) {
+    if (stream_) {
       DCHECK_EQ(stream_->type(), SPDY_PUSH_STREAM);
       InitializeStreamHelper();
       return OK;
@@ -91,7 +94,7 @@ int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
                  weak_factory_.GetWeakPtr(), callback));
 
   if (rv == OK) {
-    stream_ = stream_request_.ReleaseStream();
+    stream_ = stream_request_.ReleaseStream().get();
     InitializeStreamHelper();
   }
 
@@ -103,7 +106,7 @@ int SpdyHttpStream::ReadResponseHeaders(const CompletionCallback& callback) {
   if (stream_closed_)
     return closed_stream_status_;
 
-  CHECK(stream_.get());
+  CHECK(stream_);
 
   // Check if we already have the response headers. If so, return synchronously.
   if (response_headers_complete_) {
@@ -127,7 +130,7 @@ int SpdyHttpStream::ReadResponseBody(
   // anymore.
   request_info_ = nullptr;
 
-  if (stream_.get())
+  if (stream_)
     CHECK(!stream_->IsIdle());
 
   CHECK(buf);
@@ -155,7 +158,7 @@ void SpdyHttpStream::Close(bool not_reusable) {
   // Note: the not_reusable flag has no meaning for SPDY streams.
 
   Cancel();
-  DCHECK(!stream_.get());
+  DCHECK(!stream_);
 }
 
 bool SpdyHttpStream::IsResponseBodyComplete() const {
@@ -212,7 +215,7 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
   }
 
   base::Time request_time = base::Time::Now();
-  CHECK(stream_.get());
+  CHECK(stream_);
 
   stream_->SetRequestTime(request_time);
   // This should only get called in the case of a request occurring
@@ -283,9 +286,9 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
 void SpdyHttpStream::Cancel() {
   request_callback_.Reset();
   response_callback_.Reset();
-  if (stream_.get()) {
+  if (stream_) {
     stream_->Cancel();
-    DCHECK(!stream_.get());
+    DCHECK(!stream_);
   }
 }
 
@@ -334,7 +337,7 @@ void SpdyHttpStream::OnDataReceived(std::unique_ptr<SpdyBuffer> buffer) {
   // Note that data may be received for a SpdyStream prior to the user calling
   // ReadResponseBody(), therefore user_buffer_ may be NULL.  This may often
   // happen for server initiated streams.
-  DCHECK(stream_.get());
+  DCHECK(stream_);
   DCHECK(!stream_->IsClosed() || stream_->type() == SPDY_PUSH_STREAM);
   if (buffer) {
     response_body_queue_.Enqueue(std::move(buffer));
@@ -360,7 +363,7 @@ void SpdyHttpStream::OnClose(int status) {
   if (request_info_ && request_info_->upload_data_stream)
     request_info_->upload_data_stream->Reset();
 
-  if (stream_.get()) {
+  if (stream_) {
     stream_closed_ = true;
     closed_stream_status_ = status;
     closed_stream_id_ = stream_->stream_id();
@@ -369,7 +372,7 @@ void SpdyHttpStream::OnClose(int status) {
     closed_stream_received_bytes_ = stream_->raw_received_bytes();
     closed_stream_sent_bytes_ = stream_->raw_sent_bytes();
   }
-  stream_.reset();
+  stream_ = nullptr;
 
   // Callbacks might destroy |this|.
   base::WeakPtr<SpdyHttpStream> self = weak_factory_.GetWeakPtr();
@@ -404,7 +407,7 @@ void SpdyHttpStream::OnStreamCreated(
     const CompletionCallback& callback,
     int rv) {
   if (rv == OK) {
-    stream_ = stream_request_.ReleaseStream();
+    stream_ = stream_request_.ReleaseStream().get();
     InitializeStreamHelper();
   }
   callback.Run(rv);
@@ -435,7 +438,7 @@ void SpdyHttpStream::InitializeStreamHelper() {
 }
 
 void SpdyHttpStream::ResetStreamInternal() {
-  spdy_session_->ResetStream(stream()->stream_id(), RST_STREAM_INTERNAL_ERROR,
+  spdy_session_->ResetStream(stream()->stream_id(), ERROR_CODE_INTERNAL_ERROR,
                              std::string());
 }
 
@@ -503,7 +506,7 @@ void SpdyHttpStream::DoBufferedReadCallback() {
 
   // If the transaction is cancelled or errored out, we don't need to complete
   // the read.
-  if (!stream_.get() && !stream_closed_)
+  if (!stream_ && !stream_closed_)
     return;
 
   int stream_status =

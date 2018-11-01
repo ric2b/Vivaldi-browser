@@ -28,7 +28,6 @@
 
 @synthesize context = _context;
 @synthesize browserState = _browserState;
-@synthesize rootViewController = _rootViewController;
 @synthesize childCoordinators = _childCoordinators;
 @synthesize parentCoordinator = _parentCoordinator;
 @synthesize overlaying = _overlaying;
@@ -39,10 +38,6 @@
     _childCoordinators = [NSMutableSet set];
   }
   return self;
-}
-
-- (void)dealloc {
-  [self stop];
 }
 
 #pragma mark - Public API
@@ -72,7 +67,7 @@
   [self.childCoordinators addObject:coordinator];
   coordinator.parentCoordinator = self;
   coordinator.browserState = self.browserState;
-  coordinator.rootViewController = self.viewController;
+  coordinator.context.baseViewController = self.viewController;
 }
 
 - (BrowserCoordinator*)overlayCoordinator {

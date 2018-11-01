@@ -19,4 +19,4 @@ ScopedGroupNotesActions::~ScopedGroupNotesActions() {
   if (model_)
     model_->EndGroupedChanges();
 }
-}
+}  // namespace vivaldi

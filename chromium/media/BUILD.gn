@@ -21,10 +21,13 @@ buildflag_header("media_features") {
     "ENABLE_AC3_EAC3_AUDIO_DEMUXING=$enable_ac3_eac3_audio_demuxing",
     "ENABLE_CBCS_ENCRYPTION_SCHEME=$enable_cbcs_encryption_scheme",
     "ENABLE_HEVC_DEMUXING=$enable_hevc_demuxing",
+    "ENABLE_DOLBY_VISION_DEMUXING=$enable_dolby_vision_demuxing",
     "ENABLE_HLS_SAMPLE_AES=$enable_hls_sample_aes",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
+    "ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION=$enable_runtime_media_renderer_selection",
     "ENABLE_MEDIA_REMOTING=$enable_media_remoting",
     "ENABLE_WEBRTC=$enable_webrtc",
+    "USE_PROPRIETARY_CODECS=$proprietary_codecs",
   ]
 }
 
@@ -77,7 +80,7 @@ config("media_dependent_config") {
       "/DELAYLOAD:mfreadwrite.dll",
     ]
   }
-  if (media_use_ffmpeg && is_android) {
+  if (disable_ffmpeg_video_decoders) {
     defines += [ "DISABLE_FFMPEG_VIDEO_DECODERS" ]
   }
 }
@@ -274,11 +277,31 @@ component("media") {
   defines = []
   deps = [
     ":cdm_api",
+    "//base",
+    "//base:i18n",
+    "//base/third_party/dynamic_annotations",
+    "//cc/paint",
+    "//crypto",
+    "//crypto:platform",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/common",
+    "//skia",
+    "//third_party/libwebm",
+    "//third_party/libyuv",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gl:gl",
+    "//url",
   ]
 
   public_configs = [ "//third_party/libwebm:libwebm_config" ]
   public_deps = [
     ":filters_common",
+    ":media_features",
+    ":shared_memory_support",
+    "//media/audio",
+    "//media/base",
     "//ui/gfx:color_space",
   ]
 
@@ -328,6 +351,12 @@ component("media") {
       ]
     }
   }
+  if (proprietary_codecs && enable_dolby_vision_demuxing) {
+    sources += [
+      "formats/mp4/dolby_vision.cc",
+      "formats/mp4/dolby_vision.h",
+    ]
+  }
 
   if (current_cpu == "arm" && arm_use_neon) {
     defines += [ "USE_NEON" ]
@@ -344,7 +373,7 @@ component("media") {
   if (is_android) {
     # On Android, FFmpeg is built without video decoders. We only
     # support hardware video decoding.
-    if (media_use_ffmpeg) {
+    if (disable_ffmpeg_video_decoders) {
       sources -= [
         "filters/ffmpeg_video_decoder.cc",
         "filters/ffmpeg_video_decoder.h",
@@ -364,16 +393,6 @@ component("media") {
       "//media/base/android",
       "//media/base/android:media_jni_headers",
     ]
-
-    # Only 64 bit builds are using the android-21 NDK library.
-    if (current_cpu == "arm64" || current_cpu == "x64" ||
-        current_cpu == "mips64el") {
-      sources += [
-        "base/android/ndk_media_codec_bridge.cc",
-        "base/android/ndk_media_codec_bridge.h",
-        "base/android/ndk_media_codec_wrapper.cc",
-      ]
-    }
     allow_circular_includes_from = [ "//media/base/android" ]
   }
 
@@ -497,31 +516,6 @@ component("media") {
       "device_monitors/device_monitor_udev.h",
     ]
   }
-
-  public_deps += [
-    ":media_features",
-    ":shared_memory_support",
-    "//media/audio",
-    "//media/base",
-  ]
-
-  deps += [
-    "//base",
-    "//base:i18n",
-    "//base/third_party/dynamic_annotations",
-    "//crypto",
-    "//crypto:platform",
-    "//gpu/command_buffer/client:gles2_interface",
-    "//gpu/command_buffer/common",
-    "//skia",
-    "//third_party/libwebm",
-    "//third_party/libyuv",
-    "//ui/events:events_base",
-    "//ui/gfx",
-    "//ui/gfx/geometry",
-    "//ui/gl:gl",
-    "//url",
-  ]
 }
 
 static_library("cdm_paths") {
@@ -717,6 +711,9 @@ source_set("unit_tests") {
     if (enable_hls_sample_aes) {
       deps += [ "//third_party/boringssl" ]
     }
+    if (enable_dolby_vision_demuxing) {
+      sources += [ "formats/mp4/dolby_vision_unittest.cc" ]
+    }
   }
 
   if (is_mac || is_ios) {
@@ -809,8 +806,8 @@ test("media_perftests") {
   ]
 }
 
-# For running the subset of media_unittests that might require audio hardware
-# separately on GPU bots. media_unittests includes these too.
+# The audio subset of media_unittests. This target exists for running only the
+# audio tests on the GPU bots (which have audio hardware).
 test("audio_unittests") {
   deps = [
     ":test_support",
@@ -820,6 +817,14 @@ test("audio_unittests") {
     "//media/test:run_all_unittests",
     "//ui/gfx:test_support",
   ]
+  if (is_android) {
+    deps += [
+      # The test needs the java dependencies to add the java classes for their
+      # native counterparts to the test apk.
+      "//media/base/android:media_java",
+      "//ui/android:ui_java",
+    ]
+  }
 }
 
 static_library("test_support") {
@@ -840,6 +845,7 @@ static_library("test_support") {
   ]
   deps = [
     "//base",
+    "//cc/paint",
     "//gpu/command_buffer/common",
     "//skia",
     "//testing/gmock",

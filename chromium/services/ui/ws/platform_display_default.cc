@@ -35,11 +35,10 @@ PlatformDisplayDefault::PlatformDisplayDefault(
 #if !defined(OS_ANDROID)
       image_cursors_(new ImageCursors),
 #endif
-      frame_generator_(new FrameGenerator(this, init_params.root_window)),
       metrics_(init_params.metrics),
-      widget_(gfx::kNullAcceleratedWidget) {
-  frame_generator_->set_device_scale_factor(
-      init_params.metrics.device_scale_factor);
+      widget_(gfx::kNullAcceleratedWidget),
+      root_window_(init_params.root_window),
+      init_device_scale_factor_(init_params.metrics.device_scale_factor) {
 }
 
 PlatformDisplayDefault::~PlatformDisplayDefault() {
@@ -64,8 +63,7 @@ void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
 #if defined(OS_WIN)
   platform_window_ = base::MakeUnique<ui::WinWindow>(this, bounds);
 #elif defined(USE_X11) && !defined(OS_CHROMEOS)
-  platform_window_ = base::MakeUnique<ui::X11Window>(this);
-  platform_window_->SetBounds(bounds);
+  platform_window_ = base::MakeUnique<ui::X11Window>(this, bounds);
 #elif defined(OS_ANDROID)
   platform_window_ = base::MakeUnique<ui::PlatformWindowAndroid>(this);
   platform_window_->SetBounds(bounds);
@@ -149,7 +147,8 @@ bool PlatformDisplayDefault::UpdateViewportMetrics(
   }
 
   metrics_ = metrics;
-  frame_generator_->set_device_scale_factor(metrics_.device_scale_factor);
+  if (frame_generator_)
+    frame_generator_->SetDeviceScaleFactor(metrics_.device_scale_factor);
   return true;
 }
 
@@ -178,7 +177,10 @@ void PlatformDisplayDefault::OnBoundsChanged(const gfx::Rect& new_bounds) {
   // something but that isn't fully flushed out.
 }
 
-void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {}
+void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {
+  if (frame_generator_)
+    frame_generator_->OnWindowDamaged();
+}
 
 void PlatformDisplayDefault::DispatchEvent(ui::Event* event) {
   if (event->IsLocatedEvent())
@@ -246,7 +248,9 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
   DCHECK_EQ(gfx::kNullAcceleratedWidget, widget_);
   widget_ = widget;
   delegate_->OnAcceleratedWidgetAvailable();
-  frame_generator_->OnAcceleratedWidgetAvailable(widget);
+  frame_generator_ =
+      base::MakeUnique<FrameGenerator>(this, root_window_, widget_);
+  frame_generator_->SetDeviceScaleFactor(init_device_scale_factor_);
 }
 
 void PlatformDisplayDefault::OnAcceleratedWidgetDestroyed() {
@@ -254,10 +258,6 @@ void PlatformDisplayDefault::OnAcceleratedWidgetDestroyed() {
 }
 
 void PlatformDisplayDefault::OnActivationChanged(bool active) {}
-
-ServerWindow* PlatformDisplayDefault::GetActiveRootWindow() {
-  return delegate_->GetActiveRootWindow();
-}
 
 bool PlatformDisplayDefault::IsInHighContrastMode() {
   return delegate_ ? delegate_->IsInHighContrastMode() : false;

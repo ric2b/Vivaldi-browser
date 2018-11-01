@@ -17,8 +17,8 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/printing/cups_print_job.h"
-#include "chrome/browser/chromeos/printing/printer_pref_manager.h"
-#include "chrome/browser/chromeos/printing/printer_pref_manager_factory.h"
+#include "chrome/browser/chromeos/printing/printers_manager.h"
+#include "chrome/browser/chromeos/printing/printers_manager_factory.h"
 #include "chrome/browser/printing/print_job.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
@@ -59,14 +59,6 @@ chromeos::CupsPrintJob::State ConvertState(printing::CupsJob::JobState state) {
   NOTREACHED();
 
   return cpj::STATE_NONE;
-}
-
-// Returns true if |state| represents a terminal state.
-bool JobFinished(chromeos::CupsPrintJob::State state) {
-  using chromeos::CupsPrintJob;
-  return state == CupsPrintJob::State::STATE_CANCELLED ||
-         state == CupsPrintJob::State::STATE_ERROR ||
-         state == CupsPrintJob::State::STATE_DOCUMENT_DONE;
 }
 
 }  // namespace
@@ -120,35 +112,16 @@ void CupsPrintJobManagerImpl::Observe(
     DCHECK(document);
     CreatePrintJob(base::UTF16ToUTF8(document->settings().device_name()),
                    base::UTF16ToUTF8(document->settings().title()),
-                   document->page_count());
+                   job_details->job_id(), document->page_count());
   }
 }
 
 bool CupsPrintJobManagerImpl::CreatePrintJob(const std::string& printer_name,
                                              const std::string& title,
+                                             int job_id,
                                              int total_page_number) {
-  // Of the current jobs, find the new one for the printer.
-  ::printing::CupsJob* new_job = nullptr;
-  std::vector<::printing::CupsJob> cups_jobs = cups_connection_.GetJobs();
-  for (auto& job : cups_jobs) {
-    if (printer_name == job.printer_id &&
-        !JobFinished(ConvertState(job.state)) &&
-        !base::ContainsKey(jobs_,
-                           CupsPrintJob::GetUniqueId(printer_name, job.id))) {
-      // We found an untracked job.  It should be ours.
-      new_job = &job;
-      break;
-    }
-  }
-
-  // The started job cannot be found in the queue.
-  if (!new_job) {
-    LOG(WARNING) << "Could not track print job.";
-    return false;
-  }
-
   auto printer =
-      chromeos::PrinterPrefManagerFactory::GetForBrowserContext(profile_)
+      chromeos::PrintersManagerFactory::GetForBrowserContext(profile_)
           ->GetPrinter(printer_name);
   if (!printer) {
     LOG(WARNING) << "Printer was removed while job was in progress.  It cannot "
@@ -157,25 +130,35 @@ bool CupsPrintJobManagerImpl::CreatePrintJob(const std::string& printer_name,
   }
 
   // Create a new print job.
-  auto cpj = base::MakeUnique<CupsPrintJob>(*printer, new_job->id, title,
+  auto cpj = base::MakeUnique<CupsPrintJob>(*printer, job_id, title,
                                             total_page_number);
   std::string key = cpj->GetUniqueId();
   jobs_[key] = std::move(cpj);
-  NotifyJobCreated(jobs_[key].get());
+  CupsPrintJob* job = jobs_[key].get();
+  NotifyJobCreated(job);
 
-  JobStateUpdated(jobs_[key].get(), ConvertState(new_job->state));
+  // Always start jobs in the waiting state.
+  job->set_state(CupsPrintJob::State::STATE_WAITING);
+  NotifyJobUpdated(job);
 
-  ScheduleQuery();
+  ScheduleQuery(base::TimeDelta());
 
   return true;
 }
 
 void CupsPrintJobManagerImpl::ScheduleQuery() {
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
-      base::Bind(&CupsPrintJobManagerImpl::QueryCups,
-                 weak_ptr_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(kPollRate));
+  ScheduleQuery(base::TimeDelta::FromMilliseconds(kPollRate));
+}
+
+void CupsPrintJobManagerImpl::ScheduleQuery(const base::TimeDelta& delay) {
+  if (!in_query_) {
+    in_query_ = true;
+    content::BrowserThread::PostDelayedTask(
+        content::BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
+        base::Bind(&CupsPrintJobManagerImpl::QueryCups,
+                   weak_ptr_factory_.GetWeakPtr()),
+        base::TimeDelta::FromMilliseconds(kPollRate));
+  }
 }
 
 // Query CUPS asynchronously.  Post results back to UI thread.
@@ -188,44 +171,46 @@ void CupsPrintJobManagerImpl::QueryCups() {
                  weak_ptr_factory_.GetWeakPtr(), jobs));
 }
 
-// Use job information to update local job states.  Update jobs that are no
-// longer being reported on by CUPS.
+// Use job information to update local job states.  Previously completed jobs
+// could be in |jobs| but those are ignored as we will not emit updates for them
+// after they are completed.
 void CupsPrintJobManagerImpl::UpdateJobs(
     const std::vector<::printing::CupsJob>& jobs) {
-  std::set<std::string> updated_jobs;
+  in_query_ = false;
+
+  std::vector<std::string> active_jobs;
   for (auto& job : jobs) {
     std::string key = CupsPrintJob::GetUniqueId(job.printer_id, job.id);
-    if (!base::ContainsKey(jobs_, key)) {
-      LOG(WARNING) << "Unexpected print job encountered";
-      continue;
-    }
+    const auto& entry = jobs_.find(key);
+    if (entry != jobs_.end()) {
+      CupsPrintJob* print_job = entry->second.get();
 
-    JobStateUpdated(jobs_[key].get(), ConvertState(job.state));
-    updated_jobs.insert(key);
-  }
+      // Update a job we're tracking.
+      JobStateUpdated(print_job, ConvertState(job.state));
 
-  // Cleanup completed jobs.
-  auto it = jobs_.begin();
-  while (it != jobs_.end()) {
-    auto& entry = *it;
-    if (!base::ContainsKey(updated_jobs, entry.first)) {
-      // We are no longer receiving updates for a job.  Declare it
-      // complete.
-      JobStateUpdated(entry.second.get(),
-                      CupsPrintJob::State::STATE_DOCUMENT_DONE);
-    }
-
-    CupsPrintJob* job = entry.second.get();
-    if (JobFinished(job->state())) {
-      // Delete job since we will no longer receive events for it.
-      it = jobs_.erase(it);
-    } else {
-      it++;
+      // Cleanup completed jobs.
+      if (print_job->IsJobFinished()) {
+        jobs_.erase(entry);
+      } else {
+        active_jobs.push_back(key);
+      }
     }
   }
 
-  if (!jobs_.empty())
+  // Keep polling until all jobs complete or error.
+  if (!active_jobs.empty()) {
     ScheduleQuery();
+  } else if (!jobs_.empty()) {
+    // We're tracking jobs that we didn't receive an update for.  Something bad
+    // has happened.
+    LOG(ERROR) << "Lost track of (" << jobs_.size() << ") jobs";
+    for (const auto& entry : jobs_) {
+      // Declare all lost jobs errors.
+      JobStateUpdated(entry.second.get(), CupsPrintJob::State::STATE_ERROR);
+    }
+
+    jobs_.clear();
+  }
 }
 
 void CupsPrintJobManagerImpl::JobStateUpdated(CupsPrintJob* job,
@@ -238,8 +223,10 @@ void CupsPrintJobManagerImpl::JobStateUpdated(CupsPrintJob* job,
   job->set_state(new_state);
   switch (new_state) {
     case CupsPrintJob::State::STATE_NONE:
+      // State does not require notification.
+      break;
     case CupsPrintJob::State::STATE_WAITING:
-      // States do not require notification.
+      NotifyJobUpdated(job);
       break;
     case CupsPrintJob::State::STATE_STARTED:
       NotifyJobStarted(job);

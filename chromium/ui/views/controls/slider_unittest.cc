@@ -19,7 +19,6 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/test/slider_test_api.h"
-#include "ui/views/test/test_slider.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -183,7 +182,7 @@ SliderTest::~SliderTest() {
 void SliderTest::SetUp() {
   views::ViewsTestBase::SetUp();
 
-  slider_ = new TestSlider(nullptr);
+  slider_ = new Slider(nullptr);
   View* view = slider_;
   gfx::Size size = view->GetPreferredSize();
   view->SetSize(size);
@@ -219,22 +218,7 @@ void SliderTest::ClickAt(int x, int y) {
   event_generator_->ClickLeftButton();
 }
 
-// Test fixture for horizontally oriented slider tests.
-class HorizontalSliderTest : public SliderTest {
- public:
-  HorizontalSliderTest();
-  ~HorizontalSliderTest() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(HorizontalSliderTest);
-};
-
-HorizontalSliderTest::HorizontalSliderTest() : SliderTest() {}
-
-HorizontalSliderTest::~HorizontalSliderTest() {
-}
-
-TEST_F(HorizontalSliderTest, UpdateFromClickHorizontal) {
+TEST_F(SliderTest, UpdateFromClickHorizontal) {
   ClickAt(0, 0);
   EXPECT_EQ(0.0f, slider()->value());
 
@@ -242,8 +226,7 @@ TEST_F(HorizontalSliderTest, UpdateFromClickHorizontal) {
   EXPECT_EQ(1.0f, slider()->value());
 }
 
-
-TEST_F(HorizontalSliderTest, UpdateFromClickRTLHorizontal) {
+TEST_F(SliderTest, UpdateFromClickRTLHorizontal) {
   base::i18n::SetICUDefaultLocale("he");
 
   ClickAt(0, 0);
@@ -257,7 +240,7 @@ TEST_F(HorizontalSliderTest, UpdateFromClickRTLHorizontal) {
 #if !defined(OS_MACOSX) || defined(USE_AURA)
 
 // Test the slider location after a tap gesture.
-TEST_F(HorizontalSliderTest, SliderValueForTapGesture) {
+TEST_F(SliderTest, SliderValueForTapGesture) {
   // Tap below the minimum.
   slider()->SetValue(0.5);
   event_generator()->GestureTapAt(gfx::Point(0, 0));
@@ -275,14 +258,12 @@ TEST_F(HorizontalSliderTest, SliderValueForTapGesture) {
 }
 
 // Test the slider location after a scroll gesture.
-TEST_F(HorizontalSliderTest, SliderValueForScrollGesture) {
+TEST_F(SliderTest, SliderValueForScrollGesture) {
   // Scroll below the minimum.
   slider()->SetValue(0.5);
   event_generator()->GestureScrollSequence(
-    gfx::Point(0.5 * max_x(), 0.5 * max_y()),
-    gfx::Point(0, 0),
-    base::TimeDelta::FromMilliseconds(10),
-    5 /* steps */);
+      gfx::Point(0.5 * max_x(), 0.5 * max_y()), gfx::Point(0, 0),
+      base::TimeDelta::FromMilliseconds(10), 5 /* steps */);
   EXPECT_EQ(0, slider()->value());
 
   // Scroll above the maximum.
@@ -295,16 +276,15 @@ TEST_F(HorizontalSliderTest, SliderValueForScrollGesture) {
   // Scroll somewhere in the middle.
   slider()->SetValue(0.25);
   event_generator()->GestureScrollSequence(
-    gfx::Point(0.25 * max_x(), 0.25 * max_y()),
-    gfx::Point(0.75 * max_x(), 0.75 * max_y()),
-    base::TimeDelta::FromMilliseconds(10),
-    5 /* steps */);
+      gfx::Point(0.25 * max_x(), 0.25 * max_y()),
+      gfx::Point(0.75 * max_x(), 0.75 * max_y()),
+      base::TimeDelta::FromMilliseconds(10), 5 /* steps */);
   EXPECT_NEAR(0.75, slider()->value(), 0.03);
 }
 
 // Test the slider location by adjusting it using keyboard.
-TEST_F(HorizontalSliderTest, SliderValueForKeyboard) {
-  float value =0.5;
+TEST_F(SliderTest, SliderValueForKeyboard) {
+  float value = 0.5;
   slider()->SetValue(value);
   slider()->RequestFocus();
   event_generator()->PressKey(ui::VKEY_RIGHT, 0);
@@ -313,10 +293,37 @@ TEST_F(HorizontalSliderTest, SliderValueForKeyboard) {
   slider()->SetValue(value);
   event_generator()->PressKey(ui::VKEY_LEFT, 0);
   EXPECT_LT(slider()->value(), value);
+
+  slider()->SetValue(value);
+  event_generator()->PressKey(ui::VKEY_UP, 0);
+  EXPECT_GT(slider()->value(), value);
+
+  slider()->SetValue(value);
+  event_generator()->PressKey(ui::VKEY_DOWN, 0);
+  EXPECT_LT(slider()->value(), value);
+
+  // RTL reverse left/right but not up/down.
+  base::i18n::SetICUDefaultLocale("he");
+  EXPECT_TRUE(base::i18n::IsRTL());
+
+  event_generator()->PressKey(ui::VKEY_RIGHT, 0);
+  EXPECT_LT(slider()->value(), value);
+
+  slider()->SetValue(value);
+  event_generator()->PressKey(ui::VKEY_LEFT, 0);
+  EXPECT_GT(slider()->value(), value);
+
+  slider()->SetValue(value);
+  event_generator()->PressKey(ui::VKEY_UP, 0);
+  EXPECT_GT(slider()->value(), value);
+
+  slider()->SetValue(value);
+  event_generator()->PressKey(ui::VKEY_DOWN, 0);
+  EXPECT_LT(slider()->value(), value);
 }
 
 // Verifies the correct SliderListener events are raised for a tap gesture.
-TEST_F(HorizontalSliderTest, SliderListenerEventsForTapGesture) {
+TEST_F(SliderTest, SliderListenerEventsForTapGesture) {
   test::SliderTestApi slider_test_api(slider());
   slider_test_api.SetListener(&slider_listener());
 
@@ -328,7 +335,7 @@ TEST_F(HorizontalSliderTest, SliderListenerEventsForTapGesture) {
 }
 
 // Verifies the correct SliderListener events are raised for a scroll gesture.
-TEST_F(HorizontalSliderTest, SliderListenerEventsForScrollGesture) {
+TEST_F(SliderTest, SliderListenerEventsForScrollGesture) {
   test::SliderTestApi slider_test_api(slider());
   slider_test_api.SetListener(&slider_listener());
 
@@ -347,7 +354,7 @@ TEST_F(HorizontalSliderTest, SliderListenerEventsForScrollGesture) {
 
 // Verifies the correct SliderListener events are raised for a multi
 // finger scroll gesture.
-TEST_F(HorizontalSliderTest, SliderListenerEventsForMultiFingerScrollGesture) {
+TEST_F(SliderTest, SliderListenerEventsForMultiFingerScrollGesture) {
   test::SliderTestApi slider_test_api(slider());
   slider_test_api.SetListener(&slider_listener());
 

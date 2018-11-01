@@ -3,12 +3,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/sync/syncable/parent_child_index.h"
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/syncable/entry_kernel.h"
+#include "components/sync/syncable/parent_child_index.h"
 #include "components/sync/syncable/syncable_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -19,7 +22,7 @@ namespace syncable {
 
 namespace {
 
-static const std::string kCacheGuid = "8HhNIHlEOCGQbIAALr9QEg==";
+static const char kCacheGuid[] = "8HhNIHlEOCGQbIAALr9QEg==";
 
 class NotesParentChildIndexTest : public testing::Test {
  public:
@@ -108,7 +111,7 @@ class NotesParentChildIndexTest : public testing::Test {
   ParentChildIndex index_;
 
  private:
-   std::vector<std::unique_ptr<EntryKernel>> owned_entry_kernels_;
+  std::vector<std::unique_ptr<EntryKernel>> owned_entry_kernels_;
 };
 
 TEST_F(NotesParentChildIndexTest, TestRootNode) {

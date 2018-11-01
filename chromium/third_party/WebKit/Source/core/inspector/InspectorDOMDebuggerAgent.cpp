@@ -32,6 +32,8 @@
 
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "bindings/core/v8/V8EventTarget.h"
+#include "bindings/core/v8/V8Node.h"
+#include "core/dom/DOMNodeIds.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
 #include "core/events/Event.h"
@@ -63,6 +65,7 @@ static const char webglErrorFiredEventName[] = "webglErrorFired";
 static const char webglWarningFiredEventName[] = "webglWarningFired";
 static const char webglErrorNameProperty[] = "webglErrorName";
 static const char scriptBlockedByCSPEventName[] = "scriptBlockedByCSP";
+static const char canvasContextCreatedEventName[] = "canvasContextCreated";
 
 namespace DOMDebuggerAgentState {
 static const char eventListenerBreakpoints[] = "eventListenerBreakpoints";
@@ -72,118 +75,13 @@ static const char xhrBreakpoints[] = "xhrBreakpoints";
 static const char enabled[] = "enabled";
 }
 
-static void removeEventListenerCallback(
-    const v8::FunctionCallbackInfo<v8::Value>& info) {
-  v8::Isolate* isolate = info.GetIsolate();
-  v8::Local<v8::Context> context = isolate->GetCurrentContext();
-  v8::Local<v8::Object> data = info.Data().As<v8::Object>();
-
-  v8::Local<v8::Value> v8Target;
-  if (!data->Get(context, v8String(isolate, "target")).ToLocal(&v8Target) ||
-      !v8Target->IsObject())
-    return;
-  EventTarget* target = V8EventTarget::toImplWithTypeCheck(isolate, v8Target);
-  // We need to handle LocalDOMWindow specially, because LocalDOMWindow wrapper
-  // exists on prototype chain.
-  if (!target)
-    target = toDOMWindow(isolate, v8Target);
-  if (!target || !target->getExecutionContext())
-    return;
-
-  v8::Local<v8::Value> v8Handler;
-  if (!data->Get(context, v8String(isolate, "handler")).ToLocal(&v8Handler) ||
-      !v8Handler->IsObject())
-    return;
-  v8::Local<v8::Value> v8Type;
-  if (!data->Get(context, v8String(isolate, "type")).ToLocal(&v8Type) ||
-      !v8Type->IsString())
-    return;
-  AtomicString type =
-      AtomicString(toCoreString(v8::Local<v8::String>::Cast(v8Type)));
-  v8::Local<v8::Value> v8UseCapture;
-  if (!data->Get(context, v8String(isolate, "useCapture"))
-           .ToLocal(&v8UseCapture) ||
-      !v8UseCapture->IsBoolean())
-    return;
-  bool useCapture = v8::Local<v8::Boolean>::Cast(v8UseCapture)->Value();
-
-  EventListener* eventListener = nullptr;
-  EventListenerVector* listeners = target->getEventListeners(type);
-  if (!listeners)
-    return;
-  for (size_t i = 0; i < listeners->size(); ++i) {
-    if (listeners->at(i).capture() != useCapture)
-      continue;
-    V8AbstractEventListener* v8Listener =
-        V8AbstractEventListener::cast(listeners->at(i).listener());
-    if (!v8Listener)
-      continue;
-    if (!v8Listener->hasExistingListenerObject())
-      continue;
-    if (!v8Listener->getExistingListenerObject()
-             ->Equals(context, v8Handler)
-             .FromMaybe(false))
-      continue;
-    eventListener = v8Listener;
-    break;
-  }
-  if (!eventListener)
-    return;
-  EventListenerOptions options;
-  options.setCapture(useCapture);
-  target->removeEventListener(type, eventListener, options);
-}
-
-static void returnDataCallback(
-    const v8::FunctionCallbackInfo<v8::Value>& info) {
-  info.GetReturnValue().Set(info.Data());
-}
-
-static v8::MaybeLocal<v8::Function> createRemoveFunction(
-    v8::Local<v8::Context> context,
-    v8::Local<v8::Value> object,
-    v8::Local<v8::Object> handler,
-    AtomicString type,
-    bool useCapture) {
-  v8::Isolate* isolate = context->GetIsolate();
-  v8::Local<v8::Object> data = v8::Object::New(isolate);
-  if (!data->Set(context, v8String(isolate, "target"), object).FromMaybe(false))
-    return v8::MaybeLocal<v8::Function>();
-  if (!data->Set(context, v8String(isolate, "handler"), handler)
-           .FromMaybe(false))
-    return v8::MaybeLocal<v8::Function>();
-  if (!data->Set(context, v8String(isolate, "type"), v8String(isolate, type))
-           .FromMaybe(false))
-    return v8::MaybeLocal<v8::Function>();
-  if (!data->Set(context, v8String(isolate, "useCapture"),
-                 v8Boolean(useCapture, isolate))
-           .FromMaybe(false))
-    return v8::MaybeLocal<v8::Function>();
-  v8::Local<v8::Function> removeFunction =
-      v8::Function::New(context, removeEventListenerCallback, data, 0,
-                        v8::ConstructorBehavior::kThrow)
-          .ToLocalChecked();
-  v8::Local<v8::Function> toStringFunction;
-  if (v8::Function::New(
-          context, returnDataCallback,
-          v8String(isolate, "function remove() { [Command Line API] }"), 0,
-          v8::ConstructorBehavior::kThrow)
-          .ToLocal(&toStringFunction))
-    removeFunction->Set(v8String(context->GetIsolate(), "toString"),
-                        toStringFunction);
-  return removeFunction;
-}
-
-void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
-    v8::Isolate* isolate,
-    v8::Local<v8::Value> value,
-    V8EventListenerInfoList& eventInformation) {
-  EventTarget* target = V8EventTarget::toImplWithTypeCheck(isolate, value);
-  // We need to handle LocalDOMWindow specially, because LocalDOMWindow wrapper
-  // exists on prototype chain.
-  if (!target)
-    target = toDOMWindow(isolate, value);
-  if (!target || !target->getExecutionContext())
+static void collectEventListeners(v8::Isolate* isolate,
+                                  EventTarget* target,
+                                  v8::Local<v8::Value> targetWrapper,
+                                  Node* targetNode,
+                                  bool reportForAllContexts,
+                                  V8EventListenerInfoList* eventInformation) {
+  if (!target->getExecutionContext())
     return;
 
   ExecutionContext* executionContext = target->getExecutionContext();
@@ -204,8 +102,8 @@ void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
           static_cast<V8AbstractEventListener*>(eventListener);
       v8::Local<v8::Context> context =
           toV8Context(executionContext, v8Listener->world());
-      // Hide listeners from other contexts.
-      if (context != isolate->GetCurrentContext())
+      // Optionally hide listeners from other contexts.
+      if (!reportForAllContexts && context != isolate->GetCurrentContext())
         continue;
       // getListenerObject() may cause JS in the event attribute to get
       // compiled, potentially unsuccessfully.  In that case, the function
@@ -215,11 +113,71 @@ void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
       if (handler.IsEmpty())
         continue;
       bool useCapture = listeners->at(k).capture();
-      eventInformation.push_back(V8EventListenerInfo(
-          type, useCapture, listeners->at(k).passive(), listeners->at(k).once(),
-          handler,
-          createRemoveFunction(context, value, handler, type, useCapture)));
+      int backendNodeId = 0;
+      if (targetNode) {
+        backendNodeId = DOMNodeIds::idForNode(targetNode);
+        targetWrapper = InspectorDOMAgent::nodeV8Value(
+            reportForAllContexts ? context : isolate->GetCurrentContext(),
+            targetNode);
+      }
+      eventInformation->push_back(
+          V8EventListenerInfo(type, useCapture, listeners->at(k).passive(),
+                              listeners->at(k).once(), handler, backendNodeId));
     }
+  }
+}
+
+// static
+void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> value,
+    V8EventListenerInfoList* eventInformation) {
+  InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
+      isolate, value, 1, false, eventInformation);
+}
+
+static bool filterNodesWithListeners(Node* node) {
+  Vector<AtomicString> eventTypes = node->eventTypes();
+  for (size_t j = 0; j < eventTypes.size(); ++j) {
+    EventListenerVector* listeners = node->getEventListeners(eventTypes[j]);
+    if (listeners && listeners->size())
+      return true;
+  }
+  return false;
+}
+
+// static
+void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> value,
+    int depth,
+    bool pierce,
+    V8EventListenerInfoList* eventInformation) {
+  // Special-case nodes, respect depth and pierce parameters in case of nodes.
+  Node* node = V8Node::toImplWithTypeCheck(isolate, value);
+  if (node) {
+    if (depth < 0)
+      depth = INT_MAX;
+    HeapVector<Member<Node>> nodes;
+    InspectorDOMAgent::collectNodes(node, depth, pierce,
+                                    WTF::bind(&filterNodesWithListeners).get(),
+                                    &nodes);
+    for (Node* n : nodes) {
+      // We are only interested in listeners from the current context.
+      collectEventListeners(isolate, n, v8::Local<v8::Value>(), n, pierce,
+                            eventInformation);
+    }
+    return;
+  }
+
+  EventTarget* target = V8EventTarget::toImplWithTypeCheck(isolate, value);
+  // We need to handle LocalDOMWindow specially, because LocalDOMWindow wrapper
+  // exists on prototype chain.
+  if (!target)
+    target = toDOMWindow(isolate, value);
+  if (target) {
+    collectEventListeners(isolate, target, value, nullptr, false,
+                          eventInformation);
   }
 }
 
@@ -355,7 +313,7 @@ void InspectorDOMDebuggerAgent::didInvalidateStyleAttr(Node* node) {
 void InspectorDOMDebuggerAgent::didInsertDOMNode(Node* node) {
   if (m_domBreakpoints.size()) {
     uint32_t mask =
-        m_domBreakpoints.get(InspectorDOMAgent::innerParentNode(node));
+        m_domBreakpoints.at(InspectorDOMAgent::innerParentNode(node));
     uint32_t inheritableTypesMask =
         (mask | (mask >> domBreakpointDerivedTypeShift)) &
         inheritableDOMBreakpointTypesMask;
@@ -367,14 +325,14 @@ void InspectorDOMDebuggerAgent::didInsertDOMNode(Node* node) {
 void InspectorDOMDebuggerAgent::didRemoveDOMNode(Node* node) {
   if (m_domBreakpoints.size()) {
     // Remove subtree breakpoints.
-    m_domBreakpoints.remove(node);
+    m_domBreakpoints.erase(node);
     HeapVector<Member<Node>> stack(1, InspectorDOMAgent::innerFirstChild(node));
     do {
       Node* node = stack.back();
       stack.pop_back();
       if (!node)
         continue;
-      m_domBreakpoints.remove(node);
+      m_domBreakpoints.erase(node);
       stack.push_back(InspectorDOMAgent::innerFirstChild(node));
       stack.push_back(InspectorDOMAgent::innerNextSibling(node));
     } while (!stack.isEmpty());
@@ -424,7 +382,7 @@ Response InspectorDOMDebuggerAgent::setDOMBreakpoint(int nodeId,
     return response;
 
   uint32_t rootBit = 1 << type;
-  m_domBreakpoints.set(node, m_domBreakpoints.get(node) | rootBit);
+  m_domBreakpoints.set(node, m_domBreakpoints.at(node) | rootBit);
   if (rootBit & inheritableDOMBreakpointTypesMask) {
     for (Node* child = InspectorDOMAgent::innerFirstChild(node); child;
          child = InspectorDOMAgent::innerNextSibling(child))
@@ -448,11 +406,11 @@ Response InspectorDOMDebuggerAgent::removeDOMBreakpoint(
     return response;
 
   uint32_t rootBit = 1 << type;
-  uint32_t mask = m_domBreakpoints.get(node) & ~rootBit;
+  uint32_t mask = m_domBreakpoints.at(node) & ~rootBit;
   if (mask)
     m_domBreakpoints.set(node, mask);
   else
-    m_domBreakpoints.remove(node);
+    m_domBreakpoints.erase(node);
 
   if ((rootBit & inheritableDOMBreakpointTypesMask) &&
       !(mask & (rootBit << domBreakpointDerivedTypeShift))) {
@@ -466,6 +424,8 @@ Response InspectorDOMDebuggerAgent::removeDOMBreakpoint(
 
 Response InspectorDOMDebuggerAgent::getEventListeners(
     const String& objectId,
+    Maybe<int> depth,
+    Maybe<bool> pierce,
     std::unique_ptr<protocol::Array<protocol::DOMDebugger::EventListener>>*
         listenersArray) {
   v8::HandleScope handles(m_isolate);
@@ -482,7 +442,8 @@ Response InspectorDOMDebuggerAgent::getEventListeners(
       protocol::Array<protocol::DOMDebugger::EventListener>::create();
   V8EventListenerInfoList eventInformation;
   InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
-      context->GetIsolate(), object, eventInformation);
+      context->GetIsolate(), object, depth.fromMaybe(1),
+      pierce.fromMaybe(false), &eventInformation);
   for (const auto& info : eventInformation) {
     if (!info.useCapture)
       continue;
@@ -536,10 +497,8 @@ InspectorDOMDebuggerAgent::buildObjectForEventListener(
         m_v8Session->wrapObject(context, function, objectGroupId));
     value->setOriginalHandler(
         m_v8Session->wrapObject(context, info.handler, objectGroupId));
-    v8::Local<v8::Function> removeFunction;
-    if (info.removeFunction.ToLocal(&removeFunction))
-      value->setRemoveFunction(
-          m_v8Session->wrapObject(context, removeFunction, objectGroupId));
+    if (info.backendNodeId)
+      value->setBackendNodeId(info.backendNodeId);
   }
   return value;
 }
@@ -592,7 +551,7 @@ void InspectorDOMDebuggerAgent::breakProgramOnDOMEvent(Node* target,
     if (!insertion)
       breakpointOwner = InspectorDOMAgent::innerParentNode(target);
     ASSERT(breakpointOwner);
-    while (!(m_domBreakpoints.get(breakpointOwner) & (1 << breakpointType))) {
+    while (!(m_domBreakpoints.at(breakpointOwner) & (1 << breakpointType))) {
       Node* parentNode = InspectorDOMAgent::innerParentNode(breakpointOwner);
       if (!parentNode)
         break;
@@ -619,19 +578,19 @@ bool InspectorDOMDebuggerAgent::hasBreakpoint(Node* node, int type) {
     return false;
   uint32_t rootBit = 1 << type;
   uint32_t derivedBit = rootBit << domBreakpointDerivedTypeShift;
-  return m_domBreakpoints.get(node) & (rootBit | derivedBit);
+  return m_domBreakpoints.at(node) & (rootBit | derivedBit);
 }
 
 void InspectorDOMDebuggerAgent::updateSubtreeBreakpoints(Node* node,
                                                          uint32_t rootMask,
                                                          bool set) {
-  uint32_t oldMask = m_domBreakpoints.get(node);
+  uint32_t oldMask = m_domBreakpoints.at(node);
   uint32_t derivedMask = rootMask << domBreakpointDerivedTypeShift;
   uint32_t newMask = set ? oldMask | derivedMask : oldMask & ~derivedMask;
   if (newMask)
     m_domBreakpoints.set(node, newMask);
   else
-    m_domBreakpoints.remove(node);
+    m_domBreakpoints.erase(node);
 
   uint32_t newRootMask = rootMask & ~newMask;
   if (!newRootMask)
@@ -772,6 +731,11 @@ void InspectorDOMDebuggerAgent::willSendXMLHttpOrFetchNetworkRequest(
       toV8InspectorStringView(
           v8_inspector::protocol::Debugger::API::Paused::ReasonEnum::XHR),
       toV8InspectorStringView(json));
+}
+
+void InspectorDOMDebuggerAgent::didCreateCanvasContext() {
+  pauseOnNativeEventIfNeeded(
+      preparePauseOnNativeEventData(canvasContextCreatedEventName, 0), true);
 }
 
 void InspectorDOMDebuggerAgent::didAddBreakpoint() {

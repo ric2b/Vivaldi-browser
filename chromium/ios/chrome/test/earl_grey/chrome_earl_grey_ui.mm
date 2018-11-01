@@ -13,19 +13,31 @@
 #import "ios/web/public/test/earl_grey/js_test_util.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using testing::WaitUntilConditionOrTimeout;
 using testing::kWaitForPageLoadTimeout;
 
 @implementation ChromeEarlGreyUI
 
 + (void)openToolsMenu {
+  // TODO(crbug.com/685570): Fix the tap instead of adding a delay.
+  GREYCondition* myCondition = [GREYCondition
+      conditionWithName:@"Delay to ensure the toolbar menu can be opened"
+                  block:^BOOL {
+                    return NO;
+                  }];
+  [myCondition waitWithTimeout:0.5];
+
   // TODO(crbug.com/639524): Add logic to ensure the app is in the correct
   // state, for example DCHECK if no tabs are displayed.
   [[[EarlGrey
-      selectElementWithMatcher:grey_allOf(chrome_test_util::toolsMenuButton(),
+      selectElementWithMatcher:grey_allOf(chrome_test_util::ToolsMenuButton(),
                                           grey_sufficientlyVisible(), nil)]
          usingSearchAction:grey_swipeSlowInDirection(kGREYDirectionDown)
-      onElementWithMatcher:web::webViewScrollView(
+      onElementWithMatcher:web::WebViewScrollView(
                                chrome_test_util::GetCurrentWebState())]
       performAction:grey_tap()];
   // TODO(crbug.com/639517): Add webViewScrollView matcher so we don't have
@@ -55,7 +67,7 @@ using testing::kWaitForPageLoadTimeout;
   if (IsCompact()) {
     [self openToolsMenu];
   }
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::reloadButton()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::ReloadButton()]
       performAction:grey_tap()];
 }
 
@@ -63,7 +75,7 @@ using testing::kWaitForPageLoadTimeout;
   if (IsCompact()) {
     [ChromeEarlGreyUI openToolsMenu];
   }
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::shareButton()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::ShareButton()]
       performAction:grey_tap()];
 }
 

@@ -47,16 +47,15 @@ private:
 };
 
 std::unique_ptr<base::Value> AsValue(bool b) {
-  std::unique_ptr<base::FundamentalValue> val(new base::FundamentalValue(b));
+  std::unique_ptr<base::Value> val(new base::Value(b));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(SkScalar scalar) {
-  std::unique_ptr<base::FundamentalValue> val(
-      new base::FundamentalValue(scalar));
+  std::unique_ptr<base::Value> val(new base::Value(scalar));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(const SkSize& size) {
@@ -121,7 +120,7 @@ std::unique_ptr<base::Value> AsValue(SkBlendMode mode) {
   std::unique_ptr<base::StringValue> val(
       new base::StringValue(SkBlendMode_Name(mode)));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(SkCanvas::PointMode mode) {
@@ -131,7 +130,7 @@ std::unique_ptr<base::Value> AsValue(SkCanvas::PointMode mode) {
   std::unique_ptr<base::StringValue> val(
       new base::StringValue(gModeStrings[mode]));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(const SkColorFilter& filter) {
@@ -210,8 +209,6 @@ std::unique_ptr<base::Value> AsValue(const SkPaint& paint) {
     FlagsBuilder builder('|');
     builder.addFlag(paint.isAntiAlias(), "AntiAlias");
     builder.addFlag(paint.isDither(), "Dither");
-    builder.addFlag(paint.isUnderlineText(), "UnderlineText");
-    builder.addFlag(paint.isStrikeThruText(), "StrikeThruText");
     builder.addFlag(paint.isFakeBoldText(), "FakeBoldText");
     builder.addFlag(paint.isLinearText(), "LinearText");
     builder.addFlag(paint.isSubpixelText(), "SubpixelText");
@@ -261,7 +258,7 @@ std::unique_ptr<base::Value> SaveLayerFlagsAsValue(
 
   std::unique_ptr<base::StringValue> val(new base::StringValue(builder.str()));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(SkClipOp op) {
@@ -276,7 +273,7 @@ std::unique_ptr<base::Value> AsValue(SkClipOp op) {
   DCHECK_LT(index, SK_ARRAY_COUNT(gOpStrings));
   std::unique_ptr<base::StringValue> val(
       new base::StringValue(gOpStrings[index]));
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(const SkRegion& region) {

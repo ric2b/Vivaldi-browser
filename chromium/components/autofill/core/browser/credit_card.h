@@ -174,6 +174,9 @@ class CreditCard : public AutofillDataModel {
   // Sets |number_| to |number| and computes the appropriate card |type_|.
   void SetNumber(const base::string16& number);
 
+  // Returns the date when the credit card was last used in autofill.
+  base::string16 GetLastUsedDateForDisplay(const std::string& app_locale) const;
+
   // Logs the number of days since the credit card was last used and records its
   // use.
   void RecordAndLogUse();
@@ -196,6 +199,20 @@ class CreditCard : public AutofillDataModel {
     billing_address_id_ = id;
   }
 
+  // Sets |expiration_month_| to the integer conversion of |text| and returns
+  // whether the operation was successful.
+  bool SetExpirationMonthFromString(const base::string16& text,
+                                    const std::string& app_locale);
+
+  // Sets |expiration_year_| to the integer conversion of |text|. Will handle
+  // 4-digit year or 2-digit year (eventually converted to 4-digit year).
+  void SetExpirationYearFromString(const base::string16& text);
+
+  // Sets |expiration_year_| and |expiration_month_| to the integer conversion
+  // of |text|. Will handle mmyy, mmyyyy, mm-yyyy and mm-yy as well as single
+  // digit months, with various separators.
+  void SetExpirationDateFromString(const base::string16& text);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(CreditCardTest, SetExpirationDateFromString);
   FRIEND_TEST_ALL_PREFIXES(CreditCardTest, SetExpirationYearFromString);
@@ -212,20 +229,6 @@ class CreditCard : public AutofillDataModel {
   base::string16 ExpirationMonthAsString() const;
   base::string16 Expiration4DigitYearAsString() const;
   base::string16 Expiration2DigitYearAsString() const;
-
-  // Sets |expiration_month_| to the integer conversion of |text| and returns
-  // whether the operation was successful.
-  bool SetExpirationMonthFromString(const base::string16& text,
-                                    const std::string& app_locale);
-
-  // Sets |expiration_year_| to the integer conversion of |text|. Will handle
-  // 4-digit year or 2-digit year (eventually converted to 4-digit year).
-  void SetExpirationYearFromString(const base::string16& text);
-
-  // Sets |expiration_year_| and |expiration_month_| to the integer conversion
-  // of |text|. Will handle mmyy, mmyyyy, mm-yyyy and mm-yy as well as single
-  // digit months, with various separators.
-  void SetExpirationDateFromString(const base::string16& text);
 
   // See enum definition above.
   RecordType record_type_;

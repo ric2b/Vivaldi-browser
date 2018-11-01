@@ -152,13 +152,11 @@ class TestDragDropController : public DragDropController {
                        aura::Window* source_window,
                        const gfx::Point& location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source,
-                       bool& cancelled) override {
+                       ui::DragDropTypes::DragEventSource source) override {
     drag_start_received_ = true;
     data.GetString(&drag_string_);
     return DragDropController::StartDragAndDrop(
-        data, root_window, source_window, location, operation, source,
-        cancelled);
+        data, root_window, source_window, location, operation, source);
   }
 
   void DragUpdate(aura::Window* target,
@@ -938,9 +936,6 @@ class DragImageWindowObserver : public aura::WindowObserver {
 // Verifies the drag image moves back to the position where drag is started
 // across displays when drag is cancelled.
 TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x400,400x400");
   aura::Window::Windows root_windows =
       Shell::GetInstance()->GetAllRootWindows();
@@ -952,14 +947,12 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
   ui::OSExchangeData data;
   data.SetString(base::UTF8ToUTF16("I am being dragged"));
   {
-    bool cancelled;
     std::unique_ptr<views::Widget> widget(CreateNewWidget());
     aura::Window* window = widget->GetNativeWindow();
     drag_drop_controller_->StartDragAndDrop(
         data, window->GetRootWindow(), window, gfx::Point(5, 5),
         ui::DragDropTypes::DRAG_MOVE,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
-        cancelled);
+        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
 
     DragImageWindowObserver observer;
     ASSERT_TRUE(GetDragImageWindow());
@@ -985,14 +978,12 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
   }
 
   {
-    bool cancelled;
     std::unique_ptr<views::Widget> widget(CreateNewWidget());
     aura::Window* window = widget->GetNativeWindow();
     drag_drop_controller_->StartDragAndDrop(
         data, window->GetRootWindow(), window, gfx::Point(405, 405),
         ui::DragDropTypes::DRAG_MOVE,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
-        cancelled);
+        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
     DragImageWindowObserver observer;
     ASSERT_TRUE(GetDragImageWindow());
     GetDragImageWindow()->AddObserver(&observer);
@@ -1023,9 +1014,6 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
 
 // Verifies that a drag is aborted if a display is disconnected during the drag.
 TEST_F(DragDropControllerTest, DragCancelOnDisplayDisconnect) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x400,400x400");
   for (aura::Window* root : Shell::GetInstance()->GetAllRootWindows()) {
     aura::client::SetDragDropClient(root, drag_drop_controller_.get());
@@ -1035,11 +1023,9 @@ TEST_F(DragDropControllerTest, DragCancelOnDisplayDisconnect) {
   data.SetString(base::UTF8ToUTF16("I am being dragged"));
   std::unique_ptr<views::Widget> widget(CreateNewWidget());
   aura::Window* window = widget->GetNativeWindow();
-  bool cancelled=false;
   drag_drop_controller_->StartDragAndDrop(
       data, window->GetRootWindow(), window, gfx::Point(5, 5),
-      ui::DragDropTypes::DRAG_MOVE, ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
-      cancelled);
+      ui::DragDropTypes::DRAG_MOVE, ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
 
   // Start dragging.
   ui::MouseEvent e1(ui::ET_MOUSE_DRAGGED, gfx::Point(200, 0),

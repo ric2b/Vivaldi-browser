@@ -13,7 +13,6 @@
 #include "components/exo/wm_helper.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/window_observer.h"
-#include "ui/aura/window_tracker.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/ime/text_input_type.h"
@@ -38,6 +37,7 @@ class ArcBridgeService;
 class ArcImeService : public ArcService,
                       public ArcImeBridge::Delegate,
                       public aura::EnvObserver,
+                      public aura::WindowObserver,
                       public exo::WMHelper::FocusObserver,
                       public keyboard::KeyboardControllerObserver,
                       public ui::TextInputClient {
@@ -45,11 +45,12 @@ class ArcImeService : public ArcService,
   explicit ArcImeService(ArcBridgeService* bridge_service);
   ~ArcImeService() override;
 
-  class ArcWindowDetector {
+  class ArcWindowDelegate {
    public:
-    virtual ~ArcWindowDetector();
-    virtual bool IsArcTopLevelWindow(const aura::Window* window) const;
-    virtual bool IsArcWindow(const aura::Window* window) const;
+    virtual ~ArcWindowDelegate() {}
+    virtual bool IsArcWindow(const aura::Window* window) const = 0;
+    virtual void RegisterFocusObserver() = 0;
+    virtual void UnregisterFocusObserver() = 0;
   };
 
   // Injects the custom IPC bridge object for testing purpose only.
@@ -58,12 +59,17 @@ class ArcImeService : public ArcService,
   // Injects the custom IME for testing purpose only.
   void SetInputMethodForTesting(ui::InputMethod* test_input_method);
 
-  // Injects the custom detector for ARC windows, for testing purpose only.
-  void SetArcWindowDetectorForTesting(
-      std::unique_ptr<ArcWindowDetector> detector);
+  // Injects the custom delegate for ARC windows, for testing purpose only.
+  void SetArcWindowDelegateForTesting(
+      std::unique_ptr<ArcWindowDelegate> delegate);
 
   // Overridden from aura::EnvObserver:
   void OnWindowInitialized(aura::Window* new_window) override;
+
+  // Overridden from aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowRemovingFromRootWindow(aura::Window* window,
+                                      aura::Window* new_root) override;
 
   // Overridden from exo::WMHelper::FocusObserver:
   void OnWindowFocused(aura::Window* gained_focus,
@@ -118,12 +124,12 @@ class ArcImeService : public ArcService,
   ui::InputMethod* GetInputMethod();
 
   std::unique_ptr<ArcImeBridge> ime_bridge_;
-  std::unique_ptr<ArcWindowDetector> arc_window_detector_;
+  std::unique_ptr<ArcWindowDelegate> arc_window_delegate_;
   ui::TextInputType ime_type_;
   gfx::Rect cursor_rect_;
   bool has_composition_text_;
 
-  aura::WindowTracker focused_arc_window_;
+  aura::Window* focused_arc_window_ = nullptr;
 
   keyboard::KeyboardController* keyboard_controller_;
 

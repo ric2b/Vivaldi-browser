@@ -5,6 +5,8 @@
 package org.chromium.chrome.browser.physicalweb;
 
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.nearby.Nearby;
@@ -12,10 +14,8 @@ import com.google.android.gms.nearby.messages.Message;
 import com.google.android.gms.nearby.messages.MessageFilter;
 import com.google.android.gms.nearby.messages.MessageListener;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.ChromeApplication;
-
+import org.chromium.chrome.browser.AppHooks;
 
 /**
  * The Client that harvests URLs from BLE signals.
@@ -37,17 +37,27 @@ public class PhysicalWebBleClient {
     protected static class BackgroundMessageListener extends MessageListener {
         @Override
         public void onFound(Message message) {
-            String url = PhysicalWebBleClient.getInstance().getUrlFromMessage(message);
+            final String url = PhysicalWebBleClient.getInstance().getUrlFromMessage(message);
             if (url != null) {
-                UrlManager.getInstance().addUrl(new UrlInfo(url));
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        UrlManager.getInstance().addUrl(new UrlInfo(url));
+                    }
+                });
             }
         }
 
         @Override
         public void onLost(Message message) {
-            String url = PhysicalWebBleClient.getInstance().getUrlFromMessage(message);
+            final String url = PhysicalWebBleClient.getInstance().getUrlFromMessage(message);
             if (url != null) {
-                UrlManager.getInstance().removeUrl(new UrlInfo(url));
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        UrlManager.getInstance().removeUrl(new UrlInfo(url));
+                    }
+                });
             }
         }
     };
@@ -58,8 +68,7 @@ public class PhysicalWebBleClient {
      */
     public static PhysicalWebBleClient getInstance() {
         if (sInstance == null) {
-            sInstance = ((ChromeApplication) ContextUtils.getApplicationContext())
-                    .createPhysicalWebBleClient();
+            sInstance = AppHooks.get().createPhysicalWebBleClient();
         }
         return sInstance;
     }

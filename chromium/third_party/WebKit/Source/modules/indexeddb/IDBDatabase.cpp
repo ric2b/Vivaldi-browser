@@ -93,16 +93,19 @@ const char IDBDatabase::databaseClosedErrorMessage[] =
 
 IDBDatabase* IDBDatabase::create(ExecutionContext* context,
                                  std::unique_ptr<WebIDBDatabase> database,
-                                 IDBDatabaseCallbacks* callbacks) {
-  return new IDBDatabase(context, std::move(database), callbacks);
+                                 IDBDatabaseCallbacks* callbacks,
+                                 v8::Isolate* isolate) {
+  return new IDBDatabase(context, std::move(database), callbacks, isolate);
 }
 
 IDBDatabase::IDBDatabase(ExecutionContext* context,
                          std::unique_ptr<WebIDBDatabase> backend,
-                         IDBDatabaseCallbacks* callbacks)
+                         IDBDatabaseCallbacks* callbacks,
+                         v8::Isolate* isolate)
     : ContextLifecycleObserver(context),
       m_backend(std::move(backend)),
-      m_databaseCallbacks(callbacks) {
+      m_databaseCallbacks(callbacks),
+      m_isolate(isolate) {
   m_databaseCallbacks->connect(this);
 }
 
@@ -144,7 +147,7 @@ void IDBDatabase::setDatabaseMetadata(const IDBDatabaseMetadata& metadata) {
 void IDBDatabase::transactionCreated(IDBTransaction* transaction) {
   DCHECK(transaction);
   DCHECK(!m_transactions.contains(transaction->id()));
-  m_transactions.add(transaction->id(), transaction);
+  m_transactions.insert(transaction->id(), transaction);
 
   if (transaction->isVersionChange()) {
     DCHECK(!m_versionChangeTransaction);
@@ -155,8 +158,8 @@ void IDBDatabase::transactionCreated(IDBTransaction* transaction) {
 void IDBDatabase::transactionFinished(const IDBTransaction* transaction) {
   DCHECK(transaction);
   DCHECK(m_transactions.contains(transaction->id()));
-  DCHECK_EQ(m_transactions.get(transaction->id()), transaction);
-  m_transactions.remove(transaction->id());
+  DCHECK_EQ(m_transactions.at(transaction->id()), transaction);
+  m_transactions.erase(transaction->id());
 
   if (transaction->isVersionChange()) {
     DCHECK_EQ(m_versionChangeTransaction, transaction);
@@ -169,12 +172,12 @@ void IDBDatabase::transactionFinished(const IDBTransaction* transaction) {
 
 void IDBDatabase::onAbort(int64_t transactionId, DOMException* error) {
   DCHECK(m_transactions.contains(transactionId));
-  m_transactions.get(transactionId)->onAbort(error);
+  m_transactions.at(transactionId)->onAbort(error);
 }
 
 void IDBDatabase::onComplete(int64_t transactionId) {
   DCHECK(m_transactions.contains(transactionId));
-  m_transactions.get(transactionId)->onComplete();
+  m_transactions.at(transactionId)->onComplete();
 }
 
 void IDBDatabase::onChanges(
@@ -193,7 +196,7 @@ void IDBDatabase::onChanges(
         const std::pair<int64_t, std::vector<int64_t>>& obs_txn = it->second;
         HashSet<String> stores;
         for (int64_t store_id : obs_txn.second) {
-          stores.add(m_metadata.objectStores.get(store_id)->name);
+          stores.insert(m_metadata.objectStores.at(store_id)->name);
         }
 
         transaction = IDBTransaction::createObserver(
@@ -202,7 +205,7 @@ void IDBDatabase::onChanges(
 
       observer->callback()->call(
           observer, IDBObserverChanges::create(this, transaction, observations,
-                                               map_entry.second));
+                                               map_entry.second, m_isolate));
       if (transaction)
         transaction->setActive(false);
     }
@@ -348,7 +351,7 @@ void IDBDatabase::deleteObjectStore(const String& name,
 
   m_backend->deleteObjectStore(m_versionChangeTransaction->id(), objectStoreId);
   m_versionChangeTransaction->objectStoreDeleted(objectStoreId, name);
-  m_metadata.objectStores.remove(objectStoreId);
+  m_metadata.objectStores.erase(objectStoreId);
 }
 
 IDBTransaction* IDBDatabase::transaction(
@@ -361,14 +364,14 @@ IDBTransaction* IDBDatabase::transaction(
 
   HashSet<String> scope;
   if (storeNames.isString()) {
-    scope.add(storeNames.getAsString());
+    scope.insert(storeNames.getAsString());
   } else if (storeNames.isStringSequence()) {
     for (const String& name : storeNames.getAsStringSequence())
-      scope.add(name);
+      scope.insert(name);
   } else if (storeNames.isDOMStringList()) {
     const Vector<String>& list = *storeNames.getAsDOMStringList();
     for (const String& name : list)
-      scope.add(name);
+      scope.insert(name);
   } else {
     NOTREACHED();
   }
@@ -539,7 +542,7 @@ void IDBDatabase::renameObjectStore(int64_t objectStoreId,
                                newName);
 
   IDBObjectStoreMetadata* objectStoreMetadata =
-      m_metadata.objectStores.get(objectStoreId);
+      m_metadata.objectStores.at(objectStoreId);
   m_versionChangeTransaction->objectStoreRenamed(objectStoreMetadata->name,
                                                  newName);
   objectStoreMetadata->name = newName;
@@ -553,7 +556,7 @@ void IDBDatabase::revertObjectStoreCreation(int64_t objectStoreId) {
       << "Object store metadata reverted when versionchange transaction is "
          "still active";
   DCHECK(m_metadata.objectStores.contains(objectStoreId));
-  m_metadata.objectStores.remove(objectStoreId);
+  m_metadata.objectStores.erase(objectStoreId);
 }
 
 void IDBDatabase::revertObjectStoreMetadata(

@@ -37,12 +37,6 @@ const char kAggressiveTabDiscardThreshold[] = "aggressive-tab-discard";
 
 const char kAggressiveThreshold[] = "aggressive";
 
-// If this flag is set, enable data roaming in the cellular network by default
-// upon system start if it's an unmanaged device. This flag is used by Rialto
-// device to obtain device policy during OOBE since the Rialto device has no
-// display and and only connects over cell.
-const char kAllowDataRoamingByDefault[] = "allow-data-roaming-by-default";
-
 // If this flag is passed, failed policy fetches will not cause profile
 // initialization to fail. This is useful for tests because it means that
 // tests don't have to mock out the policy infrastructure.
@@ -55,9 +49,26 @@ const char kAllowFailedPolicyFetchForTest[] =
 // mode. This can be enabled by this flag.
 const char kAllowRAInDevMode[] = "allow-ra-in-dev-mode";
 
+// Specifies whether an app launched in kiosk mode was auto launched with zero
+// delay. Used in order to properly restore auto-launched state during session
+// restore flow.
+const char kAppAutoLaunched[] = "app-auto-launched";
+
 // Path for app's OEM manifest file.
 const char kAppOemManifestFile[] = "app-mode-oem-manifest";
 
+// Signals ARC support status on this device. This can take one of the
+// following three values.
+// - none: ARC is not installed on this device. (default)
+// - installed: ARC is installed on this device, but not officially supported.
+//   Users can enable ARC only when Finch experiment is turned on.
+// - officially-supported: ARC is installed and supported on this device. So
+//   users can enable ARC via settings etc.
+// - officially-supported-with-active-directory: ARC is supported and also
+//   allowed to use with Active Directory management.
+const char kArcAvailability[] = "arc-availability";
+
+// DEPRECATED: Please use --arc-availability=installed.
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
 
@@ -68,6 +79,15 @@ const char kArtifactsDir[] = "artifacts-dir";
 // is used to override OOBE/sign in WebUI init type.
 // Possible values: parallel|postpone. Default: parallel.
 const char kAshWebUIInit[] = "ash-webui-init";
+
+// If this flag is set, it indicates that this device is a "Cellular First"
+// device. Cellular First devices use cellular telephone data networks as
+// their primary means of connecting to the internet.
+// Setting this flag has two consequences:
+// 1. Cellular data roaming will be enabled by default.
+// 2. UpdateEngine will be instructed to allow auto-updating over cellular
+//    data connections.
+const char kCellularFirst[] = "cellular-first";
 
 // Default large wallpaper to use for kids accounts (as path to trusted,
 // non-user-writable JPEG file).
@@ -211,13 +231,17 @@ const char kEnableAd[] = "enable-ad";
 // Enables the Android Wallpapers App as the default app on Chrome OS.
 const char kEnableAndroidWallpapersApp[] = "enable-android-wallpapers-app";
 
+// DEPRECATED. Please use --arc-availability=officially-supported.
 // Enables starting the ARC instance upon session start.
 const char kEnableArc[] = "enable-arc";
 
 // Enables ARC OptIn flow in OOBE.
 const char kEnableArcOOBEOptIn[] = "enable-arc-oobe-optin";
 
-// Enables consume kiosk mode.
+// Enables native ChromeVox support for Arc.
+const char kEnableChromeVoxArcSupport[] = "enable-chromevox-arc-support";
+
+// Enables consumer kiosk mode for Chrome OS.
 const char kEnableConsumerKiosk[] = "enable-consumer-kiosk";
 
 // Enables Data Saver prompt on cellular networks.
@@ -267,6 +291,10 @@ const char kEnableTouchCalibrationSetting[] =
 // Enables touchpad three-finger-click as middle button.
 const char kEnableTouchpadThreeFingerClick[] =
     "enable-touchpad-three-finger-click";
+
+// Enables touch support for screen magnifier.
+const char kEnableTouchSupportForScreenMagnifier[] =
+    "enable-touch-support-for-screen-magnifier";
 
 // Enables the chromecast support for video player app.
 const char kEnableVideoPlayerChromecastSupport[] =
@@ -479,6 +507,10 @@ bool IsGaiaIdMigrationStarted() {
 
   return command_line->GetSwitchValueASCII(kTestCrosGaiaIdMigration) ==
          kTestCrosGaiaIdMigrationStarted;
+}
+
+bool IsCellularFirstDevice() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(kCellularFirst);
 }
 
 }  // namespace switches

@@ -8,6 +8,8 @@
 
 #include "ui/dragging/drag_tab_handler.h"
 
+#include <utility>
+
 #include "app/vivaldi_apptools.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -16,8 +18,9 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/base/dragdrop/os_exchange_data.h"
+#include "content/public/common/drop_data.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 
 #if defined(OS_MACOSX)
 #include "ui/dragging/drag_tab_handler_helper_mac.h"
@@ -28,12 +31,9 @@ using extensions::TabsPrivateAPI;
 
 namespace vivaldi {
 
-DragTabHandler::DragTabHandler()
-    : web_contents_(NULL) {
-}
+DragTabHandler::DragTabHandler() : web_contents_(NULL) {}
 
-DragTabHandler::~DragTabHandler() {
-}
+DragTabHandler::~DragTabHandler() {}
 
 void DragTabHandler::DragInitialize(WebContents* contents) {
   web_contents_ = contents;
@@ -52,7 +52,7 @@ void DragTabHandler::OnDragOver() {
 
 #if defined(USE_AURA)
 void DragTabHandler::OnReceiveDragData(const ui::OSExchangeData& data) {
-  TabsPrivateAPI *api = TabsPrivateAPI::GetFactoryInstance()->Get(
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
       ProfileManager::GetActiveUserProfile());
   if (api && api->tab_drag_delegate() && vivaldi::IsTabDragInProgress() &&
       data.HasCustomFormat(ui::Clipboard::GetWebCustomDataFormatType())) {
@@ -83,8 +83,25 @@ void DragTabHandler::OnReceiveDragData(const ui::OSExchangeData& data) {
 }
 #endif  // defined(USE_AURA)
 
+#if defined(OS_MACOSX)
+void DragTabHandler::SetDragData(const content::DropData* drop_data) {
+  if (!drop_data) {
+    return;
+  }
+  // We only need custom_data atm.
+  if (!drop_data->custom_data.empty()) {
+    tab_drag_data_.clear();
+    for (std::map<base::string16, base::string16>::const_iterator it =
+             drop_data->custom_data.begin();
+         it != drop_data->custom_data.end(); ++it) {
+      tab_drag_data_.insert(std::make_pair(it->first, it->second));
+    }
+  }
+}
+#endif // OS_MACOSX
+
 void DragTabHandler::OnDragEnter() {
-  TabsPrivateAPI *api = TabsPrivateAPI::GetFactoryInstance()->Get(
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
       ProfileManager::GetActiveUserProfile());
   if (api && api->tab_drag_delegate() && vivaldi::IsTabDragInProgress()) {
     api->tab_drag_delegate()->OnDragEnter(tab_drag_data_);
@@ -95,7 +112,7 @@ void DragTabHandler::OnDragEnter() {
 }
 
 void DragTabHandler::OnDrop() {
-  TabsPrivateAPI *api = TabsPrivateAPI::GetFactoryInstance()->Get(
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
       ProfileManager::GetActiveUserProfile());
   if (api && api->tab_drag_delegate() && vivaldi::IsTabDragInProgress()) {
     api->tab_drag_delegate()->OnDrop(tab_drag_data_);
@@ -106,8 +123,8 @@ void DragTabHandler::OnDrop() {
 }
 
 void DragTabHandler::OnDragLeave() {
-  TabsPrivateAPI *api = TabsPrivateAPI::GetFactoryInstance()->Get(
-    ProfileManager::GetActiveUserProfile());
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
+      ProfileManager::GetActiveUserProfile());
   if (api && api->tab_drag_delegate() && vivaldi::IsTabDragInProgress()) {
     api->tab_drag_delegate()->OnDragLeave(tab_drag_data_);
   } else {
@@ -116,10 +133,12 @@ void DragTabHandler::OnDragLeave() {
   }
 }
 
-blink::WebDragOperationsMask
-DragTabHandler::OnDragEnd(int screen_x, int screen_y,
-                          blink::WebDragOperationsMask ops, bool cancelled) {
-  TabsPrivateAPI *api = TabsPrivateAPI::GetFactoryInstance()->Get(
+blink::WebDragOperationsMask DragTabHandler::OnDragEnd(
+    int screen_x,
+    int screen_y,
+    blink::WebDragOperationsMask ops,
+    bool cancelled) {
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
       ProfileManager::GetActiveUserProfile());
   if (api && api->tab_drag_delegate() && vivaldi::IsTabDragInProgress()) {
     return api->tab_drag_delegate()->OnDragEnd(screen_x, screen_y, ops,

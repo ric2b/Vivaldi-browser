@@ -12,6 +12,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/memory_usage_estimator.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_stream_factory_impl_job.h"
@@ -155,11 +159,12 @@ HttpStreamRequest* HttpStreamFactoryImpl::RequestStreamInternal(
         websocket_handshake_stream_create_helper,
     HttpStreamRequest::StreamType stream_type,
     const NetLogWithSource& net_log) {
-  JobController* job_controller =
-      new JobController(this, delegate, session_, job_factory_.get());
-  job_controller_set_.insert(base::WrapUnique(job_controller));
-
-  Request* request = job_controller->Start(
+  auto job_controller = base::MakeUnique<JobController>(
+      this, delegate, session_, job_factory_.get(), request_info,
+      /*is_preconnect=*/false);
+  JobController* job_controller_raw_ptr = job_controller.get();
+  job_controller_set_.insert(std::move(job_controller));
+  Request* request = job_controller_raw_ptr->Start(
       request_info, delegate, websocket_handshake_stream_create_helper, net_log,
       stream_type, priority, server_ssl_config, proxy_ssl_config);
 
@@ -178,11 +183,13 @@ void HttpStreamFactoryImpl::PreconnectStreams(
 
   DCHECK(!for_websockets_);
 
-  JobController* job_controller =
-      new JobController(this, nullptr, session_, job_factory_.get());
-  job_controller_set_.insert(base::WrapUnique(job_controller));
-  job_controller->Preconnect(num_streams, request_info, server_ssl_config,
-                             proxy_ssl_config);
+  auto job_controller = base::MakeUnique<JobController>(
+      this, nullptr, session_, job_factory_.get(), request_info,
+      /*is_preconnect=*/true);
+  JobController* job_controller_raw_ptr = job_controller.get();
+  job_controller_set_.insert(std::move(job_controller));
+  job_controller_raw_ptr->Preconnect(num_streams, request_info,
+                                     server_ssl_config, proxy_ssl_config);
 }
 
 const HostMappingRules* HttpStreamFactoryImpl::GetHostMappingRules() const {
@@ -196,8 +203,7 @@ void HttpStreamFactoryImpl::OnNewSpdySessionReady(
     const ProxyInfo& used_proxy_info,
     bool was_alpn_negotiated,
     NextProto negotiated_protocol,
-    bool using_spdy,
-    const NetLogWithSource& net_log) {
+    bool using_spdy) {
   while (true) {
     if (!spdy_session)
       break;
@@ -324,6 +330,52 @@ bool HttpStreamFactoryImpl::ProxyServerSupportsPriorities(
 
   return session_->http_server_properties()->SupportsRequestPriority(
       scheme_host_port);
+}
+
+void HttpStreamFactoryImpl::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_absolute_name) const {
+  if (job_controller_set_.empty())
+    return;
+  std::string name =
+      base::StringPrintf("%s/stream_factory", parent_absolute_name.c_str());
+  base::trace_event::MemoryAllocatorDump* factory_dump =
+      pmd->CreateAllocatorDump(name);
+  size_t alt_job_count = 0;
+  size_t main_job_count = 0;
+  size_t preconnect_controller_count = 0;
+  for (const auto& it : job_controller_set_) {
+    // For a preconnect controller, it should have exactly the main job.
+    if (it->is_preconnect()) {
+      preconnect_controller_count++;
+      continue;
+    }
+    // For non-preconnects.
+    if (it->HasPendingAltJob())
+      alt_job_count++;
+    if (it->HasPendingMainJob())
+      main_job_count++;
+  }
+  factory_dump->AddScalar(
+      base::trace_event::MemoryAllocatorDump::kNameSize,
+      base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+      base::trace_event::EstimateMemoryUsage(job_controller_set_));
+  factory_dump->AddScalar(
+      base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+      base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+      job_controller_set_.size());
+  // The number of non-preconnect controllers with a pending alt job.
+  factory_dump->AddScalar("alt_job_count",
+                          base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                          alt_job_count);
+  // The number of non-preconnect controllers with a pending main job.
+  factory_dump->AddScalar("main_job_count",
+                          base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                          main_job_count);
+  // The number of preconnect controllers.
+  factory_dump->AddScalar("preconnect_count",
+                          base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                          preconnect_controller_count);
 }
 
 }  // namespace net

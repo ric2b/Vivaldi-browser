@@ -76,6 +76,8 @@ class CronetHttpProtocolHandlerDelegate
   // net::HTTPProtocolHandlerDelegate implementation:
   bool CanHandleRequest(NSURLRequest* request) override {
     base::AutoLock auto_lock(lock_);
+    if (!IsRequestSupported(request))
+      return false;
     if (filter_) {
       RequestFilterBlock block = filter_.get();
       return block(request);
@@ -161,16 +163,16 @@ class CronetHttpProtocolHandlerDelegate
   gSslKeyLogFileName = sslKeyLogFileName;
 }
 
-+ (void)setHttpCacheType:(HttpCacheType)httpCacheType {
++ (void)setHttpCacheType:(CRNHttpCacheType)httpCacheType {
   [self checkNotStarted];
   switch (httpCacheType) {
-    case DISABLED:
+    case CRNHttpCacheTypeDisabled:
       gHttpCache = cronet::URLRequestContextConfig::HttpCacheType::DISABLED;
       break;
-    case DISK:
+    case CRNHttpCacheTypeDisk:
       gHttpCache = cronet::URLRequestContextConfig::HttpCacheType::DISK;
       break;
-    case MEMORY:
+    case CRNHttpCacheTypeMemory:
       gHttpCache = cronet::URLRequestContextConfig::HttpCacheType::MEMORY;
       break;
     default:

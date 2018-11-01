@@ -18,7 +18,7 @@
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/ipc/common/gpu_surface_lookup.h"
 #include "gpu/ipc/service/gpu_channel.h"
-#include "media/base/android/sdk_media_codec_bridge.h"
+#include "media/base/android/media_codec_bridge_impl.h"
 #include "media/gpu/avda_codec_image.h"
 #include "media/gpu/avda_shared_state.h"
 #include "ui/gl/android/surface_texture.h"
@@ -269,7 +269,7 @@ void AVDAPictureBufferManager::MaybeRenderEarly() {
       AVDACodecImage::UpdateMode::RENDER_TO_BACK_BUFFER);
 }
 
-void AVDAPictureBufferManager::CodecChanged(VideoCodecBridge* codec) {
+void AVDAPictureBufferManager::CodecChanged(MediaCodecBridge* codec) {
   media_codec_ = codec;
   for (auto& image_kv : codec_images_)
     image_kv.second->CodecChanged(codec);

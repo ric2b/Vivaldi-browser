@@ -7,6 +7,7 @@
 #include "bindings/core/v8/ScheduledAction.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "bindings/core/v8/SourceLocation.h"
+#include "core/InstrumentingAgents.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventListener.h"
@@ -61,78 +62,6 @@ PerformanceMonitor::HandlerCall::~HandlerCall() {
 }
 
 // static
-void PerformanceMonitor::willExecuteScript(ExecutionContext* context) {
-  PerformanceMonitor* performanceMonitor = PerformanceMonitor::monitor(context);
-  if (performanceMonitor)
-    performanceMonitor->alwaysWillExecuteScript(context);
-}
-
-// static
-void PerformanceMonitor::didExecuteScript(ExecutionContext* context) {
-  PerformanceMonitor* performanceMonitor = PerformanceMonitor::monitor(context);
-  if (performanceMonitor)
-    performanceMonitor->alwaysDidExecuteScript();
-}
-
-// static
-void PerformanceMonitor::willCallFunction(ExecutionContext* context) {
-  PerformanceMonitor* performanceMonitor = PerformanceMonitor::monitor(context);
-  if (performanceMonitor)
-    performanceMonitor->alwaysWillCallFunction(context);
-}
-
-// static
-void PerformanceMonitor::didCallFunction(ExecutionContext* context,
-                                         v8::Local<v8::Function> function) {
-  PerformanceMonitor* performanceMonitor = PerformanceMonitor::monitor(context);
-  if (performanceMonitor)
-    performanceMonitor->alwaysDidCallFunction(function);
-}
-
-// static
-void PerformanceMonitor::willUpdateLayout(Document* document) {
-  PerformanceMonitor* performanceMonitor =
-      PerformanceMonitor::instrumentingMonitor(document);
-  if (performanceMonitor)
-    performanceMonitor->willUpdateLayout();
-}
-
-// static
-void PerformanceMonitor::didUpdateLayout(Document* document) {
-  PerformanceMonitor* performanceMonitor =
-      PerformanceMonitor::instrumentingMonitor(document);
-  if (performanceMonitor)
-    performanceMonitor->didUpdateLayout();
-}
-
-// static
-void PerformanceMonitor::willRecalculateStyle(Document* document) {
-  PerformanceMonitor* performanceMonitor =
-      PerformanceMonitor::instrumentingMonitor(document);
-  if (performanceMonitor)
-    performanceMonitor->willRecalculateStyle();
-}
-
-// static
-void PerformanceMonitor::didRecalculateStyle(Document* document) {
-  PerformanceMonitor* performanceMonitor =
-      PerformanceMonitor::instrumentingMonitor(document);
-  if (performanceMonitor)
-    performanceMonitor->didRecalculateStyle();
-}
-
-// static
-void PerformanceMonitor::documentWriteFetchScript(Document* document) {
-  PerformanceMonitor* performanceMonitor =
-      PerformanceMonitor::instrumentingMonitor(document);
-  if (!performanceMonitor)
-    return;
-  String text = "Parser was blocked due to document.write(<script>)";
-  performanceMonitor->reportGenericViolation(
-      kBlockedParser, text, 0, SourceLocation::capture(document).get());
-}
-
-// static
 double PerformanceMonitor::threshold(ExecutionContext* context,
                                      Violation violation) {
   PerformanceMonitor* monitor =
@@ -141,16 +70,18 @@ double PerformanceMonitor::threshold(ExecutionContext* context,
 }
 
 // static
-void PerformanceMonitor::reportGenericViolation(ExecutionContext* context,
-                                                Violation violation,
-                                                const String& text,
-                                                double time,
-                                                SourceLocation* location) {
+void PerformanceMonitor::reportGenericViolation(
+    ExecutionContext* context,
+    Violation violation,
+    const String& text,
+    double time,
+    std::unique_ptr<SourceLocation> location) {
   PerformanceMonitor* monitor =
       PerformanceMonitor::instrumentingMonitor(context);
   if (!monitor)
     return;
-  monitor->reportGenericViolation(violation, text, time, location);
+  monitor->innerReportGenericViolation(context, violation, text, time,
+                                       std::move(location));
 }
 
 // static
@@ -175,17 +106,18 @@ PerformanceMonitor::PerformanceMonitor(LocalFrame* localRoot)
     : m_localRoot(localRoot) {
   std::fill(std::begin(m_thresholds), std::end(m_thresholds), 0);
   Platform::current()->currentThread()->addTaskTimeObserver(this);
+  m_localRoot->instrumentingAgents()->addPerformanceMonitor(this);
 }
 
 PerformanceMonitor::~PerformanceMonitor() {
-  shutdown();
+  DCHECK(!m_localRoot);
 }
 
 void PerformanceMonitor::subscribe(Violation violation,
                                    double threshold,
                                    Client* client) {
   DCHECK(violation < kAfterLast);
-  ClientThresholds* clientThresholds = m_subscriptions.get(violation);
+  ClientThresholds* clientThresholds = m_subscriptions.at(violation);
   if (!clientThresholds) {
     clientThresholds = new ClientThresholds();
     m_subscriptions.set(violation, clientThresholds);
@@ -196,14 +128,18 @@ void PerformanceMonitor::subscribe(Violation violation,
 
 void PerformanceMonitor::unsubscribeAll(Client* client) {
   for (const auto& it : m_subscriptions)
-    it.value->remove(client);
+    it.value->erase(client);
   updateInstrumentation();
 }
 
 void PerformanceMonitor::shutdown() {
+  if (!m_localRoot)
+    return;
   m_subscriptions.clear();
   updateInstrumentation();
   Platform::current()->currentThread()->removeTaskTimeObserver(this);
+  m_localRoot->instrumentingAgents()->removePerformanceMonitor(this);
+  m_localRoot = nullptr;
 }
 
 void PerformanceMonitor::updateInstrumentation() {
@@ -223,7 +159,7 @@ void PerformanceMonitor::updateInstrumentation() {
               static_cast<int>(kAfterLast);
 }
 
-void PerformanceMonitor::alwaysWillExecuteScript(ExecutionContext* context) {
+void PerformanceMonitor::willExecuteScript(ExecutionContext* context) {
   // Heuristic for minimal frame context attribution: note the frame context
   // for each script execution. When a long task is encountered,
   // if there is only one frame context involved, then report it.
@@ -238,21 +174,21 @@ void PerformanceMonitor::alwaysWillExecuteScript(ExecutionContext* context) {
     m_taskHasMultipleContexts = true;
 }
 
-void PerformanceMonitor::alwaysDidExecuteScript() {
+void PerformanceMonitor::didExecuteScript() {
   --m_scriptDepth;
 }
 
-void PerformanceMonitor::alwaysWillCallFunction(ExecutionContext* context) {
-  alwaysWillExecuteScript(context);
+void PerformanceMonitor::willCallFunction(ExecutionContext* context) {
+  willExecuteScript(context);
   if (!m_enabled)
     return;
   if (m_scriptDepth == 1 && m_thresholds[m_handlerType])
     m_scriptStartTime = WTF::monotonicallyIncreasingTime();
 }
 
-void PerformanceMonitor::alwaysDidCallFunction(
-    v8::Local<v8::Function> function) {
-  alwaysDidExecuteScript();
+void PerformanceMonitor::didCallFunction(ExecutionContext* context,
+                                         v8::Local<v8::Function> function) {
+  didExecuteScript();
   if (!m_enabled)
     return;
   if (m_scriptDepth)
@@ -269,17 +205,21 @@ void PerformanceMonitor::alwaysDidCallFunction(
   String name = m_handlerName ? m_handlerName : m_handlerAtomicName;
   String text = String::format("'%s' handler took %ldms", name.utf8().data(),
                                lround(time * 1000));
-  reportGenericViolation(m_handlerType, text, time,
-                         SourceLocation::fromFunction(function).get());
+  innerReportGenericViolation(context, m_handlerType, text, time,
+                              SourceLocation::fromFunction(function));
 }
 
 void PerformanceMonitor::willUpdateLayout() {
+  if (!m_enabled)
+    return;
   if (m_thresholds[kLongLayout] && m_scriptDepth && !m_layoutDepth)
     m_layoutStartTime = WTF::monotonicallyIncreasingTime();
   ++m_layoutDepth;
 }
 
 void PerformanceMonitor::didUpdateLayout() {
+  if (!m_enabled)
+    return;
   --m_layoutDepth;
   if (m_thresholds[kLongLayout] && m_scriptDepth && !m_layoutDepth) {
     m_perTaskStyleAndLayoutTime +=
@@ -287,16 +227,28 @@ void PerformanceMonitor::didUpdateLayout() {
   }
 }
 
-void PerformanceMonitor::willRecalculateStyle() {
+void PerformanceMonitor::will(const probe::RecalculateStyle&) {
+  if (!m_enabled)
+    return;
+
   if (m_thresholds[kLongLayout] && m_scriptDepth)
     m_styleStartTime = WTF::monotonicallyIncreasingTime();
 }
 
-void PerformanceMonitor::didRecalculateStyle() {
+void PerformanceMonitor::did(const probe::RecalculateStyle&) {
+  if (!m_enabled)
+    return;
   if (m_thresholds[kLongLayout] && m_scriptDepth) {
     m_perTaskStyleAndLayoutTime +=
         WTF::monotonicallyIncreasingTime() - m_styleStartTime;
   }
+}
+
+void PerformanceMonitor::documentWriteFetchScript(Document* document) {
+  if (!m_enabled)
+    return;
+  String text = "Parser was blocked due to document.write(<script>)";
+  innerReportGenericViolation(document, kBlockedParser, text, 0, nullptr);
 }
 
 void PerformanceMonitor::willProcessTask(scheduler::TaskQueue*,
@@ -325,7 +277,7 @@ void PerformanceMonitor::didProcessTask(scheduler::TaskQueue*,
     return;
   double layoutThreshold = m_thresholds[kLongLayout];
   if (layoutThreshold && m_perTaskStyleAndLayoutTime > layoutThreshold) {
-    ClientThresholds* clientThresholds = m_subscriptions.get(kLongLayout);
+    ClientThresholds* clientThresholds = m_subscriptions.at(kLongLayout);
     DCHECK(clientThresholds);
     for (const auto& it : *clientThresholds) {
       if (it.value < m_perTaskStyleAndLayoutTime)
@@ -335,7 +287,7 @@ void PerformanceMonitor::didProcessTask(scheduler::TaskQueue*,
 
   double taskTime = endTime - startTime;
   if (m_thresholds[kLongTask] && taskTime > m_thresholds[kLongTask]) {
-    ClientThresholds* clientThresholds = m_subscriptions.get(kLongTask);
+    ClientThresholds* clientThresholds = m_subscriptions.at(kLongTask);
     for (const auto& it : *clientThresholds) {
       if (it.value < taskTime) {
         it.key->reportLongTask(
@@ -347,16 +299,23 @@ void PerformanceMonitor::didProcessTask(scheduler::TaskQueue*,
   }
 }
 
-void PerformanceMonitor::reportGenericViolation(Violation violation,
-                                                const String& text,
-                                                double time,
-                                                SourceLocation* location) {
-  ClientThresholds* clientThresholds = m_subscriptions.get(violation);
+void PerformanceMonitor::innerReportGenericViolation(
+    ExecutionContext* context,
+    Violation violation,
+    const String& text,
+    double time,
+    std::unique_ptr<SourceLocation> location) {
+  ClientThresholds* clientThresholds = m_subscriptions.at(violation);
   if (!clientThresholds)
     return;
+  if (!location)
+    location = SourceLocation::capture(context);
   for (const auto& it : *clientThresholds) {
-    if (it.value < time)
-      it.key->reportGenericViolation(violation, text, time, location);
+    if (it.value < time) {
+      if (!location)
+        location = SourceLocation::capture(context);
+      it.key->reportGenericViolation(violation, text, time, location.get());
+    }
   }
 }
 

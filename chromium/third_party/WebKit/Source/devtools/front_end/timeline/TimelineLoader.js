@@ -8,18 +8,19 @@
  */
 Timeline.TimelineLoader = class {
   /**
-   * @param {!SDK.TracingModel} model
-   * @param {!Timeline.LoaderClient} delegate
+   * @param {!Timeline.TimelineLoader.Client} client
    */
-  constructor(model, delegate) {
-    this._model = model;
-    this._delegate = delegate;
+  constructor(client) {
+    this._client = client;
+
+    this._backingStorage = new Bindings.TempFileBackingStorage('tracing');
+    this._tracingModel = new SDK.TracingModel(this._backingStorage);
 
     /** @type {?function()} */
     this._canceledCallback = null;
-
     this._state = Timeline.TimelineLoader.State.Initial;
     this._buffer = '';
+    this._firstRawChunk = true;
     this._firstChunk = true;
 
     this._loadedBytes = 0;
@@ -29,13 +30,12 @@ Timeline.TimelineLoader = class {
   }
 
   /**
-   * @param {!SDK.TracingModel} model
    * @param {!File} file
-   * @param {!Timeline.TimelineLifecycleDelegate} delegate
+   * @param {!Timeline.TimelineLoader.Client} client
    * @return {!Timeline.TimelineLoader}
    */
-  static loadFromFile(model, file, delegate) {
-    var loader = new Timeline.TimelineLoader(model, delegate);
+  static loadFromFile(file, client) {
+    var loader = new Timeline.TimelineLoader(client);
     var fileReader = Timeline.TimelineLoader._createFileReader(file, loader);
     loader._canceledCallback = fileReader.cancel.bind(fileReader);
     loader._totalSize = file.size;
@@ -44,13 +44,12 @@ Timeline.TimelineLoader = class {
   }
 
   /**
-   * @param {!SDK.TracingModel} model
    * @param {string} url
-   * @param {!Timeline.LoaderClient} delegate
+   * @param {!Timeline.TimelineLoader.Client} client
    * @return {!Timeline.TimelineLoader}
    */
-  static loadFromURL(model, url, delegate) {
-    var stream = new Timeline.TimelineLoader(model, delegate);
+  static loadFromURL(url, client) {
+    var stream = new Timeline.TimelineLoader(client);
     Host.ResourceLoader.loadAsStream(url, null, stream);
     return stream;
   }
@@ -65,9 +64,10 @@ Timeline.TimelineLoader = class {
   }
 
   cancel() {
-    this._model.reset();
-    this._delegate.loadingComplete(false);
-    this._delegate = null;
+    this._tracingModel = null;
+    this._backingStorage.reset();
+    this._client.loadingComplete(null, null);
+    this._client = null;
     if (this._canceledCallback)
       this._canceledCallback();
   }
@@ -77,14 +77,19 @@ Timeline.TimelineLoader = class {
    * @param {string} chunk
    */
   write(chunk) {
-    if (!this._delegate)
+    if (!this._client)
       return;
     this._loadedBytes += chunk.length;
-    if (!this._firstChunk)
-      this._delegate.loadingProgress(this._totalSize ? this._loadedBytes / this._totalSize : undefined);
+    if (this._firstRawChunk)
+      this._client.loadingStarted();
+    else
+      this._client.loadingProgress(this._totalSize ? this._loadedBytes / this._totalSize : undefined);
+    this._firstRawChunk = false;
 
     if (this._state === Timeline.TimelineLoader.State.Initial) {
-      if (chunk[0] === '{') {
+      if (chunk.startsWith('{"nodes":[')) {
+        this._state = Timeline.TimelineLoader.State.LoadingCPUProfileFormat;
+      } else if (chunk[0] === '{') {
         this._state = Timeline.TimelineLoader.State.LookingForEvents;
       } else if (chunk[0] === '[') {
         this._state = Timeline.TimelineLoader.State.ReadingEvents;
@@ -92,6 +97,11 @@ Timeline.TimelineLoader = class {
         this._reportErrorAndCancelLoading(Common.UIString('Malformed timeline data: Unknown JSON format'));
         return;
       }
+    }
+
+    if (this._state === Timeline.TimelineLoader.State.LoadingCPUProfileFormat) {
+      this._buffer += chunk;
+      return;
     }
 
     if (this._state === Timeline.TimelineLoader.State.LookingForEvents) {
@@ -122,9 +132,7 @@ Timeline.TimelineLoader = class {
   _writeBalancedJSON(data) {
     var json = data + ']';
 
-    if (this._firstChunk) {
-      this._delegate.loadingStarted();
-    } else {
+    if (!this._firstChunk) {
       var commaIndex = json.indexOf(',');
       if (commaIndex !== -1)
         json = json.slice(commaIndex + 1);
@@ -141,7 +149,6 @@ Timeline.TimelineLoader = class {
 
     if (this._firstChunk) {
       this._firstChunk = false;
-      this._model.reset();
       if (this._looksLikeAppVersion(items[0])) {
         this._reportErrorAndCancelLoading(Common.UIString('Legacy Timeline format is not supported.'));
         return;
@@ -149,10 +156,9 @@ Timeline.TimelineLoader = class {
     }
 
     try {
-      this._model.addEvents(items);
+      this._tracingModel.addEvents(items);
     } catch (e) {
       this._reportErrorAndCancelLoading(Common.UIString('Malformed timeline data: %s', e.toString()));
-      return;
     }
   }
 
@@ -177,9 +183,19 @@ Timeline.TimelineLoader = class {
    * @override
    */
   close() {
-    this._model.tracingComplete();
-    if (this._delegate)
-      this._delegate.loadingComplete(true);
+    if (!this._client)
+      return;
+    this._client.processingStarted();
+    setTimeout(() => this._finalizeTrace(), 0);
+  }
+
+  _finalizeTrace() {
+    if (this._state === Timeline.TimelineLoader.State.LoadingCPUProfileFormat) {
+      this._parseCPUProfileFormat(this._buffer);
+      this._buffer = '';
+    }
+    this._tracingModel.tracingComplete();
+    this._client.loadingComplete(this._tracingModel, this._backingStorage);
   }
 
   /**
@@ -221,11 +237,47 @@ Timeline.TimelineLoader = class {
             Common.UIString('An error occurred while reading the file "%s"', reader.fileName()));
     }
   }
+
+  /**
+   * @param {string} text
+   */
+  _parseCPUProfileFormat(text) {
+    var traceEvents;
+    try {
+      var profile = JSON.parse(text);
+      traceEvents = TimelineModel.TimelineJSProfileProcessor.buildTraceProfileFromCpuProfile(profile);
+    } catch (e) {
+      this._reportErrorAndCancelLoading(Common.UIString('Malformed CPU profile format'));
+      return;
+    }
+    this._tracingModel.addEvents(traceEvents);
+  }
 };
 
 
 Timeline.TimelineLoader.TransferChunkLengthBytes = 5000000;
 
+/**
+ * @interface
+ */
+Timeline.TimelineLoader.Client = function() {};
+
+Timeline.TimelineLoader.Client.prototype = {
+  loadingStarted() {},
+
+  /**
+   * @param {number=} progress
+   */
+  loadingProgress(progress) {},
+
+  processingStarted() {},
+
+  /**
+   * @param {?SDK.TracingModel} tracingModel
+   * @param {?Bindings.TempFileBackingStorage} backingStorage
+   */
+  loadingComplete(tracingModel, backingStorage) {},
+};
 
 /**
  * @enum {symbol}
@@ -234,7 +286,8 @@ Timeline.TimelineLoader.State = {
   Initial: Symbol('Initial'),
   LookingForEvents: Symbol('LookingForEvents'),
   ReadingEvents: Symbol('ReadingEvents'),
-  SkippingTail: Symbol('SkippingTail')
+  SkippingTail: Symbol('SkippingTail'),
+  LoadingCPUProfileFormat: Symbol('LoadingCPUProfileFormat')
 };
 
 /**

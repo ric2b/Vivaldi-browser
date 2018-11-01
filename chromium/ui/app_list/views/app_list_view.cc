@@ -8,7 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -86,7 +86,7 @@ class AppListOverlayView : public views::View {
  public:
   explicit AppListOverlayView(int corner_radius)
       : corner_radius_(corner_radius) {
-    SetPaintToLayer(true);
+    SetPaintToLayer();
     SetVisible(false);
     layer()->SetOpacity(0.0f);
   }
@@ -95,10 +95,10 @@ class AppListOverlayView : public views::View {
 
   // Overridden from views::View:
   void OnPaint(gfx::Canvas* canvas) override {
-    SkPaint paint;
-    paint.setStyle(SkPaint::kFill_Style);
-    paint.setColor(SK_ColorWHITE);
-    canvas->DrawRoundRect(GetContentsBounds(), corner_radius_, paint);
+    cc::PaintFlags flags;
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    flags.setColor(SK_ColorWHITE);
+    canvas->DrawRoundRect(GetContentsBounds(), corner_radius_, flags);
   }
 
  private:
@@ -229,25 +229,6 @@ void AppListView::InitAsBubble(gfx::NativeView parent, int initial_apps_page) {
                       base::Time::Now() - start_time);
 }
 
-void AppListView::InitAsFramelessWindow(gfx::NativeView parent,
-                                        int initial_apps_page,
-                                        gfx::Rect bounds) {
-  set_color(kContentsBackgroundColor);
-  InitContents(parent, initial_apps_page);
-  overlay_view_ = new AppListOverlayView(0 /* no corners */);
-  AddChildView(overlay_view_);
-
-  views::Widget* widget = new views::Widget();
-  views::Widget::InitParams params(
-      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.parent = parent;
-  params.delegate = this;
-  widget->Init(params);
-  widget->SetBounds(bounds);
-
-  InitChildWidgets();
-}
-
 void AppListView::SetBubbleArrow(views::BubbleBorder::Arrow arrow) {
   GetBubbleFrameView()->bubble_border()->set_arrow(arrow);
   SizeToContents();  // Recalcuates with new border.
@@ -368,14 +349,14 @@ void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
 
   app_list_main_view_ = new AppListMainView(delegate_);
   AddChildView(app_list_main_view_);
-  app_list_main_view_->SetPaintToLayer(true);
+  app_list_main_view_->SetPaintToLayer();
   app_list_main_view_->layer()->SetFillsBoundsOpaquely(false);
   app_list_main_view_->layer()->SetMasksToBounds(true);
 
   // This will be added to the |search_box_widget_| after the app list widget is
   // initialized.
   search_box_view_ = new SearchBoxView(app_list_main_view_, delegate_);
-  search_box_view_->SetPaintToLayer(true);
+  search_box_view_->SetPaintToLayer();
   search_box_view_->layer()->SetFillsBoundsOpaquely(false);
   search_box_view_->layer()->SetMasksToBounds(true);
 
@@ -397,7 +378,7 @@ void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
   if (delegate_ && delegate_->IsSpeechRecognitionEnabled()) {
     speech_view_ = new SpeechView(delegate_);
     speech_view_->SetVisible(false);
-    speech_view_->SetPaintToLayer(true);
+    speech_view_->SetPaintToLayer();
     speech_view_->layer()->SetFillsBoundsOpaquely(false);
     speech_view_->layer()->SetOpacity(0.0f);
     AddChildView(speech_view_);

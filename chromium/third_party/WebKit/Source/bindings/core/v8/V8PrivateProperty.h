@@ -5,15 +5,16 @@
 #ifndef V8PrivateProperty_h
 #define V8PrivateProperty_h
 
+#include <memory>
+
 #include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptPromiseProperties.h"
 #include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/CoreExport.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
@@ -21,19 +22,24 @@ class ScriptState;
 class ScriptWrappable;
 
 // Apply |X| for each pair of (InterfaceName, PrivateKeyName).
-#define V8_PRIVATE_PROPERTY_FOR_EACH(X) \
-  X(CustomEvent, Detail)                \
-  X(DOMException, Error)                \
-  X(ErrorEvent, Error)                  \
-  X(IDBObserver, Callback)              \
-  X(IntersectionObserver, Callback)     \
-  X(MessageEvent, CachedData)           \
-  X(MutationObserver, Callback)         \
-  X(PerformanceObserver, Callback)      \
-  X(SameObject, NotificationActions)    \
-  X(SameObject, NotificationData)       \
-  X(SameObject, NotificationVibrate)    \
-  X(V8NodeFilterCondition, Filter)      \
+#define V8_PRIVATE_PROPERTY_FOR_EACH(X)               \
+  X(CustomEvent, Detail)                              \
+  X(CustomElement, ConnectedCallback)                 \
+  X(CustomElement, DisconnectedCallback)              \
+  X(CustomElement, AdoptedCallback)                   \
+  X(CustomElement, AttributeChangedCallback)          \
+  X(DOMException, Error)                              \
+  X(ErrorEvent, Error)                                \
+  X(IDBObserver, Callback)                            \
+  X(IntersectionObserver, Callback)                   \
+  X(MessageEvent, CachedData)                         \
+  X(MutationObserver, Callback)                       \
+  X(PerformanceObserver, Callback)                    \
+  X(SameObject, NotificationActions)                  \
+  X(SameObject, NotificationData)                     \
+  X(SameObject, NotificationVibrate)                  \
+  X(SameObject, PerformanceLongTaskTimingAttribution) \
+  X(V8NodeFilterCondition, Filter)                    \
   X(Window, DocumentCachedAccessor)
 
 // The getter's name for a private property.

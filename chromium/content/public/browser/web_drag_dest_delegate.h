@@ -14,6 +14,7 @@ class OSExchangeData;
 
 namespace content {
 class WebContents;
+struct DropData;
 
 // An optional delegate that listens for drags of bookmark data.
 class WebDragDestDelegate {
@@ -42,6 +43,10 @@ class WebDragDestDelegate {
   // drag.
   virtual void OnReceiveDragData(const ui::OSExchangeData& data) = 0;
 #endif  // USE_AURA
+
+#if defined(OS_MACOSX)
+  virtual void SetDragData(const content::DropData* data) {}
+#endif  // OS_MACOSX
 
   virtual ~WebDragDestDelegate() {}
 };

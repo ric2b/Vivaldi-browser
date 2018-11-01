@@ -26,6 +26,7 @@
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -138,8 +139,8 @@
 #endif
 
 #if !defined(OS_ANDROID)
+#include "chrome/browser/gcm/gcm_product_util.h"
 #include "chrome/browser/lifetime/keep_alive_registry.h"
-#include "chrome/browser/services/gcm/gcm_product_util.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
@@ -541,6 +542,11 @@ metrics::MetricsService* BrowserProcessImpl::metrics_service() {
 rappor::RapporServiceImpl* BrowserProcessImpl::rappor_service() {
   DCHECK(CalledOnValidThread());
   return GetMetricsServicesManager()->GetRapporServiceImpl();
+}
+
+ukm::UkmService* BrowserProcessImpl::ukm_service() {
+  DCHECK(CalledOnValidThread());
+  return GetMetricsServicesManager()->GetUkmService();
 }
 
 IOThread* BrowserProcessImpl::io_thread() {

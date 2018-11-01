@@ -45,6 +45,7 @@ class ContentGpuClient;
 class ContentRendererClient;
 class ContentUtilityClient;
 class OriginTrialPolicy;
+struct CdmHostFilePath;
 struct CdmInfo;
 struct PepperPluginInfo;
 
@@ -87,10 +88,13 @@ class CONTENT_EXPORT ContentClient {
   virtual void AddPepperPlugins(
       std::vector<content::PepperPluginInfo>* plugins) {}
 
-  // Gives the embedder a chance to register the content decryption
-  // modules it supports.
+  // Gives the embedder a chance to register the Content Decryption Modules
+  // (CDM) it supports, as well as the CDM host file paths to verify CDM host.
+  // |cdms| or |cdm_host_file_paths| can be null which means that specific list
+  // is not needed.
   virtual void AddContentDecryptionModules(
-      std::vector<content::CdmInfo>* cdms) {}
+      std::vector<content::CdmInfo>* cdms,
+      std::vector<content::CdmHostFilePath>* cdm_host_file_paths) {}
 
   // Gives the embedder a chance to register its own schemes early in the
   // startup sequence.
@@ -107,6 +111,7 @@ class CONTENT_EXPORT ContentClient {
     std::vector<std::string> local_schemes;
     std::vector<std::string> no_access_schemes;
     std::vector<std::string> cors_enabled_schemes;
+    std::vector<std::string> csp_bypassing_schemes;
     // See https://www.w3.org/TR/powerful-features/#is-origin-trustworthy.
     std::vector<std::string> secure_schemes;
     std::vector<GURL> secure_origins;

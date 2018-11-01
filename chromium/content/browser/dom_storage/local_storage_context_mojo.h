@@ -45,9 +45,15 @@ class CONTENT_EXPORT LocalStorageContextMojo {
   void DeleteStorageForPhysicalOrigin(const url::Origin& origin);
   void Flush();
 
+  // Clears any caches, to free up as much memory as possible. Next access to
+  // storage for a particular origin will reload the data from the database.
+  void PurgeMemory();
+
   leveldb::mojom::LevelDBDatabaseAssociatedRequest DatabaseRequestForTesting();
 
  private:
+  friend class MojoDOMStorageBrowserTest;
+
   class LevelDBWrapperHolder;
 
   // Runs |callback| immediately if already connected to a database, otherwise
@@ -61,7 +67,7 @@ class CONTENT_EXPORT LocalStorageContextMojo {
   // Part of our asynchronous directory opening called from RunWhenConnected().
   void InitiateConnection(bool in_memory_only = false);
   void OnDirectoryOpened(filesystem::mojom::FileError err);
-  void OnDatabaseOpened(leveldb::mojom::DatabaseError status);
+  void OnDatabaseOpened(bool in_memory, leveldb::mojom::DatabaseError status);
   void OnGotDatabaseVersion(leveldb::mojom::DatabaseError status,
                             const std::vector<uint8_t>& value);
   void OnConnectionFinished();

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -65,7 +67,6 @@
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_dispatcher_host.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/device_sensors/device_sensor_host.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/dom_storage_message_filter.h"
 #include "content/browser/fileapi/fileapi_message_filter.h"
@@ -88,7 +89,6 @@
 #include "content/browser/media/midi_host.h"
 #include "content/browser/memory/memory_coordinator_impl.h"
 #include "content/browser/memory/memory_message_filter.h"
-#include "content/browser/message_port_message_filter.h"
 #include "content/browser/mime_registry_impl.h"
 #include "content/browser/notifications/notification_message_filter.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
@@ -96,7 +96,7 @@
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
 #include "content/browser/profiler_message_filter.h"
-#include "content/browser/push_messaging/push_messaging_message_filter.h"
+#include "content/browser/push_messaging/push_messaging_manager.h"
 #include "content/browser/quota_dispatcher_host.h"
 #include "content/browser/renderer_host/clipboard_message_filter.h"
 #include "content/browser/renderer_host/database_message_filter.h"
@@ -115,6 +115,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/browser/renderer_host/text_input_client_message_filter.h"
 #include "content/browser/resolve_proxy_msg_helper.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -148,7 +149,6 @@
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
-#include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/worker_service.h"
@@ -166,6 +166,7 @@
 #include "content/public/common/url_constants.h"
 #include "device/battery/battery_monitor_impl.h"
 #include "device/gamepad/gamepad_monitor.h"
+#include "device/sensors/device_sensor_host.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gpu_switches.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -181,12 +182,16 @@
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/features/features.h"
-#include "ppapi/shared_impl/ppapi_switches.h"
 #include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/runner/common/switches.h"
+#include "services/shape_detection/public/interfaces/barcodedetection.mojom.h"
+#include "services/shape_detection/public/interfaces/constants.mojom.h"
+#include "services/shape_detection/public/interfaces/facedetection_provider.mojom.h"
+#include "services/shape_detection/public/interfaces/textdetection.mojom.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/WebKit/public/public_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -231,6 +236,7 @@
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/browser/plugin_service_impl.h"
+#include "ppapi/shared_impl/ppapi_switches.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -455,6 +461,16 @@ void CreateMemoryCoordinatorHandle(
                                                      std::move(request));
 }
 
+// Forwards service requests to Service Manager since the renderer cannot launch
+// out-of-process services on is own.
+template <typename R>
+void ForwardShapeDetectionRequest(R request) {
+  service_manager::Connector* connector =
+      ServiceManagerConnection::GetForProcess()->GetConnector();
+  connector->BindInterface(shape_detection::mojom::kServiceName,
+                           std::move(request));
+}
+
 }  // namespace
 
 RendererMainThreadFactoryFunction g_renderer_main_thread_factory = NULL;
@@ -668,8 +684,6 @@ RenderProcessHostImpl::RenderProcessHostImpl(
       shared_worker_ref_count_(0),
       is_worker_ref_count_disabled_(false),
       route_provider_binding_(this),
-      associated_interface_provider_bindings_(
-          mojo::BindingSetDispatchMode::WITH_CONTEXT),
       visible_widgets_(0),
       is_process_backgrounded_(false),
       id_(ChildProcessHostImpl::GenerateChildProcessUniqueId()),
@@ -716,6 +730,9 @@ RenderProcessHostImpl::RenderProcessHostImpl(
                             base::Bind(&CacheShaderInfo, GetID(),
                                        storage_partition_impl_->GetPath()));
   }
+
+  push_messaging_manager_.reset(new PushMessagingManager(
+      GetID(), storage_partition_impl_->GetServiceWorkerContext()));
 
 #if defined(OS_MACOSX)
   if (BootstrapSandboxManager::ShouldEnable())
@@ -819,6 +836,7 @@ bool RenderProcessHostImpl::Init() {
   // null, so we re-initialize it here.
   if (!channel_)
     InitializeChannelProxy();
+  DCHECK(pending_connection_);
 
   // Unpause the Channel briefly. This will be paused again below if we launch a
   // real child process. Note that messages may be sent in the short window
@@ -895,19 +913,22 @@ bool RenderProcessHostImpl::Init() {
     AppendRendererCommandLine(cmd_line.get());
 
   if (vivaldi::IsVivaldiRunning())
-    cmd_line->AppendSwitchNoDup(switches::kRunningVivaldi);
+    vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
+                                          switches::kRunningVivaldi);
   else
-    cmd_line->AppendSwitchNoDup(switches::kDisableVivaldi);
+    vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
+                                          switches::kDisableVivaldi);
 
   if (vivaldi::IsDebuggingVivaldi())
-    cmd_line->AppendSwitchNoDup(switches::kDebugVivaldi);
+    vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
+                                          switches::kDebugVivaldi);
 
     // Spawn the child process asynchronously to avoid blocking the UI thread.
     // As long as there's no renderer prefix, we can use the zygote process
     // at this stage.
     child_process_launcher_.reset(new ChildProcessLauncher(
         base::MakeUnique<RendererSandboxedProcessLauncherDelegate>(),
-        std::move(cmd_line), GetID(), this, child_token_,
+        std::move(cmd_line), GetID(), this, std::move(pending_connection_),
         base::Bind(&RenderProcessHostImpl::OnMojoError, id_)));
     channel_->Pause();
 
@@ -930,9 +951,6 @@ void RenderProcessHostImpl::EnableSendQueue() {
 }
 
 void RenderProcessHostImpl::InitializeChannelProxy() {
-  // Generate a token used to identify the new child process.
-  child_token_ = mojo::edk::GenerateRandomToken();
-
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
 
@@ -957,10 +975,11 @@ void RenderProcessHostImpl::InitializeChannelProxy() {
   }
 
   // Establish a ServiceManager connection for the new render service instance.
+  pending_connection_.reset(new mojo::edk::PendingProcessConnection);
   child_connection_.reset(new ChildConnection(
       mojom::kRendererServiceName,
-      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
-      io_task_runner));
+      base::StringPrintf("%d_%d", id_, instance_id_++),
+      pending_connection_.get(), connector, io_task_runner));
 
   // Send an interface request to bootstrap the IPC::Channel. Note that this
   // request will happily sit on the pipe until the process is launched and
@@ -1134,19 +1153,13 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   channel_->AddFilter(new FontCacheDispatcher());
 #endif
 
-  message_port_message_filter_ = new MessagePortMessageFilter(
-      base::Bind(&RenderWidgetHelper::GetNextRoutingID,
-                 base::Unretained(widget_helper_.get())));
-  AddFilter(message_port_message_filter_.get());
-
   scoped_refptr<CacheStorageDispatcherHost> cache_storage_filter =
       new CacheStorageDispatcherHost();
   cache_storage_filter->Init(storage_partition_impl_->GetCacheStorageContext());
   AddFilter(cache_storage_filter.get());
 
   scoped_refptr<ServiceWorkerDispatcherHost> service_worker_filter =
-      new ServiceWorkerDispatcherHost(
-          GetID(), message_port_message_filter_.get(), resource_context);
+      new ServiceWorkerDispatcherHost(GetID(), resource_context);
   service_worker_filter->Init(
       storage_partition_impl_->GetServiceWorkerContext());
   AddFilter(service_worker_filter.get());
@@ -1162,7 +1175,8 @@ void RenderProcessHostImpl::CreateMessageFilters() {
           storage_partition_impl_->GetDatabaseTracker(),
           storage_partition_impl_->GetIndexedDBContext(),
           storage_partition_impl_->GetServiceWorkerContext()),
-      message_port_message_filter_.get()));
+      base::Bind(&RenderWidgetHelper::GetNextRoutingID,
+                 base::Unretained(widget_helper_.get()))));
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   p2p_socket_dispatcher_host_ = new P2PSocketDispatcherHost(
@@ -1187,8 +1201,6 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   AddFilter(new ProfilerMessageFilter(PROCESS_TYPE_RENDERER));
   AddFilter(new HistogramMessageFilter());
   AddFilter(new MemoryMessageFilter(this));
-  AddFilter(new PushMessagingMessageFilter(
-      GetID(), storage_partition_impl_->GetServiceWorkerContext()));
 #if defined(OS_ANDROID)
   AddFilter(new ScreenOrientationListenerAndroid());
   synchronous_compositor_filter_ =
@@ -1208,9 +1220,29 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   AddUIThreadInterface(registry.get(),
                        GetGlobalJavaInterfaces()
                            ->CreateInterfaceFactory<device::BatteryMonitor>());
+  AddUIThreadInterface(
+      registry.get(), GetGlobalJavaInterfaces()
+                          ->CreateInterfaceFactory<
+                              shape_detection::mojom::FaceDetectionProvider>());
+  AddUIThreadInterface(
+      registry.get(),
+      GetGlobalJavaInterfaces()
+          ->CreateInterfaceFactory<shape_detection::mojom::BarcodeDetection>());
+  AddUIThreadInterface(
+      registry.get(),
+      GetGlobalJavaInterfaces()
+          ->CreateInterfaceFactory<shape_detection::mojom::TextDetection>());
 #else
   AddUIThreadInterface(
       registry.get(), base::Bind(&device::BatteryMonitorImpl::Create));
+  AddUIThreadInterface(
+      registry.get(),
+      base::Bind(&ForwardShapeDetectionRequest<
+                 shape_detection::mojom::BarcodeDetectionRequest>));
+  AddUIThreadInterface(
+      registry.get(),
+      base::Bind(&ForwardShapeDetectionRequest<
+                 shape_detection::mojom::FaceDetectionProviderRequest>));
 #endif
   AddUIThreadInterface(
       registry.get(),
@@ -1270,22 +1302,30 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 #if defined(OS_ANDROID)
   // On Android the device sensors implementations need to run on the UI thread
   // to communicate to Java.
-  AddUIThreadInterface(registry.get(), base::Bind(&DeviceLightHost::Create));
-  AddUIThreadInterface(registry.get(), base::Bind(&DeviceMotionHost::Create));
   AddUIThreadInterface(registry.get(),
-                       base::Bind(&DeviceOrientationHost::Create));
+                       base::Bind(&device::DeviceLightHost::Create));
   AddUIThreadInterface(registry.get(),
-                       base::Bind(&DeviceOrientationAbsoluteHost::Create));
+                       base::Bind(&device::DeviceMotionHost::Create));
+  AddUIThreadInterface(registry.get(),
+                       base::Bind(&device::DeviceOrientationHost::Create));
+  AddUIThreadInterface(
+      registry.get(),
+      base::Bind(&device::DeviceOrientationAbsoluteHost::Create));
 #else
   // On platforms other than Android the device sensors implementations run on
   // the IO thread.
-  registry->AddInterface(base::Bind(&DeviceLightHost::Create));
-  registry->AddInterface(base::Bind(&DeviceMotionHost::Create));
-  registry->AddInterface(base::Bind(&DeviceOrientationHost::Create));
-  registry->AddInterface(base::Bind(&DeviceOrientationAbsoluteHost::Create));
+  registry->AddInterface(base::Bind(&device::DeviceLightHost::Create));
+  registry->AddInterface(base::Bind(&device::DeviceMotionHost::Create));
+  registry->AddInterface(base::Bind(&device::DeviceOrientationHost::Create));
+  registry->AddInterface(
+      base::Bind(&device::DeviceOrientationAbsoluteHost::Create));
 #endif  // defined(OS_ANDROID)
 
   registry->AddInterface(base::Bind(&device::GamepadMonitor::Create));
+
+  registry->AddInterface(
+      base::Bind(&PushMessagingManager::BindRequest,
+                 base::Unretained(push_messaging_manager_.get())));
 
   registry->AddInterface(base::Bind(&RenderProcessHostImpl::CreateMusGpuRequest,
                                     base::Unretained(this)));
@@ -1328,15 +1368,14 @@ void RenderProcessHostImpl::GetRoute(
     mojom::AssociatedInterfaceProviderAssociatedRequest request) {
   DCHECK(request.is_pending());
   associated_interface_provider_bindings_.AddBinding(
-      this, std::move(request),
-      reinterpret_cast<void*>(static_cast<uintptr_t>(routing_id)));
+      this, std::move(request), routing_id);
 }
 
 void RenderProcessHostImpl::GetAssociatedInterface(
     const std::string& name,
     mojom::AssociatedInterfaceAssociatedRequest request) {
-  int32_t routing_id = static_cast<int32_t>(reinterpret_cast<uintptr_t>(
-      associated_interface_provider_bindings_.dispatch_context()));
+  int32_t routing_id =
+      associated_interface_provider_bindings_.dispatch_context();
   IPC::Listener* listener = listeners_.Lookup(routing_id);
   if (listener)
     listener->OnAssociatedInterfaceRequest(name, request.PassHandle());
@@ -1544,7 +1583,14 @@ int RenderProcessHostImpl::VisibleWidgetCount() const {
   return visible_widgets_;
 }
 
-void RenderProcessHostImpl::AudioStateChanged() {
+void RenderProcessHostImpl::OnAudioStreamAdded() {
+  ++audio_stream_count_;
+  UpdateProcessPriority();
+}
+
+void RenderProcessHostImpl::OnAudioStreamRemoved() {
+  DCHECK_GT(audio_stream_count_, 0);
+  --audio_stream_count_;
   UpdateProcessPriority();
 }
 
@@ -1561,9 +1607,6 @@ static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
       switches::kNumRasterThreads,
       base::IntToString(NumberOfRendererRasterThreads()));
 
-  if (IsGpuRasterizationEnabled())
-    command_line->AppendSwitch(switches::kEnableGpuRasterization);
-
   if (IsAsyncWorkerContextEnabled())
     command_line->AppendSwitch(switches::kEnableGpuAsyncWorkerContext);
 
@@ -1577,9 +1620,6 @@ static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
     command_line->AppendSwitch(switches::kEnableZeroCopy);
   if (!IsPartialRasterEnabled())
     command_line->AppendSwitch(switches::kDisablePartialRaster);
-
-  if (IsForceGpuRasterizationEnabled())
-    command_line->AppendSwitch(switches::kForceGpuRasterization);
 
   if (IsGpuMemoryBufferCompositorResourcesEnabled()) {
     command_line->AppendSwitch(
@@ -1690,7 +1730,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableGpuVsync,
     switches::kDisableLowResTiling,
     switches::kDisableHistogramCustomizer,
-    switches::kDisableIconNtp,
     switches::kDisableLCDText,
     switches::kDisableLocalStorage,
     switches::kDisableLogging,
@@ -1727,7 +1766,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableGpuClientTracing,
     switches::kEnableGpuMemoryBufferVideoFrames,
     switches::kEnableGPUServiceLogging,
-    switches::kEnableIconNtp,
     switches::kEnableLowResTiling,
     switches::kEnableMediaSuspend,
     switches::kEnableInbandTextTracks,
@@ -1738,6 +1776,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnablePinch,
     switches::kEnablePluginPlaceholderTesting,
     switches::kEnablePreciseMemoryInfo,
+    switches::kEnablePrintBrowser,
     switches::kEnablePreferCompositingToLCDText,
     switches::kEnableRGBA4444Textures,
     switches::kEnableSkiaBenchmarking,
@@ -1760,6 +1799,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kForceDeviceScaleFactor,
     switches::kForceDisplayList2dCanvas,
     switches::kForceGpuMemAvailableMb,
+    switches::kForceGpuRasterization,
     switches::kEnableCanvas2dDynamicRenderingModeSwitching,
     switches::kForceOverlayFullscreenVideo,
     switches::kFullMemoryCrashReport,
@@ -1777,6 +1817,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kMSEVideoBufferSizeLimit,
     switches::kNoReferrers,
     switches::kNoSandbox,
+    switches::kNoUseMusInRenderer,
     switches::kOverridePluginPowerSaverForTesting,
     switches::kPassiveListenersDefault,
     switches::kPpapiInProcess,
@@ -1808,10 +1849,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kVModule,
     // Please keep these in alphabetical order. Compositor switches here should
     // also be added to chrome/browser/chromeos/login/chrome_restart_request.cc.
-    cc::switches::kCheckTilePriorityInversion,
-    cc::switches::kDisableCachedPictureRaster,
     cc::switches::kDisableCompositedAntialiasing,
     cc::switches::kDisableThreadedAnimation,
+    cc::switches::kEnableCheckerImaging,
     cc::switches::kEnableColorCorrectRendering,
     cc::switches::kEnableGpuBenchmarking,
     cc::switches::kEnableLayerLists,
@@ -1842,7 +1882,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableLowEndDeviceMode,
 #if defined(OS_ANDROID)
     switches::kDisableMediaSessionAPI,
-    switches::kDisableUnifiedMediaPipeline,
     switches::kEnableContentIntentDetection,
     switches::kRendererWaitForJavaDebugger,
 #endif
@@ -1866,7 +1905,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kIpcDumpDirectory,
     switches::kIpcFuzzerTestcase,
 #endif
-    switches::kUseMusInRenderer,
   };
   renderer_cmd->CopySwitchesFrom(browser_cmd, kSwitchNames,
                                  arraysize(kSwitchNames));
@@ -2224,9 +2262,6 @@ void RenderProcessHostImpl::Cleanup() {
   // away first, since deleting the channel proxy will post a
   // OnChannelClosed() to IPC::ChannelProxy::Context on the IO thread.
   ResetChannelProxy();
-
-  // The following members should be cleared in ProcessDied() as well!
-  message_port_message_filter_ = NULL;
 
   // Its important to remove the kSessionStorageHolder after the channel
   // has been reset to avoid deleting the underlying namespaces prior
@@ -2721,8 +2756,6 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
     observer.RenderProcessExited(this, status, exit_code);
   within_process_died_observer_ = false;
 
-  message_port_message_filter_ = NULL;
-
   RemoveUserData(kSessionStorageHolderKey);
 
   IDMap<IPC::Listener*>::iterator iter(&listeners_);
@@ -2801,11 +2834,16 @@ void RenderProcessHostImpl::UpdateProcessPriority() {
     return;
   }
 
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableRendererPriorityManagement)) {
+    return;
+  }
+
   // We background a process as soon as it hosts no active audio streams and no
   // visible widgets -- the callers must call this function whenever we
   // transition in/out of those states.
   const bool should_background =
-      visible_widgets_ == 0 && !audio_renderer_host_->HasActiveAudio() &&
+      visible_widgets_ == 0 && audio_stream_count_ == 0 &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableRendererBackgrounding);
 

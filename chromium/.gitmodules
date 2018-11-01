@@ -82,9 +82,6 @@
 [submodule "third_party/freetype-android/src"]
 	path = third_party/freetype-android/src
 	url = ../src/third_party/freetype2.git
-[submodule "third_party/freetype2/src"]
-	path = third_party/freetype2/src
-	url = ../src/third_party/freetype2.git
 [submodule "third_party/gestures/gestures"]
 	path = third_party/gestures/gestures
 	url = ../../chromiumos/platform/gestures.git
@@ -193,6 +190,9 @@
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
+[submodule "third_party/scan-build/src"]
+	path = third_party/scan-build/src
+	url = ../llvm-project/cfe/tools/scan-build.git
 [submodule "third_party/scons-2.0.1"]
 	path = third_party/scons-2.0.1
 	url = ../../native_client/src/third_party/scons-2.0.1.git

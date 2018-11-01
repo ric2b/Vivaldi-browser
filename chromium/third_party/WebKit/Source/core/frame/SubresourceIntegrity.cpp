@@ -8,10 +8,10 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/fetch/Resource.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/Crypto.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebCrypto.h"
@@ -302,7 +302,7 @@ bool SubresourceIntegrity::parseDigest(const UChar*& position,
   skipWhile<UChar, isIntegrityCharacter>(position, end);
 
   if (position == begin || (position != end && *position != '?')) {
-    digest = emptyString();
+    digest = emptyString;
     return false;
   }
 
@@ -415,7 +415,7 @@ SubresourceIntegrity::parseIntegrityAttribute(
     }
 
     IntegrityMetadata integrityMetadata(digest, algorithm);
-    metadataSet.add(integrityMetadata.toPair());
+    metadataSet.insert(integrityMetadata.toPair());
   }
 
   if (metadataSet.size() == 0 && error)

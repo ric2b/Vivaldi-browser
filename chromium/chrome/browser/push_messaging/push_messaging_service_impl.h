@@ -20,6 +20,7 @@
 #include "chrome/common/features.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/gcm_driver/common/gcm_messages.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 #include "components/gcm_driver/gcm_client.h"
@@ -113,6 +114,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   void OnMenuClick() override;
 
   void SetMessageCallbackForTesting(const base::Closure& callback);
+  void SetUnsubscribeCallbackForTesting(const base::Closure& callback);
   void SetContentSettingChangedCallbackForTesting(
       const base::Closure& callback);
   void SetServiceWorkerUnregisteredCallbackForTesting(
@@ -144,7 +146,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   void DoSubscribe(const PushMessagingAppIdentifier& app_identifier,
                    const content::PushSubscriptionOptions& options,
                    const RegisterCallback& callback,
-                   blink::mojom::PermissionStatus permission_status);
+                   ContentSetting permission_status);
 
   void SubscribeEnd(const RegisterCallback& callback,
                     const std::string& subscription_id,
@@ -192,15 +194,12 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
                                   const std::string& sender_id,
                                   const UnregisterCallback& callback);
 
+  void DidUnregister(bool was_subscribed, gcm::GCMClient::Result result);
   void DidDeleteID(const std::string& app_id,
                    bool was_subscribed,
-                   const UnregisterCallback&,
                    instance_id::InstanceID::Result result);
-
   void DidUnsubscribe(const std::string& app_id_when_instance_id,
-                      bool was_subscribed,
-                      const UnregisterCallback& callback,
-                      content::PushUnregistrationStatus status);
+                      bool was_subscribed);
 
   // OnContentSettingChanged methods -------------------------------------------
 
@@ -252,6 +251,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   int pending_push_subscription_count_;
 
   base::Closure message_callback_for_testing_;
+  base::Closure unsubscribe_callback_for_testing_;
   base::Closure content_setting_changed_callback_for_testing_;
   base::Closure service_worker_unregistered_callback_for_testing_;
 

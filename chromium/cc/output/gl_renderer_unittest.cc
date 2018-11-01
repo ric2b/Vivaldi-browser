@@ -66,8 +66,7 @@ class GLRendererTest : public testing::Test {
     return render_passes_in_draw_order_.back().get();
   }
   void DrawFrame(GLRenderer* renderer, const gfx::Size& viewport_size) {
-    renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, gfx::ColorSpace(),
-                        viewport_size);
+    renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, viewport_size);
   }
 
   RenderPassList render_passes_in_draw_order_;
@@ -75,6 +74,7 @@ class GLRendererTest : public testing::Test {
 
 #define EXPECT_PROGRAM_VALID(program_binding)      \
   do {                                             \
+    ASSERT_TRUE(program_binding);                  \
     EXPECT_TRUE((program_binding)->program());     \
     EXPECT_TRUE((program_binding)->initialized()); \
   } while (false)
@@ -84,6 +84,8 @@ static inline SkBlendMode BlendModeToSkXfermode(BlendMode blend_mode) {
     case BLEND_MODE_NONE:
     case BLEND_MODE_NORMAL:
       return SkBlendMode::kSrcOver;
+    case BLEND_MODE_DESTINATION_IN:
+      return SkBlendMode::kDstIn;
     case BLEND_MODE_SCREEN:
       return SkBlendMode::kScreen;
     case BLEND_MODE_OVERLAY:
@@ -131,28 +133,79 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
     ASSERT_FALSE(renderer()->IsContextLost());
   }
 
+  void TestShader(const ProgramKey& program_key) {
+    renderer()->SetCurrentFrameForTesting(GLRenderer::DrawingFrame());
+    const size_t kNumSrcColorSpaces = 4;
+    gfx::ColorSpace src_color_spaces[kNumSrcColorSpaces] = {
+        gfx::ColorSpace(), gfx::ColorSpace::CreateSRGB(),
+        gfx::ColorSpace::CreateREC709(),
+    };
+    const size_t kNumDstColorSpaces = 3;
+    gfx::ColorSpace dst_color_spaces[kNumDstColorSpaces] = {
+        gfx::ColorSpace(), gfx::ColorSpace::CreateSRGB(),
+        gfx::ColorSpace::CreateSCRGBLinear(),
+    };
+    for (size_t i = 0; i < kNumDstColorSpaces; ++i) {
+      for (size_t j = 0; j < kNumSrcColorSpaces; ++j) {
+        renderer()->SetUseProgram(program_key, src_color_spaces[j],
+                                  dst_color_spaces[i]);
+        EXPECT_TRUE(renderer()->current_program_->initialized());
+      }
+    }
+  }
+
   void TestBasicShaders() {
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::DebugBorder()));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::SolidColor(NO_AA)));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetProgram(ProgramKey::SolidColor(USE_AA)));
+    TestShader(ProgramKey::DebugBorder());
+    TestShader(ProgramKey::SolidColor(NO_AA));
+    TestShader(ProgramKey::SolidColor(USE_AA));
+  }
+
+  void TestColorShaders() {
+    const size_t kNumTransferFns = 7;
+    SkColorSpaceTransferFn transfer_fns[kNumTransferFns] = {
+        // The identity.
+        {1.f, 1.f, 0.f, 1.f, 0.f, 0.f, 0.f},
+        // The identity, with an if statement.
+        {1.f, 1.f, 0.f, 1.f, 0.5f, 0.f, 0.f},
+        // Just the power function.
+        {1.1f, 1.f, 0.f, 1.f, 0.f, 0.f, 0.f},
+        // Everything but the power function, nonlinear only.
+        {1.f, 0.9f, 0.1f, 0.9f, 0.f, 0.1f, 0.1f},
+        // Everything, nonlinear only.
+        {1.1f, 0.9f, 0.1f, 0.9f, 0.f, 0.1f, 0.1f},
+        // Everything but the power function.
+        {1.f, 0.9f, 0.1f, 0.9f, 0.5f, 0.1f, 0.1f},
+        // Everything.
+        {1.1f, 0.9f, 0.1f, 0.9f, 0.5f, 0.1f, 0.1f},
+    };
+
+    for (size_t i = 0; i < kNumTransferFns; ++i) {
+      SkMatrix44 primaries;
+      gfx::ColorSpace::CreateSRGB().GetPrimaryMatrix(&primaries);
+      gfx::ColorSpace src =
+          gfx::ColorSpace::CreateCustom(primaries, transfer_fns[i]);
+
+      renderer()->SetCurrentFrameForTesting(GLRenderer::DrawingFrame());
+      renderer()->SetUseProgram(ProgramKey::SolidColor(NO_AA), src,
+                                gfx::ColorSpace::CreateXYZD50());
+      EXPECT_TRUE(renderer()->current_program_->initialized());
+    }
   }
 
   void TestShadersWithPrecision(TexCoordPrecision precision) {
     // This program uses external textures and sampler, so it won't compile
     // everywhere.
-    if (context_provider()->ContextCapabilities().egl_image_external)
-      EXPECT_PROGRAM_VALID(
-          renderer()->GetProgram(ProgramKey::VideoStream(precision)));
+    if (context_provider()->ContextCapabilities().egl_image_external) {
+      TestShader(ProgramKey::VideoStream(precision));
+    }
   }
 
   void TestShadersWithPrecisionAndBlend(TexCoordPrecision precision,
                                         BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::RenderPass(
-        precision, SAMPLER_TYPE_2D, blend_mode, NO_AA, NO_MASK, false, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, USE_AA,
-                               NO_MASK, false, false)));
+    TestShader(ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode,
+                                      NO_AA, NO_MASK, false, false));
+    TestShader(ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode,
+                                      USE_AA, NO_MASK, false, false));
   }
 
   void TestShadersWithPrecisionAndSampler(TexCoordPrecision precision,
@@ -163,41 +216,29 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
       return;
     }
 
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA, true)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::Texture(
-        precision, sampler, NON_PREMULTIPLIED_ALPHA, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::Texture(
-        precision, sampler, NON_PREMULTIPLIED_ALPHA, true)));
-
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Tile(precision, sampler, NO_AA, NO_SWIZZLE, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Tile(precision, sampler, NO_AA, DO_SWIZZLE, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Tile(precision, sampler, USE_AA, NO_SWIZZLE, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Tile(precision, sampler, USE_AA, DO_SWIZZLE, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Tile(precision, sampler, NO_AA, NO_SWIZZLE, true)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::Tile(precision, sampler, NO_AA, DO_SWIZZLE, true)));
+    TestShader(
+        ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA, false));
+    TestShader(
+        ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA, true));
+    TestShader(ProgramKey::Texture(precision, sampler, NON_PREMULTIPLIED_ALPHA,
+                                   false));
+    TestShader(
+        ProgramKey::Texture(precision, sampler, NON_PREMULTIPLIED_ALPHA, true));
+    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, NO_SWIZZLE, false));
+    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, DO_SWIZZLE, false));
+    TestShader(ProgramKey::Tile(precision, sampler, USE_AA, NO_SWIZZLE, false));
+    TestShader(ProgramKey::Tile(precision, sampler, USE_AA, DO_SWIZZLE, false));
+    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, NO_SWIZZLE, true));
+    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, DO_SWIZZLE, true));
 
     // Iterate over alpha plane, nv12, and color_lut parameters.
     UVTextureMode uv_modes[2] = {UV_TEXTURE_MODE_UV, UV_TEXTURE_MODE_U_V};
     YUVAlphaTextureMode a_modes[2] = {YUV_NO_ALPHA_TEXTURE,
                                       YUV_HAS_ALPHA_TEXTURE};
-    ColorConversionMode c_modes[2] = {COLOR_CONVERSION_MODE_NONE,
-                                      COLOR_CONVERSION_MODE_LUT_FROM_YUV};
     for (int j = 0; j < 2; j++) {
       for (int k = 0; k < 2; k++) {
-        for (int l = 0; l < 2; l++) {
-          const Program* program = renderer()->GetProgram(ProgramKey::YUVVideo(
-              precision, sampler, a_modes[j], uv_modes[k], c_modes[l]));
-          EXPECT_PROGRAM_VALID(program);
-        }
+        TestShader(
+            ProgramKey::YUVVideo(precision, sampler, a_modes[j], uv_modes[k]));
       }
     }
   }
@@ -212,18 +253,14 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
       return;
     }
 
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA, HAS_MASK,
-                               mask_for_background, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA, HAS_MASK,
-                               mask_for_background, true)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::RenderPass(precision, sampler, blend_mode, USE_AA, HAS_MASK,
-                               mask_for_background, false)));
-    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
-        ProgramKey::RenderPass(precision, sampler, blend_mode, USE_AA, HAS_MASK,
-                               mask_for_background, true)));
+    TestShader(ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA,
+                                      HAS_MASK, mask_for_background, false));
+    TestShader(ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA,
+                                      HAS_MASK, mask_for_background, true));
+    TestShader(ProgramKey::RenderPass(precision, sampler, blend_mode, USE_AA,
+                                      HAS_MASK, mask_for_background, false));
+    TestShader(ProgramKey::RenderPass(precision, sampler, blend_mode, USE_AA,
+                                      HAS_MASK, mask_for_background, true));
   }
 };
 
@@ -236,6 +273,7 @@ static const TexCoordPrecision kPrecisionList[] = {TEX_COORD_PRECISION_MEDIUM,
 static const BlendMode kBlendModeList[LAST_BLEND_MODE + 1] = {
     BLEND_MODE_NONE,
     BLEND_MODE_NORMAL,
+    BLEND_MODE_DESTINATION_IN,
     BLEND_MODE_SCREEN,
     BLEND_MODE_OVERLAY,
     BLEND_MODE_DARKEN,
@@ -261,6 +299,10 @@ static const SamplerType kSamplerList[] = {
 
 TEST_F(GLRendererShaderPixelTest, BasicShadersCompile) {
   TestBasicShaders();
+}
+
+TEST_F(GLRendererShaderPixelTest, TestColorShadersCompile) {
+  TestColorShaders();
 }
 
 class PrecisionShaderPixelTest
@@ -407,7 +449,7 @@ class GLRendererShaderTest : public GLRendererTest {
         ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, NO_AA,
                                NO_MASK, false, false));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassColorMatrixProgram(TexCoordPrecision precision,
@@ -416,7 +458,7 @@ class GLRendererShaderTest : public GLRendererTest {
         ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, NO_AA,
                                NO_MASK, false, true));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassMaskProgram(TexCoordPrecision precision,
@@ -426,7 +468,7 @@ class GLRendererShaderTest : public GLRendererTest {
         renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
             precision, sampler, blend_mode, NO_AA, HAS_MASK, false, false));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassMaskColorMatrixProgram(TexCoordPrecision precision,
@@ -436,7 +478,7 @@ class GLRendererShaderTest : public GLRendererTest {
         renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
             precision, sampler, blend_mode, NO_AA, HAS_MASK, false, true));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassProgramAA(TexCoordPrecision precision,
@@ -445,7 +487,7 @@ class GLRendererShaderTest : public GLRendererTest {
         ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, USE_AA,
                                NO_MASK, false, false));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassColorMatrixProgramAA(TexCoordPrecision precision,
@@ -454,7 +496,7 @@ class GLRendererShaderTest : public GLRendererTest {
         ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, USE_AA,
                                NO_MASK, false, true));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassMaskProgramAA(TexCoordPrecision precision,
@@ -464,7 +506,7 @@ class GLRendererShaderTest : public GLRendererTest {
         renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
             precision, sampler, blend_mode, USE_AA, HAS_MASK, false, false));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestRenderPassMaskColorMatrixProgramAA(TexCoordPrecision precision,
@@ -474,14 +516,14 @@ class GLRendererShaderTest : public GLRendererTest {
         renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
             precision, sampler, blend_mode, USE_AA, HAS_MASK, false, true));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   void TestSolidColorProgramAA() {
     const Program* program =
         renderer_->GetProgramIfInitialized(ProgramKey::SolidColor(USE_AA));
     EXPECT_PROGRAM_VALID(program);
-    EXPECT_EQ(program->program(), renderer_->program_shadow_);
+    EXPECT_EQ(program, renderer_->current_program_);
   }
 
   RendererSettings settings_;
@@ -1011,7 +1053,7 @@ TEST_F(GLRendererTest, ScissorTestWhenClearing) {
   EXPECT_FALSE(renderer.use_partial_swap());
   renderer.SetVisible(true);
 
-  gfx::Size viewport_size(1, 1);
+  gfx::Size viewport_size(100, 100);
 
   gfx::Rect grand_child_rect(25, 25);
   int grand_child_pass_id = 3;
@@ -1190,7 +1232,7 @@ TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
 }
 
 TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
-  gfx::Size viewport_size(1, 1);
+  gfx::Size viewport_size(60, 75);
 
   gfx::Rect child_rect(50, 50);
   int child_pass_id = 2;
@@ -1402,7 +1444,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
   int child_pass_id = 2;
   RenderPass* child_pass;
 
-  gfx::Size viewport_size(1, 1);
+  gfx::Size viewport_size(100, 100);
   int root_pass_id = 1;
   RenderPass* root_pass;
 
@@ -1490,6 +1532,7 @@ class MockOutputSurface : public OutputSurface {
                     bool has_alpha,
                     bool use_stencil));
   MOCK_METHOD0(BindFramebuffer, void());
+  MOCK_METHOD1(SetDrawRectangle, void(const gfx::Rect&));
   MOCK_METHOD0(GetFramebufferCopyTextureFormat, GLenum());
   MOCK_METHOD1(SwapBuffers_, void(OutputSurfaceFrame& frame));  // NOLINT
   void SwapBuffers(OutputSurfaceFrame frame) override { SwapBuffers_(frame); }
@@ -1554,7 +1597,7 @@ class MockOutputSurfaceTest : public GLRendererTest {
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
     renderer_->DrawFrame(&render_passes_in_draw_order_, device_scale_factor,
-                         gfx::ColorSpace(), viewport_size);
+                         viewport_size);
   }
 
   RendererSettings settings_;
@@ -1584,10 +1627,11 @@ class TestOverlayProcessor : public OverlayProcessor {
    public:
     Strategy() {}
     ~Strategy() override {}
-    MOCK_METHOD3(Attempt,
+    MOCK_METHOD4(Attempt,
                  bool(ResourceProvider* resource_provider,
                       RenderPass* render_pass,
-                      OverlayCandidateList* candidates));
+                      OverlayCandidateList* candidates,
+                      std::vector<gfx::Rect>* content_bounds));
   };
 
   class Validator : public OverlayCandidateValidator {
@@ -1684,7 +1728,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   // added a fake strategy, so checking for Attempt calls checks if there was
   // any attempt to overlay, which there shouldn't be. We can't use the quad
   // list because the render pass is cleaned up by DrawFrame.
-  EXPECT_CALL(*processor->strategy_, Attempt(_, _, _)).Times(0);
+  EXPECT_CALL(*processor->strategy_, Attempt(_, _, _, _)).Times(0);
   EXPECT_CALL(*validator, AllowCALayerOverlays()).Times(0);
   DrawFrame(&renderer, viewport_size);
   Mock::VerifyAndClearExpectations(processor->strategy_);
@@ -1705,7 +1749,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   EXPECT_CALL(*validator, AllowCALayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(false));
-  EXPECT_CALL(*processor->strategy_, Attempt(_, _, _)).Times(1);
+  EXPECT_CALL(*processor->strategy_, Attempt(_, _, _, _)).Times(1);
   DrawFrame(&renderer, viewport_size);
 
   // If the CALayerOverlay path is taken, then the ordinary overlay path should
@@ -1724,7 +1768,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   EXPECT_CALL(*validator, AllowCALayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(true));
-  EXPECT_CALL(*processor->strategy_, Attempt(_, _, _)).Times(0);
+  EXPECT_CALL(*processor->strategy_, Attempt(_, _, _, _)).Times(0);
   DrawFrame(&renderer, viewport_size);
 }
 
@@ -1856,19 +1900,27 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
 
 class PartialSwapMockGLES2Interface : public TestGLES2Interface {
  public:
+  explicit PartialSwapMockGLES2Interface(bool support_set_draw_rectangle)
+      : support_set_draw_rectangle_(support_set_draw_rectangle) {}
+
   void InitializeTestContext(TestWebGraphicsContext3D* context) override {
     context->set_have_post_sub_buffer(true);
+    context->set_support_set_draw_rectangle(support_set_draw_rectangle_);
   }
 
   MOCK_METHOD1(Enable, void(GLenum cap));
   MOCK_METHOD1(Disable, void(GLenum cap));
   MOCK_METHOD4(Scissor, void(GLint x, GLint y, GLsizei width, GLsizei height));
+
+ private:
+  bool support_set_draw_rectangle_;
 };
 
 class GLRendererPartialSwapTest : public GLRendererTest {
  protected:
-  void RunTest(bool partial_swap) {
-    auto gl_owned = base::MakeUnique<PartialSwapMockGLES2Interface>();
+  void RunTest(bool partial_swap, bool set_draw_rectangle) {
+    auto gl_owned =
+        base::MakeUnique<PartialSwapMockGLES2Interface>(set_draw_rectangle);
     auto* gl = gl_owned.get();
 
     auto provider = TestContextProvider::Create(std::move(gl_owned));
@@ -1912,12 +1964,19 @@ class GLRendererPartialSwapTest : public GLRendererTest {
       // Partial frame, we should use a scissor to swap only that part when
       // partial swap is enabled.
       root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
+      gfx::Rect output_rectangle =
+          partial_swap ? root_pass->damage_rect : gfx::Rect(viewport_size);
 
-      if (partial_swap) {
+      if (partial_swap || set_draw_rectangle) {
         EXPECT_CALL(*gl, Enable(GL_SCISSOR_TEST)).InSequence(seq);
         // The scissor is flipped, so subtract the y coord and height from the
         // bottom of the GL viewport.
-        EXPECT_CALL(*gl, Scissor(2, viewport_size.height() - 3 - 2, 3, 3))
+        EXPECT_CALL(
+            *gl,
+            Scissor(output_rectangle.x(),
+                    viewport_size.height() - output_rectangle.y() -
+                        output_rectangle.height(),
+                    output_rectangle.width(), output_rectangle.height()))
             .InSequence(seq);
       }
 
@@ -1930,16 +1989,27 @@ class GLRendererPartialSwapTest : public GLRendererTest {
       renderer.DecideRenderPassAllocationsForFrame(
           render_passes_in_draw_order_);
       DrawFrame(&renderer, viewport_size);
+      if (set_draw_rectangle) {
+        EXPECT_EQ(output_rectangle, output_surface->last_set_draw_rectangle());
+      }
     }
   }
 };
 
 TEST_F(GLRendererPartialSwapTest, PartialSwap) {
-  RunTest(true);
+  RunTest(true, false);
 }
 
 TEST_F(GLRendererPartialSwapTest, NoPartialSwap) {
-  RunTest(false);
+  RunTest(false, false);
+}
+
+TEST_F(GLRendererPartialSwapTest, SetDrawRectangle_PartialSwap) {
+  RunTest(true, true);
+}
+
+TEST_F(GLRendererPartialSwapTest, SetDrawRectangle_NoPartialSwap) {
+  RunTest(false, true);
 }
 
 class GLRendererWithMockContextTest : public ::testing::Test {

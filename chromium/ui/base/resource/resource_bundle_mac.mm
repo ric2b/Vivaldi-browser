@@ -90,47 +90,23 @@ base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
 }
 
 gfx::Image& ResourceBundle::GetNativeImageNamed(int resource_id) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   // Check to see if the image is already in the cache.
-  {
-    base::AutoLock lock(*images_and_fonts_lock_);
-    if (images_.count(resource_id)) {
-      if (!images_[resource_id].HasRepresentation(gfx::Image::kImageRepCocoa)) {
-        DLOG(WARNING) << "ResourceBundle::GetNativeImageNamed() is returning a"
+  auto found = images_.find(resource_id);
+  if (found != images_.end()) {
+    if (!found->second.HasRepresentation(gfx::Image::kImageRepCocoa)) {
+      DLOG(WARNING)
+          << "ResourceBundle::GetNativeImageNamed() is returning a"
           << " cached gfx::Image that isn't backed by an NSImage. The image"
           << " will be converted, rather than going through the NSImage loader."
           << " resource_id = " << resource_id;
-      }
-      return images_[resource_id];
     }
+    return found->second;
   }
 
   gfx::Image image;
   if (delegate_)
     image = delegate_->GetNativeImageNamed(resource_id);
-
-  if (image.IsEmpty()) {
-    base::scoped_nsobject<NSImage> ns_image;
-    for (size_t i = 0; i < data_packs_.size(); ++i) {
-      scoped_refptr<base::RefCountedStaticMemory> data(
-          data_packs_[i]->GetStaticMemory(resource_id));
-      if (!data.get())
-        continue;
-
-      base::scoped_nsobject<NSData> ns_data(
-          [[NSData alloc] initWithBytes:data->front() length:data->size()]);
-      if (!ns_image.get()) {
-        ns_image.reset([[NSImage alloc] initWithData:ns_data]);
-      } else {
-        NSImageRep* image_rep = [NSBitmapImageRep imageRepWithData:ns_data];
-        if (image_rep)
-          [ns_image addRepresentation:image_rep];
-      }
-    }
-
-    if (ns_image.get()) {
-      image = gfx::Image(ns_image.release());
-    }
-  }
 
   if (image.IsEmpty()) {
     base::scoped_nsobject<NSImage> ns_image;
@@ -160,14 +136,11 @@ gfx::Image& ResourceBundle::GetNativeImageNamed(int resource_id) {
     image = gfx::Image(ns_image.release());
   }
 
-  base::AutoLock lock(*images_and_fonts_lock_);
+  DCHECK(sequence_checker_.CalledOnValidSequence());
 
-  // Another thread raced the load and has already cached the image.
-  if (images_.count(resource_id))
-    return images_[resource_id];
-
-  images_[resource_id] = image;
-  return images_[resource_id];
+  auto inserted = images_.insert(std::make_pair(resource_id, image));
+  DCHECK(inserted.second);
+  return inserted.first->second;
 }
 
 }  // namespace ui

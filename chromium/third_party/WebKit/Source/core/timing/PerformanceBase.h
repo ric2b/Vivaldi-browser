@@ -75,7 +75,6 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   // http://www.w3.org/TR/hr-time-2/#privacy-security
   static double clampTimeResolution(double timeSeconds);
 
-  // monotonicTime needs to be no smaller than timeOrigin.
   static DOMHighResTimeStamp monotonicTimeToDOMHighResTimeStamp(
       double timeOrigin,
       double monotonicTime);
@@ -83,8 +82,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   // Translate given platform monotonic time in seconds into a high resolution
   // DOMHighResTimeStamp in milliseconds. The result timestamp is relative to
   // document's time origin and has a time resolution that is safe for
-  // exposing to web. The monotonic time provided needs to be no smaller than
-  // document's time origin.
+  // exposing to web.
   DOMHighResTimeStamp monotonicTimeToDOMHighResTimeStamp(double) const;
   DOMHighResTimeStamp now() const;
 
@@ -155,7 +153,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void addPaintTiming(PerformancePaintTiming::PaintType, double startTime);
 
  protected:
-  explicit PerformanceBase(double timeOrigin);
+  explicit PerformanceBase(double timeOrigin, RefPtr<WebTaskRunner>);
 
   bool isResourceTimingBufferFull();
   void addResourceTimingBuffer(PerformanceEntry&);
@@ -181,7 +179,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   PerformanceObservers m_observers;
   PerformanceObservers m_activeObservers;
   PerformanceObservers m_suspendedObservers;
-  Timer<PerformanceBase> m_deliverObservationsTimer;
+  TaskRunnerTimer<PerformanceBase> m_deliverObservationsTimer;
 };
 
 }  // namespace blink

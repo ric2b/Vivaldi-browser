@@ -1,0 +1,51 @@
+.data-grid {
+  border: none;
+}
+
+.data-grid td .url-outer {
+  width: 100%;
+  display: inline-flex;
+  justify-content: flex-start;
+}
+
+.data-grid td .url-prefix {
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-grid td .url-suffix {
+  flex: none;
+}
+
+.data-grid td .bar {
+  display: inline-block;
+  height: 8px;
+}
+
+.data-grid .selected td .bar {
+  border-top: 1px white solid;
+  border-bottom: 1px white solid;
+}
+
+.data-grid .selected td .bar:last-child {
+  border-right: 1px white solid;
+}
+
+.data-grid .selected td .bar:first-child {
+  border-left: 1px white solid;
+}
+
+.data-grid td .bar-container {
+}
+
+.data-grid td .bar-slack-size {
+  background-color: rgb(150, 150, 200);
+}
+
+.data-grid td .bar-unused-size {
+  background-color: #E57373;
+}
+
+.data-grid td .bar-used-size {
+  background-color: #81C784;
+}

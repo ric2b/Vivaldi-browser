@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "net/quic/core/crypto/cert_compressor.h"
 #include "net/quic/core/crypto/chacha20_poly1305_encrypter.h"
 #include "net/quic/core/crypto/channel_id.h"
@@ -23,11 +22,12 @@
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_hostname_utils.h"
 #include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 
-using base::ContainsKey;
 using base::StringPiece;
 using std::string;
 
@@ -428,7 +428,7 @@ void QuicCryptoClientConfig::FillInchoateClientHello(
 
   // Server name indication. We only send SNI if it's a valid domain name, as
   // per the spec.
-  if (CryptoUtils::IsValidSNI(server_id.host())) {
+  if (QuicHostnameUtils::IsValidSNI(server_id.host())) {
     out->SetStringPiece(kSNI, server_id.host());
   }
   out->SetValue(kVER, QuicVersionToQuicTag(preferred_version));
@@ -658,10 +658,9 @@ QuicErrorCode QuicCryptoClientConfig::FillClientHello(
     std::unique_ptr<char[]> output(new char[encrypted_len]);
     size_t output_size = 0;
     if (!crypters.encrypter->EncryptPacket(
-            preferred_version, kDefaultPathId /* path id */,
-            0 /* packet number */, StringPiece() /* associated data */,
-            cetv_plaintext.AsStringPiece(), output.get(), &output_size,
-            encrypted_len)) {
+            preferred_version, 0 /* packet number */,
+            StringPiece() /* associated data */, cetv_plaintext.AsStringPiece(),
+            output.get(), &output_size, encrypted_len)) {
       *error_details = "Packet encryption failed";
       return QUIC_ENCRYPTION_FAILURE;
     }
@@ -963,7 +962,7 @@ bool QuicCryptoClientConfig::PopulateFromCanonicalConfig(
 
   QuicServerId suffix_server_id(canonical_suffixes_[i], server_id.port(),
                                 server_id.privacy_mode());
-  if (!ContainsKey(canonical_server_map_, suffix_server_id)) {
+  if (!QuicContainsKey(canonical_server_map_, suffix_server_id)) {
     // This is the first host we've seen which matches the suffix, so make it
     // canonical.
     canonical_server_map_[suffix_server_id] = server_id;

@@ -40,6 +40,7 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.TraceEvent;
@@ -59,6 +60,7 @@ import org.chromium.content.browser.input.SelectPopup;
 import org.chromium.content.browser.input.SelectPopupDialog;
 import org.chromium.content.browser.input.SelectPopupDropdown;
 import org.chromium.content.browser.input.SelectPopupItem;
+import org.chromium.content.common.ContentSwitches;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
@@ -132,19 +134,15 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         }
 
         @Override
-        public void didFailLoad(boolean isProvisionalLoad, boolean isMainFrame, int errorCode,
-                String description, String failingUrl, boolean wasIgnoredByHandler) {
-            // Navigation that fails the provisional load will have the strong binding removed
-            // here. One for which the provisional load is commited will have the strong binding
-            // removed in navigationEntryCommitted() below.
-            if (isProvisionalLoad) determinedProcessVisibility();
-        }
+        public void didFinishNavigation(String url, boolean isInMainFrame, boolean isErrorPage,
+                boolean hasCommitted, boolean isSamePage, boolean isFragmentNavigation,
+                Integer pageTransition, int errorCode, String errorDescription,
+                int httpStatusCode) {
+            determinedProcessVisibility();
 
-        @Override
-        public void didNavigateMainFrame(String url, String baseUrl,
-                boolean isNavigationToDifferentPage, boolean isFragmentNavigation, int statusCode) {
-            if (!isNavigationToDifferentPage) return;
-            resetPopupsAndInput();
+            if (hasCommitted && isInMainFrame && !isSamePage) {
+                resetPopupsAndInput();
+            }
         }
 
         @Override
@@ -153,11 +151,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             ContentViewCore contentViewCore = mWeakContentViewCore.get();
             if (contentViewCore == null) return;
             contentViewCore.mImeAdapter.resetAndHideKeyboard();
-        }
-
-        @Override
-        public void navigationEntryCommitted() {
-            determinedProcessVisibility();
         }
 
         private void resetPopupsAndInput() {
@@ -263,14 +256,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         boolean super_awakenScrollBars(int startDelay, boolean invalidate);
     }
 
-    /**
-     * An interface that allows the embedder to be notified when the results of
-     * extractSmartClipData are available.
-     */
-    public interface SmartClipDataListener {
-        public void onSmartClipDataExtracted(String text, String html, Rect clipRect);
-    }
-
     private final Context mContext;
     private final String mProductVersion;
     private ViewGroup mContainerView;
@@ -359,8 +344,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     // onNativeFlingStopped() is called asynchronously.
     private int mPotentiallyActiveFlingCount;
 
-    private SmartClipDataListener mSmartClipDataListener;
-
     /**
      * PID used to indicate an invalid render process.
      */
@@ -372,9 +355,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     private float mCurrentTouchOffsetX;
     private float mCurrentTouchOffsetY;
 
-    // Offsets for smart clip
-    private int mSmartClipOffsetX;
-    private int mSmartClipOffsetY;
+    // True if we want to disable Android native event batching and use compositor event queue.
+    private boolean mShouldRequestUnbufferedDispatch;
 
     // Whether the ContentViewCore requires the WebContents to be fullscreen in order to lock the
     // screen orientation.
@@ -607,6 +589,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         mSelectionPopupController.setContainerView(getContainerView());
 
         mWebContentsObserver = new ContentViewWebContentsObserver(this);
+
+        mShouldRequestUnbufferedDispatch = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                && CommandLine.getInstance().hasSwitch(ContentSwitches.REQUEST_UNBUFFERED_DISPATCH);
     }
 
     /**
@@ -792,7 +777,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         }
         mWebContentsObserver.destroy();
         mWebContentsObserver = null;
-        setSmartClipDataListener(null);
         mImeAdapter.resetAndHideKeyboard();
         // TODO(igsolla): address TODO in ContentViewClient because ContentViewClient is not
         // currently a real Null Object.
@@ -841,11 +825,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             // Null Object, since we cut down on the number of JNI calls.
         }
         return mContentViewClient;
-    }
-
-    @CalledByNative
-    private void onBackgroundColorChanged(int color) {
-        getContentViewClient().onBackgroundColorChanged(color);
     }
 
     /**
@@ -964,6 +943,14 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     public boolean onTouchEvent(MotionEvent event) {
         // TODO(mustaq): Should we include MotionEvent.TOOL_TYPE_STYLUS here?
         // crbug.com/592082
+        if (event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
+            // Mouse button info is incomplete on L and below
+            int apiVersion = Build.VERSION.SDK_INT;
+            if (apiVersion >= android.os.Build.VERSION_CODES.M) {
+                return sendMouseEvent(event);
+            }
+        }
+
         final boolean isTouchHandleEvent = false;
         return sendTouchEvent(event, isTouchHandleEvent);
     }
@@ -1012,6 +999,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             int eventAction = event.getActionMasked();
 
             if (eventAction == MotionEvent.ACTION_DOWN) {
+                if (mShouldRequestUnbufferedDispatch) {
+                    requestUnbufferedDispatch(event);
+                }
                 cancelRequestToScrollFocusedEditableNodeIntoView();
             }
 
@@ -1476,8 +1466,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         }
     }
 
-    public void onFocusChanged(boolean gainFocus) {
-        mImeAdapter.onViewFocusChanged(gainFocus);
+    public void onFocusChanged(boolean gainFocus, boolean hideKeyboardOnBlur) {
+        mImeAdapter.onViewFocusChanged(gainFocus, hideKeyboardOnBlur);
 
         // Used in test that bypasses initialize().
         if (mJoystickScrollProvider != null) {
@@ -1582,6 +1572,13 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
                             event.getAxisValue(MotionEvent.AXIS_VSCROLL),
                             mRenderCoordinates.getWheelScrollFactor());
                     return true;
+                case MotionEvent.ACTION_BUTTON_PRESS:
+                case MotionEvent.ACTION_BUTTON_RELEASE:
+                    // TODO(mustaq): Should we include MotionEvent.TOOL_TYPE_STYLUS here?
+                    // crbug.com/592082
+                    if (event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
+                        return sendMouseEvent(event);
+                    }
             }
         } else if ((event.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) != 0) {
             if (mJoystickScrollProvider.onMotion(event)) return true;
@@ -1804,7 +1801,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             float minPageScaleFactor, float maxPageScaleFactor, float contentWidth,
             float contentHeight, float viewportWidth, float viewportHeight,
             float browserControlsHeightDp, float browserControlsShownRatio,
-            float bottomControlsHeightDp, float bottomControlsShownRatio,
             boolean isMobileOptimizedHint, boolean hasInsertionMarker,
             boolean isInsertionMarkerVisible, float insertionMarkerHorizontal,
             float insertionMarkerTop, float insertionMarkerBottom) {
@@ -1819,8 +1815,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
                 mViewportHeightPix / (deviceScale * pageScaleFactor));
         final float topBarShownPix =
                 browserControlsHeightDp * deviceScale * browserControlsShownRatio;
-        final float bottomBarShownPix = bottomControlsHeightDp * deviceScale
-                * bottomControlsShownRatio;
 
         final boolean contentSizeChanged =
                 contentWidth != mRenderCoordinates.getContentWidthCss()
@@ -1836,8 +1830,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
                 || scrollOffsetY != mRenderCoordinates.getScrollY();
         final boolean topBarChanged = Float.compare(topBarShownPix,
                 mRenderCoordinates.getContentOffsetYPix()) != 0;
-        final boolean bottomBarChanged = Float.compare(bottomBarShownPix, mRenderCoordinates
-                .getContentOffsetYPixBottom()) != 0;
 
         final boolean needHidePopupZoomer = contentSizeChanged || scrollChanged;
 
@@ -1851,12 +1843,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
                     (int) mRenderCoordinates.getScrollYPix());
         }
 
-        mRenderCoordinates.updateFrameInfo(
-                scrollOffsetX, scrollOffsetY,
-                contentWidth, contentHeight,
-                viewportWidth, viewportHeight,
-                pageScaleFactor, minPageScaleFactor, maxPageScaleFactor,
-                topBarShownPix, bottomBarShownPix);
+        mRenderCoordinates.updateFrameInfo(scrollOffsetX, scrollOffsetY, contentWidth,
+                contentHeight, viewportWidth, viewportHeight, pageScaleFactor, minPageScaleFactor,
+                maxPageScaleFactor, topBarShownPix);
 
         if (scrollChanged || topBarChanged) {
             for (mGestureStateListenersIterator.rewind();
@@ -1873,15 +1862,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
                 mGestureStateListenersIterator.next().onScaleLimitsChanged(
                         minPageScaleFactor, maxPageScaleFactor);
             }
-        }
-
-        if (topBarChanged) {
-            float topBarTranslate = topBarShownPix - browserControlsHeightDp * deviceScale;
-            getContentViewClient().onTopControlsChanged(topBarTranslate, topBarShownPix);
-        }
-        if (bottomBarChanged) {
-            float bottomBarTranslate = bottomControlsHeightDp * deviceScale - bottomBarShownPix;
-            getContentViewClient().onBottomControlsChanged(bottomBarTranslate, bottomBarShownPix);
         }
 
         if (mBrowserAccessibilityManager != null) {
@@ -1906,10 +1886,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             boolean focusedNodeIsPassword = (textInputType == TextInputType.PASSWORD);
 
             mImeAdapter.attach(nativeImeAdapterAndroid);
-            mImeAdapter.updateKeyboardVisibility(
-                    textInputType, textInputFlags, textInputMode, showImeIfNeeded);
-            mImeAdapter.updateState(text, selectionStart, selectionEnd, compositionStart,
-                    compositionEnd, replyToRequest);
+            mImeAdapter.updateState(textInputType, textInputFlags, textInputMode, showImeIfNeeded,
+                    text, selectionStart, selectionEnd, compositionStart, compositionEnd,
+                    replyToRequest);
 
             boolean editableToggled = (focusedNodeEditable != isFocusedNodeEditable());
             mSelectionPopupController.updateSelectionState(focusedNodeEditable,
@@ -2006,7 +1985,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     @SuppressWarnings("unused")
     @CalledByNative
     private MotionEventSynthesizer createMotionEventSynthesizer() {
-        return new MotionEventSynthesizer(this);
+        return new MotionEventSynthesizer(getContainerView(), this);
     }
 
     @SuppressWarnings("unused")
@@ -2303,11 +2282,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         return mRenderCoordinates.getPageScaleFactor();
     }
 
-    @CalledByNative
-    private void startContentIntent(String contentUrl, boolean isMainFrame) {
-        getContentViewClient().onStartContentIntent(getContext(), contentUrl, isMainFrame);
-    }
-
     @Override
     public void onAccessibilityStateChanged(boolean enabled) {
         setAccessibilityState(enabled);
@@ -2467,6 +2441,11 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         viewNode.asyncCommit();
     }
 
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    private void requestUnbufferedDispatch(MotionEvent touchDownEvent) {
+        mContainerView.requestUnbufferedDispatch(touchDownEvent);
+    }
+
     @TargetApi(Build.VERSION_CODES.KITKAT)
     @Override
     public void onSystemCaptioningChanged(TextTrackSettings settings) {
@@ -2548,52 +2527,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     @CalledByNative
     private static Rect createRect(int x, int y, int right, int bottom) {
         return new Rect(x, y, right, bottom);
-    }
-
-    public void extractSmartClipData(int x, int y, int width, int height) {
-        if (mNativeContentViewCore != 0) {
-            x += mSmartClipOffsetX;
-            y += mSmartClipOffsetY;
-            nativeExtractSmartClipData(mNativeContentViewCore, x, y, width, height);
-        }
-    }
-
-    /**
-     * Set offsets for smart clip.
-     *
-     * <p>This should be called if there is a viewport change introduced by,
-     * e.g., show and hide of a location bar.
-     *
-     * @param offsetX Offset for X position.
-     * @param offsetY Offset for Y position.
-     */
-    public void setSmartClipOffsets(int offsetX, int offsetY) {
-        mSmartClipOffsetX = offsetX;
-        mSmartClipOffsetY = offsetY;
-    }
-
-    @CalledByNative
-    private void onSmartClipDataExtracted(String text, String html, Rect clipRect) {
-        // Translate the positions by the offsets introduced by location bar. Note that the
-        // coordinates are in dp scale, and that this definitely has the potential to be
-        // different from the offsets when extractSmartClipData() was called. However,
-        // as long as OEM has a UI that consumes all the inputs and waits until the
-        // callback is called, then there shouldn't be any difference.
-        // TODO(changwan): once crbug.com/416432 is resolved, try to pass offsets as
-        // separate params for extractSmartClipData(), and apply them not the new offset
-        // values in the callback.
-        final float deviceScale = mRenderCoordinates.getDeviceScaleFactor();
-        final int offsetXInDp = (int) (mSmartClipOffsetX / deviceScale);
-        final int offsetYInDp = (int) (mSmartClipOffsetY / deviceScale);
-        clipRect.offset(-offsetXInDp, -offsetYInDp);
-
-        if (mSmartClipDataListener != null) {
-            mSmartClipDataListener.onSmartClipDataExtracted(text, html, clipRect);
-        }
-    }
-
-    public void setSmartClipDataListener(SmartClipDataListener listener) {
-        mSmartClipDataListener = listener;
     }
 
     public void setBackgroundOpaque(boolean opaque) {
@@ -2818,7 +2751,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
 
     private native int nativeSendMouseEvent(long nativeContentViewCoreImpl, long timeMs, int action,
             float x, float y, int pointerId, float pressure, float orientaton, float tilt,
-            int changedButton, int buttonState, int metaState, int toolType);
+            int actionButton, int buttonState, int metaState, int toolType);
 
     private native int nativeSendMouseWheelEvent(long nativeContentViewCoreImpl, long timeMs,
             float x, float y, float ticksX, float ticksY, float pixelsPerTick);
@@ -2891,9 +2824,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             boolean textTracksEnabled, String textTrackBackgroundColor, String textTrackFontFamily,
             String textTrackFontStyle, String textTrackFontVariant, String textTrackTextColor,
             String textTrackTextShadow, String textTrackTextSize);
-
-    private native void nativeExtractSmartClipData(long nativeContentViewCoreImpl,
-            int x, int y, int w, int h);
 
     private native void nativeSetBackgroundOpaque(long nativeContentViewCoreImpl, boolean opaque);
     private native boolean nativeIsTouchDragDropEnabled(long nativeContentViewCoreImpl);

@@ -44,9 +44,7 @@ void TestGLES2Interface::GenQueriesEXT(GLsizei n, GLuint* queries) {
 }
 
 void TestGLES2Interface::DeleteTextures(GLsizei n, const GLuint* textures) {
-  for (GLsizei i = 0; i < n; ++i) {
-    test_context_->deleteTexture(textures[i]);
-  }
+  test_context_->deleteTextures(n, textures);
 }
 
 void TestGLES2Interface::DeleteBuffers(GLsizei n, const GLuint* buffers) {
@@ -275,15 +273,6 @@ GLuint TestGLES2Interface::CreateImageCHROMIUM(ClientBuffer buffer,
 
 void TestGLES2Interface::DestroyImageCHROMIUM(GLuint image_id) {
   test_context_->destroyImageCHROMIUM(image_id);
-}
-
-GLuint TestGLES2Interface::CreateGpuMemoryBufferImageCHROMIUM(
-    GLsizei width,
-    GLsizei height,
-    GLenum internalformat,
-    GLenum usage) {
-  return test_context_->createGpuMemoryBufferImageCHROMIUM(
-      width, height, internalformat, usage);
 }
 
 void TestGLES2Interface::BindTexImage2DCHROMIUM(GLenum target, GLint image_id) {

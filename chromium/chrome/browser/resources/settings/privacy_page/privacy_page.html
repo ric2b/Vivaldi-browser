@@ -1,55 +1,40 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_vars_css.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="/clear_browsing_data_dialog/clear_browsing_data_dialog.html">
-<link rel="import" href="/controls/settings_toggle_button.html">
-<link rel="import" href="/lifetime_browser_proxy.html">
-<link rel="import" href="/route.html">
-<link rel="import" href="/settings_page/settings_animated_pages.html">
-<link rel="import" href="/settings_page/settings_subpage.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/site_settings/all_sites.html">
-<link rel="import" href="/site_settings/category_default_setting.html">
-<link rel="import" href="/site_settings/category_setting_exceptions.html">
-<link rel="import" href="/site_settings/constants.html">
-<link rel="import" href="/site_settings/media_picker.html">
-<link rel="import" href="/site_settings/pdf_documents.html">
-<link rel="import" href="/site_settings/protocol_handlers.html">
-<link rel="import" href="/site_settings/site_data_details_subpage.html">
-<link rel="import" href="/site_settings/usb_devices.html">
-<link rel="import" href="/site_settings/site_data.html">
-<link rel="import" href="/site_settings/zoom_levels.html">
-<link rel="import" href="/site_settings_page/site_settings_page.html">
+<link rel="import" href="../clear_browsing_data_dialog/clear_browsing_data_dialog.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
+<link rel="import" href="../lifetime_browser_proxy.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../settings_page/settings_animated_pages.html">
+<link rel="import" href="../settings_page/settings_subpage.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../site_settings/all_sites.html">
+<link rel="import" href="../site_settings/category_default_setting.html">
+<link rel="import" href="../site_settings/category_setting_exceptions.html">
+<link rel="import" href="../site_settings/constants.html">
+<link rel="import" href="../site_settings/media_picker.html">
+<link rel="import" href="../site_settings/pdf_documents.html">
+<link rel="import" href="../site_settings/protocol_handlers.html">
+<link rel="import" href="../site_settings/site_data_details_subpage.html">
+<link rel="import" href="../site_settings/usb_devices.html">
+<link rel="import" href="../site_settings/site_data.html">
+<link rel="import" href="../site_settings/site_details.html">
+<link rel="import" href="../site_settings/zoom_levels.html">
+<link rel="import" href="../site_settings_page/site_settings_page.html">
 
 <if expr="use_nss_certs">
-<link rel="import" href="/certificate_manager_page/certificate_manager_page.html">
+<link rel="import" href="../certificate_manager_page/certificate_manager_page.html">
 </if>
-<link rel="import" href="/privacy_page/privacy_page_browser_proxy.html">
+<link rel="import" href="privacy_page_browser_proxy.html">
 
 <dom-module id="settings-privacy-page">
   <template>
     <style include="settings-shared">
-      button[is='paper-icon-button-light'].icon-help {
-        background-image: url(../images/help_outline.svg);
-      }
-
-      .settings-row-min-height {
-        min-height: var(--settings-row-min-height);
-      }
-
-      #metricsReporting paper-tooltip {
-        --paper-tooltip: var(--cr-policy-tooltip);
-      }
-
-      #metricsReportingControl,
-      #indicator,
-      #restart {
-        -webkit-margin-start: var(--checkbox-spacing);
-      }
     </style>
     <template is="dom-if" if="[[showClearBrowsingDataDialog_]]" restamp>
       <settings-clear-browsing-data-dialog prefs="{{prefs}}"
@@ -77,15 +62,18 @@
             hidden="[[!pageVisibility.networkPrediction]]">
           <settings-toggle-button class="start"
               pref="{{prefs.net.network_prediction_options}}"
-              label="$i18n{networkPredictionEnabled}">
+              label="$i18n{networkPredictionEnabled}"
+              numeric-unchecked-value="[[networkPredictionEnum_.NEVER]]">
           </settings-toggle-button>
         </div>
         <div class="settings-box">
-          <div class="start">$i18n{safeBrowsingEnableExtendedReporting}</div>
-          <paper-toggle-button id="safeBrowsingExtendedReportingControl"
-              on-tap="onSafeBrowsingExtendedReportingControlTap_"
-              checked="[[safeBrowsingExtendedReportingEnabled_]]">
-          </paper-toggle-button>
+          <settings-toggle-button class="start"
+              id="safeBrowsingExtendedReportingControl"
+              pref="[[safeBrowsingExtendedReportingPref_]]"
+              label="$i18n{safeBrowsingEnableExtendedReporting}"
+              on-settings-boolean-control-change="onSberChange_"
+              no-set-pref>
+          </settings-toggle-button>
         </div>
         <div class="settings-box">
           <settings-toggle-button class="start"
@@ -104,24 +92,19 @@
 </if><!-- chromeos -->
 <if expr="not chromeos">
         <div class="settings-box">
-          <div class="start">$i18n{enableLogging}</div>
-          <template is="dom-if" if="[[showRestart_]]" restamp>
-            <paper-button on-tap="onRestartTap_" id="restart">
-              $i18n{restart}
-            </paper-button>
-          </template>
-          <template is="dom-if" if="[[metricsReporting_.managed]]" restamp>
-            <iron-icon id="indicator" tabindex=0 icon="cr:domain"></iron-icon>
-            <paper-tooltip for="indicator" position="top"
-                fit-to-visible-bounds>
-              $i18n{controlledSettingPolicy}
-            </paper-tooltip>
-          </template>
-          <paper-toggle-button id="metricsReportingControl"
-              on-tap="onMetricsReportingControlTap_"
-              checked="[[metricsReporting_.enabled]]"
-              disabled="[[metricsReporting_.managed]]">
-          </paper-toggle-button>
+          <settings-toggle-button class="start"
+              id="metricsReportingControl"
+              pref="[[metricsReportingPref_]]"
+              label="$i18n{enableLogging}"
+              on-settings-boolean-control-change="onMetricsReportingChange_"
+              no-set-pref>
+            <template is="dom-if" if="[[showRestart_]]" restamp>
+              <paper-button on-tap="onRestartTap_" id="restart"
+                  class="more-actions">
+                $i18n{restart}
+              </paper-button>
+            </template>
+          </settings-toggle-button>
         </div>
 </if><!-- not chromeos -->
 </if><!-- _google_chrome -->
@@ -159,13 +142,19 @@
             actionable on-tap="onManageCertificatesTap_">
           <div class="start">
             $i18n{manageCertificates}
-            <div class="secondary">$i18n{manageCertificatesDescription}</div>
+            <div class="secondary" id="manageCertificatesSecondary">
+              $i18n{manageCertificatesDescription}
+            </div>
           </div>
 <if expr="use_nss_certs">
-          <button is="paper-icon-button-light" class="subpage-arrow"></button>
+          <button is="paper-icon-button-light" class="subpage-arrow"
+              aria-label="$i18n{manageCertificates}"
+              aria-describedby="manageCertificatesSecondary"></button>
 </if>
 <if expr="not use_nss_certs">
-          <button is="paper-icon-button-light" class="icon-external"></button>
+          <button is="paper-icon-button-light" class="icon-external"
+              aria-label="$i18n{manageCertificates}"
+              aria-describedby="manageCertificatesSecondary"></button>
 </if>
         </div>
 </if>
@@ -174,17 +163,25 @@
             on-tap="onSiteSettingsTap_">
           <div class="start">
             [[siteSettingsPageTitle_()]]
-            <div class="secondary">$i18n{siteSettingsDescription}</div>
+            <div class="secondary" id="siteSettingsSecondary">
+              $i18n{siteSettingsDescription}
+            </div>
           </div>
-          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label$="[[siteSettingsPageTitle_()]]"
+              aria-describedby="siteSettingsSecondary"></button>
         </div>
         <div class="settings-box two-line" id="clearBrowsingData"
             on-tap="onClearBrowsingDataTap_" actionable>
           <div class="start">
             $i18n{clearBrowsingData}
-            <div class="secondary">$i18n{clearBrowsingDataDescription}</div>
+            <div class="secondary" id="clearBrowsingDataSecondary">
+              $i18n{clearBrowsingDataDescription}
+            </div>
           </div>
-          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label="$i18n{clearBrowsingData}"
+              aria-describedby="clearBrowsingDataSecondary"></button>
         </div>
       </neon-animatable>
 <if expr="use_nss_certs">
@@ -201,7 +198,8 @@
         <settings-subpage
             associated-control="[[$$('#site-settings-subpage-trigger')]]"
             id="site-settings"
-            page-title="[[siteSettingsPageTitle_()]]">
+            page-title="[[siteSettingsPageTitle_()]]"
+            learn-more-url="$i18n{exceptionsLearnMoreURL}">
           <settings-site-settings-page></settings-site-settings-page>
         </settings-subpage>
       </template>
@@ -213,9 +211,9 @@
       </template>
       <template is="dom-if" route-path="/content/automaticDownloads" no-search>
         <settings-subpage page-title="$i18n{siteSettingsAutomaticDownloads}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting
+              toggle-off-label="$i18n{siteSettingsAutoDownloadBlock}"
+              toggle-on-label="$i18n{siteSettingsAutoDownloadAskRecommended}"
               category="{{ContentSettingsTypes.AUTOMATIC_DOWNLOADS}}">
           </category-default-setting>
           <category-setting-exceptions
@@ -225,9 +223,10 @@
       </template>
       <template is="dom-if" route-path="/content/backgroundSync" no-search>
         <settings-subpage page-title="$i18n{siteSettingsBackgroundSync}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting
+              toggle-off-label="$i18n{siteSettingsBackgroundSyncBlocked}"
+              toggle-on-label=
+                  "$i18n{siteSettingsAllowRecentlyClosedSitesRecommended}"
               category="{{ContentSettingsTypes.BACKGROUND_SYNC}}">
           </category-default-setting>
           <category-setting-exceptions
@@ -237,10 +236,11 @@
       </template>
       <template is="dom-if" route-path="/content/camera" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryCamera}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <media-picker type="camera"></media-picker>
-          <category-default-setting category="{{ContentSettingsTypes.CAMERA}}">
+          <category-default-setting category="{{ContentSettingsTypes.CAMERA}}"
+              toggle-off-label="$i18n{siteSettingsBlocked}"
+              toggle-on-label=
+                  "$i18n{siteSettingsAskBeforeAccessingRecommended}">
           </category-default-setting>
           <category-setting-exceptions
               category="{{ContentSettingsTypes.CAMERA}}">
@@ -249,9 +249,9 @@
       </template>
       <template is="dom-if" route-path="/content/cookies" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryCookies}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting category="{{ContentSettingsTypes.COOKIES}}"
+              toggle-off-label="$i18n{siteSettingsBlocked}"
+              toggle-on-label="$i18n{siteSettingsCookiesAllowedRecommended}"
               sub-option-label="$i18n{deleteDataPostSession}"
               sub-option-secondary=""><!-- To work with :empty. -->
           </category-default-setting>
@@ -270,9 +270,9 @@
       </template>
       <template is="dom-if" route-path="/content/images" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryImages}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
-          <category-default-setting category="{{ContentSettingsTypes.IMAGES}}">
+          <category-default-setting category="{{ContentSettingsTypes.IMAGES}}"
+              toggle-off-label="$i18n{siteSettingsDontShowImages}"
+              toggle-on-label="$i18n{siteSettingsShowAllRecommended}">
           </category-default-setting>
           <category-setting-exceptions
               category="{{ContentSettingsTypes.IMAGES}}">
@@ -281,9 +281,9 @@
       </template>
       <template is="dom-if" route-path="/content/location" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryLocation}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting
+              toggle-off-label="$i18n{siteSettingsBlocked}"
+              toggle-on-label="$i18n{siteSettingsAskBeforeAccessingRecommended}"
               category="{{ContentSettingsTypes.GEOLOCATION}}">
           </category-default-setting>
           <category-setting-exceptions
@@ -293,7 +293,10 @@
       </template>
       <template is="dom-if" route-path="/handlers" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryHandlers}">
-          <protocol-handlers></protocol-handlers>
+          <protocol-handlers
+              toggle-off-label="$i18n{siteSettingsHandlersBlocked}"
+              toggle-on-label="$i18n{siteSettingsHandlersAskRecommended}">
+          </protocol-handlers>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/zoomLevels" no-search>
@@ -308,9 +311,9 @@
       </template>
       <template is="dom-if" route-path="/content/javascript" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryJavascript}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting
+              toggle-off-label="$i18n{siteSettingsBlocked}"
+              toggle-on-label="$i18n{siteSettingsAllowedRecommended}"
               category="{{ContentSettingsTypes.JAVASCRIPT}}">
           </category-default-setting>
           <category-setting-exceptions
@@ -320,10 +323,11 @@
       </template>
       <template is="dom-if" route-path="/content/microphone" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryMicrophone}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <media-picker type="mic"></media-picker>
-          <category-default-setting category="{{ContentSettingsTypes.MIC}}">
+          <category-default-setting category="{{ContentSettingsTypes.MIC}}"
+              toggle-off-label="$i18n{siteSettingsBlocked}"
+              toggle-on-label=
+                  "$i18n{siteSettingsAskBeforeAccessingRecommended}">
           </category-default-setting>
           <category-setting-exceptions category="{{ContentSettingsTypes.MIC}}">
           </category-setting-exceptions>
@@ -331,9 +335,9 @@
       </template>
       <template is="dom-if" route-path="/content/notifications" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryNotifications}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting
+              toggle-off-label="$i18n{siteSettingsBlocked}"
+              toggle-on-label="$i18n{siteSettingsAskBeforeSendingRecommended}"
               category="{{ContentSettingsTypes.NOTIFICATIONS}}">
           </category-default-setting>
           <category-setting-exceptions
@@ -343,16 +347,18 @@
       </template>
       <template is="dom-if" route-path="/content/flash" no-search>
         <settings-subpage page-title="$i18n{siteSettingsFlash}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting category="{{ContentSettingsTypes.PLUGINS}}"
+              toggle-off-label="$i18n{siteSettingsFlashBlock}"
+              toggle-on-label="$i18n{siteSettingsFlashAllow}"
               sub-option-label="$i18n{siteSettingsFlashAskBefore}"
               sub-option-secondary="$i18n{siteSettingsFlashAskBeforeSubtitle}">
           </category-default-setting>
 <if expr="chromeos">
           <div actionable class="settings-box"
               on-tap="onAdobeFlashStorageClicked_">
-            <div class="list-item list-button">$i18n{adobeFlashStorage}</div>
+            <div class="start">$i18n{adobeFlashStorage}</div>
+            <button class="icon-external" is="paper-icon-button-light"
+                aria-label="$i18n{adobeFlashStorage}"></button>
           </div>
 </if>
           <category-setting-exceptions
@@ -362,9 +368,9 @@
       </template>
       <template is="dom-if" route-path="/content/popups" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryPopups}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
-          <category-default-setting category="{{ContentSettingsTypes.POPUPS}}">
+          <category-default-setting category="{{ContentSettingsTypes.POPUPS}}"
+              toggle-off-label="$i18n{siteSettingsBlockedRecommended}"
+              toggle-on-label="$i18n{siteSettingsAllowed}">
           </category-default-setting>
           <category-setting-exceptions
               category="{{ContentSettingsTypes.POPUPS}}">
@@ -373,13 +379,27 @@
       </template>
       <template is="dom-if" route-path="/content/unsandboxedPlugins" no-search>
         <settings-subpage page-title="$i18n{siteSettingsUnsandboxedPlugins}">
-          <button class="icon-help subpage-title-extra"
-              is="paper-icon-button-light" on-tap="onHelpTap_"></button>
           <category-default-setting
+              toggle-off-label="$i18n{siteSettingsUnsandboxedPluginsBlock}"
+              toggle-on-label=
+                  "$i18n{siteSettingsUnsandboxedPluginsAskRecommended}"
               category="{{ContentSettingsTypes.UNSANDBOXED_PLUGINS}}">
           </category-default-setting>
           <category-setting-exceptions
               category="{{ContentSettingsTypes.UNSANDBOXED_PLUGINS}}">
+          </category-setting-exceptions>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/content/midiDevices" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsMidiDevices}">
+          <category-default-setting
+              toggle-off-label="$i18n{siteSettingsMidiDevicesBlock}"
+              toggle-on-label=
+                  "$i18n{siteSettingsMidiDevicesAskRecommended}"
+              category="{{ContentSettingsTypes.MIDI_DEVICES}}">
+          </category-default-setting>
+          <category-setting-exceptions
+              category="{{ContentSettingsTypes.MIDI_DEVICES}}">
           </category-setting-exceptions>
         </settings-subpage>
       </template>
@@ -401,6 +421,39 @@
           </paper-button>
           <site-data-details-subpage page-title="{{pageTitle}}">
           </site-data-details-subpage>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/content/protectedContent" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsProtectedContent}">
+          <div class="settings-box first">
+            <settings-toggle-button class="start"
+                pref="{{prefs.webkit.webprefs.encrypted_media_enabled}}"
+                label="[[getProtectedContentLabel_(
+                    prefs.webkit.webprefs.encrypted_media_enabled.value)]]"
+                disabled$="[[isGuest_]]">
+            </settings-toggle-button>
+          </div>
+<if expr="chromeos or is_win">
+          <div class="settings-box first two-line">
+            $i18n{siteSettingsProtectedContentIdentifiersExplanation}
+          </div>
+          <div class="settings-box first">
+            <settings-toggle-button class="start"
+                pref="{{prefs.settings.privacy.drm_enabled}}"
+                label="[[getProtectedContentIdentifiersLabel_(
+                    prefs.settings.privacy.drm_enabled.value)]]"
+                disabled$="[[isGuest_]]">
+            </settings-toggle-button>
+          </div>
+</if>
+<if expr="chromeos">
+          <template is="dom-if"
+              if="[[prefs.settings.privacy.drm_enabled.value]]">
+            <category-setting-exceptions
+                category="{{ContentSettingsTypes.PROTECTED_CONTENT}}">
+            </category-setting-exceptions>
+          </template>
+</if>
         </settings-subpage>
       </template>
     </settings-animated-pages>

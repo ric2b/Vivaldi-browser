@@ -22,11 +22,11 @@
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/metrics/histogram_macros.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/devices/input_device_manager.h"
@@ -82,18 +82,20 @@ class TitleView : public views::View, public views::ButtonListener {
         new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
     SetLayoutManager(box_layout);
 
-    title_label_ =
+    auto* title_label =
         new views::Label(l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
-    title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    AddChildView(title_label_);
-    box_layout->SetFlexForView(title_label_, 1);
+    title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    AddChildView(title_label);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE);
+    style.SetupLabel(title_label);
+    box_layout->SetFlexForView(title_label, 1);
     if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
       help_button_ =
           new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
                                kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
       settings_button_ = new SystemMenuButton(
           this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
-          IDS_ASH_STATUS_TRAY_SETTINGS);
+          IDS_ASH_PALETTE_SETTINGS);
     } else {
       gfx::ImageSkia help_icon =
           gfx::CreateVectorIcon(kSystemMenuHelpIcon, kMenuIconColor);
@@ -120,11 +122,6 @@ class TitleView : public views::View, public views::ButtonListener {
   ~TitleView() override {}
 
  private:
-  // views::View:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    UpdateStyle();
-  }
-
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     if (sender == settings_button_) {
@@ -142,18 +139,10 @@ class TitleView : public views::View, public views::ButtonListener {
     }
   }
 
-  void UpdateStyle() {
-    TrayPopupItemStyle style(GetNativeTheme(),
-                             TrayPopupItemStyle::FontStyle::TITLE);
-    style.SetupLabel(title_label_);
-  }
-
   // Unowned pointers to button views so we can determine which button was
   // clicked.
   views::View* settings_button_;
   views::View* help_button_;
-  // Needed for UpdateStyles()
-  views::Label* title_label_;
   PaletteTray* palette_tray_;
 
   DISALLOW_COPY_AND_ASSIGN(TitleView);
@@ -241,8 +230,7 @@ bool PaletteTray::ShowPalette() {
   bubble_view->AddChildView(title_view);
 
   // Add horizontal separator.
-  views::Separator* separator =
-      new views::Separator(views::Separator::HORIZONTAL);
+  views::Separator* separator = new views::Separator();
   separator->SetColor(kPaletteSeparatorColor);
   separator->SetBorder(views::CreateEmptyBorder(gfx::Insets(
       kPaddingBetweenTitleAndSeparator, 0, kMenuSeparatorVerticalPadding, 0)));

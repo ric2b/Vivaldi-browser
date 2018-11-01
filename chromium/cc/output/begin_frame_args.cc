@@ -5,7 +5,6 @@
 #include "cc/output/begin_frame_args.h"
 
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/proto/base_conversions.h"
 
 namespace cc {
 
@@ -49,7 +48,7 @@ BeginFrameArgs::BeginFrameArgs(uint32_t source_id,
       source_id(source_id),
       type(type),
       on_critical_path(true) {
-  DCHECK_LT(kInvalidFrameNumber, sequence_number);
+  DCHECK_LE(kStartingFrameNumber, sequence_number);
 }
 
 BeginFrameArgs BeginFrameArgs::Create(BeginFrameArgs::CreationLocation location,

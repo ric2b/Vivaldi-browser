@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 
 #include "base/feature_list.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/common/chrome_features.h"
@@ -14,6 +15,7 @@
 #include "components/user_manager/user_manager.h"
 
 namespace chromeos {
+namespace quick_unlock {
 
 namespace {
 bool enable_for_testing_ = false;
@@ -24,14 +26,30 @@ const char kQuickUnlockWhitelistOptionPin[] = "PIN";
 constexpr int kDefaultMinimumPinLength = 6;
 }  // namespace
 
-void RegisterQuickUnlockProfilePrefs(PrefRegistrySimple* registry) {
+base::TimeDelta PasswordConfirmationFrequencyToTimeDelta(
+    PasswordConfirmationFrequency frequency) {
+  switch (frequency) {
+    case PasswordConfirmationFrequency::SIX_HOURS:
+      return base::TimeDelta::FromHours(6);
+    case PasswordConfirmationFrequency::TWELVE_HOURS:
+      return base::TimeDelta::FromHours(12);
+    case PasswordConfirmationFrequency::DAY:
+      return base::TimeDelta::FromDays(1);
+    case PasswordConfirmationFrequency::WEEK:
+      return base::TimeDelta::FromDays(7);
+  }
+  NOTREACHED();
+  return base::TimeDelta();
+}
+
+void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   base::ListValue quick_unlock_whitelist_default;
   quick_unlock_whitelist_default.AppendString(kQuickUnlockWhitelistOptionPin);
   registry->RegisterListPref(prefs::kQuickUnlockModeWhitelist,
                              quick_unlock_whitelist_default.DeepCopy());
   registry->RegisterIntegerPref(
       prefs::kQuickUnlockTimeout,
-      static_cast<int>(QuickUnlockPasswordConfirmationFrequency::DAY));
+      static_cast<int>(PasswordConfirmationFrequency::DAY));
 
   // Preferences related the lock screen pin unlock.
   registry->RegisterIntegerPref(prefs::kPinUnlockMinimumLength,
@@ -39,9 +57,11 @@ void RegisterQuickUnlockProfilePrefs(PrefRegistrySimple* registry) {
   // 0 indicates no maximum length for the pin.
   registry->RegisterIntegerPref(prefs::kPinUnlockMaximumLength, 0);
   registry->RegisterBooleanPref(prefs::kPinUnlockWeakPinsAllowed, true);
+
+  registry->RegisterBooleanPref(prefs::kEnableQuickUnlockFingerprint, false);
 }
 
-bool IsPinUnlockEnabled(PrefService* pref_service) {
+bool IsPinEnabled(PrefService* pref_service) {
   if (enable_for_testing_)
     return true;
 
@@ -67,8 +87,17 @@ bool IsPinUnlockEnabled(PrefService* pref_service) {
   return base::FeatureList::IsEnabled(features::kQuickUnlockPin);
 }
 
-void EnableQuickUnlockForTesting() {
+bool IsFingerprintEnabled() {
+  if (enable_for_testing_)
+    return true;
+
+  // Enable fingerprint unlock only if the switch is present.
+  return base::FeatureList::IsEnabled(features::kQuickUnlockFingerprint);
+}
+
+void EnableForTesting() {
   enable_for_testing_ = true;
 }
 
+}  // namespace quick_unlock
 }  // namespace chromeos

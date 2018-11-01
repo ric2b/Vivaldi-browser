@@ -218,10 +218,10 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
     return m_grid[row].row[effectiveColumn];
   }
   LayoutTableCell* primaryCellAt(unsigned row, unsigned effectiveColumn) {
-    if (effectiveColumn >= numCols(row))
+    Row& rowVector = m_grid[row].row;
+    if (effectiveColumn >= rowVector.size())
       return nullptr;
-    CellStruct& c = m_grid[row].row[effectiveColumn];
-    return c.primaryCell();
+    return rowVector[effectiveColumn].primaryCell();
   }
   const LayoutTableCell* primaryCellAt(unsigned row,
                                        unsigned effectiveColumn) const {
@@ -322,12 +322,14 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   int paginationStrutForRow(LayoutTableRow*, LayoutUnit logicalOffset) const;
 
-  bool mapToVisualRectInAncestorSpace(
+  bool mapToVisualRectInAncestorSpaceInternal(
       const LayoutBoxModelObject* ancestor,
-      LayoutRect&,
+      TransformState&,
       VisualRectFlags = DefaultVisualRectFlags) const override;
 
   bool isRepeatingHeaderGroup() const;
+
+  void layout() override;
 
  protected:
   void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
@@ -342,8 +344,6 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   }
 
   void willBeRemovedFromTree() override;
-
-  void layout() override;
 
   int borderSpacingForRow(unsigned row) const {
     return m_grid[row].rowLayoutObject ? table()->vBorderSpacing() : 0;

@@ -154,6 +154,80 @@ TEST_F(SourceListDirectiveTest, BlobMatchingSelf) {
       "https");
 }
 
+TEST_F(SourceListDirectiveTest, FilesystemMatchingSelf) {
+  KURL base;
+  String sources = "'self'";
+  SourceListDirective sourceList("script-src", sources, csp.get());
+
+  EXPECT_TRUE(sourceList.allows(KURL(base, "https://example.test/")));
+  EXPECT_FALSE(sourceList.allows(
+      KURL(base, "filesystem:https://example.test/file.txt")));
+
+  // Register "https" as bypassing CSP, which should trigger the innerURL
+  // behavior.
+  SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy("https");
+
+  EXPECT_TRUE(sourceList.allows(KURL(base, "https://example.test/")));
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "filesystem:https://example.test/file.txt")));
+
+  // Unregister the scheme to clean up after ourselves.
+  SchemeRegistry::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(
+      "https");
+}
+
+TEST_F(SourceListDirectiveTest, BlobDisallowedWhenBypassingSelfScheme) {
+  KURL base;
+  String sources = "'self' blob:";
+  SourceListDirective sourceList("script-src", sources, csp.get());
+
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "blob:https://example.test/1be95204-93d6-4GUID")));
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "blob:https://not-example.test/1be95204-93d6-4GUID")));
+
+  // Register "https" as bypassing CSP, which should trigger the innerURL
+  // behavior.
+  SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy("https");
+
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "blob:https://example.test/1be95204-93d6-4GUID")));
+  // TODO(mkwst, arthursonzogni): This should be true.
+  // See http://crbug.com/692046
+  EXPECT_FALSE(sourceList.allows(
+      KURL(base, "blob:https://not-example.test/1be95204-93d6-4GUID")));
+
+  // Unregister the scheme to clean up after ourselves.
+  SchemeRegistry::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(
+      "https");
+}
+
+TEST_F(SourceListDirectiveTest, FilesystemDisallowedWhenBypassingSelfScheme) {
+  KURL base;
+  String sources = "'self' filesystem:";
+  SourceListDirective sourceList("script-src", sources, csp.get());
+
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "filesystem:https://example.test/file.txt")));
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "filesystem:https://not-example.test/file.txt")));
+
+  // Register "https" as bypassing CSP, which should trigger the innerURL
+  // behavior.
+  SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy("https");
+
+  EXPECT_TRUE(sourceList.allows(
+      KURL(base, "filesystem:https://example.test/file.txt")));
+  // TODO(mkwst, arthursonzogni): This should be true.
+  // See http://crbug.com/692046
+  EXPECT_FALSE(sourceList.allows(
+      KURL(base, "filesystem:https://not-example.test/file.txt")));
+
+  // Unregister the scheme to clean up after ourselves.
+  SchemeRegistry::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(
+      "https");
+}
+
 TEST_F(SourceListDirectiveTest, BlobMatchingBlob) {
   KURL base;
   String sources = "blob:";
@@ -1369,6 +1443,33 @@ TEST_F(SourceListDirectiveTest, ParseHost) {
     EXPECT_EQ(test.expected,
               SourceListDirective::parseHost(start, end, host, disposition))
         << "SourceListDirective::parseHost fail to parse: " << test.sources;
+  }
+}
+
+TEST_F(SourceListDirectiveTest, AllowHostWildcard) {
+  KURL base;
+  // When the host-part is "*", the port must still be checked.
+  // See crbug.com/682673.
+  {
+    String sources = "http://*:111";
+    SourceListDirective sourceList("default-src", sources, csp.get());
+    EXPECT_TRUE(sourceList.allows(KURL(base, "http://a.com:111")));
+    EXPECT_FALSE(sourceList.allows(KURL(base, "http://a.com:222")));
+  }
+  // When the host-part is "*", the path must still be checked.
+  // See crbug.com/682673.
+  {
+    String sources = "http://*/welcome.html";
+    SourceListDirective sourceList("default-src", sources, csp.get());
+    EXPECT_TRUE(sourceList.allows(KURL(base, "http://a.com/welcome.html")));
+    EXPECT_FALSE(sourceList.allows(KURL(base, "http://a.com/passwords.txt")));
+  }
+  // When the host-part is "*" and the expression-source is not "*", then every
+  // host are allowed. See crbug.com/682673.
+  {
+    String sources = "http://*";
+    SourceListDirective sourceList("default-src", sources, csp.get());
+    EXPECT_TRUE(sourceList.allows(KURL(base, "http://a.com")));
   }
 }
 

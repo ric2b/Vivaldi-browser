@@ -10,6 +10,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
+#include "cc/output/begin_frame_args.h"
 
 namespace cc {
 
@@ -24,6 +25,16 @@ SchedulerStateMachine::SchedulerStateMachine(const SchedulerSettings& settings)
       begin_impl_frame_state_(BEGIN_IMPL_FRAME_STATE_IDLE),
       begin_main_frame_state_(BEGIN_MAIN_FRAME_STATE_IDLE),
       forced_redraw_state_(FORCED_REDRAW_STATE_IDLE),
+      begin_frame_source_id_(0),
+      begin_frame_sequence_number_(BeginFrameArgs::kInvalidFrameNumber),
+      last_begin_frame_sequence_number_begin_main_frame_sent_(
+          BeginFrameArgs::kInvalidFrameNumber),
+      last_begin_frame_sequence_number_pending_tree_was_fresh_(
+          BeginFrameArgs::kInvalidFrameNumber),
+      last_begin_frame_sequence_number_active_tree_was_fresh_(
+          BeginFrameArgs::kInvalidFrameNumber),
+      last_begin_frame_sequence_number_compositor_frame_was_fresh_(
+          BeginFrameArgs::kInvalidFrameNumber),
       commit_count_(0),
       current_frame_number_(0),
       last_frame_number_submit_performed_(-1),
@@ -33,6 +44,7 @@ SchedulerStateMachine::SchedulerStateMachine(const SchedulerSettings& settings)
       draw_funnel_(false),
       send_begin_main_frame_funnel_(true),
       invalidate_compositor_frame_sink_funnel_(false),
+      impl_side_invalidation_funnel_(false),
       prepare_tiles_funnel_(0),
       consecutive_checkerboard_animations_(0),
       pending_submit_frames_(0),
@@ -60,7 +72,10 @@ SchedulerStateMachine::SchedulerStateMachine(const SchedulerSettings& settings)
       last_commit_had_no_updates_(false),
       wait_for_ready_to_draw_(false),
       did_draw_in_last_frame_(false),
-      did_submit_in_last_frame_(false) {}
+      did_submit_in_last_frame_(false),
+      needs_impl_side_invalidation_(false),
+      previous_pending_tree_was_impl_side_(false),
+      current_pending_tree_is_impl_side_(false) {}
 
 const char* SchedulerStateMachine::CompositorFrameSinkStateToString(
     CompositorFrameSinkState state) {
@@ -177,6 +192,8 @@ const char* SchedulerStateMachine::ActionToString(Action action) {
       return "ACTION_PREPARE_TILES";
     case ACTION_INVALIDATE_COMPOSITOR_FRAME_SINK:
       return "ACTION_INVALIDATE_COMPOSITOR_FRAME_SINK";
+    case ACTION_PERFORM_IMPL_SIDE_INVALIDATION:
+      return "ACTION_PERFORM_IMPL_SIDE_INVALIDATION";
   }
   NOTREACHED();
   return "???";
@@ -214,12 +231,26 @@ void SchedulerStateMachine::AsValueInto(
                     last_frame_number_draw_performed_);
   state->SetInteger("last_frame_number_begin_main_frame_sent",
                     last_frame_number_begin_main_frame_sent_);
+  state->SetInteger("begin_frame_source_id", begin_frame_source_id_);
+  state->SetInteger("begin_frame_sequence_number",
+                    begin_frame_sequence_number_);
+  state->SetInteger("last_begin_frame_sequence_number_begin_main_frame_sent",
+                    last_begin_frame_sequence_number_begin_main_frame_sent_);
+  state->SetInteger("last_begin_frame_sequence_number_pending_tree_was_fresh",
+                    last_begin_frame_sequence_number_pending_tree_was_fresh_);
+  state->SetInteger("last_begin_frame_sequence_number_active_tree_was_fresh",
+                    last_begin_frame_sequence_number_active_tree_was_fresh_);
+  state->SetInteger(
+      "last_begin_frame_sequence_number_compositor_frame_was_fresh",
+      last_begin_frame_sequence_number_compositor_frame_was_fresh_);
   state->SetBoolean("funnel: draw_funnel", draw_funnel_);
   state->SetBoolean("funnel: send_begin_main_frame_funnel",
                     send_begin_main_frame_funnel_);
   state->SetInteger("funnel: prepare_tiles_funnel", prepare_tiles_funnel_);
   state->SetBoolean("funnel: invalidate_compositor_frame_sink_funnel",
                     invalidate_compositor_frame_sink_funnel_);
+  state->SetBoolean("funnel: impl_side_invalidation_funnel",
+                    impl_side_invalidation_funnel_);
   state->SetInteger("consecutive_checkerboard_animations",
                     consecutive_checkerboard_animations_);
   state->SetInteger("pending_submit_frames_", pending_submit_frames_);
@@ -255,6 +286,8 @@ void SchedulerStateMachine::AsValueInto(
   state->SetBoolean("last_commit_had_no_updates", last_commit_had_no_updates_);
   state->SetBoolean("did_draw_in_last_frame", did_draw_in_last_frame_);
   state->SetBoolean("did_submit_in_last_frame", did_submit_in_last_frame_);
+  state->SetBoolean("needs_impl_side_invalidation",
+                    needs_impl_side_invalidation_);
   state->EndDictionary();
 }
 
@@ -493,7 +526,8 @@ bool SchedulerStateMachine::ShouldCommit() const {
 
   // We must not finish the commit until the pending tree is free.
   if (has_pending_tree_) {
-    DCHECK(settings_.main_frame_before_activation_enabled);
+    DCHECK(settings_.main_frame_before_activation_enabled ||
+           current_pending_tree_is_impl_side_);
     return false;
   }
 
@@ -554,6 +588,8 @@ SchedulerStateMachine::Action SchedulerStateMachine::NextAction() const {
     else
       return ACTION_DRAW_IF_POSSIBLE;
   }
+  if (ShouldPerformImplSideInvalidation())
+    return ACTION_PERFORM_IMPL_SIDE_INVALIDATION;
   if (ShouldPrepareTiles())
     return ACTION_PREPARE_TILES;
   if (ShouldSendBeginMainFrame())
@@ -565,6 +601,84 @@ SchedulerStateMachine::Action SchedulerStateMachine::NextAction() const {
   return ACTION_NONE;
 }
 
+bool SchedulerStateMachine::ShouldPerformImplSideInvalidation() const {
+  if (!needs_impl_side_invalidation_)
+    return false;
+
+  if (!CouldCreatePendingTree())
+    return false;
+
+  // If the main thread is ready to commit, the impl-side invalidations will be
+  // merged with the incoming main frame.
+  if (begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_READY_TO_COMMIT)
+    return false;
+
+  // Don't invalidate too many times in the same frame.
+  if (impl_side_invalidation_funnel_)
+    return false;
+
+  // If invalidations go to the active tree and we are waiting for the previous
+  // frame to be drawn, submitted and acked.
+  if (settings_.commit_to_active_tree &&
+      (active_tree_needs_first_draw_ || IsDrawThrottled())) {
+    return false;
+  }
+
+  // If we are inside the deadline and an impl-side invalidation request is
+  // still pending, do it now. We restrict performing impl-side invalidations
+  // until the deadline to give the main thread a chance to respond to a sent
+  // BeginMainFrame. If the main thread responds with a commit, we know the
+  // invalidations will have been merged with the main frame.
+  // If the commit was aborted, or the main thread fails to respond within the
+  // deadline, then we create a pending tree for impl-side invalidations now.
+  // This also checks to make sure that the |prepare_tiles_funnel_| is not full,
+  // since impl-side invalidations will cause a PrepareTiles.
+  if (begin_impl_frame_state_ == BEGIN_IMPL_FRAME_STATE_INSIDE_DEADLINE &&
+      prepare_tiles_funnel_ == 0) {
+    return true;
+  }
+
+  // Wait till the deadline to perform impl-side invalidations.
+  return false;
+}
+
+void SchedulerStateMachine::WillPerformImplSideInvalidation() {
+  current_pending_tree_is_impl_side_ = true;
+  WillPerformImplSideInvalidationInternal();
+}
+
+void SchedulerStateMachine::WillPerformImplSideInvalidationInternal() {
+  DCHECK(needs_impl_side_invalidation_);
+  DCHECK(!has_pending_tree_);
+
+  needs_impl_side_invalidation_ = false;
+  has_pending_tree_ = true;
+  impl_side_invalidation_funnel_ = true;
+  // TODO(eseckler): Track impl-side invalidations for pending/active tree and
+  // CompositorFrame freshness computation.
+}
+
+bool SchedulerStateMachine::CouldCreatePendingTree() const {
+  // Can't create a new pending tree till the current one is activated.
+  if (has_pending_tree_)
+    return false;
+
+  // Can't make frames while we're invisible.
+  if (!visible_)
+    return false;
+
+  // If the BeginFrameSource is paused, we will not be able to make any impl
+  // frames.
+  if (begin_frame_source_paused_)
+    return false;
+
+  // Don't create a pending tree till a frame sink is initialized.
+  if (!HasInitializedCompositorFrameSink())
+    return false;
+
+  return true;
+}
+
 void SchedulerStateMachine::WillSendBeginMainFrame() {
   DCHECK(!has_pending_tree_ || settings_.main_frame_before_activation_enabled);
   DCHECK(visible_);
@@ -574,6 +688,8 @@ void SchedulerStateMachine::WillSendBeginMainFrame() {
   needs_begin_main_frame_ = false;
   send_begin_main_frame_funnel_ = true;
   last_frame_number_begin_main_frame_sent_ = current_frame_number_;
+  last_begin_frame_sequence_number_begin_main_frame_sent_ =
+      begin_frame_sequence_number_;
 }
 
 void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
@@ -584,10 +700,38 @@ void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
   last_commit_had_no_updates_ = commit_has_no_updates;
   begin_main_frame_state_ = BEGIN_MAIN_FRAME_STATE_IDLE;
 
-  if (!commit_has_no_updates) {
-    // Pending tree only exists if commit had updates.
+  if (commit_has_no_updates) {
+    // Pending tree might still exist from prior commit.
+    if (has_pending_tree_) {
+      DCHECK(settings_.main_frame_before_activation_enabled);
+      last_begin_frame_sequence_number_pending_tree_was_fresh_ =
+          last_begin_frame_sequence_number_begin_main_frame_sent_;
+    } else {
+      if (last_begin_frame_sequence_number_compositor_frame_was_fresh_ ==
+          last_begin_frame_sequence_number_active_tree_was_fresh_) {
+        // Assuming that SetNeedsRedraw() is only called at the beginning of
+        // a BeginFrame, we can update the compositor frame freshness.
+        last_begin_frame_sequence_number_compositor_frame_was_fresh_ =
+            last_begin_frame_sequence_number_begin_main_frame_sent_;
+      }
+      last_begin_frame_sequence_number_active_tree_was_fresh_ =
+          last_begin_frame_sequence_number_begin_main_frame_sent_;
+    }
+  } else {
+    // If there was a commit, the impl-side invalidations will be merged with
+    // it. We always fill the impl-side invalidation funnel here, even if no
+    // request was currently pending, to defer creating another pending tree and
+    // performing PrepareTiles until the next frame, in case the invalidation
+    // request is received after the commit.
+    if (needs_impl_side_invalidation_)
+      WillPerformImplSideInvalidationInternal();
+    impl_side_invalidation_funnel_ = true;
+
+    // We have a new pending tree.
     has_pending_tree_ = true;
     pending_tree_is_ready_for_activation_ = false;
+    last_begin_frame_sequence_number_pending_tree_was_fresh_ =
+        last_begin_frame_sequence_number_begin_main_frame_sent_;
     wait_for_ready_to_draw_ = settings_.commit_to_active_tree;
   }
 
@@ -619,6 +763,11 @@ void SchedulerStateMachine::WillActivate() {
   pending_tree_is_ready_for_activation_ = false;
   active_tree_needs_first_draw_ = true;
   needs_redraw_ = true;
+  last_begin_frame_sequence_number_active_tree_was_fresh_ =
+      last_begin_frame_sequence_number_pending_tree_was_fresh_;
+
+  previous_pending_tree_was_impl_side_ = current_pending_tree_is_impl_side_;
+  current_pending_tree_is_impl_side_ = false;
 }
 
 void SchedulerStateMachine::WillDrawInternal() {
@@ -650,9 +799,17 @@ void SchedulerStateMachine::DidDrawInternal(DrawResult draw_result) {
       NOTREACHED() << "Invalid return DrawResult:" << draw_result;
       break;
     case DRAW_ABORTED_DRAINING_PIPELINE:
+      consecutive_checkerboard_animations_ = 0;
+      forced_redraw_state_ = FORCED_REDRAW_STATE_IDLE;
+      break;
     case DRAW_SUCCESS:
       consecutive_checkerboard_animations_ = 0;
       forced_redraw_state_ = FORCED_REDRAW_STATE_IDLE;
+      // The draw either didn't have damage or had damage and submitted a
+      // CompositorFrame. In either case, the compositor frame freshness should
+      // be updated to match the active tree.
+      last_begin_frame_sequence_number_compositor_frame_was_fresh_ =
+          last_begin_frame_sequence_number_active_tree_was_fresh_;
       break;
     case DRAW_ABORTED_CHECKERBOARD_ANIMATIONS:
       DCHECK(!did_submit_in_last_frame_);
@@ -687,6 +844,10 @@ void SchedulerStateMachine::WillDraw() {
 
 void SchedulerStateMachine::DidDraw(DrawResult draw_result) {
   DidDrawInternal(draw_result);
+}
+
+void SchedulerStateMachine::SetNeedsImplSideInvalidation() {
+  needs_impl_side_invalidation_ = true;
 }
 
 void SchedulerStateMachine::AbortDraw() {
@@ -767,7 +928,8 @@ bool SchedulerStateMachine::BeginFrameRequiredForAction() const {
     return true;
 
   return needs_redraw_ || needs_one_begin_impl_frame_ ||
-         (needs_begin_main_frame_ && !defer_commits_);
+         (needs_begin_main_frame_ && !defer_commits_) ||
+         needs_impl_side_invalidation_;
 }
 
 // These are cases where we are very likely want a BeginFrame message in the
@@ -815,7 +977,65 @@ bool SchedulerStateMachine::ProactiveBeginFrameWanted() const {
   return false;
 }
 
-void SchedulerStateMachine::OnBeginImplFrame() {
+void SchedulerStateMachine::OnBeginFrameDroppedNotObserving(
+    uint32_t source_id,
+    uint64_t sequence_number) {
+  DCHECK(!BeginFrameNeeded());
+  DCHECK_EQ(BEGIN_IMPL_FRAME_STATE_IDLE, begin_impl_frame_state_);
+
+  // Confirms the dropped BeginFrame, since we don't have updates.
+  UpdateBeginFrameSequenceNumbersForBeginFrame(source_id, sequence_number);
+  UpdateBeginFrameSequenceNumbersForBeginFrameDeadline();
+}
+
+void SchedulerStateMachine::UpdateBeginFrameSequenceNumbersForBeginFrame(
+    uint32_t source_id,
+    uint64_t sequence_number) {
+  if (source_id != begin_frame_source_id_) {
+    begin_frame_source_id_ = source_id;
+    begin_frame_sequence_number_ = sequence_number;
+
+    // Reset freshness sequence numbers.
+    last_begin_frame_sequence_number_begin_main_frame_sent_ =
+        BeginFrameArgs::kInvalidFrameNumber;
+    last_begin_frame_sequence_number_active_tree_was_fresh_ =
+        BeginFrameArgs::kInvalidFrameNumber;
+    last_begin_frame_sequence_number_pending_tree_was_fresh_ =
+        BeginFrameArgs::kInvalidFrameNumber;
+    last_begin_frame_sequence_number_compositor_frame_was_fresh_ =
+        BeginFrameArgs::kInvalidFrameNumber;
+  } else {
+    DCHECK_GT(sequence_number, begin_frame_sequence_number_);
+    begin_frame_sequence_number_ = sequence_number;
+  }
+}
+
+void SchedulerStateMachine::
+    UpdateBeginFrameSequenceNumbersForBeginFrameDeadline() {
+  // Update frame numbers for freshness in case no updates were necessary.
+  if (begin_main_frame_state_ != BEGIN_MAIN_FRAME_STATE_IDLE ||
+      needs_begin_main_frame_) {
+    return;
+  }
+
+  if (has_pending_tree_) {
+    last_begin_frame_sequence_number_pending_tree_was_fresh_ =
+        begin_frame_sequence_number_;
+    return;
+  }
+
+  last_begin_frame_sequence_number_active_tree_was_fresh_ =
+      begin_frame_sequence_number_;
+
+  if (!needs_redraw_)
+    last_begin_frame_sequence_number_compositor_frame_was_fresh_ =
+        begin_frame_sequence_number_;
+}
+
+void SchedulerStateMachine::OnBeginImplFrame(uint32_t source_id,
+                                             uint64_t sequence_number) {
+  UpdateBeginFrameSequenceNumbersForBeginFrame(source_id, sequence_number);
+
   begin_impl_frame_state_ = BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME;
   current_frame_number_++;
 
@@ -827,6 +1047,7 @@ void SchedulerStateMachine::OnBeginImplFrame() {
   // Clear funnels for any actions we perform during the frame.
   send_begin_main_frame_funnel_ = false;
   invalidate_compositor_frame_sink_funnel_ = false;
+  impl_side_invalidation_funnel_ = false;
 
   // "Drain" the PrepareTiles funnel.
   if (prepare_tiles_funnel_ > 0)
@@ -844,6 +1065,9 @@ void SchedulerStateMachine::OnBeginImplFrameDeadline() {
     if (prepare_tiles_funnel_ > 0)
       prepare_tiles_funnel_--;
   }
+
+  if (!settings_.using_synchronous_renderer_compositor)
+    UpdateBeginFrameSequenceNumbersForBeginFrameDeadline();
 }
 
 void SchedulerStateMachine::OnBeginImplFrameIdle() {
@@ -860,6 +1084,12 @@ void SchedulerStateMachine::OnBeginImplFrameIdle() {
   // funnels so that we don't perform any actions that we shouldn't.
   if (!BeginFrameNeeded())
     send_begin_main_frame_funnel_ = true;
+
+  // Synchronous compositor finishes BeginFrames before triggering their
+  // deadline. Therefore, we update sequence numbers when becoming idle, before
+  // the Scheduler sends its BeginFrameAck.
+  if (settings_.using_synchronous_renderer_compositor)
+    UpdateBeginFrameSequenceNumbersForBeginFrameDeadline();
 }
 
 SchedulerStateMachine::BeginImplFrameDeadlineMode

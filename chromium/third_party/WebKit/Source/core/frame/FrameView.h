@@ -26,6 +26,7 @@
 #ifndef FrameView_h
 #define FrameView_h
 
+#include <memory>
 #include "core/CoreExport.h"
 #include "core/dom/DocumentLifecycle.h"
 #include "core/frame/FrameViewAutoSizeInfo.h"
@@ -38,8 +39,8 @@
 #include "core/paint/PaintInvalidationCapableScrollableArea.h"
 #include "core/paint/PaintPhase.h"
 #include "core/paint/ScrollbarManager.h"
+#include "platform/FrameViewBase.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/Widget.h"
 #include "platform/animation/CompositorAnimationHost.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
 #include "platform/geometry/IntRect.h"
@@ -57,7 +58,6 @@
 #include "wtf/HashSet.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
@@ -69,6 +69,7 @@ class Element;
 class ElementVisibilityObserver;
 class Frame;
 class FloatSize;
+class GeometryMapper;
 class JSONArray;
 class JSONObject;
 class LayoutItem;
@@ -88,6 +89,7 @@ class PaintArtifactCompositor;
 class PaintController;
 class PaintInvalidationState;
 class Page;
+class PrintContext;
 class ScrollingCoordinator;
 class TracedValue;
 class TransformState;
@@ -97,7 +99,7 @@ struct CompositedSelection;
 typedef unsigned long long DOMTimeStamp;
 
 class CORE_EXPORT FrameView final
-    : public Widget,
+    : public FrameViewBase,
       public PaintInvalidationCapableScrollableArea {
   USING_GARBAGE_COLLECTED_MIXIN(FrameView);
 
@@ -228,8 +230,8 @@ class CORE_EXPORT FrameView final
 
   // Fixed-position objects.
   typedef HashSet<LayoutObject*> ViewportConstrainedObjectSet;
-  void addViewportConstrainedObject(LayoutObject*);
-  void removeViewportConstrainedObject(LayoutObject*);
+  void addViewportConstrainedObject(LayoutObject&);
+  void removeViewportConstrainedObject(LayoutObject&);
   const ViewportConstrainedObjectSet* viewportConstrainedObjects() const {
     return m_viewportConstrainedObjects.get();
   }
@@ -338,7 +340,7 @@ class CORE_EXPORT FrameView final
   };
 
   ScrollingReasons getScrollingReasons() const;
-  bool isScrollable();
+  bool isScrollable() const override;
   bool isProgrammaticallyScrollable() override;
 
   enum ScrollbarModesCalculationStrategy { RulesFromWebContentOnly, AnyRule };
@@ -354,6 +356,7 @@ class CORE_EXPORT FrameView final
 
   bool scrollbarsCanBeActive() const override;
   void scrollbarVisibilityChanged() override;
+  void scrollbarFrameRectChanged() override;
 
   // FIXME: Remove this method once plugin loading is decoupled from layout.
   void flushAnyPendingPostLayoutTasks();
@@ -439,13 +442,14 @@ class CORE_EXPORT FrameView final
   bool isScrollCornerVisible() const override;
   bool userInputScrollable(ScrollbarOrientation) const override;
   bool shouldPlaceVerticalScrollbarOnLeft() const override;
-  Widget* getWidget() override;
+  FrameViewBase* getWidget() override;
   CompositorAnimationHost* compositorAnimationHost() const override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
   LayoutBox* layoutBox() const override;
   FloatQuad localToVisibleContentQuad(const FloatQuad&,
                                       const LayoutObject*,
                                       unsigned = 0) const final;
+  RefPtr<WebTaskRunner> getTimerTaskRunner() const final;
 
   LayoutRect scrollIntoView(const LayoutRect& rectInContent,
                             const ScrollAlignment& alignX,
@@ -456,12 +460,12 @@ class CORE_EXPORT FrameView final
   // and repaints to the host window in the window's coordinate space.
   HostWindow* getHostWindow() const;
 
-  typedef HeapHashSet<Member<Widget>> ChildrenWidgetSet;
+  typedef HeapHashSet<Member<FrameViewBase>> ChildrenWidgetSet;
 
   // Functions for child manipulation and inspection.
-  void setParent(Widget*) override;
-  void removeChild(Widget*);
-  void addChild(Widget*);
+  void setParent(FrameViewBase*) override;
+  void removeChild(FrameViewBase*);
+  void addChild(FrameViewBase*);
   const ChildrenWidgetSet* children() const { return &m_children; }
 
   // If the scroll view does not use a native widget, then it will have
@@ -606,7 +610,7 @@ class CORE_EXPORT FrameView final
   // event handlers (like Win32).
   Scrollbar* scrollbarAtFramePoint(const IntPoint&);
 
-  IntPoint convertChildToSelf(const Widget* child,
+  IntPoint convertChildToSelf(const FrameViewBase* child,
                               const IntPoint& point) const override {
     IntPoint newPoint = point;
     if (!isFrameViewScrollbar(child))
@@ -615,7 +619,7 @@ class CORE_EXPORT FrameView final
     return newPoint;
   }
 
-  IntPoint convertSelfToChild(const Widget* child,
+  IntPoint convertSelfToChild(const FrameViewBase* child,
                               const IntPoint& point) const override {
     IntPoint newPoint = point;
     if (!isFrameViewScrollbar(child))
@@ -624,16 +628,16 @@ class CORE_EXPORT FrameView final
     return newPoint;
   }
 
-  // Widget override. Handles painting of the contents of the view as well as
-  // the scrollbars.
+  // FrameViewBase override. Handles painting of the contents of the view as
+  // well as the scrollbars.
   void paint(GraphicsContext&, const CullRect&) const override;
   void paint(GraphicsContext&, const GlobalPaintFlags, const CullRect&) const;
   void paintContents(GraphicsContext&,
                      const GlobalPaintFlags,
                      const IntRect& damageRect) const;
 
-  // Widget overrides to ensure that our children's visibility status is kept up
-  // to date when we get shown and hidden.
+  // FrameViewBase overrides to ensure that our children's visibility status is
+  // kept up to date when we get shown and hidden.
   void show() override;
   void hide() override;
   void setParentVisible(bool) override;
@@ -712,11 +716,6 @@ class CORE_EXPORT FrameView final
     return m_scrollTranslation.get();
   }
 
-  void setScroll(PassRefPtr<ScrollPaintPropertyNode> scroll) {
-    m_scroll = scroll;
-  }
-  ScrollPaintPropertyNode* scroll() const { return m_scroll.get(); }
-
   void setContentClip(PassRefPtr<ClipPaintPropertyNode> contentClip) {
     m_contentClip = contentClip;
   }
@@ -761,7 +760,13 @@ class CORE_EXPORT FrameView final
   IntRect computeVisibleArea();
 
   // Viewport size that should be used for viewport units (i.e. 'vh'/'vw').
+  // May include the size of browser controls. See implementation for further
+  // documentation.
   FloatSize viewportSizeForViewportUnits() const;
+
+  // Initial containing block size for evaluating viewport-dependent media
+  // queries.
+  FloatSize viewportSizeForMediaQueries() const;
 
   ScrollAnchor* scrollAnchor() override { return &m_scrollAnchor; }
   void clearScrollAnchor();
@@ -830,6 +835,17 @@ class CORE_EXPORT FrameView final
   void setAnimationTimeline(std::unique_ptr<CompositorAnimationTimeline>);
   void setAnimationHost(std::unique_ptr<CompositorAnimationHost>);
 
+  // Returns the GeometryMapper associated with the root local frame.
+  GeometryMapper& geometryMapper();
+
+  void crossOriginStatusChanged();
+
+  // The visual viewport can supply scrollbars which affect the existence of
+  // our scrollbars (see: computeScrollbarExistence).
+  void visualViewportScrollbarsChanged();
+
+  LayoutUnit caretWidth() const;
+
  protected:
   // Scroll the content via the compositor.
   bool scrollContentsFastPath(const IntSize& scrollDelta);
@@ -891,6 +907,11 @@ class CORE_EXPORT FrameView final
 
   void updateScrollbarEnabledState();
 
+  void dispatchEventsForPrintingOnAllFrames();
+
+  void setupPrintContext();
+  void clearPrintContext();
+
   void updateLifecyclePhasesInternal(
       DocumentLifecycle::LifecycleState targetState);
 
@@ -930,15 +951,15 @@ class CORE_EXPORT FrameView final
   void scheduleOrPerformPostLayoutTasks();
   void performPostLayoutTasks();
 
-  void maybeRecordLoadReason();
+  void recordDeferredLoadingStats();
 
   DocumentLifecycle& lifecycle() const;
 
   void contentsResized() override;
   void scrollbarExistenceDidChange();
 
-  // Override Widget methods to do point conversion via layoutObjects, in order
-  // to take transforms into account.
+  // Override FrameViewBase methods to do point conversion via layoutObjects, in
+  // order to take transforms into account.
   IntRect convertToContainingWidget(const IntRect&) const override;
   IntRect convertFromContainingWidget(const IntRect&) const override;
   IntPoint convertToContainingWidget(const IntPoint&) const override;
@@ -971,14 +992,13 @@ class CORE_EXPORT FrameView final
   // visible.
   bool hasOverlayScrollbars() const;
 
-  // Returns true if the frame should use custom scrollbars. If true, one of
-  // either |customScrollbarElement| or |customScrollbarFrame| will be set to
-  // the element or frame which owns the scrollbar with the other set to null.
-  bool shouldUseCustomScrollbars(Element*& customScrollbarElement,
-                                 LocalFrame*& customScrollbarFrame) const;
+  // Returns true if the frame should use custom scrollbars. If true, sets
+  // customScrollbarElement to the element that supplies the scrollbar's style
+  // information.
+  bool shouldUseCustomScrollbars(Element*& customScrollbarElement) const;
 
   // Returns true if a scrollbar needs to go from native -> custom or vice
-  // versa.
+  // versa, or if a custom scrollbar has a stale owner.
   bool needsScrollbarReconstruction() const;
 
   bool shouldIgnoreOverflowHidden() const;
@@ -994,7 +1014,7 @@ class CORE_EXPORT FrameView final
   void adjustScrollOffsetFromUpdateScrollbars();
   bool visualViewportSuppliesScrollbars();
 
-  bool isFrameViewScrollbar(const Widget* child) const {
+  bool isFrameViewScrollbar(const FrameViewBase* child) const {
     return horizontalScrollbar() == child || verticalScrollbar() == child;
   }
 
@@ -1015,7 +1035,17 @@ class CORE_EXPORT FrameView final
 
   void updateViewportIntersectionsForSubtree(
       DocumentLifecycle::LifecycleState targetState);
-  void updateRenderThrottlingStatus(bool hidden, bool subtreeThrottled);
+
+  enum ForceThrottlingInvalidationBehavior {
+    DontForceThrottlingInvalidation,
+    ForceThrottlingInvalidation
+  };
+  enum NotifyChildrenBehavior { DontNotifyChildren, NotifyChildren };
+  void updateRenderThrottlingStatus(
+      bool hidden,
+      bool subtreeThrottled,
+      ForceThrottlingInvalidationBehavior = DontForceThrottlingInvalidation,
+      NotifyChildrenBehavior = NotifyChildren);
   void notifyResizeObservers();
 
   // PaintInvalidationCapableScrollableArea
@@ -1031,16 +1061,9 @@ class CORE_EXPORT FrameView final
   EmbeddedObjectSet m_partUpdateSet;
 
   // FIXME: These are just "children" of the FrameView and should be
-  // Member<Widget> instead.
+  // Member<FrameViewBase> instead.
   HashSet<RefPtr<LayoutPart>> m_parts;
 
-  // The RefPtr cycle between LocalFrame and FrameView is broken
-  // when a LocalFrame is detached by LocalFrame::detach().
-  // It clears the LocalFrame's m_view reference via setView(nullptr).
-  //
-  // For Oilpan, Member reference cycles pose no problem, but
-  // LocalFrame's FrameView is also cleared by that setView(), so as to
-  // keep the observable lifespan of LocalFrame::view() identical.
   Member<LocalFrame> m_frame;
 
   WebDisplayMode m_displayMode;
@@ -1096,7 +1119,7 @@ class CORE_EXPORT FrameView final
   IntSize m_initialViewportSize;
   bool m_layoutSizeFixedToFrameSize;
 
-  Timer<FrameView> m_didScrollTimer;
+  TaskRunnerTimer<FrameView> m_didScrollTimer;
 
   Vector<IntRect> m_tickmarks;
 
@@ -1143,14 +1166,13 @@ class CORE_EXPORT FrameView final
 
   // Paint properties for SPv2 Only.
   // The hierarchy of transform subtree created by a FrameView.
-  // [ preTranslation ]               The offset from Widget::frameRect.
+  // [ preTranslation ]               The offset from FrameViewBase::frameRect.
   //     |                            Establishes viewport.
   //     +---[ scrollTranslation ]    Frame scrolling.
   // TODO(trchen): These will not be needed once settings->rootLayerScrolls() is
   // enabled.
   RefPtr<TransformPaintPropertyNode> m_preTranslation;
   RefPtr<TransformPaintPropertyNode> m_scrollTranslation;
-  RefPtr<ScrollPaintPropertyNode> m_scroll;
   // The content clip clips the document (= LayoutView) but not the scrollbars.
   // TODO(trchen): This will not be needed once settings->rootLayerScrolls() is
   // enabled.
@@ -1205,6 +1227,12 @@ class CORE_EXPORT FrameView final
   // TODO(kenrb): Remove these when https://crbug.com/680606 is resolved.
   std::unique_ptr<CompositorAnimationTimeline> m_animationTimeline;
   std::unique_ptr<CompositorAnimationHost> m_animationHost;
+
+  std::unique_ptr<GeometryMapper> m_geometryMapper;
+
+  Member<PrintContext> m_printContext;
+
+  FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
 };
 
 inline void FrameView::incrementVisuallyNonEmptyCharacterCount(unsigned count) {
@@ -1232,10 +1260,10 @@ inline void FrameView::incrementVisuallyNonEmptyPixelCount(
 }
 
 DEFINE_TYPE_CASTS(FrameView,
-                  Widget,
-                  widget,
-                  widget->isFrameView(),
-                  widget.isFrameView());
+                  FrameViewBase,
+                  frameViewBase,
+                  frameViewBase->isFrameView(),
+                  frameViewBase.isFrameView());
 DEFINE_TYPE_CASTS(FrameView,
                   ScrollableArea,
                   scrollableArea,

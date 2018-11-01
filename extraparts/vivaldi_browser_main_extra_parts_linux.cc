@@ -6,5 +6,4 @@
 #include "chrome/common/chrome_switches.h"
 
 // Overridden from ChromeBrowserMainExtraParts:
-void VivaldiBrowserMainExtraParts::PostEarlyInitializationLinux() {
-}
+void VivaldiBrowserMainExtraParts::PostEarlyInitializationLinux() {}

@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Vis en gemt (dvs. forældet) kopi af denne side.</translation>
 <translation id="1559528461873125649">Filen eller mappen findes ikke</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">Du får vist kilden for en webside.</translation>
+<translation id="1728677426644403582">Du ser kilden for en webside</translation>
 <translation id="194030505837763158">Gå til <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Mente du <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Mindre</translation>
 <translation id="2166378884831602661">Dette website kan ikke levere en sikker forbindelse</translation>
 <translation id="2292556288342944218">Din internetadgang er blokeret</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldigt svar.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Der blev nægtet adgang til filen</translation>
 <translation id="2705137772291741111">Den gemte (cachelagrede) kopi af dette website kunne ikke læses.</translation>
 <translation id="2784949926578158345">Forbindelsen blev nulstillet.</translation>
-<translation id="284702764277384724">Serverens certifikat på <ph name="HOST_NAME" /> lader til at være en forfalskning.</translation>
 <translation id="2909946352844186028">Der blev registreret en netværksændring.</translation>
 <translation id="3005723025932146533">Vis gemt kopi</translation>
 <translation id="3093245981617870298">Du er offline.</translation>
@@ -39,7 +37,6 @@
 <translation id="4021036232240155012">DNS er den netværkstjeneste, der oversætter navnet på et website til dets internetadresse.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> accepterede ikke dit logincertifikat, eller der er ikke angivet et.</translation>
 <translation id="4522570452068850558">Detaljer</translation>
-<translation id="4670097147947922288">Du er i øjeblikket på en udvidelsesside.</translation>
 <translation id="4708268264240856090">Din forbindelse blev afbrudt</translation>
 <translation id="4744603770635761495">Eksekverbar sti</translation>
 <translation id="4764776831041365478">Websiden på <ph name="URL" /> kan være midlertidigt nede, eller også er den permanent flyttet til en ny webadresse.</translation>
@@ -56,7 +53,6 @@
 <translation id="5675650730144413517">Denne side virker ikke</translation>
 <translation id="5869405914158311789">Der kan ikke oprettes forbindelse til dette website</translation>
 <translation id="5990559369517809815">Anmodninger til serveren er blokeret af en udvidelse.</translation>
-<translation id="6042308850641462728">Mere</translation>
 <translation id="6146055958333702838">Kontrollér eventuelle kabler, og genstart alle routere, modemmer eller andre
     netværksenheder, du bruger.</translation>
 <translation id="6165508094623778733">Flere oplysninger</translation>
@@ -65,12 +61,11 @@
 <translation id="6321917430147971392">Kontrollér dine DNS-indstillinger</translation>
 <translation id="6328639280570009161">Prøv at deaktivere netværksforslag</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> nægtede at oprette forbindelse.</translation>
+<translation id="6569060085658103619">Du ser en udvidelsesside</translation>
 <translation id="6711464428925977395">Der er noget galt med proxyserveren, eller adressen er forkert.</translation>
 <translation id="6757797048963528358">Din computer gik i dvale.</translation>
-<translation id="6830600606572693159">Websiden på <ph name="URL" /> er ikke tilgængelig lige nu. Den kan enten være overbelastet eller under vedligeholdelse.</translation>
 <translation id="6897140037006041989">Brugeragent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> overholder ikke sikkerhedsstandarderne.</translation>
-<translation id="7269802741830436641">Denne webside har et loop ved omdirigering</translation>
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7419106976560586862">Profilsti</translation>
 <translation id="7518003948725431193">Ingen webside fundet på webadressen: <ph name="URL" /></translation>
@@ -78,8 +73,8 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan i øjeblikket ikke behandle denne anmodning.</translation>
 <translation id="7716424297397655342">Dette website kan ikke indlæses fra cachen</translation>
 <translation id="7758069387465995638">Firewall- eller antivirussoftware kan have blokeret forbindelsen.</translation>
-<translation id="778579833039460630">Ingen data modtaget</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8089520772729574115">mindre end 1 MB</translation>
 <translation id="8134994873729925007"><ph name="BEGIN_ABBR" />DNS-adressen<ph name="END_ABBR" /> for <ph name="HOST_NAME" />s server blev ikke fundet.</translation>
 <translation id="8142868475871995937">Gå til &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for at se listen over sortlistede webadresser og andre politikker, din systemadministrator har igangsat.</translation>
 <translation id="8149426793427495338">Din computer gik i dvale.</translation>

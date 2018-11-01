@@ -13,7 +13,6 @@
 #include "components/cryptauth/cryptauth_device_manager.h"
 #include "components/cryptauth/cryptauth_enrollment_manager.h"
 #include "components/cryptauth/cryptauth_gcm_manager.h"
-#include "components/proximity_auth/authenticator.h"
 #include "components/proximity_auth/logging/log_buffer.h"
 #include "components/proximity_auth/messenger_observer.h"
 #include "components/proximity_auth/proximity_auth_client.h"
@@ -26,13 +25,13 @@ class ListValue;
 
 namespace cryptauth {
 class ExternalDeviceInfo;
+class RemoteDeviceLoader;
 }
 
 namespace proximity_auth {
 
 class ReachablePhoneFlow;
 class RemoteDeviceLifeCycle;
-class RemoteDeviceLoader;
 struct RemoteStatusUpdate;
 
 // Handles messages from the chrome://proximity-auth page.
@@ -148,7 +147,7 @@ class ProximityAuthWebUIHandler
 
   // Member variables for connecting to and authenticating the remote device.
   // TODO(tengs): Support multiple simultaenous connections.
-  std::unique_ptr<RemoteDeviceLoader> remote_device_loader_;
+  std::unique_ptr<cryptauth::RemoteDeviceLoader> remote_device_loader_;
   cryptauth::RemoteDevice selected_remote_device_;
   std::unique_ptr<RemoteDeviceLifeCycle> life_cycle_;
   std::unique_ptr<RemoteStatusUpdate> last_remote_status_update_;

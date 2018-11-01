@@ -261,6 +261,11 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
                     mWebContents.paste();
                     mWebContents.dismissTextHandles();
                 }
+
+                @Override
+                public boolean canPaste() {
+                    return SelectionPopupController.this.canPaste();
+                }
             };
             Context windowContext = mWindowAndroid.getContext().get();
             if (windowContext == null) return null;
@@ -826,10 +831,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
                 mWasPastePopupShowingOnInsertionDragStart = false;
                 break;
 
-            case SelectionEventType.SELECTION_ESTABLISHED:
-            case SelectionEventType.SELECTION_DISSOLVED:
-                break;
-
             default:
                 assert false : "Invalid selection event type.";
         }
@@ -847,12 +848,8 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
      * end if applicable.
      */
     void clearSelection() {
-        if (isEmpty()) return;
-        if (isSelectionEditable()) {
-            mImeAdapter.moveCursorToSelectionEnd();
-        } else {
-            if (mWebContents != null) mWebContents.unselect();
-        }
+        if (mWebContents == null || isEmpty()) return;
+        mWebContents.collapseSelection();
     }
 
     void onSelectionChanged(String text) {

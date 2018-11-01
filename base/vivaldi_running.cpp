@@ -18,7 +18,7 @@ void CheckVivaldiStatus() {
   if (g_checked_vivaldi_status)
     return;
   g_checked_vivaldi_status = true;
-  base::CommandLine *cmd_line = base::CommandLine::ForCurrentProcess();
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   DCHECK(cmd_line);
   g_vivaldi_is_running = IsVivaldiRunning(*cmd_line);
   g_debugging_vivaldi = IsDebuggingVivaldi(*cmd_line);
@@ -27,24 +27,23 @@ void CheckVivaldiStatus() {
 }  // namespace
 
 void ForceVivaldiRunning(bool status) {
-  //g_vivaldi_is_running = status;
+  // g_vivaldi_is_running = status;
   g_checked_vivaldi_status = true;
   g_forced_vivaldi_status = status;
 }
 
-bool ForcedVivaldiRunning()
-{
+bool ForcedVivaldiRunning() {
   return g_forced_vivaldi_status;
 }
 
-bool IsVivaldiRunning(const base::CommandLine &cmd_line) {
+bool IsVivaldiRunning(const base::CommandLine& cmd_line) {
   if (cmd_line.HasSwitch(switches::kDisableVivaldi) ||
-    cmd_line.HasSwitch("app"))  // so we don't load the Vivaldi app
+      cmd_line.HasSwitch("app"))  // so we don't load the Vivaldi app
     return false;
   return true;
 }
 
-bool IsDebuggingVivaldi(const base::CommandLine &cmd_line) {
+bool IsDebuggingVivaldi(const base::CommandLine& cmd_line) {
   return cmd_line.HasSwitch(switches::kDebugVivaldi);
 }
 
@@ -64,6 +63,13 @@ bool IsTabDragInProgress() {
 
 void SetTabDragInProgress(bool tab_drag_in_progress) {
   g_tab_drag_in_progress = tab_drag_in_progress;
+}
+
+void CommandLineAppendSwitchNoDup(base::CommandLine* const cmd_line,
+                                  const std::string& switch_string) {
+  if (!cmd_line->HasSwitch(switch_string))
+    cmd_line->AppendSwitchNative(switch_string,
+                                 base::CommandLine::StringType());
 }
 
 }  // namespace vivaldi

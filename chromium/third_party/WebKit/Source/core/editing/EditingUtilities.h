@@ -67,13 +67,15 @@ class Range;
 
 // This file contains a set of helper functions used by the editing commands
 
-CORE_EXPORT bool needsLayoutTreeUpdate(const Node&);
 CORE_EXPORT bool needsLayoutTreeUpdate(const Position&);
 CORE_EXPORT bool needsLayoutTreeUpdate(const PositionInFlatTree&);
 
 // -------------------------------------------------------------------------
 // Node
 // -------------------------------------------------------------------------
+
+// Returns true if |node| has "user-select:contain".
+bool isUserSelectContain(const Node& /* node */);
 
 CORE_EXPORT bool hasEditableStyle(const Node&);
 CORE_EXPORT bool hasRichlyEditableStyle(const Node&);
@@ -82,6 +84,8 @@ CORE_EXPORT Element* rootEditableElement(const Node&);
 Element* rootEditableElementOf(const Position&);
 Element* rootEditableElementOf(const PositionInFlatTree&);
 Element* rootEditableElementOf(const VisiblePosition&);
+ContainerNode* rootEditableElementOrTreeScopeRootNodeOf(
+    const VisibleSelection&);
 // highestEditableRoot returns the highest editable node. If the
 // rootEditableElement of the speicified Position is <body>, this returns the
 // <body>. Otherwise, this searches ancestors for the highest editable node in
@@ -187,7 +191,6 @@ bool isRenderedAsNonInlineTableImageOrHR(const Node*);
 CORE_EXPORT bool areIdenticalElements(const Node&, const Node&);
 bool isNonTableCellHTMLBlockElement(const Node*);
 bool isBlockFlowElement(const Node&);
-bool nodeIsUserSelectAll(const Node*);
 EUserSelect usedValueOfUserSelect(const Node&);
 bool isTextSecurityNode(const Node*);
 CORE_EXPORT TextDirection directionOfEnclosingBlock(const Position&);
@@ -305,7 +308,7 @@ PositionWithAffinity positionRespectingEditingBoundary(
     const Position&,
     const LayoutPoint& localPoint,
     Node* targetNode);
-void updatePositionForNodeRemoval(Position&, Node&);
+Position computePositionForNodeRemoval(const Position&, Node&);
 
 // -------------------------------------------------------------------------
 // VisiblePosition
@@ -415,20 +418,14 @@ const String& nonBreakingSpaceString();
 // -------------------------------------------------------------------------
 
 // Functions dispatch InputEvent
-DispatchEventResult dispatchBeforeInputInsertText(EventTarget*,
-                                                  const String& data);
-DispatchEventResult dispatchBeforeInputFromComposition(
-    EventTarget*,
-    InputEvent::InputType,
-    const String& data,
-    InputEvent::EventCancelable);
-DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget*,
+const StaticRangeVector* targetRangesForInputEvent(const Node&);
+DispatchEventResult dispatchBeforeInputInsertText(Node*, const String& data);
+DispatchEventResult dispatchBeforeInputEditorCommand(Node*,
                                                      InputEvent::InputType,
-                                                     const RangeVector*);
-DispatchEventResult dispatchBeforeInputDataTransfer(EventTarget*,
+                                                     const StaticRangeVector*);
+DispatchEventResult dispatchBeforeInputDataTransfer(Node*,
                                                     InputEvent::InputType,
-                                                    DataTransfer*,
-                                                    const RangeVector*);
+                                                    DataTransfer*);
 
 InputEvent::InputType deletionInputTypeFromTextGranularity(DeleteDirection,
                                                            TextGranularity);

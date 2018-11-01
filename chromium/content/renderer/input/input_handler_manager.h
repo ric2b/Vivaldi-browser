@@ -62,7 +62,7 @@ class CONTENT_EXPORT InputHandlerManager {
   // Callable from the main thread only.
   void AddInputHandler(int routing_id,
                        const base::WeakPtr<cc::InputHandler>& input_handler,
-                       const base::WeakPtr<RenderViewImpl>& render_view_impl,
+                       const base::WeakPtr<RenderWidget>& render_widget,
                        bool enable_smooth_scrolling);
 
   void RegisterRoutingID(int routing_id);
@@ -77,19 +77,20 @@ class CONTENT_EXPORT InputHandlerManager {
                                            blink::WebInputEvent::Type,
                                            blink::WebInputEventResult,
                                            InputEventAckState);
-  void ProcessRafAlignedInputOnMainThread(int routing_id);
+  void ProcessRafAlignedInputOnMainThread(int routing_id,
+                                          base::TimeTicks frame_time);
 
   // Callback only from the compositor's thread.
   void RemoveInputHandler(int routing_id);
 
   using InputEventAckStateCallback =
       base::Callback<void(InputEventAckState,
-                          blink::WebScopedInputEvent,
+                          ui::WebScopedInputEvent,
                           const ui::LatencyInfo&,
                           std::unique_ptr<ui::DidOverscrollParams>)>;
   // Called from the compositor's thread.
   virtual void HandleInputEvent(int routing_id,
-                                blink::WebScopedInputEvent input_event,
+                                ui::WebScopedInputEvent input_event,
                                 const ui::LatencyInfo& latency_info,
                                 const InputEventAckStateCallback& callback);
 
@@ -108,7 +109,7 @@ class CONTENT_EXPORT InputHandlerManager {
   // Called from the compositor's thread.
   void DispatchNonBlockingEventToMainThread(
       int routing_id,
-      blink::WebScopedInputEvent event,
+      ui::WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info);
 
  private:
@@ -117,7 +118,7 @@ class CONTENT_EXPORT InputHandlerManager {
       int routing_id,
       const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
       const base::WeakPtr<cc::InputHandler>& input_handler,
-      const base::WeakPtr<RenderViewImpl>& render_view_impl,
+      const base::WeakPtr<RenderWidget>& render_widget,
       bool enable_smooth_scrolling);
 
   void RegisterRoutingIDOnCompositorThread(int routing_id);
@@ -136,7 +137,7 @@ class CONTENT_EXPORT InputHandlerManager {
   void DidHandleInputEventAndOverscroll(
       const InputEventAckStateCallback& callback,
       ui::InputHandlerProxy::EventDisposition event_disposition,
-      blink::WebScopedInputEvent input_event,
+      ui::WebScopedInputEvent input_event,
       const ui::LatencyInfo& latency_info,
       std::unique_ptr<ui::DidOverscrollParams> overscroll_params);
 

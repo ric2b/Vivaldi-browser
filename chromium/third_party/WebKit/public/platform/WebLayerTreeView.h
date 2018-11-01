@@ -33,6 +33,7 @@
 #include "WebEventListenerProperties.h"
 #include "WebFloatPoint.h"
 #include "WebSize.h"
+#include "cc/surfaces/frame_sink_id.h"
 
 namespace cc {
 class AnimationHost;
@@ -159,16 +160,20 @@ class WebLayerTreeView {
 
   // Input properties ---------------------------------------------------
   virtual void setEventListenerProperties(WebEventListenerClass,
-                                          WebEventListenerProperties){};
-  virtual void setHaveScrollEventHandlers(bool){};
+                                          WebEventListenerProperties) {}
+  virtual void updateEventRectsForSubframeIfNecessary() {}
+  virtual void setHaveScrollEventHandlers(bool) {}
+
+  // Returns the FrameSinkId of the widget associated with this layer tree view.
+  virtual cc::FrameSinkId getFrameSinkId() { return cc::FrameSinkId(); }
 
   // Debugging / dangerous ---------------------------------------------
 
   virtual WebEventListenerProperties eventListenerProperties(
       WebEventListenerClass) const {
     return WebEventListenerProperties::Nothing;
-  };
-  virtual bool haveScrollEventHandlers() const { return false; };
+  }
+  virtual bool haveScrollEventHandlers() const { return false; }
 
   virtual int layerTreeId() const { return 0; }
 

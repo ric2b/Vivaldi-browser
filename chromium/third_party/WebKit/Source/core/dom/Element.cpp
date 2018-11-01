@@ -70,6 +70,7 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/PresentationAttributeStyle.h"
 #include "core/dom/PseudoElement.h"
+#include "core/dom/ResizeObservation.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/dom/SelectorQuery.h"
 #include "core/dom/StyleChangeReason.h"
@@ -121,7 +122,6 @@
 #include "core/layout/api/LayoutBoxItem.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/observer/ResizeObservation.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
@@ -134,8 +134,8 @@
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
 #include "core/paint/PaintLayer.h"
 #include "core/svg/SVGAElement.h"
-#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGElement.h"
+#include "core/svg/SVGTreeScopeResources.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/CompositorMutableProperties.h"
@@ -249,7 +249,7 @@ bool Element::layoutObjectIsFocusable() const {
          layoutObject()->style()->visibility() == EVisibility::kVisible;
 }
 
-Node* Element::cloneNode(bool deep) {
+Node* Element::cloneNode(bool deep, ExceptionState&) {
   return deep ? cloneElementWithChildren() : cloneElementWithoutChildren();
 }
 
@@ -604,6 +604,12 @@ void Element::callApplyScroll(ScrollState& scrollState) {
   // Hits ASSERTs when trying to determine whether we need to scroll on main
   // or CC. http://crbug.com/625676.
   DisableCompositingQueryAsserts disabler;
+
+  if (!document().frameHost()) {
+    // We should always have a frameHost if we're scrolling. See
+    // crbug.com/689074 for details.
+    return;
+  }
 
   ScrollStateCallback* callback =
       scrollCustomizationCallbacks().getApplyScroll(this);
@@ -1568,7 +1574,8 @@ const AtomicString Element::imageSourceURL() const {
 }
 
 bool Element::layoutObjectIsNeeded(const ComputedStyle& style) {
-  return style.display() != EDisplay::None;
+  return style.display() != EDisplay::None &&
+         style.display() != EDisplay::Contents;
 }
 
 LayoutObject* Element::createLayoutObject(const ComputedStyle& style) {
@@ -1663,8 +1670,11 @@ void Element::removedFrom(ContainerNode* insertionPoint) {
     if (this == document().cssTarget())
       document().setCSSTarget(nullptr);
 
-    if (hasPendingResources())
-      document().accessSVGExtensions().removeElementFromPendingResources(this);
+    if (hasPendingResources()) {
+      treeScope()
+          .ensureSVGTreeScopedResources()
+          .removeElementFromPendingResources(*this);
+    }
 
     if (getCustomElementState() == CustomElementState::Custom)
       CustomElement::enqueueDisconnectedCallback(this);
@@ -1706,9 +1716,15 @@ void Element::attachLayoutTree(const AttachContext& context) {
     data->clearComputedStyle();
   }
 
-  if (!isActiveSlotOrActiveInsertionPoint())
-    LayoutTreeBuilderForElement(*this, context.resolvedStyle)
-        .createLayoutObjectIfNeeded();
+  if (!isActiveSlotOrActiveInsertionPoint()) {
+    LayoutTreeBuilderForElement builder(*this, context.resolvedStyle);
+    builder.createLayoutObjectIfNeeded();
+
+    if (ComputedStyle* style = builder.resolvedStyle()) {
+      if (!layoutObject() && shouldStoreNonLayoutObjectComputedStyle(*style))
+        storeNonLayoutObjectComputedStyle(style);
+    }
+  }
 
   addCallbackSelectors();
 
@@ -1884,8 +1900,28 @@ void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling) {
   if (change >= IndependentInherit || needsStyleRecalc()) {
     if (hasRareData()) {
       ElementRareData* data = elementRareData();
-      if (change != IndependentInherit)
-        data->clearComputedStyle();
+      if (change != IndependentInherit) {
+        // We keep the old computed style around for display: contents, option
+        // and optgroup. This way we can call stylePropagationDiff accurately.
+        //
+        // We could clear it always, but we'd have more expensive restyles for
+        // children.
+        //
+        // Note that we can't just keep stored other kind of non-layout object
+        // computed style (like the one that gets set when getComputedStyle is
+        // called on a display: none element), because that is a sizable memory
+        // hit.
+        //
+        // Also, we don't want to leave a stale computed style, which may happen
+        // if we don't end up calling recalcOwnStyle because there's no parent
+        // style.
+        const ComputedStyle* nonLayoutStyle = nonLayoutObjectComputedStyle();
+        if (!nonLayoutStyle ||
+            !shouldStoreNonLayoutObjectComputedStyle(*nonLayoutStyle) ||
+            !parentComputedStyle()) {
+          data->clearComputedStyle();
+        }
+      }
 
       if (change >= IndependentInherit) {
         if (ElementAnimations* elementAnimations = data->elementAnimations())
@@ -1931,7 +1967,7 @@ void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling) {
   }
 
   if (hasCustomStyleCallbacks())
-    didRecalcStyle(change);
+    didRecalcStyle();
 }
 
 PassRefPtr<ComputedStyle> Element::propagateInheritedProperties(
@@ -2007,6 +2043,9 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change,
       // https://codereview.chromium.org/30453002/
       layoutObject->setStyleInternal(newStyle.get());
     }
+  } else if (localChange != NoChange &&
+             shouldStoreNonLayoutObjectComputedStyle(*newStyle)) {
+    storeNonLayoutObjectComputedStyle(newStyle);
   }
 
   if (getStyleChangeType() >= SubtreeStyleChange)
@@ -2635,6 +2674,11 @@ void Element::focus(const FocusParams& params) {
   if (!document().isActive())
     return;
 
+  if (isFrameOwnerElement() &&
+      toHTMLFrameOwnerElement(this)->contentDocument() &&
+      toHTMLFrameOwnerElement(this)->contentDocument()->unloadStarted())
+    return;
+
   document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
   if (!isFocusable())
     return;
@@ -2664,7 +2708,7 @@ void Element::focus(const FocusParams& params) {
     // gesture. Since tracking that across arbitrary boundaries (eg.
     // animations) is difficult, for now we match IE's heuristic and bring
     // up the keyboard if there's been any gesture since load.
-    document().page()->chromeClient().showVirtualKeyboard();
+    document().page()->chromeClient().showVirtualKeyboardOnElementFocus();
   }
 }
 
@@ -2679,12 +2723,11 @@ void Element::updateFocusAppearance(
 
     // When focusing an editable element in an iframe, don't reset the selection
     // if it already contains a selection.
-    if (this == frame->selection().rootEditableElement())
+    if (this ==
+        frame->selection()
+            .computeVisibleSelectionInDOMTreeDeprecated()
+            .rootEditableElement())
       return;
-
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-    // needs to be audited.  See http://crbug.com/590369 for more details.
-    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     // FIXME: We should restore the previous selection if there is one.
     // Passing DoNotSetFocus as this function is called after
@@ -2830,8 +2873,7 @@ String Element::outerHTML() const {
 }
 
 void Element::setInnerHTML(const String& html, ExceptionState& exceptionState) {
-  InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(
-      &document(), "setInnerHTML", true);
+  probe::breakIfNeeded(&document(), "Element.setInnerHTML");
   if (DocumentFragment* fragment = createFragmentForInnerOuterHTML(
           html, this, AllowScriptingContent, "innerHTML", exceptionState)) {
     ContainerNode* container = this;
@@ -3034,8 +3076,9 @@ String Element::innerText() {
   if (!layoutObject())
     return textContent(true);
 
-  return plainText(EphemeralRange::rangeOfContents(*this),
-                   TextIteratorForInnerText);
+  return plainText(
+      EphemeralRange::rangeOfContents(*this),
+      TextIteratorBehavior::Builder().setForInnerText(true).build());
 }
 
 String Element::outerText() {
@@ -3062,12 +3105,12 @@ String Element::textFromChildren() {
       foundMultipleTextNodes = true;
     unsigned length = text->data().length();
     if (length > std::numeric_limits<unsigned>::max() - totalLength)
-      return emptyString();
+      return emptyString;
     totalLength += length;
   }
 
   if (!firstTextNode)
-    return emptyString();
+    return emptyString;
 
   if (firstTextNode && !foundMultipleTextNodes) {
     firstTextNode->atomize();
@@ -3158,13 +3201,47 @@ const ComputedStyle* Element::ensureComputedStyle(
           elementStyle->getCachedPseudoStyle(pseudoElementSpecifier))
     return pseudoElementStyle;
 
+  // TODO(ecobos): Passing two times elementStyle may be wrong, though we don't
+  // support display: contents elements' pseudo-elements yet, so this is not a
+  // problem for now.
   RefPtr<ComputedStyle> result =
       document().ensureStyleResolver().pseudoStyleForElement(
           this, PseudoStyleRequest(pseudoElementSpecifier,
                                    PseudoStyleRequest::ForComputedStyle),
-          elementStyle);
+          elementStyle, elementStyle);
   DCHECK(result);
   return elementStyle->addCachedPseudoStyle(result.release());
+}
+
+const ComputedStyle* Element::nonLayoutObjectComputedStyle() const {
+  if (layoutObject() || !hasRareData())
+    return nullptr;
+
+  return elementRareData()->computedStyle();
+}
+
+bool Element::hasDisplayContentsStyle() const {
+  if (const ComputedStyle* style = nonLayoutObjectComputedStyle())
+    return style->display() == EDisplay::Contents;
+  return false;
+}
+
+bool Element::shouldStoreNonLayoutObjectComputedStyle(
+    const ComputedStyle& style) const {
+#if DCHECK_IS_ON()
+  if (style.display() == EDisplay::Contents)
+    DCHECK(!layoutObject());
+#endif
+
+  return style.display() == EDisplay::Contents ||
+         isHTMLOptGroupElement(*this) || isHTMLOptionElement(*this);
+}
+
+void Element::storeNonLayoutObjectComputedStyle(
+    PassRefPtr<ComputedStyle> style) {
+  DCHECK(style);
+  DCHECK(shouldStoreNonLayoutObjectComputedStyle(*style));
+  ensureElementRareData().setComputedStyle(std::move(style));
 }
 
 AtomicString Element::computeInheritedLanguage() const {
@@ -3283,7 +3360,7 @@ void Element::createPseudoElementIfNeeded(PseudoId pseudoId) {
   element->insertedInto(this);
   element->attachLayoutTree();
 
-  InspectorInstrumentation::pseudoElementCreated(element);
+  probe::pseudoElementCreated(element);
 
   ensureElementRareData().setPseudoElement(pseudoId, element);
 }
@@ -3429,6 +3506,26 @@ void Element::setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
     element->setContainsFullScreenElement(flag);
 }
 
+void Element::setContainsPersistentVideo(bool value) {
+  setElementFlag(ContainsPersistentVideo, value);
+  pseudoStateChanged(CSSSelector::PseudoVideoPersistentAncestor);
+
+  // In some rare situations, when the persistent video has been removed from
+  // the tree, part of the tree might still carry the flag.
+  if (!value && Fullscreen::isCurrentFullScreenElement(*this)) {
+    for (Node* node = firstChild(); node;) {
+      if (!node->isElementNode() ||
+          !toElement(node)->containsPersistentVideo()) {
+        node = node->nextSibling();
+        break;
+      }
+
+      toElement(node)->setContainsPersistentVideo(false);
+      node = node->firstChild();
+    }
+  }
+}
+
 void Element::setIsInTopLayer(bool inTopLayer) {
   if (isInTopLayer() == inTopLayer)
     return;
@@ -3558,7 +3655,7 @@ void Element::willModifyAttribute(const QualifiedName& name,
     recipients->enqueueMutationRecord(
         MutationRecord::createAttributes(this, name, oldValue));
 
-  InspectorInstrumentation::willModifyDOMAttr(this, oldValue, newValue);
+  probe::willModifyDOMAttr(this, oldValue, newValue);
 }
 
 DISABLE_CFI_PERF
@@ -3568,7 +3665,7 @@ void Element::didAddAttribute(const QualifiedName& name,
     updateId(nullAtom, value);
   attributeChanged(AttributeModificationParams(
       name, nullAtom, value, AttributeModificationReason::kDirectly));
-  InspectorInstrumentation::didModifyDOMAttr(this, name, value);
+  probe::didModifyDOMAttr(this, name, value);
   dispatchSubtreeModifiedEvent();
 }
 
@@ -3579,7 +3676,7 @@ void Element::didModifyAttribute(const QualifiedName& name,
     updateId(oldValue, newValue);
   attributeChanged(AttributeModificationParams(
       name, oldValue, newValue, AttributeModificationReason::kDirectly));
-  InspectorInstrumentation::didModifyDOMAttr(this, name, newValue);
+  probe::didModifyDOMAttr(this, name, newValue);
   // Do not dispatch a DOMSubtreeModified event here; see bug 81141.
 }
 
@@ -3589,7 +3686,7 @@ void Element::didRemoveAttribute(const QualifiedName& name,
     updateId(oldValue, nullAtom);
   attributeChanged(AttributeModificationParams(
       name, oldValue, nullAtom, AttributeModificationReason::kDirectly));
-  InspectorInstrumentation::didRemoveDOMAttr(this, name);
+  probe::didRemoveDOMAttr(this, name);
   dispatchSubtreeModifiedEvent();
 }
 
@@ -3724,7 +3821,7 @@ void Element::willRecalcStyle(StyleRecalcChange) {
   DCHECK(hasCustomStyleCallbacks());
 }
 
-void Element::didRecalcStyle(StyleRecalcChange) {
+void Element::didRecalcStyle() {
   DCHECK(hasCustomStyleCallbacks());
 }
 
@@ -3894,7 +3991,7 @@ void Element::styleAttributeChanged(
   setNeedsStyleRecalc(
       LocalStyleChange,
       StyleChangeReasonForTracing::create(StyleChangeReason::StyleSheetChange));
-  InspectorInstrumentation::didInvalidateStyleAttr(this);
+  probe::didInvalidateStyleAttr(this);
 }
 
 void Element::inlineStyleChanged() {
@@ -3903,7 +4000,7 @@ void Element::inlineStyleChanged() {
                                             StyleChangeReason::Inline));
   DCHECK(elementData());
   elementData()->m_styleAttributeIsDirty = true;
-  InspectorInstrumentation::didInvalidateStyleAttr(this);
+  probe::didInvalidateStyleAttr(this);
 
   if (MutationObserverInterestGroup* recipients =
           MutationObserverInterestGroup::createForAttributesMutation(

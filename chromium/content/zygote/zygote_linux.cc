@@ -32,7 +32,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "content/common/child_process_sandbox_support_impl_linux.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/common/set_process_title.h"
 #include "content/common/zygote_commands_linux.h"
@@ -91,7 +90,7 @@ void KillAndReap(pid_t pid, ZygoteForkDelegate* helper) {
 }  // namespace
 
 Zygote::Zygote(int sandbox_flags,
-               ScopedVector<ZygoteForkDelegate> helpers,
+               std::vector<std::unique_ptr<ZygoteForkDelegate>> helpers,
                const std::vector<base::ProcessHandle>& extra_children,
                const std::vector<int>& extra_fds)
     : sandbox_flags_(sandbox_flags),
@@ -418,11 +417,9 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
                             int* uma_sample,
                             int* uma_boundary_value) {
   ZygoteForkDelegate* helper = NULL;
-  for (ScopedVector<ZygoteForkDelegate>::iterator i = helpers_.begin();
-       i != helpers_.end();
-       ++i) {
+  for (auto i = helpers_.begin(); i != helpers_.end(); ++i) {
     if ((*i)->CanHelp(process_type, uma_name, uma_sample, uma_boundary_value)) {
-      helper = *i;
+      helper = i->get();
       break;
     }
   }

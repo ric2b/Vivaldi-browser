@@ -19,20 +19,13 @@
 #include "modules/bluetooth/RequestDeviceOptions.h"
 #include "platform/UserGestureIndicator.h"
 #include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
 #include <memory>
 #include <utility>
 
 namespace blink {
 
 namespace {
-// A name coming from an adv packet is max 29 bytes (adv packet max size
-// 31 bytes - 2 byte length field), but the name can also be acquired via
-// gap.device_name, so it is limited to the max EIR packet size of 240 bytes.
-// See Core Spec 5.0, vol 3, C, 8.1.2.
-const size_t kMaxFilterNameLength = 240;
-const char kFilterNameTooLong[] =
-    "A 'name' or 'namePrefix' longer than 240 bytes results in no devices "
-    "being found, because a device can't acquire a name longer than 240 bytes.";
 // Per the Bluetooth Spec: The name is a user-friendly name associated with the
 // device and consists of a maximum of 248 bytes coded according to the UTF-8
 // standard.
@@ -73,10 +66,6 @@ static void canonicalizeFilter(
       exceptionState.throwTypeError(kDeviceNameTooLong);
       return;
     }
-    if (nameLength > kMaxFilterNameLength) {
-      exceptionState.throwDOMException(NotFoundError, kFilterNameTooLong);
-      return;
-    }
     canonicalizedFilter->name = filter.name();
   }
 
@@ -84,10 +73,6 @@ static void canonicalizeFilter(
     size_t namePrefixLength = filter.namePrefix().utf8().length();
     if (namePrefixLength > kMaxDeviceNameLength) {
       exceptionState.throwTypeError(kDeviceNameTooLong);
-      return;
-    }
-    if (namePrefixLength > kMaxFilterNameLength) {
-      exceptionState.throwDOMException(NotFoundError, kFilterNameTooLong);
       return;
     }
     if (filter.namePrefix().length() == 0) {
@@ -165,7 +150,7 @@ void Bluetooth::RequestDeviceCallback(
         getBluetoothDeviceRepresentingDevice(std::move(device), resolver);
     resolver->resolve(bluetoothDevice);
   } else {
-    resolver->reject(BluetoothError::take(resolver, result));
+    resolver->reject(BluetoothError::createDOMException(result));
   }
 }
 
@@ -195,9 +180,8 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* scriptState,
 
   if (!m_service) {
     InterfaceProvider* interfaceProvider = nullptr;
-    ExecutionContext* executionContext = scriptState->getExecutionContext();
-    if (executionContext->isDocument()) {
-      Document* document = toDocument(executionContext);
+    if (context->isDocument()) {
+      Document* document = toDocument(context);
       if (document->frame())
         interfaceProvider = document->frame()->interfaceProvider();
     }
@@ -210,7 +194,7 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* scriptState,
       // WebBluetoothService so that it can send us events without us
       // prompting.
       mojom::blink::WebBluetoothServiceClientAssociatedPtrInfo ptrInfo;
-      m_clientBinding.Bind(&ptrInfo, m_service.associated_group());
+      m_clientBinding.Bind(&ptrInfo);
       m_service->SetClient(std::move(ptrInfo));
     }
   }
@@ -228,6 +212,11 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* scriptState,
   if (exceptionState.hadException())
     return exceptionState.reject(scriptState);
 
+  // Record the eTLD+1 of the frame using the API.
+  Document* document = toDocument(context);
+  Platform::current()->recordRapporURL("Bluetooth.APIUsage.Origin",
+                                       document->url());
+
   // Subsequent steps are handled in the browser process.
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
@@ -240,18 +229,19 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* scriptState,
   return promise;
 }
 
-void Bluetooth::addDevice(const String& deviceId, BluetoothDevice* device) {
-  m_connectedDevices.add(deviceId, device);
+void Bluetooth::addToConnectedDevicesMap(const String& deviceId,
+                                         BluetoothDevice* device) {
+  m_connectedDevices.insert(deviceId, device);
 }
 
-void Bluetooth::removeDevice(const String& deviceId) {
+void Bluetooth::removeFromConnectedDevicesMap(const String& deviceId) {
   m_connectedDevices.remove(deviceId);
 }
 
 void Bluetooth::registerCharacteristicObject(
     const String& characteristicInstanceId,
     BluetoothRemoteGATTCharacteristic* characteristic) {
-  m_activeCharacteristics.add(characteristicInstanceId, characteristic);
+  m_activeCharacteristics.insert(characteristicInstanceId, characteristic);
 }
 
 void Bluetooth::characteristicObjectRemoved(
@@ -271,13 +261,13 @@ void Bluetooth::RemoteCharacteristicValueChanged(
     const WTF::String& characteristicInstanceId,
     const WTF::Vector<uint8_t>& value) {
   BluetoothRemoteGATTCharacteristic* characteristic =
-      m_activeCharacteristics.get(characteristicInstanceId);
+      m_activeCharacteristics.at(characteristicInstanceId);
   if (characteristic)
     characteristic->dispatchCharacteristicValueChanged(value);
 }
 
 void Bluetooth::GattServerDisconnected(const WTF::String& deviceId) {
-  BluetoothDevice* device = m_connectedDevices.get(deviceId);
+  BluetoothDevice* device = m_connectedDevices.at(deviceId);
   if (device) {
     // Remove device from the map before calling dispatchGattServerDisconnected
     // to avoid removing a device the gattserverdisconnected event handler might
@@ -291,10 +281,10 @@ BluetoothDevice* Bluetooth::getBluetoothDeviceRepresentingDevice(
     mojom::blink::WebBluetoothDevicePtr devicePtr,
     ScriptPromiseResolver* resolver) {
   WTF::String id = devicePtr->id;
-  BluetoothDevice* device = m_deviceInstanceMap.get(id);
+  BluetoothDevice* device = m_deviceInstanceMap.at(id);
   if (!device) {
     device = BluetoothDevice::take(resolver, std::move(devicePtr), this);
-    auto result = m_deviceInstanceMap.add(id, device);
+    auto result = m_deviceInstanceMap.insert(id, device);
     DCHECK(result.isNewEntry);
   }
   return device;

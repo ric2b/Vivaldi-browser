@@ -11,10 +11,7 @@ Profiler.HeapProfilerPanel = class extends Profiler.ProfilesPanel {
     var registry = Profiler.ProfileTypeRegistry.instance;
     super(
         'heap_profiler',
-        [
-          registry.cpuProfileType, registry.heapSnapshotProfileType, registry.samplingHeapProfileType,
-          registry.trackingHeapSnapshotProfileType
-        ],
+        [registry.heapSnapshotProfileType, registry.samplingHeapProfileType, registry.trackingHeapSnapshotProfileType],
         'profiler.heap-toggle-recording');
   }
 
@@ -40,21 +37,19 @@ Profiler.HeapProfilerPanel = class extends Profiler.ProfilesPanel {
     if (!heapProfiles.length)
       return;
 
+    var heapProfilerModel = object.target().model(SDK.HeapProfilerModel);
+    if (!heapProfilerModel)
+      return;
+
     /**
+     * @param {string} viewName
      * @this {Profiler.ProfilesPanel}
      */
     function revealInView(viewName) {
-      object.target().heapProfilerAgent().getHeapObjectId(objectId, didReceiveHeapObjectId.bind(this, viewName));
-    }
-
-    /**
-     * @this {Profiler.ProfilesPanel}
-     */
-    function didReceiveHeapObjectId(viewName, error, result) {
-      if (!this.isShowing())
-        return;
-      if (!error)
-        this.showObject(result, viewName);
+      heapProfilerModel.snapshotObjectIdForObjectId(objectId).then(result => {
+        if (this.isShowing() && result)
+          this.showObject(result, viewName);
+      });
     }
 
     contextMenu.appendItem(Common.UIString.capitalize('Reveal in Summary ^view'), revealInView.bind(this, 'Summary'));

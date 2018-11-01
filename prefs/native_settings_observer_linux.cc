@@ -16,7 +16,6 @@ NativeSettingsObserverLinux::NativeSettingsObserverLinux(
   DCHECK(delegate_);
 }
 
-NativeSettingsObserverLinux::~NativeSettingsObserverLinux() {
-}
+NativeSettingsObserverLinux::~NativeSettingsObserverLinux() {}
 
 }  // namespace vivaldi

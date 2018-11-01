@@ -70,6 +70,7 @@ class ChannelAssociatedGroupController
     connector_->set_connection_error_handler(
         base::Bind(&ChannelAssociatedGroupController::OnPipeError,
                    base::Unretained(this)));
+    connector_->SetWatcherHeapProfilerTag("IPC Channel");
   }
 
   void Pause() {
@@ -106,12 +107,14 @@ class ChannelAssociatedGroupController
       Endpoint* receiver_endpoint = new Endpoint(this, receiver_id);
       endpoints_.insert({ sender_id, sender_endpoint });
       endpoints_.insert({ receiver_id, receiver_endpoint });
+      sender_endpoint->set_handle_created();
+      receiver_endpoint->set_handle_created();
     }
 
     mojo::ScopedInterfaceEndpointHandle sender_handle =
-        CreateScopedInterfaceEndpointHandle(sender_id, true);
+        CreateScopedInterfaceEndpointHandle(sender_id);
     mojo::ScopedInterfaceEndpointHandle receiver_handle =
-        CreateScopedInterfaceEndpointHandle(receiver_id, true);
+        CreateScopedInterfaceEndpointHandle(receiver_id);
 
     sender->Bind(mojom::ChannelAssociatedPtrInfo(std::move(sender_handle), 0));
     receiver->Bind(std::move(receiver_handle));
@@ -125,26 +128,43 @@ class ChannelAssociatedGroupController
   }
 
   // mojo::AssociatedGroupController:
-  void CreateEndpointHandlePair(
-      mojo::ScopedInterfaceEndpointHandle* local_endpoint,
-      mojo::ScopedInterfaceEndpointHandle* remote_endpoint) override {
-    base::AutoLock locker(lock_);
+  mojo::InterfaceId AssociateInterface(
+      mojo::ScopedInterfaceEndpointHandle handle_to_send) override {
+    if (!handle_to_send.pending_association())
+      return mojo::kInvalidInterfaceId;
+
     uint32_t id = 0;
-    do {
-      if (next_interface_id_ >= mojo::kInterfaceIdNamespaceMask)
-        next_interface_id_ = 2;
-      id = next_interface_id_++;
-      if (set_interface_id_namespace_bit_)
-        id |= mojo::kInterfaceIdNamespaceMask;
-    } while (ContainsKey(endpoints_, id));
+    {
+      base::AutoLock locker(lock_);
+      do {
+        if (next_interface_id_ >= mojo::kInterfaceIdNamespaceMask)
+          next_interface_id_ = 2;
+        id = next_interface_id_++;
+        if (set_interface_id_namespace_bit_)
+          id |= mojo::kInterfaceIdNamespaceMask;
+      } while (ContainsKey(endpoints_, id));
 
-    Endpoint* endpoint = new Endpoint(this, id);
-    if (encountered_error_)
-      endpoint->set_peer_closed();
-    endpoints_.insert({ id, endpoint });
+      Endpoint* endpoint = new Endpoint(this, id);
+      if (encountered_error_)
+        endpoint->set_peer_closed();
+      endpoint->set_handle_created();
+      endpoints_.insert({id, endpoint});
+    }
 
-    *local_endpoint = CreateScopedInterfaceEndpointHandle(id, true);
-    *remote_endpoint = CreateScopedInterfaceEndpointHandle(id, false);
+    if (!NotifyAssociation(&handle_to_send, id)) {
+      // The peer handle of |handle_to_send|, which is supposed to join this
+      // associated group, has been closed.
+      {
+        base::AutoLock locker(lock_);
+        Endpoint* endpoint = FindEndpoint(id);
+        if (endpoint)
+          MarkClosedAndMaybeRemove(endpoint);
+      }
+
+      control_message_proxy_.NotifyPeerEndpointClosed(
+          id, handle_to_send.disconnect_reason());
+    }
+    return id;
   }
 
   mojo::ScopedInterfaceEndpointHandle CreateLocalEndpointHandle(
@@ -155,35 +175,35 @@ class ChannelAssociatedGroupController
     base::AutoLock locker(lock_);
     bool inserted = false;
     Endpoint* endpoint = FindOrInsertEndpoint(id, &inserted);
-    if (inserted && encountered_error_)
-      endpoint->set_peer_closed();
-
-    return CreateScopedInterfaceEndpointHandle(id, true);
-  }
-
-  void CloseEndpointHandle(mojo::InterfaceId id, bool is_local) override {
-    if (!mojo::IsValidInterfaceId(id))
-      return;
-
-    base::AutoLock locker(lock_);
-    if (!is_local) {
-      DCHECK(ContainsKey(endpoints_, id));
-      DCHECK(!mojo::IsMasterInterfaceId(id));
-
-      base::AutoUnlock unlocker(lock_);
-      control_message_proxy_.NotifyEndpointClosedBeforeSent(id);
-      return;
+    if (inserted) {
+      DCHECK(!endpoint->handle_created());
+      if (encountered_error_)
+        endpoint->set_peer_closed();
+    } else {
+      if (endpoint->handle_created())
+        return mojo::ScopedInterfaceEndpointHandle();
     }
 
-    DCHECK(ContainsKey(endpoints_, id));
-    Endpoint* endpoint = endpoints_[id].get();
-    DCHECK(!endpoint->client());
-    DCHECK(!endpoint->closed());
-    MarkClosedAndMaybeRemove(endpoint);
+    endpoint->set_handle_created();
+    return CreateScopedInterfaceEndpointHandle(id);
+  }
 
-    base::AutoUnlock unlocker(lock_);
-    if (!mojo::IsMasterInterfaceId(id))
-      control_message_proxy_.NotifyPeerEndpointClosed(id);
+  void CloseEndpointHandle(
+      mojo::InterfaceId id,
+      const base::Optional<mojo::DisconnectReason>& reason) override {
+    if (!mojo::IsValidInterfaceId(id))
+      return;
+    {
+      base::AutoLock locker(lock_);
+      DCHECK(ContainsKey(endpoints_, id));
+      Endpoint* endpoint = endpoints_[id].get();
+      DCHECK(!endpoint->client());
+      DCHECK(!endpoint->closed());
+      MarkClosedAndMaybeRemove(endpoint);
+    }
+
+    if (!mojo::IsMasterInterfaceId(id) || reason)
+      control_message_proxy_.NotifyPeerEndpointClosed(id, reason);
   }
 
   mojo::InterfaceEndpointController* AttachEndpointClient(
@@ -236,6 +256,47 @@ class ChannelAssociatedGroupController
   friend class Endpoint;
   friend class ControlMessageProxyThunk;
 
+  // MessageWrapper objects are always destroyed under the controller's lock. On
+  // destruction, if the message it wrappers contains
+  // ScopedInterfaceEndpointHandles (which cannot be destructed under the
+  // controller's lock), the wrapper unlocks to clean them up.
+  class MessageWrapper {
+   public:
+    MessageWrapper() = default;
+
+    MessageWrapper(ChannelAssociatedGroupController* controller,
+                   mojo::Message message)
+        : controller_(controller), value_(std::move(message)) {}
+
+    MessageWrapper(MessageWrapper&& other)
+        : controller_(other.controller_), value_(std::move(other.value_)) {}
+
+    ~MessageWrapper() {
+      if (value_.associated_endpoint_handles()->empty())
+        return;
+
+      controller_->lock_.AssertAcquired();
+      {
+        base::AutoUnlock unlocker(controller_->lock_);
+        value_.mutable_associated_endpoint_handles()->clear();
+      }
+    }
+
+    MessageWrapper& operator=(MessageWrapper&& other) {
+      controller_ = other.controller_;
+      value_ = std::move(other.value_);
+      return *this;
+    }
+
+    mojo::Message& value() { return value_; }
+
+   private:
+    ChannelAssociatedGroupController* controller_ = nullptr;
+    mojo::Message value_;
+
+    DISALLOW_COPY_AND_ASSIGN(MessageWrapper);
+  };
+
   class Endpoint : public base::RefCountedThreadSafe<Endpoint>,
                    public mojo::InterfaceEndpointController {
    public:
@@ -262,6 +323,25 @@ class ChannelAssociatedGroupController
     void set_peer_closed() {
       controller_->lock_.AssertAcquired();
       peer_closed_ = true;
+    }
+
+    bool handle_created() const {
+      controller_->lock_.AssertAcquired();
+      return handle_created_;
+    }
+
+    void set_handle_created() {
+      controller_->lock_.AssertAcquired();
+      handle_created_ = true;
+    }
+
+    const base::Optional<mojo::DisconnectReason>& disconnect_reason() const {
+      return disconnect_reason_;
+    }
+
+    void set_disconnect_reason(
+        const base::Optional<mojo::DisconnectReason>& disconnect_reason) {
+      disconnect_reason_ = disconnect_reason;
     }
 
     base::SingleThreadTaskRunner* task_runner() const {
@@ -295,7 +375,7 @@ class ChannelAssociatedGroupController
       sync_watcher_.reset();
     }
 
-    uint32_t EnqueueSyncMessage(mojo::Message message) {
+    uint32_t EnqueueSyncMessage(MessageWrapper message) {
       controller_->lock_.AssertAcquired();
       uint32_t id = GenerateSyncMessageId();
       sync_messages_.emplace(id, std::move(message));
@@ -305,15 +385,16 @@ class ChannelAssociatedGroupController
 
     void SignalSyncMessageEvent() {
       controller_->lock_.AssertAcquired();
-      EnsureSyncMessageEventExists();
-      sync_message_event_->Signal();
+
+      if (sync_message_event_)
+        sync_message_event_->Signal();
     }
 
-    mojo::Message PopSyncMessage(uint32_t id) {
+    MessageWrapper PopSyncMessage(uint32_t id) {
       controller_->lock_.AssertAcquired();
       if (sync_messages_.empty() || sync_messages_.front().first != id)
-        return mojo::Message();
-      mojo::Message message = std::move(sync_messages_.front().second);
+        return MessageWrapper();
+      MessageWrapper message = std::move(sync_messages_.front().second);
       sync_messages_.pop();
       return message;
     }
@@ -367,14 +448,16 @@ class ChannelAssociatedGroupController
         base::AutoLock locker(controller_->lock_);
         bool more_to_process = false;
         if (!sync_messages_.empty()) {
-          mojo::Message message = std::move(sync_messages_.front().second);
+          MessageWrapper message_wrapper =
+              std::move(sync_messages_.front().second);
           sync_messages_.pop();
 
           bool dispatch_succeeded;
           mojo::InterfaceEndpointClient* client = client_;
           {
             base::AutoUnlock unlocker(controller_->lock_);
-            dispatch_succeeded = client->HandleIncomingMessage(&message);
+            dispatch_succeeded =
+                client->HandleIncomingMessage(&message_wrapper.value());
           }
 
           if (!sync_messages_.empty())
@@ -407,9 +490,11 @@ class ChannelAssociatedGroupController
 
       {
         base::AutoLock locker(controller_->lock_);
-        EnsureSyncMessageEventExists();
-        if (!sync_messages_.empty())
-          SignalSyncMessageEvent();
+        if (!sync_message_event_) {
+          sync_message_event_.reset(new MojoEvent);
+          if (peer_closed_ || !sync_messages_.empty())
+            SignalSyncMessageEvent();
+        }
       }
 
       sync_watcher_.reset(new mojo::SyncHandleWatcher(
@@ -436,11 +521,13 @@ class ChannelAssociatedGroupController
 
     bool closed_ = false;
     bool peer_closed_ = false;
+    bool handle_created_ = false;
+    base::Optional<mojo::DisconnectReason> disconnect_reason_;
     mojo::InterfaceEndpointClient* client_ = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
     std::unique_ptr<mojo::SyncHandleWatcher> sync_watcher_;
     std::unique_ptr<MojoEvent> sync_message_event_;
-    std::queue<std::pair<uint32_t, mojo::Message>> sync_messages_;
+    std::queue<std::pair<uint32_t, MessageWrapper>> sync_messages_;
     uint32_t next_sync_message_id_ = 0;
 
     DISALLOW_COPY_AND_ASSIGN(Endpoint);
@@ -471,8 +558,16 @@ class ChannelAssociatedGroupController
       Endpoint* endpoint = iter->second.get();
       ++iter;
 
-      DCHECK(endpoint->closed());
-      MarkPeerClosedAndMaybeRemove(endpoint);
+      if (!endpoint->closed()) {
+        // This happens when a NotifyPeerEndpointClosed message been received,
+        // but the interface ID hasn't been used to create local endpoint
+        // handle.
+        DCHECK(!endpoint->client());
+        DCHECK(endpoint->peer_closed());
+        MarkClosedAndMaybeRemove(endpoint);
+      } else {
+        MarkPeerClosedAndMaybeRemove(endpoint);
+      }
     }
 
     DCHECK(endpoints_.empty());
@@ -538,9 +633,11 @@ class ChannelAssociatedGroupController
     DCHECK(endpoint->task_runner() && endpoint->client());
     if (endpoint->task_runner()->BelongsToCurrentThread() && !force_async) {
       mojo::InterfaceEndpointClient* client = endpoint->client();
+      base::Optional<mojo::DisconnectReason> reason(
+          endpoint->disconnect_reason());
 
       base::AutoUnlock unlocker(lock_);
-      client->NotifyError();
+      client->NotifyError(reason);
     } else {
       endpoint->task_runner()->PostTask(
           FROM_HERE,
@@ -582,20 +679,28 @@ class ChannelAssociatedGroupController
     lock_.AssertAcquired();
     DCHECK(!inserted || !*inserted);
 
-    auto iter = endpoints_.find(id);
-    if (iter != endpoints_.end())
-      return iter->second.get();
-
-    Endpoint* endpoint = new Endpoint(this, id);
-    endpoints_.insert({ id, endpoint });
-    if (inserted)
-      *inserted = true;
+    Endpoint* endpoint = FindEndpoint(id);
+    if (!endpoint) {
+      endpoint = new Endpoint(this, id);
+      endpoints_.insert({id, endpoint});
+      if (inserted)
+        *inserted = true;
+    }
     return endpoint;
+  }
+
+  Endpoint* FindEndpoint(mojo::InterfaceId id) {
+    lock_.AssertAcquired();
+    auto iter = endpoints_.find(id);
+    return iter != endpoints_.end() ? iter->second.get() : nullptr;
   }
 
   // mojo::MessageReceiver:
   bool Accept(mojo::Message* message) override {
     DCHECK(thread_checker_.CalledOnValidThread());
+
+    if (!message->DeserializeAssociatedEndpointHandles(this))
+      return false;
 
     if (mojo::PipeControlMessageHandler::IsPipeControlMessage(message))
       return control_message_handler_.Accept(message);
@@ -604,9 +709,11 @@ class ChannelAssociatedGroupController
     DCHECK(mojo::IsValidInterfaceId(id));
 
     base::AutoLock locker(lock_);
-    Endpoint* endpoint = GetEndpointForDispatch(id, true /* create */);
-    mojo::InterfaceEndpointClient* client =
-        endpoint ? endpoint->client() : nullptr;
+    Endpoint* endpoint = FindEndpoint(id);
+    if (!endpoint)
+      return true;
+
+    mojo::InterfaceEndpointClient* client = endpoint->client();
     if (!client || !endpoint->task_runner()->BelongsToCurrentThread()) {
       // No client has been bound yet or the client runs tasks on another
       // thread. We assume the other thread must always be the one on which
@@ -617,12 +724,14 @@ class ChannelAssociatedGroupController
       DCHECK(proxy_task_runner_);
 
       if (message->has_flag(mojo::Message::kFlagIsSync)) {
+        MessageWrapper message_wrapper(this, std::move(*message));
         // Sync messages may need to be handled by the endpoint if it's blocking
         // on a sync reply. We pass ownership of the message to the endpoint's
         // sync message queue. If the endpoint was blocking, it will dequeue the
         // message and dispatch it. Otherwise the posted |AcceptSyncMessage()|
         // call will dequeue the message and dispatch it.
-        uint32_t message_id = endpoint->EnqueueSyncMessage(std::move(*message));
+        uint32_t message_id =
+            endpoint->EnqueueSyncMessage(std::move(message_wrapper));
         proxy_task_runner_->PostTask(
             FROM_HERE,
             base::Bind(&ChannelAssociatedGroupController::AcceptSyncMessage,
@@ -653,7 +762,7 @@ class ChannelAssociatedGroupController
     DCHECK(mojo::IsValidInterfaceId(id) && !mojo::IsMasterInterfaceId(id));
 
     base::AutoLock locker(lock_);
-    Endpoint* endpoint = GetEndpointForDispatch(id, false /* create */);
+    Endpoint* endpoint = FindEndpoint(id);
     if (!endpoint)
       return;
 
@@ -680,17 +789,16 @@ class ChannelAssociatedGroupController
     DCHECK(proxy_task_runner_->BelongsToCurrentThread());
 
     base::AutoLock locker(lock_);
-    Endpoint* endpoint =
-        GetEndpointForDispatch(interface_id, false /* create */);
+    Endpoint* endpoint = FindEndpoint(interface_id);
     if (!endpoint)
       return;
 
     DCHECK(endpoint->task_runner()->BelongsToCurrentThread());
-    mojo::Message message = endpoint->PopSyncMessage(message_id);
+    MessageWrapper message_wrapper = endpoint->PopSyncMessage(message_id);
 
     // The message must have already been dequeued by the endpoint waking up
     // from a sync wait. Nothing to do.
-    if (message.IsNull())
+    if (message_wrapper.value().IsNull())
       return;
 
     mojo::InterfaceEndpointClient* client = endpoint->client();
@@ -700,59 +808,32 @@ class ChannelAssociatedGroupController
     bool result = false;
     {
       base::AutoUnlock unlocker(lock_);
-      result = client->HandleIncomingMessage(&message);
+      result = client->HandleIncomingMessage(&message_wrapper.value());
     }
 
     if (!result)
       RaiseError();
   }
 
-  Endpoint* GetEndpointForDispatch(mojo::InterfaceId id, bool create) {
-    lock_.AssertAcquired();
-    auto iter = endpoints_.find(id);
-    if (iter != endpoints_.end())
-      return iter->second.get();
-    if (!create)
-      return nullptr;
-    bool inserted = false;
-    Endpoint* endpoint = FindOrInsertEndpoint(id, &inserted);
-    DCHECK(inserted);
-    return endpoint;
-  }
-
   // mojo::PipeControlMessageHandlerDelegate:
-  bool OnPeerAssociatedEndpointClosed(mojo::InterfaceId id) override {
+  bool OnPeerAssociatedEndpointClosed(
+      mojo::InterfaceId id,
+      const base::Optional<mojo::DisconnectReason>& reason) override {
     DCHECK(thread_checker_.CalledOnValidThread());
 
-    if (mojo::IsMasterInterfaceId(id))
-      return false;
+    DCHECK(!mojo::IsMasterInterfaceId(id) || reason);
 
     scoped_refptr<ChannelAssociatedGroupController> keepalive(this);
     base::AutoLock locker(lock_);
     scoped_refptr<Endpoint> endpoint = FindOrInsertEndpoint(id, nullptr);
+    if (reason)
+      endpoint->set_disconnect_reason(reason);
     if (!endpoint->peer_closed()) {
       if (endpoint->client())
         NotifyEndpointOfError(endpoint.get(), false /* force_async */);
       MarkPeerClosedAndMaybeRemove(endpoint.get());
     }
 
-    return true;
-  }
-
-  bool OnAssociatedEndpointClosedBeforeSent(mojo::InterfaceId id) override {
-    DCHECK(thread_checker_.CalledOnValidThread());
-
-    if (mojo::IsMasterInterfaceId(id))
-      return false;
-
-    {
-      base::AutoLock locker(lock_);
-      Endpoint* endpoint = FindOrInsertEndpoint(id, nullptr);
-      DCHECK(!endpoint->closed());
-      MarkClosedAndMaybeRemove(endpoint);
-    }
-
-    control_message_proxy_.NotifyPeerEndpointClosed(id);
     return true;
   }
 
@@ -793,28 +874,20 @@ class MojoBootstrapImpl : public MojoBootstrap {
  public:
   MojoBootstrapImpl(
       mojo::ScopedMessagePipeHandle handle,
-      Delegate* delegate,
       const scoped_refptr<ChannelAssociatedGroupController> controller)
-            : controller_(controller),
-        handle_(std::move(handle)),
-        delegate_(delegate) {
-    associated_group_ = controller_->CreateAssociatedGroup();
-  }
+      : controller_(controller),
+        associated_group_(controller),
+        handle_(std::move(handle)) {}
 
   ~MojoBootstrapImpl() override {
     controller_->ShutDown();
   }
 
  private:
-  // MojoBootstrap:
-  void Connect() override {
+  void Connect(mojom::ChannelAssociatedPtr* sender,
+               mojom::ChannelAssociatedRequest* receiver) override {
     controller_->Bind(std::move(handle_));
-
-    IPC::mojom::ChannelAssociatedPtr sender;
-    IPC::mojom::ChannelAssociatedRequest receiver;
-    controller_->CreateChannelEndpoints(&sender, &receiver);
-
-    delegate_->OnPipesAvailable(std::move(sender), std::move(receiver));
+    controller_->CreateChannelEndpoints(sender, receiver);
   }
 
   void Pause() override {
@@ -830,14 +903,13 @@ class MojoBootstrapImpl : public MojoBootstrap {
   }
 
   mojo::AssociatedGroup* GetAssociatedGroup() override {
-    return associated_group_.get();
+    return &associated_group_;
   }
 
   scoped_refptr<ChannelAssociatedGroupController> controller_;
+  mojo::AssociatedGroup associated_group_;
 
   mojo::ScopedMessagePipeHandle handle_;
-  Delegate* delegate_;
-  std::unique_ptr<mojo::AssociatedGroup> associated_group_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoBootstrapImpl);
 };
@@ -848,12 +920,10 @@ class MojoBootstrapImpl : public MojoBootstrap {
 std::unique_ptr<MojoBootstrap> MojoBootstrap::Create(
     mojo::ScopedMessagePipeHandle handle,
     Channel::Mode mode,
-    Delegate* delegate,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
   return base::MakeUnique<MojoBootstrapImpl>(
-      std::move(handle), delegate,
-      new ChannelAssociatedGroupController(mode == Channel::MODE_SERVER,
-                                           ipc_task_runner));
+      std::move(handle), new ChannelAssociatedGroupController(
+                             mode == Channel::MODE_SERVER, ipc_task_runner));
 }
 
 }  // namespace IPC

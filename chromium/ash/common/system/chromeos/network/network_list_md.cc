@@ -13,6 +13,7 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/memory/ptr_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
@@ -23,7 +24,6 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "components/device_event_log/device_event_log.h"
-#include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
@@ -94,7 +94,10 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
     AddToggleButton(enabled);
   }
 
-  virtual void SetEnabled(bool enabled) { toggle_->SetIsOn(enabled, true); }
+  virtual void SetIsOn(bool enabled) {
+    toggle_->SetEnabled(true);
+    toggle_->SetIsOn(enabled, true);
+  }
 
  protected:
   // This is called before the toggle button is added to give subclasses an
@@ -117,6 +120,11 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     DCHECK_EQ(toggle_, sender);
+    // In the event of frequent clicks, helps to prevent a toggle button state
+    // from becoming inconsistent with the async operation of enabling /
+    // disabling of mobile radio. The toggle will get re-enabled in the next
+    // call to NetworkListViewMd::Update().
+    toggle_->SetEnabled(false);
     OnToggleToggled(toggle_->is_on());
   }
 
@@ -164,7 +172,7 @@ namespace {
 class CellularHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
  public:
   CellularHeaderRowView()
-      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_CELLULAR) {}
+      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_MOBILE) {}
 
   ~CellularHeaderRowView() override {}
 
@@ -182,6 +190,24 @@ class CellularHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
   DISALLOW_COPY_AND_ASSIGN(CellularHeaderRowView);
 };
 
+class TetherHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
+ public:
+  TetherHeaderRowView()
+      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_TETHER) {}
+
+  ~TetherHeaderRowView() override {}
+
+  const char* GetClassName() const override { return "TetherHeaderRowView"; }
+
+ protected:
+  void OnToggleToggled(bool is_on) override {
+    // TODO (hansberry): Persist toggle to settings/preferences.
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TetherHeaderRowView);
+};
+
 class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
  public:
   explicit WifiHeaderRowView(NetworkListDelegate* network_list_delegate)
@@ -191,9 +217,9 @@ class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
 
   ~WifiHeaderRowView() override {}
 
-  void SetEnabled(bool enabled) override {
+  void SetIsOn(bool enabled) override {
     join_->SetEnabled(enabled);
-    SectionHeaderRowView::SetEnabled(enabled);
+    SectionHeaderRowView::SetIsOn(enabled);
   }
 
   const char* GetClassName() const override { return "WifiHeaderRowView"; }
@@ -208,7 +234,8 @@ class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
   }
 
   void AddExtraButtons(bool enabled) override {
-    const SkColor prominent_color = style()->GetIconColor();
+    const SkColor prominent_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_ProminentButtonColor);
     gfx::ImageSkia normal_image = network_icon::GetImageForNewWifiNetwork(
         SkColorSetA(prominent_color, kJoinIconAlpha),
         SkColorSetA(prominent_color, kJoinBadgeAlpha));
@@ -262,8 +289,10 @@ NetworkListViewMd::NetworkListViewMd(NetworkListDelegate* delegate)
       no_wifi_networks_view_(nullptr),
       no_cellular_networks_view_(nullptr),
       cellular_header_view_(nullptr),
+      tether_header_view_(nullptr),
       wifi_header_view_(nullptr),
       cellular_separator_view_(nullptr),
+      tether_separator_view_(nullptr),
       wifi_separator_view_(nullptr) {
   CHECK(delegate_);
 }
@@ -274,22 +303,32 @@ NetworkListViewMd::~NetworkListViewMd() {
 
 void NetworkListViewMd::Update() {
   CHECK(container());
-  NetworkStateHandler::NetworkStateList network_list;
+
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
+
+  NetworkStateHandler::NetworkStateList network_list;
   handler->GetVisibleNetworkList(&network_list);
   UpdateNetworks(network_list);
+
+  NetworkStateHandler::NetworkStateList tether_network_list;
+  handler->GetTetherNetworkList(0 /* no limit */, &tether_network_list);
+  for (const auto* tether_network : tether_network_list) {
+    network_list_.push_back(
+        base::MakeUnique<NetworkInfo>(tether_network->guid()));
+  }
+
   UpdateNetworkIcons();
   OrderNetworks();
   UpdateNetworkListInternal();
 }
 
 bool NetworkListViewMd::IsNetworkEntry(views::View* view,
-                                       std::string* service_path) const {
+                                       std::string* guid) const {
   std::map<views::View*, std::string>::const_iterator found =
       network_map_.find(view);
   if (found == network_map_.end())
     return false;
-  *service_path = found->second;
+  *guid = found->second;
   return true;
 }
 
@@ -298,9 +337,9 @@ void NetworkListViewMd::UpdateNetworks(
   SCOPED_NET_LOG_IF_SLOW();
   network_list_.clear();
   const NetworkTypePattern pattern = delegate_->GetNetworkTypePattern();
-  for (const auto& network : networks) {
+  for (const auto* network : networks) {
     if (pattern.MatchesType(network->type()))
-      network_list_.push_back(base::MakeUnique<NetworkInfo>(network->path()));
+      network_list_.push_back(base::MakeUnique<NetworkInfo>(network->guid()));
   }
 }
 
@@ -313,9 +352,9 @@ void NetworkListViewMd::OrderNetworks() {
     bool operator()(const std::unique_ptr<NetworkInfo>& network1,
                     const std::unique_ptr<NetworkInfo>& network2) {
       const int order1 =
-          GetOrder(handler_->GetNetworkState(network1->service_path));
+          GetOrder(handler_->GetNetworkStateFromGuid(network1->guid));
       const int order2 =
-          GetOrder(handler_->GetNetworkState(network2->service_path));
+          GetOrder(handler_->GetNetworkStateFromGuid(network2->guid));
       if (order1 != order2)
         return order1 < order2;
       if (network1->connected != network2->connected)
@@ -324,7 +363,7 @@ void NetworkListViewMd::OrderNetworks() {
         return network1->connecting;
       if (network1->highlight != network2->highlight)
         return network1->highlight;
-      return network1->service_path.compare(network2->service_path) < 0;
+      return network1->guid.compare(network2->guid) < 0;
     }
 
    private:
@@ -357,7 +396,7 @@ void NetworkListViewMd::UpdateNetworkIcons() {
 
   for (auto& info : network_list_) {
     const chromeos::NetworkState* network =
-        handler->GetNetworkState(info->service_path);
+        handler->GetNetworkStateFromGuid(info->guid);
     if (!network)
       continue;
     bool prohibited_by_policy = IsProhibitedByPolicy(network);
@@ -375,6 +414,8 @@ void NetworkListViewMd::UpdateNetworkIcons() {
       info->type = NetworkInfo::Type::WIFI;
     else if (network->Matches(NetworkTypePattern::Cellular()))
       info->type = NetworkInfo::Type::CELLULAR;
+    else if (network->Matches(NetworkTypePattern::Tether()))
+      info->type = NetworkInfo::Type::TETHER;
     if (prohibited_by_policy) {
       info->tooltip =
           l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_PROHIBITED);
@@ -393,28 +434,27 @@ void NetworkListViewMd::UpdateNetworkListInternal() {
   // Get the updated list entries.
   needs_relayout_ = false;
   network_map_.clear();
-  std::unique_ptr<std::set<std::string>> new_service_paths =
-      UpdateNetworkListEntries();
+  std::unique_ptr<std::set<std::string>> new_guids = UpdateNetworkListEntries();
 
   // Remove old children.
-  std::set<std::string> remove_service_paths;
-  for (const auto& iter : service_path_map_) {
-    if (new_service_paths->find(iter.first) == new_service_paths->end()) {
-      remove_service_paths.insert(iter.first);
+  std::set<std::string> remove_guids;
+  for (const auto& iter : network_guid_map_) {
+    if (new_guids->find(iter.first) == new_guids->end()) {
+      remove_guids.insert(iter.first);
       network_map_.erase(iter.second);
       delete iter.second;
       needs_relayout_ = true;
     }
   }
 
-  for (const auto& remove_iter : remove_service_paths)
-    service_path_map_.erase(remove_iter);
+  for (const auto& remove_iter : remove_guids)
+    network_guid_map_.erase(remove_iter);
 
   if (!needs_relayout_)
     return;
 
   views::View* selected_view = nullptr;
-  for (const auto& iter : service_path_map_) {
+  for (const auto& iter : network_guid_map_) {
     if (delegate_->IsViewHovered(iter.second)) {
       selected_view = iter.second;
       break;
@@ -431,11 +471,11 @@ NetworkListViewMd::UpdateNetworkListEntries() {
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
 
   // First add high-priority networks (not Wi-Fi nor cellular).
-  std::unique_ptr<std::set<std::string>> new_service_paths =
+  std::unique_ptr<std::set<std::string>> new_guids =
       UpdateNetworkChildren(NetworkInfo::Type::UNKNOWN, 0);
 
   // Keep an index where the next child should be inserted.
-  int index = new_service_paths->size();
+  int index = new_guids->size();
 
   const NetworkTypePattern pattern = delegate_->GetNetworkTypePattern();
   if (pattern.MatchesPattern(NetworkTypePattern::Cellular())) {
@@ -451,18 +491,36 @@ NetworkListViewMd::UpdateNetworkListEntries() {
     if (!message_id &&
         handler->IsTechnologyEnabled(NetworkTypePattern::Mobile()) &&
         !handler->FirstNetworkByType(NetworkTypePattern::Mobile())) {
-      message_id = IDS_ASH_STATUS_TRAY_NO_CELLULAR_NETWORKS;
+      message_id = IDS_ASH_STATUS_TRAY_NO_MOBILE_NETWORKS;
     }
     UpdateInfoLabel(message_id, index, &no_cellular_networks_view_);
     if (message_id)
       ++index;
 
     // Add cellular networks.
-    std::unique_ptr<std::set<std::string>> new_cellular_service_paths =
+    std::unique_ptr<std::set<std::string>> new_cellular_guids =
         UpdateNetworkChildren(NetworkInfo::Type::CELLULAR, index);
-    index += new_cellular_service_paths->size();
-    new_service_paths->insert(new_cellular_service_paths->begin(),
-                              new_cellular_service_paths->end());
+    index += new_cellular_guids->size();
+    new_guids->insert(new_cellular_guids->begin(), new_cellular_guids->end());
+  }
+
+  // TODO (hansberry): Audit existing usage of NonVirtual and consider changing
+  // it to include Tether. See crbug.com/693647.
+  if (handler->IsTechnologyAvailable(NetworkTypePattern::Tether())) {
+    index = UpdateSectionHeaderRow(
+        NetworkTypePattern::Tether(),
+        handler->IsTechnologyEnabled(NetworkTypePattern::Tether()), index,
+        &tether_header_view_, &tether_separator_view_);
+
+    // TODO (hansberry): Should a message similar to
+    // IDS_ASH_STATUS_TRAY_NO_CELLULAR_NETWORKS be shown if Tether technology
+    // is enabled but no networks are around?
+
+    // Add Tether networks.
+    std::unique_ptr<std::set<std::string>> new_tether_guids =
+        UpdateNetworkChildren(NetworkInfo::Type::TETHER, index);
+    index += new_tether_guids->size();
+    new_guids->insert(new_tether_guids->begin(), new_tether_guids->end());
   }
 
   if (pattern.MatchesPattern(NetworkTypePattern::WiFi())) {
@@ -483,11 +541,10 @@ NetworkListViewMd::UpdateNetworkListEntries() {
       ++index;
 
     // Add Wi-Fi networks.
-    std::unique_ptr<std::set<std::string>> new_wifi_service_paths =
+    std::unique_ptr<std::set<std::string>> new_wifi_guids =
         UpdateNetworkChildren(NetworkInfo::Type::WIFI, index);
-    index += new_wifi_service_paths->size();
-    new_service_paths->insert(new_wifi_service_paths->begin(),
-                              new_wifi_service_paths->end());
+    index += new_wifi_guids->size();
+    new_guids->insert(new_wifi_guids->begin(), new_wifi_guids->end());
   }
 
   // No networks or other messages (fallback).
@@ -496,28 +553,26 @@ NetworkListViewMd::UpdateNetworkListEntries() {
                     &no_wifi_networks_view_);
   }
 
-  return new_service_paths;
+  return new_guids;
 }
 
 std::unique_ptr<std::set<std::string>> NetworkListViewMd::UpdateNetworkChildren(
     NetworkInfo::Type type,
     int index) {
-  std::unique_ptr<std::set<std::string>> new_service_paths(
-      new std::set<std::string>);
+  std::unique_ptr<std::set<std::string>> new_guids(new std::set<std::string>);
   for (const auto& info : network_list_) {
     if (info->type != type)
       continue;
     UpdateNetworkChild(index++, info.get());
-    new_service_paths->insert(info->service_path);
+    new_guids->insert(info->guid);
   }
-  return new_service_paths;
+  return new_guids;
 }
 
 void NetworkListViewMd::UpdateNetworkChild(int index, const NetworkInfo* info) {
   views::View* network_view = nullptr;
-  ServicePathMap::const_iterator found =
-      service_path_map_.find(info->service_path);
-  if (found == service_path_map_.end()) {
+  NetworkGuidMap::const_iterator found = network_guid_map_.find(info->guid);
+  if (found == network_guid_map_.end()) {
     network_view = delegate_->CreateViewForNetwork(*info);
   } else {
     network_view = found->second;
@@ -529,8 +584,8 @@ void NetworkListViewMd::UpdateNetworkChild(int index, const NetworkInfo* info) {
   PlaceViewAtIndex(network_view, index);
   if (info->disable)
     network_view->SetEnabled(false);
-  network_map_[network_view] = info->service_path;
-  service_path_map_[info->service_path] = network_view;
+  network_map_[network_view] = info->guid;
+  network_guid_map_[info->guid] = network_view;
 }
 
 void NetworkListViewMd::PlaceViewAtIndex(views::View* view, int index) {
@@ -574,6 +629,8 @@ int NetworkListViewMd::UpdateSectionHeaderRow(
   if (!*view) {
     if (pattern.Equals(NetworkTypePattern::Cellular()))
       *view = new CellularHeaderRowView();
+    else if (pattern.Equals(NetworkTypePattern::Tether()))
+      *view = new TetherHeaderRowView();
     else if (pattern.Equals(NetworkTypePattern::WiFi()))
       *view = new WifiHeaderRowView(delegate_);
     else
@@ -592,7 +649,7 @@ int NetworkListViewMd::UpdateSectionHeaderRow(
     *separator_view = nullptr;
   }
 
-  (*view)->SetEnabled(enabled);
+  (*view)->SetIsOn(enabled);
   PlaceViewAtIndex(*view, child_index++);
   return child_index;
 }

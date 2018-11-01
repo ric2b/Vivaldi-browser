@@ -34,7 +34,7 @@
 #include "ui/views/window/dialog_delegate.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/views/apps/app_info_dialog/arc_app_info_links_panel.h"
@@ -143,10 +143,10 @@ AppInfoDialog::AppInfoDialog(gfx::NativeWindow parent_window,
   dialog_body_contents->AddChildView(new AppInfoPermissionsPanel(profile, app));
 
 #if defined(OS_CHROMEOS)
-  // When ARC is enabled and the Settings app is available, show the
-  // "Manage supported links" link for Chrome.
+  // When Google Play Store is enabled and the Settings app is available, show
+  // the "Manage supported links" link for Chrome.
   if (app->id() == extension_misc::kChromeAppId &&
-      arc::ArcSessionManager::Get()->IsArcEnabled()) {
+      arc::IsArcPlayStoreEnabledForProfile(profile)) {
     const ArcAppListPrefs* arc_app_list_prefs = ArcAppListPrefs::Get(profile);
     if (arc_app_list_prefs &&
         arc_app_list_prefs->IsRegistered(arc::kSettingsAppId)) {
@@ -155,6 +155,7 @@ AppInfoDialog::AppInfoDialog(gfx::NativeWindow parent_window,
     }
   }
 #endif
+
   // Clip the scrollable view so that the scrollbar appears. As long as this
   // is larger than the height of the dialog, it will be resized to the dialog's
   // actual height.

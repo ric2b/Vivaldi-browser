@@ -44,8 +44,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   ContextType getContextType() const override { return Context2d; }
   bool is2d() const override { return true; }
   void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
-  void setIsHidden(bool) final { ASSERT_NOT_REACHED(); }
-  void stop() final { ASSERT_NOT_REACHED(); }
+  void setIsHidden(bool) final { NOTREACHED(); }
+  void stop() final { NOTREACHED(); }
   void setCanvasGetContextResult(RenderingContext&) final {}
   void clearRect(double x, double y, double width, double height) override {
     BaseRenderingContext2D::clearRect(x, y, width, height);
@@ -67,12 +67,14 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 
   bool parseColorOrCurrentColor(Color&, const String& colorString) const final;
 
-  SkCanvas* drawingCanvas() const final;
-  SkCanvas* existingDrawingCanvas() const final;
+  PaintCanvas* drawingCanvas() const final;
+  PaintCanvas* existingDrawingCanvas() const final;
   void disableDeferral(DisableDeferralReason) final;
 
   AffineTransform baseTransform() const final;
-  void didDraw(const SkIRect& dirtyRect) final;
+  void didDraw(const SkIRect& dirtyRect) final;  // overrides
+                                                 // BaseRenderingContext2D and
+                                                 // CanvasRenderingContext
 
   bool stateHasFilter() final;
   sk_sp<SkImageFilter> stateGetFilter() final;

@@ -10,20 +10,21 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/gcm/fake_gcm_profile_service.h"
+#include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
-#include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
-#include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/gcm_driver/instance_id/fake_gcm_driver_for_instance_id.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -223,9 +224,11 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
   void GrantNotificationPermissionForTest(const GURL& url) {
     GURL origin = url.GetOrigin();
     DesktopNotificationProfileUtil::GrantPermission(profile(), origin);
-    ASSERT_EQ(blink::mojom::PermissionStatus::GRANTED,
-              PermissionManager::Get(profile())->GetPermissionStatus(
-                  content::PermissionType::NOTIFICATIONS, origin, origin));
+    ASSERT_EQ(CONTENT_SETTING_ALLOW,
+              PermissionManager::Get(profile())
+                  ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                                        origin, origin)
+                  .content_setting);
   }
 
   PushMessagingAppIdentifier GetAppIdentifierForServiceWorkerRegistration(

@@ -210,7 +210,16 @@ String Color::serializedAsCSSComponentValue() const {
   result.appendNumber(static_cast<unsigned char>(blue()));
   if (colorHasAlpha) {
     result.append(", ");
-    result.appendNumber(alpha() / 255.0f, 6);
+    // See <alphavalue> section in
+    // http://dev.w3.org/csswg/cssom/#serializing-css-values
+    int alphavalue = alpha();
+    float rounded = round(alphavalue * 100 / 255.0f) / 100;
+    if (round(rounded * 255) == alphavalue) {
+      result.appendNumber(rounded, 2);
+    } else {
+      rounded = round(alphavalue * 1000 / 255.0f) / 1000;
+      result.appendNumber(rounded, 3);
+    }
   }
 
   result.append(')');
@@ -222,9 +231,9 @@ String Color::serialized() const {
     StringBuilder builder;
     builder.reserveCapacity(7);
     builder.append('#');
-    appendByteAsHex(red(), builder, Lowercase);
-    appendByteAsHex(green(), builder, Lowercase);
-    appendByteAsHex(blue(), builder, Lowercase);
+    HexNumber::appendByteAsHex(red(), builder, HexNumber::Lowercase);
+    HexNumber::appendByteAsHex(green(), builder, HexNumber::Lowercase);
+    HexNumber::appendByteAsHex(blue(), builder, HexNumber::Lowercase);
     return builder.toString();
   }
 

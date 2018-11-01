@@ -38,6 +38,19 @@ enum DurationFormatWidth {
   DURATION_WIDTH_NUMERIC  // "3:07"
 };
 
+// Date formats from third_party/icu/source/i18n/unicode/udat.h. Add more as
+// necessary.
+enum DateFormat {
+  // November 2007
+  DATE_FORMAT_YEAR_MONTH,
+  // Tuesday, 7 November
+  DATE_FORMAT_MONTH_WEEKDAY_DAY,
+};
+
+// TODO(derat@chromium.org): Update all of these functions to return boolean
+// "success" values and use out-params for formatted strings:
+// http://crbug.com/698802
+
 // Returns the time of day, e.g., "3:07 PM".
 BASE_I18N_EXPORT string16 TimeFormatTimeOfDay(const Time& time);
 
@@ -63,6 +76,9 @@ BASE_I18N_EXPORT string16 TimeFormatShortDateNumeric(const Time& time);
 // Returns a numeric date and time such as "12/13/52 2:44:30 PM".
 BASE_I18N_EXPORT string16 TimeFormatShortDateAndTime(const Time& time);
 
+// Returns a month and year, e.g. "November 2007"
+BASE_I18N_EXPORT string16 TimeFormatMonthAndYear(const Time& time);
+
 // Returns a numeric date and time with time zone such as
 // "12/13/52 2:44:30 PM PST".
 BASE_I18N_EXPORT string16
@@ -75,6 +91,13 @@ BASE_I18N_EXPORT string16 TimeFormatFriendlyDateAndTime(const Time& time);
 // Formats a time in a friendly sentence format, e.g.
 // "Monday, March 6, 2008".
 BASE_I18N_EXPORT string16 TimeFormatFriendlyDate(const Time& time);
+
+// Formats a time using a skeleton to produce a format for different locales
+// when an unusual time format is needed, e.g. "Feb. 2, 18:00".
+//
+// See http://userguide.icu-project.org/formatparse/datetime for details.
+BASE_I18N_EXPORT string16 TimeFormatWithPattern(const Time& time,
+                                                const char* pattern);
 
 // Formats a time duration of hours and minutes into various formats, e.g.,
 // "3:07" or "3 hours, 7 minutes", and returns true on success. See
@@ -102,6 +125,12 @@ BASE_I18N_EXPORT bool TimeDurationFormatWithSeconds(
     const TimeDelta time,
     const DurationFormatWidth width,
     string16* out) WARN_UNUSED_RESULT;
+
+// Formats a date interval into various formats, e.g. "2 December - 4 December"
+// or "March 2016 - December 2016". See DateFormat for details.
+BASE_I18N_EXPORT string16 DateIntervalFormat(const Time& begin_time,
+                                             const Time& end_time,
+                                             DateFormat format);
 
 // Gets the hour clock type of the current locale. e.g.
 // k12HourClock (en-US).

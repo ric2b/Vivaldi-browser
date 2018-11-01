@@ -42,7 +42,6 @@
 #endif
 
 #include "app/vivaldi_resources.h"
-#include "grit/components_strings.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
 #include "notes/notesnode.h"

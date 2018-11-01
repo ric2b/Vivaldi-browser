@@ -7,9 +7,7 @@
 #include <vector>
 
 #include "base/metrics/histogram_macros.h"
-
 #include "cc/quads/surface_draw_quad.h"
-#include "cc/surfaces/surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
@@ -18,6 +16,8 @@
 #include "content/common/frame_messages.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/blink/web_input_event_traits.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -173,8 +173,26 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
     RenderWidgetHostViewBase* root_view,
     blink::WebMouseEvent* event,
     const ui::LatencyInfo& latency) {
-  RenderWidgetHostViewBase* target;
+  RenderWidgetHostViewBase* target = nullptr;
   gfx::Point transformed_point;
+
+  // When the mouse is locked, directly route the events to the widget that
+  // holds the lock and return.
+  if (root_view->IsMouseLocked()) {
+    target = RenderWidgetHostImpl::From(root_view->GetRenderWidgetHost())
+                 ->delegate()
+                 ->GetMouseLockWidget()
+                 ->GetView();
+    if (!root_view->TransformPointToCoordSpaceForView(
+            gfx::Point(event->x, event->y), target, &transformed_point))
+      return;
+
+    event->x = transformed_point.x();
+    event->y = transformed_point.y();
+    target->ProcessMouseEvent(*event, latency);
+    return;
+  }
+
   const int mouse_button_modifiers = blink::WebInputEvent::LeftButtonDown |
                                      blink::WebInputEvent::MiddleButtonDown |
                                      blink::WebInputEvent::RightButtonDown;
@@ -201,6 +219,12 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
     RenderWidgetHostViewBase* owner_view =
         static_cast<RenderWidgetHostViewGuest*>(target)
             ->GetOwnerRenderWidgetHostView();
+    if (vivaldi::IsVivaldiRunning() && !owner_view) {
+      // NOTE(espen@vivaldi.com). This could be tested for non-vivaldi as well,
+      // but seems to work well in chrome. This can happen for a brief interval
+      // right after a tab is closed.
+      return;
+    }
     // In case there is nested RenderWidgetHostViewGuests (i.e., PDF inside
     // <webview>), we will need the owner view of the top-most guest for input
     // routing.
@@ -247,9 +271,22 @@ void RenderWidgetHostInputEventRouter::RouteMouseWheelEvent(
     RenderWidgetHostViewBase* root_view,
     blink::WebMouseWheelEvent* event,
     const ui::LatencyInfo& latency) {
+  RenderWidgetHostViewBase* target = nullptr;
   gfx::Point transformed_point;
-  RenderWidgetHostViewBase* target = FindEventTarget(
-      root_view, gfx::Point(event->x, event->y), &transformed_point);
+
+  if (root_view->IsMouseLocked()) {
+    target = RenderWidgetHostImpl::From(root_view->GetRenderWidgetHost())
+                 ->delegate()
+                 ->GetMouseLockWidget()
+                 ->GetView();
+    if (!root_view->TransformPointToCoordSpaceForView(
+            gfx::Point(event->x, event->y), target, &transformed_point))
+      return;
+  } else {
+    target = FindEventTarget(root_view, gfx::Point(event->x, event->y),
+                             &transformed_point);
+  }
+
   if (!target)
     return;
 
@@ -359,6 +396,10 @@ void RenderWidgetHostInputEventRouter::RouteTouchEvent(
       break;
     case blink::WebInputEvent::TouchEnd:
     case blink::WebInputEvent::TouchCancel:
+      // It might be safer to test active_touches_ and only decrement it if it's
+      // non-zero, since active_touches_ can be reset to 0 in
+      // OnRenderWidgetHostViewBaseDestroyed, and this can happen between the
+      // TouchStart and a subsequent TouchMove/End/Cancel.
       DCHECK(active_touches_);
       active_touches_ -= CountChangedTouchPoints(*event);
       if (!touch_target_.target)
@@ -452,7 +493,7 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
 
   gfx::Point transformed_point;
   // Send MouseLeaves.
-  for (auto view : exited_views) {
+  for (auto* view : exited_views) {
     blink::WebMouseEvent mouse_leave(*event);
     mouse_leave.setType(blink::WebInputEvent::MouseLeave);
     // There is a chance of a race if the last target has recently created a
@@ -481,7 +522,7 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
   }
 
   // Send MouseMoves to trigger MouseEnter handlers.
-  for (auto view : entered_views) {
+  for (auto* view : entered_views) {
     if (view == target)
       continue;
     blink::WebMouseEvent mouse_enter(*event);
@@ -671,7 +712,7 @@ void RenderWidgetHostInputEventRouter::RouteTouchscreenGestureEvent(
     // TODO(wjmaclean,kenrb,tdresser): When scroll latching lands, we can
     // revisit how this code should work.
     // https://crbug.com/526463
-    auto rwhi =
+    auto* rwhi =
         static_cast<RenderWidgetHostImpl*>(root_view->GetRenderWidgetHost());
     // If the root view is the current gesture target, then we explicitly don't
     // send a GestureScrollBegin, as by the time we see GesturePinchBegin there
@@ -689,7 +730,7 @@ void RenderWidgetHostInputEventRouter::RouteTouchscreenGestureEvent(
       in_touchscreen_gesture_pinch_ = false;
       // If the root view wasn't already receiving the gesture stream, then we
       // need to wrap the diverted pinch events in a GestureScrollBegin/End.
-      auto rwhi =
+      auto* rwhi =
           static_cast<RenderWidgetHostImpl*>(root_view->GetRenderWidgetHost());
       if (root_view != touchscreen_gesture_target_.target &&
           gesture_pinch_did_send_scroll_begin_ &&

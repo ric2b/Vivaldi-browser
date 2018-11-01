@@ -27,7 +27,6 @@ class Display;
 namespace gfx {
 class Insets;
 class Rect;
-class Vector2d;
 }
 
 namespace ui {
@@ -55,10 +54,8 @@ class AURA_EXPORT WindowManagerClient {
   virtual void AddActivationParent(Window* window) = 0;
   virtual void RemoveActivationParent(Window* window) = 0;
   virtual void ActivateNextWindow() = 0;
-  virtual void SetUnderlaySurfaceOffsetAndExtendedHitArea(
-      Window* window,
-      const gfx::Vector2d& offset,
-      const gfx::Insets& hit_area) = 0;
+  virtual void SetExtendedHitArea(Window* window,
+                                  const gfx::Insets& hit_area) = 0;
 
   // Requests the client embedded in |window| to close the window. Only
   // applicable to top-level windows. If a client is not embedded in |window|,
@@ -93,6 +90,10 @@ class AURA_EXPORT WindowManagerDelegate {
       Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) = 0;
+
+  // A client requested to change focusibility of |window|. We currently assume
+  // this always succeeds.
+  virtual void OnWmSetCanFocus(Window* window, bool can_focus) = 0;
 
   // A client has requested a new top level window. The delegate should create
   // and parent the window appropriately and return it. |properties| is the

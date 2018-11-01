@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #import "chrome/browser/ui/cocoa/autofill/save_card_bubble_view_bridge.h"
@@ -66,6 +67,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -525,7 +527,11 @@ void BrowserWindowCocoa::UpdateAlertState(TabAlertState alert_state) {
 }
 
 void BrowserWindowCocoa::ShowUpdateChromeDialog() {
-  restart_browser::RequestRestart(window());
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    chrome::ShowUpdateChromeDialogViews(GetNativeWindow());
+  } else {
+    restart_browser::RequestRestart(window());
+  }
 }
 
 void BrowserWindowCocoa::ShowBookmarkBubble(const GURL& url,
@@ -795,7 +801,8 @@ NSWindow* BrowserWindowCocoa::window() const {
 void BrowserWindowCocoa::ShowAvatarBubbleFromAvatarButton(
     AvatarBubbleMode mode,
     const signin::ManageAccountsParams& manage_accounts_params,
-    signin_metrics::AccessPoint access_point) {
+    signin_metrics::AccessPoint access_point,
+    bool is_source_keyboard) {
   profiles::BubbleViewMode bubble_view_mode;
   profiles::TutorialMode tutorial_mode;
   profiles::BubbleViewModeFromAvatarBubbleMode(mode, &bubble_view_mode,

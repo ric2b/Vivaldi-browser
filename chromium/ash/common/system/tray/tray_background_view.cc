@@ -18,8 +18,8 @@
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "base/memory/ptr_util.h"
-#include "grit/ash_resources.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/nine_image_painter_factory.h"
 #include "ui/compositor/layer.h"
@@ -117,30 +117,30 @@ class TrayBackground : public views::Background {
   TrayBackground(TrayBackgroundView* tray_background_view, bool draws_active)
       : tray_background_view_(tray_background_view),
         draws_active_(draws_active),
-        alpha_(0) {}
+        color_(SK_ColorTRANSPARENT) {}
 
   ~TrayBackground() override {}
 
-  void set_alpha(int alpha) { alpha_ = alpha; }
+  void set_color(SkColor color) { color_ = color; }
 
  private:
   WmShelf* GetShelf() const { return tray_background_view_->shelf(); }
 
   void PaintMaterial(gfx::Canvas* canvas, views::View* view) const {
-    SkPaint background_paint;
-    background_paint.setFlags(SkPaint::kAntiAlias_Flag);
-    background_paint.setColor(SkColorSetA(kShelfBaseColor, alpha_));
+    cc::PaintFlags background_flags;
+    background_flags.setAntiAlias(true);
+    background_flags.setColor(color_);
     gfx::Insets insets =
         GetMirroredBackgroundInsets(GetShelf()->GetAlignment());
     gfx::Rect bounds = view->GetLocalBounds();
     bounds.Inset(insets);
-    canvas->DrawRoundRect(bounds, kTrayRoundedBorderRadius, background_paint);
+    canvas->DrawRoundRect(bounds, kTrayRoundedBorderRadius, background_flags);
 
     if (draws_active_ && tray_background_view_->is_active()) {
-      SkPaint highlight_paint;
-      highlight_paint.setFlags(SkPaint::kAntiAlias_Flag);
-      highlight_paint.setColor(kShelfButtonActivatedHighlightColor);
-      canvas->DrawRoundRect(bounds, kTrayRoundedBorderRadius, highlight_paint);
+      cc::PaintFlags highlight_flags;
+      highlight_flags.setAntiAlias(true);
+      highlight_flags.setColor(kShelfButtonActivatedHighlightColor);
+      canvas->DrawRoundRect(bounds, kTrayRoundedBorderRadius, highlight_flags);
     }
   }
 
@@ -205,7 +205,7 @@ class TrayBackground : public views::Background {
   // is removed (see https://crbug.com/614453).
   bool draws_active_;
 
-  int alpha_;
+  SkColor color_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayBackground);
 };
@@ -302,7 +302,7 @@ TrayBackgroundView::TrayBackgroundView(WmShelf* wm_shelf)
   SetContents(tray_container_);
   tray_event_filter_.reset(new TrayEventFilter);
 
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   // Start the tray items not visible, because visibility changes are animated.
   views::View::SetVisible(false);
@@ -415,8 +415,7 @@ TrayBackgroundView::CreateInkDropHighlight() const {
   // correctly, so the extra highlight would be clipped.
   // TODO(mohsen): Remove this extra size when resize is handled properly (see
   // https://crbug.com/669253).
-  const int icon_size =
-      kTrayIconSize + 2 * GetTrayConstant(TRAY_IMAGE_ITEM_PADDING);
+  const int icon_size = kTrayIconSize + 2 * kTrayImageItemPadding;
   bounds.set_width(bounds.width() + 2 * icon_size);
   bounds.set_height(bounds.height() + 2 * icon_size);
   std::unique_ptr<views::InkDropHighlight> highlight(
@@ -514,9 +513,9 @@ void TrayBackgroundView::UpdateBubbleViewArrow(
   // Nothing to do here.
 }
 
-void TrayBackgroundView::UpdateShelfItemBackground(int alpha) {
+void TrayBackgroundView::UpdateShelfItemBackground(SkColor color) {
   if (background_) {
-    background_->set_alpha(alpha);
+    background_->set_color(color);
     SchedulePaint();
   }
 }
@@ -567,56 +566,38 @@ void TrayBackgroundView::OnPaintFocus(gfx::Canvas* canvas) {
   // sure clicking on the edges brings up the popup. However, the focus border
   // should be only around the container.
   gfx::RectF paint_bounds;
-  if (MaterialDesignController::IsShelfMaterial()) {
-    paint_bounds = gfx::RectF(GetBackgroundBounds());
-    paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
-  } else {
-    paint_bounds = gfx::RectF(GetContentsBounds());
-    paint_bounds.Inset(gfx::Insets(1));
-  }
+  paint_bounds = gfx::RectF(GetBackgroundBounds());
+  paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
   canvas->DrawSolidFocusRect(paint_bounds, kFocusBorderColor,
                              kFocusBorderThickness);
 }
 
 void TrayBackgroundView::OnPaint(gfx::Canvas* canvas) {
   ActionableView::OnPaint(canvas);
-  if (!MaterialDesignController::IsShelfMaterial() ||
-      shelf()->GetBackgroundType() ==
+  if (shelf()->GetBackgroundType() ==
           ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT ||
       !separator_visible_) {
     return;
   }
-  //  In the given |canvas|, for a horizontal shelf draw a separator line to the
-  //  right or left of the TrayBackgroundView when the system is LTR or RTL
-  //  aligned, respectively. For a vertical shelf draw the separator line
-  //  underneath the items instead.
-  const bool horizontal_shelf = IsHorizontalAlignment(shelf_alignment_);
+  // In the given |canvas|, for a horizontal shelf draw a separator line to the
+  // right or left of the TrayBackgroundView when the system is LTR or RTL
+  // aligned, respectively. For a vertical shelf draw the separator line
+  // underneath the items instead.
   const gfx::Rect local_bounds = GetLocalBounds();
-  const int height = kTrayItemSize;
-  const int x =
-      horizontal_shelf
-          ? (base::i18n::IsRTL() ? 0 : (local_bounds.width() - kSeparatorWidth))
-          : (local_bounds.height() - kSeparatorWidth);
-  const int y = (GetShelfConstant(SHELF_SIZE) - kTrayItemSize) / 2;
-  gfx::ScopedCanvas scoped_canvas(canvas);
-  const float scale = canvas->UndoDeviceScaleFactor();
-  SkPaint paint;
-  paint.setColor(kSeparatorColor);
-  paint.setAntiAlias(true);
+  const SkColor color = SkColorSetA(SK_ColorWHITE, 0x4D);
 
-  const gfx::Rect bounds = horizontal_shelf
-                               ? gfx::Rect(x, y, kSeparatorWidth, height)
-                               : gfx::Rect(y, x, height, kSeparatorWidth);
-  gfx::RectF rect(gfx::ScaleRect(gfx::RectF(bounds), scale));
-  gfx::PointF line_start =
-      horizontal_shelf
-          ? (base::i18n::IsRTL() ? rect.origin() : rect.top_right())
-          : rect.bottom_left();
-  gfx::PointF line_end =
-      (horizontal_shelf && base::i18n::IsRTL() ? rect.bottom_left()
-                                               : rect.bottom_right());
-
-  canvas->DrawLine(line_start, line_end, paint);
+  if (IsHorizontalAlignment(shelf_alignment_)) {
+    const gfx::PointF point(
+        base::i18n::IsRTL() ? 0 : (local_bounds.width() - kSeparatorWidth),
+        (GetShelfConstant(SHELF_SIZE) - kTrayItemSize) / 2);
+    const gfx::Vector2dF vector(0, kTrayItemSize);
+    canvas->Draw1pxLine(point, point + vector, color);
+  } else {
+    const gfx::PointF point((GetShelfConstant(SHELF_SIZE) - kTrayItemSize) / 2,
+                            local_bounds.height() - kSeparatorWidth);
+    const gfx::Vector2dF vector(kTrayItemSize, 0);
+    canvas->Draw1pxLine(point, point + vector, color);
+  }
 }
 
 gfx::Insets TrayBackgroundView::GetBackgroundInsets() const {

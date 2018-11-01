@@ -104,6 +104,11 @@ class RemoveFlakesOMatic(object):
         if not self._has_pass_expectation(expectations):
             return False
 
+        # Don't check lines that have expectations for directories, since
+        # the flakiness of all sub-tests isn't as easy to check.
+        if self._port.test_isdir(test_expectation_line.name):
+            return False
+
         # The line can be deleted if the only expectation on the line that appears in the actual
         # results is the PASS expectation.
         builders_checked = []

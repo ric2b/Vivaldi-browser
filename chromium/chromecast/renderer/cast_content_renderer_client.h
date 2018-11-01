@@ -5,6 +5,7 @@
 #ifndef CHROMECAST_RENDERER_CAST_CONTENT_RENDERER_CLIENT_H_
 #define CHROMECAST_RENDERER_CAST_CONTENT_RENDERER_CLIENT_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -18,11 +19,10 @@ class PrescientNetworkingDispatcher;
 namespace chromecast {
 namespace media {
 class MediaCapsObserverImpl;
+class SupportedCodecProfileLevelsMemo;
 }
 
 namespace shell {
-
-void ExecuteJavaScript(content::RenderFrame* render_frame, int resourceId);
 
 class CastContentRendererClient : public content::ContentRendererClient {
  public:
@@ -42,7 +42,7 @@ class CastContentRendererClient : public content::ContentRendererClient {
   void DeferMediaLoad(content::RenderFrame* render_frame,
                       bool render_frame_has_played_media_before,
                       const base::Closure& closure) override;
-  void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
+  bool AllowMediaSuspend() override;
 
  protected:
   CastContentRendererClient();
@@ -54,6 +54,8 @@ class CastContentRendererClient : public content::ContentRendererClient {
   std::unique_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
   std::unique_ptr<media::MediaCapsObserverImpl> media_caps_observer_;
+  std::unique_ptr<media::SupportedCodecProfileLevelsMemo> supported_profiles_;
+
   const bool allow_hidden_media_playback_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentRendererClient);

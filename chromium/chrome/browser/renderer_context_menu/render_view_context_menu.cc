@@ -49,7 +49,6 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
-#include "chrome/browser/tab_contents/retargeting_details.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -769,6 +768,11 @@ void RenderViewContextMenu::AppendCurrentExtensionItems() {
 void RenderViewContextMenu::InitMenu() {
   RenderViewContextMenuBase::InitMenu();
 
+  if (content_type_->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_PASSWORD)) {
+    AppendPasswordItems();
+  }
+
   if (content_type_->SupportsGroup(ContextMenuContentType::ITEM_GROUP_PAGE))
     AppendPageItems();
 
@@ -865,7 +869,7 @@ void RenderViewContextMenu::InitMenu() {
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_DEVELOPER)) {
     ::vivaldi::VivaldiAddFullscreenItems(
-        menu_model_, source_web_contents_, params_);
+        &menu_model_, source_web_contents_, params_);
     AppendDeveloperItems();
   }
 
@@ -877,11 +881,6 @@ void RenderViewContextMenu::InitMenu() {
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_PRINT_PREVIEW)) {
     AppendPrintPreviewItems();
-  }
-
-  if (content_type_->SupportsGroup(
-          ContextMenuContentType::ITEM_GROUP_PASSWORD)) {
-    AppendPasswordItems();
   }
 
   // Remove any redundant trailing separator.
@@ -1005,7 +1004,7 @@ void RenderViewContextMenu::AppendDeveloperItems() {
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_INSPECTELEMENT,
                                   IDS_CONTENT_CONTEXT_INSPECTELEMENT);
 
-  ::vivaldi::VivaldiAddDeveloperItems(menu_model_, source_web_contents_,
+  ::vivaldi::VivaldiAddDeveloperItems(&menu_model_, source_web_contents_,
       params_);
 }
 
@@ -1138,7 +1137,7 @@ void RenderViewContextMenu::AppendLinkItems() {
                                     IDS_CONTENT_CONTEXT_COPYLINKTEXT);
   }
 
-  ::vivaldi::VivaldiAddLinkItems(menu_model_, source_web_contents_, params_);
+  ::vivaldi::VivaldiAddLinkItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendOpenWithLinkItems() {
@@ -1182,7 +1181,7 @@ void RenderViewContextMenu::AppendImageItems() {
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
                                   IDS_CONTENT_CONTEXT_COPYIMAGELOCATION);
 
-  ::vivaldi::VivaldiAddImageItems(menu_model_, source_web_contents_, params_);
+  ::vivaldi::VivaldiAddImageItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendSearchWebForImageItems() {
@@ -1308,7 +1307,7 @@ void RenderViewContextMenu::AppendPageItems() {
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
     AddGoogleIconToLastMenuItem(&menu_model_);
   }
-  ::vivaldi::VivaldiAddPageItems(menu_model_, source_web_contents_, params_);
+  ::vivaldi::VivaldiAddPageItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendExitFullscreenItem() {
@@ -1333,7 +1332,7 @@ void RenderViewContextMenu::AppendCopyItem() {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPY,
                                   IDS_CONTENT_CONTEXT_COPY);
-  ::vivaldi::VivaldiAddCopyItems(menu_model_, source_web_contents_, params_);
+  ::vivaldi::VivaldiAddCopyItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendPrintItem() {
@@ -1346,10 +1345,12 @@ void RenderViewContextMenu::AppendPrintItem() {
 }
 
 void RenderViewContextMenu::AppendMediaRouterItem() {
+#if defined(ENABLE_MEDIA_ROUTER)
   if (media_router::MediaRouterEnabled(browser_context_)) {
     menu_model_.AddItemWithStringId(IDC_ROUTE_MEDIA,
                                     IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
   }
+#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
 
 void RenderViewContextMenu::AppendRotationItems() {
@@ -1466,11 +1467,11 @@ void RenderViewContextMenu::AppendEditableItems() {
   }
 
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  ::vivaldi::VivaldiAddCopyItems(menu_model_, source_web_contents_, params_);
+  ::vivaldi::VivaldiAddCopyItems(&menu_model_, source_web_contents_, params_);
   AppendInsertNoteSubMenu();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 
-  ::vivaldi::VivaldiAddEditableItems(menu_model_, params_);
+  ::vivaldi::VivaldiAddEditableItems(&menu_model_, params_);
 }
 
 void RenderViewContextMenu::AppendLanguageSettings() {
@@ -1535,19 +1536,19 @@ void RenderViewContextMenu::AppendProtocolHandlerSubMenu() {
 }
 
 void RenderViewContextMenu::AppendPasswordItems() {
-  bool separator_added = false;
+  bool add_separator = false;
   if (password_manager::ForceSavingExperimentEnabled()) {
-    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    separator_added = true;
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD,
                                     IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
+    add_separator = true;
   }
   if (password_manager::ManualPasswordGenerationEnabled()) {
-    if (!separator_added)
-      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATEPASSWORD,
                                     IDS_CONTENT_CONTEXT_GENERATEPASSWORD);
+    add_separator = true;
   }
+  if (add_separator)
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 }
 
 // Menu delegate functions -----------------------------------------------------
@@ -1751,7 +1752,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       {
         bool enabled = false;
         if (::vivaldi::IsVivaldiCommandIdEnabled(
-              menu_model_, params_, id, enabled))
+              menu_model_, params_, id, &enabled))
           return enabled;
       }
 
@@ -2048,24 +2049,6 @@ void RenderViewContextMenu::NotifyMenuShown() {
       content::NotificationService::NoDetails());
 }
 
-void RenderViewContextMenu::NotifyURLOpened(
-    const GURL& url,
-    content::WebContents* new_contents) {
-  RetargetingDetails details;
-  details.source_web_contents = source_web_contents_;
-  // Don't use GetRenderFrameHost() as it may be NULL. crbug.com/399789
-  details.source_render_process_id = render_process_id_;
-  details.source_render_frame_id = render_frame_id_;
-  details.target_url = url;
-  details.target_web_contents = new_contents;
-  details.not_yet_in_tabstrip = false;
-
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_RETARGETING,
-      content::Source<Profile>(GetProfile()),
-      content::Details<RetargetingDetails>(&details));
-}
-
 base::string16 RenderViewContextMenu::PrintableSelectionText() {
   return gfx::TruncateString(params_.selection_text,
                              kMaxSelectionTextLength,
@@ -2243,6 +2226,7 @@ bool RenderViewContextMenu::IsPrintPreviewEnabled() const {
 }
 
 bool RenderViewContextMenu::IsRouteMediaEnabled() const {
+#if defined(ENABLE_MEDIA_ROUTER)
   if (!media_router::MediaRouterEnabled(browser_context_))
     return false;
 
@@ -2262,6 +2246,9 @@ bool RenderViewContextMenu::IsRouteMediaEnabled() const {
   const web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
   return !manager || !manager->IsDialogActive();
+#else
+  return false;
+#endif  // defined(ENABLE_MEDIA_ROUTER)
 }
 
 bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {

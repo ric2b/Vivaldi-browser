@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/bluetooth/bluetooth_allowed_devices_map.h"
+#include "content/browser/bluetooth/bluetooth_allowed_devices.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -133,6 +133,13 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
       blink::mojom::WebBluetoothGATTQueryQuantity quantity,
       const base::Optional<device::BluetoothUUID>& characteristics_uuid,
       const RemoteCharacteristicGetDescriptorsCallback& callback) override;
+  void RemoteDescriptorReadValue(
+      const std::string& characteristic_instance_id,
+      const RemoteDescriptorReadValueCallback& callback) override;
+  void RemoteDescriptorWriteValue(
+      const std::string& descriptor_instance_id,
+      const std::vector<uint8_t>& value,
+      const RemoteDescriptorWriteValueCallback& callback) override;
 
   void RequestDeviceImpl(
       blink::mojom::WebBluetoothRequestDeviceOptionsPtr options,
@@ -195,6 +202,21 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
       const std::string& characteristic_instance_id,
       const RemoteCharacteristicStopNotificationsCallback& callback);
 
+  // Callbacks for BluetoothRemoteGattDescriptor::ReadRemoteDescriptor.
+  void OnDescriptorReadValueSuccess(
+      const RemoteDescriptorReadValueCallback& callback,
+      const std::vector<uint8_t>& value);
+  void OnDescriptorReadValueFailed(
+      const RemoteDescriptorReadValueCallback& callback,
+      device::BluetoothRemoteGattService::GattErrorCode error_code);
+
+  // Callbacks for BluetoothRemoteGattDescriptor::WriteRemoteDescriptor.
+  void OnDescriptorWriteValueSuccess(
+      const RemoteDescriptorWriteValueCallback& callback);
+  void OnDescriptorWriteValueFailed(
+      const RemoteDescriptorWriteValueCallback& callback,
+      device::BluetoothRemoteGattService::GattErrorCode error_code);
+
   // Functions to query the platform cache for the bluetooth object.
   // result.outcome == CacheQueryOutcome::SUCCESS if the object was found in the
   // cache. Otherwise result.outcome that can used to record the outcome and
@@ -217,18 +239,22 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
   CacheQueryResult QueryCacheForCharacteristic(
       const std::string& characteristic_instance_id);
 
+  // Queries the platform cache for a descriptor with |descriptor_instance_id|.
+  // Fills in the |outcome| field, and |device|, |service|, |characteristic|,
+  // |descriptor| fields if successful.
+  CacheQueryResult QueryCacheForDescriptor(
+      const std::string& descriptor_instance_id);
+
   RenderProcessHost* GetRenderProcessHost();
   device::BluetoothAdapter* GetAdapter();
   url::Origin GetOrigin();
+  BluetoothAllowedDevices& allowed_devices();
 
   // Clears all state (maps, sets, etc).
   void ClearState();
 
   // Used to open a BluetoothChooser and start a device discovery session.
   std::unique_ptr<BluetoothDeviceChooserController> device_chooser_controller_;
-
-  // Keeps track of which devices the frame's origin is allowed to access.
-  BluetoothAllowedDevicesMap allowed_devices_map_;
 
   // Maps to get the object's parent based on its instanceID.
   std::unordered_map<std::string, std::string> service_id_to_device_address_;

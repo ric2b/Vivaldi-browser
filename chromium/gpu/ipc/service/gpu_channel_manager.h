@@ -20,6 +20,7 @@
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -38,7 +39,6 @@ class GLShareGroup;
 namespace gpu {
 struct GpuPreferences;
 class PreemptionFlag;
-class SyncPointClient;
 class SyncPointManager;
 struct SyncToken;
 namespace gles2 {
@@ -71,7 +71,8 @@ class GPU_EXPORT GpuChannelManager {
                     base::SingleThreadTaskRunner* io_task_runner,
                     base::WaitableEvent* shutdown_event,
                     SyncPointManager* sync_point_manager,
-                    GpuMemoryBufferFactory* gpu_memory_buffer_factory);
+                    GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+                    const GpuFeatureInfo& gpu_feature_info);
   virtual ~GpuChannelManager();
 
   GpuChannelManagerDelegate* delegate() const { return delegate_; }
@@ -103,6 +104,7 @@ class GPU_EXPORT GpuChannelManager {
   const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds() const {
     return gpu_driver_bug_workarounds_;
   }
+  const GpuFeatureInfo& gpu_feature_info() const { return gpu_feature_info_; }
   gles2::ProgramCache* program_cache();
   gles2::ShaderTranslatorCache* shader_translator_cache();
   gles2::FramebufferCompletenessCache* framebuffer_completeness_cache();
@@ -187,13 +189,13 @@ class GPU_EXPORT GpuChannelManager {
   GpuMemoryManager gpu_memory_manager_;
   // SyncPointManager guaranteed to outlive running MessageLoop.
   SyncPointManager* sync_point_manager_;
-  std::unique_ptr<SyncPointClient> sync_point_client_waiter_;
   std::unique_ptr<gles2::ProgramCache> program_cache_;
   scoped_refptr<gles2::ShaderTranslatorCache> shader_translator_cache_;
   scoped_refptr<gles2::FramebufferCompletenessCache>
       framebuffer_completeness_cache_;
   scoped_refptr<gl::GLSurface> default_offscreen_surface_;
   GpuMemoryBufferFactory* const gpu_memory_buffer_factory_;
+  GpuFeatureInfo gpu_feature_info_;
 #if defined(OS_ANDROID)
   // Last time we know the GPU was powered on. Global for tracking across all
   // transport surfaces.

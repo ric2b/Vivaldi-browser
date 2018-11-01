@@ -9,11 +9,25 @@ if (is_android) {
   import("//build/config/android/rules.gni")  # For generate_jni().
 }
 
-if (current_cpu == "arm" || current_cpu == "arm64") {
-  component("vr") {
-    output_name = "device_vr"
+component("vr") {
+  output_name = "device_vr"
 
-    sources = [
+  sources = [
+    "vr_export.h",
+  ]
+  defines = [ "DEVICE_VR_IMPLEMENTATION" ]
+  deps = [
+    ":mojo_bindings",
+  ]
+
+  if (!enable_webvr) {
+    sources += [
+      # We need to include an empty .cc file so that mac and windows don't fall over when trying to
+      # compile this when webvr is disabled.
+      "empty.cc",
+    ]
+  } else {
+    sources += [
       "vr_device.cc",
       "vr_device.h",
       "vr_device_manager.cc",
@@ -21,20 +35,18 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "vr_device_provider.h",
       "vr_display_impl.cc",
       "vr_display_impl.h",
+      "vr_export.h",
       "vr_service_impl.cc",
       "vr_service_impl.h",
     ]
 
-    deps = [
-      ":mojo_bindings",
+    deps += [
       "//base",
       "//mojo/public/cpp/bindings",
       "//ui/gfx",
     ]
 
-    defines = [ "DEVICE_VR_IMPLEMENTATION" ]
-
-    if (is_android) {
+    if (is_android && (current_cpu == "arm" || current_cpu == "arm64")) {
       sources += [
         "android/gvr/gvr_delegate.cc",
         "android/gvr/gvr_delegate.h",
@@ -55,7 +67,9 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
     }
   }
+}
 
+if (enable_webvr) {
   static_library("fakes") {
     testonly = true
 
@@ -83,4 +97,12 @@ mojom("mojo_bindings") {
   sources = [
     "vr_service.mojom",
   ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+  ]
+
+  export_class_attribute = "DEVICE_VR_EXPORT"
+  export_define = "DEVICE_VR_IMPLEMENTATION=1"
+  export_header = "device/vr/vr_export.h"
 }

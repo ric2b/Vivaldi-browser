@@ -132,7 +132,7 @@ void DatabaseThread::recordDatabaseOpen(Database* database) {
   ASSERT(!m_openDatabaseSet.contains(database));
   MutexLocker lock(m_terminationRequestedMutex);
   if (!m_terminationRequested)
-    m_openDatabaseSet.add(database);
+    m_openDatabaseSet.insert(database);
 }
 
 void DatabaseThread::recordDatabaseClosed(Database* database) {
@@ -144,7 +144,7 @@ void DatabaseThread::recordDatabaseClosed(Database* database) {
     ASSERT(m_terminationRequested || m_openDatabaseSet.contains(database));
   }
 #endif
-  m_openDatabaseSet.remove(database);
+  m_openDatabaseSet.erase(database);
 }
 
 bool DatabaseThread::isDatabaseOpen(Database* database) {

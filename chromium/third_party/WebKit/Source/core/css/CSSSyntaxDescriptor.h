@@ -51,6 +51,9 @@ class CORE_EXPORT CSSSyntaxDescriptor {
     return m_syntaxComponents.size() == 1 &&
            m_syntaxComponents[0].m_type == CSSSyntaxType::TokenStream;
   }
+  const Vector<CSSSyntaxComponent>& components() const {
+    return m_syntaxComponents;
+  }
 
  private:
   Vector<CSSSyntaxComponent> m_syntaxComponents;

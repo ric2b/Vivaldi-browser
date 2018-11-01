@@ -243,8 +243,10 @@ Protocol.TargetBase = class {
       this._agents[domain].setTarget(this);
     }
 
-    for (var domain in dispatcherPrototypes)
+    for (var domain in dispatcherPrototypes) {
       this._dispatchers[domain] = Object.create(dispatcherPrototypes[domain]);
+      this._dispatchers[domain].initialize();
+    }
   }
 
   /**
@@ -378,7 +380,7 @@ Protocol.TargetBase = class {
     if (!this._dispatchers[domain])
       return;
 
-    this._dispatchers[domain].setDomainDispatcher(dispatcher);
+    this._dispatchers[domain].addDomainDispatcher(dispatcher);
   }
 
   /**
@@ -597,13 +599,15 @@ Protocol.InspectorBackend._AgentPrototype = class {
     }
     var userCallback = (args.length && typeof args.peekLast() === 'function') ? args.pop() : null;
     var params = this._prepareParameters(method, signature, args, !userCallback, onError);
-    if (errorMessage)
-      return Promise.reject(new Error(errorMessage));
-    else
-      return new Promise(promiseAction.bind(this));
+    var responseArguments;
+    if (errorMessage) {
+      responseArguments = [errorMessage];
+      return Promise.resolve().then(runUserCallback);
+    }
+    return new Promise(promiseAction.bind(this)).then(runUserCallback);
 
     /**
-     * @param {function(?)} resolve
+     * @param {function()} resolve
      * @param {function(!Error)} reject
      * @this {Protocol.InspectorBackend._AgentPrototype}
      */
@@ -612,10 +616,14 @@ Protocol.InspectorBackend._AgentPrototype = class {
        * @param {...*} vararg
        */
       function callback(vararg) {
-        var result = userCallback ? userCallback.apply(null, arguments) : undefined;
-        resolve(result);
+        responseArguments = arguments;
+        resolve();
       }
       this._target._wrapCallbackAndSendMessageObject(this._domain, method, params, callback);
+    }
+
+    function runUserCallback() {
+      return userCallback ? userCallback.apply(null, responseArguments) : undefined;
     }
   }
 
@@ -663,7 +671,6 @@ Protocol.InspectorBackend._AgentPrototype = class {
 Protocol.InspectorBackend._DispatcherPrototype = class {
   constructor() {
     this._eventArgs = {};
-    this._dispatcher = null;
   }
 
   /**
@@ -674,11 +681,15 @@ Protocol.InspectorBackend._DispatcherPrototype = class {
     this._eventArgs[eventName] = params;
   }
 
+  initialize() {
+    this._dispatchers = [];
+  }
+
   /**
    * @param {!Object} dispatcher
    */
-  setDomainDispatcher(dispatcher) {
-    this._dispatcher = dispatcher;
+  addDomainDispatcher(dispatcher) {
+    this._dispatchers.push(dispatcher);
   }
 
   /**
@@ -686,15 +697,8 @@ Protocol.InspectorBackend._DispatcherPrototype = class {
    * @param {!Object} messageObject
    */
   dispatch(functionName, messageObject) {
-    if (!this._dispatcher)
+    if (!this._dispatchers.length)
       return;
-
-    if (!(functionName in this._dispatcher)) {
-      Protocol.InspectorBackend.reportProtocolError(
-          'Protocol Error: Attempted to dispatch an unimplemented method \'' + messageObject.method + '\'',
-          messageObject);
-      return;
-    }
 
     if (!this._eventArgs[messageObject.method]) {
       Protocol.InspectorBackend.reportProtocolError(
@@ -714,7 +718,11 @@ Protocol.InspectorBackend._DispatcherPrototype = class {
     if (Protocol.InspectorBackend.Options.dumpInspectorTimeStats)
       console.time(timingLabel);
 
-    this._dispatcher[functionName].apply(this._dispatcher, params);
+    for (var index = 0; index < this._dispatchers.length; ++index) {
+      var dispatcher = this._dispatchers[index];
+      if (functionName in dispatcher)
+        dispatcher[functionName].apply(dispatcher, params);
+    }
 
     if (Protocol.InspectorBackend.Options.dumpInspectorTimeStats)
       console.timeEnd(timingLabel);

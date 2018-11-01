@@ -113,8 +113,7 @@ void ScriptedAnimationController::dispatchEvents(
     // avoid special casting window.
     // FIXME: We should not fire events for nodes that are no longer in the
     // tree.
-    InspectorInstrumentation::AsyncTask asyncTask(
-        eventTarget->getExecutionContext(), event);
+    probe::AsyncTask asyncTask(eventTarget->getExecutionContext(), event);
     if (LocalDOMWindow* window = eventTarget->toLocalDOMWindow())
       window->dispatchEvent(event, nullptr);
     else
@@ -175,14 +174,14 @@ void ScriptedAnimationController::enqueueTask(
 }
 
 void ScriptedAnimationController::enqueueEvent(Event* event) {
-  InspectorInstrumentation::asyncTaskScheduled(
-      event->target()->getExecutionContext(), event->type(), event);
+  probe::asyncTaskScheduled(event->target()->getExecutionContext(),
+                            event->type(), event);
   m_eventQueue.push_back(event);
   scheduleAnimationIfNeeded();
 }
 
 void ScriptedAnimationController::enqueuePerFrameEvent(Event* event) {
-  if (!m_perFrameEvents.add(eventTargetKey(event)).isNewEntry)
+  if (!m_perFrameEvents.insert(eventTargetKey(event)).isNewEntry)
     return;
   enqueueEvent(event);
 }
@@ -190,7 +189,7 @@ void ScriptedAnimationController::enqueuePerFrameEvent(Event* event) {
 void ScriptedAnimationController::enqueueMediaQueryChangeListeners(
     HeapVector<Member<MediaQueryListListener>>& listeners) {
   for (const auto& listener : listeners) {
-    m_mediaQueryListListeners.add(listener);
+    m_mediaQueryListListeners.insert(listener);
   }
   scheduleAnimationIfNeeded();
 }

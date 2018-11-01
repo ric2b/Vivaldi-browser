@@ -21,7 +21,6 @@
 #include "ios/chrome/browser/ui/webui/version_handler.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
 #include "ios/web/public/webui/web_ui_ios.h"
@@ -46,10 +45,7 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
   html_source->AddString(version_ui::kVersionModifier,
                          GetChannelString(GetChannel()));
   html_source->AddLocalizedString(version_ui::kOSName, IDS_VERSION_UI_OS);
-  html_source->AddLocalizedString(version_ui::kPlatform,
-                                  IDS_IOS_PLATFORM_LABEL);
   html_source->AddString(version_ui::kOSType, version_info::GetOSType());
-  html_source->AddString(version_ui::kOSVersion, std::string());
 
   html_source->AddLocalizedString(version_ui::kCompany,
                                   IDS_IOS_ABOUT_VERSION_COMPANY_NAME);
@@ -81,8 +77,9 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
 #endif
   html_source->AddLocalizedString(version_ui::kUserAgentName,
                                   IDS_VERSION_UI_USER_AGENT);
-  html_source->AddString(version_ui::kUserAgent,
-                         web::GetWebClient()->GetUserAgent(false));
+  html_source->AddString(
+      version_ui::kUserAgent,
+      web::GetWebClient()->GetUserAgent(web::UserAgentType::MOBILE));
   html_source->AddLocalizedString(version_ui::kCommandLineName,
                                   IDS_VERSION_UI_COMMAND_LINE);
 

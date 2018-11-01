@@ -77,9 +77,8 @@ void ExtensionMessageBubbleController::Delegate::SetBubbleInfoBeenAcknowledged(
   if (pref_name.empty())
     return;
   extensions::ExtensionPrefs* prefs = extensions::ExtensionPrefs::Get(profile_);
-  prefs->UpdateExtensionPref(extension_id,
-                             pref_name,
-                             value ? new base::FundamentalValue(value) : NULL);
+  prefs->UpdateExtensionPref(extension_id, pref_name,
+                             value ? new base::Value(value) : NULL);
 }
 
 std::string
@@ -316,7 +315,8 @@ void ExtensionMessageBubbleController::OnClose() {
   // If the bubble was closed due to deactivation, don't treat it as
   // acknowledgment so that the user will see the bubble again (until they
   // explicitly take an action).
-  if (user_action_ != ACTION_DISMISS_DEACTIVATION) {
+  if (user_action_ != ACTION_DISMISS_DEACTIVATION ||
+      delegate_->ShouldAcknowledgeOnDeactivate()) {
     AcknowledgeExtensions();
     if (delegate_->ClearProfileSetAfterAction())
       GetProfileSet()->clear();

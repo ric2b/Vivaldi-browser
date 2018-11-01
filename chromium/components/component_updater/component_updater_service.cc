@@ -200,7 +200,7 @@ std::unique_ptr<ComponentInfo> CrxUpdateService::GetComponentForMimeType(
   const auto it = component_ids_by_mime_type_.find(mime_type);
   if (it == component_ids_by_mime_type_.end())
     return nullptr;
-  const auto component = GetComponent(it->second);
+  auto* const component = GetComponent(it->second);
   if (!component)
     return nullptr;
   return base::MakeUnique<ComponentInfo>(GetCrxComponentID(*component),
@@ -247,9 +247,11 @@ void CrxUpdateService::OnDemandUpdate(const std::string& id,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!GetComponent(id)) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(callback, update_client::Error::INVALID_ARGUMENT));
+    if (!callback.is_null()) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::Bind(callback, update_client::Error::INVALID_ARGUMENT));
+    }
     return;
   }
 

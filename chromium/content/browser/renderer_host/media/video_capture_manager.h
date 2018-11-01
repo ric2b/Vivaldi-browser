@@ -1,4 +1,4 @@
-  // Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/observer_list.h"
 #include "base/process/process_handle.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/elapsed_timer.h"
@@ -29,6 +30,7 @@
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/common/content_export.h"
 #include "content/common/media/media_stream_options.h"
+#include "media/base/video_facing.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_capture_device_factory.h"
 #include "media/capture/video_capture_types.h"
@@ -50,15 +52,23 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   using DoneCB =
       base::Callback<void(const base::WeakPtr<VideoCaptureController>&)>;
 
-  explicit VideoCaptureManager(
-      std::unique_ptr<media::VideoCaptureDeviceFactory> factory);
+  VideoCaptureManager(
+      std::unique_ptr<media::VideoCaptureDeviceFactory> factory,
+      scoped_refptr<base::SingleThreadTaskRunner> device_task_runner);
 
-  void Unregister();
+  // AddVideoCaptureObserver() can be called only before any devices are opened.
+  // RemoveAllVideoCaptureObservers() can be called only after all devices
+  // are closed.
+  // They can be called more than once and it's ok to not call at all if the
+  // client is not interested in receiving media::VideoCaptureObserver callacks.
+  // This methods can be called on whatever thread. The callbacks of
+  // media::VideoCaptureObserver arrive on browser IO thread.
+  void AddVideoCaptureObserver(media::VideoCaptureObserver* observer);
+  void RemoveAllVideoCaptureObservers();
 
   // Implements MediaStreamProvider.
-  void Register(MediaStreamProviderListener* listener,
-                const scoped_refptr<base::SingleThreadTaskRunner>&
-                    device_task_runner) override;
+  void RegisterListener(MediaStreamProviderListener* listener) override;
+  void UnregisterListener() override;
   int Open(const StreamDeviceInfo& device) override;
   void Close(int capture_session_id) override;
 
@@ -122,12 +132,25 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   bool GetDeviceSupportedFormats(
       media::VideoCaptureSessionId capture_session_id,
       media::VideoCaptureFormats* supported_formats);
+  // Retrieves all capture supported formats for a particular device. Returns
+  // false if the  |device_id| is not found. The supported formats are cached
+  // during device(s) enumeration, and depending on the underlying
+  // implementation, could be an empty list.
+  bool GetDeviceSupportedFormats(const std::string& device_id,
+                                 media::VideoCaptureFormats* supported_formats);
 
   // Retrieves the format(s) currently in use.  Returns false if the
   // |capture_session_id| is not found. Returns true and |formats_in_use|
   // otherwise. |formats_in_use| is empty if the device is not in use.
   bool GetDeviceFormatsInUse(media::VideoCaptureSessionId capture_session_id,
                              media::VideoCaptureFormats* formats_in_use);
+  // Retrieves the format(s) currently in use.  Returns false if the
+  // |stream_type|, |device_id| pair is not found. Returns true and
+  // |formats_in_use| otherwise. |formats_in_use| is empty if the device is not
+  // in use.
+  bool GetDeviceFormatsInUse(MediaStreamType stream_type,
+                             const std::string& device_id,
+                             media::VideoCaptureFormats* supported_formats);
 
   // Sets the platform-dependent window ID for the desktop capture notification
   // UI for the given session.
@@ -171,6 +194,13 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   using EnumerationCallback =
       base::Callback<void(const media::VideoCaptureDeviceDescriptors&)>;
   void EnumerateDevices(const EnumerationCallback& client_callback);
+
+  // Retrieves camera calibration information for a particular device. Returns
+  // nullopt_t if the |device_id| is not found or camera calibration information
+  // is not available for the device.  Camera calibration is cached during
+  // device(s) enumeration.
+  base::Optional<CameraCalibration> GetCameraCalibration(
+      const std::string& device_id);
 
  private:
   class CaptureDeviceStartRequest;
@@ -241,7 +271,6 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
                         const media::VideoCaptureParams& params);
   void OnDeviceStarted(
       int serial_id,
-      std::unique_ptr<media::FrameBufferPool> frame_buffer_pool,
       std::unique_ptr<VideoCaptureDevice> device);
   void DoStopDevice(DeviceEntry* entry);
   void HandleQueuedStartRequest();
@@ -322,6 +351,8 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   // from the test harness.
   std::unique_ptr<media::VideoCaptureDeviceFactory>
       video_capture_device_factory_;
+
+  base::ObserverList<media::VideoCaptureObserver> capture_observers_;
 
   // Local cache of the enumerated video capture devices' names and capture
   // supported formats. A snapshot of the current devices and their capabilities

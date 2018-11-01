@@ -1,7 +1,9 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef SYNC_VIVALDI_SYNC_MODEL_OBSERVER_H
-#define SYNC_VIVALDI_SYNC_MODEL_OBSERVER_H
+#ifndef SYNC_VIVALDI_SYNC_MODEL_OBSERVER_H_
+#define SYNC_VIVALDI_SYNC_MODEL_OBSERVER_H_
+
+#include <string>
 
 class VivaldiSyncModel;
 
@@ -20,4 +22,4 @@ class VivaldiSyncModelObserver {
 
 }  // namespace vivaldi
 
-#endif  // SYNC_VIVALDI_SYNC_MODEL_OBSERVER_H
+#endif  // SYNC_VIVALDI_SYNC_MODEL_OBSERVER_H_

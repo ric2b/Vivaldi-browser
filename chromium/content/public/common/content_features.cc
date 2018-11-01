@@ -43,17 +43,6 @@ const base::Feature kCompositeOpaqueScrollers{"CompositeOpaqueScrollers",
 const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable GPU Rasterization by default. This can still be overridden by
-// --force-gpu-rasterization or --disable-gpu-rasterization.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
-// DefaultEnableGpuRasterization has launched on Android and Mac.
-const base::Feature kDefaultEnableGpuRasterization{
-    "DefaultEnableGpuRasterization", base::FEATURE_ENABLED_BY_DEFAULT};
-#else
-const base::Feature kDefaultEnableGpuRasterization{
-    "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
-
 // Speculatively pre-evaluate Javascript which will likely use document.write to
 // load an external script. The feature extracts the written markup and sends it
 // to the preload scanner.
@@ -68,7 +57,7 @@ const base::Feature kExpensiveBackgroundTimerThrottling{
 // Enables faster location.reload() to use a reload mode that revalidates only
 // main resource forcibly. https://crbug.com/670237.
 const base::Feature kFasterLocationReload{"FasterLocationReload",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the Feature Policy framework for granting and removing access to
 // other features through HTTP headers.
@@ -113,6 +102,10 @@ const base::Feature kHeapCompaction{"HeapCompaction",
 const base::Feature kLazyParseCSS{"LazyParseCSS",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Use Mojo IPC for resource loading.
+const base::Feature kLoadingWithMojo{"LoadingWithMojo",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
 const base::Feature kMediaDocumentDownloadButton{
@@ -146,9 +139,9 @@ const base::Feature kOptimizeLoadingIPCForSmallResources{
 const base::Feature kOriginTrials{"OriginTrials",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Whether the lookahead parser in Blink runs on the main thread.
-const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+// Whether a download can be handled by parallel jobs.
+const base::Feature kParallelDownloading{
+    "ParallelDownloading", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Whether document level event listeners should default 'passive' to true.
 const base::Feature kPassiveDocumentEventListeners{
@@ -260,9 +253,19 @@ const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames{
 const base::Feature kWebRtcHWH264Encoding{
     "WebRtcHWH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables the WebRTC Echo Canceller version 3 (AEC3). Feature for
+// http://crbug.com/688388. This value is sent to WebRTC's echo canceller to
+// toggle which echo canceller should be used.
+const base::Feature kWebRtcUseEchoCanceller3{"WebRtcUseEchoCanceller3",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether the WebUSB API is enabled:
 // https://wicg.github.io/webusb
 const base::Feature kWebUsb{"WebUSB", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables WebVR experimental rendering optimizations.
+const base::Feature kWebVRExperimentalRendering{
+    "WebVRExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Make sendBeacon throw for a Blob with a non simple type.
 const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
@@ -270,6 +273,10 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
+// A browsing history manager implementation for Android.
+const base::Feature kNativeAndroidHistoryManager{
+  "AndroidHistoryManager", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -283,7 +290,10 @@ const base::Feature kServiceWorkerPaymentApps{
 // The JavaScript API for payments on the web.
 const base::Feature kWebPayments{"WebPayments",
                                  base::FEATURE_ENABLED_BY_DEFAULT};
-
+#else
+// The JavaScript API for payments on the web.
+const base::Feature kWebPayments{"WebPayments",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if !defined(OS_ANDROID)

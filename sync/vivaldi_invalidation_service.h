@@ -1,7 +1,10 @@
 // Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
 
-#ifndef _SYNC_VIVALDI_INVALIDATION_SERVICE_H
-#define _SYNC_VIVALDI_INVALIDATION_SERVICE_H
+#ifndef SYNC_VIVALDI_INVALIDATION_SERVICE_H_
+#define SYNC_VIVALDI_INVALIDATION_SERVICE_H_
+
+#include <memory>
+#include <string>
 
 #include "components/invalidation/impl/invalidator_registrar.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -17,7 +20,7 @@ namespace vivaldi {
 
 class VivaldiInvalidationService : public invalidation::InvalidationService {
  public:
-  VivaldiInvalidationService(Profile *);
+  explicit VivaldiInvalidationService(Profile*);
   ~VivaldiInvalidationService() override;
 
   void PerformInvalidation(const syncer::ObjectIdInvalidationMap&);
@@ -44,6 +47,6 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
   DISALLOW_COPY_AND_ASSIGN(VivaldiInvalidationService);
 };
 
-}  // namepace vivaldi
+}  // namespace vivaldi
 
-#endif  // _SYNC_VIVALDI_INVALIDATION_SERVICE_H
+#endif  // SYNC_VIVALDI_INVALIDATION_SERVICE_H_

@@ -12,7 +12,9 @@
 #include "ui/arc/notification/arc_custom_notification_item.h"
 #include "ui/arc/notification/arc_notification_surface_manager.h"
 #include "ui/aura/window_observer.h"
+#include "ui/gfx/animation/animation_delegate.h"
 #include "ui/message_center/views/custom_notification_content_view_delegate.h"
+#include "ui/message_center/views/padded_button.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/native/native_view_host.h"
 
@@ -20,9 +22,12 @@ namespace exo {
 class NotificationSurface;
 }
 
+namespace gfx {
+class LinearAnimation;
+}
+
 namespace views {
 class FocusTraversable;
-class ImageButton;
 class Widget;
 }
 
@@ -33,7 +38,8 @@ class ArcCustomNotificationView
       public views::ButtonListener,
       public aura::WindowObserver,
       public ArcCustomNotificationItem::Observer,
-      public ArcNotificationSurfaceManager::Observer {
+      public ArcNotificationSurfaceManager::Observer,
+      public gfx::AnimationDelegate {
  public:
   explicit ArcCustomNotificationView(ArcCustomNotificationItem* item);
   ~ArcCustomNotificationView() override;
@@ -43,17 +49,37 @@ class ArcCustomNotificationView
 
  private:
   class ContentViewDelegate;
-  class CloseButton;
   class EventForwarder;
+  class SettingsButton;
   class SlideHelper;
 
-  void CreateFloatingCloseButton();
+  // A image button class used for the settings button and the close button.
+  // We can't use forward declaration for this class due to std::unique_ptr<>
+  // requires size of this class.
+  class ControlButton : public message_center::PaddedButton {
+   public:
+    explicit ControlButton(ArcCustomNotificationView* owner);
+    void OnFocus() override;
+    void OnBlur() override;
+
+   private:
+    ArcCustomNotificationView* const owner_;
+
+    DISALLOW_COPY_AND_ASSIGN(ControlButton);
+  };
+
+  void CreateCloseButton();
+  void CreateSettingsButton();
+  void MaybeCreateFloatingControlButtons();
   void SetSurface(exo::NotificationSurface* surface);
   void UpdatePreferredSize();
-  void UpdateCloseButtonVisiblity();
+  void UpdateControlButtonsVisibility();
   void UpdatePinnedState();
   void UpdateSnapshot();
   void AttachSurface();
+  void ActivateToast();
+  void StartControlButtonsColorAnimation();
+  bool ShouldUpdateControlButtonsColor() const;
 
   // views::NativeViewHost
   void ViewHierarchyChanged(
@@ -67,6 +93,7 @@ class ArcCustomNotificationView
   void OnFocus() override;
   void OnBlur() override;
   views::FocusTraversable* GetFocusTraversable() override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
 
   // views::ButtonListener
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -85,6 +112,12 @@ class ArcCustomNotificationView
   void OnNotificationSurfaceAdded(exo::NotificationSurface* surface) override;
   void OnNotificationSurfaceRemoved(exo::NotificationSurface* surface) override;
 
+  // AnimationDelegate
+  void AnimationEnded(const gfx::Animation* animation) override;
+  void AnimationProgressed(const gfx::Animation* animation) override;
+
+  // If |item_| is null, we may be about to be destroyed. In this case,
+  // we have to be careful about what we do.
   ArcCustomNotificationItem* item_ = nullptr;
   exo::NotificationSurface* surface_ = nullptr;
 
@@ -101,16 +134,20 @@ class ArcCustomNotificationView
   // when a slide is in progress and restore the surface when it finishes.
   std::unique_ptr<SlideHelper> slide_helper_;
 
-  // A close button on top of NotificationSurface. Needed because the
+  // A control buttons on top of NotificationSurface. Needed because the
   // aura::Window of NotificationSurface is added after hosting widget's
-  // RootView thus standard notification close button is always below
+  // RootView thus standard notification control buttons are always below
   // it.
-  std::unique_ptr<views::Widget> floating_close_button_widget_;
+  std::unique_ptr<views::Widget> floating_control_buttons_widget_;
 
-  views::ImageButton* floating_close_button_ = nullptr;
+  views::View* control_buttons_view_ = nullptr;
+  std::unique_ptr<ControlButton> close_button_;
+  ControlButton* settings_button_ = nullptr;
 
   // Protects from call loops between Layout and OnWindowBoundsChanged.
   bool in_layout_ = false;
+
+  std::unique_ptr<gfx::LinearAnimation> control_button_color_animation_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcCustomNotificationView);
 };

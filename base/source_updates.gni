@@ -15,7 +15,7 @@ post_process_target("//base:base_static") {
   ]
 }
 
-post_process_target("//chrome/browser:test_support") {
+post_process_target("//base/test:test_support") {
   sources += [
     "//vivaldi/base/vivaldi_paths.cc",
     "//vivaldi/base/vivaldi_paths.h",

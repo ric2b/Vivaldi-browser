@@ -37,12 +37,9 @@ std::vector<uint8_t> String16ToUint8Vector(const base::string16& input) {
 class GetAllCallback : public mojom::LevelDBWrapperGetAllCallback {
  public:
   static mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo CreateAndBind(
-      mojo::AssociatedGroup* associated_group,
       const base::Callback<void(bool)>& callback) {
     mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo ptr_info;
-    mojom::LevelDBWrapperGetAllCallbackAssociatedRequest request;
-    associated_group->CreateAssociatedInterface(
-        mojo::AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
+    auto request = mojo::MakeRequest(&ptr_info);
     mojo::MakeStrongAssociatedBinding(
         base::WrapUnique(new GetAllCallback(callback)), std::move(request));
     return ptr_info;
@@ -84,7 +81,7 @@ LocalStorageCachedArea::LocalStorageCachedArea(
   storage_partition_service->OpenLocalStorage(origin_,
                                               mojo::MakeRequest(&leveldb_));
   mojom::LevelDBObserverAssociatedPtrInfo ptr_info;
-  binding_.Bind(&ptr_info, leveldb_.associated_group());
+  binding_.Bind(&ptr_info);
   leveldb_->AddObserver(std::move(ptr_info));
 }
 
@@ -151,7 +148,6 @@ void LocalStorageCachedArea::RemoveItem(const base::string16& key,
 void LocalStorageCachedArea::Clear(const GURL& page_url,
                                    const std::string& storage_area_id) {
   // No need to prime the cache in this case.
-
   Reset();
   map_ = new DOMStorageMap(kPerStorageAreaQuota);
   ignore_all_mutations_ = true;
@@ -291,7 +287,6 @@ void LocalStorageCachedArea::EnsureLoaded() {
   leveldb::mojom::DatabaseError status = leveldb::mojom::DatabaseError::OK;
   std::vector<content::mojom::KeyValuePtr> data;
   leveldb_->GetAll(GetAllCallback::CreateAndBind(
-                       leveldb_.associated_group(),
                        base::Bind(&LocalStorageCachedArea::OnGetAllComplete,
                                   weak_factory_.GetWeakPtr())),
                    &status, &data);

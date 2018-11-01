@@ -24,9 +24,9 @@
 #include "core/CoreExport.h"
 #include "core/dom/PendingScript.h"
 #include "core/dom/ScriptRunner.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceClient.h"
 #include "core/loader/resource/ScriptResource.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceClient.h"
 #include "wtf/text/TextPosition.h"
 #include "wtf/text/WTFString.h"
 
@@ -64,11 +64,11 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
       const String& languageAttributeValue,
       LegacyTypeSupport supportLegacyTypes);
 
+  // https://html.spec.whatwg.org/#prepare-a-script
   bool prepareScript(
       const TextPosition& scriptStartPosition = TextPosition::minimumPosition(),
       LegacyTypeSupport = DisallowLegacyTypeInTypeAttribute);
 
-  String scriptCharset() const { return m_characterEncoding; }
   String scriptContent() const;
   // Returns false if and only if execution was blocked.
   bool executeScript(const ScriptSourceCode&);
@@ -92,7 +92,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   }
   bool isParserInserted() const { return m_parserInserted; }
   bool alreadyStarted() const { return m_alreadyStarted; }
-  bool forceAsync() const { return m_forceAsync; }
+  bool isNonBlocking() const { return m_nonBlocking; }
 
   // Helper functions used by our parent classes.
   void didNotifySubtreeInsertionsToDocument();
@@ -106,9 +106,6 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   bool errorOccurred() const {
     return m_pendingScript && m_pendingScript->errorOccurred();
   }
-
-  // Clears the connection to the PendingScript (and Element and Resource).
-  void detach();
 
   bool wasCreatedDuringDocumentWrite() { return m_createdDuringDocumentWrite; }
 
@@ -129,10 +126,15 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   bool isScriptForEventSupported() const;
   void logScriptMIMEType(LocalFrame*, ScriptResource*, const String&);
 
-  bool fetchScript(const String& sourceUrl, FetchRequest::DeferOption);
+  bool fetchScript(const String& sourceUrl,
+                   const String& encoding,
+                   FetchRequest::DeferOption);
   bool doExecuteScript(const ScriptSourceCode&);
 
   ScriptLoaderClient* client() const;
+
+  // Clears the connection to the PendingScript.
+  void detachPendingScript();
 
   // PendingScriptClient
   void pendingScriptFinished(PendingScript*) override;
@@ -140,19 +142,41 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   Member<Element> m_element;
   Member<ScriptResource> m_resource;
   WTF::OrdinalNumber m_startLineNumber;
-  String m_characterEncoding;
-  String m_fallbackCharacterEncoding;
 
-  bool m_parserInserted : 1;
-  bool m_isExternalScript : 1;
-  bool m_alreadyStarted : 1;
-  bool m_haveFiredLoad : 1;
+  // https://html.spec.whatwg.org/#script-processing-model
+  // "A script element has several associated pieces of state.":
+
+  // https://html.spec.whatwg.org/#already-started
+  // "Initially, script elements must have this flag unset"
+  bool m_alreadyStarted = false;
+
+  // https://html.spec.whatwg.org/#parser-inserted
+  // "Initially, script elements must have this flag unset."
+  bool m_parserInserted = false;
+
+  // https://html.spec.whatwg.org/#non-blocking
+  // "Initially, script elements must have this flag set."
+  bool m_nonBlocking = true;
+
+  // https://html.spec.whatwg.org/#ready-to-be-parser-executed
+  // "Initially, script elements must have this flag unset"
+  bool m_readyToBeParserExecuted = false;
+
+  // https://html.spec.whatwg.org/#concept-script-type
+  // TODO(hiroshige): Implement "script's type".
+
+  // https://html.spec.whatwg.org/#concept-script-external
+  // "It is determined when the script is prepared"
+  bool m_isExternalScript = false;
+
+  bool m_haveFiredLoad;
+
   // Same as "The parser will handle executing the script."
-  bool m_willBeParserExecuted : 1;
-  bool m_readyToBeParserExecuted : 1;
-  bool m_willExecuteWhenDocumentFinishedParsing : 1;
-  bool m_forceAsync : 1;
-  const bool m_createdDuringDocumentWrite : 1;
+  bool m_willBeParserExecuted;
+
+  bool m_willExecuteWhenDocumentFinishedParsing;
+
+  const bool m_createdDuringDocumentWrite;
 
   ScriptRunner::AsyncExecutionType m_asyncExecType;
   enum DocumentWriteIntervention {

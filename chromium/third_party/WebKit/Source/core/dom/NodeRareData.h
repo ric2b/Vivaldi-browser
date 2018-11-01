@@ -50,13 +50,13 @@ class NodeMutationObserverData final
   }
 
   void addTransientRegistration(MutationObserverRegistration* registration) {
-    m_transientRegistry.add(
+    m_transientRegistry.insert(
         TraceWrapperMember<MutationObserverRegistration>(this, registration));
   }
 
   void removeTransientRegistration(MutationObserverRegistration* registration) {
     DCHECK(m_transientRegistry.contains(registration));
-    m_transientRegistry.remove(registration);
+    m_transientRegistry.erase(registration);
   }
 
   void addRegistration(MutationObserverRegistration* registration) {
@@ -143,7 +143,7 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
   }
   void setRestyleFlag(DynamicRestyleFlags mask) {
     m_restyleFlags |= mask;
-    RELEASE_ASSERT(m_restyleFlags);
+    CHECK(m_restyleFlags);
   }
   bool hasRestyleFlags() const { return m_restyleFlags; }
   void clearRestyleFlags() { m_restyleFlags = 0; }

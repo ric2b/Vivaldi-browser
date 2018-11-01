@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/singleton.h"
@@ -76,10 +75,12 @@ PrivetURLFetcher::PrivetURLFetcher(
     const GURL& url,
     net::URLFetcher::RequestType request_type,
     const scoped_refptr<net::URLRequestContextGetter>& context_getter,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation,
     PrivetURLFetcher::Delegate* delegate)
     : url_(url),
       request_type_(request_type),
       context_getter_(context_getter),
+      traffic_annotation_(traffic_annotation),
       delegate_(delegate),
       max_retries_(kPrivetMaxRetries),
       do_not_retry_on_transient_error_(false),
@@ -150,7 +151,8 @@ void PrivetURLFetcher::Try() {
   tries_++;
   if (tries_ <= max_retries_) {
     DVLOG(1) << "Attempt: " << tries_;
-    url_fetcher_ = net::URLFetcher::Create(url_, request_type_, this);
+    url_fetcher_ =
+        net::URLFetcher::Create(url_, request_type_, this, traffic_annotation_);
     data_use_measurement::DataUseUserData::AttachToFetcher(
         url_fetcher_.get(), data_use_measurement::DataUseUserData::CLOUD_PRINT);
 
@@ -202,8 +204,6 @@ void PrivetURLFetcher::Start() {
   DCHECK_EQ(tries_, 0);  // We haven't called |Start()| yet.
 
   if (!url_.is_valid()) {
-    // Not yet clear why it's possible. crbug.com/513505
-    base::debug::DumpWithoutCrashing();
     return delegate_->OnError(this, UNKNOWN_ERROR);
   }
 
@@ -386,7 +386,6 @@ void PrivetURLFetcher::RefreshToken(const std::string& token) {
 
 bool PrivetURLFetcher::PrivetErrorTransient(const std::string& error) {
   return (error == kPrivetErrorDeviceBusy) ||
-         (error == kPrivetV3ErrorDeviceBusy) ||
          (error == kPrivetErrorPendingUserAction) ||
          (error == kPrivetErrorPrinterBusy);
 }

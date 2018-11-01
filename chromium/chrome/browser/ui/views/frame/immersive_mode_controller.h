@@ -16,6 +16,10 @@ class Rect;
 class Size;
 }
 
+namespace views {
+class Widget;
+}
+
 // A lock which will keep the top-of-window views revealed for its
 // lifetime.
 // See ImmersiveModeController::GetRevealedLock for details.
@@ -49,6 +53,9 @@ class ImmersiveModeController {
    public:
     // Called when a reveal of the top-of-window views has been initiated.
     virtual void OnImmersiveRevealStarted() {}
+
+    // Called when a reveal of the top-of-window views has finished.
+    virtual void OnImmersiveRevealEnded() {}
 
     // Called when the immersive mode controller has been destroyed.
     virtual void OnImmersiveModeControllerDestroyed() {}
@@ -103,6 +110,10 @@ class ImmersiveModeController {
       const gfx::Rect& new_visible_bounds_in_screen) = 0;
 
   Type type() const { return type_; }
+
+  // Returns the widget hosting the reveal, null if a widget isn't used to
+  // host the reveal, or not currently revealed.
+  virtual views::Widget* GetRevealWidget() = 0;
 
   virtual void AddObserver(Observer* observer);
   virtual void RemoveObserver(Observer* observer);

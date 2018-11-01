@@ -43,7 +43,7 @@ void LayoutSVGResourceGradient::removeClientFromCache(
     LayoutObject* client,
     bool markForInvalidation) {
   ASSERT(client);
-  m_gradientMap.remove(client);
+  m_gradientMap.erase(client);
   markClientForInvalidation(
       client, markForInvalidation ? PaintInvalidation : ParentOnlyInvalidation);
 }
@@ -79,7 +79,7 @@ SVGPaintServer LayoutSVGResourceGradient::preparePaintServer(
     return SVGPaintServer::invalid();
 
   std::unique_ptr<GradientData>& gradientData =
-      m_gradientMap.add(&object, nullptr).storedValue->value;
+      m_gradientMap.insert(&object, nullptr).storedValue->value;
   if (!gradientData)
     gradientData = WTF::wrapUnique(new GradientData);
 

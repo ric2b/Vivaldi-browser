@@ -265,6 +265,8 @@ without changes to the corresponding grd file. -->
 
       <structure name="IDR_WEBUI_HTML_ACTION_LINK"
                  file="html/action_link.html" type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_ACTION_LINK_CSS"
+                 file="html/action_link_css.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_ASSERT"
                  file="html/assert.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_PROMISE_RESOLVER"
@@ -465,6 +467,9 @@ without changes to the corresponding grd file. -->
                  file="js/icon.js" type="chrome_html" flattenhtml="true" />
       <structure name="IDR_WEBUI_JS_I18N_TEMPLATE_NO_PROCESS"
                  file="js/i18n_template_no_process.js"
+                 type="chrome_html" />
+      <structure name="IDR_WEBUI_JS_I18N_TEMPLATE_PROCESS"
+                 file="js/i18n_template_process.js"
                  type="chrome_html" />
       <structure name="IDR_WEBUI_JS_LOAD_TIME_DATA"
                  file="js/load_time_data.js" type="chrome_html" />

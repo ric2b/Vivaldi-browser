@@ -23,7 +23,7 @@
 #include "media/filters/decrypting_demuxer_stream.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/pipeline_stats.h"
+#include "platform_media/common/pipeline_stats.h"
 #endif
 
 namespace media {
@@ -261,8 +261,14 @@ base::TimeDelta DecoderStream<StreamType>::AverageDuration() const {
 
 template <DemuxerStream::Type StreamType>
 void DecoderStream<StreamType>::SelectDecoder() {
+  // If we are already using DecryptingDemuxerStream (DDS), e.g. during
+  // fallback, the |stream_| will always be clear. In this case, no need pass in
+  // the |cdm_context_|. This will also help prevent creating a new DDS on top
+  // of the current DDS.
+  CdmContext* cdm_context = decrypting_demuxer_stream_ ? nullptr : cdm_context_;
+
   decoder_selector_->SelectDecoder(
-      &traits_, stream_, cdm_context_,
+      &traits_, stream_, cdm_context,
       base::Bind(&DecoderStream<StreamType>::OnDecoderSelected,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&DecoderStream<StreamType>::OnDecodeOutputReady,
@@ -708,7 +714,8 @@ void DecoderStream<StreamType>::ReinitializeDecoder() {
   state_ = STATE_REINITIALIZING_DECODER;
   // Decoders should not need a new CDM during reinitialization.
   traits_.InitializeDecoder(
-      decoder_.get(), stream_, cdm_context_,
+      decoder_.get(), StreamTraits::GetDecoderConfig(stream_),
+      stream_->liveness() == DemuxerStream::LIVENESS_LIVE, cdm_context_,
       base::Bind(&DecoderStream<StreamType>::OnDecoderReinitialized,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&DecoderStream<StreamType>::OnDecodeOutputReady,

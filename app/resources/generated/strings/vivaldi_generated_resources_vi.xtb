@@ -22,7 +22,6 @@
 <translation id="1616206807336925449">Tiện ích này không yêu cầu quyền đặc biệt.</translation>
 <translation id="1620510694547887537">Máy ảnh</translation>
 <translation id="1635033183663317347">Do người giám hộ của bạn cài đặt.</translation>
-<translation id="1652965563555864525">&amp;Tắt tiếng</translation>
 <translation id="1708338024780164500">(Không hiện dịch)</translation>
 <translation id="1723824996674794290">Cửa sổ &amp;Mới</translation>
 <translation id="1729533290416704613">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
@@ -32,7 +31,6 @@
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
 <translation id="1965328510789761112">Bộ nhớ riêng</translation>
 <translation id="1992397118740194946">Chưa đặt</translation>
-<translation id="2011110593081822050">Người làm việc trên Web: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">Ẩn plugin này</translation>
 <translation id="2087822576218954668">Bản in: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Cập nhật plugin</translation>
@@ -57,7 +55,6 @@
 <translation id="2482878487686419369">Thông báo</translation>
 <translation id="2501797496290880632">Nhập phím tắt</translation>
 <translation id="2509857212037838238">Cài đặt <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;Tạm dừng</translation>
 <translation id="2550212893339833758">Đã hoán đổi bộ nhớ</translation>
 <translation id="2662876636500006917">Cửa hàng Chrome Trực tuyến</translation>
 <translation id="2678063897982469759">Kích hoạt lại</translation>
@@ -103,8 +100,8 @@
 <translation id="3909791450649380159">Cắ&amp;t</translation>
 <translation id="3927932062596804919">Từ chối</translation>
 <translation id="3936390757709632190">&amp;Mở âm thanh trong tab mới</translation>
+<translation id="3936999098172113189">Đang đợi in <ph name="PAGE_NUMBER" /> trang đến <ph name="PRINTER_NAME" /></translation>
 <translation id="3943582379552582368">&amp;Quay lại</translation>
-<translation id="3954582159466790312">Hủy &amp;tắt tiếng</translation>
 <translation id="3978267865113951599">(Treo)</translation>
 <translation id="3979395879372752341">Đã thêm tiện ích mới (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -133,17 +130,13 @@
 <translation id="4593021220803146968">Đ&amp;i đến <ph name="URL" /></translation>
 <translation id="4595560905247879544">Chỉ người quản lý mới có thể sửa đổi ứng dụng và tiện ích (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Tiện ích đã thay đổi trang nào sẽ được hiển thị khi bạn mở một tab mới.</translation>
-<translation id="4623537843784569564">Tiện ích này có thể đã được cập nhật không đúng. Hãy thử cài đặt lại.</translation>
 <translation id="4677772697204437347">Bộ nhớ GPU</translation>
 <translation id="4711638718396952945">Khôi phục cài đặt</translation>
 <translation id="4839303808932127586">Lưu &amp;video thành...</translation>
 <translation id="4850258771229959924">Xem với Công Cụ Nhà Phát Triển</translation>
 <translation id="4851858059374029925">Cài đặt <ph name="PLUGIN_NAME" />? Chỉ cài đặt những plugin mà bạn tin cậy.</translation>
-<translation id="4861833787540810454">&amp;Phát</translation>
-<translation id="4883993111890464517">Tiện ích này có thể đã hỏng. Hãy thử cài đặt lại.</translation>
 <translation id="488785315393301722">Hiển thị chi tiết</translation>
 <translation id="4911714727432509308">Không có tiện ích nào được gán phím tắt.</translation>
-<translation id="4919987486109157213">Tiện ích đã hỏng. Hãy thử cài đặt lại.</translation>
 <translation id="4927301649992043040">Đóng gói tiện ích</translation>
 <translation id="49896407730300355">Xoay &amp;ngược chiều kim đồng hồ</translation>
 <translation id="4989966318180235467">Kiểm tra trang &amp;nền</translation>
@@ -211,7 +204,6 @@
 <translation id="6787839852456839824">Phím tắt</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Lưu thay đổi</translation>
-<translation id="6844537474943985871">Tiện ích này có thể đã hỏng. Hãy thử gỡ cài đặt và cài đặt lại.</translation>
 <translation id="6863910145616405334">Không tìm thấy plugin</translation>
 <translation id="6886871292305414135">Mở liên kết trong &amp;tab mới</translation>
 <translation id="6900284862687837908">Ứng dụng nền: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -233,7 +225,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Tab mới</translation>
 <translation id="7564847347806291057">Kết thúc quá trình</translation>
-<translation id="7618337809041914424">&amp;In khung...</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Hủy</translation>
 <translation id="7663719505383602579">Bộ thu: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -281,7 +272,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8962083179518285172">Ẩn chi tiết</translation>
 <translation id="9003647077635673607">Cho phép trên tất cả các website</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> bị chặn bởi chính sách doanh nghiệp</translation>
-<translation id="9101691533782776290">Chạy ứng dụng</translation>
 <translation id="9153341767479566106">Những phần mở rộng khác không nạp được:</translation>
 <translation id="9170848237812810038">H&amp;oàn tác</translation>
 <translation id="9215293857209265904">Đã thêm "<ph name="EXTENSION_NAME" />"</translation>

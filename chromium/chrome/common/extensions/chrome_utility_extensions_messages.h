@@ -85,35 +85,6 @@ IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_IndexPicasaAlbumsContents,
                      std::vector<picasa::FolderINIContents> /* folders_inis */)
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
-// Tell the utility process to attempt to validate the passed media file. The
-// file will undergo basic sanity checks and will be decoded for up to
-// |milliseconds_of_decoding| wall clock time. It is still not safe to decode
-// the file in the browser process after this check.
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_CheckMediaFile,
-                     int64_t /* milliseconds_of_decoding */,
-                     IPC::PlatformFileForTransit /* Media file to parse */)
-
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_RequestBlobBytes_Finished,
-                     int64_t /* request_id */,
-                     std::string /* bytes */)
-
-// Requests that the utility process write the contents of the source file to
-// the removable drive listed in the target file. The target will be restricted
-// to removable drives by the utility process.
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_ImageWriter_Write,
-                     base::FilePath /* source file */,
-                     base::FilePath /* target file */)
-
-// Requests that the utility process verify that the contents of the source file
-// was written to the target. As above the target will be restricted to
-// removable drives by the utility process.
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_ImageWriter_Verify,
-                     base::FilePath /* source file */,
-                     base::FilePath /* target file */)
-
-// Cancels a pending write or verify operation.
-IPC_MESSAGE_CONTROL0(ChromeUtilityMsg_ImageWriter_Cancel)
-
 //------------------------------------------------------------------------------
 // Utility process host messages:
 // These are messages from the utility process to the browser.
@@ -144,27 +115,3 @@ IPC_MESSAGE_CONTROL3(ChromeUtilityHostMsg_ParsePicasaPMPDatabase_Finished,
 IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_IndexPicasaAlbumsContents_Finished,
                      picasa::AlbumImagesMap /* albums_images */)
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
-
-// Reply after checking the passed media file. A true result indicates that
-// the file appears to be a well formed media file.
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_CheckMediaFile_Finished,
-                     bool /* passed_checks */)
-
-IPC_MESSAGE_CONTROL3(ChromeUtilityHostMsg_RequestBlobBytes,
-                     int64_t /* request_id */,
-                     int64_t /* start_byte */,
-                     int64_t /* length */)
-
-// Reply when a write or verify operation succeeds.
-IPC_MESSAGE_CONTROL0(ChromeUtilityHostMsg_ImageWriter_Succeeded)
-
-// Reply when a write or verify operation has been fully cancelled.
-IPC_MESSAGE_CONTROL0(ChromeUtilityHostMsg_ImageWriter_Cancelled)
-
-// Reply when a write or verify operation fails to complete.
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_ImageWriter_Failed,
-                     std::string /* message */)
-
-// Periodic status update about the progress of an operation.
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_ImageWriter_Progress,
-                     int64_t /* number of bytes processed */)

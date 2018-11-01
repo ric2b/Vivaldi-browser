@@ -45,12 +45,21 @@ var OUTPUT_PROTECTION_TEST_KEYSYSTEM =
 var PLATFORM_VERIFICATION_TEST_KEYSYSTEM =
     'org.chromium.externalclearkey.platformverificationtest';
 var CRASH_TEST_KEYSYSTEM = 'org.chromium.externalclearkey.crash';
+var VERIFY_HOST_FILES_TEST_KEYSYSTEM =
+    'org.chromium.externalclearkey.verifycdmhosttest';
 
 // Key system name:value map to show on the document page.
 var KEY_SYSTEMS = {
   'Widevine': WIDEVINE_KEYSYSTEM,
   'Clearkey': CLEARKEY,
   'External Clearkey': EXTERNAL_CLEARKEY
+};
+
+var CONFIG_CHANGE_TYPE = {
+  CLEAR_TO_CLEAR : '0',
+  CLEAR_TO_ENCRYPTED : '1',
+  ENCRYPTED_TO_CLEAR : '2',
+  ENCRYPTED_TO_ENCRYPTED : '3'
 };
 
 // General WebM and MP4 name:content_type map to show on the document page.

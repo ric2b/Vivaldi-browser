@@ -10,6 +10,7 @@
 #include "content/common/establish_channel_params.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/common/gpu_command_buffer_traits.h"
 #include "gpu/ipc/common/gpu_param_traits.h"
@@ -34,16 +35,6 @@
 IPC_ENUM_TRAITS_VALIDATE(gpu::GpuPreferences::VpxDecodeVendors,
                          ((value >= gpu::GpuPreferences::VPX_VENDOR_NONE) &&
                           (value <= gpu::GpuPreferences::VPX_VENDOR_ALL)))
-
-IPC_STRUCT_TRAITS_BEGIN(gpu::VideoMemoryUsageStats)
-  IPC_STRUCT_TRAITS_MEMBER(process_map)
-  IPC_STRUCT_TRAITS_MEMBER(bytes_allocated)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(gpu::VideoMemoryUsageStats::ProcessStats)
-  IPC_STRUCT_TRAITS_MEMBER(video_memory)
-  IPC_STRUCT_TRAITS_MEMBER(has_duplicates)
-IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(GpuMsg_CreateGpuMemoryBuffer_Params)
   IPC_STRUCT_MEMBER(gfx::GpuMemoryBufferId, id)
@@ -106,14 +97,6 @@ IPC_STRUCT_TRAITS_END()
 // GPU Messages
 // These are messages from the browser to the GPU process.
 
-// Tells the GPU process to initialize itself. The browser explicitly
-// requests this be done so that we are guaranteed that the channel is set
-// up between the browser and GPU process before doing any work that might
-// potentially crash the GPU process. Detection of the child process
-// exiting abruptly is predicated on having the IPC channel set up.
-IPC_MESSAGE_CONTROL1(GpuMsg_Initialize,
-                     gpu::GpuPreferences /* gpu_prefernces */)
-
 // Tells the GPU process to shutdown itself.
 IPC_MESSAGE_CONTROL0(GpuMsg_Finalize)
 
@@ -144,9 +127,6 @@ IPC_MESSAGE_CONTROL3(GpuMsg_DestroyGpuMemoryBuffer,
 // information.
 IPC_MESSAGE_CONTROL0(GpuMsg_CollectGraphicsInfo)
 
-// Tells the GPU process to report video_memory information for the task manager
-IPC_MESSAGE_CONTROL0(GpuMsg_GetVideoMemoryUsageStats)
-
 #if defined(OS_ANDROID)
 // Tells the GPU process to wake up the GPU because we're about to draw.
 IPC_MESSAGE_CONTROL0(GpuMsg_WakeUpGpu)
@@ -164,6 +144,11 @@ IPC_MESSAGE_CONTROL0(GpuMsg_Crash)
 // Tells the GPU process to hang.
 IPC_MESSAGE_CONTROL0(GpuMsg_Hang)
 
+#if defined(OS_ANDROID)
+// Tells the GPU process to throw a java exception
+IPC_MESSAGE_CONTROL0(GpuMsg_JavaCrash)
+#endif
+
 // Tells the GPU process that the browser has seen a GPU switch.
 IPC_MESSAGE_CONTROL0(GpuMsg_GpuSwitched)
 
@@ -172,22 +157,14 @@ IPC_MESSAGE_CONTROL0(GpuMsg_GpuSwitched)
 // These are messages to the browser.
 
 // Response from GPU to a GputMsg_Initialize message.
-IPC_MESSAGE_CONTROL2(GpuHostMsg_Initialized,
+IPC_MESSAGE_CONTROL3(GpuHostMsg_Initialized,
                      bool /* result */,
-                     ::gpu::GPUInfo /* gpu_info */)
+                     ::gpu::GPUInfo /* gpu_info */,
+                     ::gpu::GpuFeatureInfo /* gpu_feature_info */)
 
 // Response from GPU to a GpuHostMsg_EstablishChannel message.
 IPC_MESSAGE_CONTROL1(GpuHostMsg_ChannelEstablished,
                      IPC::ChannelHandle /* channel_handle */)
-
-// Message from GPU to notify to destroy the channel.
-IPC_MESSAGE_CONTROL1(GpuHostMsg_DestroyChannel, int32_t /* client_id */)
-
-// Message to cache the given shader information.
-IPC_MESSAGE_CONTROL3(GpuHostMsg_CacheShader,
-                     int32_t /* client_id */,
-                     std::string /* key */,
-                     std::string /* shader */)
 
 // Message to the GPU that a shader was loaded from disk.
 IPC_MESSAGE_CONTROL1(GpuMsg_LoadedShader, std::string /* encoded shader */)
@@ -200,31 +177,11 @@ IPC_MESSAGE_CONTROL1(GpuHostMsg_GpuMemoryBufferCreated,
 IPC_MESSAGE_CONTROL1(GpuHostMsg_GraphicsInfoCollected,
                      gpu::GPUInfo /* GPU logging stats */)
 
-// Response from GPU to a GpuMsg_GetVideoMemory.
-IPC_MESSAGE_CONTROL1(GpuHostMsg_VideoMemoryUsageStats,
-                     gpu::VideoMemoryUsageStats /* GPU memory stats */)
-
-#if defined(OS_WIN)
-IPC_MESSAGE_CONTROL2(GpuHostMsg_AcceleratedSurfaceCreatedChildWindow,
-                     gpu::SurfaceHandle /* parent_window */,
-                     gpu::SurfaceHandle /* child_window */)
-#endif
-
 #if defined(OS_ANDROID)
 // Response to a GpuMsg_DestroyingVideoSurface message.
 IPC_MESSAGE_CONTROL1(GpuHostMsg_DestroyingVideoSurfaceAck,
                      int /* surface_id */)
 #endif
-
-
-IPC_MESSAGE_CONTROL1(GpuHostMsg_DidCreateOffscreenContext, GURL /* url */)
-
-IPC_MESSAGE_CONTROL3(GpuHostMsg_DidLoseContext,
-                     bool /* offscreen */,
-                     gpu::error::ContextLostReason /* reason */,
-                     GURL /* url */)
-
-IPC_MESSAGE_CONTROL1(GpuHostMsg_DidDestroyOffscreenContext, GURL /* url */)
 
 // Message from GPU to add a GPU log message to the about:gpu page.
 IPC_MESSAGE_CONTROL3(GpuHostMsg_OnLogMessage,

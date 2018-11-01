@@ -38,6 +38,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/settings_resources.h"
 #include "chrome/grit/settings_resources_map.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -45,7 +46,7 @@
 #if defined(OS_CHROMEOS)
 #include "ash/common/system/chromeos/palette/palette_utils.h"
 #include "ash/common/system/chromeos/power/power_status.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
@@ -59,8 +60,10 @@
 #include "chrome/browser/ui/webui/settings/chromeos/device_storage_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_stylus_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/easy_unlock_settings_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/fingerprint_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/internet_handler.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/arc/arc_util.h"
 #else  // !defined(OS_CHROMEOS)
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_manage_profile_handler.h"
@@ -90,7 +93,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(base::MakeUnique<BrowserLifetimeHandler>());
   AddSettingsPageUIHandler(base::MakeUnique<ClearBrowsingDataHandler>(web_ui));
   AddSettingsPageUIHandler(base::MakeUnique<CookiesViewHandler>());
-  AddSettingsPageUIHandler(base::MakeUnique<DownloadsHandler>());
+  AddSettingsPageUIHandler(base::MakeUnique<DownloadsHandler>(profile));
   AddSettingsPageUIHandler(base::MakeUnique<ExtensionControlHandler>());
   AddSettingsPageUIHandler(base::MakeUnique<FontHandler>(web_ui));
   AddSettingsPageUIHandler(base::MakeUnique<ImportDataHandler>());
@@ -120,11 +123,15 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::CupsPrintersHandler>(web_ui));
   AddSettingsPageUIHandler(
+      base::MakeUnique<chromeos::settings::FingerprintHandler>());
+  AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::KeyboardHandler>(web_ui));
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::PointerHandler>());
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::StorageHandler>());
+  AddSettingsPageUIHandler(
+      base::MakeUnique<chromeos::settings::StylusHandler>());
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::InternetHandler>());
 #else
@@ -140,6 +147,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
 
   content::WebUIDataSource* html_source =
       content::WebUIDataSource::Create(url.host());
+  html_source->AddString("hostname", url.host());
 
 #if defined(OS_CHROMEOS)
   chromeos::settings::EasyUnlockSettingsHandler* easy_unlock_handler =
@@ -153,16 +161,18 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
 
   AddSettingsPageUIHandler(
       base::MakeUnique<chromeos::settings::StylusHandler>());
-  html_source->AddBoolean("pinUnlockEnabled",
-                          chromeos::IsPinUnlockEnabled(profile->GetPrefs()));
   html_source->AddBoolean(
-      "androidAppsAllowed",
-      arc::ArcSessionManager::IsAllowedForProfile(profile) &&
-          !arc::ArcSessionManager::IsOptInVerificationDisabled());
+      "pinUnlockEnabled",
+      chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs()));
+  html_source->AddBoolean("fingerprintUnlockEnabled",
+                          chromeos::quick_unlock::IsFingerprintEnabled());
+  html_source->AddBoolean("androidAppsAllowed",
+                          arc::IsArcAllowedForProfile(profile) &&
+                              !arc::IsArcOptInVerificationDisabled());
 
   // TODO(mash): Support Chrome power settings in Mash. crbug.com/644348
   bool enable_power_settings =
-      !chrome::IsRunningInMash() &&
+      !ash_util::IsRunningInMash() &&
       (switches::PowerOverlayEnabled() ||
        (ash::PowerStatus::Get()->IsBatteryPresent() &&
         ash::PowerStatus::Get()->SupportsDualRoleDevices()));
@@ -181,14 +191,20 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   // Add the metrics handler to write uma stats.
   web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
 
+#if BUILDFLAG(USE_VULCANIZE)
+  html_source->AddResourcePath("crisper.js", IDR_MD_SETTINGS_CRISPER_JS);
+  html_source->SetDefaultResource(IDR_MD_SETTINGS_VULCANIZED_HTML);
+  html_source->UseGzip(std::unordered_set<std::string>());
+#else
   // Add all settings resources.
   for (size_t i = 0; i < kSettingsResourcesSize; ++i) {
     html_source->AddResourcePath(kSettingsResources[i].name,
                                  kSettingsResources[i].value);
   }
+  html_source->SetDefaultResource(IDR_SETTINGS_SETTINGS_HTML);
+#endif
 
   AddLocalizedStrings(html_source, profile);
-  html_source->SetDefaultResource(IDR_SETTINGS_SETTINGS_HTML);
 
   content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                 html_source);
@@ -204,10 +220,11 @@ void MdSettingsUI::AddSettingsPageUIHandler(
   web_ui()->AddMessageHandler(std::move(handler));
 }
 
-void MdSettingsUI::DidStartProvisionalLoadForFrame(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    bool is_error_page) {
+void MdSettingsUI::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->IsSamePage())
+    return;
+
   load_start_time_ = base::Time::Now();
 }
 

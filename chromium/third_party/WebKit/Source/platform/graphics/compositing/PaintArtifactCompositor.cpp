@@ -4,17 +4,21 @@
 
 #include "platform/graphics/compositing/PaintArtifactCompositor.h"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/playback/compositing_display_item.h"
 #include "cc/playback/display_item_list.h"
-#include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
 #include "cc/playback/filter_display_item.h"
 #include "cc/playback/float_clip_display_item.h"
 #include "cc/playback/transform_display_item.h"
+#include "cc/trees/layer_tree_host.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/compositing/PropertyTreeManager.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/DisplayItem.h"
@@ -40,9 +44,6 @@
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PtrUtil.h"
-#include <algorithm>
-#include <memory>
-#include <utility>
 
 namespace blink {
 
@@ -60,6 +61,13 @@ static std::unique_ptr<JSONArray> sizeAsJSONArray(const T& size) {
   array->pushDouble(size.height());
   return array;
 }
+
+// cc property trees make use of a sequence number to identify when tree
+// topology changes. For now we naively increment the sequence number each time
+// we update the property trees. We should explore optimizing our management of
+// the sequence number through the use of a dirty bit or similar. See
+// http://crbug.com/692842#c4.
+static int sPropertyTreeSequenceNumber = 1;
 
 class PaintArtifactCompositor::ContentLayerClientImpl
     : public cc::ContentLayerClient {
@@ -221,18 +229,18 @@ static gfx::Rect largeRect(-200000, -200000, 400000, 400000);
 static void appendDisplayItemToCcDisplayItemList(const DisplayItem& displayItem,
                                                  cc::DisplayItemList* list) {
   if (DisplayItem::isDrawingType(displayItem.getType())) {
-    const SkPicture* picture =
-        static_cast<const DrawingDisplayItem&>(displayItem).picture();
-    if (!picture)
+    const PaintRecord* record =
+        static_cast<const DrawingDisplayItem&>(displayItem).GetPaintRecord();
+    if (!record)
       return;
-    // In theory we would pass the bounds of the picture, previously done as:
-    // gfx::Rect bounds = gfx::SkIRectToRect(picture->cullRect().roundOut());
+    // In theory we would pass the bounds of the record, previously done as:
+    // gfx::Rect bounds = gfx::SkIRectToRect(record->cullRect().roundOut());
     // or use the visual rect directly. However, clip content layers attempt
     // to raster in a different space than that of the visual rects. We'll be
     // reworking visual rects further for SPv2, so for now we just pass a
     // visual rect large enough to make sure items raster.
-    list->CreateAndAppendDrawingItem<cc::DrawingDisplayItem>(
-        largeRect, sk_ref_sp(picture));
+    list->CreateAndAppendDrawingItem<cc::DrawingDisplayItem>(largeRect,
+                                                             sk_ref_sp(record));
   }
 }
 
@@ -282,7 +290,7 @@ static void applyClipsBetweenStates(const PropertyTreeState& localState,
 #endif
 
   FloatRect combinedClip =
-      geometryMapper.localToAncestorClipRect(localState, ancestorState);
+      geometryMapper.localToAncestorClipRect(localState, ancestorState).rect();
 
   ccList.CreateAndAppendPairedBeginItem<cc::FloatClipDisplayItem>(
       gfx::RectF(combinedClip));
@@ -371,7 +379,9 @@ static void recordPairedBeginDisplayItems(
                 gfx::ToFlooredInt(255 * pairedState->effect()->opacity())),
             pairedState->effect()->blendMode(),
             // TODO(chrishtr): compute bounds as necessary.
-            nullptr, nullptr, kLcdTextRequiresOpaqueLayer);
+            nullptr, GraphicsContext::WebCoreColorFilterToSkiaColorFilter(
+                         pairedState->effect()->colorFilter()),
+            kLcdTextRequiresOpaqueLayer);
 
         ccList.CreateAndAppendPairedBeginItem<cc::FilterDisplayItem>(
             pairedState->effect()->filter().asCcFilterOperations(), clipRect,
@@ -419,9 +429,7 @@ scoped_refptr<cc::DisplayItemList> PaintArtifactCompositor::recordPendingLayer(
     const PendingLayer& pendingLayer,
     const gfx::Rect& combinedBounds,
     GeometryMapper& geometryMapper) {
-  cc::DisplayItemListSettings settings;
-  scoped_refptr<cc::DisplayItemList> ccList =
-      cc::DisplayItemList::Create(settings);
+  auto ccList = make_scoped_refptr(new cc::DisplayItemList);
 
   gfx::Transform translation;
   translation.Translate(-combinedBounds.x(), -combinedBounds.y());
@@ -585,10 +593,10 @@ bool PaintArtifactCompositor::canMergeInto(
   for (const PropertyTreeState* currentState =
            &newChunk.properties.propertyTreeState;
        currentState; currentState = iterator.next()) {
-    if (currentState->hasDirectCompositingReasons())
-      return false;
     if (*currentState == candidatePendingLayer.propertyTreeState)
       return true;
+    if (currentState->hasDirectCompositingReasons())
+      return false;
   }
   return false;
 }
@@ -597,19 +605,23 @@ bool PaintArtifactCompositor::mightOverlap(
     const PaintChunk& paintChunk,
     const PendingLayer& candidatePendingLayer,
     GeometryMapper& geometryMapper) {
-  PropertyTreeState rootPropertyTreeState(
-      TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
-      EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+  PropertyTreeState rootPropertyTreeState(TransformPaintPropertyNode::root(),
+                                          ClipPaintPropertyNode::root(),
+                                          EffectPaintPropertyNode::root());
 
   FloatRect paintChunkScreenVisualRect =
-      geometryMapper.localToAncestorVisualRect(
-          paintChunk.bounds, paintChunk.properties.propertyTreeState,
-          rootPropertyTreeState);
+      geometryMapper
+          .localToAncestorVisualRect(paintChunk.bounds,
+                                     paintChunk.properties.propertyTreeState,
+                                     rootPropertyTreeState)
+          .rect();
 
   FloatRect pendingLayerScreenVisualRect =
-      geometryMapper.localToAncestorVisualRect(
-          candidatePendingLayer.bounds, candidatePendingLayer.propertyTreeState,
-          rootPropertyTreeState);
+      geometryMapper
+          .localToAncestorVisualRect(candidatePendingLayer.bounds,
+                                     candidatePendingLayer.propertyTreeState,
+                                     rootPropertyTreeState)
+          .rect();
 
   return paintChunkScreenVisualRect.intersects(pendingLayerScreenVisualRect);
 }
@@ -672,32 +684,33 @@ void PaintArtifactCompositor::collectPendingLayers(
 void PaintArtifactCompositor::update(
     const PaintArtifact& paintArtifact,
     RasterInvalidationTrackingMap<const PaintChunk>* rasterChunkInvalidations,
-    bool storeDebugInfo) {
+    bool storeDebugInfo,
+    GeometryMapper& geometryMapper) {
 #ifndef NDEBUG
   storeDebugInfo = true;
 #endif
 
   DCHECK(m_rootLayer);
 
-  cc::LayerTree* layerTree = m_rootLayer->GetLayerTree();
+  cc::LayerTreeHost* layerTreeHost = m_rootLayer->layer_tree_host();
 
   // The tree will be null after detaching and this update can be ignored.
   // See: WebViewImpl::detachPaintArtifactCompositor().
-  if (!layerTree)
+  if (!layerTreeHost)
     return;
 
   if (m_extraDataForTestingEnabled)
     m_extraDataForTesting = WTF::wrapUnique(new ExtraDataForTesting);
 
   m_rootLayer->RemoveAllChildren();
-  m_rootLayer->set_property_tree_sequence_number(
-      PropertyTreeManager::kPropertyTreeSequenceNumber);
 
-  PropertyTreeManager propertyTreeManager(*layerTree->property_trees(),
-                                          m_rootLayer.get());
+  m_rootLayer->set_property_tree_sequence_number(sPropertyTreeSequenceNumber);
+
+  PropertyTreeManager propertyTreeManager(*layerTreeHost->property_trees(),
+                                          m_rootLayer.get(),
+                                          sPropertyTreeSequenceNumber);
 
   Vector<PendingLayer, 0> pendingLayers;
-  GeometryMapper geometryMapper;
   collectPendingLayers(paintArtifact, pendingLayers, geometryMapper);
 
   Vector<std::unique_ptr<ContentLayerClientImpl>> newContentLayerClients;
@@ -708,26 +721,23 @@ void PaintArtifactCompositor::update(
         paintArtifact, pendingLayer, layerOffset, newContentLayerClients,
         rasterChunkInvalidations, storeDebugInfo, geometryMapper);
 
-    int transformId = propertyTreeManager.ensureCompositorTransformNode(
-        pendingLayer.propertyTreeState.transform());
-    int scrollId = propertyTreeManager.ensureCompositorScrollNode(
-        pendingLayer.propertyTreeState.scroll());
+    const auto* transform = pendingLayer.propertyTreeState.transform();
+    int transformId =
+        propertyTreeManager.ensureCompositorTransformNode(transform);
     int clipId = propertyTreeManager.ensureCompositorClipNode(
         pendingLayer.propertyTreeState.clip());
     int effectId = propertyTreeManager.switchToEffectNode(
         *pendingLayer.propertyTreeState.effect());
 
-    propertyTreeManager.updateScrollOffset(layer->id(), scrollId);
-
     layer->set_offset_to_transform_parent(layerOffset);
+    layer->SetElementId(pendingLayer.propertyTreeState.compositorElementId());
 
     m_rootLayer->AddChild(layer);
-    layer->set_property_tree_sequence_number(
-        PropertyTreeManager::kPropertyTreeSequenceNumber);
+    layer->set_property_tree_sequence_number(sPropertyTreeSequenceNumber);
     layer->SetTransformTreeIndex(transformId);
     layer->SetClipTreeIndex(clipId);
     layer->SetEffectTreeIndex(effectId);
-    layer->SetScrollTreeIndex(scrollId);
+    propertyTreeManager.updateLayerScrollMapping(layer.get(), transform);
 
     layer->SetShouldCheckBackfaceVisibility(pendingLayer.backfaceHidden);
 
@@ -738,10 +748,12 @@ void PaintArtifactCompositor::update(
   m_contentLayerClients.swap(newContentLayerClients);
 
   // Mark the property trees as having been rebuilt.
-  layerTree->property_trees()->sequence_number =
-      PropertyTreeManager::kPropertyTreeSequenceNumber;
-  layerTree->property_trees()->needs_rebuild = false;
-  layerTree->property_trees()->ResetCachedData();
+  layerTreeHost->property_trees()->sequence_number =
+      sPropertyTreeSequenceNumber;
+  layerTreeHost->property_trees()->needs_rebuild = false;
+  layerTreeHost->property_trees()->ResetCachedData();
+
+  sPropertyTreeSequenceNumber++;
 }
 
 #ifndef NDEBUG

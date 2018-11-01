@@ -1,3 +1,5 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
 // Defines all the command-line switches used by Vivaldi.
 
 #include "base/vivaldi_switches.h"

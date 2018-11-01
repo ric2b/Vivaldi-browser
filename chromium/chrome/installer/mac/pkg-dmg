@@ -304,6 +304,7 @@ my(@gCleanup, %gConfig, $gDarwinMajor, $gDryRun, $gVerbosity);
             'cmd_chmod'          => 'chmod',
             'cmd_diskutil'       => 'diskutil',
             'cmd_du'             => 'du',
+            'cmd_find'           => 'find',
             'cmd_hdid'           => 'hdid',
             'cmd_hdiutil'        => 'hdiutil',
             'cmd_mkdir'          => 'mkdir',
@@ -614,6 +615,11 @@ if(defined($iconFile)) {
 
 if(command($gConfig{'cmd_chmod'}, '-R', 'a+rX,a-st,u+w,go-w',
  $tempRoot) != 0) {
+  cleanupDie('chmod failed');
+}
+
+if(command($gConfig{'cmd_find'}, $tempRoot, '-type', 'l', '-exec', 'chmod',
+ '-h', 'a+rX,a-st,u+w,go-w', '{}', '+') != 0) {
   cleanupDie('chmod failed');
 }
 

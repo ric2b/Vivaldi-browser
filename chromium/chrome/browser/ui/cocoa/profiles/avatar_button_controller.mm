@@ -6,20 +6,20 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#import "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_button.h"
 #include "chrome/grit/generated_resources.h"
-#import "chrome/browser/themes/theme_properties.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "skia/ext/skia_utils_mac.h"
@@ -29,7 +29,6 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 
 namespace {
 
@@ -48,6 +47,10 @@ const CGFloat kSignedOutWidthPadding = 2;
 
 // Kern value for the avatar button title.
 const CGFloat kTitleKern = 0.25;
+
+// Upper and lower bounds for determining if the frame's theme color is a
+// "dark" theme. This value is determined by trial and error.
+const CGFloat kFrameColorDarkUpperBound = 0.33;
 
 }  // namespace
 
@@ -151,11 +154,14 @@ const CGFloat kTitleKern = 0.25;
 - (void)setErrorStatus:(BOOL)hasError;
 - (void)dealloc;
 - (void)themeDidChangeNotification:(NSNotification*)aNotification;
+
+// Called right after |window_| became/resigned the main window.
+- (void)mainWindowDidChangeNotification:(NSNotification*)aNotification;
 @end
 
 @implementation AvatarButtonController
 
-- (id)initWithBrowser:(Browser*)browser {
+- (id)initWithBrowser:(Browser*)browser window:(NSWindow*)window {
   if ((self = [super initWithBrowser:browser])) {
     ThemeService* themeService =
         ThemeServiceFactory::GetForProfile(browser->profile());
@@ -179,10 +185,6 @@ const CGFloat kTitleKern = 0.25;
       [[avatarButton cell] setHighlightsBy:NSNoCellMask];
     [avatarButton setBordered:YES];
 
-    if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
-      [avatarButton setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
-    else
-      [avatarButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [avatarButton setTarget:self];
     [avatarButton setAction:@selector(buttonClicked:)];
     [avatarButton setRightAction:@selector(buttonClicked:)];
@@ -192,11 +194,22 @@ const CGFloat kTitleKern = 0.25;
     hasError_ = profileObserver_->HasAvatarError();
     [self updateAvatarButtonAndLayoutParent:NO];
 
+    window_ = window;
+
     NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
     [center addObserver:self
                selector:@selector(themeDidChangeNotification:)
                    name:kBrowserThemeDidChangeNotification
                  object:nil];
+
+    [center addObserver:self
+               selector:@selector(mainWindowDidChangeNotification:)
+                   name:NSWindowDidBecomeMainNotification
+                 object:window];
+    [center addObserver:self
+               selector:@selector(mainWindowDidChangeNotification:)
+                   name:NSWindowDidResignMainNotification
+                 object:window];
   }
   return self;
 }
@@ -215,15 +228,16 @@ const CGFloat kTitleKern = 0.25;
   [self updateAvatarButtonAndLayoutParent:YES];
 }
 
+- (void)mainWindowDidChangeNotification:(NSNotification*)aNotification {
+  [self updateAvatarButtonAndLayoutParent:NO];
+}
+
 - (void)updateAvatarButtonAndLayoutParent:(BOOL)layoutParent {
   // The button text has a black foreground and a white drop shadow for regular
   // windows, and a light text with a dark drop shadow for guest windows
   // which are themed with a dark background.
-  NSColor* foregroundColor;
-  const ui::ThemeProvider* theme =
-      &ThemeService::GetThemeProviderForProfile(browser_->profile());
-  foregroundColor = theme ? theme->GetNSColor(ThemeProperties::COLOR_TAB_TEXT)
-                          : [NSColor blackColor];
+  NSColor* foregroundColor =
+      [self isFrameColorDark] ? [NSColor whiteColor] : [NSColor blackColor];
 
   ProfileAttributesStorage& storage =
       g_browser_process->profile_manager()->GetProfileAttributesStorage();
@@ -244,15 +258,15 @@ const CGFloat kTitleKern = 0.25;
       base::mac::ObjCCastStrict<AvatarButton>(button_);
 
   if (useGenericButton) {
-    NSImage* avatarIcon = NSImageFromImageSkia(gfx::CreateVectorIcon(
-        gfx::VectorIconId::USER_ACCOUNT_AVATAR, 18, kAvatarIconColor));
+    NSImage* avatarIcon = NSImageFromImageSkia(
+        gfx::CreateVectorIcon(kUserAccountAvatarIcon, 18, kAvatarIconColor));
     [button setDefaultImage:avatarIcon];
     [button setHoverImage:nil];
     [button setPressedImage:nil];
     [button setImagePosition:NSImageOnly];
   } else if (hasError_) {
-    NSImage* errorIcon = NSImageFromImageSkia(gfx::CreateVectorIcon(
-        gfx::VectorIconId::SYNC_PROBLEM, 16, gfx::kGoogleRed700));
+    NSImage* errorIcon = NSImageFromImageSkia(
+        gfx::CreateVectorIcon(kSyncProblemIcon, 16, gfx::kGoogleRed700));
     [button setDefaultImage:errorIcon];
     [button setHoverImage:nil];
     [button setPressedImage:nil];
@@ -294,6 +308,23 @@ const CGFloat kTitleKern = 0.25;
   [self updateAvatarButtonAndLayoutParent:YES];
 }
 
+- (BOOL)isFrameColorDark {
+  const ui::ThemeProvider* themeProvider =
+      &ThemeService::GetThemeProviderForProfile(browser_->profile());
+  const int propertyId = [window_ isMainWindow]
+                             ? ThemeProperties::COLOR_FRAME
+                             : ThemeProperties::COLOR_FRAME_INACTIVE;
+  if (themeProvider && themeProvider->HasCustomColor(propertyId)) {
+    NSColor* frameColor = themeProvider->GetNSColor(propertyId);
+    frameColor =
+        [frameColor colorUsingColorSpaceName:NSCalibratedWhiteColorSpace];
+    return frameColor &&
+           [frameColor whiteComponent] < kFrameColorDarkUpperBound;
+  }
+
+  return false;
+}
+
 - (void)showAvatarBubbleAnchoredAt:(NSView*)anchor
                           withMode:(BrowserWindow::AvatarBubbleMode)mode
                    withServiceType:(signin::GAIAServiceType)serviceType
@@ -310,6 +341,7 @@ const CGFloat kTitleKern = 0.25;
 - (void)bubbleWillClose:(NSNotification*)notif {
   AvatarButton* button = base::mac::ObjCCastStrict<AvatarButton>(button_);
   [button setIsActive:NO];
+  [self updateAvatarButtonAndLayoutParent:NO];
   [super bubbleWillClose:notif];
 }
 

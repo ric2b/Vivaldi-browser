@@ -51,30 +51,10 @@
 #include "wtf/Vector.h"
 #include "wtf/allocator/Partitions.h"
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace blink {
-
-// FIXME: This should use opaque GC roots.
-static void addReferencesForNodeWithEventListeners(
-    v8::Isolate* isolate,
-    Node* node,
-    const v8::Persistent<v8::Object>& wrapper) {
-  ASSERT(node->hasEventListeners());
-
-  EventListenerIterator iterator(node);
-  while (EventListener* listener = iterator.nextListener()) {
-    if (listener->type() != EventListener::JSEventListenerType)
-      continue;
-    V8AbstractEventListener* v8listener =
-        static_cast<V8AbstractEventListener*>(listener);
-    if (!v8listener->hasExistingListenerObject())
-      continue;
-
-    isolate->SetReference(
-        wrapper, v8::Persistent<v8::Value>::Cast(
-                     v8listener->existingListenerObjectPersistentHandle()));
-  }
-}
 
 Node* V8GCController::opaqueRootForGC(v8::Isolate*, Node* node) {
   ASSERT(node);
@@ -148,115 +128,157 @@ class MinorGCUnmodifiedWrapperVisitor : public v8::PersistentHandleVisitor {
   v8::Isolate* m_isolate;
 };
 
-class MajorGCWrapperVisitor : public v8::PersistentHandleVisitor {
+class HeapSnaphotWrapperVisitor : public ScriptWrappableVisitor,
+                                  public v8::PersistentHandleVisitor {
  public:
-  explicit MajorGCWrapperVisitor(v8::Isolate* isolate,
-                                 bool constructRetainedObjectInfos)
-      : m_isolate(isolate),
-        m_domObjectsWithPendingActivity(0),
-        m_liveRootGroupIdSet(false),
-        m_constructRetainedObjectInfos(constructRetainedObjectInfos) {}
+  explicit HeapSnaphotWrapperVisitor(v8::Isolate* isolate)
+      : ScriptWrappableVisitor(isolate),
+        m_currentParent(nullptr),
+        m_onlyTraceSingleLevel(false),
+        m_firstScriptWrappableTraced(false) {
+    DCHECK(isMainThread());
+  }
+
+  // Collect interesting V8 roots for the heap snapshot. Currently these are
+  // DOM nodes.
+  void collectV8Roots() { m_isolate->VisitHandlesWithClassIds(this); }
 
   void VisitPersistentHandle(v8::Persistent<v8::Value>* value,
                              uint16_t classId) override {
-    if (classId != WrapperTypeInfo::NodeClassId &&
-        classId != WrapperTypeInfo::ObjectClassId)
+    if (classId != WrapperTypeInfo::NodeClassId)
       return;
 
-    if (value->IsIndependent())
-      return;
-
+    DCHECK(!value->IsIndependent());
     v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(
         m_isolate, v8::Persistent<v8::Object>::Cast(*value));
-    DCHECK(V8DOMWrapper::hasInternalFieldsSet(wrapper));
+    DCHECK(V8Node::hasInstance(wrapper, m_isolate));
+    Node* node = V8Node::toImpl(wrapper);
+    Node* root = V8GCController::opaqueRootForGC(m_isolate, node);
+    m_nodesRequiringTracing[root].push_back(node);
+  }
 
-    const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
-    if (type->isActiveScriptWrappable() &&
-        toScriptWrappable(wrapper)->hasPendingActivity()) {
-      // Enable hasPendingActivity only when the associated
-      // ExecutionContext is not yet detached. This is a work-around
-      // to avoid memory leaks caused by hasPendingActivity that keeps
-      // returning true forever. This will be okay in practice because
-      // the spec requires to stop almost all DOM activities when the
-      // associated browsing context is detached. However, the real
-      // problem is that some hasPendingActivity's are wrongly implemented
-      // and never return false.
-      // TODO(haraken): Implement correct lifetime using traceWrapper.
-      ExecutionContext* context =
-          toExecutionContext(wrapper->CreationContext());
-      if (context && !context->isContextDestroyed()) {
-        m_isolate->SetObjectGroupId(*value, liveRootId());
-        ++m_domObjectsWithPendingActivity;
-      }
-    }
+  // Trace through the blink heap to find all V8 wrappers reachable from
+  // ActiveScriptWrappables. Also collect retainer edges on the way.
+  void tracePendingActivities() {
+    CHECK(m_foundV8Wrappers.empty());
+    m_currentParent = nullptr;
 
-    if (classId == WrapperTypeInfo::NodeClassId) {
-      DCHECK(V8Node::hasInstance(wrapper, m_isolate));
-      Node* node = V8Node::toImpl(wrapper);
-      if (node->hasEventListeners())
-        addReferencesForNodeWithEventListeners(
-            m_isolate, node, v8::Persistent<v8::Object>::Cast(*value));
-      Node* root = V8GCController::opaqueRootForGC(m_isolate, node);
-      m_isolate->SetObjectGroupId(
-          *value, v8::UniqueId(reinterpret_cast<intptr_t>(root)));
-      if (m_constructRetainedObjectInfos)
-        m_groupsWhichNeedRetainerInfo.push_back(root);
-    } else if (classId == WrapperTypeInfo::ObjectClassId) {
-      if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-        type->visitDOMWrapper(m_isolate, toScriptWrappable(wrapper),
-                              v8::Persistent<v8::Object>::Cast(*value));
+    TracePrologue();
+    ActiveScriptWrappableBase::traceActiveScriptWrappables(m_isolate, this);
+    AdvanceTracing(
+        0,
+        v8::EmbedderHeapTracer::AdvanceTracingActions(
+            v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION));
+    // Abort instead of Epilogue as we want to finish synchronously.
+    AbortTracing();
+
+    m_groups.push_back(
+        std::make_pair(new SuspendableObjectsInfo(m_foundV8Wrappers.size()),
+                       std::move(m_foundV8Wrappers)));
+  }
+
+  // Trace through the blink heap to find all V8 wrappers reachable from any
+  // of the collected roots. Also collect retainer edges on the way.
+  void traceV8Roots() {
+    for (auto& groupPair : m_nodesRequiringTracing) {
+      v8::HeapProfiler::RetainerChildren groupChildren;
+      for (auto& node : groupPair.second) {
+        // Ignore the actual wrappers reachable as we only want to create
+        // groups of DOM nodes. The method is still used to collect edges
+        // though.
+        findV8WrappersDirectlyReachableFrom(node);
+        groupChildren.insert(persistentForWrappable(node));
       }
-    } else {
-      NOTREACHED();
+      m_groups.push_back(std::make_pair(new RetainedDOMInfo(groupPair.first),
+                                        std::move(groupChildren)));
     }
   }
 
-  void notifyFinished() {
-    if (!m_constructRetainedObjectInfos)
-      return;
-    std::sort(m_groupsWhichNeedRetainerInfo.begin(),
-              m_groupsWhichNeedRetainerInfo.end());
-    Node* alreadyAdded = 0;
-    v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
-    for (size_t i = 0; i < m_groupsWhichNeedRetainerInfo.size(); ++i) {
-      Node* root = m_groupsWhichNeedRetainerInfo[i];
-      if (root != alreadyAdded) {
-        profiler->SetRetainedObjectInfo(
-            v8::UniqueId(reinterpret_cast<intptr_t>(root)),
-            new RetainedDOMInfo(root));
-        alreadyAdded = root;
-      }
-    }
-    if (m_liveRootGroupIdSet) {
-      profiler->SetRetainedObjectInfo(
-          liveRootId(),
-          new SuspendableObjectsInfo(m_domObjectsWithPendingActivity));
+  v8::HeapProfiler::RetainerEdges edges() { return std::move(m_edges); }
+  v8::HeapProfiler::RetainerGroups groups() { return std::move(m_groups); }
+
+  void markWrappersInAllWorlds(
+      const ScriptWrappable* traceable) const override {
+    // Only mark the main thread wrapper as we cannot properly intercept
+    // DOMWrapperMap::markWrapper. This means that edges from the isolated
+    // worlds are missing in the snapshot.
+    traceable->markWrapper(this);
+  }
+
+  void markWrapper(const v8::PersistentBase<v8::Value>* value) const override {
+    if (m_currentParent && m_currentParent != value)
+      m_edges.push_back(std::make_pair(m_currentParent, value));
+    m_foundV8Wrappers.insert(value);
+  }
+
+  void dispatchTraceWrappers(const TraceWrapperBase* traceable) const override {
+    if (!m_onlyTraceSingleLevel || !traceable->isScriptWrappable() ||
+        !reinterpret_cast<const ScriptWrappable*>(traceable)
+             ->containsWrapper() ||
+        !m_firstScriptWrappableTraced) {
+      m_firstScriptWrappableTraced = true;
+      traceable->traceWrappers(this);
     }
   }
 
  private:
-  v8::UniqueId liveRootId() {
-    const v8::Persistent<v8::Value>& liveRoot =
-        V8PerIsolateData::from(m_isolate)->ensureLiveRoot();
-    const intptr_t* idPointer = reinterpret_cast<const intptr_t*>(&liveRoot);
-    v8::UniqueId id(*idPointer);
-    if (!m_liveRootGroupIdSet) {
-      m_isolate->SetObjectGroupId(liveRoot, id);
-      m_liveRootGroupIdSet = true;
-      ++m_domObjectsWithPendingActivity;
-    }
-    return id;
+  inline v8::PersistentBase<v8::Value>* persistentForWrappable(
+      ScriptWrappable* wrappable) {
+    return &v8::Persistent<v8::Value>::Cast(*wrappable->rawMainWorldWrapper());
   }
 
-  v8::Isolate* m_isolate;
-  // v8 guarantees that Blink will not regain control while a v8 GC runs
-  // (=> no Oilpan GCs will be triggered), hence raw, untraced members
-  // can safely be kept here.
-  Vector<UntracedMember<Node>> m_groupsWhichNeedRetainerInfo;
-  int m_domObjectsWithPendingActivity;
-  bool m_liveRootGroupIdSet;
-  bool m_constructRetainedObjectInfos;
+  v8::HeapProfiler::RetainerChildren findV8WrappersDirectlyReachableFrom(
+      Node* traceable) {
+    CHECK(m_foundV8Wrappers.empty());
+    WTF::AutoReset<bool> scope(&m_onlyTraceSingleLevel, true);
+    m_firstScriptWrappableTraced = false;
+    m_currentParent = persistentForWrappable(traceable);
+
+    TracePrologue();
+    traceable->wrapperTypeInfo()->traceWrappers(this, traceable);
+    AdvanceTracing(
+        0,
+        v8::EmbedderHeapTracer::AdvanceTracingActions(
+            v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION));
+    // Abort instead of Epilogue as we want to finish synchronously.
+    AbortTracing();
+
+    return std::move(m_foundV8Wrappers);
+  }
+
+  // Input obtained from |VisitPersistentHandle|.
+  std::unordered_map<Node*, std::vector<Node*>> m_nodesRequiringTracing;
+
+  // Temporaries used for tracing a single Node.
+  const v8::PersistentBase<v8::Value>* m_currentParent;
+  bool m_onlyTraceSingleLevel;
+  mutable bool m_firstScriptWrappableTraced;
+  mutable v8::HeapProfiler::RetainerChildren m_foundV8Wrappers;
+
+  // Out variables
+  mutable v8::HeapProfiler::RetainerEdges m_edges;
+  mutable v8::HeapProfiler::RetainerGroups m_groups;
 };
+
+// The function |getRetainerInfos| processing all handles on the blink heap,
+// logically grouping together DOM trees (attached and detached) and pending
+// activities, while at the same time finding parent to child relationships
+// for non-Node wrappers. Since we are processing *all* handles there is no
+// way we miss out on a handle. V8 will figure out the liveness information
+// for the provided information itself.
+v8::HeapProfiler::RetainerInfos V8GCController::getRetainerInfos(
+    v8::Isolate* isolate) {
+  V8PerIsolateData::TemporaryScriptWrappableVisitorScope scope(
+      isolate, std::unique_ptr<HeapSnaphotWrapperVisitor>(
+                   new HeapSnaphotWrapperVisitor(isolate)));
+
+  HeapSnaphotWrapperVisitor* tracer =
+      reinterpret_cast<HeapSnaphotWrapperVisitor*>(scope.currentVisitor());
+  tracer->collectV8Roots();
+  tracer->traceV8Roots();
+  tracer->tracePendingActivities();
+  return v8::HeapProfiler::RetainerInfos{tracer->groups(), tracer->edges()};
+}
 
 static unsigned long long usedHeapSize(v8::Isolate* isolate) {
   v8::HeapStatistics heapStatistics;
@@ -269,21 +291,6 @@ namespace {
 void visitWeakHandlesForMinorGC(v8::Isolate* isolate) {
   MinorGCUnmodifiedWrapperVisitor visitor(isolate);
   isolate->VisitWeakHandles(&visitor);
-}
-
-void objectGroupingForMajorGC(v8::Isolate* isolate,
-                              bool constructRetainedObjectInfos) {
-  MajorGCWrapperVisitor visitor(isolate, constructRetainedObjectInfos);
-  isolate->VisitHandlesWithClassIds(&visitor);
-  visitor.notifyFinished();
-}
-
-void gcPrologueForMajorGC(v8::Isolate* isolate,
-                          bool constructRetainedObjectInfos) {
-  if (!RuntimeEnabledFeatures::traceWrappablesEnabled() ||
-      constructRetainedObjectInfos) {
-    objectGroupingForMajorGC(isolate, constructRetainedObjectInfos);
-  }
 }
 
 }  // namespace
@@ -322,8 +329,6 @@ void V8GCController::gcPrologue(v8::Isolate* isolate,
       TRACE_EVENT_BEGIN2("devtools.timeline,v8", "MajorGC",
                          "usedHeapSizeBefore", usedHeapSize(isolate), "type",
                          "atomic pause");
-      gcPrologueForMajorGC(
-          isolate, flags & v8::kGCCallbackFlagConstructRetainedObjectInfos);
       break;
     case v8::kGCTypeIncrementalMarking:
       if (ThreadState::current())
@@ -332,8 +337,6 @@ void V8GCController::gcPrologue(v8::Isolate* isolate,
       TRACE_EVENT_BEGIN2("devtools.timeline,v8", "MajorGC",
                          "usedHeapSizeBefore", usedHeapSize(isolate), "type",
                          "incremental marking");
-      gcPrologueForMajorGC(
-          isolate, flags & v8::kGCCallbackFlagConstructRetainedObjectInfos);
       break;
     case v8::kGCTypeProcessWeakCallbacks:
       TRACE_EVENT_BEGIN2("devtools.timeline,v8", "MajorGC",

@@ -10,10 +10,12 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/WebDisplayItemList.h"
@@ -43,7 +45,8 @@ class MockWebDisplayItemList : public WebDisplayItemList {
  public:
   ~MockWebDisplayItemList() override {}
 
-  MOCK_METHOD2(appendDrawingItem, void(const WebRect&, sk_sp<const SkPicture>));
+  MOCK_METHOD2(appendDrawingItem,
+               void(const WebRect&, sk_sp<const PaintRecord>));
 };
 
 void paintRecursively(GraphicsLayer* layer, WebDisplayItemList* displayItems) {
@@ -58,9 +61,13 @@ void paintRecursively(GraphicsLayer* layer, WebDisplayItemList* displayItems) {
 
 }  // namespace
 
-class FrameThrottlingTest : public SimTest {
+class FrameThrottlingTest : public SimTest,
+                            public ::testing::WithParamInterface<bool>,
+                            private ScopedRootLayerScrollingForTest {
  protected:
-  FrameThrottlingTest() { webView().resize(WebSize(640, 480)); }
+  FrameThrottlingTest() : ScopedRootLayerScrollingForTest(GetParam()) {
+    webView().resize(WebSize(640, 480));
+  }
 
   SimDisplayItemList compositeFrame() {
     SimDisplayItemList displayItems = compositor().beginFrame();
@@ -71,19 +78,27 @@ class FrameThrottlingTest : public SimTest {
 
   // Number of rectangles that make up the root layer's touch handler region.
   size_t touchHandlerRegionSize() {
-    return webView()
-        .mainFrameImpl()
-        ->frame()
-        ->contentLayoutItem()
-        .layer()
-        ->graphicsLayerBacking()
-        ->platformLayer()
-        ->touchEventHandlerRegion()
-        .size();
+    size_t result = 0;
+    PaintLayer* layer =
+        webView().mainFrameImpl()->frame()->contentLayoutObject()->layer();
+    GraphicsLayer* ownGraphicsLayer =
+        layer->graphicsLayerBacking(&layer->layoutObject());
+    if (ownGraphicsLayer) {
+      result +=
+          ownGraphicsLayer->platformLayer()->touchEventHandlerRegion().size();
+    }
+    GraphicsLayer* childGraphicsLayer = layer->graphicsLayerBacking();
+    if (childGraphicsLayer && childGraphicsLayer != ownGraphicsLayer) {
+      result +=
+          childGraphicsLayer->platformLayer()->touchEventHandlerRegion().size();
+    }
+    return result;
   }
 };
 
-TEST_F(FrameThrottlingTest, ThrottleInvisibleFrames) {
+INSTANTIATE_TEST_CASE_P(All, FrameThrottlingTest, ::testing::Bool());
+
+TEST_P(FrameThrottlingTest, ThrottleInvisibleFrames) {
   SimRequest mainResource("https://example.com/", "text/html");
 
   loadURL("https://example.com/");
@@ -110,7 +125,7 @@ TEST_F(FrameThrottlingTest, ThrottleInvisibleFrames) {
   EXPECT_FALSE(frameDocument->view()->isHiddenForThrottling());
 }
 
-TEST_F(FrameThrottlingTest, HiddenSameOriginFramesAreNotThrottled) {
+TEST_P(FrameThrottlingTest, HiddenSameOriginFramesAreNotThrottled) {
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
 
@@ -137,7 +152,7 @@ TEST_F(FrameThrottlingTest, HiddenSameOriginFramesAreNotThrottled) {
   EXPECT_FALSE(innerFrameDocument->view()->canThrottleRendering());
 }
 
-TEST_F(FrameThrottlingTest, HiddenCrossOriginFramesAreThrottled) {
+TEST_P(FrameThrottlingTest, HiddenCrossOriginFramesAreThrottled) {
   // Create a document with doubly nested iframes.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -165,7 +180,7 @@ TEST_F(FrameThrottlingTest, HiddenCrossOriginFramesAreThrottled) {
   EXPECT_TRUE(innerFrameDocument->view()->canThrottleRendering());
 }
 
-TEST_F(FrameThrottlingTest, HiddenCrossOriginZeroByZeroFramesAreNotThrottled) {
+TEST_P(FrameThrottlingTest, HiddenCrossOriginZeroByZeroFramesAreNotThrottled) {
   // Create a document with doubly nested iframes.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -194,7 +209,7 @@ TEST_F(FrameThrottlingTest, HiddenCrossOriginZeroByZeroFramesAreNotThrottled) {
   EXPECT_FALSE(innerFrameDocument->view()->canThrottleRendering());
 }
 
-TEST_F(FrameThrottlingTest, ThrottledLifecycleUpdate) {
+TEST_P(FrameThrottlingTest, ThrottledLifecycleUpdate) {
   SimRequest mainResource("https://example.com/", "text/html");
 
   loadURL("https://example.com/");
@@ -223,7 +238,7 @@ TEST_F(FrameThrottlingTest, ThrottledLifecycleUpdate) {
   EXPECT_EQ(DocumentLifecycle::PaintClean, frameDocument->lifecycle().state());
 }
 
-TEST_F(FrameThrottlingTest, UnthrottlingFrameSchedulesAnimation) {
+TEST_P(FrameThrottlingTest, UnthrottlingFrameSchedulesAnimation) {
   SimRequest mainResource("https://example.com/", "text/html");
 
   loadURL("https://example.com/");
@@ -243,7 +258,7 @@ TEST_F(FrameThrottlingTest, UnthrottlingFrameSchedulesAnimation) {
   EXPECT_TRUE(compositor().needsBeginFrame());
 }
 
-TEST_F(FrameThrottlingTest, MutatingThrottledFrameDoesNotCauseAnimation) {
+TEST_P(FrameThrottlingTest, MutatingThrottledFrameDoesNotCauseAnimation) {
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
 
@@ -283,7 +298,7 @@ TEST_F(FrameThrottlingTest, MutatingThrottledFrameDoesNotCauseAnimation) {
   EXPECT_TRUE(displayItems3.contains(SimCanvas::Rect, "green"));
 }
 
-TEST_F(FrameThrottlingTest, SynchronousLayoutInThrottledFrame) {
+TEST_P(FrameThrottlingTest, SynchronousLayoutInThrottledFrame) {
   // Create a hidden frame which is throttled.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -306,7 +321,7 @@ TEST_F(FrameThrottlingTest, SynchronousLayoutInThrottledFrame) {
   EXPECT_EQ(50, divElement->clientWidth());
 }
 
-TEST_F(FrameThrottlingTest, UnthrottlingTriggersRepaint) {
+TEST_P(FrameThrottlingTest, UnthrottlingTriggersRepaint) {
   // Create a hidden frame which is throttled.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -337,7 +352,7 @@ TEST_F(FrameThrottlingTest, UnthrottlingTriggersRepaint) {
   EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
 }
 
-TEST_F(FrameThrottlingTest, UnthrottlingTriggersRepaintInCompositedChild) {
+TEST_P(FrameThrottlingTest, UnthrottlingTriggersRepaintInCompositedChild) {
   // Create a hidden frame with a composited child layer.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -376,7 +391,7 @@ TEST_F(FrameThrottlingTest, UnthrottlingTriggersRepaintInCompositedChild) {
   EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
 }
 
-TEST_F(FrameThrottlingTest, ChangeStyleInThrottledFrame) {
+TEST_P(FrameThrottlingTest, ChangeStyleInThrottledFrame) {
   // Create a hidden frame which is throttled.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -411,7 +426,45 @@ TEST_F(FrameThrottlingTest, ChangeStyleInThrottledFrame) {
   EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
 }
 
-TEST_F(FrameThrottlingTest, ThrottledFrameWithFocus) {
+TEST_P(FrameThrottlingTest, ChangeOriginInThrottledFrame) {
+  // Create a hidden frame which is throttled.
+  SimRequest mainResource("http://example.com/", "text/html");
+  SimRequest frameResource("http://sub.example.com/iframe.html", "text/html");
+  loadURL("http://example.com/");
+  mainResource.complete(
+      "<iframe style='position: absolute; top: 10000px' id=frame "
+      "src=http://sub.example.com/iframe.html></iframe>");
+  frameResource.complete("");
+
+  auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+
+  compositeFrame();
+
+  EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+  EXPECT_TRUE(
+      frameElement->contentDocument()->frame()->isCrossOriginSubframe());
+  EXPECT_FALSE(frameElement->contentDocument()
+                   ->view()
+                   ->layoutView()
+                   ->needsPaintPropertyUpdate());
+
+  NonThrowableExceptionState exceptionState;
+
+  // Security policy requires setting domain on both frames.
+  document().setDomain(String("example.com"), exceptionState);
+  frameElement->contentDocument()->setDomain(String("example.com"),
+                                             exceptionState);
+
+  EXPECT_FALSE(
+      frameElement->contentDocument()->frame()->isCrossOriginSubframe());
+  EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+  EXPECT_TRUE(frameElement->contentDocument()
+                  ->view()
+                  ->layoutView()
+                  ->needsPaintPropertyUpdate());
+}
+
+TEST_P(FrameThrottlingTest, ThrottledFrameWithFocus) {
   webView().settings()->setJavaScriptEnabled(true);
   webView().settings()->setAcceleratedCompositingEnabled(true);
   RuntimeEnabledFeatures::setCompositedSelectionUpdateEnabled(true);
@@ -448,7 +501,7 @@ TEST_F(FrameThrottlingTest, ThrottledFrameWithFocus) {
   EXPECT_FALSE(compositor().hasSelection());
 }
 
-TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledFrame) {
+TEST_P(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledFrame) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
 
   // Create a hidden frame which is throttled.
@@ -502,7 +555,7 @@ TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledFrame) {
   EXPECT_FALSE(document().view()->shouldScrollOnMainThread());
 }
 
-TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledLayer) {
+TEST_P(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledLayer) {
   webView().settings()->setJavaScriptEnabled(true);
   webView().settings()->setAcceleratedCompositingEnabled(true);
   webView().settings()->setPreferCompositingToLCDTextEnabled(true);
@@ -547,7 +600,7 @@ TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledLayer) {
             frameElement->contentDocument()->lifecycle().state());
 }
 
-TEST_F(FrameThrottlingTest,
+TEST_P(FrameThrottlingTest,
        ScrollingCoordinatorShouldSkipCompositedThrottledFrame) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
   webView().settings()->setPreferCompositingToLCDTextEnabled(true);
@@ -598,7 +651,7 @@ TEST_F(FrameThrottlingTest,
       frameElement->contentDocument()->view()->usesCompositedScrolling());
 }
 
-TEST_F(FrameThrottlingTest, UnthrottleByTransformingWithoutLayout) {
+TEST_P(FrameThrottlingTest, UnthrottleByTransformingWithoutLayout) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
 
   // Create a hidden frame which is throttled.
@@ -623,7 +676,7 @@ TEST_F(FrameThrottlingTest, UnthrottleByTransformingWithoutLayout) {
   EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
 }
 
-TEST_F(FrameThrottlingTest, ThrottledTopLevelEventHandlerIgnored) {
+TEST_P(FrameThrottlingTest, ThrottledTopLevelEventHandlerIgnored) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
   webView().settings()->setJavaScriptEnabled(true);
   EXPECT_EQ(0u, touchHandlerRegionSize());
@@ -658,7 +711,7 @@ TEST_F(FrameThrottlingTest, ThrottledTopLevelEventHandlerIgnored) {
   EXPECT_EQ(1u, touchHandlerRegionSize());
 }
 
-TEST_F(FrameThrottlingTest, ThrottledEventHandlerIgnored) {
+TEST_P(FrameThrottlingTest, ThrottledEventHandlerIgnored) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
   webView().settings()->setJavaScriptEnabled(true);
   EXPECT_EQ(0u, touchHandlerRegionSize());
@@ -692,7 +745,7 @@ TEST_F(FrameThrottlingTest, ThrottledEventHandlerIgnored) {
   EXPECT_EQ(1u, touchHandlerRegionSize());
 }
 
-TEST_F(FrameThrottlingTest, DumpThrottledFrame) {
+TEST_P(FrameThrottlingTest, DumpThrottledFrame) {
   webView().settings()->setJavaScriptEnabled(true);
 
   // Create a frame which is throttled.
@@ -722,7 +775,7 @@ TEST_F(FrameThrottlingTest, DumpThrottledFrame) {
   EXPECT_EQ(std::string::npos, result.utf8().find("throttled"));
 }
 
-TEST_F(FrameThrottlingTest, PaintingViaContentLayerDelegateIsThrottled) {
+TEST_P(FrameThrottlingTest, PaintingViaContentLayerDelegateIsThrottled) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
   webView().settings()->setPreferCompositingToLCDTextEnabled(true);
 
@@ -753,7 +806,7 @@ TEST_F(FrameThrottlingTest, PaintingViaContentLayerDelegateIsThrottled) {
   paintRecursively(layer, &displayItems);
 }
 
-TEST_F(FrameThrottlingTest, ThrottleSubtreeAtomically) {
+TEST_P(FrameThrottlingTest, ThrottleSubtreeAtomically) {
   // Create two nested frames which are throttled.
   SimRequest mainResource("https://example.com/", "text/html");
   SimRequest frameResource("https://example.com/iframe.html", "text/html");
@@ -820,7 +873,7 @@ TEST_F(FrameThrottlingTest, ThrottleSubtreeAtomically) {
       childFrameElement->contentDocument()->view()->canThrottleRendering());
 }
 
-TEST_F(FrameThrottlingTest, SkipPaintingLayersInThrottledFrames) {
+TEST_P(FrameThrottlingTest, SkipPaintingLayersInThrottledFrames) {
   webView().settings()->setAcceleratedCompositingEnabled(true);
   webView().settings()->setPreferCompositingToLCDTextEnabled(true);
 
@@ -854,7 +907,7 @@ TEST_F(FrameThrottlingTest, SkipPaintingLayersInThrottledFrames) {
   EXPECT_FALSE(displayItems2.contains(SimCanvas::Rect, "red"));
 }
 
-TEST_F(FrameThrottlingTest, SynchronousLayoutInAnimationFrameCallback) {
+TEST_P(FrameThrottlingTest, SynchronousLayoutInAnimationFrameCallback) {
   webView().settings()->setJavaScriptEnabled(true);
 
   // Prepare a page with two cross origin frames (from the same origin so they
@@ -902,7 +955,7 @@ TEST_F(FrameThrottlingTest, SynchronousLayoutInAnimationFrameCallback) {
   compositeFrame();
 }
 
-TEST_F(FrameThrottlingTest, AllowOneAnimationFrame) {
+TEST_P(FrameThrottlingTest, AllowOneAnimationFrame) {
   webView().settings()->setJavaScriptEnabled(true);
 
   // Prepare a page with two cross origin frames (from the same origin so they
@@ -931,7 +984,7 @@ TEST_F(FrameThrottlingTest, AllowOneAnimationFrame) {
   EXPECT_TRUE(result->IsTrue());
 }
 
-TEST_F(FrameThrottlingTest, UpdatePaintPropertiesOnUnthrottling) {
+TEST_P(FrameThrottlingTest, UpdatePaintPropertiesOnUnthrottling) {
   if (!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
     return;
 
@@ -977,7 +1030,7 @@ TEST_F(FrameThrottlingTest, UpdatePaintPropertiesOnUnthrottling) {
             innerDiv->layoutObject()->paintProperties()->transform()->matrix());
 }
 
-TEST_F(FrameThrottlingTest, DisplayNoneNotThrottled) {
+TEST_P(FrameThrottlingTest, DisplayNoneNotThrottled) {
   SimRequest mainResource("https://example.com/", "text/html");
 
   loadURL("https://example.com/");
@@ -996,6 +1049,38 @@ TEST_F(FrameThrottlingTest, DisplayNoneNotThrottled) {
   frameElement->setAttribute(styleAttr, "display: none");
   compositeFrame();
   EXPECT_FALSE(frameDocument->view()->canThrottleRendering());
+}
+
+TEST_P(FrameThrottlingTest, DisplayNoneChildrenRemainThrottled) {
+  // Create two nested frames which are throttled.
+  SimRequest mainResource("https://example.com/", "text/html");
+  SimRequest frameResource("https://example.com/iframe.html", "text/html");
+  SimRequest childFrameResource("https://example.com/child-iframe.html",
+                                "text/html");
+
+  loadURL("https://example.com/");
+  mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+  frameResource.complete(
+      "<iframe id=child-frame sandbox src=child-iframe.html></iframe>");
+  childFrameResource.complete("");
+
+  // Move both frames offscreen to make them throttled.
+  auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+  auto* childFrameElement = toHTMLIFrameElement(
+      frameElement->contentDocument()->getElementById("child-frame"));
+  frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+  compositeFrame();
+  EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+  EXPECT_TRUE(
+      childFrameElement->contentDocument()->view()->canThrottleRendering());
+
+  // Setting display:none for the parent frame unthrottles the parent but not
+  // the child. This behavior matches Safari.
+  frameElement->setAttribute(styleAttr, "display: none");
+  compositeFrame();
+  EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+  EXPECT_TRUE(
+      childFrameElement->contentDocument()->view()->canThrottleRendering());
 }
 
 }  // namespace blink

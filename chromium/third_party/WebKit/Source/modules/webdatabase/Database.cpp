@@ -201,7 +201,7 @@ static DatabaseGuid guidForOriginAndName(const String& origin,
 
   typedef HashMap<String, int> IDGuidMap;
   DEFINE_STATIC_LOCAL_WITH_LOCK(IDGuidMap, stringIdentifierToGUIDMap, ());
-  DatabaseGuid guid = stringIdentifierToGUIDMap.get(stringID);
+  DatabaseGuid guid = stringIdentifierToGUIDMap.at(stringID);
   if (!guid) {
     static int currentNewGUID = 1;
     guid = currentNewGUID++;
@@ -236,7 +236,7 @@ Database::Database(DatabaseContext* databaseContext,
     m_name = "";
 
   {
-    SafePointAwareMutexLocker locker(guidMutex());
+    MutexLocker locker(guidMutex());
     m_guid = guidForOriginAndName(getSecurityOrigin()->toString(), name);
     guidCount().add(m_guid);
   }
@@ -389,11 +389,11 @@ void Database::closeDatabase() {
   // See comment at the top this file regarding calling removeOpenDatabase().
   DatabaseTracker::tracker().removeOpenDatabase(this);
   {
-    SafePointAwareMutexLocker locker(guidMutex());
+    MutexLocker locker(guidMutex());
 
     ASSERT(guidCount().contains(m_guid));
     if (guidCount().remove(m_guid)) {
-      guidToVersionMap().remove(m_guid);
+      guidToVersionMap().erase(m_guid);
     }
   }
 }
@@ -454,13 +454,13 @@ bool Database::performOpenAndVerify(bool shouldSetVersionInNewDatabase,
 
   String currentVersion;
   {
-    SafePointAwareMutexLocker locker(guidMutex());
+    MutexLocker locker(guidMutex());
 
     GuidVersionMap::iterator entry = guidToVersionMap().find(m_guid);
     if (entry != guidToVersionMap().end()) {
       // Map null string to empty string (see updateGuidVersionMap()).
       currentVersion =
-          entry->value.isNull() ? emptyString() : entry->value.isolatedCopy();
+          entry->value.isNull() ? emptyString : entry->value.isolatedCopy();
       STORAGE_DVLOG(1) << "Current cached version for guid " << m_guid << " is "
                        << currentVersion;
 
@@ -668,13 +668,13 @@ void Database::setExpectedVersion(const String& version) {
 }
 
 String Database::getCachedVersion() const {
-  SafePointAwareMutexLocker locker(guidMutex());
-  return guidToVersionMap().get(m_guid).isolatedCopy();
+  MutexLocker locker(guidMutex());
+  return guidToVersionMap().at(m_guid).isolatedCopy();
 }
 
 void Database::setCachedVersion(const String& actualVersion) {
   // Update the in memory database version map.
-  SafePointAwareMutexLocker locker(guidMutex());
+  MutexLocker locker(guidMutex());
   updateGuidVersionMap(m_guid, actualVersion);
 }
 
@@ -873,11 +873,10 @@ void Database::runTransaction(SQLTransactionCallback* callback,
     if (callback) {
       std::unique_ptr<SQLErrorData> error = SQLErrorData::create(
           SQLError::kUnknownErr, "database has been closed");
-      getExecutionContext()->postTask(
-          TaskType::DatabaseAccess, BLINK_FROM_HERE,
-          createSameThreadTask(&callTransactionErrorCallback,
-                               wrapPersistent(callback),
-                               WTF::passed(std::move(error))));
+      TaskRunnerHelper::get(TaskType::DatabaseAccess, getExecutionContext())
+          ->postTask(BLINK_FROM_HERE, WTF::bind(&callTransactionErrorCallback,
+                                                wrapPersistent(callback),
+                                                WTF::passed(std::move(error))));
     }
   }
 }

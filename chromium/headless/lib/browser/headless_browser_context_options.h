@@ -26,6 +26,7 @@ class HeadlessBrowserContextOptions {
   HeadlessBrowserContextOptions& operator=(
       HeadlessBrowserContextOptions&& options);
 
+  const std::string& product_name_and_version() const;
   const std::string& user_agent() const;
 
   // See HeadlessBrowser::Options::proxy_server.
@@ -60,15 +61,17 @@ class HeadlessBrowserContextOptions {
 
   HeadlessBrowser::Options* browser_options_;
 
+  base::Optional<std::string> product_name_and_version_;
   base::Optional<std::string> user_agent_;
   base::Optional<net::HostPortPair> proxy_server_;
   base::Optional<std::string> host_resolver_rules_;
   base::Optional<gfx::Size> window_size_;
   base::Optional<base::FilePath> user_data_dir_;
   base::Optional<bool> incognito_mode_;
+  base::Optional<base::Callback<void(WebPreferences*)>>
+      override_web_preferences_callback_;
 
   ProtocolHandlerMap protocol_handlers_;
-  base::Callback<void(WebPreferences*)> override_web_preferences_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserContextOptions);
 };

@@ -6,13 +6,11 @@
 
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
-#include "base/debug/crash_logging.h"
-#include "base/debug/dump_without_crashing.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -100,8 +98,6 @@ class AudioManagerHelper : public base::PowerObserver {
   const std::string& app_name() const { return app_name_; }
 #endif
 
-  void enable_crash_key_logging() { enable_crash_key_logging_ = true; }
-
  private:
   // base::PowerObserver overrides.
   // Disable hang detection when the system goes into the suspend state.
@@ -158,8 +154,6 @@ class AudioManagerHelper : public base::PowerObserver {
         successful_pings_ = 0;
         if (++failed_pings_ >= kMaxFailedPingsCount &&
             audio_thread_status_ < THREAD_HUNG) {
-          if (enable_crash_key_logging_)
-            LogAudioDriverCrashKeys();
           HistogramThreadStatus(THREAD_HUNG);
         }
       } else {
@@ -214,25 +208,6 @@ class AudioManagerHelper : public base::PowerObserver {
                               THREAD_MAX + 1);
   }
 
-  void LogAudioDriverCrashKeys() {
-    DCHECK(monitor_task_runner_->BelongsToCurrentThread());
-    DCHECK(enable_crash_key_logging_);
-
-#if defined(OS_WIN)
-    std::string driver_name, driver_version;
-    if (!CoreAudioUtil::GetDxDiagDetails(&driver_name, &driver_version))
-      return;
-
-    base::debug::ScopedCrashKey crash_key(
-        "hung-audio-thread-details",
-        base::StringPrintf("%s:%s", driver_name.c_str(),
-                           driver_version.c_str()));
-
-    // Please forward crash reports to http://crbug.com/422522
-    base::debug::DumpWithoutCrashing();
-#endif
-  }
-
   FakeAudioLogFactory fake_log_factory_;
 
   const base::TimeDelta max_hung_task_time_ = base::TimeDelta::FromMinutes(1);
@@ -246,7 +221,6 @@ class AudioManagerHelper : public base::PowerObserver {
   bool io_task_running_ = false;
   bool audio_task_running_ = false;
   ThreadStatus audio_thread_status_ = THREAD_NONE;
-  bool enable_crash_key_logging_ = false;
   uint32_t successful_pings_ = 0;
 
 #if defined(OS_WIN)
@@ -260,8 +234,10 @@ class AudioManagerHelper : public base::PowerObserver {
   DISALLOW_COPY_AND_ASSIGN(AudioManagerHelper);
 };
 
-base::LazyInstance<AudioManagerHelper>::Leaky g_helper =
-    LAZY_INSTANCE_INITIALIZER;
+AudioManagerHelper* GetHelper() {
+  static AudioManagerHelper* helper = new AudioManagerHelper();
+  return helper;
+}
 
 }  // namespace
 
@@ -286,9 +262,7 @@ void AudioManagerDeleter::operator()(const AudioManager* instance) const {
   // uses a state that is destroyed in ~BrowserMainLoop().
   // See http://crbug.com/623703 for more details.
   DCHECK(instance->GetTaskRunner()->BelongsToCurrentThread());
-  AudioManagerMac* mac_instance =
-      static_cast<AudioManagerMac*>(const_cast<AudioManager*>(instance));
-  delete mac_instance;
+  delete instance;
 #else
   // AudioManager must be destroyed on the audio thread.
   if (!instance->GetTaskRunner()->DeleteSoon(FROM_HERE, instance)) {
@@ -333,51 +307,50 @@ AudioManager::~AudioManager() {
 ScopedAudioManagerPtr AudioManager::Create(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     AudioLogFactory* audio_log_factory) {
   DCHECK(task_runner);
   DCHECK(worker_task_runner);
-  return CreateAudioManager(std::move(task_runner),
-                            std::move(worker_task_runner), audio_log_factory);
+  ScopedAudioManagerPtr manager = CreateAudioManager(
+      std::move(task_runner), std::move(worker_task_runner), audio_log_factory);
+#if BUILDFLAG(ENABLE_WEBRTC)
+  manager->InitializeOutputDebugRecording(std::move(file_task_runner));
+#endif
+  return manager;
 }
 
 // static
 ScopedAudioManagerPtr AudioManager::CreateForTesting(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
 #if defined(OS_WIN)
-  g_helper.Pointer()->InitializeCOMForTesting();
+  GetHelper()->InitializeCOMForTesting();
 #endif
-  return Create(task_runner, task_runner,
-                g_helper.Pointer()->fake_log_factory());
+  return Create(task_runner, task_runner, task_runner,
+                GetHelper()->fake_log_factory());
 }
 
 // static
 void AudioManager::StartHangMonitorIfNeeded(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  if (g_helper.Pointer()->monitor_task_runner())
+  if (GetHelper()->monitor_task_runner())
     return;
 
   DCHECK(AudioManager::Get());
   DCHECK(task_runner);
   DCHECK_NE(task_runner, AudioManager::Get()->GetTaskRunner());
 
-  g_helper.Pointer()->StartHangTimer(std::move(task_runner));
-}
-
-// static
-void AudioManager::EnableCrashKeyLoggingForAudioThreadHangs() {
-  CHECK(!g_last_created);
-  g_helper.Pointer()->enable_crash_key_logging();
+  GetHelper()->StartHangTimer(std::move(task_runner));
 }
 
 #if defined(OS_LINUX)
 // static
 void AudioManager::SetGlobalAppName(const std::string& app_name) {
-  g_helper.Pointer()->set_app_name(app_name);
+  GetHelper()->set_app_name(app_name);
 }
 
 // static
 const std::string& AudioManager::GetGlobalAppName() {
-  return g_helper.Pointer()->app_name();
+  return GetHelper()->app_name();
 }
 #endif
 

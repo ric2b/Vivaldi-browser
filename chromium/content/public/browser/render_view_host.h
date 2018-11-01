@@ -86,16 +86,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Returns the main frame for this render view.
   virtual RenderFrameHost* GetMainFrame() = 0;
 
-  // Tell the render view to enable a set of javascript bindings. The argument
-  // should be a combination of values from BindingsPolicy.
-  virtual void AllowBindings(int binding_flags) = 0;
-
-  // Tells the renderer to clear the focused element (if any).
-  virtual void ClearFocusedElement() = 0;
-
-  // Returns true if the current focused element is editable.
-  virtual bool IsFocusedElementEditable() = 0;
-
   virtual void LoadImageAt(int x, int y) = 0;
 
   // Notifies the listener that a directory enumeration is complete.
@@ -130,10 +120,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
       const gfx::Point& location, const blink::WebPluginAction& action) = 0;
 
   virtual RenderViewHostDelegate* GetDelegate() const = 0;
-
-  // Returns a bitwise OR of bindings types that have been enabled for this
-  // RenderView. See BindingsPolicy for details.
-  virtual int GetEnabledBindings() const = 0;
 
   virtual SiteInstance* GetSiteInstance() const = 0;
 

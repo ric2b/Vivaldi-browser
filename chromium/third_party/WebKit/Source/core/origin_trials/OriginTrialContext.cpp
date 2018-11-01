@@ -20,10 +20,9 @@
 #include "public/platform/WebOriginTrialTokenStatus.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebTrialTokenValidator.h"
+#include "v8/include/v8.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringBuilder.h"
-
-#include <v8.h>
 
 namespace blink {
 
@@ -86,9 +85,9 @@ String extractTokenOrQuotedString(const String& headerValue, unsigned& pos) {
 
 }  // namespace
 
-OriginTrialContext::OriginTrialContext(ExecutionContext* host,
+OriginTrialContext::OriginTrialContext(ExecutionContext& context,
                                        WebTrialTokenValidator* validator)
-    : m_host(host), m_trialTokenValidator(validator) {}
+    : Supplement<ExecutionContext>(context), m_trialTokenValidator(validator) {}
 
 // static
 const char* OriginTrialContext::supplementName() {
@@ -96,14 +95,14 @@ const char* OriginTrialContext::supplementName() {
 }
 
 // static
-OriginTrialContext* OriginTrialContext::from(ExecutionContext* host,
+OriginTrialContext* OriginTrialContext::from(ExecutionContext* context,
                                              CreateMode create) {
   OriginTrialContext* originTrials = static_cast<OriginTrialContext*>(
-      Supplement<ExecutionContext>::from(host, supplementName()));
+      Supplement<ExecutionContext>::from(context, supplementName()));
   if (!originTrials && create == CreateIfNotExists) {
     originTrials = new OriginTrialContext(
-        host, Platform::current()->trialTokenValidator());
-    Supplement<ExecutionContext>::provideTo(*host, supplementName(),
+        *context, Platform::current()->trialTokenValidator());
+    Supplement<ExecutionContext>::provideTo(*context, supplementName(),
                                             originTrials);
   }
   return originTrials;
@@ -127,28 +126,28 @@ std::unique_ptr<Vector<String>> OriginTrialContext::parseHeaderValue(
 }
 
 // static
-void OriginTrialContext::addTokensFromHeader(ExecutionContext* host,
+void OriginTrialContext::addTokensFromHeader(ExecutionContext* context,
                                              const String& headerValue) {
   if (headerValue.isEmpty())
     return;
   std::unique_ptr<Vector<String>> tokens(parseHeaderValue(headerValue));
   if (!tokens)
     return;
-  addTokens(host, tokens.get());
+  addTokens(context, tokens.get());
 }
 
 // static
-void OriginTrialContext::addTokens(ExecutionContext* host,
+void OriginTrialContext::addTokens(ExecutionContext* context,
                                    const Vector<String>* tokens) {
   if (!tokens || tokens->isEmpty())
     return;
-  from(host)->addTokens(*tokens);
+  from(context)->addTokens(*tokens);
 }
 
 // static
 std::unique_ptr<Vector<String>> OriginTrialContext::getTokens(
-    ExecutionContext* host) {
-  OriginTrialContext* context = from(host, DontCreateIfNotExists);
+    ExecutionContext* executionContext) {
+  OriginTrialContext* context = from(executionContext, DontCreateIfNotExists);
   if (!context || context->m_tokens.isEmpty())
     return nullptr;
   return std::unique_ptr<Vector<String>>(new Vector<String>(context->m_tokens));
@@ -186,9 +185,9 @@ void OriginTrialContext::addTokens(const Vector<String>& tokens) {
 void OriginTrialContext::initializePendingFeatures() {
   if (!m_enabledTrials.size())
     return;
-  if (!m_host->isDocument())
+  if (!supplementable()->isDocument())
     return;
-  LocalFrame* frame = toDocument(m_host.get())->frame();
+  LocalFrame* frame = toDocument(supplementable())->frame();
   if (!frame)
     return;
   ScriptState* scriptState = ScriptState::forMainWorld(frame);
@@ -201,7 +200,7 @@ void OriginTrialContext::initializePendingFeatures() {
     if (m_installedTrials.contains(enabledTrial))
       continue;
     installPendingConditionalFeature(enabledTrial, scriptState);
-    m_installedTrials.add(enabledTrial);
+    m_installedTrials.insert(enabledTrial);
   }
 }
 
@@ -216,7 +215,7 @@ bool OriginTrialContext::enableTrialFromToken(const String& token) {
   DCHECK(!token.isEmpty());
 
   // Origin trials are only enabled for secure origins
-  if (!m_host->isSecureContext()) {
+  if (!supplementable()->isSecureContext()) {
     tokenValidationResultHistogram().count(
         static_cast<int>(WebOriginTrialTokenStatus::Insecure));
     return false;
@@ -228,14 +227,14 @@ bool OriginTrialContext::enableTrialFromToken(const String& token) {
     return false;
   }
 
-  WebSecurityOrigin origin(m_host->getSecurityOrigin());
+  WebSecurityOrigin origin(supplementable()->getSecurityOrigin());
   WebString trialName;
   bool valid = false;
   WebOriginTrialTokenStatus tokenResult =
       m_trialTokenValidator->validateToken(token, origin, &trialName);
   if (tokenResult == WebOriginTrialTokenStatus::Success) {
     valid = true;
-    m_enabledTrials.add(trialName);
+    m_enabledTrials.insert(trialName);
   }
 
   tokenValidationResultHistogram().count(static_cast<int>(tokenResult));
@@ -243,7 +242,6 @@ bool OriginTrialContext::enableTrialFromToken(const String& token) {
 }
 
 DEFINE_TRACE(OriginTrialContext) {
-  visitor->trace(m_host);
   Supplement<ExecutionContext>::trace(visitor);
 }
 

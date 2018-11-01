@@ -4,7 +4,9 @@
 
 #include "components/omnibox/browser/autocomplete_match.h"
 
-#include "base/i18n/time_formatting.h"
+#include <algorithm>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -12,7 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
@@ -20,7 +22,11 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_formatter.h"
-#include "ui/gfx/vector_icons_public.h"
+#include "ui/gfx/vector_icon_types.h"
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#include "components/omnibox/browser/vector_icons.h"  // nogncheck
+#endif
 
 namespace {
 
@@ -166,39 +172,50 @@ AutocompleteMatch& AutocompleteMatch::operator=(
 }
 
 // static
-gfx::VectorIconId AutocompleteMatch::TypeToVectorIcon(Type type) {
+const gfx::VectorIcon& AutocompleteMatch::TypeToVectorIcon(Type type) {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  static const gfx::VectorIconId kIcons[] = {
-      gfx::VectorIconId::OMNIBOX_HTTP,           // URL_WHAT_YOU_TYPE
-      gfx::VectorIconId::OMNIBOX_HTTP,           // HISTORY_URL
-      gfx::VectorIconId::OMNIBOX_HTTP,           // HISTORY_TITLE
-      gfx::VectorIconId::OMNIBOX_HTTP,           // HISTORY_BODY
-      gfx::VectorIconId::OMNIBOX_HTTP,           // HISTORY_KEYWORD
-      gfx::VectorIconId::OMNIBOX_HTTP,           // NAVSUGGEST
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_WHAT_YOU_TYPED
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_HISTORY
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_SUGGEST
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_SUGGEST_ENTITY
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_SUGGEST_TAIL
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_SUGGEST_PERSONALIZED
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_SUGGEST_PROFILE
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // SEARCH_OTHER_ENGINE
-      gfx::VectorIconId::OMNIBOX_EXTENSION_APP,  // EXTENSION_APP
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // CONTACT_DEPRECATED
-      gfx::VectorIconId::OMNIBOX_HTTP,           // BOOKMARK_TITLE
-      gfx::VectorIconId::OMNIBOX_HTTP,           // NAVSUGGEST_PERSONALIZED
-      gfx::VectorIconId::OMNIBOX_CALCULATOR,     // CALCULATOR
-      gfx::VectorIconId::OMNIBOX_HTTP,           // CLIPBOARD
-      gfx::VectorIconId::OMNIBOX_SEARCH,         // VOICE_SEARCH
-      gfx::VectorIconId::OMNIBOX_HTTP,           // PHYSICAL_WEB
-      gfx::VectorIconId::OMNIBOX_HTTP,           // PHYSICAL_WEB_OVERFLOW
-  };
-  static_assert(arraysize(kIcons) == AutocompleteMatchType::NUM_TYPES,
-                "icons array must have NUM_TYPES elements");
-  return kIcons[type];
+  switch (type) {
+    case Type::URL_WHAT_YOU_TYPED:
+    case Type::HISTORY_URL:
+    case Type::HISTORY_TITLE:
+    case Type::HISTORY_BODY:
+    case Type::HISTORY_KEYWORD:
+    case Type::NAVSUGGEST:
+    case Type::BOOKMARK_TITLE:
+    case Type::NAVSUGGEST_PERSONALIZED:
+    case Type::CLIPBOARD:
+    case Type::PHYSICAL_WEB:
+    case Type::PHYSICAL_WEB_OVERFLOW:
+      return omnibox::kHttpIcon;
+
+    case Type::SEARCH_WHAT_YOU_TYPED:
+    case Type::SEARCH_HISTORY:
+    case Type::SEARCH_SUGGEST:
+    case Type::SEARCH_SUGGEST_ENTITY:
+    case Type::SEARCH_SUGGEST_TAIL:
+    case Type::SEARCH_SUGGEST_PERSONALIZED:
+    case Type::SEARCH_SUGGEST_PROFILE:
+    case Type::SEARCH_OTHER_ENGINE:
+    case Type::CONTACT_DEPRECATED:
+    case Type::VOICE_SUGGEST:
+      return omnibox::kSearchIcon;
+
+    case Type::EXTENSION_APP:
+      return omnibox::kExtensionAppIcon;
+
+    case Type::CALCULATOR:
+      return omnibox::kCalculatorIcon;
+
+    case Type::NUM_TYPES:
+      NOTREACHED();
+      break;
+  }
+  NOTREACHED();
+  return omnibox::kHttpIcon;
 #else
   NOTREACHED();
-  return gfx::VectorIconId::VECTOR_ICON_NONE;
+  static const gfx::VectorIcon dummy = {};
+  return dummy;
 #endif
 }
 
@@ -530,10 +547,10 @@ void AutocompleteMatch::RecordAdditionalInfo(const std::string& property,
 }
 
 void AutocompleteMatch::RecordAdditionalInfo(const std::string& property,
-                                             const base::Time& value) {
-  RecordAdditionalInfo(property,
-                       base::UTF16ToUTF8(
-                           base::TimeFormatShortDateAndTime(value)));
+                                             base::Time value) {
+  RecordAdditionalInfo(
+      property, base::StringPrintf("%d hours ago",
+                                   (base::Time::Now() - value).InHours()));
 }
 
 std::string AutocompleteMatch::GetAdditionalInfo(

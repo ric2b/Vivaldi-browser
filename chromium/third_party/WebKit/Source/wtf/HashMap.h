@@ -60,6 +60,7 @@ class HashMap {
   typedef const typename KeyTraits::PeekInType& KeyPeekInType;
   typedef typename MappedTraits::TraitType MappedType;
   typedef typename ValueTraits::TraitType ValueType;
+  using value_type = ValueType;
 
  private:
   typedef typename MappedTraits::PeekOutType MappedPeekType;
@@ -135,7 +136,7 @@ class HashMap {
   iterator find(KeyPeekInType);
   const_iterator find(KeyPeekInType) const;
   bool contains(KeyPeekInType) const;
-  MappedPeekType get(KeyPeekInType) const;
+  MappedPeekType at(KeyPeekInType) const;
 
   // replaces value but not key if key is already present return value is a
   // pair of the iterator to the key location, and a boolean that's true if a
@@ -147,9 +148,13 @@ class HashMap {
   // iterator to the key location, and a boolean that's true if a new value
   // was actually added
   template <typename IncomingKeyType, typename IncomingMappedType>
-  AddResult add(IncomingKeyType&&, IncomingMappedType&&);
+  AddResult insert(IncomingKeyType&&, IncomingMappedType&&);
 
+  // TODO(pilgrim) remove remove() method once all references migrated to
+  // erase()
+  // https://crbug.com/662431
   void remove(KeyPeekInType);
+  void erase(KeyPeekInType);
   void remove(iterator);
   void clear();
   template <typename Collection>
@@ -171,7 +176,7 @@ class HashMap {
   template <typename HashTranslator, typename T>
   bool contains(const T&) const;
 
-  // An alternate version of add() that finds the object by hashing and
+  // An alternate version of insert() that finds the object by hashing and
   // comparing with some other type, to avoid the cost of type conversion if
   // the object is already in the table. HashTranslator must have the
   // following function members:
@@ -181,7 +186,7 @@ class HashMap {
   template <typename HashTranslator,
             typename IncomingKeyType,
             typename IncomingMappedType>
-  AddResult add(IncomingKeyType&&, IncomingMappedType&&);
+  AddResult insert(IncomingKeyType&&, IncomingMappedType&&);
 
   static bool isValidKey(KeyPeekInType);
 
@@ -350,7 +355,7 @@ HashMap<T, U, V, W, X, Y>::HashMap(std::initializer_list<ValueType> elements) {
   if (elements.size())
     m_impl.reserveCapacityForSize(elements.size());
   for (const ValueType& element : elements)
-    add(element.key, element.value);
+    insert(element.key, element.value);
 }
 
 template <typename T,
@@ -560,8 +565,9 @@ template <typename T,
 template <typename HashTranslator,
           typename IncomingKeyType,
           typename IncomingMappedType>
-auto HashMap<T, U, V, W, X, Y>::add(IncomingKeyType&& key,
-                                    IncomingMappedType&& mapped) -> AddResult {
+auto HashMap<T, U, V, W, X, Y>::insert(IncomingKeyType&& key,
+                                       IncomingMappedType&& mapped)
+    -> AddResult {
   return m_impl.template addPassingHashCode<
       HashMapTranslatorAdapter<ValueTraits, HashTranslator>>(
       std::forward<IncomingKeyType>(key),
@@ -575,7 +581,7 @@ template <typename T,
           typename X,
           typename Y>
 template <typename IncomingKeyType, typename IncomingMappedType>
-typename HashMap<T, U, V, W, X, Y>::AddResult HashMap<T, U, V, W, X, Y>::add(
+typename HashMap<T, U, V, W, X, Y>::AddResult HashMap<T, U, V, W, X, Y>::insert(
     IncomingKeyType&& key,
     IncomingMappedType&& mapped) {
   return inlineAdd(std::forward<IncomingKeyType>(key),
@@ -589,7 +595,7 @@ template <typename T,
           typename X,
           typename Y>
 typename HashMap<T, U, V, W, X, Y>::MappedPeekType
-HashMap<T, U, V, W, X, Y>::get(KeyPeekInType key) const {
+HashMap<T, U, V, W, X, Y>::at(KeyPeekInType key) const {
   ValueType* entry = const_cast<HashTableType&>(m_impl).lookup(key);
   if (!entry)
     return MappedTraits::peek(MappedTraits::emptyValue());
@@ -613,6 +619,16 @@ template <typename T,
           typename X,
           typename Y>
 inline void HashMap<T, U, V, W, X, Y>::remove(KeyPeekInType key) {
+  remove(find(key));
+}
+
+template <typename T,
+          typename U,
+          typename V,
+          typename W,
+          typename X,
+          typename Y>
+inline void HashMap<T, U, V, W, X, Y>::erase(KeyPeekInType key) {
   remove(find(key));
 }
 

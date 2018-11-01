@@ -53,7 +53,7 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject)
       m_isDescendant(false),
       m_isPlaced(false),
       m_isLowestNonOverhangingFloatInChild(false)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       ,
       m_isInPlacedTree(false)
 #endif
@@ -80,7 +80,7 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject,
       m_isDescendant(isDescendant),
       m_isPlaced(true),
       m_isLowestNonOverhangingFloatInChild(isLowestNonOverhangingFloatInChild)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       ,
       m_isInPlacedTree(false)
 #endif
@@ -468,7 +468,7 @@ void FloatingObjects::moveAllToFloatInfoMap(LayoutBoxToFloatInfoMap& map) {
   while (!m_set.isEmpty()) {
     std::unique_ptr<FloatingObject> floatingObject = m_set.takeFirst();
     LayoutBox* layoutObject = floatingObject->layoutObject();
-    map.add(layoutObject, std::move(floatingObject));
+    map.insert(layoutObject, std::move(floatingObject));
   }
   clear();
 }
@@ -531,7 +531,7 @@ FloatingObject* FloatingObjects::add(
     std::unique_ptr<FloatingObject> floatingObject) {
   FloatingObject* newObject = floatingObject.release();
   increaseObjectsCount(newObject->getType());
-  m_set.add(WTF::wrapUnique(newObject));
+  m_set.insert(WTF::wrapUnique(newObject));
   if (newObject->isPlaced())
     addPlacedObject(*newObject);
   markLowestFloatLogicalBottomCacheAsDirty();

@@ -10,6 +10,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "ui/aura/window.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/default_style.h"
 #include "ui/base/default_theme_provider.h"
@@ -47,12 +48,12 @@ namespace {
 // If |view| has a layer the layer is added to |layers|. Else this recurses
 // through the children. This is used to build a list of the layers created by
 // views that are direct children of the Widgets layer.
-void BuildRootLayers(View* view, std::vector<ui::Layer*>* layers) {
+void BuildViewsWithLayers(View* view, View::Views* views) {
   if (view->layer()) {
-    layers->push_back(view->layer());
+    views->push_back(view);
   } else {
     for (int i = 0; i < view->child_count(); ++i)
-      BuildRootLayers(view->child_at(i), layers);
+      BuildViewsWithLayers(view->child_at(i), views);
   }
 }
 
@@ -143,6 +144,14 @@ Widget::InitParams::InitParams(const InitParams& other) = default;
 Widget::InitParams::~InitParams() {
 }
 
+bool Widget::InitParams::CanActivate() const {
+  if (activatable != InitParams::ACTIVATABLE_DEFAULT)
+    return activatable == InitParams::ACTIVATABLE_YES;
+  return type != InitParams::TYPE_CONTROL && type != InitParams::TYPE_POPUP &&
+         type != InitParams::TYPE_MENU && type != InitParams::TYPE_TOOLTIP &&
+         type != InitParams::TYPE_DRAG;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, public:
 
@@ -165,10 +174,9 @@ Widget::Widget()
       ignore_capture_loss_(false),
       last_mouse_event_was_move_(false),
       auto_release_capture_(true),
-      root_layers_dirty_(false),
+      views_with_layers_dirty_(false),
       movement_disabled_(false),
-      observer_manager_(this) {
-}
+      observer_manager_(this) {}
 
 Widget::~Widget() {
   DestroyRootView();
@@ -311,20 +319,9 @@ void Widget::Init(const InitParams& in_params) {
   if (params.opacity == views::Widget::InitParams::INFER_OPACITY)
     params.opacity = views::Widget::InitParams::OPAQUE_WINDOW;
 
-  bool can_activate = false;
-  if (params.activatable != InitParams::ACTIVATABLE_DEFAULT) {
-    can_activate = (params.activatable == InitParams::ACTIVATABLE_YES);
-  } else if (params.type != InitParams::TYPE_CONTROL &&
-             params.type != InitParams::TYPE_POPUP &&
-             params.type != InitParams::TYPE_MENU &&
-             params.type != InitParams::TYPE_TOOLTIP &&
-             params.type != InitParams::TYPE_DRAG) {
-    can_activate = true;
-    params.activatable = InitParams::ACTIVATABLE_YES;
-  } else {
-    can_activate = false;
-    params.activatable = InitParams::ACTIVATABLE_NO;
-  }
+  bool can_activate = params.CanActivate();
+  params.activatable =
+      can_activate ? InitParams::ACTIVATABLE_YES : InitParams::ACTIVATABLE_NO;
 
   widget_delegate_ = params.delegate ?
       params.delegate : new DefaultWidgetDelegate(this);
@@ -346,7 +343,12 @@ void Widget::Init(const InitParams& in_params) {
     // NonClientView to the RootView. This will cause everything to be parented.
     non_client_view_->set_client_view(widget_delegate_->CreateClientView(this));
     non_client_view_->SetOverlayView(widget_delegate_->CreateOverlayView());
-    SetContentsView(non_client_view_);
+
+    // Bypass the Layout() that happens in Widget::SetContentsView(). Layout()
+    // will occur after setting the initial bounds below. The RootView's size is
+    // not valid until that happens.
+    root_view_->SetContentsView(non_client_view_);
+
     // Initialize the window's icon and title before setting the window's
     // initial bounds; the frame view's preferred height may depend on the
     // presence of an icon or a title.
@@ -354,6 +356,12 @@ void Widget::Init(const InitParams& in_params) {
     UpdateWindowTitle();
     non_client_view_->ResetWindowControls();
     SetInitialBounds(params.bounds);
+
+    // Perform the initial layout. This handles the case where the size might
+    // not actually change when setting the initial bounds. If it did, child
+    // views won't have a dirty Layout state, so won't do any work.
+    root_view_->Layout();
+
     if (params.show_state == ui::SHOW_STATE_MAXIMIZED) {
       Maximize();
     } else if (params.show_state == ui::SHOW_STATE_MINIMIZED) {
@@ -460,7 +468,15 @@ void Widget::SetContentsView(View* view) {
   // Do not SetContentsView() again if it is already set to the same view.
   if (view == GetContentsView())
     return;
+
   root_view_->SetContentsView(view);
+
+  // Force a layout now, since the attached hierarchy won't be ready for the
+  // containing window's bounds. Note that we call Layout directly rather than
+  // calling the widget's size changed handler, since the RootView's bounds may
+  // not have changed, which will cause the Layout not to be done otherwise.
+  root_view_->Layout();
+
   if (non_client_view_ != view) {
     // |non_client_view_| can only be non-NULL here if RequiresNonClientView()
     // was true when the widget was initialized. Creating widgets with non
@@ -705,6 +721,8 @@ bool Widget::IsFullscreen() const {
 }
 
 void Widget::SetOpacity(float opacity) {
+  DCHECK(opacity >= 0.0f);
+  DCHECK(opacity <= 1.0f);
   native_widget_->SetOpacity(opacity);
 }
 
@@ -916,11 +934,11 @@ void Widget::ReorderNativeViews() {
   native_widget_->ReorderNativeViews();
 }
 
-void Widget::UpdateRootLayers() {
+void Widget::LayerTreeChanged() {
   // Calculate the layers requires traversing the tree, and since nearly any
   // mutation of the tree can trigger this call we delay until absolutely
   // necessary.
-  root_layers_dirty_ = true;
+  views_with_layers_dirty_ = true;
 }
 
 const NativeWidget* Widget::native_widget() const {
@@ -1278,15 +1296,6 @@ bool Widget::ExecuteCommand(int command_id) {
   return widget_delegate_->ExecuteWindowsCommand(command_id);
 }
 
-const std::vector<ui::Layer*>& Widget::GetRootLayers() {
-  if (root_layers_dirty_) {
-    root_layers_dirty_ = false;
-    root_layers_.clear();
-    BuildRootLayers(GetRootView(), &root_layers_);
-  }
-  return root_layers_;
-}
-
 bool Widget::HasHitTestMask() const {
   return widget_delegate_->WidgetHasHitTestMask();
 }
@@ -1317,12 +1326,64 @@ bool Widget::SetInitialFocus(ui::WindowShowState show_state) {
   }
   if (v) {
     v->RequestFocus();
-    // If the request for focus was unsuccessful, fall back to using the first
+    // If the Widget is active (thus allowing its child Views to receive focus),
+    // but the request for focus was unsuccessful, fall back to using the first
     // focusable View instead.
-    if (focus_manager && focus_manager->GetFocusedView() == nullptr)
+    if (focus_manager && focus_manager->GetFocusedView() == nullptr &&
+        IsActive()) {
       focus_manager->AdvanceFocus(false);
+    }
   }
   return !!focus_manager->GetFocusedView();
+}
+
+bool Widget::ShouldDescendIntoChildForEventHandling(
+    ui::Layer* root_layer,
+    gfx::NativeView child,
+    ui::Layer* child_layer,
+    const gfx::Point& location) {
+  if (widget_delegate_ &&
+      !widget_delegate_->ShouldDescendIntoChildForEventHandling(child,
+                                                                location)) {
+    return false;
+  }
+
+  const View::Views& views_with_layers = GetViewsWithLayers();
+  if (views_with_layers.empty())
+    return true;
+
+  // Don't descend into |child| if there is a view with a Layer that contains
+  // the point and is stacked above |child_layer|.
+  auto child_layer_iter = std::find(root_layer->children().begin(),
+                                    root_layer->children().end(), child_layer);
+  if (child_layer_iter == root_layer->children().end())
+    return true;
+
+  for (auto iter = views_with_layers.rbegin(); iter != views_with_layers.rend();
+       ++iter) {
+    ui::Layer* layer = (*iter)->layer();
+    DCHECK(layer);
+    if (layer->visible() && layer->bounds().Contains(location)) {
+      auto root_layer_iter = std::find(root_layer->children().begin(),
+                                       root_layer->children().end(), layer);
+      if (child_layer_iter > root_layer_iter) {
+        // |child| is on top of the remaining layers, no need to continue.
+        return true;
+      }
+
+      // Event targeting uses the visible bounds of the View, which may differ
+      // from the bounds of the layer. Verify the view hosting the layer
+      // actually contains |location|. Use GetVisibleBounds(), which is
+      // effectively what event targetting uses.
+      View* view = *iter;
+      gfx::Rect vis_bounds = view->GetVisibleBounds();
+      gfx::Point point_in_view = location;
+      View::ConvertPointToTarget(GetRootView(), view, &point_in_view);
+      if (vis_bounds.Contains(point_in_view))
+        return false;
+    }
+  }
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1492,6 +1553,15 @@ bool Widget::GetSavedWindowPlacement(gfx::Rect* bounds,
     return true;
   }
   return false;
+}
+
+const View::Views& Widget::GetViewsWithLayers() {
+  if (views_with_layers_dirty_) {
+    views_with_layers_dirty_ = false;
+    views_with_layers_.clear();
+    BuildViewsWithLayers(GetRootView(), &views_with_layers_);
+  }
+  return views_with_layers_;
 }
 
 namespace internal {

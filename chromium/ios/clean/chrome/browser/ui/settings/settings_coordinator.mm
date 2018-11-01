@@ -32,14 +32,15 @@
       newSettingsMainControllerWithMainBrowserState:self.browserState
                                 currentBrowserState:self.browserState
                                            delegate:self];
-  [self.rootViewController presentViewController:self.viewController
-                                        animated:self.context.animated
-                                      completion:nil];
+  [self.context.baseViewController presentViewController:self.viewController
+                                                animated:self.context.animated
+                                              completion:nil];
 }
 
 - (void)stop {
-  [self.viewController dismissViewControllerAnimated:self.context.animated
-                                          completion:nil];
+  [self.viewController.presentingViewController
+      dismissViewControllerAnimated:self.context.animated
+                         completion:nil];
 }
 
 #pragma mark - SettingsNavigationControllerDelegate

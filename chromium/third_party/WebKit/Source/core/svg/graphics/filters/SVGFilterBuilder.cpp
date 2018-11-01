@@ -64,7 +64,7 @@ class FilterInputKeywords {
 SVGFilterGraphNodeMap::SVGFilterGraphNodeMap() {}
 
 void SVGFilterGraphNodeMap::addBuiltinEffect(FilterEffect* effect) {
-  m_effectReferences.add(effect, FilterEffectSet());
+  m_effectReferences.insert(effect, FilterEffectSet());
 }
 
 void SVGFilterGraphNodeMap::addPrimitive(LayoutObject* object,
@@ -72,7 +72,7 @@ void SVGFilterGraphNodeMap::addPrimitive(LayoutObject* object,
   // The effect must be a newly created filter effect.
   ASSERT(!m_effectReferences.contains(effect));
   ASSERT(!object || !m_effectRenderer.contains(object));
-  m_effectReferences.add(effect, FilterEffectSet());
+  m_effectReferences.insert(effect, FilterEffectSet());
 
   unsigned numberOfInputEffects = effect->inputEffects().size();
 
@@ -80,13 +80,13 @@ void SVGFilterGraphNodeMap::addPrimitive(LayoutObject* object,
   // allow determining what effects needs to be invalidated when a certain
   // effect changes.
   for (unsigned i = 0; i < numberOfInputEffects; ++i)
-    effectReferences(effect->inputEffect(i)).add(effect);
+    effectReferences(effect->inputEffect(i)).insert(effect);
 
   // If object is null, that means the element isn't attached for some
   // reason, which in turn mean that certain types of invalidation will not
   // work (the LayoutObject -> FilterEffect mapping will not be defined).
   if (object)
-    m_effectRenderer.add(object, effect);
+    m_effectRenderer.insert(object, effect);
 }
 
 void SVGFilterGraphNodeMap::invalidateDependentEffects(FilterEffect* effect) {
@@ -107,22 +107,24 @@ DEFINE_TRACE(SVGFilterGraphNodeMap) {
 
 SVGFilterBuilder::SVGFilterBuilder(FilterEffect* sourceGraphic,
                                    SVGFilterGraphNodeMap* nodeMap,
-                                   const SkPaint* fillPaint,
-                                   const SkPaint* strokePaint)
+                                   const PaintFlags* fillFlags,
+                                   const PaintFlags* strokeFlags)
     : m_nodeMap(nodeMap) {
   FilterEffect* sourceGraphicRef = sourceGraphic;
-  m_builtinEffects.add(FilterInputKeywords::getSourceGraphic(),
-                       sourceGraphicRef);
-  m_builtinEffects.add(FilterInputKeywords::sourceAlpha(),
-                       SourceAlpha::create(sourceGraphicRef));
-  if (fillPaint)
-    m_builtinEffects.add(
+  m_builtinEffects.insert(FilterInputKeywords::getSourceGraphic(),
+                          sourceGraphicRef);
+  m_builtinEffects.insert(FilterInputKeywords::sourceAlpha(),
+                          SourceAlpha::create(sourceGraphicRef));
+  if (fillFlags) {
+    m_builtinEffects.insert(
         FilterInputKeywords::fillPaint(),
-        PaintFilterEffect::create(sourceGraphicRef->getFilter(), *fillPaint));
-  if (strokePaint)
-    m_builtinEffects.add(
+        PaintFilterEffect::create(sourceGraphicRef->getFilter(), *fillFlags));
+  }
+  if (strokeFlags) {
+    m_builtinEffects.insert(
         FilterInputKeywords::strokePaint(),
-        PaintFilterEffect::create(sourceGraphicRef->getFilter(), *strokePaint));
+        PaintFilterEffect::create(sourceGraphicRef->getFilter(), *strokeFlags));
+  }
   addBuiltinEffects();
 }
 
@@ -209,17 +211,17 @@ void SVGFilterBuilder::add(const AtomicString& id, FilterEffect* effect) {
 
 FilterEffect* SVGFilterBuilder::getEffectById(const AtomicString& id) const {
   if (!id.isEmpty()) {
-    if (FilterEffect* builtinEffect = m_builtinEffects.get(id))
+    if (FilterEffect* builtinEffect = m_builtinEffects.at(id))
       return builtinEffect;
 
-    if (FilterEffect* namedEffect = m_namedEffects.get(id))
+    if (FilterEffect* namedEffect = m_namedEffects.at(id))
       return namedEffect;
   }
 
   if (m_lastEffect)
     return m_lastEffect.get();
 
-  return m_builtinEffects.get(FilterInputKeywords::getSourceGraphic());
+  return m_builtinEffects.at(FilterInputKeywords::getSourceGraphic());
 }
 
 }  // namespace blink

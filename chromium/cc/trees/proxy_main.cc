@@ -18,14 +18,14 @@
 #include "cc/output/swap_promise.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/blocking_task_runner.h"
-#include "cc/trees/layer_tree_host_in_process.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy_impl.h"
 #include "cc/trees/scoped_abort_remaining_swap_promises.h"
 
 namespace cc {
 
-ProxyMain::ProxyMain(LayerTreeHostInProcess* layer_tree_host,
+ProxyMain::ProxyMain(LayerTreeHost* layer_tree_host,
                      TaskRunnerProvider* task_runner_provider)
     : layer_tree_host_(layer_tree_host),
       task_runner_provider_(task_runner_provider),
@@ -353,11 +353,6 @@ bool ProxyMain::CommitRequested() const {
   // CommitInProgress().
   return current_pipeline_stage_ != NO_PIPELINE_STAGE ||
          max_requested_pipeline_stage_ >= COMMIT_PIPELINE_STAGE;
-}
-
-bool ProxyMain::BeginMainFrameRequested() const {
-  DCHECK(IsMainThread());
-  return max_requested_pipeline_stage_ != NO_PIPELINE_STAGE;
 }
 
 void ProxyMain::MainThreadHasStoppedFlinging() {

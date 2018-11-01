@@ -31,7 +31,15 @@ InputMethodMus::InputMethodMus(ui::internal::InputMethodDelegate* delegate,
   SetDelegate(delegate);
 }
 
-InputMethodMus::~InputMethodMus() {}
+InputMethodMus::~InputMethodMus() {
+  // Mus won't dispatch the next key event until the existing one is acked. We
+  // may have KeyEvents sent to IME and awaiting the result, we need to ack
+  // them otherwise mus won't process the next event until it times out.
+  for (auto& callback_ptr : pending_callbacks_) {
+    if (callback_ptr)
+      callback_ptr->Run(EventResult::UNHANDLED);
+  }
+}
 
 void InputMethodMus::Init(service_manager::Connector* connector) {
   if (connector)
@@ -40,13 +48,13 @@ void InputMethodMus::Init(service_manager::Connector* connector) {
 
 void InputMethodMus::DispatchKeyEvent(
     ui::KeyEvent* event,
-    std::unique_ptr<base::Callback<void(EventResult)>> ack_callback) {
+    std::unique_ptr<EventResultCallback> ack_callback) {
   DCHECK(event->type() == ui::ET_KEY_PRESSED ||
          event->type() == ui::ET_KEY_RELEASED);
 
   // If no text input client, do nothing.
   if (!GetTextInputClient()) {
-    ignore_result(DispatchKeyEventPostIME(event));
+    DispatchKeyEventPostIME(event);
     if (ack_callback) {
       ack_callback->Run(event->handled() ? EventResult::HANDLED
                                          : EventResult::UNHANDLED);
@@ -54,13 +62,7 @@ void InputMethodMus::DispatchKeyEvent(
     return;
   }
 
-  // IME driver will notify us whether it handled the event or not by calling
-  // ProcessKeyEventCallback(), in which we will run the |ack_callback| to tell
-  // the window server if client handled the event or not.
-  input_method_->ProcessKeyEvent(
-      ui::Event::Clone(*event),
-      base::Bind(&InputMethodMus::ProcessKeyEventCallback,
-                 base::Unretained(this), *event, Passed(&ack_callback)));
+  SendKeyEventToInputMethod(*event, std::move(ack_callback));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,6 +119,26 @@ bool InputMethodMus::IsCandidatePopupOpen() const {
   return false;
 }
 
+void InputMethodMus::SendKeyEventToInputMethod(
+    const ui::KeyEvent& event,
+    std::unique_ptr<EventResultCallback> ack_callback) {
+  if (!input_method_) {
+    // This code path is hit in tests that don't connect to the server.
+    DCHECK(!ack_callback);
+    std::unique_ptr<ui::Event> event_clone = ui::Event::Clone(event);
+    DispatchKeyEventPostIME(event_clone->AsKeyEvent());
+    return;
+  }
+  // IME driver will notify us whether it handled the event or not by calling
+  // ProcessKeyEventCallback(), in which we will run the |ack_callback| to tell
+  // the window server if client handled the event or not.
+  pending_callbacks_.push_back(std::move(ack_callback));
+  input_method_->ProcessKeyEvent(
+      ui::Event::Clone(event),
+      base::Bind(&InputMethodMus::ProcessKeyEventCallback,
+                 base::Unretained(this), event));
+}
+
 void InputMethodMus::OnDidChangeFocusedClient(
     ui::TextInputClient* focused_before,
     ui::TextInputClient* focused) {
@@ -132,7 +154,8 @@ void InputMethodMus::OnDidChangeFocusedClient(
     ui::mojom::StartSessionDetailsPtr details =
         ui::mojom::StartSessionDetails::New();
     details->client = text_input_client_->CreateInterfacePtrAndBind();
-    details->input_method_request = MakeRequest(&input_method_);
+    details->input_method_request = MakeRequest(&input_method_ptr_);
+    input_method_ = input_method_ptr_.get();
     details->text_input_type = focused->GetTextInputType();
     details->text_input_mode = focused->GetTextInputMode();
     details->text_direction = focused->GetTextDirection();
@@ -157,7 +180,6 @@ void InputMethodMus::UpdateTextInputType() {
 
 void InputMethodMus::ProcessKeyEventCallback(
     const ui::KeyEvent& event,
-    std::unique_ptr<base::Callback<void(EventResult)>> ack_callback,
     bool handled) {
   EventResult event_result;
   if (!handled) {
@@ -165,12 +187,16 @@ void InputMethodMus::ProcessKeyEventCallback(
     // any client-side post-ime processing needs to be done. This includes cases
     // like backspace, return key, etc.
     std::unique_ptr<ui::Event> event_clone = ui::Event::Clone(event);
-    ignore_result(DispatchKeyEventPostIME(event_clone->AsKeyEvent()));
+    DispatchKeyEventPostIME(event_clone->AsKeyEvent());
     event_result =
         event_clone->handled() ? EventResult::HANDLED : EventResult::UNHANDLED;
   } else {
     event_result = EventResult::HANDLED;
   }
+  DCHECK(!pending_callbacks_.empty());
+  std::unique_ptr<EventResultCallback> ack_callback =
+      std::move(pending_callbacks_.front());
+  pending_callbacks_.pop_front();
   // |ack_callback| can be null if the standard form of DispatchKeyEvent() is
   // called instead of the version which provides a callback. In mus+ash we
   // use the version with callback, but some unittests use the standard form.

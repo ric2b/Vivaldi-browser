@@ -10,20 +10,22 @@
 #include <string>
 
 #include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/wm_window_observer.h"
 #include "base/macros.h"
+#include "ui/aura/window_observer.h"
 
 namespace ash {
 
-class ShelfModel;
+class WmWindow;
 
 namespace test {
 
+class ShelfInitializer;
+
 // Test implementation of ShelfDelegate.
 // Tests may create icons for windows by calling AddShelfItem().
-class TestShelfDelegate : public ShelfDelegate, public WmWindowObserver {
+class TestShelfDelegate : public ShelfDelegate, public aura::WindowObserver {
  public:
-  explicit TestShelfDelegate(ShelfModel* model);
+  TestShelfDelegate();
   ~TestShelfDelegate() override;
 
   // Adds a ShelfItem for the given |window|. The ShelfItem's status will be
@@ -46,9 +48,8 @@ class TestShelfDelegate : public ShelfDelegate, public WmWindowObserver {
   static TestShelfDelegate* instance() { return instance_; }
 
   // WindowObserver implementation
-  void OnWindowDestroying(WmWindow* window) override;
-  void OnWindowTreeChanging(WmWindow* window,
-                            const TreeChangeParams& params) override;
+  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowHierarchyChanging(const HierarchyChangeParams& params) override;
 
   // ShelfDelegate implementation.
   ShelfID GetShelfIDForAppID(const std::string& app_id) override;
@@ -69,7 +70,7 @@ class TestShelfDelegate : public ShelfDelegate, public WmWindowObserver {
 
   static TestShelfDelegate* instance_;
 
-  ShelfModel* model_;
+  std::unique_ptr<ShelfInitializer> shelf_initializer_;
 
   std::set<std::string> pinned_apps_;
 

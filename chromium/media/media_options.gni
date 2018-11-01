@@ -49,7 +49,12 @@ declare_args() {
   # platform. Enable by default for Chromecast.
   enable_hevc_demuxing = proprietary_codecs && is_chromecast
 
-  enable_webrtc = !is_ios
+  # Enable Dolby Vision demuxing. Enable by default for Chromecast. Actual
+  # decoding must be provided by the platform. Note some Dolby Vision profiles
+  # which are encoded using HEVC require |enable_hevc_demuxing| to be enabled.
+  enable_dolby_vision_demuxing = proprietary_codecs && is_chromecast
+
+  enable_webrtc = !is_ios && !is_cast_audio_only
 
   # Enable HLS with SAMPLE-AES decryption.
   # Enabled by default on the cast desktop implementation to allow unit tests of
@@ -81,6 +86,16 @@ declare_args() {
   }
 }
 
+# Use another declare_args() to pick up possible overrides of media_use_ffmpeg
+# from --args command line flags. See "gn help declare_args".
+declare_args() {
+  # On Android, FFMpeg is built without video decoders by default.
+  # This flag gives the option to override that decision in case there are no
+  # hardware decoders. To do so, you will also need to update ffmpeg build files
+  # in order to define which decoders to build in.
+  disable_ffmpeg_video_decoders = !media_use_ffmpeg || is_android
+}
+
 declare_args() {
   # Experiment to enable mojo media services (e.g. "renderer", "cdm", see
   # |mojo_media_services|). When enabled, selected mojo paths will be enabled in
@@ -91,9 +106,24 @@ declare_args() {
   # Enable the TestMojoMediaClient to be used in mojo MediaService. This is for
   # testing only and will override the default platform MojoMediaClient, if any.
   enable_test_mojo_media_client = false
+
+  # When enabled, this feature allows developers to use a runtime flag to
+  # choose the implementation of the renderer that is used. On a build which
+  # enables the mojo renderer, if --disable-mojo-renderer is passed at start-up,
+  # the "default" renderer will be used instead. Both renderer implementations
+  # will be linked if this feature is enabled, increasing the binary size. This
+  # feature does not make sense if the mojo renderer is not enabled.
+  enable_runtime_media_renderer_selection = is_cast_desktop_build
 }
 
-# Use a second declare_args() to pick up possible overrides of enable_mojo_media
+# This feature can only be enabled when using Mojo media. Furthermore, the
+# "renderer" service must be enabled, which is asserted in
+# //media/mojo/services/BUILD.gn
+assert(
+    !enable_runtime_media_renderer_selection || enable_mojo_media,
+    "Runtime media renderer selection only applies when mojo media is enabled.")
+
+# Use another declare_args() to pick up possible overrides of enable_mojo_media
 # from --args command line flags. See "gn help declare_args".
 declare_args() {
   # A list of mojo media services that should be used in the media pipeline.

@@ -28,7 +28,7 @@ TileItemView::TileItemView()
       title_(new views::Label),
       selected_(false) {
   // Prevent the icon view from interfering with our mouse events.
-  icon_->set_interactive(false);
+  icon_->set_can_process_events_within_subtree(false);
   icon_->SetVerticalAlignment(views::ImageView::LEADING);
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
@@ -89,7 +89,7 @@ void TileItemView::SetTitle(const base::string16& title) {
   SetAccessibleName(title);
 }
 
-void TileItemView::StateChanged() {
+void TileItemView::StateChanged(ButtonState old_state) {
   UpdateBackgroundColor();
 }
 

@@ -33,7 +33,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/download/download_crx_util.h"
-#include "components/history/content/browser/download_constants_utils.h"
+#include "components/history/content/browser/download_conversions.h"
 #include "components/history/core/browser/download_database.h"
 #include "components/history/core/browser/download_row.h"
 #include "components/history/core/browser/history_service.h"
@@ -96,6 +96,7 @@ class DownloadHistoryData : public base::SupportsUserData::Data {
   // order to save memory.
   history::DownloadRow* info() { return info_.get(); }
   void set_info(const history::DownloadRow& i) {
+    // TODO(qinmin): avoid creating a new copy each time.
     info_.reset(new history::DownloadRow(i));
   }
   void clear_info() {
@@ -140,13 +141,14 @@ history::DownloadRow GetDownloadRow(
       history::ToHistoryDownloadInterruptReason(item->GetLastReason()),
       std::string(),  // Hash value (not available yet)
       history::ToHistoryDownloadId(item->GetId()), item->GetGuid(),
-      item->GetOpened(), by_ext_id, by_ext_name);
+      item->GetOpened(), by_ext_id, by_ext_name,
+      history::GetHistoryDownloadSliceInfos(*item));
 }
 
 enum class ShouldUpdateHistoryResult {
-    NO,
-    UPDATE,
-    UPDATE_IMMEDIATELY,
+  NO_UPDATE,
+  UPDATE,
+  UPDATE_IMMEDIATELY,
 };
 
 ShouldUpdateHistoryResult ShouldUpdateHistory(
@@ -177,11 +179,12 @@ ShouldUpdateHistoryResult ShouldUpdateHistory(
       (previous->hash != current.hash) ||
       (previous->opened != current.opened) ||
       (previous->by_ext_id != current.by_ext_id) ||
-      (previous->by_ext_name != current.by_ext_name)) {
+      (previous->by_ext_name != current.by_ext_name) ||
+      (previous->download_slice_info != current.download_slice_info)) {
     return ShouldUpdateHistoryResult::UPDATE;
   }
 
-  return ShouldUpdateHistoryResult::NO;
+  return ShouldUpdateHistoryResult::NO_UPDATE;
 }
 
 typedef std::vector<history::DownloadRow> InfoVector;
@@ -295,7 +298,7 @@ void DownloadHistory::QueryCallback(std::unique_ptr<InfoVector> infos) {
         history::ToContentDownloadState(it->state),
         history::ToContentDownloadDangerType(it->danger_type),
         history::ToContentDownloadInterruptReason(it->interrupt_reason),
-        it->opened);
+        it->opened, history::ToContentReceivedSlices(it->download_slice_info));
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     if (!it->by_ext_id.empty() && !it->by_ext_name.empty()) {
       new extensions::DownloadedByExtension(
@@ -430,7 +433,8 @@ void DownloadHistory::OnDownloadUpdated(
   history::DownloadRow current_info(GetDownloadRow(item));
   ShouldUpdateHistoryResult should_update_result =
       ShouldUpdateHistory(data->info(), current_info);
-  bool should_update = (should_update_result != ShouldUpdateHistoryResult::NO);
+  bool should_update =
+      (should_update_result != ShouldUpdateHistoryResult::NO_UPDATE);
   UMA_HISTOGRAM_ENUMERATION("Download.HistoryPropagatedUpdate",
                             should_update, 2);
   if (should_update) {

@@ -2,6 +2,8 @@
 
 #include "extensions/permissions/vivaldi_api_permissions.h"
 
+#include <memory>
+
 #include "base/memory/ptr_util.h"
 #include "extensions/common/permissions/api_permission.h"
 
@@ -16,20 +18,20 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       // Register permissions for all extension types.
       {APIPermission::kAutoUpdate, "autoUpdate"},
       {APIPermission::kBookmarksPrivate, "bookmarksPrivate"},
-      {APIPermission::kEditCommand, "editcommand" },
+      {APIPermission::kEditCommand, "editcommand"},
       {APIPermission::kExtensionActionUtils, "extensionActionUtils"},
-      {APIPermission::kHistoryPrivate, "historyPrivate" },
+      {APIPermission::kHistoryPrivate, "historyPrivate"},
       {APIPermission::kImportData, "importData"},
       {APIPermission::kNotes, "notes"},
-      {APIPermission::kRuntimePrivate, "runtimePrivate" },
-      {APIPermission::kSessionsPrivate, "sessionsPrivate" },
-      {APIPermission::kSettings, "settings" },
+      {APIPermission::kRuntimePrivate, "runtimePrivate"},
+      {APIPermission::kSessionsPrivate, "sessionsPrivate"},
+      {APIPermission::kSettings, "settings"},
       {APIPermission::kSavedPasswords, "savedpasswords"},
       {APIPermission::kShowMenu, "showMenu"},
-      {APIPermission::kSync, "sync" },
+      {APIPermission::kSync, "sync"},
       {APIPermission::kTabsPrivate, "tabsPrivate"},
       {APIPermission::kThumbnails, "thumbnails"},
-      {APIPermission::kZoom, "zoom" },
+      {APIPermission::kZoom, "zoom"},
       {APIPermission::kUtilities, "utilities"},
       {APIPermission::kWebViewPrivate, "webViewPrivate"},
   };
@@ -42,4 +44,4 @@ VivaldiAPIPermissions::GetAllPermissions() const {
   return permissions;
 }
 
-}   // namespace extensions
+}  // namespace extensions

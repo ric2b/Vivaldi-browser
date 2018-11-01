@@ -32,12 +32,12 @@
 #define FrameFetchContext_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/FetchContext.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/LinkLoader.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/FetchContext.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceRequest.h"
 #include "wtf/Forward.h"
 
@@ -46,7 +46,7 @@ namespace blink {
 class ClientHintsPreferences;
 class Document;
 class DocumentLoader;
-class FrameLoaderClient;
+class LocalFrameClient;
 class LocalFrame;
 class ResourceError;
 class ResourceResponse;
@@ -107,7 +107,8 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
                                int encodedDataLength) override;
   void dispatchDidFinishLoading(unsigned long identifier,
                                 double finishTime,
-                                int64_t encodedDataLength) override;
+                                int64_t encodedDataLength,
+                                int64_t decodedBodyLength) override;
   void dispatchDidFail(unsigned long identifier,
                        const ResourceError&,
                        int64_t encodedDataLength,
@@ -118,7 +119,7 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
                                 ResourceRequest&,
                                 Resource::Type,
                                 const AtomicString& fetchInitiatorName,
-                                bool forPreload) override;
+                                V8ActivityLoggingPolicy) override;
   void didLoadResource(Resource*) override;
 
   void addResourceTiming(const ResourceTimingInfo&) override;
@@ -128,7 +129,7 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
       const ResourceRequest&,
       const KURL&,
       const ResourceLoaderOptions&,
-      bool forPreload,
+      SecurityViolationReportingPolicy,
       FetchRequest::OriginRestriction) const override;
   ResourceRequestBlockedReason allowResponse(
       Resource::Type,
@@ -177,7 +178,7 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
   LocalFrame* frameOfImportsController() const;
   LocalFrame* frame() const;
 
-  FrameLoaderClient* frameLoaderClient() const;
+  LocalFrameClient* localFrameClient() const;
 
   void printAccessDeniedMessage(const KURL&) const;
   ResourceRequestBlockedReason canRequestInternal(
@@ -185,7 +186,7 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
       const ResourceRequest&,
       const KURL&,
       const ResourceLoaderOptions&,
-      bool forPreload,
+      SecurityViolationReportingPolicy,
       FetchRequest::OriginRestriction,
       ResourceRequest::RedirectStatus) const;
 

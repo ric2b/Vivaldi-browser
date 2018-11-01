@@ -38,7 +38,7 @@ TEST(MediaConditionParserTest, Basic) {
   // FIXME: We should test comma-seperated media conditions
   for (unsigned i = 0; testCases[i].input; ++i) {
     CSSTokenizer tokenizer(testCases[i].input);
-    MediaQuerySet* mediaConditionQuerySet =
+    RefPtr<MediaQuerySet> mediaConditionQuerySet =
         MediaQueryParser::parseMediaCondition(tokenizer.tokenRange());
     ASSERT_EQ(mediaConditionQuerySet->queryVector().size(), (unsigned)1);
     String queryText = mediaConditionQuerySet->queryVector()[0]->cssText();

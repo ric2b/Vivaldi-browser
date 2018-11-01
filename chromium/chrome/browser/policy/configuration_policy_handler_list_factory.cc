@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -108,6 +109,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kHomepageIsNewTabPage,
     prefs::kHomePageIsNewTabPage,
     base::Value::Type::BOOLEAN },
+  { key::kNewTabPageLocation,
+    prefs::kNewTabPageLocationOverride,
+    base::Value::Type::STRING },
   { key::kRestoreOnStartupURLs,
     prefs::kURLsToRestoreOnStartup,
     base::Value::Type::LIST },
@@ -242,6 +246,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kEnableSha1ForLocalAnchors,
     ssl_config::prefs::kCertEnableSha1LocalAnchors,
+    base::Value::Type::BOOLEAN },
+  { key::kEnableCommonNameFallbackForLocalAnchors,
+    ssl_config::prefs::kCertEnableCommonNameFallbackLocalAnchors,
     base::Value::Type::BOOLEAN },
   { key::kAuthSchemes,
     prefs::kAuthSchemes,
@@ -397,9 +404,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kForceEphemeralProfiles,
     prefs::kForceEphemeralProfiles,
     base::Value::Type::BOOLEAN },
-  { key::kDHEEnabled,
-    ssl_config::prefs::kDHEEnabled,
-    base::Value::Type::BOOLEAN },
+  { key::kSSLVersionMax,
+    ssl_config::prefs::kSSLVersionMax,
+    base::Value::Type::STRING },
   { key::kNTPContentSuggestionsEnabled,
     ntp_snippets::prefs::kEnableSnippets,
     base::Value::Type::BOOLEAN },
@@ -407,6 +414,11 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kEnableMediaRouter,
     prefs::kEnableMediaRouter,
     base::Value::Type::BOOLEAN },
+#if !defined(OS_ANDROID)
+  { key::kShowCastIconInToolbar,
+    prefs::kShowCastIconInToolbar,
+    base::Value::Type::BOOLEAN },
+#endif  // !defined(OS_ANDROID)
 #endif  // defined(ENABLE_MEDIA_ROUTER)
 #if BUILDFLAG(ENABLE_WEBRTC)
   { key::kWebRtcUdpPortRange,
@@ -670,7 +682,7 @@ class ForceSafeSearchPolicyHandler : public TypeCheckingPolicyHandler {
       if (value->GetAsBoolean(&enabled)) {
         prefs->SetValue(
             prefs::kForceYouTubeRestrict,
-            base::MakeUnique<base::FundamentalValue>(
+            base::MakeUnique<base::Value>(
                 enabled ? safe_search_util::YOUTUBE_RESTRICT_MODERATE
                         : safe_search_util::YOUTUBE_RESTRICT_OFF));
       }
@@ -699,11 +711,10 @@ class ForceYouTubeSafetyModePolicyHandler : public TypeCheckingPolicyHandler {
     const base::Value* value = policies.GetValue(policy_name());
     bool enabled;
     if (value && value->GetAsBoolean(&enabled)) {
-      prefs->SetValue(
-          prefs::kForceYouTubeRestrict,
-          base::MakeUnique<base::FundamentalValue>(
-              enabled ? safe_search_util::YOUTUBE_RESTRICT_MODERATE
-                      : safe_search_util::YOUTUBE_RESTRICT_OFF));
+      prefs->SetValue(prefs::kForceYouTubeRestrict,
+                      base::MakeUnique<base::Value>(
+                          enabled ? safe_search_util::YOUTUBE_RESTRICT_MODERATE
+                                  : safe_search_util::YOUTUBE_RESTRICT_OFF));
     }
   }
 
@@ -745,7 +756,7 @@ void GetExtensionAllowedTypesMap(
     result->push_back(
         base::MakeUnique<StringMappingListPolicyHandler::MappingEntry>(
             entry.name, std::unique_ptr<base::Value>(
-                            new base::FundamentalValue(entry.manifest_type))));
+                            new base::Value(entry.manifest_type))));
   }
 }
 
@@ -766,7 +777,7 @@ class DevToolsExtensionsUIPolicyHandler : public TypeCheckingPolicyHandler {
     if (value && value->GetAsBoolean(&developerToolsDisabled) &&
         developerToolsDisabled) {
       prefs->SetValue(prefs::kExtensionsUIDeveloperMode,
-                      base::MakeUnique<base::FundamentalValue>(false));
+                      base::MakeUnique<base::Value>(false));
     }
   }
 

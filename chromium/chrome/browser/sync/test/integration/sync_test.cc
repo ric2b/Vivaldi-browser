@@ -82,6 +82,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/port_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -528,7 +529,8 @@ void SyncTest::InitializeProfile(int index, Profile* profile) {
   profiles_[index] = profile;
 
   // CheckInitialState() assumes that no windows are open at startup.
-  browsers_[index] = new Browser(Browser::CreateParams(GetProfile(index)));
+  browsers_[index] =
+      new Browser(Browser::CreateParams(GetProfile(index), true));
 
   EXPECT_NE(nullptr, GetBrowser(index)) << "Could not create Browser " << index;
 
@@ -976,7 +978,8 @@ bool SyncTest::IsTestServerRunning() {
   GURL sync_url_status(sync_url.append("/healthz"));
   SyncServerStatusChecker delegate;
   std::unique_ptr<net::URLFetcher> fetcher =
-      net::URLFetcher::Create(sync_url_status, net::URLFetcher::GET, &delegate);
+      net::URLFetcher::Create(sync_url_status, net::URLFetcher::GET, &delegate,
+                              TRAFFIC_ANNOTATION_FOR_TESTS);
   fetcher->SetLoadFlags(net::LOAD_DISABLE_CACHE |
                         net::LOAD_DO_NOT_SEND_COOKIES |
                         net::LOAD_DO_NOT_SAVE_COOKIES);

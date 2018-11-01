@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -74,7 +75,7 @@ class SpellCheckTest : public testing::Test {
 #if defined(OS_MACOSX)
     // TODO(groby): Forcing spellcheck to use hunspell, even on OSX.
     // Instead, tests should exercise individual spelling engines.
-    spell_check_->languages_.push_back(new SpellcheckLanguage());
+    spell_check_->languages_.push_back(base::MakeUnique<SpellcheckLanguage>());
     spell_check_->languages_.front()->platform_spelling_engine_.reset(
         new HunspellEngine);
     spell_check_->languages_.front()->Init(std::move(file), language);
@@ -178,13 +179,7 @@ class MockTextCheckingCompletion : public blink::WebTextCheckingCompletion {
 // A test with a "[ROBUSTNESS]" mark shows it is a robustness test and it uses
 // grammatically incorrect string.
 // TODO(groby): Please feel free to add more tests.
-#if defined(OS_WIN) && !defined(NDEBUG)
-// Test times out on win dbg. crbug.com/678753.
-#define MAYBE_SpellCheckStrings_EN_US DISABLED_SpellCheckStrings_EN_US
-#else
-#define MAYBE_SpellCheckStrings_EN_US SpellCheckStrings_EN_US
-#endif
-TEST_F(SpellCheckTest, MAYBE_SpellCheckStrings_EN_US) {
+TEST_F(SpellCheckTest, SpellCheckStrings_EN_US) {
   static const struct {
     // A string to be tested.
     const wchar_t* input;
@@ -495,14 +490,13 @@ TEST_F(SpellCheckTest, SpellCheckSuggestions_EN_US) {
 
 // This test verifies our spellchecker can split a text into words and check
 // the spelling of each word in the text.
-#if defined(THREAD_SANITIZER) || defined(OS_WIN)
-// SpellCheckTest.SpellCheckText fails under ThreadSanitizer v2.
-// See http://crbug.com/217909.
-// Also fails on windows: crbug.com/678300.
+#if defined(OS_WIN)
+// SpellCheckTest.SpellCheckText fails on Windows.
+// See http://crbug.com/689101.
 #define MAYBE_SpellCheckText DISABLED_SpellCheckText
 #else
 #define MAYBE_SpellCheckText SpellCheckText
-#endif  // THREAD_SANITIZER
+#endif  // OS_WIN
 TEST_F(SpellCheckTest, MAYBE_SpellCheckText) {
   static const struct {
     const char* language;
@@ -1237,9 +1231,9 @@ TEST_F(SpellCheckTest, CreateTextCheckingResultsKeepsTypographicalApostrophe) {
   ASSERT_EQ(arraysize(kExpectedReplacements), textcheck_results.size());
   for (size_t i = 0; i < arraysize(kExpectedReplacements); ++i) {
     EXPECT_EQ(base::WideToUTF16(kExpectedReplacements[i]),
-              textcheck_results[i].replacement)
+              textcheck_results[i].replacement.utf16())
         << "i=" << i << "\nactual: \""
-        << base::string16(textcheck_results[i].replacement) << "\"";
+        << textcheck_results[i].replacement.utf16() << "\"";
   }
 }
 

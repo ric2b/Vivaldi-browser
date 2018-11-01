@@ -82,8 +82,8 @@ void AcceleratedStaticBitmapImage::copyToTexture(
   destGL->WaitSyncTokenCHROMIUM(m_textureHolder->syncToken().GetData());
   GLuint sourceTextureId = destGL->CreateAndConsumeTextureCHROMIUM(
       GL_TEXTURE_2D, m_textureHolder->mailbox().name);
-  destGL->CopyTextureCHROMIUM(sourceTextureId, 0, destTextureId, 0,
-                              internalFormat, destType, flipY, false, false);
+  destGL->CopyTextureCHROMIUM(sourceTextureId, 0, GL_TEXTURE_2D, destTextureId,
+                              0, internalFormat, destType, flipY, false, false);
   // This drops the |destGL| context's reference on our |m_mailbox|, but it's
   // still held alive by our SkImage.
   destGL->DeleteTextures(1, &sourceTextureId);
@@ -91,6 +91,9 @@ void AcceleratedStaticBitmapImage::copyToTexture(
 
 sk_sp<SkImage> AcceleratedStaticBitmapImage::imageForCurrentFrame(
     const ColorBehavior& colorBehavior) {
+  // TODO(xlai): Refactor so that sync tokens are only used when
+  // |m_textureHolder| is MailboxTextureHolder.
+  // https://crbug.com/693229
   // TODO(ccameron): This function should not ignore |colorBehavior|.
   // https://crbug.com/672306
   checkThread();
@@ -100,13 +103,12 @@ sk_sp<SkImage> AcceleratedStaticBitmapImage::imageForCurrentFrame(
   return m_textureHolder->skImage();
 }
 
-void AcceleratedStaticBitmapImage::draw(SkCanvas* canvas,
-                                        const SkPaint& paint,
+void AcceleratedStaticBitmapImage::draw(PaintCanvas* canvas,
+                                        const PaintFlags& flags,
                                         const FloatRect& dstRect,
                                         const FloatRect& srcRect,
                                         RespectImageOrientationEnum,
-                                        ImageClampingMode imageClampingMode,
-                                        const ColorBehavior& colorBehavior) {
+                                        ImageClampingMode imageClampingMode) {
   // TODO(ccameron): This function should not ignore |colorBehavior|.
   // https://crbug.com/672306
   checkThread();
@@ -114,7 +116,7 @@ void AcceleratedStaticBitmapImage::draw(SkCanvas* canvas,
     return;
   createImageFromMailboxIfNeeded();
   sk_sp<SkImage> image = m_textureHolder->skImage();
-  StaticBitmapImage::drawHelper(canvas, paint, dstRect, srcRect,
+  StaticBitmapImage::drawHelper(canvas, flags, dstRect, srcRect,
                                 imageClampingMode, image);
 }
 

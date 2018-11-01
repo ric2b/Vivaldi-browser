@@ -15,10 +15,6 @@
 // Values below IDC_MinimumLabelValue are reserved for dynamic menu items.
 #define IDC_MinimumLabelValue           4000
 
-#define IDC_Messages                    4000
-#define IDC_MessagesAll                 4007
-#define IDC_MessagesNone                4008
-
 // NOTE: Within each of the following sections, the IDs are ordered roughly by
 // how they appear in the GUI/menus (left to right, top to bottom, etc.).
 
@@ -335,6 +331,7 @@
 #define IDC_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION 51204
 #define IDC_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE 51205
 #define IDC_MEDIA_ROUTER_MANAGE_DEVICES 51206
+#define IDC_MEDIA_ROUTER_SHOWN_BY_POLICY 51207
 
 // Context menu items for media stream status tray
 #define IDC_MEDIA_STREAM_DEVICE_STATUS_TRAY 51300

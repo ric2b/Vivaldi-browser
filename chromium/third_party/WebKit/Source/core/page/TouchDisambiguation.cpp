@@ -121,7 +121,7 @@ void findGoodTouchTargets(const IntRect& touchBoxInRootFrame,
       Node* containerNode = container->node();
       if (!containerNode)
         continue;
-      if (!blackList.add(containerNode).isNewEntry)
+      if (!blackList.insert(containerNode).isNewEntry)
         break;
     }
   }
@@ -139,7 +139,7 @@ void findGoodTouchTargets(const IntRect& touchBoxInRootFrame,
         break;
       if (node.willRespondToMouseClickEvents()) {
         TouchTargetData& targetData =
-            touchTargets.add(&node, TouchTargetData()).storedValue->value;
+            touchTargets.insert(&node, TouchTargetData()).storedValue->value;
         targetData.windowBoundingBox = boundingBoxForEventNodes(&node);
         targetData.score = scoreTouchTarget(touchPoint, touchPointPadding,
                                             targetData.windowBoundingBox);

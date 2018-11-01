@@ -14,6 +14,7 @@
 #include "content/browser/renderer_host/resize_lock.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_factory.h"
+#include "media/base/video_frame.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/layout.h"
@@ -168,16 +169,15 @@ BrowserCompositorMac::BrowserCompositorMac(
     ui::AcceleratedWidgetMacNSView* accelerated_widget_mac_ns_view,
     BrowserCompositorMacClient* client,
     bool render_widget_host_is_hidden,
-    bool ns_view_attached_to_window)
+    bool ns_view_attached_to_window,
+    const cc::FrameSinkId& frame_sink_id)
     : client_(client),
       accelerated_widget_mac_ns_view_(accelerated_widget_mac_ns_view),
       weak_factory_(this) {
   g_browser_compositor_count += 1;
 
   root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  delegated_frame_host_.reset(new DelegatedFrameHost(
-      factory->GetContextFactoryPrivate()->AllocateFrameSinkId(), this));
+  delegated_frame_host_.reset(new DelegatedFrameHost(frame_sink_id, this));
 
   SetRenderWidgetHostIsHidden(render_widget_host_is_hidden);
   SetNSViewAttachedToWindow(ns_view_attached_to_window);
@@ -254,7 +254,7 @@ void BrowserCompositorMac::CopyToVideoFrameCompleted(
 
 void BrowserCompositorMac::CopyFromCompositingSurfaceToVideoFrame(
     const gfx::Rect& src_subrect,
-    const scoped_refptr<media::VideoFrame>& target,
+    scoped_refptr<media::VideoFrame> target,
     const base::Callback<void(const gfx::Rect&, bool)>& callback) {
   DCHECK(delegated_frame_host_);
   DCHECK(state_ == HasAttachedCompositor);
@@ -265,7 +265,7 @@ void BrowserCompositorMac::CopyFromCompositingSurfaceToVideoFrame(
                  weak_factory_.GetWeakPtr(), callback);
 
   delegated_frame_host_->CopyFromCompositingSurfaceToVideoFrame(
-      src_subrect, target, callback_with_decrement);
+      src_subrect, std::move(target), callback_with_decrement);
 }
 
 void BrowserCompositorMac::SwapCompositorFrame(

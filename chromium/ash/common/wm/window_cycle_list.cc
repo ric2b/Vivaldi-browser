@@ -62,14 +62,14 @@ class LayerFillBackgroundPainter : public views::Background {
 
 // This view represents a single WmWindow by displaying a title and a thumbnail
 // of the window's contents.
-class WindowPreviewView : public views::View, public WmWindowObserver {
+class WindowPreviewView : public views::View, public aura::WindowObserver {
  public:
   explicit WindowPreviewView(WmWindow* window)
       : window_title_(new views::Label),
         preview_background_(new views::View),
         mirror_view_(window->CreateViewWithRecreatedLayers().release()),
         window_observer_(this) {
-    window_observer_.Add(window);
+    window_observer_.Add(window->aura_window());
     window_title_->SetText(window->GetTitle());
     window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     window_title_->SetEnabledColor(SK_ColorWHITE);
@@ -135,12 +135,12 @@ class WindowPreviewView : public views::View, public WmWindowObserver {
     node_data->SetName(window_title_->text());
   }
 
-  // WmWindowObserver:
-  void OnWindowDestroying(WmWindow* window) override {
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override {
     window_observer_.Remove(window);
   }
 
-  void OnWindowTitleChanged(WmWindow* window) override {
+  void OnWindowTitleChanged(aura::Window* window) override {
     window_title_->SetText(window->GetTitle());
   }
 
@@ -200,7 +200,7 @@ class WindowPreviewView : public views::View, public WmWindowObserver {
   // The view that actually renders a thumbnail version of the window.
   views::View* mirror_view_;
 
-  ScopedObserver<WmWindow, WmWindowObserver> window_observer_;
+  ScopedObserver<aura::Window, aura::WindowObserver> window_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowPreviewView);
 };
@@ -213,7 +213,7 @@ class WindowCycleView : public views::WidgetDelegateView {
         highlight_view_(new views::View()),
         target_window_(nullptr) {
     DCHECK(!windows.empty());
-    SetPaintToLayer(true);
+    SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
     layer()->SetMasksToBounds(true);
     layer()->SetOpacity(0.0);
@@ -232,7 +232,7 @@ class WindowCycleView : public views::WidgetDelegateView {
     layout->set_cross_axis_alignment(
         views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
     mirror_container_->SetLayoutManager(layout);
-    mirror_container_->SetPaintToLayer(true);
+    mirror_container_->SetPaintToLayer();
     mirror_container_->layer()->SetFillsBoundsOpaquely(false);
 
     for (WmWindow* window : windows) {
@@ -249,7 +249,8 @@ class WindowCycleView : public views::WidgetDelegateView {
         views::Painter::CreateRoundRectWith1PxBorderPainter(
             SkColorSetA(SK_ColorWHITE, 0x4D), SkColorSetA(SK_ColorWHITE, 0x33),
             kBackgroundCornerRadius)));
-    highlight_view_->SetPaintToLayer(true);
+    highlight_view_->SetPaintToLayer();
+
     highlight_view_->layer()->SetFillsBoundsOpaquely(false);
 
     AddChildView(highlight_view_);
@@ -262,14 +263,8 @@ class WindowCycleView : public views::WidgetDelegateView {
     target_window_ = target;
     if (GetWidget()) {
       Layout();
-      if (target_window_) {
-        // In the window destruction case, we may have already removed the
-        // focused view and hence not be the focused window. We should still
-        // always be active, though.
-        DCHECK_EQ(ash::WmShell::Get()->GetActiveWindow()->GetInternalWidget(),
-                  GetWidget());
+      if (target_window_)
         window_view_map_[target_window_]->RequestFocus();
-      }
     }
   }
 
@@ -354,23 +349,19 @@ class WindowCycleView : public views::WidgetDelegateView {
     }
   }
 
-  void OnMouseCaptureLost() override {
-    WmShell::Get()->window_cycle_controller()->CancelCycling();
-  }
-
   void OnPaintBackground(gfx::Canvas* canvas) override {
     // We can't set a bg on the mirror container itself because the highlight
     // view needs to be on top of the bg but behind the target windows.
     const gfx::RectF shield_bounds(mirror_container_->bounds());
-    SkPaint paint;
-    paint.setColor(SkColorSetA(SK_ColorBLACK, 0xE6));
-    paint.setStyle(SkPaint::kFill_Style);
+    cc::PaintFlags flags;
+    flags.setColor(SkColorSetA(SK_ColorBLACK, 0xE6));
+    flags.setStyle(cc::PaintFlags::kFill_Style);
     float corner_radius = 0.f;
     if (shield_bounds.width() < width()) {
-      paint.setAntiAlias(true);
+      flags.setAntiAlias(true);
       corner_radius = kBackgroundCornerRadius;
     }
-    canvas->DrawRoundRect(shield_bounds, corner_radius, paint);
+    canvas->DrawRoundRect(shield_bounds, corner_radius, flags);
   }
 
   View* GetInitiallyFocusedView() override {
@@ -395,7 +386,7 @@ WindowCycleList::WindowCycleList(const WindowList& windows)
     WmShell::Get()->mru_window_tracker()->SetIgnoreActivations(true);
 
   for (WmWindow* window : windows_)
-    window->AddObserver(this);
+    window->aura_window()->AddObserver(this);
 
   if (ShouldShowUi()) {
     if (g_disable_initial_delay) {
@@ -412,7 +403,7 @@ WindowCycleList::~WindowCycleList() {
     WmShell::Get()->mru_window_tracker()->SetIgnoreActivations(false);
 
   for (WmWindow* window : windows_)
-    window->RemoveObserver(this);
+    window->aura_window()->RemoveObserver(this);
 
   if (!windows_.empty() && user_did_accept_) {
     WmWindow* target_window = windows_[current_index_];
@@ -476,10 +467,11 @@ void WindowCycleList::DisableInitialDelayForTesting() {
   g_disable_initial_delay = true;
 }
 
-void WindowCycleList::OnWindowDestroying(WmWindow* window) {
+void WindowCycleList::OnWindowDestroying(aura::Window* window) {
   window->RemoveObserver(this);
 
-  WindowList::iterator i = std::find(windows_.begin(), windows_.end(), window);
+  WindowList::iterator i =
+      std::find(windows_.begin(), windows_.end(), WmWindow::Get(window));
   // TODO(oshima): Change this back to DCHECK once crbug.com/483491 is fixed.
   CHECK(i != windows_.end());
   int removed_index = static_cast<int>(i - windows_.begin());
@@ -492,7 +484,8 @@ void WindowCycleList::OnWindowDestroying(WmWindow* window) {
   if (cycle_view_) {
     WmWindow* new_target_window =
         windows_.empty() ? nullptr : windows_[current_index_];
-    cycle_view_->HandleWindowDestruction(window, new_target_window);
+    cycle_view_->HandleWindowDestruction(WmWindow::Get(window),
+                                         new_target_window);
     if (windows_.empty()) {
       // This deletes us.
       WmShell::Get()->window_cycle_controller()->CancelCycling();
@@ -552,8 +545,6 @@ void WindowCycleList::InitWindowCycleView() {
 
   screen_observer_.Add(display::Screen::GetScreen());
   widget->Show();
-  widget->SetCapture(cycle_view_);
-  widget->set_auto_release_capture(false);
   cycle_ui_widget_ = widget;
 }
 

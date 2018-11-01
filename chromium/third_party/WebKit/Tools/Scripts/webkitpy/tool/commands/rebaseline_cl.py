@@ -2,19 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""A command to fetch new baselines from try jobs for a Rietveld issue.
-
-This command interacts with the Rietveld API to get information about try jobs
-with layout test results.
-"""
+"""A command to fetch new baselines from try jobs for the current CL."""
 
 import json
 import logging
 import optparse
 
 from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.net.rietveld import Rietveld
-from webkitpy.common.net.web import Web
 from webkitpy.layout_tests.models.test_expectations import BASELINE_SUFFIX_LIST
 from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
 
@@ -34,9 +28,6 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
     def __init__(self):
         super(RebaselineCL, self).__init__(options=[
             optparse.make_option(
-                '--issue', type='int', default=None,
-                help='Rietveld issue number; if none given, this will be obtained via `git cl issue`.'),
-            optparse.make_option(
                 '--dry-run', action='store_true', default=False,
                 help='Dry run mode; list actions that would be performed but do not do anything.'),
             optparse.make_option(
@@ -48,7 +39,6 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             self.no_optimize_option,
             self.results_directory_option,
         ])
-        self.rietveld = Rietveld(Web())
 
     def execute(self, options, args, tool):
         self._tool = tool
@@ -58,27 +48,25 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             _log.error('Aborting: there are unstaged baselines:')
             for path in unstaged_baselines:
                 _log.error('  %s', path)
-            return
+            return 1
 
-        issue_number = self._get_issue_number(options)
+        issue_number = self._get_issue_number()
         if not issue_number:
-            return
+            return 1
 
-        # TODO(qyearsley): Replace this with git cl try-results to remove
-        # dependency on Rietveld. See crbug.com/671684.
-        builds = self.rietveld.latest_try_jobs(issue_number, self._try_bots())
+        builds = self.git_cl().latest_try_jobs(self._try_bots())
 
         if options.trigger_jobs:
             if self.trigger_jobs_for_missing_builds(builds):
                 _log.info('Please re-run webkit-patch rebaseline-cl once all pending try jobs have finished.')
-                return
+                return 1
         if not builds:
             _log.info('No builds to download baselines from.')
 
-        _log.debug('Getting results for Rietveld issue %d.', issue_number)
+        _log.debug('Getting results for issue %d.', issue_number)
         builds_to_results = self._fetch_results(builds)
         if builds_to_results is None:
-            return
+            return 1
 
         test_prefix_list = {}
         if args:
@@ -92,20 +80,16 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
         self._log_test_prefix_list(test_prefix_list)
 
-        if options.dry_run:
-            return
-        self.rebaseline(options, test_prefix_list)
+        if not options.dry_run:
+            self.rebaseline(options, test_prefix_list)
+        return 0
 
-    def _get_issue_number(self, options):
-        """Gets the Rietveld CL number from either |options| or from the current local branch."""
-        if options.issue:
-            return options.issue
+    def _get_issue_number(self):
+        """Returns the current CL number, or None if there is none."""
         issue_number = self.git_cl().get_issue_number()
         _log.debug('Issue number for current branch: %s', issue_number)
         if not issue_number.isdigit():
-            _log.error('No issue number given and no issue for current branch. This tool requires a CL\n'
-                       'to operate on; please run `git cl upload` on this branch first, or use the --issue\n'
-                       'option to download baselines for another existing CL.')
+            _log.error('No CL number for current branch.')
             return None
         return int(issue_number)
 
@@ -191,7 +175,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         for build, results in builds_to_results.iteritems():
             builds_to_tests[build] = self._tests_to_rebaseline(build, results)
         if only_changed_tests:
-            files_in_cl = self.rietveld.changed_files(issue_number)
+            files_in_cl = self._tool.git().changed_files(diff_filter='AM')
             # Note, in the changed files list from Rietveld, paths always
             # use / as the separator, and they're always relative to repo root.
             # TODO(qyearsley): Do this without using a hard-coded constant.

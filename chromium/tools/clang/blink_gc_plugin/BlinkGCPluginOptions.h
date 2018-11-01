@@ -11,9 +11,14 @@
 
 struct BlinkGCPluginOptions {
   bool dump_graph = false;
+
+  // If |true|, emit warning for class types which derive from from
+  // GarbageCollectedFinalized<> when just GarbageCollected<> will do.
   bool warn_unneeded_finalizer = false;
+
   // TODO(https://crbug.com/675879): Clean up after the Blink rename.
   bool use_chromium_style_naming = false;
+
   std::set<std::string> ignored_classes;
   std::set<std::string> checked_namespaces;
   std::vector<std::string> ignored_directories;

@@ -28,12 +28,13 @@ Polymer({
     },
 
     /**
-     * Accessibility label.
-     * @type {!string}
+     * ARIA-label for the selection menu.
+     *
+     * Note that we are not using "aria-label" property here, because
+     * we want to pass the label value but not actually declare it as an
+     * ARIA property anywhere but the actual target element.
      */
-    label: {
-      type: String,
-    },
+    labelForAria: String,
   },
 
   /**
@@ -41,6 +42,10 @@ Polymer({
    * @type {!Map<string,I18nMenuItem>}
    */
   idToItem_: null,
+
+  focus: function() {
+    this.$.select.focus();
+  },
 
   /**
    * @param {string} value Option value.

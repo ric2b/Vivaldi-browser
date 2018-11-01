@@ -136,10 +136,10 @@ class CORE_EXPORT LayoutMultiColumnSet : public LayoutBlockFlow {
   LayoutMultiColumnSet* nextSiblingMultiColumnSet() const;
   LayoutMultiColumnSet* previousSiblingMultiColumnSet() const;
 
-  // Return true if we have a fragmentainer group that can hold a column at the
-  // specified flow thread block offset.
-  bool hasFragmentainerGroupForColumnAt(LayoutUnit bottomOffsetInFlowThread,
-                                        PageBoundaryRule) const;
+  // Return true if we need to create additional fragmentainer group(s) to hold
+  // a column at the specified flow thread block offset.
+  bool needsNewFragmentainerGroupAt(LayoutUnit bottomOffsetInFlowThread,
+                                    PageBoundaryRule) const;
 
   MultiColumnFragmentainerGroup& appendNewFragmentainerGroup();
 
@@ -149,7 +149,10 @@ class CORE_EXPORT LayoutMultiColumnSet : public LayoutBlockFlow {
   LayoutUnit logicalTopInFlowThread() const;
   LayoutUnit logicalBottomInFlowThread() const;
   LayoutUnit logicalHeightInFlowThread() const {
-    return logicalBottomInFlowThread() - logicalTopInFlowThread();
+    // Due to negative margins, logical bottom may actually end up above logical
+    // top, but we never want to return negative logical heights.
+    return (logicalBottomInFlowThread() - logicalTopInFlowThread())
+        .clampNegativeToZero();
   }
 
   // Return the amount of flow thread contents that the specified fragmentainer
@@ -160,11 +163,6 @@ class CORE_EXPORT LayoutMultiColumnSet : public LayoutBlockFlow {
   }
 
   LayoutRect flowThreadPortionRect() const;
-  LayoutRect flowThreadPortionOverflowRect() const;
-  LayoutRect overflowRectForFlowThreadPortion(
-      const LayoutRect& flowThreadPortionRect,
-      bool isFirstPortion,
-      bool isLastPortion) const;
 
   // The used CSS value of column-count, i.e. how many columns there are room
   // for without overflowing.

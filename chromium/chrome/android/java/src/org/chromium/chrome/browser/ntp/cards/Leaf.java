@@ -7,7 +7,8 @@ package org.chromium.chrome.browser.ntp.cards;
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 
-import java.util.List;
+import java.util.Collections;
+import java.util.Set;
 
 /**
  * A permanent leaf in the tree, i.e. a single item.
@@ -15,8 +16,14 @@ import java.util.List;
  * implementation that will take care of hiding or showing the item.
  */
 public abstract class Leaf extends ChildNode {
+    protected Leaf() {
+        // Initialize the item count to 1 (at this point the parent is null, so no notification will
+        // be sent).
+        notifyItemInserted(0);
+    }
+
     @Override
-    public int getItemCount() {
+    protected final int getItemCountForDebugging() {
         return 1;
     }
 
@@ -28,7 +35,7 @@ public abstract class Leaf extends ChildNode {
     }
 
     @Override
-    public void onBindViewHolder(NewTabPageViewHolder holder, int position, List<Object> payload) {
+    public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
         if (position != 0) throw new IndexOutOfBoundsException();
         onBindViewHolder(holder);
     }
@@ -41,19 +48,19 @@ public abstract class Leaf extends ChildNode {
     }
 
     @Override
-    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
-        assert false;
+    public Set<Integer> getItemDismissalGroup(int position) {
+        return Collections.emptySet();
     }
 
     @Override
-    public int getDismissSiblingPosDelta(int position) {
-        return 0;
+    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
+        assert false;
     }
 
     /**
      * Display the data for this item.
      * @param holder The view holder that should be updated.
-     * @see #onBindViewHolder(NewTabPageViewHolder, int, List)
+     * @see #onBindViewHolder(NewTabPageViewHolder, int)
      * @see android.support.v7.widget.RecyclerView.Adapter#onBindViewHolder
      */
     protected abstract void onBindViewHolder(NewTabPageViewHolder holder);

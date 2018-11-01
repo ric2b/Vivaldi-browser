@@ -58,6 +58,7 @@ bundle_data("resources") {
 }
 
 source_set("find_bar") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "find_bar_controller_ios.h",
     "find_bar_controller_ios.mm",
@@ -83,6 +84,7 @@ source_set("find_bar") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "find_in_page_egtest.mm",

@@ -21,6 +21,12 @@ namespace test {
 // thread where the ScopedTaskScheduler lives. The destructor runs remaining
 // BLOCK_SHUTDOWN tasks synchronously.
 //
+// Note: ScopedTaskScheduler intentionally breaks the TaskScheduler contract of
+// always running its tasks on threads it owns, instead opting to run its tasks
+// on the main thread for determinism in tests. Components that depend on
+// TaskScheduler using independent threads should use ScopedAsyncTaskScheduler
+// for testing.
+//
 // Example usage:
 //
 // In this snippet, RunUntilIdle() returns after "A" is run.
@@ -44,13 +50,41 @@ namespace test {
 // runs "D" because it's BLOCK_SHUTDOWN. "C" is skipped.
 class ScopedTaskScheduler {
  public:
-  // Registers a TaskScheduler that instantiates a MessageLoop on the current
-  // thread and runs its tasks on it.
+  // Registers a synchronous TaskScheduler on a thread that doesn't have a
+  // MessageLoop.
+  //
+  // This constructor handles most common cases.
   ScopedTaskScheduler();
 
-  // Registers a TaskScheduler that runs its tasks on |external_message_loop|.
-  // |external_message_loop| must be bound to the current thread.
-  explicit ScopedTaskScheduler(MessageLoop* external_message_loop);
+  // Registers a synchronous TaskScheduler on a thread that already has a
+  // |message_loop|. Calling RunLoop::Run/RunUntilIdle() on the thread where
+  // this lives runs the MessageLoop and TaskScheduler tasks in posting order.
+  //
+  // In general, you don't need a ScopedTaskScheduler and a MessageLoop because
+  // ScopedTaskScheduler provides most MessageLoop features.
+  //
+  //     ScopedTaskScheduler scoped_task_scheduler;
+  //     ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, Bind(&Task));
+  //     RunLoop().RunUntilIdle();  // Runs Task.
+  //
+  //     is equivalent to
+  //
+  //     MessageLoop message_loop;
+  //     ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, Bind(&Task));
+  //     RunLoop().RunUntilIdle();  // Runs Task.
+  //
+  // Use this constructor if you need a non-default MessageLoop (e.g.
+  // MessageLoopFor(UI|IO)).
+  //
+  //    MessageLoopForIO message_loop_for_io;
+  //    ScopedTaskScheduler scoped_task_scheduler(&message_loop_for_io);
+  //    message_loop_for_io->WatchFileDescriptor(...);
+  //    message_loop_for_io->task_runner()->PostTask(
+  //        FROM_HERE, &MessageLoopTask);
+  //    PostTaskWithTraits(FROM_HERE, TaskTraits(), Bind(&TaskSchedulerTask));
+  //    RunLoop().RunUntilIdle();  // Runs both MessageLoopTask and
+  //                               // TaskSchedulerTask.
+  explicit ScopedTaskScheduler(MessageLoop* message_loop);
 
   // Runs all pending BLOCK_SHUTDOWN tasks and unregisters the TaskScheduler.
   ~ScopedTaskScheduler();

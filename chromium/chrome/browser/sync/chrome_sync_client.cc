@@ -4,12 +4,13 @@
 
 #include "chrome/browser/sync/chrome_sync_client.h"
 
-#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/path_service.h"
+#include "base/syslog_logging.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -56,6 +58,7 @@
 #include "components/search_engines/search_engine_data_type_controller.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/spellcheck/spellcheck_build_features.h"
+#include "components/sync/base/pref_names.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/driver/async_directory_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
@@ -105,6 +108,9 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/printing/printers_manager.h"
+#include "chrome/browser/chromeos/printing/printers_manager_factory.h"
+#include "chrome/browser/chromeos/printing/printers_sync_bridge.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_sync_data_type_controller.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
 #include "components/sync_wifi/wifi_credential_syncable_service.h"
@@ -122,6 +128,13 @@ using browser_sync::SearchEngineDataTypeController;
 using syncer::AsyncDirectoryTypeController;
 
 namespace browser_sync {
+
+namespace {
+#if defined(OS_WIN)
+const base::FilePath::CharType kLoopbackServerBackendFilename[] =
+    FILE_PATH_LITERAL("profile.pb");
+#endif
+}  // namespace
 
 // Chrome implementation of SyncSessionsClient. Needs to be in a separate class
 // due to possible multiple inheritance issues, wherein ChromeSyncClient might
@@ -237,6 +250,35 @@ Profile *ChromeSyncClient::GetProfile() {
 PrefService* ChromeSyncClient::GetPrefService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return profile_->GetPrefs();
+}
+
+base::FilePath ChromeSyncClient::GetLocalSyncBackendFolder() {
+  base::FilePath local_sync_backend_folder =
+      GetPrefService()->GetFilePath(syncer::prefs::kLocalSyncBackendDir);
+
+#if defined(OS_WIN)
+  if (local_sync_backend_folder.empty()) {
+    if (!base::PathService::Get(chrome::DIR_ROAMING_USER_DATA,
+                                &local_sync_backend_folder)) {
+      SYSLOG(WARNING) << "Local sync can not get the roaming profile folder.";
+      return base::FilePath();
+    }
+  }
+
+  // This code as it is now will assume the same profile order is present on
+  // all machines, which is not a given. It is to be defined if only the
+  // Default profile should get this treatment or all profile as is the case
+  // now.
+  // TODO(pastarmovj): http://crbug.com/674928 Decide if only the Default one
+  // should be considered roamed. For now the code assumes all profiles are
+  // created in the same order on all machines.
+  local_sync_backend_folder =
+      local_sync_backend_folder.Append(profile_->GetPath().BaseName());
+  local_sync_backend_folder =
+      local_sync_backend_folder.Append(kLoopbackServerBackendFilename);
+#endif  // defined(OS_WIN)
+
+  return local_sync_backend_folder;
 }
 
 bookmarks::BookmarkModel* ChromeSyncClient::GetBookmarkModel() {
@@ -458,8 +500,13 @@ ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();
     case syncer::AUTOFILL:
       return autofill::AutocompleteSyncBridge::FromWebDataService(
-                 web_data_service_.get())
+          web_data_service_.get());
+#if defined(OS_CHROMEOS)
+    case syncer::PRINTERS:
+      return chromeos::PrintersManagerFactory::GetForBrowserContext(profile_)
+          ->GetSyncBridge()
           ->AsWeakPtr();
+#endif
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();
@@ -638,6 +685,7 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
             syncer::WIFI_CREDENTIALS, error_callback, this, syncer::GROUP_UI,
             BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
   }
+
   // TODO(lgcheng): Add switch for this.
   sync_service->RegisterDataTypeController(
       base::MakeUnique<ArcPackageSyncDataTypeController>(

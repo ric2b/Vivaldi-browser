@@ -54,7 +54,6 @@
 using web::WebStateImpl;
 
 static const char kNewTabUrl[] = "chrome://newtab/";
-static NSString* const kNewTabTitle = @"New Tab";
 static const char kGoogleUserUrl[] = "http://google.com";
 static const char kGoogleRedirectUrl[] = "http://www.google.fr/";
 static NSString* const kGoogleTitle = @"Google";
@@ -160,13 +159,16 @@ class FakeChromeBrowserProvider : public ios::TestChromeBrowserProvider {
   base::scoped_nsprotocol<id<NativeAppWhitelistManager>> manager_;
 };
 
+// TODO(crbug.com/620465): can a TestWebState be used instead of a WebStateImpl
+// for those tests? This will require changing Tab to use a WebState instead of
+// a WebStateImpl first though.
 class TabTest : public BlockCleanupTest {
  public:
   TabTest()
       : thread_bundle_(web::TestWebThreadBundle::REAL_FILE_THREAD),
         scoped_browser_state_manager_(
-            base::MakeUnique<TestChromeBrowserStateManager>(base::FilePath())) {
-  }
+            base::MakeUnique<TestChromeBrowserStateManager>(base::FilePath())),
+        web_state_impl_(nullptr) {}
 
   void SetUp() override {
     BlockCleanupTest::SetUp();
@@ -191,25 +193,20 @@ class TabTest : public BlockCleanupTest {
 
     mock_web_controller_ =
         [OCMockObject niceMockForClass:[CRWWebController class]];
-    std::unique_ptr<WebStateImpl> web_state_impl;
-    web_state_impl.reset(new WebStateImpl(browser_state));
+    auto web_state_impl = base::MakeUnique<WebStateImpl>(browser_state);
     web_state_impl->SetWebController(mock_web_controller_);
-    web_state_impl->GetNavigationManagerImpl().InitializeSession(
-        @"window1", @"opener", NO, 0);
-    WebStateImpl* web_state = web_state_impl.get();
-    [[[(OCMockObject*)mock_web_controller_ stub]
-        andReturnValue:OCMOCK_VALUE(web_state)] webStateImpl];
+    web_state_impl->GetNavigationManagerImpl().InitializeSession(NO);
+    web_state_impl_ = web_state_impl.get();
+    [[[static_cast<OCMockObject*>(mock_web_controller_) stub]
+        andReturnValue:OCMOCK_VALUE(web_state_impl_)] webStateImpl];
     web_controller_view_.reset([[UIView alloc] init]);
-    [[[(OCMockObject*)mock_web_controller_ stub]
+    [[[static_cast<OCMockObject*>(mock_web_controller_) stub]
         andReturn:web_controller_view_.get()] view];
-    tab_.reset([[Tab alloc] initWithWindowName:nil
-                                        opener:nullptr
-                                   openedByDOM:NO
-                                         model:nil
-                                  browserState:browser_state]);
+    tab_.reset([[Tab alloc] initWithWebState:std::move(web_state_impl)
+                                       model:nil
+                            attachTabHelpers:NO]);
     web::NavigationManager::WebLoadParams params(GURL("chrome://version/"));
     [[tab_ webController] loadWithParams:params];
-    [tab_ replaceWebStateImpl:std::move(web_state_impl)];
 
     // There should be no entries in the history at this point.
     history::QueryResults results;
@@ -228,29 +225,34 @@ class TabTest : public BlockCleanupTest {
   }
 
   void BrowseTo(const GURL& userUrl, const GURL& redirectUrl, NSString* title) {
-    web::Referrer empty_referrer;
+    DCHECK_EQ(tab_.get().webState, web_state_impl_);
+
     [tab_ webWillAddPendingURL:userUrl transition:ui::PAGE_TRANSITION_TYPED];
-    [tab_ webStateImpl]->OnProvisionalNavigationStarted(userUrl);
+    web_state_impl_->OnProvisionalNavigationStarted(userUrl);
     [tab_ webWillAddPendingURL:redirectUrl
                     transition:ui::PAGE_TRANSITION_CLIENT_REDIRECT];
-    [[tab_ navigationManager]->GetSessionController()
-          addPendingEntry:redirectUrl
-                 referrer:empty_referrer
-               transition:ui::PAGE_TRANSITION_CLIENT_REDIRECT
-        rendererInitiated:YES];
-    [tab_ webStateImpl]->OnProvisionalNavigationStarted(redirectUrl);
-    [[tab_ navigationManager]->GetSessionController() commitPendingEntry];
+
+    web::Referrer empty_referrer;
+    [tab_ navigationManagerImpl]->AddPendingItem(
+        redirectUrl, empty_referrer, ui::PAGE_TRANSITION_CLIENT_REDIRECT,
+        web::NavigationInitiationType::RENDERER_INITIATED);
+
+    web_state_impl_->OnProvisionalNavigationStarted(redirectUrl);
+    [[tab_ navigationManagerImpl]->GetSessionController() commitPendingItem];
     [[tab_ webController] webStateImpl]->OnNavigationCommitted(redirectUrl);
     [tab_ webDidStartLoadingURL:redirectUrl shouldUpdateHistory:YES];
+
     base::string16 new_title = base::SysNSStringToUTF16(title);
     [tab_ navigationManager]->GetLastCommittedItem()->SetTitle(new_title);
-    [tab_ webController:mock_web_controller_ titleDidChange:title];
+
+    web_state_impl_->OnTitleChanged();
     [[[(id)mock_web_controller_ expect]
         andReturnValue:OCMOCK_VALUE(kPageLoaded)] loadPhase];
-    [tab_ webStateImpl]->OnPageLoaded(redirectUrl, true);
+    web_state_impl_->OnPageLoaded(redirectUrl, true);
   }
 
   void BrowseToNewTab() {
+    DCHECK_EQ(tab_.get().webState, web_state_impl_);
     const GURL url(kNewTabUrl);
     // TODO(crbug.com/661992): This will not work with a mock CRWWebController.
     // The only test that uses it is currently disabled.
@@ -262,8 +264,8 @@ class TabTest : public BlockCleanupTest {
     [tab_ webDidStartLoadingURL:url shouldUpdateHistory:YES];
     [[[(id)mock_web_controller_ expect]
         andReturnValue:OCMOCK_VALUE(kPageLoaded)] loadPhase];
-    [tab_ webStateImpl]->OnPageLoaded(url, true);
-    [tab_ webController:mock_web_controller_ titleDidChange:kNewTabTitle];
+    web_state_impl_->OnPageLoaded(url, true);
+    web_state_impl_->OnTitleChanged();
   }
 
   void QueryAllHistory(history::QueryResults* results) {
@@ -317,6 +319,7 @@ class TabTest : public BlockCleanupTest {
   IOSChromeScopedTestingChromeBrowserStateManager scoped_browser_state_manager_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   base::scoped_nsobject<Tab> tab_;
+  web::WebStateImpl* web_state_impl_;
   history::HistoryService* history_service_;  // weak
   CRWWebController* mock_web_controller_;     // weak
   base::scoped_nsobject<UIView> web_controller_view_;

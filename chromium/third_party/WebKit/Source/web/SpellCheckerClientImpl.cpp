@@ -98,7 +98,8 @@ void SpellCheckerClientImpl::toggleSpellCheckingEnabled() {
     m_spellCheckThisFieldStatus = SpellCheckForcedOn;
     if (m_webView->focusedCoreFrame()->isLocalFrame()) {
       if (LocalFrame* frame = toLocalFrame(m_webView->focusedCoreFrame())) {
-        VisibleSelection frameSelection = frame->selection().selection();
+        VisibleSelection frameSelection =
+            frame->selection().computeVisibleSelectionInDOMTreeDeprecated();
         // If a selection is in an editable element spell check its content.
         if (Element* rootEditableElement =
                 frameSelection.rootEditableElement()) {
@@ -139,10 +140,8 @@ void SpellCheckerClientImpl::requestCheckingOfString(
   if (!m_webView->spellCheckClient())
     return;
   const String& text = request->data().text();
-  const Vector<uint32_t>& markers = request->data().markers();
-  const Vector<unsigned>& markerOffsets = request->data().offsets();
   m_webView->spellCheckClient()->requestCheckingOfText(
-      text, markers, markerOffsets, new WebTextCheckingCompletionImpl(request));
+      text, new WebTextCheckingCompletionImpl(request));
 }
 
 void SpellCheckerClientImpl::cancelAllPendingRequests() {

@@ -55,6 +55,7 @@
     },
 
     'chromium.android.fyi': {
+      'Memory Infra Tester': 'android_release_thumb_bot',
       'NDK Next MIPS Builder':
         'android_ndk_next_release_bot_minimal_symbols_mipsel',
       'NDK Next arm Builder':
@@ -96,7 +97,7 @@
 
     'chromium.fyi': {
       'Afl Upload Linux ASan': 'release_afl_asan',
-      'Android Builder (dbg)': 'android_debug_static_bot_vr_shell',
+      'Android Builder (dbg)': 'android_debug_static_bot',
       'Android Builder Goma Canary (dbg)': 'android_debug_bot',
       'Android deterministic': 'android_without_codecs_release_bot_minimal_symbols',
       'Android deterministic (dbg)': 'android_debug_bot',
@@ -106,7 +107,9 @@
       'CFI Linux': 'cfi_release_static',
       'CFI Linux Full': 'cfi_full_release_static',
       'Chromium Linux Goma Canary': 'release_bot',
+      'Chromium Linux Goma Canary': 'release_bot',
       'Chromium Linux Goma Canary (clobber)': 'release_bot',
+      'Chromium Linux Goma Canary LocalOutputCache': 'release_bot',
       'Chromium Linux Precise Goma LinkTest': 'release_bot',
       'Chromium Linux32 Goma Canary (clobber)': 'release_bot_x86',
       'Chromium Mac 10.10 MacViews': 'mac_views_browser_release_bot',
@@ -173,7 +176,7 @@
       'EarlGreyiOS': 'ios',
       'GomaCanaryiOS': 'ios',
       'ios-simulator': 'ios',
-      'Headless Linux (dbg)': '//build/args/bots/chromium.fyi/headless_linux_dbg.gn',
+      'Headless Linux (dbg)': 'headless_linux_debug_bot',
       'MD Top Chrome ChromeOS material-hybrid': 'chromeos_with_codecs_debug_bot',
       'MD Top Chrome ChromeOS non-material': 'chromeos_with_codecs_debug_bot',
       'MD Top Chrome Win material': 'debug_bot',
@@ -186,6 +189,7 @@
       'Libfuzzer Upload Linux UBSan': 'release_libfuzzer_ubsan',
       'Libfuzzer Upload Mac ASan': 'release_libfuzzer_mac_asan',
       'Linux ARM': 'release_bot_arm',
+      'Linux Clang Analyzer': 'linux_chromium_analysis',
       'Linux deterministic': 'release_bot',
       'Linux deterministic (dbg)': 'debug_bot',
       'Linux remote_run Builder': 'release_bot',
@@ -248,6 +252,7 @@
       'GPU Win x64 Builder (dbg)': 'gpu_tests_deqp_gles_debug_trybot',
       'Linux ChromiumOS Builder': 'gpu_fyi_tests_chromeos_release_trybot',
       'Linux ChromiumOS Ozone Builder': 'gpu_fyi_tests_chromeos_ozone_release_trybot',
+      'Linux GPU TSAN Release': 'gpu_fyi_tests_release_trybot_tsan',
       'Mac GPU ASAN Release': 'gpu_fyi_tests_release_trybot_asan',
     },
 
@@ -268,6 +273,7 @@
       'Linux Builder Trusty (dbg)': 'debug_bot',
       'Linux Builder Trusty (dbg)(32)': 'debug_bot_x86',
       'Linux Builder Trusty': 'release_bot',
+      'Deterministic Linux': 'release_bot',
     },
 
     'chromium.lkgr': {
@@ -300,6 +306,7 @@
       'ios-device-xcode-clang': 'ios',
       'ios-simulator': 'ios',
       'ios-simulator-cronet': 'ios',
+      'ios-simulator-eg': 'ios',
       'ios-simulator-xcode-clang': 'ios',
     },
 
@@ -336,6 +343,14 @@
       'Android Builder FYI': 'official_goma_minimal_symbols_android',
       'Win Builder FYI': 'official_goma',
       'Win Clang Builder': 'official_goma_minimal_symbols_clang',
+      'Battor Agent Linux': 'debug_bot',
+    },
+
+    'chromium.swarm': {
+      'Android Swarm': 'android_without_codecs_release_bot_minimal_symbols',
+      'Linux Swarm': 'release_bot',
+      'Mac Swarm': 'release_bot_mac_strip',
+      'Windows Swarm': 'release_bot_x86',
     },
 
     'client.nacl.sdk': {
@@ -346,6 +361,11 @@
       'mac-sdk-multirel': 'release_bot',
       'windows-sdk-multi': 'release_bot_x86',
       'windows-sdk-multirel': 'release_bot_x86',
+    },
+
+    'client.v8.chromium': {
+      'Linux - Future': 'v8_future_release_bot',
+      'Linux - Future (dbg)': 'v8_future_debug_bot',
     },
 
     'client.v8.fyi': {
@@ -417,8 +437,9 @@
     },
 
     'official.desktop': {
+      'linux64': 'official',
       'mac64': 'official',
-      'precise64': 'official',
+      'mac64-recipes': 'official',
 
       # Currently the official bots set mini_installer_official_deps=1
       # but it's not clear if that's actually used anywhere.
@@ -435,15 +456,22 @@
         '1': 'official_chrome_pgo_phase_1',
         '2': 'official_chrome_pgo_phase_2',
       },
+      # TODO(mmoss): Remove this once all official Windows recipes are working.
+      'win-recipes': 'official',
     },
 
     'official.desktop.continuous': {
       'mac beta': 'official',
       'mac stable': 'official',
       'mac trunk': 'official',
-      'precise64 beta': 'official',
-      'precise64 stable': 'official',
-      'precise64 trunk': 'official',
+      'linux64 beta': 'official_six_concurrent_links',
+      'linux64 stable': 'official_six_concurrent_links',
+      'linux64 trunk': 'official_six_concurrent_links',
+      # TODO(mmoss): These precise64 entries can go away once the newly renamed
+      # builders are fully deployed.
+      'precise64 beta': 'official_six_concurrent_links',
+      'precise64 stable': 'official_six_concurrent_links',
+      'precise64 trunk': 'official_six_concurrent_links',
       'win beta': 'official_six_concurrent_links',
       'win stable': 'official_six_concurrent_links',
       'win trunk': 'official_six_concurrent_links',
@@ -534,6 +562,7 @@
       'linux_chromium_chromeos_msan_rel_ng': 'chromeos_msan_release_bot',
       'linux_chromium_chromeos_ozone_rel_ng': 'chromeos_with_codecs_ozone_release_trybot',
       'linux_chromium_chromeos_rel_ng': 'chromeos_with_codecs_release_trybot',
+      'linux_chromium_clobber_deterministic': 'release_trybot',
       'linux_chromium_clobber_rel_ng': 'release_trybot',
       'linux_chromium_compile_dbg_32_ng': 'debug_trybot_x86',
       'linux_chromium_compile_dbg_ng': 'debug_trybot',
@@ -541,8 +570,7 @@
       'linux_chromium_dbg_32_ng': 'debug_trybot_x86',
       'linux_chromium_dbg_ng': 'debug_trybot',
       'linux_chromium_gn_upload': 'gn_linux_upload',
-      'linux_chromium_headless_dbg': '//build/args/bots/tryserver.chromium.linux/linux_chromium_headless_dbg.gn',
-      'linux_chromium_headless_rel': '//build/args/bots/tryserver.chromium.linux/linux_chromium_headless_rel.gn',
+      'linux_chromium_headless_rel': 'headless_linux_release_trybot',
       'linux_chromium_ozone_compile_only_ng': 'ozone_linux_release_trybot',
 
       # This is intentionally a release_bot and not a release_trybot;
@@ -592,6 +620,7 @@
       'ios-device': 'ios',
       'ios-device-xcode-clang': 'ios',
       'ios-simulator': 'ios',
+      'ios-simulator-eg': 'ios',
       'ios-simulator-cronet': 'ios',
       'ios-simulator-xcode-clang': 'ios',
       'mac_chromium_10.10_rel_ng': 'gpu_tests_release_trybot',
@@ -809,6 +838,10 @@
       'android', 'release_bot', 'minimal_symbols', 'arm64',
     ],
 
+    'android_release_thumb_bot': [
+      'android', 'release_bot', 'arm_thumb',
+    ],
+
     'android_release_trybot': [
       'android', 'release_trybot',
     ],
@@ -823,10 +856,6 @@
 
     'android_debug_static_bot_x86': [
       'android', 'debug_static_bot', 'x86',
-    ],
-
-    'android_debug_static_bot_vr_shell': [
-      'android', 'debug_static_bot', 'vr_shell',
     ],
 
     'android_debug_static_minimal_symbols_mipsel': [
@@ -1026,11 +1055,11 @@
     ],
 
     'chromeos_with_codecs_ozone_release_bot': [
-      'chromeos_with_codecs', 'ozone', 'release_bot',
+      'chromeos_with_codecs', 'ozone', 'default_ozone_platform_x11', 'release_bot',
     ],
 
     'chromeos_with_codecs_ozone_release_trybot': [
-      'chromeos_with_codecs', 'ozone', 'release_trybot',
+      'chromeos_with_codecs', 'ozone', 'default_ozone_platform_x11', 'release_trybot',
     ],
 
     'chromeos_with_codecs_release_bot': [
@@ -1190,7 +1219,7 @@
     ],
 
     'gpu_fyi_tests_chromeos_ozone_release_trybot': [
-      'gpu_fyi_tests', 'release_trybot', 'chromeos', 'ozone',
+      'gpu_fyi_tests', 'release_trybot', 'ozone', 'ozone_linux', 'system_gbm_libdrm',
     ],
 
     'gpu_fyi_tests_chromeos_release_trybot': [
@@ -1207,6 +1236,10 @@
 
     'gpu_fyi_tests_release_trybot_asan': [
       'gpu_fyi_tests', 'release_trybot', 'asan', 'full_symbols', 'disable_nacl',
+    ],
+
+    'gpu_fyi_tests_release_trybot_tsan': [
+      'gpu_fyi_tests', 'release_trybot', 'tsan', 'full_symbols', 'disable_nacl',
     ],
 
     'gpu_fyi_tests_win_clang_debug_bot': [
@@ -1257,12 +1290,24 @@
       'gn_linux_upload', 'official', 'goma',
     ],
 
+    'headless_linux_debug_bot': [
+      'debug_bot', 'headless',
+    ],
+
+    'headless_linux_release_trybot': [
+      'release_trybot', 'headless',
+    ],
+
     # The 'ios' config is just used for auditing. iOS bots
     # actually use the ios recipes, not the chromium recipe, and look
     # up their GN arguments via files checked in under //ios/build/bots.
     # It is an error to actually use one of these configs to generate the
     # build files.
     'ios': [ 'error'],
+
+    'linux_chromium_analysis': [
+      'analysis'
+    ],
 
     'mac_views_browser_release_bot': [
       'mac_views_browser', 'release_bot',
@@ -1480,6 +1525,14 @@
       'ubsan_vptr', 'ubsan_no_recover_hack', 'release_trybot',
     ],
 
+    'v8_future_debug_bot': [
+      'v8_future', 'debug_bot',
+    ],
+
+    'v8_future_release_bot': [
+      'v8_future', 'release_bot',
+    ],
+
     'win_clang_debug_bot': [
       'clang', 'debug_bot', 'minimal_symbols',
     ],
@@ -1493,6 +1546,8 @@
   # mb should use. See //tools/mb/docs/user_guide.md for more information.
   'mixins': {
     'afl': { 'gn_args': 'use_afl=true' },
+
+    'analysis': { 'gn_args': 'use_clang_static_analyzer=true'},
 
     # We build Android with codecs on most bots to ensure maximum test
     # coverage, but use 'android_without_codecs' on bots responsible for
@@ -1525,6 +1580,10 @@
     'arm_no_neon': {
       'mixins': ['arm'],
       'gn_args': 'arm_use_neon=false',
+    },
+
+    'arm_thumb': {
+      'gn_args': 'arm_use_thumb=true',
     },
 
     'asan': {
@@ -1638,6 +1697,10 @@
       'mixins': ['debug_bot', 'minimal_symbols'],
     },
 
+    'default_ozone_platform_x11': {
+      'gn_args': 'ozone_platform="x11"',
+    },
+
     'disable_nacl': {
       'gn_args': 'enable_nacl=false',
     },
@@ -1700,6 +1763,10 @@
       'gn_args': 'use_system_xcode=false',
     },
 
+    'headless': {
+      'args_file': '//build/args/headless.gn',
+    },
+
     'hybrid': {
       'gn_args': 'v8_target_cpu="arm" target_cpu="x86"',
       'mixins': ['disable_nacl'],
@@ -1732,7 +1799,7 @@
     },
 
     'minimal_symbols': {
-      'gn_args': 'symbol_level=1',
+      'gn_args': 'symbol_level=1 strip_absolute_paths_from_debug_symbols=true',
     },
 
     'mipsel': {
@@ -1781,7 +1848,8 @@
     'ozone_linux': {
       'gn_args': ('ozone_auto_platforms=false ozone_platform_wayland=true '
                   'ozone_platform_x11=true ozone_platform_gbm=true '
-                  'enable_package_mash_services=true use_ash=false'),
+                  'enable_package_mash_services=true use_ash=false '
+                  'use_jessie_sysroot=true use_xkbcommon=true'),
     },
 
     'pdf_xfa': {
@@ -1824,6 +1892,10 @@
       'gn_args': 'is_component_build=false',
     },
 
+    'system_gbm_libdrm': {
+      'gn_args': 'use_system_libdrm=true use_system_minigbm=true',
+    },
+
     'syzyasan': {
       'gn_args': 'is_syzyasan=true',
     },
@@ -1858,12 +1930,12 @@
       'gn_args': 'use_lld=true',
     },
 
-    'v8_heap': {
-      'gn_args': 'v8_enable_verify_heap=true',
+    'v8_future': {
+      'gn_args': 'v8_enable_future=true',
     },
 
-    'vr_shell': {
-      'gn_args': 'enable_vr_shell=true',
+    'v8_heap': {
+      'gn_args': 'v8_enable_verify_heap=true',
     },
 
     'win_analyze': {

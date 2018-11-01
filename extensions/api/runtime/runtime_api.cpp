@@ -2,15 +2,17 @@
 
 #include "extensions/api/runtime/runtime_api.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/path_service.h"
 #include "base/json/json_reader.h"
 #include "base/memory/singleton.h"
+#include "base/path_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -36,24 +38,22 @@ using vivaldi::runtime_private::FeatureFlagInfo;
 // Action function used by RuntimePrivateExitFunction::Run()
 void PerformApplicationShutdown();
 
-FeatureEntry::FeatureEntry() { }
+FeatureEntry::FeatureEntry() {}
 
 VivaldiRuntimeFeatures::VivaldiRuntimeFeatures(Profile* profile)
-  : profile_(profile), weak_ptr_factory_(this) {
+    : profile_(profile), weak_ptr_factory_(this) {
   LoadRuntimeFeatures();
 }
 
 VivaldiRuntimeFeatures::VivaldiRuntimeFeatures()
-  : profile_(nullptr), weak_ptr_factory_(this) {
-}
+    : profile_(nullptr), weak_ptr_factory_(this) {}
 
-VivaldiRuntimeFeatures::~VivaldiRuntimeFeatures() {
-}
+VivaldiRuntimeFeatures::~VivaldiRuntimeFeatures() {}
 
 /* static */
 bool IsEnabled(Profile* profile, const std::string& feature_name) {
   extensions::VivaldiRuntimeFeatures* features =
-    extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(profile);
+      extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(profile);
   DCHECK(features);
   FeatureEntry* feature = features->FindNamedFeature(feature_name);
   DCHECK(feature);
@@ -79,7 +79,7 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
                                std::unique_ptr<PrefFilter>());
     store_->ReadPrefs();
 
-    if (!GetFlags(flags_)) {
+    if (!GetFlags(&flags_)) {
       LOG(ERROR) << "Unable to locate the \"flags\" preference file: "
                  << path.value();
     }
@@ -88,7 +88,7 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
   }
 }
 
-bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap& flags) {
+bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap* flags) {
   DCHECK(store_.get());
 
   const base::Value* flags_value;
@@ -114,7 +114,7 @@ bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap& flags) {
 
       for (base::DictionaryValue::Iterator values_it(*value);
            !values_it.IsAtEnd(); values_it.Advance()) {
-        const base::Value *sub_value = NULL;
+        const base::Value* sub_value = NULL;
         if (value->GetWithoutPathExpansion(values_it.key(), &sub_value)) {
           if (values_it.key() == "description") {
             sub_value->GetAsString(&entry->description);
@@ -151,14 +151,14 @@ bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap& flags) {
         entry->internal_enabled = entry->enabled = false;
         entry->force_value = true;
       }
-      flags.insert(std::make_pair(it.key(), entry));
+      flags->insert(std::make_pair(it.key(), entry));
     }
   }
   const base::ListValue* list =
       profile_->GetPrefs()->GetList(vivaldiprefs::kVivaldiExperiments);
 
   // Check for any features that might be enabled by the user now.
-  for (auto& flag_entry : flags) {
+  for (auto& flag_entry : *flags) {
     base::ListValue::const_iterator it =
         list->Find(base::StringValue(flag_entry.first));
     if (it != list->end() && flag_entry.second->force_value == false) {
@@ -168,8 +168,8 @@ bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap& flags) {
   return true;
 }
 
-FeatureEntry *
-VivaldiRuntimeFeatures::FindNamedFeature(const std::string &feature_name) {
+FeatureEntry* VivaldiRuntimeFeatures::FindNamedFeature(
+    const std::string& feature_name) {
   FeatureEntryMap::iterator it = flags_.find(feature_name);
   if (it != flags_.end()) {
     return (*it).second;
@@ -181,28 +181,25 @@ const FeatureEntryMap& VivaldiRuntimeFeatures::GetAllFeatures() {
   return flags_;
 }
 
-VivaldiRuntimeFeatures*
-VivaldiRuntimeFeaturesFactory::GetForProfile(Profile* profile) {
+VivaldiRuntimeFeatures* VivaldiRuntimeFeaturesFactory::GetForProfile(
+    Profile* profile) {
   return static_cast<VivaldiRuntimeFeatures*>(
-    GetInstance()->GetServiceForBrowserContext(profile, true));
+      GetInstance()->GetServiceForBrowserContext(profile, true));
 }
 
-VivaldiRuntimeFeaturesFactory*
-VivaldiRuntimeFeaturesFactory::GetInstance() {
+VivaldiRuntimeFeaturesFactory* VivaldiRuntimeFeaturesFactory::GetInstance() {
   return base::Singleton<VivaldiRuntimeFeaturesFactory>::get();
 }
 
 VivaldiRuntimeFeaturesFactory::VivaldiRuntimeFeaturesFactory()
-  : BrowserContextKeyedServiceFactory(
-    "VivaldiRuntimeFeatures",
-    BrowserContextDependencyManager::GetInstance()) {
-}
+    : BrowserContextKeyedServiceFactory(
+          "VivaldiRuntimeFeatures",
+          BrowserContextDependencyManager::GetInstance()) {}
 
-VivaldiRuntimeFeaturesFactory::~VivaldiRuntimeFeaturesFactory() {
-}
+VivaldiRuntimeFeaturesFactory::~VivaldiRuntimeFeaturesFactory() {}
 
 KeyedService* VivaldiRuntimeFeaturesFactory::BuildServiceInstanceFor(
-  content::BrowserContext* profile) const {
+    content::BrowserContext* profile) const {
   return new VivaldiRuntimeFeatures(static_cast<Profile*>(profile));
 }
 
@@ -214,19 +211,16 @@ bool VivaldiRuntimeFeaturesFactory::ServiceIsCreatedWithBrowserContext() const {
   return true;
 }
 
-content::BrowserContext *VivaldiRuntimeFeaturesFactory::GetBrowserContextToUse(
-    content::BrowserContext *context) const {
+content::BrowserContext* VivaldiRuntimeFeaturesFactory::GetBrowserContextToUse(
+    content::BrowserContext* context) const {
   // Redirected in incognito.
   return extensions::ExtensionsBrowserClient::Get()->GetOriginalContext(
-    context);
+      context);
 }
 
+RuntimePrivateExitFunction::RuntimePrivateExitFunction() {}
 
-RuntimePrivateExitFunction::RuntimePrivateExitFunction() {
-}
-
-RuntimePrivateExitFunction::~RuntimePrivateExitFunction() {
-}
+RuntimePrivateExitFunction::~RuntimePrivateExitFunction() {}
 
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
   PerformApplicationShutdown();
@@ -241,13 +235,13 @@ RuntimePrivateGetAllFeatureFlagsFunction::
 
 bool RuntimePrivateGetAllFeatureFlagsFunction::RunAsync() {
   extensions::VivaldiRuntimeFeatures* features =
-    extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(GetProfile());
+      extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(GetProfile());
 
   const FeatureEntryMap& flags = features->GetAllFeatures();
   std::vector<FeatureFlagInfo> results;
 
   for (auto& entry : flags) {
-    FeatureFlagInfo *flag = new FeatureFlagInfo;
+    FeatureFlagInfo* flag = new FeatureFlagInfo;
     flag->name = entry.first;
     flag->friendly_name = entry.second->friendly_name;
     flag->description = entry.second->description;
@@ -265,12 +259,10 @@ bool RuntimePrivateGetAllFeatureFlagsFunction::RunAsync() {
 }
 
 RuntimePrivateSetFeatureEnabledFunction::
-RuntimePrivateSetFeatureEnabledFunction() {
-}
+    RuntimePrivateSetFeatureEnabledFunction() {}
 
 RuntimePrivateSetFeatureEnabledFunction::
-    ~RuntimePrivateSetFeatureEnabledFunction() {
-}
+    ~RuntimePrivateSetFeatureEnabledFunction() {}
 
 bool RuntimePrivateSetFeatureEnabledFunction::RunAsync() {
   std::unique_ptr<vivaldi::runtime_private::SetFeatureEnabled::Params> params(
@@ -278,7 +270,7 @@ bool RuntimePrivateSetFeatureEnabledFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   extensions::VivaldiRuntimeFeatures* features =
-    extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(GetProfile());
+      extensions::VivaldiRuntimeFeaturesFactory::GetForProfile(GetProfile());
 
   bool found = false;
   FeatureEntry* entry = features->FindNamedFeature(params->feature_name);
@@ -303,7 +295,7 @@ bool RuntimePrivateSetFeatureEnabledFunction::RunAsync() {
     }
   }
   results_ =
-    vivaldi::runtime_private::SetFeatureEnabled::Results::Create(found);
+      vivaldi::runtime_private::SetFeatureEnabled::Results::Create(found);
 
   SendResponse(true);
   return true;

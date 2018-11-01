@@ -10,9 +10,9 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "content/child/feature_policy/feature_policy_platform.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/webmessageportchannel_impl.h"
-#include "content/common/content_security_policy_header.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
@@ -23,6 +23,7 @@
 #include "content/common/swapped_out_messages.h"
 #include "content/common/view_messages.h"
 #include "content/renderer/child_frame_compositing_helper.h"
+#include "content/renderer/frame_owner_properties.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -49,23 +50,6 @@ static base::LazyInstance<RoutingIDProxyMap> g_routing_id_proxy_map =
 typedef std::map<blink::WebFrame*, RenderFrameProxy*> FrameMap;
 base::LazyInstance<FrameMap> g_frame_map = LAZY_INSTANCE_INITIALIZER;
 
-blink::WebParsedFeaturePolicy ToWebParsedFeaturePolicy(
-    const ParsedFeaturePolicy& parsed_whitelists) {
-  std::vector<blink::WebFeaturePolicy::ParsedWhitelist> result;
-  for (const FeaturePolicyParsedWhitelist& whitelist : parsed_whitelists) {
-    blink::WebFeaturePolicy::ParsedWhitelist web_whitelist;
-    web_whitelist.featureName =
-        blink::WebString::fromUTF8(whitelist.feature_name);
-    web_whitelist.matchesAllOrigins = whitelist.matches_all_origins;
-    std::vector<blink::WebSecurityOrigin> web_origins;
-    for (const url::Origin& origin : whitelist.origins)
-      web_origins.push_back(origin);
-    web_whitelist.origins = web_origins;
-    result.push_back(web_whitelist);
-  }
-  return result;
-}
-
 }  // namespace
 
 // static
@@ -75,8 +59,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
     blink::WebTreeScopeType scope) {
   CHECK_NE(routing_id, MSG_ROUTING_NONE);
 
-  std::unique_ptr<RenderFrameProxy> proxy(
-      new RenderFrameProxy(routing_id, frame_to_replace->GetRoutingID()));
+  std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
 
   // When a RenderFrame is replaced by a RenderProxy, the WebRemoteFrame should
   // always come from WebRemoteFrame::create and a call to WebFrame::swap must
@@ -114,8 +97,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
       return nullptr;
   }
 
-  std::unique_ptr<RenderFrameProxy> proxy(
-      new RenderFrameProxy(routing_id, MSG_ROUTING_NONE));
+  std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
   RenderViewImpl* render_view = nullptr;
   RenderWidget* render_widget = nullptr;
   blink::WebRemoteFrame* web_frame = nullptr;
@@ -181,9 +163,9 @@ RenderFrameProxy* RenderFrameProxy::FromWebFrame(blink::WebFrame* web_frame) {
   return NULL;
 }
 
-RenderFrameProxy::RenderFrameProxy(int routing_id, int frame_routing_id)
+RenderFrameProxy::RenderFrameProxy(int routing_id)
     : routing_id_(routing_id),
-      frame_routing_id_(frame_routing_id),
+      provisional_frame_routing_id_(MSG_ROUTING_NONE),
       web_frame_(nullptr),
       render_view_(nullptr),
       render_widget_(nullptr) {
@@ -243,7 +225,7 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   web_frame_->setReplicatedPotentiallyTrustworthyUniqueOrigin(
       state.has_potentially_trustworthy_unique_origin);
   web_frame_->setReplicatedFeaturePolicyHeader(
-      ToWebParsedFeaturePolicy(state.feature_policy_header));
+      FeaturePolicyHeaderToWeb(state.feature_policy_header));
   if (state.has_received_user_gesture)
     web_frame_->setHasReceivedUserGesture();
 
@@ -329,9 +311,7 @@ void RenderFrameProxy::OnChildFrameProcessGone() {
 }
 
 void RenderFrameProxy::OnSetChildFrameSurface(
-    const cc::SurfaceId& surface_id,
-    const gfx::Size& frame_size,
-    float scale_factor,
+    const cc::SurfaceInfo& surface_info,
     const cc::SurfaceSequence& sequence) {
   // If this WebFrame has already been detached, its parent will be null. This
   // can happen when swapping a WebRemoteFrame with a WebLocalFrame, where this
@@ -344,8 +324,7 @@ void RenderFrameProxy::OnSetChildFrameSurface(
     compositing_helper_ =
         ChildFrameCompositingHelper::CreateForRenderFrameProxy(this);
   }
-  compositing_helper_->OnSetSurface(
-      cc::SurfaceInfo(surface_id, scale_factor, frame_size), sequence);
+  compositing_helper_->OnSetSurface(surface_info, sequence);
 }
 
 void RenderFrameProxy::OnUpdateOpener(int opener_routing_id) {
@@ -389,7 +368,8 @@ void RenderFrameProxy::OnEnforceInsecureRequestPolicy(
 
 void RenderFrameProxy::OnSetFrameOwnerProperties(
     const FrameOwnerProperties& properties) {
-  web_frame_->setFrameOwnerProperties(properties.ToWebFrameOwnerProperties());
+  web_frame_->setFrameOwnerProperties(
+      ConvertFrameOwnerPropertiesToWebFrameOwnerProperties(properties));
 }
 
 void RenderFrameProxy::OnDidUpdateOrigin(
@@ -429,6 +409,20 @@ void RenderFrameProxy::frameDetached(DetachType type) {
 
   web_frame_->close();
 
+  // If this proxy was associated with a provisional RenderFrame, and we're not
+  // in the process of swapping with it, clean it up as well.
+  if (type == DetachType::Remove &&
+      provisional_frame_routing_id_ != MSG_ROUTING_NONE) {
+    RenderFrameImpl* provisional_frame =
+        RenderFrameImpl::FromRoutingID(provisional_frame_routing_id_);
+    // |provisional_frame| should always exist.  If it was deleted via
+    // FrameMsg_Delete right before this proxy was removed,
+    // RenderFrameImpl::frameDetached would've cleared this proxy's
+    // |provisional_frame_routing_id_| and we wouldn't get here.
+    CHECK(provisional_frame);
+    provisional_frame->GetWebFrame()->detach();
+  }
+
   // Remove the entry in the WebFrame->RenderFrameProxy map, as the |web_frame_|
   // is no longer valid.
   FrameMap::iterator it = g_frame_map.Get().find(web_frame_);
@@ -450,13 +444,13 @@ void RenderFrameProxy::forwardPostMessage(
 
   FrameMsg_PostMessage_Params params;
   params.is_data_raw_string = false;
-  params.data = event.data().toString();
-  params.source_origin = event.origin();
+  params.data = event.data().toString().utf16();
+  params.source_origin = event.origin().utf16();
   if (!target_origin.isNull())
-    params.target_origin = target_origin.toString();
+    params.target_origin = target_origin.toString().utf16();
 
   params.message_ports =
-      WebMessagePortChannelImpl::ExtractMessagePortIDs(event.releaseChannels());
+      WebMessagePortChannelImpl::ExtractMessagePorts(event.releaseChannels());
 
   // Include the routing ID for the source frame (if one exists), which the
   // browser process will translate into the routing ID for the equivalent

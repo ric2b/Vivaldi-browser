@@ -3,18 +3,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_GLUE_NOTES_CHANGE_PROCESSOR_H_
-#define VIVALDI_SYNC_GLUE_NOTES_CHANGE_PROCESSOR_H_
+#ifndef SYNC_GLUE_NOTES_CHANGE_PROCESSOR_H_
+#define SYNC_GLUE_NOTES_CHANGE_PROCESSOR_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/threading/thread_checker.h"
-#include "notes/notesnode.h"
-#include "notes/notes_model_observer.h"
-#include "sync/glue/notes_model_associator.h"
 #include "components/sync/model/change_processor.h"
 #include "components/sync/model/data_type_error_handler.h"
+#include "notes/notes_model_observer.h"
+#include "notes/notesnode.h"
+#include "sync/glue/notes_model_associator.h"
 
 class Profile;
 using vivaldi::Notes_Model;
@@ -231,4 +232,4 @@ class NotesChangeProcessor : public NotesModelObserver,
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_GLUE_NOTES_CHANGE_PROCESSOR_H_
+#endif  // SYNC_GLUE_NOTES_CHANGE_PROCESSOR_H_

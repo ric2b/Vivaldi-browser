@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/aura/window_tree_host_platform.h"
 
@@ -51,6 +52,10 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
 
   ~WindowTreeHostMus() override;
 
+  // Returns the WindowTreeHostMus for |window|. This returns null if |window|
+  // is null, or not in a WindowTreeHostMus.
+  static WindowTreeHostMus* ForWindow(aura::Window* window);
+
   // Sets the bounds in pixels.
   void SetBoundsFromServer(const gfx::Rect& bounds_in_pixels);
 
@@ -68,8 +73,29 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   // clear.
   void SetHitTestMask(const base::Optional<gfx::Rect>& rect);
 
+  // Sets the opacity of the underlying mus window.
+  void SetOpacity(float value);
+
   // Requests that the window manager change the activation to the next window.
   void DeactivateWindow();
+
+  // Requests that our root window be stacked above this other root window
+  // which our connection owns.
+  void StackAbove(Window* window);
+
+  // Requests that our root window be stacked above all other parallel root
+  // windows which we might not own.
+  void StackAtTop();
+
+  // Tells the window manager to take control of moving the window. Returns
+  // true if the move wasn't canceled.
+  void PerformWindowMove(ui::mojom::MoveLoopSource mus_source,
+                         const gfx::Point& cursor_location,
+                         const base::Callback<void(bool)>& callback);
+
+  // Tells the window manager to abort any current move initiated by
+  // PerformWindowMove().
+  void CancelWindowMove();
 
   // Intended only for WindowTreeClient to call.
   void set_display_id(int64_t id) { display_id_ = id; }
@@ -84,6 +110,8 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   void OnActivationChanged(bool active) override;
   void OnCloseRequest() override;
   gfx::ICCProfile GetICCProfileForCurrentDisplay() override;
+  void MoveCursorToScreenLocationInPixels(
+      const gfx::Point& location_in_pixels) override;
 
  private:
   int64_t display_id_;

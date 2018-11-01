@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.text.Editable;
@@ -20,6 +21,7 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ReplacementSpan;
 import android.util.AttributeSet;
+import android.util.Pair;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
@@ -30,6 +32,7 @@ import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputConnectionWrapper;
+import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Log;
@@ -844,21 +847,31 @@ public class UrlBar extends VerticallyFixedEditText {
         mAccessibilityTextOverride = accessibilityOverride;
     }
 
-    private void scrollToTLD() {
+    /**
+     * Scroll to ensure the TLD is visible.
+     * @return Whether the TLD was discovered and successfully scrolled to.
+     */
+    public boolean scrollToTLD() {
         Editable url = getText();
-        if (url == null || url.length() < 1) return;
+        if (url == null || url.length() < 1) return false;
         String urlString = url.toString();
-        URL javaUrl;
-        try {
-            javaUrl = new URL(urlString);
-        } catch (MalformedURLException mue) {
-            return;
+        Pair<String, String> urlComponents =
+                LocationBarLayout.splitPathFromUrlDisplayText(urlString);
+
+        if (TextUtils.isEmpty(urlComponents.first)) return false;
+
+        // Do not scroll to the end of the host for URLs such as data:, javascript:, etc...
+        if (urlComponents.second == null) {
+            Uri uri = Uri.parse(urlString);
+            String scheme = uri.getScheme();
+            if (!TextUtils.isEmpty(scheme)
+                    && LocationBarLayout.UNSUPPORTED_SCHEMES_TO_SPLIT.contains(scheme)) {
+                return false;
+            }
         }
-        String host = javaUrl.getHost();
-        if (host == null || host.isEmpty()) return;
-        int hostStart = urlString.indexOf(host);
-        int hostEnd = hostStart + host.length();
-        setSelection(hostEnd);
+
+        setSelection(urlComponents.first.length());
+        return true;
     }
 
     @Override
@@ -1116,7 +1129,7 @@ public class UrlBar extends VerticallyFixedEditText {
     }
 
     /**
-     * Emphasize the TLD and second domain of the URL.
+     * Emphasize components of the URL for readability.
      */
     public void emphasizeUrl() {
         Editable url = getText();
@@ -1128,8 +1141,6 @@ public class UrlBar extends VerticallyFixedEditText {
             return;
         }
 
-        // We retrieve the domain and registry from the full URL (the url bar shows a simplified
-        // version of the URL).
         Tab currentTab = mUrlBarDelegate.getCurrentTab();
         if (currentTab == null || currentTab.getProfile() == null) return;
 
@@ -1147,7 +1158,7 @@ public class UrlBar extends VerticallyFixedEditText {
     }
 
     /**
-     * Reset the modifications done to emphasize the TLD and second domain of the URL.
+     * Reset the modifications done to emphasize components of the URL.
      */
     public void deEmphasizeUrl() {
         OmniboxUrlEmphasizer.deEmphasizeUrl(getText());
@@ -1158,6 +1169,17 @@ public class UrlBar extends VerticallyFixedEditText {
      */
     public boolean isPastedText() {
         return mIsPastedText;
+    }
+
+    @Override
+    public CharSequence getAccessibilityClassName() {
+        // When UrlBar is used as a read-only TextView, force Talkback to pronounce it like
+        // TextView. Otherwise Talkback will say "Edit box, http://...". crbug.com/636988
+        if (isEnabled()) {
+            return super.getAccessibilityClassName();
+        } else {
+            return TextView.class.getName();
+        }
     }
 
     private void notifyAutocompleteTextStateChanged(boolean textDeleted) {

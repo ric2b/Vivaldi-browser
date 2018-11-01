@@ -26,6 +26,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 const char kDisableTopSites[] = "disable-top-sites";
@@ -122,7 +124,9 @@ TopSitesFactory::~TopSitesFactory() {
 scoped_refptr<RefcountedKeyedService> TopSitesFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   history::PrepopulatedPageList prepopulated_pages;
+  if (!vivaldi::IsVivaldiRunning()) {
   InitializePrepopulatedPageList(&prepopulated_pages);
+  }
   return BuildTopSites(context, prepopulated_pages);
 }
 

@@ -17,10 +17,10 @@
 #include "components/app_modal/javascript_dialog_extensions_client.h"
 #include "components/app_modal/javascript_native_dialog_factory.h"
 #include "components/app_modal/native_app_modal_dialog.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/javascript_message_type.h"
-#include "grit/components_strings.h"
+#include "content/public/common/javascript_dialog_type.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/font_list.h"
 
@@ -128,11 +128,11 @@ base::string16 JavaScriptDialogManager::GetTitle(
 void JavaScriptDialogManager::RunJavaScriptDialog(
     content::WebContents* web_contents,
     const GURL& origin_url,
-    content::JavaScriptMessageType message_type,
+    content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
     const DialogClosedCallback& callback,
-    bool* did_suppress_message)  {
+    bool* did_suppress_message) {
   *did_suppress_message = false;
 
   ChromeJavaScriptDialogExtraData* extra_data =
@@ -183,12 +183,8 @@ void JavaScriptDialogManager::RunJavaScriptDialog(
 
   LogUMAMessageLengthStats(message_text);
   AppModalDialogQueue::GetInstance()->AddDialog(new JavaScriptAppModalDialog(
-      web_contents,
-      &javascript_dialog_extra_data_,
-      dialog_title,
-      message_type,
-      message_text,
-      default_prompt_text,
+      web_contents, &javascript_dialog_extra_data_, dialog_title, dialog_type,
+      message_text, default_prompt_text,
       ShouldDisplaySuppressCheckbox(extra_data),
       false,  // is_before_unload_dialog
       false,  // is_reload
@@ -232,14 +228,11 @@ void JavaScriptDialogManager::RunBeforeUnloadDialog(
   extensions_client_->OnDialogOpened(web_contents);
 
   AppModalDialogQueue::GetInstance()->AddDialog(new JavaScriptAppModalDialog(
-      web_contents,
-      &javascript_dialog_extra_data_,
-      title,
-      content::JAVASCRIPT_MESSAGE_TYPE_CONFIRM,
-      message,
+      web_contents, &javascript_dialog_extra_data_, title,
+      content::JAVASCRIPT_DIALOG_TYPE_CONFIRM, message,
       base::string16(),  // default_prompt_text
       ShouldDisplaySuppressCheckbox(extra_data),
-      true,        // is_before_unload_dialog
+      true,  // is_before_unload_dialog
       is_reload,
       base::Bind(&JavaScriptDialogManager::OnBeforeUnloadDialogClosed,
                  base::Unretained(this), web_contents, callback)));
@@ -268,7 +261,6 @@ bool JavaScriptDialogManager::HandleJavaScriptDialog(
 }
 
 void JavaScriptDialogManager::CancelDialogs(content::WebContents* web_contents,
-                                            bool suppress_callbacks,
                                             bool reset_state) {
   AppModalDialogQueue* queue = AppModalDialogQueue::GetInstance();
   AppModalDialog* active_dialog = queue->active_dialog();
@@ -279,10 +271,10 @@ void JavaScriptDialogManager::CancelDialogs(content::WebContents* web_contents,
     if ((*i) == active_dialog)
       continue;
     if ((*i)->web_contents() == web_contents)
-      (*i)->Invalidate(suppress_callbacks);
+      (*i)->Invalidate();
   }
   if (active_dialog && active_dialog->web_contents() == web_contents)
-    active_dialog->Invalidate(suppress_callbacks);
+    active_dialog->Invalidate();
 
   if (reset_state)
     javascript_dialog_extra_data_.erase(web_contents);

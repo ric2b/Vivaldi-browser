@@ -139,27 +139,6 @@ class PortTestCase(LoggingTestCase):
         self.assertTrue('--foo=bar' in cmd_line)
         self.assertTrue('--foo=baz' in cmd_line)
 
-    def assert_servers_are_down(self, host, ports):
-        for port in ports:
-            try:
-                test_socket = socket.socket()
-                test_socket.connect((host, port))
-                self.fail()
-            except IOError as error:
-                self.assertTrue(error.errno in (errno.ECONNREFUSED, errno.ECONNRESET))
-            finally:
-                test_socket.close()
-
-    def assert_servers_are_up(self, host, ports):
-        for port in ports:
-            try:
-                test_socket = socket.socket()
-                test_socket.connect((host, port))
-            except IOError:
-                self.fail('failed to connect to %s:%d' % (host, port))
-            finally:
-                test_socket.close()
-
     def test_diff_image__missing_both(self):
         port = self.make_port()
         self.assertEqual(port.diff_image(None, None), (None, None))
@@ -260,16 +239,6 @@ class PortTestCase(LoggingTestCase):
             port.host.filesystem.join(port.layout_tests_dir(), 'NeverFixTests'),
             port.host.filesystem.join(port.layout_tests_dir(), 'StaleTestExpectations'),
             port.host.filesystem.join(port.layout_tests_dir(), 'SlowTests'),
-        ])
-
-    def test_expectations_files_wptserve_enabled(self):
-        port = self.make_port(options=optparse.Values(dict(enable_wptserve=True)))
-        self.assertEqual(port.expectations_files(), [
-            port.path_to_generic_test_expectations_file(),
-            port.host.filesystem.join(port.layout_tests_dir(), 'NeverFixTests'),
-            port.host.filesystem.join(port.layout_tests_dir(), 'StaleTestExpectations'),
-            port.host.filesystem.join(port.layout_tests_dir(), 'SlowTests'),
-            port.host.filesystem.join(port.layout_tests_dir(), 'WPTServeExpectations'),
         ])
 
     def test_check_sys_deps(self):

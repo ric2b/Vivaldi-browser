@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 
+#include <string>
+
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 
@@ -21,6 +23,11 @@ void UpdateOptInCancelUMA(OptInCancelReason reason) {
 
 void UpdateEnabledStateUMA(bool enabled) {
   UMA_HISTOGRAM_BOOLEAN("Arc.State", enabled);
+}
+
+void UpdateOptInFlowResultUMA(OptInFlowResult result) {
+  UMA_HISTOGRAM_ENUMERATION("Arc.OptInResult", static_cast<int>(result),
+                            static_cast<int>(OptInFlowResult::SIZE));
 }
 
 void UpdateProvisioningResultUMA(ProvisioningResult result, bool managed) {
@@ -62,9 +69,16 @@ void UpdateAuthCheckinAttempts(int32_t num_attempts) {
   UMA_HISTOGRAM_SPARSE_SLOWLY("ArcAuth.CheckinAttempts", num_attempts);
 }
 
+void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status) {
+  DCHECK_LE(status, mojom::AccountCheckStatus::CHECK_FAILED);
+  UMA_HISTOGRAM_ENUMERATION(
+      "ArcAuth.AccountCheckStatus", static_cast<int>(status),
+      static_cast<int>(mojom::AccountCheckStatus::CHECK_FAILED) + 1);
+}
+
 void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state) {
-  UMA_HISTOGRAM_ENUMERATION("Arc.OptInSilentAuthCode", static_cast<int>(state),
-                            static_cast<int>(OptInSilentAuthCode::SIZE));
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Arc.OptInSilentAuthCode",
+                              static_cast<int>(state));
 }
 
 std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result) {

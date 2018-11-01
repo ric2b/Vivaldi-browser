@@ -258,7 +258,7 @@ void ChromeRuntimeAPIDelegate::OpenURL(const GURL& uninstall_url) {
   Profile* profile = Profile::FromBrowserContext(browser_context_);
   Browser* browser = chrome::FindLastActiveWithProfile(profile);
   if (!browser)
-    browser = new Browser(Browser::CreateParams(profile));
+    browser = new Browser(Browser::CreateParams(profile, false));
 
   chrome::NavigateParams params(
       browser, uninstall_url, ui::PAGE_TRANSITION_CLIENT_REDIRECT);
@@ -324,12 +324,11 @@ bool ChromeRuntimeAPIDelegate::RestartDevice(std::string* error_message) {
   return false;
 }
 
-bool ChromeRuntimeAPIDelegate::OpenOptionsPage(const Extension* extension) {
-  Profile* profile = Profile::FromBrowserContext(browser_context_);
-  Browser* browser = chrome::FindLastActiveWithProfile(profile);
-  if (!browser)
-    return false;
-  return extensions::ExtensionTabUtil::OpenOptionsPage(extension, browser);
+bool ChromeRuntimeAPIDelegate::OpenOptionsPage(
+    const Extension* extension,
+    content::BrowserContext* browser_context) {
+  return extensions::ExtensionTabUtil::OpenOptionsPageFromAPI(extension,
+                                                              browser_context);
 }
 
 void ChromeRuntimeAPIDelegate::Observe(

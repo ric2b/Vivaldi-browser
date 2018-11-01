@@ -35,7 +35,9 @@ kbr@chromium.org
 keishi@chromium.org
 kenneth.r.christiansen@intel.com
 kinuko@chromium.org
+kojii@chromium.org
 kouhei@chromium.org
+meade@chromium.org
 mkwst@chromium.org
 mstensho@opera.com
 ojan@chromium.org
@@ -47,6 +49,7 @@ rego@igalia.com
 # rbyers reviews input related changes (eg. event handling, mouse cursors, touch hit testing, scrolling coordinator)
 rbyers@chromium.org
 rob.buis@samsung.com
+robhogan@gmail.com
 # rune reviews core/css and parts of core/rendering
 rune@opera.com
 schenney@chromium.org

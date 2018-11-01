@@ -495,7 +495,13 @@ LayoutMultiColumnSet* LayoutMultiColumnFlowThread::columnSetAtBlockOffset(
        walker = walker->nextSiblingMultiColumnSet()) {
     if (!walker->isPageLogicalHeightKnown())
       continue;
-    if (walker->logicalTopInFlowThread() == offset)
+    if (pageBoundaryRule == AssociateWithFormerPage) {
+      if (walker->logicalTopInFlowThread() < offset &&
+          walker->logicalBottomInFlowThread() >= offset)
+        return walker;
+    }
+    if (walker->logicalTopInFlowThread() <= offset &&
+        walker->logicalBottomInFlowThread() > offset)
       return walker;
     break;
   }
@@ -621,19 +627,18 @@ void LayoutMultiColumnFlowThread::appendNewFragmentainerGroupIfNeeded(
   if (!columnSet->newFragmentainerGroupsAllowed())
     return;
 
-  if (!columnSet->hasFragmentainerGroupForColumnAt(offsetInFlowThread,
-                                                   pageBoundaryRule)) {
-    FragmentationContext* enclosingFragmentationContext =
-        this->enclosingFragmentationContext();
-    // Not nested. We'll never need more rows than the one we already have then.
-    if (!enclosingFragmentationContext)
-      return;
-    ASSERT(!isLayoutPagedFlowThread());
+  if (columnSet->needsNewFragmentainerGroupAt(offsetInFlowThread,
+                                              pageBoundaryRule)) {
+    // We should never create additional fragmentainer groups unless we're in a
+    // nested fragmentation context.
+    DCHECK(enclosingFragmentationContext());
+
+    DCHECK(!isLayoutPagedFlowThread());
 
     // We have run out of columns here, so we need to add at least one more row
     // to hold more columns.
     LayoutMultiColumnFlowThread* enclosingFlowThread =
-        enclosingFragmentationContext->associatedFlowThread();
+        enclosingFragmentationContext()->associatedFlowThread();
     do {
       if (enclosingFlowThread) {
         // When we add a new row here, it implicitly means that we're inserting
@@ -661,8 +666,8 @@ void LayoutMultiColumnFlowThread::appendNewFragmentainerGroupIfNeeded(
       ASSERT(newRow.logicalHeight() > 0);
       if (newRow.logicalHeight() <= 0)
         break;
-    } while (!columnSet->hasFragmentainerGroupForColumnAt(offsetInFlowThread,
-                                                          pageBoundaryRule));
+    } while (columnSet->needsNewFragmentainerGroupAt(offsetInFlowThread,
+                                                     pageBoundaryRule));
   }
 }
 
@@ -874,7 +879,7 @@ void LayoutMultiColumnFlowThread::addColumnSetToThread(
     ASSERT(it != m_multiColumnSetList.end());
     m_multiColumnSetList.insertBefore(it, columnSet);
   } else {
-    m_multiColumnSetList.add(columnSet);
+    m_multiColumnSetList.insert(columnSet);
   }
 }
 
@@ -896,13 +901,8 @@ void LayoutMultiColumnFlowThread::skipColumnSpanner(
   LayoutMultiColumnSpannerPlaceholder* placeholder =
       layoutObject->spannerPlaceholder();
   LayoutBox* previousColumnBox = placeholder->previousSiblingMultiColumnBox();
-  if (previousColumnBox && previousColumnBox->isLayoutMultiColumnSet()) {
-    LayoutMultiColumnSet* columnSet = toLayoutMultiColumnSet(previousColumnBox);
-    // Negative margins may cause this.
-    if (logicalTopInFlowThread < columnSet->logicalTopInFlowThread())
-      logicalTopInFlowThread = columnSet->logicalTopInFlowThread();
-    columnSet->endFlow(logicalTopInFlowThread);
-  }
+  if (previousColumnBox && previousColumnBox->isLayoutMultiColumnSet())
+    toLayoutMultiColumnSet(previousColumnBox)->endFlow(logicalTopInFlowThread);
   LayoutBox* nextColumnBox = placeholder->nextSiblingMultiColumnBox();
   if (nextColumnBox && nextColumnBox->isLayoutMultiColumnSet()) {
     LayoutMultiColumnSet* nextSet = toLayoutMultiColumnSet(nextColumnBox);
@@ -1113,9 +1113,9 @@ static inline bool needsToReinsertIntoFlowThread(
       newStyle.hasTransformRelatedProperty())
     return true;
   return (oldStyle.hasInFlowPosition() &&
-          newStyle.position() == StaticPosition) ||
+          newStyle.position() == EPosition::kStatic) ||
          (newStyle.hasInFlowPosition() &&
-          oldStyle.position() == StaticPosition);
+          oldStyle.position() == EPosition::kStatic);
 }
 
 static inline bool needsToRemoveFromFlowThread(const ComputedStyle& oldStyle,

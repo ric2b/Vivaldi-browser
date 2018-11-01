@@ -13,12 +13,8 @@
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/empty_content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
-#include "cc/playback/display_item_list_settings.h"
-#include "cc/proto/layer.pb.h"
-#include "cc/test/fake_client_picture_cache.h"
+#include "cc/paint/paint_flags.h"
 #include "cc/test/fake_compositor_frame_sink.h"
-#include "cc/test/fake_engine_picture_cache.h"
-#include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/fake_picture_layer_impl.h"
@@ -47,7 +43,7 @@ TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
   auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
       &host_client, &task_graph_runner, animation_host.get());
-  host->GetLayerTree()->SetRootLayer(layer);
+  host->SetRootLayer(layer);
   layer->SetIsDrawable(true);
   layer->SavePaintProperties();
   layer->Update();
@@ -91,7 +87,7 @@ TEST(PictureLayerTest, InvalidateRasterAfterUpdate) {
   auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
       &host_client, &task_graph_runner, animation_host.get());
-  host->GetLayerTree()->SetRootLayer(layer);
+  host->SetRootLayer(layer);
   layer->SetIsDrawable(true);
   layer->SavePaintProperties();
 
@@ -135,7 +131,7 @@ TEST(PictureLayerTest, InvalidateRasterWithoutUpdate) {
   auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
       &host_client, &task_graph_runner, animation_host.get());
-  host->GetLayerTree()->SetRootLayer(layer);
+  host->SetRootLayer(layer);
   layer->SetIsDrawable(true);
   layer->SavePaintProperties();
 
@@ -170,7 +166,7 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   FakeContentLayerClient client;
   client.set_bounds(layer_size);
   client.add_draw_image(CreateDiscardableImage(layer_size), gfx::Point(),
-                        SkPaint());
+                        PaintFlags());
   scoped_refptr<PictureLayer> layer = PictureLayer::Create(&client);
   layer->SetBounds(gfx::Size(10, 10));
 
@@ -179,7 +175,7 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
       &host_client, &task_graph_runner, animation_host.get());
-  host->GetLayerTree()->SetRootLayer(layer);
+  host->SetRootLayer(layer);
   layer->SetIsDrawable(true);
   layer->SavePaintProperties();
   layer->Update();
@@ -261,7 +257,7 @@ TEST(PictureLayerTest, SuitableForGpuRasterization) {
   auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
       &host_client, &task_graph_runner, animation_host.get());
-  host->GetLayerTree()->SetRootLayer(layer);
+  host->SetRootLayer(layer);
 
   // Update layers to initialize the recording source.
   gfx::Size layer_bounds(200, 200);
@@ -306,22 +302,21 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
 
   auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
 
-  LayerTreeHostInProcess::InitParams params;
+  LayerTreeHost::InitParams params;
   params.client = &host_client1;
   params.settings = &settings;
   params.task_graph_runner = &task_graph_runner;
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
   params.mutator_host = animation_host.get();
   std::unique_ptr<LayerTreeHost> host1 =
-      LayerTreeHostInProcess::CreateSingleThreaded(&single_thread_client,
-                                                   &params);
+      LayerTreeHost::CreateSingleThreaded(&single_thread_client, &params);
   host1->SetVisible(true);
   host_client1.SetLayerTreeHost(host1.get());
 
   auto animation_host2 = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
 
   // TODO(sad): InitParams will be movable.
-  LayerTreeHostInProcess::InitParams params2;
+  LayerTreeHost::InitParams params2;
   params2.client = &host_client1;
   params2.settings = &settings;
   params2.task_graph_runner = &task_graph_runner;
@@ -329,13 +324,12 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   params2.client = &host_client2;
   params2.mutator_host = animation_host2.get();
   std::unique_ptr<LayerTreeHost> host2 =
-      LayerTreeHostInProcess::CreateSingleThreaded(&single_thread_client,
-                                                   &params2);
+      LayerTreeHost::CreateSingleThreaded(&single_thread_client, &params2);
   host2->SetVisible(true);
   host_client2.SetLayerTreeHost(host2.get());
 
   // The PictureLayer is put in one LayerTreeHost.
-  host1->GetLayerTree()->SetRootLayer(layer);
+  host1->SetRootLayer(layer);
   // Do a main frame, record the picture layers.
   EXPECT_EQ(0, layer->update_count());
   layer->SetNeedsDisplay();
@@ -350,8 +344,8 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   EXPECT_EQ(2, host1->SourceFrameNumber());
 
   // Then moved to another LayerTreeHost.
-  host1->GetLayerTree()->SetRootLayer(nullptr);
-  host2->GetLayerTree()->SetRootLayer(layer);
+  host1->SetRootLayer(nullptr);
+  host2->SetRootLayer(layer);
 
   // Do a main frame, record the picture layers. The frame number has changed
   // non-monotonically.

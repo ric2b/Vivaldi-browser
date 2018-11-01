@@ -5,11 +5,15 @@
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/aura/client/transient_window_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
@@ -19,6 +23,7 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/mus/mus_client.h"
+#include "ui/views/mus/mus_property_mirror.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/native_widget_aura.h"
@@ -167,6 +172,14 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
 
   DISALLOW_COPY_AND_ASSIGN(NativeCursorManagerMus);
 };
+
+void OnMoveLoopEnd(bool* out_success,
+                   base::Closure quit_closure,
+                   bool in_success) {
+  *out_success = in_success;
+  quit_closure.Run();
+}
+
 }  // namespace
 
 DesktopWindowTreeHostMus::DesktopWindowTreeHostMus(
@@ -177,11 +190,11 @@ DesktopWindowTreeHostMus::DesktopWindowTreeHostMus(
                               mus_properties),
       native_widget_delegate_(native_widget_delegate),
       desktop_native_widget_aura_(desktop_native_widget_aura),
-      fullscreen_restore_state_(ui::SHOW_STATE_DEFAULT),
       close_widget_factory_(this) {
   aura::Env::GetInstance()->AddObserver(this);
   MusClient::Get()->AddObserver(this);
   native_widget_delegate_->AsWidget()->AddObserver(this);
+  desktop_native_widget_aura_->content_window()->AddObserver(this);
   // DesktopNativeWidgetAura registers the association between |content_window_|
   // and Widget, but code may also want to go from the root (window()) to the
   // Widget. This call enables that.
@@ -196,6 +209,7 @@ DesktopWindowTreeHostMus::~DesktopWindowTreeHostMus() {
   // the cursor-client needs to be unset on the root-window before
   // |cursor_manager_| is destroyed.
   aura::client::SetCursorClient(window(), nullptr);
+  desktop_native_widget_aura_->content_window()->RemoveObserver(this);
   native_widget_delegate_->AsWidget()->RemoveObserver(this);
   MusClient::Get()->RemoveObserver(this);
   aura::Env::GetInstance()->RemoveObserver(this);
@@ -272,6 +286,21 @@ void DesktopWindowTreeHostMus::Init(aura::Window* content_window,
       base::MakeUnique<NativeCursorManagerMus>(window()));
   aura::client::SetCursorClient(window(), cursor_manager_.get());
   InitHost();
+
+  NativeWidgetAura::SetShadowElevationFromInitParams(window(), params);
+
+  // Transient parents are connected using the Window created by WindowTreeHost,
+  // which is owned by the window manager. This way the window manager can
+  // properly identify and honor transients.
+  if (params.parent && params.parent->GetHost()) {
+    aura::client::GetTransientWindowClient()->AddTransientChild(
+        params.parent->GetHost()->window(), window());
+  }
+
+  if (!params.accept_events) {
+    aura::WindowPortMus::Get(window())->SetEventTargetingPolicy(
+        ui::mojom::EventTargetingPolicy::NONE);
+  }
 }
 
 void DesktopWindowTreeHostMus::OnNativeWidgetCreated(
@@ -296,6 +325,9 @@ void DesktopWindowTreeHostMus::OnWidgetInitDone() {
   // client-area and hit-test-mask.
   SendClientAreaToServer();
   SendHitTestMaskToServer();
+
+  MusClient::Get()->OnCaptureClientSet(
+      aura::client::GetCaptureClient(window()));
 }
 
 std::unique_ptr<corewm::Tooltip> DesktopWindowTreeHostMus::CreateTooltip() {
@@ -325,6 +357,9 @@ void DesktopWindowTreeHostMus::Close() {
 }
 
 void DesktopWindowTreeHostMus::CloseNow() {
+  MusClient::Get()->OnCaptureClientUnset(
+      aura::client::GetCaptureClient(window()));
+
   native_widget_delegate_->OnNativeWidgetDestroying();
 
   // If we have children, close them. Use a copy for iteration because they'll
@@ -400,14 +435,19 @@ void DesktopWindowTreeHostMus::SetSize(const gfx::Size& size) {
   SetBoundsInDIP(screen_bounds);
 }
 
-void DesktopWindowTreeHostMus::StackAbove(aura::Window* window) {
-  // TODO: implement window stacking, http://crbug.com/663617.
-  NOTIMPLEMENTED();
+void DesktopWindowTreeHostMus::StackAbove(aura::Window* relative) {
+  // Windows and X11 check for |relative| being nullptr and fail silently. It
+  // also looks like |relative| is usually multiple children deep in the root
+  // window, which we must pass instead.
+  if (relative && relative->GetRootWindow())
+    WindowTreeHostMus::StackAbove(relative->GetRootWindow());
 }
 
 void DesktopWindowTreeHostMus::StackAtTop() {
-  // TODO: implement window stacking, http://crbug.com/663617.
-  NOTIMPLEMENTED();
+  // Request to the server to stack our current mus window at the top. Our
+  // window() is a root, and we can't reach up past it so we can't just request
+  // a Reorder(), which is what we'd do to reorder our own subwindows.
+  WindowTreeHostMus::StackAtTop();
 }
 
 void DesktopWindowTreeHostMus::CenterWindow(const gfx::Size& size) {
@@ -493,13 +533,16 @@ void DesktopWindowTreeHostMus::SetShape(
 }
 
 void DesktopWindowTreeHostMus::Activate() {
+  if (!IsVisible())
+    return;
+
+  // This should result in OnActiveFocusClientChanged() being called, which
+  // triggers a call to DesktopNativeWidgetAura::HandleActivationChanged(),
+  // which focuses the right window.
   aura::Env::GetInstance()->SetActiveFocusClient(
       aura::client::GetFocusClient(window()), window());
-  if (is_active_) {
-    window()->Focus();
-    if (window()->GetProperty(aura::client::kDrawAttentionKey))
-      window()->SetProperty(aura::client::kDrawAttentionKey, false);
-  }
+  if (is_active_)
+    window()->SetProperty(aura::client::kDrawAttentionKey, false);
 }
 
 void DesktopWindowTreeHostMus::Deactivate() {
@@ -572,12 +615,32 @@ Widget::MoveLoopResult DesktopWindowTreeHostMus::RunMoveLoop(
     const gfx::Vector2d& drag_offset,
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
-  NOTIMPLEMENTED();
-  return Widget::MOVE_LOOP_CANCELED;
+  static_cast<internal::NativeWidgetPrivate*>(
+      desktop_native_widget_aura_)->ReleaseCapture();
+
+  base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
+  base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
+  base::RunLoop run_loop;
+
+  ui::mojom::MoveLoopSource mus_source =
+      source == Widget::MOVE_LOOP_SOURCE_MOUSE
+          ? ui::mojom::MoveLoopSource::MOUSE
+          : ui::mojom::MoveLoopSource::TOUCH;
+
+  bool success = false;
+  gfx::Point cursor_location =
+      display::Screen::GetScreen()->GetCursorScreenPoint();
+  WindowTreeHostMus::PerformWindowMove(
+      mus_source, cursor_location,
+      base::Bind(OnMoveLoopEnd, &success, run_loop.QuitClosure()));
+
+  run_loop.Run();
+
+  return success ? Widget::MOVE_LOOP_SUCCESSFUL : Widget::MOVE_LOOP_CANCELED;
 }
 
 void DesktopWindowTreeHostMus::EndMoveLoop() {
-  NOTIMPLEMENTED();
+  WindowTreeHostMus::CancelWindowMove();
 }
 
 void DesktopWindowTreeHostMus::SetVisibilityChangedAnimationsEnabled(
@@ -606,16 +669,7 @@ void DesktopWindowTreeHostMus::SetFullscreen(bool fullscreen) {
   if (IsFullscreen() == fullscreen)
     return;  // Nothing to do.
 
-  // Save window state before entering full screen so that it could restored
-  // when exiting full screen.
-  if (fullscreen) {
-    fullscreen_restore_state_ =
-        window()->GetProperty(aura::client::kShowStateKey);
-  }
-
-  window()->SetProperty(
-      aura::client::kShowStateKey,
-      fullscreen ? ui::SHOW_STATE_FULLSCREEN : fullscreen_restore_state_);
+  wm::SetWindowFullscreen(window(), fullscreen);
 }
 
 bool DesktopWindowTreeHostMus::IsFullscreen() const {
@@ -623,9 +677,7 @@ bool DesktopWindowTreeHostMus::IsFullscreen() const {
          ui::SHOW_STATE_FULLSCREEN;
 }
 void DesktopWindowTreeHostMus::SetOpacity(float opacity) {
-  // TODO: this likely need to go to server so that non-client decorations get
-  // opacity. http://crbug.com/663619.
-  window()->layer()->SetOpacity(opacity);
+  WindowTreeHostMus::SetOpacity(opacity);
 }
 
 void DesktopWindowTreeHostMus::SetWindowIcons(const gfx::ImageSkia& window_icon,
@@ -667,6 +719,11 @@ bool DesktopWindowTreeHostMus::ShouldUseDesktopNativeCursorManager() const {
   return false;
 }
 
+bool DesktopWindowTreeHostMus::ShouldCreateVisibilityController() const {
+  // Window manager takes care of all top-level window animations.
+  return false;
+}
+
 void DesktopWindowTreeHostMus::OnWindowManagerFrameValuesChanged() {
   NonClientView* non_client_view =
       native_widget_delegate_->AsWidget()->non_client_view();
@@ -686,6 +743,22 @@ void DesktopWindowTreeHostMus::OnWidgetActivationChanged(Widget* widget,
   // instead of asking the Widget to change the activation and have the widget
   // then tell us the activation has changed. But if we do that, focus breaks.
   is_active_ = active;
+}
+
+void DesktopWindowTreeHostMus::OnWindowPropertyChanged(aura::Window* window,
+                                                       const void* key,
+                                                       intptr_t old) {
+  DCHECK_EQ(window, desktop_native_widget_aura_->content_window());
+  DCHECK(!window->GetRootWindow() || this->window() == window->GetRootWindow());
+  if (!this->window())
+    return;
+
+  // Allow mus clients to mirror widget window properties to their root windows.
+  MusPropertyMirror* property_mirror = MusClient::Get()->mus_property_mirror();
+  if (property_mirror) {
+    property_mirror->MirrorPropertyFromWidgetWindowToRootWindow(
+        window, this->window(), key);
+  }
 }
 
 void DesktopWindowTreeHostMus::ShowImpl() {

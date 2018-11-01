@@ -18,6 +18,11 @@ public interface ContextMenuItemDelegate {
     public static final int CLIPBOARD_TYPE_IMAGE_URL = 2;
 
     /**
+     * Called when this ContextMenuItemDelegate is about to be destroyed.
+     */
+    void onDestroy();
+
+    /**
      * @return Whether or not this context menu is being shown for an incognito
      *     {@link ContentViewCore}.
      */
@@ -81,14 +86,15 @@ public interface ContextMenuItemDelegate {
     void onOpenImageInNewTab(String url, Referrer referrer);
 
     /**
-     *  Reloads all the Lo-Fi images in a Tab.
-     */
-    void onReloadLoFiImages();
-
-    /**
      * Called when the original image should be loaded.
      */
     void onLoadOriginalImage();
+
+    /**
+     * Returns whether the load image has been requested on a Lo-Fi image for the current page load.
+     * @return true if load image has been requested for the current page load.
+     */
+    boolean wasLoadOriginalImageRequestedForPageLoad();
 
     /**
      * Called when the {@code text} should be saved to the clipboard.
@@ -153,4 +159,22 @@ public interface ContextMenuItemDelegate {
      * @param pageUrl URL of the current page.
      */
     void onOpenInChrome(String linkUrl, String pageUrl);
+
+    /**
+     * Called when the {@code url} should be opened in a new Chrome tab from CCT.
+     * @param url The URL to open.
+     * @param isIncognito true if the {@code url} should be opened in a new incognito tab.
+     */
+    void onOpenInNewChromeTabFromCCT(String linkUrl, boolean isIncognito);
+
+    /**
+     * @return title of the context menu to open a page in external apps.
+     */
+    String getTitleForOpenTabInExternalApp();
+
+    /**
+     * Called when the current Chrome app is not the default to handle a View Intent.
+     * @param url The URL to open.
+     */
+    void onOpenInDefaultBrowser(String url);
 }

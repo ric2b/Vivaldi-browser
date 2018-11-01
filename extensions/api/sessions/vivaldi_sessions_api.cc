@@ -8,8 +8,11 @@
 #include "extensions/api/sessions/vivaldi_sessions_api.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
+
 #include "app/vivaldi_constants.h"
 #include "base/files/file_util.h"
 #include "base/i18n/time_formatting.h"
@@ -55,17 +58,15 @@ base::FilePath GenerateFilename(Profile* profile,
     base::FilePath path(profile->GetPath());
     path = path.Append(kSessionPath)
 #if defined(OS_POSIX)
-                 .Append(temp_session_name)
+               .Append(temp_session_name)
 #elif defined(OS_WIN)
-                 .Append(base::UTF8ToWide(temp_session_name))
+               .Append(base::UTF8ToWide(temp_session_name))
 #endif
-                 .AddExtension(FILE_PATH_LITERAL(".bin"));
+               .AddExtension(FILE_PATH_LITERAL(".bin"));
     if (unique_name) {
       if (base::PathExists(path)) {
         temp_session_name.assign(session_name);
-        base::snprintf(number_string,
-                      kNumberBufferSize,
-                      " (%d)", cnt++);
+        base::snprintf(number_string, kNumberBufferSize, " (%d)", cnt++);
         temp_session_name.append(number_string);
       } else {
         return path;
@@ -108,7 +109,7 @@ bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
   } else {
     base::FilePath path = GenerateFilename(GetProfile(), params->name, true);
 
-    for (auto* browser: *BrowserList::GetInstance()) {
+    for (auto* browser : *BrowserList::GetInstance()) {
       // Make sure the browser has tabs and a window. Browser's destructor
       // removes itself from the BrowserList. When a browser is closed the
       // destructor is not necessarily run immediately. This means it's possible
@@ -168,8 +169,7 @@ bool SessionsPrivateGetAllFunction::RunAsync() {
 
     sessions.push_back(std::move(*new_item));
   }
-  results_ =
-      vivaldi::sessions_private::GetAll::Results::Create(sessions);
+  results_ = vivaldi::sessions_private::GetAll::Results::Create(sessions);
 
   SendResponse(true);
   return true;
@@ -202,8 +202,7 @@ bool SessionsPrivateOpenFunction::RunAsync() {
       error_code = kErrorFileMissing;
     }
   }
-  results_ =
-      vivaldi::sessions_private::Open::Results::Create(error_code);
+  results_ = vivaldi::sessions_private::Open::Results::Create(error_code);
 
   SendResponse(true);
   return true;
@@ -228,8 +227,7 @@ bool SessionsPrivateDeleteFunction::RunAsync() {
       error_code = kErrorDeleteFailure;
     }
   }
-  results_ =
-      vivaldi::sessions_private::Delete::Results::Create(error_code);
+  results_ = vivaldi::sessions_private::Delete::Results::Create(error_code);
 
   SendResponse(true);
   return true;

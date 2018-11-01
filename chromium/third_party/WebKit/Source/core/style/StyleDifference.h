@@ -51,8 +51,17 @@ class StyleDifference {
            !(m_propertySpecificDifferences & ~propertyDifferences);
   }
 
-  bool needsPaintInvalidation() const {
-    return m_paintInvalidationType != NoPaintInvalidation;
+  bool needsFullPaintInvalidation() const {
+    return m_paintInvalidationType > PaintInvalidationSelectionOnly;
+  }
+
+  // The text selection needs paint invalidation.
+  bool needsPaintInvalidationSelection() const {
+    return m_paintInvalidationType == PaintInvalidationSelectionOnly;
+  }
+  void setNeedsPaintInvalidationSelection() {
+    if (!needsFullPaintInvalidation())
+      m_paintInvalidationType = PaintInvalidationSelectionOnly;
   }
 
   // The object just needs to issue paint invalidations.
@@ -60,7 +69,7 @@ class StyleDifference {
     return m_paintInvalidationType == PaintInvalidationObject;
   }
   void setNeedsPaintInvalidationObject() {
-    ASSERT(!needsPaintInvalidationSubtree());
+    DCHECK(!needsPaintInvalidationSubtree());
     m_paintInvalidationType = PaintInvalidationObject;
   }
 
@@ -140,9 +149,10 @@ class StyleDifference {
 
  private:
   enum PaintInvalidationType {
-    NoPaintInvalidation = 0,
+    NoPaintInvalidation,
+    PaintInvalidationSelectionOnly,
     PaintInvalidationObject,
-    PaintInvalidationSubtree
+    PaintInvalidationSubtree,
   };
   unsigned m_paintInvalidationType : 2;
 

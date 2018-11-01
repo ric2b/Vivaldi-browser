@@ -16,6 +16,7 @@
 #import "ios/clean/chrome/browser/ui/animators/zoom_transition_animator.h"
 #import "ios/clean/chrome/browser/ui/tab/tab_coordinator.h"
 #import "ios/clean/chrome/browser/ui/tab_strip/tab_strip_container_view_controller.h"
+#import "ios/shared/chrome/browser/coordinator_context/coordinator_context.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -28,9 +29,9 @@
 
 @implementation TabStripContainerCoordinator
 
-@synthesize webState = _webState;
 @synthesize presentationKey = _presentationKey;
 @synthesize viewController = _viewController;
+@synthesize webState = _webState;
 
 - (void)start {
   self.viewController = [[TabStripContainerViewController alloc] init];
@@ -40,9 +41,9 @@
   TabCoordinator* tabCoordinator = [[TabCoordinator alloc] init];
   tabCoordinator.webState = self.webState;
   [self addChildCoordinator:tabCoordinator];
-  // Unset the root view controller, so |tabCoordinator| doesn't present
+  // Unset the base view controller, so |tabCoordinator| doesn't present
   // its view controller.
-  tabCoordinator.rootViewController = nil;
+  tabCoordinator.context.baseViewController = nil;
   [tabCoordinator start];
 
   // PLACEHOLDER: Replace this placeholder with an actual tab strip view
@@ -60,13 +61,15 @@
   self.viewController.tabStripViewController = tabStripViewController;
   self.viewController.contentViewController = tabCoordinator.viewController;
 
-  [self.rootViewController presentViewController:self.viewController
-                                        animated:YES
-                                      completion:nil];
+  [self.context.baseViewController presentViewController:self.viewController
+                                                animated:self.context.animated
+                                              completion:nil];
 }
 
 - (void)stop {
-  [self.viewController dismissViewControllerAnimated:YES completion:nil];
+  [self.viewController.presentingViewController
+      dismissViewControllerAnimated:self.context.animated
+                         completion:nil];
   self.viewController = nil;
 }
 

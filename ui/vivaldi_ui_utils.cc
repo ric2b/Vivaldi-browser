@@ -27,9 +27,9 @@
 #if defined(OS_WIN) || defined(OS_LINUX)
 #include "ui/vivaldi_browser_window.h"
 #endif  // OS_WIN || OS_LINUX
-#include "ui/views/widget/widget.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
+#include "ui/views/widget/widget.h"
 
 using extensions::AppWindowRegistry;
 
@@ -38,7 +38,7 @@ namespace ui_tools {
 
 /*static*/
 extensions::WebViewGuest* GetActiveWebViewGuest() {
-  Browser *browser = chrome::FindLastActive();
+  Browser* browser = chrome::FindLastActive();
   if (!browser)
     return nullptr;
 
@@ -46,9 +46,9 @@ extensions::WebViewGuest* GetActiveWebViewGuest() {
 }
 
 /*static*/
-extensions::WebViewGuest *
-GetActiveWebViewGuest(extensions::NativeAppWindow *app_window) {
-  Browser *browser =
+extensions::WebViewGuest* GetActiveWebViewGuest(
+    extensions::NativeAppWindow* app_window) {
+  Browser* browser =
       chrome::FindBrowserWithWindow(app_window->GetNativeWindow());
 
   if (!browser)
@@ -72,14 +72,14 @@ extensions::AppWindow* GetActiveAppWindow() {
 #if defined(OS_WIN) || defined(OS_LINUX)
   Browser* browser = chrome::FindLastActive();
   if (browser && browser->is_vivaldi())
-    return static_cast<const VivaldiBrowserWindow *>(browser->window())
+    return static_cast<const VivaldiBrowserWindow*>(browser->window())
         ->GetAppWindow();
 #endif
   return nullptr;
 }
 
-content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile *profile) {
-  content::WebContents *contents = nullptr;
+content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile* profile) {
+  content::WebContents* contents = nullptr;
   bool include_incognito = true;
   Browser* browser;
   int tab_index;
@@ -93,12 +93,12 @@ bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
   gfx::Point screen_point(screen_x, screen_y);
 
   AppWindowRegistry* app_window_registry =
-    AppWindowRegistry::Factory::GetForBrowserContext(profile, false);
+      AppWindowRegistry::Factory::GetForBrowserContext(profile, false);
   AppWindowRegistry::AppWindowList list =
-    app_window_registry->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
+      app_window_registry->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
 
   bool outside = true;
-  for (auto& win : list) {
+  for (auto* win : list) {
     gfx::Rect rect = win->GetBaseWindow()->GetBounds();
     if (rect.Contains(screen_point)) {
       outside = false;
@@ -110,7 +110,7 @@ bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
 
 bool EncodeBitmap(const SkBitmap& screen_capture,
                   std::vector<unsigned char>* data,
-                  std::string& mime_type,
+                  std::string* mime_type,
                   extensions::api::extension_types::ImageFormat image_format,
                   gfx::Size size,
                   double scale,
@@ -122,15 +122,13 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
     dst_size_pixels.SetSize(size.width(), size.height());
   } else {
     dst_size_pixels = gfx::ScaleToRoundedSize(
-      gfx::Size(screen_capture.width(), screen_capture.height()), scale);
+        gfx::Size(screen_capture.width(), screen_capture.height()), scale);
   }
   SkBitmap bitmap;
   if (resize) {
     bitmap = skia::ImageOperations::Resize(
-      screen_capture,
-      skia::ImageOperations::RESIZE_BEST,
-      dst_size_pixels.width(),
-      dst_size_pixels.height());
+        screen_capture, skia::ImageOperations::RESIZE_BEST,
+        dst_size_pixels.width(), dst_size_pixels.height());
   } else {
     bitmap = screen_capture;
   }
@@ -139,28 +137,24 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
   SkAutoLockPixels lock(bitmap);
 
   switch (image_format) {
-  case extensions::api::extension_types::IMAGE_FORMAT_JPEG:
-    if (bitmap.getPixels()) {
-      encoded = gfx::JPEGCodec::Encode(
-        reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
-        gfx::JPEGCodec::FORMAT_SkBitmap,
-        bitmap.width(),
-        bitmap.height(),
-        static_cast<int>(bitmap.rowBytes()),
-        image_quality,
-        data);
-      mime_type = "image/jpeg";  // kMimeTypeJpeg;
-    }
-    break;
-  case extensions::api::extension_types::IMAGE_FORMAT_PNG:
-    encoded = gfx::PNGCodec::EncodeBGRASkBitmap(
-      bitmap,
-      true,  // Discard transparency.
-      data);
-    mime_type = "image/png";  // kMimeTypePng;
-    break;
-  default:
-    NOTREACHED() << "Invalid image format.";
+    case extensions::api::extension_types::IMAGE_FORMAT_JPEG:
+      if (bitmap.getPixels()) {
+        encoded = gfx::JPEGCodec::Encode(
+            reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
+            gfx::JPEGCodec::FORMAT_SkBitmap, bitmap.width(), bitmap.height(),
+            static_cast<int>(bitmap.rowBytes()), image_quality, data);
+        *mime_type = "image/jpeg";  // kMimeTypeJpeg;
+      }
+      break;
+    case extensions::api::extension_types::IMAGE_FORMAT_PNG:
+      encoded =
+          gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
+                                            true,  // Discard transparency.
+                                            data);
+      *mime_type = "image/png";  // kMimeTypePng;
+      break;
+    default:
+      NOTREACHED() << "Invalid image format.";
   }
 
   return encoded;
@@ -172,13 +166,13 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
   // Clip it to a more reasonable position.
   SkBitmap clipped_bitmap = thumbnails::SimpleThumbnailCrop::GetClippedBitmap(
-    capture, target_width, target_height, &clip_result);
+      capture, target_width, target_height, &clip_result);
   // Resize the result to the target size.
   SkBitmap result = skia::ImageOperations::Resize(
-    clipped_bitmap, skia::ImageOperations::RESIZE_BEST, target_width,
-    target_height);
+      clipped_bitmap, skia::ImageOperations::RESIZE_BEST, target_width,
+      target_height);
 
-  // NOTE(pettern): Copied from SimpleThumbnailCrop::CreateThumbnail():
+// NOTE(pettern): Copied from SimpleThumbnailCrop::CreateThumbnail():
 #if !defined(USE_AURA)
   // This is a bit subtle. SkBitmaps are refcounted, but the magic
   // ones in PlatformCanvas can't be assigned to SkBitmap with proper

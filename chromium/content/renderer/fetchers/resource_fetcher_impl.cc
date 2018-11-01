@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebHTTPBody.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -171,7 +172,6 @@ void ResourceFetcherImpl::SetHeader(const std::string& header,
 void ResourceFetcherImpl::Start(
     blink::WebFrame* frame,
     blink::WebURLRequest::RequestContext request_context,
-    blink::WebURLRequest::FrameType frame_type,
     const Callback& callback) {
   DCHECK(!loader_);
   DCHECK(!client_);
@@ -180,9 +180,8 @@ void ResourceFetcherImpl::Start(
     DCHECK_NE("GET", request_.httpMethod().utf8()) << "GETs can't have bodies.";
 
   request_.setRequestContext(request_context);
-  request_.setFrameType(frame_type);
   request_.setFirstPartyForCookies(frame->document().firstPartyForCookies());
-  frame->dispatchWillSendRequest(request_);
+  request_.addHTTPOriginIfNeeded(blink::WebSecurityOrigin::createUnique());
 
   client_.reset(new ClientImpl(this, callback));
 

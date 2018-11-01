@@ -60,6 +60,13 @@ class CONTENT_EXPORT WebContentsViewAura
     init_rwhv_with_null_parent_for_testing_ = set;
   }
 
+  using RenderWidgetHostViewCreateFunction =
+      RenderWidgetHostViewAura* (*)(RenderWidgetHost*, bool);
+
+  // Used to override the creation of RenderWidgetHostViews in tests.
+  static void InstallCreateHookForTests(
+      RenderWidgetHostViewCreateFunction create_render_widget_host_view);
+
  private:
   class WindowObserver;
 
@@ -148,7 +155,8 @@ class CONTENT_EXPORT WebContentsViewAura
   bool OnOverscrollUpdate(float delta_x, float delta_y) override;
   void OnOverscrollComplete(OverscrollMode overscroll_mode) override;
   void OnOverscrollModeChange(OverscrollMode old_mode,
-                              OverscrollMode new_mode) override;
+                              OverscrollMode new_mode,
+                              OverscrollSource source) override;
 
   // Overridden from aura::WindowDelegate:
   gfx::Size GetMinimumSize() const override;

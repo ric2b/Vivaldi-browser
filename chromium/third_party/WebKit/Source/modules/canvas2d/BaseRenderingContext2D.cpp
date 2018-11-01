@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/css/cssom/CSSURLImageValue.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/frame/ImageBitmap.h"
@@ -26,6 +27,8 @@
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StrokeData.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 
 namespace blink {
@@ -45,7 +48,7 @@ CanvasRenderingContext2DState& BaseRenderingContext2D::modifiableState() {
 void BaseRenderingContext2D::realizeSaves() {
   validateStateStack();
   if (state().hasUnrealizedSaves()) {
-    ASSERT(m_stateStack.size() >= 1);
+    DCHECK_GE(m_stateStack.size(), 1u);
     // Reduce the current state's unrealized count by one now,
     // to reflect the fact we are saving one state.
     m_stateStack.back()->restore();
@@ -58,7 +61,7 @@ void BaseRenderingContext2D::realizeSaves() {
     // state (in turn necessary to support correct resizing and unwinding of the
     // stack).
     m_stateStack.back()->resetUnrealizedSaveCount();
-    SkCanvas* canvas = drawingCanvas();
+    PaintCanvas* canvas = drawingCanvas();
     if (canvas)
       canvas->save();
     validateStateStack();
@@ -76,21 +79,21 @@ void BaseRenderingContext2D::restore() {
     m_stateStack.back()->restore();
     return;
   }
-  ASSERT(m_stateStack.size() >= 1);
+  DCHECK_GE(m_stateStack.size(), 1u);
   if (m_stateStack.size() <= 1)
     return;
   m_path.transform(state().transform());
   m_stateStack.pop_back();
   m_stateStack.back()->clearResolvedFilter();
   m_path.transform(state().transform().inverse());
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (c)
     c->restore();
 
   validateStateStack();
 }
 
-void BaseRenderingContext2D::restoreMatrixClipStack(SkCanvas* c) const {
+void BaseRenderingContext2D::restoreMatrixClipStack(PaintCanvas* c) const {
   if (!c)
     return;
   HeapVector<Member<CanvasRenderingContext2DState>>::const_iterator currState;
@@ -110,7 +113,7 @@ void BaseRenderingContext2D::restoreMatrixClipStack(SkCanvas* c) const {
 
 void BaseRenderingContext2D::unwindStateStack() {
   if (size_t stackSize = m_stateStack.size()) {
-    if (SkCanvas* skCanvas = existingDrawingCanvas()) {
+    if (PaintCanvas* skCanvas = existingDrawingCanvas()) {
       while (--stackSize)
         skCanvas->restore();
     }
@@ -123,7 +126,7 @@ void BaseRenderingContext2D::reset() {
   m_stateStack.resize(1);
   m_stateStack.front() = CanvasRenderingContext2DState::create();
   m_path.clear();
-  if (SkCanvas* c = existingDrawingCanvas()) {
+  if (PaintCanvas* c = existingDrawingCanvas()) {
     // The canvas should always have an initial/unbalanced save frame, which
     // we use to reset the top level matrix and clip here.
     DCHECK_EQ(c->getSaveCount(), 2);
@@ -132,7 +135,7 @@ void BaseRenderingContext2D::reset() {
     DCHECK(c->getTotalMatrix().isIdentity());
 #if DCHECK_IS_ON()
     SkIRect clipBounds;
-    DCHECK(c->getClipDeviceBounds(&clipBounds));
+    DCHECK(c->getDeviceClipBounds(&clipBounds));
     DCHECK(clipBounds == c->imageInfo().bounds());
 #endif
   }
@@ -160,7 +163,7 @@ void BaseRenderingContext2D::strokeStyle(
 
 void BaseRenderingContext2D::setStrokeStyle(
     const StringOrCanvasGradientOrCanvasPattern& style) {
-  ASSERT(!style.isNull());
+  DCHECK(!style.isNull());
 
   String colorString;
   CanvasStyle* canvasStyle = nullptr;
@@ -187,7 +190,7 @@ void BaseRenderingContext2D::setStrokeStyle(
     canvasStyle = CanvasStyle::createFromPattern(canvasPattern);
   }
 
-  ASSERT(canvasStyle);
+  DCHECK(canvasStyle);
 
   modifiableState().setStrokeStyle(canvasStyle);
   modifiableState().setUnparsedStrokeColor(colorString);
@@ -201,7 +204,7 @@ void BaseRenderingContext2D::fillStyle(
 
 void BaseRenderingContext2D::setFillStyle(
     const StringOrCanvasGradientOrCanvasPattern& style) {
-  ASSERT(!style.isNull());
+  DCHECK(!style.isNull());
   validateStateStack();
   String colorString;
   CanvasStyle* canvasStyle = nullptr;
@@ -229,7 +232,7 @@ void BaseRenderingContext2D::setFillStyle(
     canvasStyle = CanvasStyle::createFromPattern(canvasPattern);
   }
 
-  ASSERT(canvasStyle);
+  DCHECK(canvasStyle);
   modifiableState().setFillStyle(canvasStyle);
   modifiableState().setUnparsedFillColor(colorString);
   modifiableState().clearResolvedFilter();
@@ -425,7 +428,7 @@ void BaseRenderingContext2D::setCurrentTransform(
 }
 
 void BaseRenderingContext2D::scale(double sx, double sy) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
 
@@ -446,7 +449,7 @@ void BaseRenderingContext2D::scale(double sx, double sy) {
 }
 
 void BaseRenderingContext2D::rotate(double angleInRadians) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
 
@@ -466,7 +469,7 @@ void BaseRenderingContext2D::rotate(double angleInRadians) {
 }
 
 void BaseRenderingContext2D::translate(double tx, double ty) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
   if (!state().isTransformInvertible())
@@ -493,7 +496,7 @@ void BaseRenderingContext2D::transform(double m11,
                                        double m22,
                                        double dx,
                                        double dy) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
 
@@ -515,7 +518,7 @@ void BaseRenderingContext2D::transform(double m11,
 }
 
 void BaseRenderingContext2D::resetTransform() {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
 
@@ -544,7 +547,7 @@ void BaseRenderingContext2D::setTransform(double m11,
                                           double m22,
                                           double dx,
                                           double dy) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
 
@@ -622,8 +625,8 @@ void BaseRenderingContext2D::drawPathInternal(
   if (!drawingCanvas())
     return;
 
-  if (draw([&skPath](SkCanvas* c, const SkPaint* paint)  // draw lambda
-           { c->drawPath(skPath, *paint); },
+  if (draw([&skPath](PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+           { c->drawPath(skPath, *flags); },
            [](const SkIRect& rect)  // overdraw test lambda
            { return false; },
            bounds, paintType)) {
@@ -641,7 +644,7 @@ static SkPath::FillType parseWinding(const String& windingRuleString) {
   if (windingRuleString == "evenodd")
     return SkPath::kEvenOdd_FillType;
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return SkPath::kEvenOdd_FillType;
 }
 
@@ -682,27 +685,27 @@ void BaseRenderingContext2D::fillRect(double x,
     return;
 
   SkRect rect = SkRect::MakeXYWH(x, y, width, height);
-  draw([&rect](SkCanvas* c, const SkPaint* paint)  // draw lambda
-       { c->drawRect(rect, *paint); },
+  draw([&rect](PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+       { c->drawRect(rect, *flags); },
        [&rect, this](const SkIRect& clipBounds)  // overdraw test lambda
        { return rectContainsTransformedRect(rect, clipBounds); },
        rect, CanvasRenderingContext2DState::FillPaintType);
 }
 
 static void strokeRectOnCanvas(const FloatRect& rect,
-                               SkCanvas* canvas,
-                               const SkPaint* paint) {
-  ASSERT(paint->getStyle() == SkPaint::kStroke_Style);
+                               PaintCanvas* canvas,
+                               const PaintFlags* flags) {
+  DCHECK_EQ(flags->getStyle(), PaintFlags::kStroke_Style);
   if ((rect.width() > 0) != (rect.height() > 0)) {
     // When stroking, we must skip the zero-dimension segments
     SkPath path;
     path.moveTo(rect.x(), rect.y());
     path.lineTo(rect.maxX(), rect.maxY());
     path.close();
-    canvas->drawPath(path, *paint);
+    canvas->drawPath(path, *flags);
     return;
   }
-  canvas->drawRect(rect, *paint);
+  canvas->drawRect(rect, *flags);
 }
 
 void BaseRenderingContext2D::strokeRect(double x,
@@ -719,8 +722,8 @@ void BaseRenderingContext2D::strokeRect(double x,
   SkRect rect = SkRect::MakeXYWH(x, y, width, height);
   FloatRect bounds = rect;
   inflateStrokeRect(bounds);
-  draw([&rect](SkCanvas* c, const SkPaint* paint)  // draw lambda
-       { strokeRectOnCanvas(rect, c, paint); },
+  draw([&rect](PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+       { strokeRectOnCanvas(rect, c, flags); },
        [](const SkIRect& clipBounds)  // overdraw test lambda
        { return false; },
        bounds, CanvasRenderingContext2DState::StrokePaintType);
@@ -728,7 +731,7 @@ void BaseRenderingContext2D::strokeRect(double x,
 
 void BaseRenderingContext2D::clipInternal(const Path& path,
                                           const String& windingRuleString) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c) {
     return;
   }
@@ -773,7 +776,7 @@ bool BaseRenderingContext2D::isPointInPathInternal(
     const double x,
     const double y,
     const String& windingRuleString) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return false;
   if (!state().isTransformInvertible())
@@ -802,7 +805,7 @@ bool BaseRenderingContext2D::isPointInStroke(Path2D* domPath,
 bool BaseRenderingContext2D::isPointInStrokeInternal(const Path& path,
                                                      const double x,
                                                      const double y) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return false;
   if (!state().isTransformInvertible())
@@ -835,31 +838,31 @@ void BaseRenderingContext2D::clearRect(double x,
   if (!validateRectForCanvas(x, y, width, height))
     return;
 
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c)
     return;
   if (!state().isTransformInvertible())
     return;
 
   SkIRect clipBounds;
-  if (!c->getClipDeviceBounds(&clipBounds))
+  if (!c->getDeviceClipBounds(&clipBounds))
     return;
 
-  SkPaint clearPaint;
-  clearPaint.setBlendMode(SkBlendMode::kClear);
-  clearPaint.setStyle(SkPaint::kFill_Style);
+  PaintFlags clearFlags;
+  clearFlags.setBlendMode(SkBlendMode::kClear);
+  clearFlags.setStyle(PaintFlags::kFill_Style);
   FloatRect rect(x, y, width, height);
 
   if (rectContainsTransformedRect(rect, clipBounds)) {
-    checkOverdraw(rect, &clearPaint, CanvasRenderingContext2DState::NoImage,
+    checkOverdraw(rect, &clearFlags, CanvasRenderingContext2DState::NoImage,
                   ClipFill);
     if (drawingCanvas())
-      drawingCanvas()->drawRect(rect, clearPaint);
+      drawingCanvas()->drawRect(rect, clearFlags);
     didDraw(clipBounds);
   } else {
     SkIRect dirtyRect;
     if (computeDirtyRect(rect, clipBounds, &dirtyRect)) {
-      c->drawRect(rect, clearPaint);
+      c->drawRect(rect, clearFlags);
       didDraw(dirtyRect);
     }
   }
@@ -929,12 +932,12 @@ static inline CanvasImageSource* toImageSourceInternal(
     }
     return value.getAsOffscreenCanvas();
   }
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 
 void BaseRenderingContext2D::drawImage(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     const CanvasImageSourceUnion& imageSource,
     double x,
     double y,
@@ -948,13 +951,13 @@ void BaseRenderingContext2D::drawImage(
       imageSourceInternal->elementSize(defaultObjectSize);
   FloatSize destRectSize =
       imageSourceInternal->defaultDestinationSize(defaultObjectSize);
-  drawImage(executionContext, imageSourceInternal, 0, 0, sourceRectSize.width(),
+  drawImage(scriptState, imageSourceInternal, 0, 0, sourceRectSize.width(),
             sourceRectSize.height(), x, y, destRectSize.width(),
             destRectSize.height(), exceptionState);
 }
 
 void BaseRenderingContext2D::drawImage(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     const CanvasImageSourceUnion& imageSource,
     double x,
     double y,
@@ -968,12 +971,12 @@ void BaseRenderingContext2D::drawImage(
   FloatSize defaultObjectSize(this->width(), this->height());
   FloatSize sourceRectSize =
       imageSourceInternal->elementSize(defaultObjectSize);
-  drawImage(executionContext, imageSourceInternal, 0, 0, sourceRectSize.width(),
+  drawImage(scriptState, imageSourceInternal, 0, 0, sourceRectSize.width(),
             sourceRectSize.height(), x, y, width, height, exceptionState);
 }
 
 void BaseRenderingContext2D::drawImage(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     const CanvasImageSourceUnion& imageSource,
     double sx,
     double sy,
@@ -988,16 +991,16 @@ void BaseRenderingContext2D::drawImage(
       toImageSourceInternal(imageSource, exceptionState);
   if (!imageSourceInternal)
     return;
-  drawImage(executionContext, imageSourceInternal, sx, sy, sw, sh, dx, dy, dw,
-            dh, exceptionState);
+  drawImage(scriptState, imageSourceInternal, sx, sy, sw, sh, dx, dy, dw, dh,
+            exceptionState);
 }
 
 bool BaseRenderingContext2D::shouldDrawImageAntialiased(
     const FloatRect& destRect) const {
   if (!state().shouldAntialias())
     return false;
-  SkCanvas* c = drawingCanvas();
-  ASSERT(c);
+  PaintCanvas* c = drawingCanvas();
+  DCHECK(c);
 
   const SkMatrix& ctm = c->getTotalMatrix();
   // Don't disable anti-aliasing if we're rotated or skewed.
@@ -1032,12 +1035,12 @@ static bool isDrawScalingDown(const FloatRect& srcRect,
              srcRect.height() * srcRect.height();
 }
 
-void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
+void BaseRenderingContext2D::drawImageInternal(PaintCanvas* c,
                                                CanvasImageSource* imageSource,
                                                Image* image,
                                                const FloatRect& srcRect,
                                                const FloatRect& dstRect,
-                                               const SkPaint* paint) {
+                                               const PaintFlags* flags) {
   if (imageSource->isSVGSource()) {
     trackDrawCall(DrawVectorImage, nullptr, dstRect.width(), dstRect.height());
   } else {
@@ -1045,9 +1048,9 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
   }
 
   int initialSaveCount = c->getSaveCount();
-  SkPaint imagePaint = *paint;
+  PaintFlags imageFlags = *flags;
 
-  if (paint->getImageFilter()) {
+  if (flags->getImageFilter()) {
     SkMatrix ctm = c->getTotalMatrix();
     SkMatrix invCtm;
     if (!ctm.invert(&invCtm)) {
@@ -1061,25 +1064,25 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
     c->concat(invCtm);
     SkRect bounds = dstRect;
     ctm.mapRect(&bounds);
-    SkPaint layerPaint;
-    layerPaint.setBlendMode(paint->getBlendMode());
-    layerPaint.setImageFilter(paint->refImageFilter());
+    PaintFlags layerFlags;
+    layerFlags.setBlendMode(flags->getBlendMode());
+    layerFlags.setImageFilter(flags->refImageFilter());
 
-    c->saveLayer(&bounds, &layerPaint);
+    c->saveLayer(&bounds, &layerFlags);
     c->concat(ctm);
-    imagePaint.setBlendMode(SkBlendMode::kSrcOver);
-    imagePaint.setImageFilter(nullptr);
+    imageFlags.setBlendMode(SkBlendMode::kSrcOver);
+    imageFlags.setImageFilter(nullptr);
   }
 
   if (!imageSmoothingEnabled() &&
       isDrawScalingDown(srcRect, dstRect, state().transform().xScaleSquared(),
                         state().transform().yScaleSquared()))
-    imagePaint.setFilterQuality(kLow_SkFilterQuality);
+    imageFlags.setFilterQuality(kLow_SkFilterQuality);
 
   if (!imageSource->isVideoElement()) {
-    imagePaint.setAntiAlias(shouldDrawImageAntialiased(dstRect));
-    image->draw(c, imagePaint, dstRect, srcRect, DoNotRespectImageOrientation,
-                Image::DoNotClampImageToSourceRect, drawImageColorBehavior());
+    imageFlags.setAntiAlias(shouldDrawImageAntialiased(dstRect));
+    image->draw(c, imageFlags, dstRect, srcRect, DoNotRespectImageOrientation,
+                Image::DoNotClampImageToSourceRect);
   } else {
     c->save();
     c->clipRect(dstRect);
@@ -1091,7 +1094,7 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
     video->paintCurrentFrame(
         c,
         IntRect(IntPoint(), IntSize(video->videoWidth(), video->videoHeight())),
-        &imagePaint);
+        &imageFlags);
   }
 
   c->restoreToCount(initialSaveCount);
@@ -1099,8 +1102,8 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
 
 bool shouldDisableDeferral(CanvasImageSource* imageSource,
                            DisableDeferralReason* reason) {
-  ASSERT(reason);
-  ASSERT(*reason == DisableDeferralReasonUnknown);
+  DCHECK(reason);
+  DCHECK_EQ(*reason, DisableDeferralReasonUnknown);
 
   if (imageSource->isVideoElement()) {
     *reason = DisableDeferralReasonDrawImageOfVideo;
@@ -1116,7 +1119,7 @@ bool shouldDisableDeferral(CanvasImageSource* imageSource,
   return false;
 }
 
-void BaseRenderingContext2D::drawImage(ExecutionContext* executionContext,
+void BaseRenderingContext2D::drawImage(ScriptState* scriptState,
                                        CanvasImageSource* imageSource,
                                        double sx,
                                        double sy,
@@ -1307,9 +1310,9 @@ void BaseRenderingContext2D::drawImage(ExecutionContext* executionContext,
 
   draw(
       [this, &imageSource, &image, &srcRect, dstRect](
-          SkCanvas* c, const SkPaint* paint)  // draw lambda
+          PaintCanvas* c, const PaintFlags* flags)  // draw lambda
       {
-        drawImageInternal(c, imageSource, image.get(), srcRect, dstRect, paint);
+        drawImageInternal(c, imageSource, image.get(), srcRect, dstRect, flags);
       },
       [this, &dstRect](const SkIRect& clipBounds)  // overdraw test lambda
       { return rectContainsTransformedRect(dstRect, clipBounds); },
@@ -1336,7 +1339,8 @@ void BaseRenderingContext2D::drawImage(ExecutionContext* executionContext,
       buffer->setHasExpensiveOp();
   }
 
-  if (originClean() && wouldTaintOrigin(imageSource, executionContext))
+  if (originClean() &&
+      wouldTaintOrigin(imageSource, scriptState->getExecutionContext()))
     setOriginTainted();
 }
 
@@ -1344,7 +1348,7 @@ void BaseRenderingContext2D::clearCanvas() {
   FloatRect canvasRect(0, 0, width(), height());
   checkOverdraw(canvasRect, 0, CanvasRenderingContext2DState::NoImage,
                 ClipFill);
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (c)
     c->clear(hasAlpha() ? SK_ColorTRANSPARENT : SK_ColorBLACK);
 }
@@ -1389,7 +1393,7 @@ CanvasGradient* BaseRenderingContext2D::createRadialGradient(
 }
 
 CanvasPattern* BaseRenderingContext2D::createPattern(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     const CanvasImageSourceUnion& imageSource,
     const String& repetitionType,
     ExceptionState& exceptionState) {
@@ -1399,12 +1403,12 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
     return nullptr;
   }
 
-  return createPattern(executionContext, imageSourceInternal, repetitionType,
+  return createPattern(scriptState, imageSourceInternal, repetitionType,
                        exceptionState);
 }
 
 CanvasPattern* BaseRenderingContext2D::createPattern(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     CanvasImageSource* imageSource,
     const String& repetitionType,
     ExceptionState& exceptionState) {
@@ -1445,12 +1449,13 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
     case IncompleteSourceImageStatus:
       return nullptr;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return nullptr;
   }
-  ASSERT(imageForRendering);
+  DCHECK(imageForRendering);
 
-  bool originClean = !wouldTaintOrigin(imageSource, executionContext);
+  bool originClean =
+      !wouldTaintOrigin(imageSource, scriptState->getExecutionContext());
 
   return CanvasPattern::create(imageForRendering.release(), repeatMode,
                                originClean);
@@ -1459,7 +1464,7 @@ CanvasPattern* BaseRenderingContext2D::createPattern(
 bool BaseRenderingContext2D::computeDirtyRect(const FloatRect& localRect,
                                               SkIRect* dirtyRect) {
   SkIRect clipBounds;
-  if (!drawingCanvas()->getClipDeviceBounds(&clipBounds))
+  if (!drawingCanvas()->getDeviceClipBounds(&clipBounds))
     return false;
   return computeDirtyRect(localRect, clipBounds, dirtyRect);
 }
@@ -1720,10 +1725,10 @@ void BaseRenderingContext2D::setImageSmoothingQuality(const String& quality) {
 
 void BaseRenderingContext2D::checkOverdraw(
     const SkRect& rect,
-    const SkPaint* paint,
+    const PaintFlags* flags,
     CanvasRenderingContext2DState::ImageType imageType,
     DrawType drawType) {
-  SkCanvas* c = drawingCanvas();
+  PaintCanvas* c = drawingCanvas();
   if (!c || !imageBuffer()->isRecording())
     return;
 
@@ -1731,12 +1736,12 @@ void BaseRenderingContext2D::checkOverdraw(
   if (drawType == UntransformedUnclippedFill) {
     deviceRect = rect;
   } else {
-    ASSERT(drawType == ClipFill);
+    DCHECK_EQ(drawType, ClipFill);
     if (state().hasComplexClip())
       return;
 
     SkIRect skIBounds;
-    if (!c->getClipDeviceBounds(&skIBounds))
+    if (!c->getDeviceClipBounds(&skIBounds))
       return;
     deviceRect = SkRect::Make(skIBounds);
   }
@@ -1748,21 +1753,21 @@ void BaseRenderingContext2D::checkOverdraw(
 
   bool isSourceOver = true;
   unsigned alpha = 0xFF;
-  if (paint) {
-    if (paint->getLooper() || paint->getImageFilter() || paint->getMaskFilter())
+  if (flags) {
+    if (flags->getLooper() || flags->getImageFilter() || flags->getMaskFilter())
       return;
 
-    SkBlendMode mode = paint->getBlendMode();
+    SkBlendMode mode = flags->getBlendMode();
     isSourceOver = mode == SkBlendMode::kSrcOver;
     if (!isSourceOver && mode != SkBlendMode::kSrc &&
         mode != SkBlendMode::kClear)
       return;  // The code below only knows how to handle Src, SrcOver, and
                // Clear
 
-    alpha = paint->getAlpha();
+    alpha = flags->getAlpha();
 
     if (isSourceOver && imageType == CanvasRenderingContext2DState::NoImage) {
-      SkShader* shader = paint->getShader();
+      PaintShader* shader = flags->getShader();
       if (shader) {
         if (shader->isOpaque() && alpha == 0xFF)
           imageBuffer()->willOverwriteCanvas();

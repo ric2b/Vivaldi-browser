@@ -27,9 +27,6 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="1654128982815600832">Permitindo conexões remotas a este computador...</translation>
 <translation id="170207782578677537">Falha ao registrar este computador.</translation>
 <translation id="1704090719919187045">Preferências do host do Chromoting</translation>
-<translation id="1730409684442507495">• Melhoria na qualidade de imagem da área de trabalho, capacidade de resposta e consumo de bateria.
-• Melhoria na capacidade de resposta em operações de clicar e arrastar.
-• Melhoria em diversos efeitos de animações de IU.</translation>
 <translation id="174018511426417793">Você não tem computadores cadastrados. Para ativar conexões remotas a um computador, instale a Área de trabalho remota do Google Chrome no computador desejado e clique em "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Conectando...</translation>
 <translation id="1770394049404108959">Não consigo abrir o aplicativo.</translation>
@@ -44,6 +41,10 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="2013996867038862849">Todos os clientes pareados foram excluídos.</translation>
 <translation id="2038229918502634450">O host está reiniciando para levar em conta a alteração de uma política.</translation>
 <translation id="2046651113449445291">Os clientes a seguir foram pareados com este computador e podem se conectar sem o fornecimento de um PIN. Você pode revogar esta permissão a qualquer momento, individualmente ou para todos os clientes.</translation>
+<translation id="2053901200959289492">• Adição de compatibilidade com várias janelas no Android Nougat.
+• Melhoria na qualidade de imagem da área de trabalho, capacidade de resposta e consumo de bateria.
+• Melhoria na capacidade de resposta em operações de clicar e arrastar.
+• Melhoria em diversos efeitos de animações de IU.</translation>
 <translation id="2078880767960296260">Processo do host</translation>
 <translation id="20876857123010370">Modo de trackpad</translation>
 <translation id="2089514346391228378">As conexões remotas deste computador foram ativadas.</translation>

@@ -4,10 +4,11 @@
 
 #include <stdint.h>
 
-#include "build/build_config.h"
 #include "base/command_line.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_main_delegate.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "content/public/app/content_main.h"
 #include "content/public/common/content_switches.h"
@@ -23,6 +24,10 @@
 
 #if defined(VIVALDI_BUILD)
 #include "extraparts/vivaldi_main_delegate.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "chrome/app/chrome_main_mac.h"
 #endif
 
 #if defined(OS_WIN)
@@ -101,16 +106,20 @@ int ChromeMain(int argc, const char** argv) {
   ALLOW_UNUSED_LOCAL(command_line);
 #endif
 
-#if defined(OS_LINUX)
-  if (command_line->HasSwitch(switches::kHeadless))
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+  if (command_line->HasSwitch(switches::kHeadless)) {
+#if defined(OS_MACOSX)
+    SetUpBundleOverrides();
+#endif
     return headless::HeadlessShellMain(argc, argv);
-#endif  // defined(OS_LINUX)
+  }
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX)
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
   version_info::Channel channel = chrome::GetChannel();
   if (channel == version_info::Channel::CANARY ||
       channel == version_info::Channel::UNKNOWN) {
-    if (command_line->HasSwitch("mash"))
+    if (command_line->HasSwitch(switches::kMash))
       return MashMain();
     WaitForMashDebuggerIfNecessary();
     if (service_manager::ServiceManagerIsRemote())

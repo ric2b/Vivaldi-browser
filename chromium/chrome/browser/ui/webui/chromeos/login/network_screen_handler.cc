@@ -20,8 +20,8 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/idle_detector.h"
-#include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
-#include "chrome/browser/chromeos/login/screens/network_model.h"
+#include "chrome/browser/chromeos/login/screens/core_oobe_view.h"
+#include "chrome/browser/chromeos/login/screens/network_screen.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
@@ -54,20 +54,18 @@ namespace chromeos {
 
 // NetworkScreenHandler, public: -----------------------------------------------
 
-NetworkScreenHandler::NetworkScreenHandler(CoreOobeActor* core_oobe_actor)
-    : BaseScreenHandler(kJsScreenPath),
-      core_oobe_actor_(core_oobe_actor),
-      model_(nullptr),
-      show_on_init_(false) {
-  DCHECK(core_oobe_actor_);
+NetworkScreenHandler::NetworkScreenHandler(CoreOobeView* core_oobe_view)
+    : core_oobe_view_(core_oobe_view) {
+  set_call_js_prefix(kJsScreenPath);
+  DCHECK(core_oobe_view_);
 }
 
 NetworkScreenHandler::~NetworkScreenHandler() {
-  if (model_)
-    model_->OnViewDestroyed(this);
+  if (screen_)
+    screen_->OnViewDestroyed(this);
 }
 
-// NetworkScreenHandler, NetworkScreenActor implementation: --------------------
+// NetworkScreenHandler, NetworkScreenView implementation: ---------------------
 
 void NetworkScreenHandler::Show() {
   if (!page_is_ready()) {
@@ -77,13 +75,13 @@ void NetworkScreenHandler::Show() {
 
   PrefService* prefs = g_browser_process->local_state();
   if (prefs->GetBoolean(prefs::kFactoryResetRequested)) {
-    if (core_oobe_actor_)
-      core_oobe_actor_->ShowDeviceResetScreen();
+    if (core_oobe_view_)
+      core_oobe_view_->ShowDeviceResetScreen();
 
     return;
   } else if (prefs->GetBoolean(prefs::kDebuggingFeaturesRequested)) {
-    if (core_oobe_actor_)
-      core_oobe_actor_->ShowEnableDebuggingScreen();
+    if (core_oobe_view_)
+      core_oobe_view_->ShowEnableDebuggingScreen();
 
     return;
   }
@@ -100,19 +98,19 @@ void NetworkScreenHandler::Show() {
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kSystemDevMode));
   ShowScreenWithData(OobeScreen::SCREEN_OOBE_NETWORK, &network_screen_params);
-  core_oobe_actor_->InitDemoModeDetection();
+  core_oobe_view_->InitDemoModeDetection();
 }
 
 void NetworkScreenHandler::Hide() {
 }
 
-void NetworkScreenHandler::Bind(NetworkModel& model) {
-  model_ = &model;
-  BaseScreenHandler::SetBaseScreen(model_);
+void NetworkScreenHandler::Bind(NetworkScreen* screen) {
+  screen_ = screen;
+  BaseScreenHandler::SetBaseScreen(screen_);
 }
 
 void NetworkScreenHandler::Unbind() {
-  model_ = nullptr;
+  screen_ = nullptr;
   BaseScreenHandler::SetBaseScreen(nullptr);
 }
 
@@ -122,11 +120,11 @@ void NetworkScreenHandler::ShowError(const base::string16& message) {
 
 void NetworkScreenHandler::ClearErrors() {
   if (page_is_ready())
-    core_oobe_actor_->ClearErrors();
+    core_oobe_view_->ClearErrors();
 }
 
 void NetworkScreenHandler::StopDemoModeDetection() {
-  core_oobe_actor_->StopDemoModeDetection();
+  core_oobe_view_->StopDemoModeDetection();
 }
 
 void NetworkScreenHandler::ShowConnectingStatus(
@@ -137,7 +135,7 @@ void NetworkScreenHandler::ShowConnectingStatus(
 void NetworkScreenHandler::ReloadLocalizedContent() {
   base::DictionaryValue localized_strings;
   GetOobeUI()->GetLocalizedStrings(&localized_strings);
-  core_oobe_actor_->ReloadContent(localized_strings);
+  core_oobe_view_->ReloadContent(localized_strings);
 }
 
 // NetworkScreenHandler, BaseScreenHandler implementation: --------------------
@@ -156,6 +154,7 @@ void NetworkScreenHandler::DeclareLocalizedValues(
   builder->Add("selectKeyboard", IDS_KEYBOARD_SELECTION_SELECT);
   builder->Add("selectNetwork", IDS_NETWORK_SELECTION_SELECT);
   builder->Add("selectTimezone", IDS_OPTIONS_SETTINGS_TIMEZONE_DESCRIPTION);
+  builder->Add("timezoneDropdownLabel", IDS_TIMEZONE_DROPDOWN_LABEL);
   builder->Add("proxySettings", IDS_OPTIONS_PROXIES_CONFIGURE_BUTTON);
   builder->Add("continueButton", IDS_NETWORK_SELECTION_CONTINUE_BUTTON);
   builder->Add("debuggingFeaturesLink", IDS_NETWORK_ENABLE_DEV_FEATURES_LINK);
@@ -163,6 +162,7 @@ void NetworkScreenHandler::DeclareLocalizedValues(
   // MD-OOBE
   builder->Add("oobeOKButtonText", IDS_OOBE_OK_BUTTON_TEXT);
   builder->Add("welcomeNextButtonText", IDS_OOBE_WELCOME_NEXT_BUTTON_TEXT);
+  builder->Add("languageButtonLabel", IDS_LANGUAGE_BUTTON_LABEL);
   builder->Add("languageSectionTitle", IDS_LANGUAGE_SECTION_TITLE);
   builder->Add("accessibilitySectionTitle", IDS_ACCESSIBILITY_SECTION_TITLE);
   builder->Add("accessibilitySectionHint", IDS_ACCESSIBILITY_SECTION_HINT);
@@ -171,7 +171,9 @@ void NetworkScreenHandler::DeclareLocalizedValues(
   builder->Add("networkSectionHint", IDS_NETWORK_SECTION_HINT);
 
   builder->Add("languageDropdownTitle", IDS_LANGUAGE_DROPDOWN_TITLE);
+  builder->Add("languageDropdownLabel", IDS_LANGUAGE_DROPDOWN_LABEL);
   builder->Add("keyboardDropdownTitle", IDS_KEYBOARD_DROPDOWN_TITLE);
+  builder->Add("keyboardDropdownLabel", IDS_KEYBOARD_DROPDOWN_LABEL);
   builder->Add("proxySettingsMenuName", IDS_PROXY_SETTINGS_MENU_NAME);
   builder->Add("addWiFiNetworkMenuName", IDS_ADD_WI_FI_NETWORK_MENU_NAME);
   builder->Add("addMobileNetworkMenuName", IDS_ADD_MOBILE_NETWORK_MENU_NAME);
@@ -202,12 +204,12 @@ void NetworkScreenHandler::GetAdditionalParameters(
           .id();
 
   std::unique_ptr<base::ListValue> language_list;
-  if (model_) {
-    if (model_->GetLanguageList() &&
-        model_->GetLanguageListLocale() == application_locale) {
-      language_list.reset(model_->GetLanguageList()->DeepCopy());
+  if (screen_) {
+    if (screen_->language_list() &&
+        screen_->language_list_locale() == application_locale) {
+      language_list.reset(screen_->language_list()->DeepCopy());
     } else {
-      model_->UpdateLanguageList();
+      screen_->UpdateLanguageList();
     }
   }
 
@@ -259,7 +261,7 @@ void NetworkScreenHandler::Initialize() {
   }
 
   // Reload localized strings if they are already resolved.
-  if (model_ && model_->GetLanguageList())
+  if (screen_ && screen_->language_list())
     ReloadLocalizedContent();
 }
 

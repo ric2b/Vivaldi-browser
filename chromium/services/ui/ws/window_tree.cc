@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/map.h"
+#include "services/ui/ws/cursor_location_manager.h"
 #include "services/ui/ws/default_access_policy.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
@@ -798,7 +799,8 @@ void WindowTree::ProcessWindowSurfaceChanged(
 }
 
 void WindowTree::SendToPointerWatcher(const ui::Event& event,
-                                      ServerWindow* target_window) {
+                                      ServerWindow* target_window,
+                                      int64_t display_id) {
   if (!EventMatchesPointerWatcher(event))
     return;
 
@@ -806,8 +808,8 @@ void WindowTree::SendToPointerWatcher(const ui::Event& event,
   // Ignore the return value from IsWindowKnown() as in the case of the client
   // not knowing the window we'll send 0, which corresponds to no window.
   IsWindowKnown(target_window, &client_window_id);
-  client()->OnPointerEventObserved(ui::Event::Clone(event),
-                                   client_window_id.id);
+  client()->OnPointerEventObserved(ui::Event::Clone(event), client_window_id.id,
+                                   display_id);
 }
 
 bool WindowTree::ShouldRouteToWindowManager(const ServerWindow* window) const {
@@ -824,16 +826,7 @@ bool WindowTree::ShouldRouteToWindowManager(const ServerWindow* window) const {
   if (roots_.count(window) == 0)
     return false;
 
-  // The WindowManager is attached to the root of the Display, if there isn't a
-  // WindowManager attached no need to route to it.
-  const WindowManagerDisplayRoot* display_root =
-      GetWindowManagerDisplayRoot(window);
-  if (!display_root)
-    return false;
-
-  // Route to the windowmanager if the windowmanager created the window.
-  return display_root->window_manager_state()->window_tree()->id() ==
-         window->id().client_id;
+  return IsWindowCreatedByWindowManager(window);
 }
 
 void WindowTree::ProcessCaptureChanged(const ServerWindow* new_capture,
@@ -1155,8 +1148,10 @@ void WindowTree::DispatchInputEventImpl(ServerWindow* target,
   // Should only get events from windows attached to a host.
   DCHECK(event_source_wms_);
   bool matched_pointer_watcher = EventMatchesPointerWatcher(event);
+  Display* display = GetDisplay(target);
+  DCHECK(display);
   client()->OnWindowInputEvent(
-      event_ack_id_, ClientWindowIdForWindow(target).id,
+      event_ack_id_, ClientWindowIdForWindow(target).id, display->GetId(),
       ui::Event::Clone(event), matched_pointer_watcher);
 }
 
@@ -1291,6 +1286,9 @@ void WindowTree::ReorderWindow(uint32_t change_id,
                                Id window_id,
                                Id relative_window_id,
                                mojom::OrderDirection direction) {
+  // TODO(erg): This implementation allows reordering two windows that are
+  // children of a parent window which the two implementations can't see. There
+  // should be a security check to prevent this.
   bool success = false;
   ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
   ServerWindow* relative_window =
@@ -1425,8 +1423,8 @@ void WindowTree::AttachCompositorFrameSink(
     DVLOG(1) << "request to AttachCompositorFrameSink failed";
     return;
   }
-  window->CreateOffscreenCompositorFrameSink(std::move(compositor_frame_sink),
-                                             std::move(client));
+  window->CreateCompositorFrameSink(std::move(compositor_frame_sink),
+                                    std::move(client));
 }
 
 void WindowTree::SetWindowTextInputState(Id transport_window_id,
@@ -1554,19 +1552,29 @@ void WindowTree::SetFocus(uint32_t change_id, Id transport_window_id) {
 void WindowTree::SetCanFocus(Id transport_window_id, bool can_focus) {
   ServerWindow* window =
       GetWindowByClientId(ClientWindowId(transport_window_id));
-  // TODO(sky): there should be an else case (it shouldn't route to wm and
-  // policy allows, then set_can_focus).
-  if (window && ShouldRouteToWindowManager(window))
+  if (!window) {
+    DVLOG(1) << "SetCanFocus failed (invalid id)";
+    return;
+  }
+
+  if (ShouldRouteToWindowManager(window)) {
+    WindowManagerDisplayRoot* display_root =
+        GetWindowManagerDisplayRoot(window);
+    WindowTree* wm_tree = display_root->window_manager_state()->window_tree();
+    wm_tree->window_manager_internal_->WmSetCanFocus(transport_window_id,
+                                                     can_focus);
+  } else if (access_policy_->CanSetFocus(window)) {
     window->set_can_focus(can_focus);
+  }
 }
 
-void WindowTree::SetCanAcceptEvents(Id transport_window_id,
-                                    bool can_accept_events) {
+void WindowTree::SetEventTargetingPolicy(Id transport_window_id,
+                                         mojom::EventTargetingPolicy policy) {
   ServerWindow* window =
       GetWindowByClientId(ClientWindowId(transport_window_id));
   // TODO(riajiang): check |event_queue_| is empty for |window|.
-  if (window && access_policy_->CanSetAcceptEvents(window))
-    window->set_can_accept_events(can_accept_events);
+  if (window && access_policy_->CanSetEventTargetingPolicy(window))
+    window->set_event_targeting_policy(policy);
 }
 
 void WindowTree::SetPredefinedCursor(uint32_t change_id,
@@ -1605,6 +1613,110 @@ void WindowTree::DeactivateWindow(Id window_id) {
       wm_tree->ClientWindowIdForWindow(window).id);
 }
 
+void WindowTree::StackAbove(uint32_t change_id, Id above_id, Id below_id) {
+  ServerWindow* above = GetWindowByClientId(ClientWindowId(above_id));
+  if (!above) {
+    DVLOG(1) << "StackAtTop failed (invalid above id)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  ServerWindow* below = GetWindowByClientId(ClientWindowId(below_id));
+  if (!below) {
+    DVLOG(1) << "StackAtTop failed (invalid below id)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  if (!access_policy_->CanStackAbove(above, below)) {
+    DVLOG(1) << "StackAtTop failed (access denied)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  ServerWindow* parent = above->parent();
+  ServerWindow* below_parent = below->parent();
+  if (!parent) {
+    DVLOG(1) << "StackAtTop failed (above unparented)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+  if (!below_parent) {
+    DVLOG(1) << "StackAtTop failed (below unparented)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+  if (parent != below_parent) {
+    DVLOG(1) << "StackAtTop failed (windows have different parents)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(above);
+  if (!display_root) {
+    DVLOG(1) << "StackAtTop (no display root)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  // Window reordering assumes that it is the owner of parent who is sending
+  // the message, and does not deal gracefully with other clients reordering
+  // their windows. So tell the window manager to send us a reorder message.
+  WindowTree* wm_tree = display_root->window_manager_state()->window_tree();
+  const uint32_t wm_change_id =
+      window_server_->GenerateWindowManagerChangeId(this, change_id);
+  wm_tree->window_manager_internal_->WmStackAbove(
+      wm_change_id,
+      wm_tree->ClientWindowIdForWindow(above).id,
+      wm_tree->ClientWindowIdForWindow(below).id);
+}
+
+void WindowTree::StackAtTop(uint32_t change_id, Id window_id) {
+  ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
+  if (!window) {
+    DVLOG(1) << "StackAtTop failed (invalid id)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  if (!access_policy_->CanStackAtTop(window)) {
+    DVLOG(1) << "StackAtTop failed (access denied)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  ServerWindow* parent = window->parent();
+  if (!parent) {
+    DVLOG(1) << "StackAtTop failed (window unparented)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  DCHECK(!parent->children().empty());
+  if (parent->children().back() == window) {
+    // Ignore this call; the client didn't know they were already at the top.
+    DVLOG(3) << "StackAtTop ignored (already at top)";
+    client()->OnChangeCompleted(change_id, true);
+    return;
+  }
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root) {
+    DVLOG(1) << "StackAtTop (no display root)";
+    client()->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  // Window reordering assumes that it is the owner of parent who is sending
+  // the message, and does not deal gracefully with other clients reordering
+  // their windows. So tell the window manager to send us a reorder message.
+  WindowTree* wm_tree = display_root->window_manager_state()->window_tree();
+  const uint32_t wm_change_id =
+      window_server_->GenerateWindowManagerChangeId(this, change_id);
+  wm_tree->window_manager_internal_->WmStackAtTop(
+      wm_change_id, wm_tree->ClientWindowIdForWindow(window).id);
+}
+
 void WindowTree::GetWindowManagerClient(
     mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal) {
   if (!access_policy_->CanSetWindowManager() || !window_manager_internal_ ||
@@ -1618,9 +1730,9 @@ void WindowTree::GetWindowManagerClient(
 
 void WindowTree::GetCursorLocationMemory(
     const GetCursorLocationMemoryCallback& callback) {
-  callback.Run(
-      window_server_->display_manager()->GetUserDisplayManager(user_id_)->
-      GetCursorLocationMemory());
+  callback.Run(window_server_->display_manager()
+                   ->GetCursorLocationManager(user_id_)
+                   ->GetCursorLocationMemory());
 }
 
 void WindowTree::PerformDragDrop(
@@ -1827,16 +1939,17 @@ void WindowTree::ActivateNextWindow() {
   (*displays.begin())->ActivateNextWindow();
 }
 
-void WindowTree::SetUnderlaySurfaceOffsetAndExtendedHitArea(
-    Id window_id,
-    int32_t x_offset,
-    int32_t y_offset,
-    const gfx::Insets& hit_area) {
+void WindowTree::SetExtendedHitArea(Id window_id, const gfx::Insets& hit_area) {
   ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
-  if (!window)
+  // Extended hit test region should only be set by the owner of the window.
+  if (!window) {
+    DVLOG(1) << "SetExtendedHitArea supplied unknown window";
     return;
-
-  window->SetUnderlayOffset(gfx::Vector2d(x_offset, y_offset));
+  }
+  if (window->id().client_id != id_) {
+    DVLOG(1) << "SetExtendedHitArea supplied window that client does not own";
+    return;
+  }
   window->set_extended_hit_test_region(hit_area);
 }
 
@@ -1934,6 +2047,19 @@ bool WindowTree::IsWindowRootOfAnotherTreeForAccessPolicy(
     const ServerWindow* window) const {
   WindowTree* tree = window_server_->GetTreeWithRoot(window);
   return tree && tree != this;
+}
+
+bool WindowTree::IsWindowCreatedByWindowManager(
+    const ServerWindow* window) const {
+  // The WindowManager is attached to the root of the Display, if there isn't a
+  // WindowManager attached, the window manager didn't create this window.
+  const WindowManagerDisplayRoot* display_root =
+      GetWindowManagerDisplayRoot(window);
+  if (!display_root)
+    return false;
+
+  return display_root->window_manager_state()->window_tree()->id() ==
+         window->id().client_id;
 }
 
 void WindowTree::OnDragCompleted(bool success, uint32_t action_taken) {

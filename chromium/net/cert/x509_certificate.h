@@ -80,14 +80,6 @@ class NET_EXPORT X509Certificate
     kPublicKeyTypeECDH
   };
 
-  enum SignatureHashAlgorithm {
-    kSignatureHashAlgorithmMd2,
-    kSignatureHashAlgorithmMd4,
-    kSignatureHashAlgorithmMd5,
-    kSignatureHashAlgorithmSha1,
-    kSignatureHashAlgorithmOther,
-  };
-
   enum Format {
     // The data contains a single DER-encoded certificate, or a PEM-encoded
     // DER certificate with the PEM encoding block name of "CERTIFICATE".
@@ -196,17 +188,22 @@ class NET_EXPORT X509Certificate
   const base::Time& valid_start() const { return valid_start_; }
   const base::Time& valid_expiry() const { return valid_expiry_; }
 
-  // Gets the DNS names in the certificate.  Pursuant to RFC 2818, Section 3.1
+  // Gets the DNS names in the certificate. Pursuant to RFC 2818, Section 3.1
   // Server Identity, if the certificate has a subjectAltName extension of
   // type dNSName, this method gets the DNS names in that extension.
   // Otherwise, it gets the common name in the subject field.
+  //
+  // Note: Chrome has deprecated fallback to the subject field, see
+  // https://crbug.com/308330; prefer GetSubjectAltName() instead.
   void GetDNSNames(std::vector<std::string>* dns_names) const;
 
   // Gets the subjectAltName extension field from the certificate, if any.
   // For future extension; currently this only returns those name types that
   // are required for HTTP certificate name verification - see VerifyHostname.
-  // Unrequired parameters may be passed as NULL.
-  void GetSubjectAltName(std::vector<std::string>* dns_names,
+  // Returns true if any dNSName or iPAddress SAN was present. If |dns_names|
+  // is non-null, it will be set to all dNSNames present. If |ip_addrs| is
+  // non-null, it will be set to all iPAddresses present.
+  bool GetSubjectAltName(std::vector<std::string>* dns_names,
                          std::vector<std::string>* ip_addrs) const;
 
   // Convenience method that returns whether this certificate has expired as of
@@ -287,11 +284,11 @@ class NET_EXPORT X509Certificate
   // Verifies that |hostname| matches this certificate.
   // Does not verify that the certificate is valid, only that the certificate
   // matches this host.
-  // Returns true if it matches, and updates |*common_name_fallback_used|,
-  // setting it to true if a fallback to the CN was used, rather than
-  // subjectAltName.
+  // If |allow_common_name_fallback| is set to true, and iff no SANs are
+  // present of type dNSName or iPAddress, then fallback to using the
+  // certificate's commonName field in the Subject.
   bool VerifyNameMatch(const std::string& hostname,
-                       bool* common_name_fallback_used) const;
+                       bool allow_common_name_fallback) const;
 
   // Obtains the DER encoded certificate data for |cert_handle|. On success,
   // returns true and writes the DER encoded certificate to |*der_encoded|.
@@ -322,15 +319,6 @@ class NET_EXPORT X509Certificate
   static void GetPublicKeyInfo(OSCertHandle cert_handle,
                                size_t* size_bits,
                                PublicKeyType* type);
-
-  // Returns the digest algorithm used in |cert_handle|'s signature.
-  // If the digest algorithm cannot be determined, or if it is not one
-  // of the explicitly enumerated values, kSignatureHashAlgorithmOther
-  // will be returned.
-  // NOTE: No validation of the signature is performed, and thus invalid
-  // signatures may result in seemingly meaningful values.
-  static SignatureHashAlgorithm GetSignatureHashAlgorithm(
-      OSCertHandle cert_handle);
 
   // Returns the OSCertHandle of this object. Because of caching, this may
   // differ from the OSCertHandle originally supplied during initialization.
@@ -420,14 +408,14 @@ class NET_EXPORT X509Certificate
   // extension, if present. Note these IP addresses are NOT ascii-encoded:
   // they must be 4 or 16 bytes of network-ordered data, for IPv4 and IPv6
   // addresses, respectively.
-  // |common_name_fallback_used| will be updated to true if cert_common_name
-  // was used to match the hostname, or false if either of the |cert_san_*|
-  // parameters was used to match the hostname.
+  // If |allow_common_name_fallback| is true, then the |cert_common_name| will
+  // be used if the |cert_san_dns_names| and |cert_san_ip_addrs| parameters are
+  // empty.
   static bool VerifyHostname(const std::string& hostname,
                              const std::string& cert_common_name,
                              const std::vector<std::string>& cert_san_dns_names,
                              const std::vector<std::string>& cert_san_ip_addrs,
-                             bool* common_name_fallback_used);
+                             bool allow_common_name_fallback);
 
   // Reads a single certificate from |pickle_iter| and returns a
   // platform-specific certificate handle. The format of the certificate

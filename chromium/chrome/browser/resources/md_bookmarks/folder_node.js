@@ -9,7 +9,7 @@ Polymer({
     /** @type {BookmarkTreeNode} */
     item: Object,
 
-    isSelected: {
+    isSelectedFolder: {
       type: Boolean,
       value: false,
       reflectToAttribute: true,
@@ -21,7 +21,7 @@ Polymer({
    * @return {string}
    */
   getFolderIcon_: function() {
-    return this.isSelected ? 'bookmarks:folder-open' : 'cr:folder';
+    return this.isSelectedFolder ? 'bookmarks:folder-open' : 'cr:folder';
   },
 
   /**
@@ -29,8 +29,7 @@ Polymer({
    * @return {string}
    */
   getArrowIcon_: function() {
-    return this.item.isOpen ? 'cr:arrow-drop-up' :
-                              'cr:arrow-drop-down';
+    return this.item.isOpen ? 'cr:arrow-drop-up' : 'cr:arrow-drop-down';
   },
 
   /** @private */
@@ -60,4 +59,13 @@ Polymer({
     }
     return false;
   },
+
+  /**
+   * @param {BookmarkTreeNode} item
+   * @private
+   * @return {boolean}
+   */
+  isFolder_: function(item) {
+    return !item.url;
+  }
 });

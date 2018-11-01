@@ -11,7 +11,7 @@
 #include "ash/common/system/toast/toast_manager.h"
 #include "ash/common/wm_shell.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "grit/ash_strings.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {

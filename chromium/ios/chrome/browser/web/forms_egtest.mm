@@ -141,7 +141,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
   chrome_test_util::TapWebViewElementWithId(kSubmitButton);
 
   GURL url = TestResponseProvider::GetPrintFormDataUrl();
-  id<GREYMatcher> URLMatcher = chrome_test_util::omniboxText(url.GetContent());
+  id<GREYMatcher> URLMatcher = chrome_test_util::OmniboxText(url.GetContent());
   [[EarlGrey selectElementWithMatcher:URLMatcher]
       assertWithMatcher:grey_notNil()];
 }
@@ -152,7 +152,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
       conditionWithName:@"Waiting for webview to display resulting text."
                   block:^BOOL {
                     id<GREYMatcher> webViewMatcher =
-                        chrome_test_util::webViewContainingText(
+                        chrome_test_util::WebViewContainingText(
                             expectedResponse);
                     NSError* error = nil;
                     [[EarlGrey selectElementWithMatcher:webViewMatcher]
@@ -200,9 +200,8 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 
 // Open back navigation history.
 - (void)openBackHistory {
-  id<GREYMatcher> back =
-      chrome_test_util::buttonWithAccessibilityLabelId(IDS_ACCNAME_BACK);
-  [[EarlGrey selectElementWithMatcher:back] performAction:grey_longPress()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
+      performAction:grey_longPress()];
 }
 
 // Navigates forward to a previous webpage.
@@ -215,17 +214,17 @@ void TestResponseProvider::GetResponseHeadersAndBody(
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
 
-// Accepts the warning that the form POST data will be resent.
+// Accepts the warning that the form POST data will be reposted.
 - (void)confirmResendWarning {
   id<GREYMatcher> resendWarning =
-      chrome_test_util::buttonWithAccessibilityLabelId(
+      chrome_test_util::ButtonWithAccessibilityLabelId(
           IDS_HTTP_POST_WARNING_RESEND);
   [[EarlGrey selectElementWithMatcher:resendWarning]
       performAction:grey_longPress()];
 }
 
 // Tests whether the request data is reposted correctly.
-- (void)testFormsResendPostData {
+- (void)testRepostForm {
   [ChromeEarlGrey loadURL:TestResponseProvider::GetFormUrl()];
 
   [self submitForm];
@@ -239,7 +238,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 
 // Tests that a POST followed by navigating to a new page and then tapping back
 // to the form result page resends data.
-- (void)testFormsResendPostDataAfterTappingBack {
+- (void)testRepostFormAfterTappingBack {
   [ChromeEarlGrey loadURL:TestResponseProvider::GetFormUrl()];
 
   [self submitForm];
@@ -247,7 +246,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
   // Go to a new page.
   [ChromeEarlGrey loadURL:TestResponseProvider::GetGenericUrl()];
 
-  // Go back and check that the data is resent.
+  // Go back and check that the data is reposted.
   [self goBack];
   [self confirmResendWarning];
   [self waitForExpectedResponse:kExpectedPostData];
@@ -255,7 +254,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 
 // Tests that a POST followed by tapping back to the form page and then tapping
 // forward to the result page resends data.
-- (void)testFormsResendPostDataAfterTappingBackAndForward {
+- (void)testRepostFormAfterTappingBackAndForward {
   [ChromeEarlGrey loadURL:TestResponseProvider::GetFormUrl()];
   [self submitForm];
 
@@ -267,7 +266,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 
 // Tests that a POST followed by a new request and then index navigation to get
 // back to the result page resends data.
-- (void)testFormsResendPostDataAfterIndexNavigation {
+- (void)testRepostFormAfterIndexNavigation {
   [ChromeEarlGrey loadURL:TestResponseProvider::GetFormUrl()];
   [self submitForm];
 
@@ -288,7 +287,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 }
 
 // When data is not re-sent, the request is done with a GET method.
-- (void)testFormsDontResendPostData {
+- (void)testRepostFormCancelling {
   [ChromeEarlGrey loadURL:TestResponseProvider::GetFormUrl()];
   [self submitForm];
 
@@ -309,7 +308,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
         performAction:grey_tapAtPoint(CGPointMake(50.0f, 50.0f))];
   } else {
     // On handset, dismiss via the cancel button.
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::cancelButton()]
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::CancelButton()]
         performAction:grey_tap()];
   }
   // Check that the POST is changed to a GET
@@ -317,7 +316,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 }
 
 // Tests that a POST followed by a redirect does not show the popup.
-- (void)testFormsDontResendPostDataAfterRedirect {
+- (void)testRepostFormCancellingAfterRedirect {
   [ChromeEarlGrey loadURL:TestResponseProvider::GetRedirectFormUrl()];
   // Submit the form, which redirects before printing the data.
   [self submitForm];
@@ -327,7 +326,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
 
   // Check that the popup did not show
   id<GREYMatcher> resendWarning =
-      chrome_test_util::buttonWithAccessibilityLabelId(
+      chrome_test_util::ButtonWithAccessibilityLabelId(
           IDS_HTTP_POST_WARNING_RESEND);
   [[EarlGrey selectElementWithMatcher:resendWarning]
       assertWithMatcher:grey_nil()];

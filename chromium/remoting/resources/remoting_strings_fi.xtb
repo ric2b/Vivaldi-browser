@@ -27,9 +27,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="1654128982815600832">Otetaan tietokoneen etäyhteyksiä käyttöön…</translation>
 <translation id="170207782578677537">Tietokoneen rekisteröinti epäonnistui.</translation>
 <translation id="1704090719919187045">Chromoting-isäntäasetukset</translation>
-<translation id="1730409684442507495">• Parannuksia työpöydän kuvanlaatuun, käytettävyyteen ja virrankulutukseen
-• Parannuksia klikkaamisen ja vetämisen käytettävyyteen
-• Parannuksia useisiin käyttöliittymän animaatioihin</translation>
 <translation id="174018511426417793">Käyttöösi ei ole rekisteröity tietokoneita. Ota käyttöön etäyhteys asentamalla toiselle tietokoneelle Chrome-etäkäyttö ja klikkaamalla painiketta <ph name="BUTTON_NAME" />.</translation>
 <translation id="1742469581923031760">Yhdistetään…</translation>
 <translation id="1770394049404108959">Sovellus ei aukea.</translation>
@@ -44,6 +41,10 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="2013996867038862849">Kaikki laitepareiksi yhdistetyt asiakkaat on poistettu.</translation>
 <translation id="2038229918502634450">Isäntä käynnistyy uudelleen ja ottaa käyttöön käytäntöihin tehdyn muutoksen.</translation>
 <translation id="2046651113449445291">Seuraavat asiakkaat on yhdistetty tämän tietokoneen laitepareiksi, ja ne voivat muodostaa yhteyden ilman PIN-koodia. Voit peruuttaa luvan milloin tahansa joko yksitellen tai kaikille asiakkaille yhtä aikaa.</translation>
+<translation id="2053901200959289492">• Lisätty Android Nougat'n usean ikkunan tuki
+• Parannuksia työpöydän kuvanlaatuun, käytettävyyteen ja virrankulutukseen
+• Klikkaamisen ja vetämisen herkkyyttä lisätty
+• Parannuksia useisiin käyttöliittymän animaatioihin</translation>
 <translation id="2078880767960296260">Isäntäprosessi</translation>
 <translation id="20876857123010370">Ohjauslevytila</translation>
 <translation id="2089514346391228378">Tietokoneen etäyhteydet on otettu käyttöön.</translation>

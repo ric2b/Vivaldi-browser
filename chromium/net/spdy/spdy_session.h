@@ -90,7 +90,7 @@ class TransportSecurityState;
 // NOTE: There's an enum of the same name (also with numeric suffixes)
 // in histograms.xml. Be sure to add new values there also.
 enum SpdyProtocolErrorDetails {
-  // SpdyFramer::SpdyError mappings.
+  // SpdyFramer::SpdyFramerError mappings.
   SPDY_ERROR_NO_ERROR = 0,
   SPDY_ERROR_INVALID_STREAM_ID = 38,
   SPDY_ERROR_INVALID_CONTROL_FRAME = 1,
@@ -108,7 +108,7 @@ enum SpdyProtocolErrorDetails {
   SPDY_ERROR_INTERNAL_FRAMER_ERROR = 41,
   SPDY_ERROR_INVALID_CONTROL_FRAME_SIZE = 37,
   SPDY_ERROR_OVERSIZED_PAYLOAD = 40,
-  // SpdyRstStreamStatus mappings.
+  // SpdyErrorCode mappings.
   STATUS_CODE_NO_ERROR = 41,
   STATUS_CODE_PROTOCOL_ERROR = 11,
   STATUS_CODE_INTERNAL_ERROR = 16,
@@ -141,18 +141,19 @@ enum SpdyProtocolErrorDetails {
   NUM_SPDY_PROTOCOL_ERROR_DETAILS = 43,
 };
 SpdyProtocolErrorDetails NET_EXPORT_PRIVATE
-    MapFramerErrorToProtocolError(SpdyFramer::SpdyError error);
-Error NET_EXPORT_PRIVATE MapFramerErrorToNetError(SpdyFramer::SpdyError error);
+MapFramerErrorToProtocolError(SpdyFramer::SpdyFramerError error);
+Error NET_EXPORT_PRIVATE
+MapFramerErrorToNetError(SpdyFramer::SpdyFramerError error);
 SpdyProtocolErrorDetails NET_EXPORT_PRIVATE
-    MapRstStreamStatusToProtocolError(SpdyRstStreamStatus status);
-SpdyGoAwayStatus NET_EXPORT_PRIVATE MapNetErrorToGoAwayStatus(Error err);
+MapRstStreamStatusToProtocolError(SpdyErrorCode error_code);
+SpdyErrorCode NET_EXPORT_PRIVATE MapNetErrorToGoAwayStatus(Error err);
 
 // If these compile asserts fail then SpdyProtocolErrorDetails needs
 // to be updated with new values, as do the mapping functions above.
 static_assert(17 == SpdyFramer::LAST_ERROR,
               "SpdyProtocolErrorDetails / Spdy Errors mismatch");
-static_assert(14 == RST_STREAM_NUM_STATUS_CODES,
-              "SpdyProtocolErrorDetails / RstStreamStatus mismatch");
+static_assert(13 == SpdyErrorCode::ERROR_CODE_MAX,
+              "SpdyProtocolErrorDetails / SpdyErrorCode mismatch");
 
 // A helper class used to manage a request to create a stream.
 class NET_EXPORT_PRIVATE SpdyStreamRequest {
@@ -189,6 +190,9 @@ class NET_EXPORT_PRIVATE SpdyStreamRequest {
   // OK or |callback| is called with OK. The caller must immediately
   // set a delegate for the returned stream (except for test code).
   base::WeakPtr<SpdyStream> ReleaseStream();
+
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
 
  private:
   friend class SpdySession;
@@ -241,6 +245,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
       PushedStreamInfo(SpdyStreamId stream_id, base::TimeTicks creation_time)
           : stream_id(stream_id), creation_time(creation_time) {}
       ~PushedStreamInfo() {}
+      size_t EstimateMemoryUsage() const { return 0; }
 
       SpdyStreamId stream_id;
       base::TimeTicks creation_time;
@@ -269,6 +274,8 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
                     const GURL& url,
                     SpdyStreamId stream_id,
                     const base::TimeTicks& creation_time);
+
+    size_t EstimateMemoryUsage() const;
 
    private:
     SpdySession* spdy_session_;
@@ -327,7 +334,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // of that stream is updated to match |priority|.
   int GetPushStream(const GURL& url,
                     RequestPriority priority,
-                    base::WeakPtr<SpdyStream>* spdy_stream,
+                    SpdyStream** spdy_stream,
                     const NetLogWithSource& stream_net_log);
 
   // Called when the pushed stream should be cancelled. If the pushed stream is
@@ -395,7 +402,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // stream with the given ID, which must exist and be active. Note
   // that that stream may hold the last reference to the session.
   void ResetStream(SpdyStreamId stream_id,
-                   SpdyRstStreamStatus status,
+                   SpdyErrorCode error_code,
                    const std::string& description);
 
   // Check if a stream is active.
@@ -564,8 +571,10 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // indicate whether session is active.
   // |stats| can be assumed as being default initialized upon entry.
   // Implementation overrides fields in |stats|.
-  void DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
-                       bool* is_session_active) const;
+  // Returns the estimate of dynamically allocated memory in bytes, which
+  // includes the size attributed to the underlying socket.
+  size_t DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
+                         bool* is_session_active) const;
 
  private:
   friend class test::SpdyStreamTest;
@@ -689,7 +698,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // Calls EnqueueResetStreamFrame() and then
   // CloseActiveStreamIterator().
   void ResetStreamIterator(ActiveStreamMap::iterator it,
-                           SpdyRstStreamStatus status,
+                           SpdyErrorCode error_code,
                            const std::string& description);
 
   // Send a RST_STREAM frame with the given parameters. There should
@@ -697,7 +706,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // stream should be closed shortly after this function is called.
   void EnqueueResetStreamFrame(SpdyStreamId stream_id,
                                RequestPriority priority,
-                               SpdyRstStreamStatus status,
+                               SpdyErrorCode error_code,
                                const std::string& description);
 
   // Send a PRIORITY frame with the given parameters.
@@ -818,7 +827,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // Check if we have a pending pushed-stream for this url
   // Returns the stream if found (and returns it from the pending
   // list). Returns NULL otherwise.
-  base::WeakPtr<SpdyStream> GetActivePushStream(const GURL& url);
+  SpdyStream* GetActivePushStream(const GURL& url);
 
   void RecordPingRTTHistogram(base::TimeDelta duration);
   void RecordHistograms();
@@ -856,13 +865,13 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   void DeleteExpiredPushedStreams();
 
   // BufferedSpdyFramerVisitorInterface:
-  void OnError(SpdyFramer::SpdyError error_code) override;
+  void OnError(SpdyFramer::SpdyFramerError spdy_framer_error) override;
   void OnStreamError(SpdyStreamId stream_id,
                      const std::string& description) override;
   void OnPing(SpdyPingId unique_id, bool is_ack) override;
-  void OnRstStream(SpdyStreamId stream_id, SpdyRstStreamStatus status) override;
+  void OnRstStream(SpdyStreamId stream_id, SpdyErrorCode error_code) override;
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
-                SpdyGoAwayStatus status,
+                SpdyErrorCode error_code,
                 base::StringPiece debug_data) override;
   void OnDataFrameHeader(SpdyStreamId stream_id,
                          size_t length,
@@ -889,7 +898,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
                 base::StringPiece origin,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                     altsvc_vector) override;
-  bool OnUnknownFrame(SpdyStreamId stream_id, int frame_type) override;
+  bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override;
 
   // SpdyFramerDebugVisitorInterface
   void OnSendCompressedFrame(SpdyStreamId stream_id,

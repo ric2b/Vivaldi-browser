@@ -10,6 +10,8 @@
 #include "cc/base/math_util.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
 #include "cc/resources/ui_resource_bitmap.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/layer_tree_host.h"
@@ -170,13 +172,13 @@ void PaintedScrollbarLayer::UpdateThumbAndTrackGeometry() {
 }
 
 void PaintedScrollbarLayer::UpdateInternalContentScale() {
-  float scale = GetLayerTree()->device_scale_factor();
+  float scale = layer_tree_host()->device_scale_factor();
   if (layer_tree_host()
           ->GetSettings()
           .layer_transforms_should_scale_layer_contents) {
     gfx::Transform transform;
     transform = draw_property_utils::ScreenSpaceTransform(
-        this, GetLayerTree()->property_trees()->transform_tree);
+        this, layer_tree_host()->property_trees()->transform_tree);
 
     gfx::Vector2dF transform_scales =
         MathUtil::ComputeTransform2dScaleComponents(transform, scale);
@@ -263,26 +265,25 @@ UIResourceBitmap PaintedScrollbarLayer::RasterizeScrollbarPart(
 
   SkBitmap skbitmap;
   skbitmap.allocN32Pixels(content_rect.width(), content_rect.height());
-  SkCanvas skcanvas(skbitmap);
+  PaintCanvas canvas(skbitmap);
 
   float scale_x =
       content_rect.width() / static_cast<float>(layer_rect.width());
   float scale_y =
       content_rect.height() / static_cast<float>(layer_rect.height());
 
-  skcanvas.scale(SkFloatToScalar(scale_x),
-                 SkFloatToScalar(scale_y));
-  skcanvas.translate(SkFloatToScalar(-layer_rect.x()),
-                     SkFloatToScalar(-layer_rect.y()));
+  canvas.scale(SkFloatToScalar(scale_x), SkFloatToScalar(scale_y));
+  canvas.translate(SkFloatToScalar(-layer_rect.x()),
+                   SkFloatToScalar(-layer_rect.y()));
 
   SkRect layer_skrect = RectToSkRect(layer_rect);
-  SkPaint paint;
+  PaintFlags paint;
   paint.setAntiAlias(false);
   paint.setBlendMode(SkBlendMode::kClear);
-  skcanvas.drawRect(layer_skrect, paint);
-  skcanvas.clipRect(layer_skrect);
+  canvas.drawRect(layer_skrect, paint);
+  canvas.clipRect(layer_skrect);
 
-  scrollbar_->PaintPart(&skcanvas, part, layer_rect);
+  scrollbar_->PaintPart(&canvas, part, layer_rect);
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();

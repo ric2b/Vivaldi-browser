@@ -27,9 +27,6 @@ Du kan få flere oplysninger om privatliv i privatlivspolitikkerne for Google (h
 <translation id="1654128982815600832">Aktiverer fjernforbindelserne for denne computer…</translation>
 <translation id="170207782578677537">Denne computer kunne ikke registreres.</translation>
 <translation id="1704090719919187045">Præferencer for Chromoting-host</translation>
-<translation id="1730409684442507495">• Forbedring af billedkvaliteten på computere samt af reaktionsevnen og batteriforbruget.
-• Forbedring af reaktionsevnen ved klik og træk-handlinger.
-• Forbedring af flere animationseffekter i brugerfladen.</translation>
 <translation id="174018511426417793">Du har ingen registrerede computere. Hvis du vil aktivere fjernforbindelser til en computer, skal du installere Chrome Fjernskrivebord på den pågældende computer og klikke på "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Opretter forbindelse...</translation>
 <translation id="1770394049404108959">Jeg kan ikke åbne applikationen.</translation>
@@ -44,6 +41,10 @@ Du kan få flere oplysninger om privatliv i privatlivspolitikkerne for Google (h
 <translation id="2013996867038862849">Alle parrede klienter er blevet slettet.</translation>
 <translation id="2038229918502634450">Hosten genstarter af hensyn til en ændring af politikken.</translation>
 <translation id="2046651113449445291">Følgende klienter er parret med denne computer og kan oprette forbindelse uden at angive en pinkode. Du kan altid trække denne tilladelse tilbage, enten for hver enkelt eller for alle klienter.</translation>
+<translation id="2053901200959289492">• Tilføjet understøttelse af Multivindue til Android Nougat.
+• Forbedring af billedkvaliteten på computere samt af reaktionsevnen og batteriforbruget.
+• Forbedring af reaktionsevnen ved klik og træk-handlinger.
+• Forbedring af flere animationseffekter i brugerfladen.</translation>
 <translation id="2078880767960296260">Hostproces</translation>
 <translation id="20876857123010370">Musemarkør</translation>
 <translation id="2089514346391228378">Fjernforbindelserne til denne computer er blevet aktiveret.</translation>

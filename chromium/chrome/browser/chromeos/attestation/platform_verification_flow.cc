@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/attestation/attestation.pb.h"
 #include "chromeos/attestation/attestation_flow.h"
@@ -27,10 +28,10 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/user_manager/user.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/user_metrics.h"
@@ -112,14 +113,15 @@ class DefaultDelegate : public PlatformVerificationFlow::Delegate {
     const GURL& requesting_origin = GetURL(web_contents).GetOrigin();
 
     GURL embedding_origin = web_contents->GetLastCommittedURL().GetOrigin();
-    blink::mojom::PermissionStatus status =
+    ContentSetting content_setting =
         PermissionManager::Get(
             Profile::FromBrowserContext(web_contents->GetBrowserContext()))
             ->GetPermissionStatus(
-                content::PermissionType::PROTECTED_MEDIA_IDENTIFIER,
-                requesting_origin, embedding_origin);
+                CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
+                requesting_origin, embedding_origin)
+            .content_setting;
 
-    return status == blink::mojom::PermissionStatus::GRANTED;
+    return content_setting == CONTENT_SETTING_ALLOW;
   }
 
   bool IsInSupportedMode(content::WebContents* web_contents) override {

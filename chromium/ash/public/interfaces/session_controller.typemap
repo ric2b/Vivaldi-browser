@@ -10,12 +10,12 @@ public_headers = [
 ]
 traits_headers = [ "//ash/public/interfaces/session_controller_traits.h" ]
 public_deps = [
-  "//ash/public/cpp",
   "//components/session_manager:base",
   "//components/user_manager",
 ]
 type_mappings = [
   "ash.mojom.AddUserSessionPolicy=ash::AddUserSessionPolicy",
+  "ash.mojom.CycleUserDirection=ash::CycleUserDirection",
   "ash.mojom.SessionState=session_manager::SessionState",
   "ash.mojom.UserType=user_manager::UserType",
 ]

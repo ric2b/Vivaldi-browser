@@ -11,11 +11,11 @@
 #include <string>
 #include <utility>
 
-#include "ash/common/strings/grit/ash_strings.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/resolution_notification_controller.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -195,13 +195,13 @@ base::DictionaryValue* ConvertBoundsToValue(const gfx::Rect& bounds) {
 
 DisplayOptionsHandler::DisplayOptionsHandler() {
   // TODO(mash) Support Chrome display settings in Mash. crbug.com/548429
-  if (!chrome::IsRunningInMash())
+  if (!ash_util::IsRunningInMash())
     ash::Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
 }
 
 DisplayOptionsHandler::~DisplayOptionsHandler() {
   // TODO(mash) Support Chrome display settings in Mash. crbug.com/548429
-  if (!chrome::IsRunningInMash())
+  if (!ash_util::IsRunningInMash())
     ash::Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
 }
 
@@ -318,7 +318,7 @@ void DisplayOptionsHandler::SendAllDisplayInfo() {
     display_mode = display::DisplayManager::UNIFIED;
   else
     display_mode = display::DisplayManager::EXTENDED;
-  base::FundamentalValue mode(static_cast<int>(display_mode));
+  base::Value mode(static_cast<int>(display_mode));
 
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   std::unique_ptr<base::ListValue> js_displays(new base::ListValue);
@@ -358,8 +358,10 @@ void DisplayOptionsHandler::SendAllDisplayInfo() {
     js_display->Set("availableColorProfiles", available_color_profiles);
 
     if (display_manager->GetNumDisplays() > 1) {
+      // The settings UI must use the resolved display layout to show the
+      // actual applied layout.
       const display::DisplayPlacement placement =
-          display_manager->GetCurrentDisplayLayout().FindPlacementById(
+          display_manager->GetCurrentResolvedDisplayLayout().FindPlacementById(
               display.id());
       if (placement.display_id != display::kInvalidDisplayId) {
         js_display->SetString(
@@ -378,7 +380,7 @@ void DisplayOptionsHandler::SendAllDisplayInfo() {
 
 void DisplayOptionsHandler::UpdateDisplaySettingsEnabled() {
   // TODO(mash) Support Chrome display settings in Mash. crbug.com/548429
-  if (chrome::IsRunningInMash())
+  if (ash_util::IsRunningInMash())
     return;
 
   display::DisplayManager* display_manager = GetDisplayManager();
@@ -391,10 +393,8 @@ void DisplayOptionsHandler::UpdateDisplaySettingsEnabled() {
   bool mirrored_enabled = display_manager->num_connected_displays() == 2;
 
   web_ui()->CallJavascriptFunctionUnsafe(
-      "options.BrowserOptions.enableDisplaySettings",
-      base::FundamentalValue(ui_enabled),
-      base::FundamentalValue(unified_enabled),
-      base::FundamentalValue(mirrored_enabled));
+      "options.BrowserOptions.enableDisplaySettings", base::Value(ui_enabled),
+      base::Value(unified_enabled), base::Value(mirrored_enabled));
 }
 
 void DisplayOptionsHandler::HandleDisplayInfo(
@@ -536,8 +536,7 @@ void DisplayOptionsHandler::HandleSetRotation(const base::ListValue* args) {
   content::RecordAction(
       base::UserMetricsAction("Options_DisplaySetOrientation"));
   GetDisplayConfigurationController()->SetDisplayRotation(
-      display_id, new_rotation, display::Display::ROTATION_SOURCE_USER,
-      true /* user_action */);
+      display_id, new_rotation, display::Display::ROTATION_SOURCE_USER);
 }
 
 void DisplayOptionsHandler::HandleSetColorProfile(const base::ListValue* args) {

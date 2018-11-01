@@ -4,12 +4,12 @@
 
 chrome.test.runTests([
   function waitForDeviceChangedEventTests() {
-    chrome.test.listenOnce(chrome.audio.OnDevicesChanged, function (devices) {
+    chrome.test.listenOnce(chrome.audio.onDeviceListChanged, function(devices) {
       var deviceList = devices.map(function(device) {
         return {
           id: device.id,
           stableDeviceId: device.stableDeviceId,
-          isInput: device.isInput,
+          streamType: device.streamType,
           deviceType: device.deviceType,
           deviceName: device.deviceName,
           displayName: device.displayName
@@ -21,14 +21,14 @@ chrome.test.runTests([
       chrome.test.assertEq([{
         id: '40001',
         stableDeviceId: '106606' /* 90001 ^ 0xFFFF */,
-        isInput: true,
+        streamType: 'INPUT',
         deviceType: 'USB',
         deviceName: 'Jabra Mic',
         displayName: 'Jabra Mic 1'
       }, {
         id: '40002',
         stableDeviceId: '106605' /* 90002 ^ 0xFFFF */,
-        isInput: true,
+        streamType: 'INPUT',
         deviceType: 'USB',
         deviceName: 'Jabra Mic',
         displayName: 'Jabra Mic 2'

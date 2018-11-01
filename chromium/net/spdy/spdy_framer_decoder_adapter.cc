@@ -11,6 +11,7 @@
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 
 #if defined(COMPILER_GCC)
 #define PRETTY_THIS base::StringPrintf("%s@%p ", __PRETTY_FUNCTION__, this)
@@ -87,8 +88,8 @@ void SpdyFramerVisitorAdapter::OnHeaderFrameEnd(SpdyStreamId stream_id,
 }
 
 void SpdyFramerVisitorAdapter::OnRstStream(SpdyStreamId stream_id,
-                                           SpdyRstStreamStatus status) {
-  visitor_->OnRstStream(stream_id, status);
+                                           SpdyErrorCode error_code) {
+  visitor_->OnRstStream(stream_id, error_code);
 }
 
 void SpdyFramerVisitorAdapter::OnSetting(SpdySettingsIds id,
@@ -113,8 +114,8 @@ void SpdyFramerVisitorAdapter::OnSettingsEnd() {
 }
 
 void SpdyFramerVisitorAdapter::OnGoAway(SpdyStreamId last_accepted_stream_id,
-                                        SpdyGoAwayStatus status) {
-  visitor_->OnGoAway(last_accepted_stream_id, status);
+                                        SpdyErrorCode error_code) {
+  visitor_->OnGoAway(last_accepted_stream_id, error_code);
 }
 
 void SpdyFramerVisitorAdapter::OnHeaders(SpdyStreamId stream_id,
@@ -136,11 +137,6 @@ void SpdyFramerVisitorAdapter::OnWindowUpdate(SpdyStreamId stream_id,
 bool SpdyFramerVisitorAdapter::OnGoAwayFrameData(const char* goaway_data,
                                                  size_t len) {
   return visitor_->OnGoAwayFrameData(goaway_data, len);
-}
-
-bool SpdyFramerVisitorAdapter::OnRstStreamFrameData(const char* rst_stream_data,
-                                                    size_t len) {
-  return visitor_->OnRstStreamFrameData(rst_stream_data, len);
 }
 
 void SpdyFramerVisitorAdapter::OnBlocked(SpdyStreamId stream_id) {
@@ -173,13 +169,13 @@ void SpdyFramerVisitorAdapter::OnAltSvc(
 }
 
 bool SpdyFramerVisitorAdapter::OnUnknownFrame(SpdyStreamId stream_id,
-                                              int frame_type) {
+                                              uint8_t frame_type) {
   return visitor_->OnUnknownFrame(stream_id, frame_type);
 }
 
 class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
   typedef SpdyFramer::SpdyState SpdyState;
-  typedef SpdyFramer::SpdyError SpdyError;
+  typedef SpdyFramer::SpdyFramerError SpdyFramerError;
 
  public:
   explicit NestedSpdyFramerDecoder(SpdyFramer* outer)
@@ -229,12 +225,16 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
 
   void Reset() override { framer_.Reset(); }
 
-  SpdyFramer::SpdyError error_code() const override {
-    return framer_.error_code();
+  SpdyFramer::SpdyFramerError spdy_framer_error() const override {
+    return framer_.spdy_framer_error();
   }
   SpdyFramer::SpdyState state() const override { return framer_.state(); }
   bool probable_http_response() const override {
     return framer_.probable_http_response();
+  }
+  size_t EstimateMemoryUsage() const override {
+    // Skip |visitor_adapter_| because it doesn't allocate.
+    return SpdyEstimateMemoryUsage(framer_);
   }
 
  private:

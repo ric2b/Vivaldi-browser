@@ -62,14 +62,13 @@ std::unique_ptr<WebIDBCallbacksImpl> WebIDBCallbacksImpl::create(
 
 WebIDBCallbacksImpl::WebIDBCallbacksImpl(IDBRequest* request)
     : m_request(request) {
-  InspectorInstrumentation::asyncTaskScheduled(
-      m_request->getExecutionContext(), IndexedDBNames::IndexedDB, this, true);
+  probe::asyncTaskScheduled(m_request->getExecutionContext(),
+                            IndexedDBNames::IndexedDB, this, true);
 }
 
 WebIDBCallbacksImpl::~WebIDBCallbacksImpl() {
   if (m_request) {
-    InspectorInstrumentation::asyncTaskCanceled(
-        m_request->getExecutionContext(), this);
+    probe::asyncTaskCanceled(m_request->getExecutionContext(), this);
     m_request->webCallbacksDestroyed();
   }
 }
@@ -78,8 +77,7 @@ void WebIDBCallbacksImpl::onError(const WebIDBDatabaseError& error) {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onError(DOMException::create(error.code(), error.message()));
 }
 
@@ -90,8 +88,7 @@ void WebIDBCallbacksImpl::onSuccess(const WebVector<WebString>& webStringList) {
   Vector<String> stringList;
   for (size_t i = 0; i < webStringList.size(); ++i)
     stringList.push_back(webStringList[i]);
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onSuccess(stringList);
 }
 
@@ -102,18 +99,16 @@ void WebIDBCallbacksImpl::onSuccess(WebIDBCursor* cursor,
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onSuccess(WTF::wrapUnique(cursor), key, primaryKey,
-                       IDBValue::create(value));
+                       IDBValue::create(value, m_request->isolate()));
 }
 
 void WebIDBCallbacksImpl::onSuccess(WebIDBDatabase* backend,
                                     const WebIDBMetadata& metadata) {
   std::unique_ptr<WebIDBDatabase> db = WTF::wrapUnique(backend);
   if (m_request) {
-    InspectorInstrumentation::AsyncTask asyncTask(
-        m_request->getExecutionContext(), this);
+    probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
     m_request->onSuccess(std::move(db), IDBDatabaseMetadata(metadata));
   } else if (db) {
     db->close();
@@ -124,8 +119,7 @@ void WebIDBCallbacksImpl::onSuccess(const WebIDBKey& key) {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onSuccess(key);
 }
 
@@ -133,20 +127,18 @@ void WebIDBCallbacksImpl::onSuccess(const WebIDBValue& value) {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
-  m_request->onSuccess(IDBValue::create(value));
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
+  m_request->onSuccess(IDBValue::create(value, m_request->isolate()));
 }
 
 void WebIDBCallbacksImpl::onSuccess(const WebVector<WebIDBValue>& values) {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   Vector<RefPtr<IDBValue>> idbValues(values.size());
   for (size_t i = 0; i < values.size(); ++i)
-    idbValues[i] = IDBValue::create(values[i]);
+    idbValues[i] = IDBValue::create(values[i], m_request->isolate());
   m_request->onSuccess(idbValues);
 }
 
@@ -154,8 +146,7 @@ void WebIDBCallbacksImpl::onSuccess(long long value) {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onSuccess(value);
 }
 
@@ -163,8 +154,7 @@ void WebIDBCallbacksImpl::onSuccess() {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onSuccess();
 }
 
@@ -174,17 +164,16 @@ void WebIDBCallbacksImpl::onSuccess(const WebIDBKey& key,
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
-  m_request->onSuccess(key, primaryKey, IDBValue::create(value));
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
+  m_request->onSuccess(key, primaryKey,
+                       IDBValue::create(value, m_request->isolate()));
 }
 
 void WebIDBCallbacksImpl::onBlocked(long long oldVersion) {
   if (!m_request)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_request->getExecutionContext(), this);
+  probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
   m_request->onBlocked(oldVersion);
 }
 
@@ -195,8 +184,7 @@ void WebIDBCallbacksImpl::onUpgradeNeeded(long long oldVersion,
                                           WebString dataLossMessage) {
   std::unique_ptr<WebIDBDatabase> db = WTF::wrapUnique(database);
   if (m_request) {
-    InspectorInstrumentation::AsyncTask asyncTask(
-        m_request->getExecutionContext(), this);
+    probe::AsyncTask asyncTask(m_request->getExecutionContext(), this);
     m_request->onUpgradeNeeded(
         oldVersion, std::move(db), IDBDatabaseMetadata(metadata),
         static_cast<WebIDBDataLoss>(dataLoss), dataLossMessage);

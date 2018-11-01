@@ -20,6 +20,7 @@ import android.content.Context;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -31,7 +32,7 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.DisableHistogramsRule;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.superviseduser.SupervisedUserContentProvider.SupervisedUserQueryReply;
 import org.chromium.components.signin.AccountManagerDelegate;
@@ -39,6 +40,7 @@ import org.chromium.components.signin.AccountManagerHelper;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.webrestrictions.browser.WebRestrictionsContentProvider.WebRestrictionsResult;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
+
 /**
  * Tests of SupervisedUserContentProvider. This is tested as a simple class, not as a content
  * provider. The content provider aspects are tested with WebRestrictionsContentProviderTest.
@@ -46,6 +48,8 @@ import org.chromium.testing.local.LocalRobolectricTestRunner;
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class SupervisedUserContentProviderUnitTest {
+    @Rule
+    public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
 
     private SupervisedUserContentProvider mSupervisedUserContentProvider;
 
@@ -53,8 +57,6 @@ public class SupervisedUserContentProviderUnitTest {
 
     @Before
     public void setUp() {
-        RecordHistogram.disableForTests();
-
         // Ensure clean state (in particular not signed in).
         ContextUtils.getAppSharedPreferences().edit().clear().apply();
 

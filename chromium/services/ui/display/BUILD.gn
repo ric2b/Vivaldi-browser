@@ -21,23 +21,32 @@ source_set("display") {
     "//ui/gfx",
   ]
 
-  if (use_ozone && is_chromeos) {
-    sources += [
-      "screen_manager_ozone.cc",
-      "screen_manager_ozone.h",
-    ]
+  if (use_ozone) {
+    if (is_chromeos) {
+      sources += [
+        "output_protection.cc",
+        "output_protection.h",
+        "screen_manager_ozone_internal.cc",
+        "screen_manager_ozone_internal.h",
+      ]
 
-    deps += [
-      "//chromeos",
-      "//services/ui/public/interfaces/display",
-      "//skia",
-      "//ui/display/manager",
-      "//ui/ozone",
-    ]
+      deps += [
+        "//chromeos",
+        "//services/ui/public/interfaces/display",
+        "//skia",
+        "//ui/display/manager",
+        "//ui/ozone",
+      ]
+    } else {
+      sources += [
+        "screen_manager_ozone_external.cc",
+        "screen_manager_ozone_external.h",
+      ]
+    }
   } else {
     sources += [
-      "screen_manager_stub.cc",
-      "screen_manager_stub.h",
+      "screen_manager_stub_internal.cc",
+      "screen_manager_stub_internal.h",
     ]
   }
 }
@@ -46,7 +55,7 @@ if (use_ozone && is_chromeos) {
   test("display_service_unittests") {
     sources = [
       "run_all_unittests.cc",
-      "screen_manager_ozone_unittests.cc",
+      "screen_manager_ozone_internal_unittests.cc",
     ]
 
     deps = [

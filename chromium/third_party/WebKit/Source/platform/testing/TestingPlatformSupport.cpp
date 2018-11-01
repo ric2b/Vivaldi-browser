@@ -34,6 +34,7 @@
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/run_loop.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/test_discardable_memory_allocator.h"
 #include "cc/blink/web_compositor_support_impl.h"
@@ -41,6 +42,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "platform/HTTPNames.h"
 #include "platform/heap/Heap.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/network/mime/MockMimeRegistry.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/task_queue_manager.h"
@@ -123,6 +125,14 @@ TestingCompositorSupport::createScrollbarLayer(
 }
 
 std::unique_ptr<WebScrollbarLayer>
+TestingCompositorSupport::createOverlayScrollbarLayer(
+    std::unique_ptr<WebScrollbar>,
+    WebScrollbarThemePainter,
+    std::unique_ptr<WebScrollbarThemeGeometry>) {
+  return nullptr;
+}
+
+std::unique_ptr<WebScrollbarLayer>
 TestingCompositorSupport::createSolidColorScrollbarLayer(
     WebScrollbar::Orientation,
     int thumbThickness,
@@ -194,6 +204,10 @@ WebURLError TestingPlatformSupport::cancelledError(const WebURL& url) const {
 
 InterfaceProvider* TestingPlatformSupport::interfaceProvider() {
   return m_interfaceProvider.get();
+}
+
+void TestingPlatformSupport::runUntilIdle() {
+  base::RunLoop().RunUntilIdle();
 }
 
 // TestingPlatformSupportWithMockScheduler definition:
@@ -337,6 +351,7 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
   ThreadState::current()->registerTraceDOMWrappers(nullptr, nullptr, nullptr,
                                                    nullptr);
   HTTPNames::init();
+  FetchInitiatorTypeNames::init();
 }
 
 ScopedUnittestsEnvironmentSetup::~ScopedUnittestsEnvironmentSetup() {}

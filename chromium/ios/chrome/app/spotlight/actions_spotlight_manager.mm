@@ -6,17 +6,19 @@
 
 #import <CoreSpotlight/CoreSpotlight.h>
 
-#include "base/ios/weak_nsobject.h"
 #include "base/mac/foundation_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/app_startup_parameters.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -108,20 +110,19 @@ BOOL SetStartupParametersForSpotlightAction(
 @implementation ActionsSpotlightManager
 
 + (ActionsSpotlightManager*)actionsSpotlightManager {
-  return [[[ActionsSpotlightManager alloc]
+  return [[ActionsSpotlightManager alloc]
       initWithLargeIconService:nil
-                        domain:spotlight::DOMAIN_ACTIONS] autorelease];
+                        domain:spotlight::DOMAIN_ACTIONS];
 }
 
 #pragma mark public methods
 
 - (void)indexActions {
-  base::WeakNSObject<ActionsSpotlightManager> weakSelf(self);
+  __weak ActionsSpotlightManager* weakSelf = self;
   dispatch_after(
       dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(1 * NSEC_PER_SEC)),
       dispatch_get_main_queue(), ^{
-        base::scoped_nsobject<ActionsSpotlightManager> strongSelf(
-            [weakSelf retain]);
+        ActionsSpotlightManager* strongSelf = weakSelf;
         [strongSelf clearAndAddSpotlightActions];
       });
 }
@@ -130,16 +131,12 @@ BOOL SetStartupParametersForSpotlightAction(
 
 - (void)clearAndAddSpotlightActions {
   [self clearAllSpotlightItems:^(NSError* error) {
-    if (!experimental_flags::IsSpotlightActionsEnabled()) {
-      return;
-    }
-    base::WeakNSObject<ActionsSpotlightManager> weakSelf(self);
+    __weak ActionsSpotlightManager* weakSelf = self;
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW,
                       static_cast<int64_t>(1 * NSEC_PER_SEC)),
         dispatch_get_main_queue(), ^{
-          base::scoped_nsobject<ActionsSpotlightManager> strongSelf(
-              [weakSelf retain]);
+          ActionsSpotlightManager* strongSelf = weakSelf;
 
           if (!strongSelf) {
             return;
@@ -181,10 +178,10 @@ BOOL SetStartupParametersForSpotlightAction(
 }
 
 - (CSSearchableItem*)getItemForAction:(NSString*)action title:(NSString*)title {
-  base::scoped_nsobject<CSSearchableItemAttributeSet> attributeSet(
+  CSSearchableItemAttributeSet* attributeSet =
       [[CSSearchableItemAttributeSet alloc]
           initWithItemContentType:spotlight::StringFromSpotlightDomain(
-                                      spotlight::DOMAIN_ACTIONS)]);
+                                      spotlight::DOMAIN_ACTIONS)];
   [attributeSet setTitle:title];
   [attributeSet setDisplayName:title];
 

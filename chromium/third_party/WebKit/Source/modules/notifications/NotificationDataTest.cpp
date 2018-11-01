@@ -252,12 +252,12 @@ TEST_F(NotificationDataTest, DefaultTimestampValue) {
 
 TEST_F(NotificationDataTest, DirectionValues) {
   WTF::HashMap<String, WebNotificationData::Direction> mappings;
-  mappings.add("ltr", WebNotificationData::DirectionLeftToRight);
-  mappings.add("rtl", WebNotificationData::DirectionRightToLeft);
-  mappings.add("auto", WebNotificationData::DirectionAuto);
+  mappings.insert("ltr", WebNotificationData::DirectionLeftToRight);
+  mappings.insert("rtl", WebNotificationData::DirectionRightToLeft);
+  mappings.insert("auto", WebNotificationData::DirectionAuto);
 
   // Invalid values should default to "auto".
-  mappings.add("peter", WebNotificationData::DirectionAuto);
+  mappings.insert("peter", WebNotificationData::DirectionAuto);
 
   for (const String& direction : mappings.keys()) {
     NotificationOptions options;
@@ -268,7 +268,7 @@ TEST_F(NotificationDataTest, DirectionValues) {
         getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_FALSE(exceptionState.hadException());
 
-    EXPECT_EQ(mappings.get(direction), notificationData.direction);
+    EXPECT_EQ(mappings.at(direction), notificationData.direction);
   }
 }
 

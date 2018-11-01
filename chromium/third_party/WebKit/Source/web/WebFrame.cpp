@@ -73,7 +73,7 @@ bool WebFrame::swap(WebFrame* frame) {
   FrameOwner* owner = oldFrame->owner();
 
   v8::HandleScope handleScope(v8::Isolate::GetCurrent());
-  HashMap<DOMWrapperWorld*, v8::Local<v8::Object>> globals;
+  WindowProxyManagerBase::GlobalsVector globals;
   oldFrame->getWindowProxyManager()->clearForNavigation();
   oldFrame->getWindowProxyManager()->releaseGlobals(globals);
 
@@ -160,6 +160,7 @@ void WebFrame::setFrameOwnerProperties(
   owner->setAllowPaymentRequest(properties.allowPaymentRequest);
   owner->setCsp(properties.requiredCsp);
   owner->setDelegatedpermissions(properties.delegatedPermissions);
+  owner->setAllowedFeatures(properties.allowedFeatures);
 }
 
 WebFrame* WebFrame::opener() const {
@@ -291,9 +292,7 @@ WebFrame::~WebFrame() {
   m_openedFrameTracker.reset(0);
 }
 
-template <typename VisitorDispatcher>
-ALWAYS_INLINE void WebFrame::traceFrameImpl(VisitorDispatcher visitor,
-                                            WebFrame* frame) {
+void WebFrame::traceFrame(Visitor* visitor, WebFrame* frame) {
   if (!frame)
     return;
 
@@ -303,9 +302,7 @@ ALWAYS_INLINE void WebFrame::traceFrameImpl(VisitorDispatcher visitor,
     visitor->trace(toWebRemoteFrameImpl(frame));
 }
 
-template <typename VisitorDispatcher>
-ALWAYS_INLINE void WebFrame::traceFramesImpl(VisitorDispatcher visitor,
-                                             WebFrame* frame) {
+void WebFrame::traceFrames(Visitor* visitor, WebFrame* frame) {
   DCHECK(frame);
   traceFrame(visitor, frame->m_parent);
   for (WebFrame* child = frame->firstChild(); child;
@@ -316,18 +313,5 @@ ALWAYS_INLINE void WebFrame::traceFramesImpl(VisitorDispatcher visitor,
 void WebFrame::close() {
   m_openedFrameTracker->dispose();
 }
-
-#define DEFINE_VISITOR_METHOD(VisitorDispatcher)                           \
-  void WebFrame::traceFrame(VisitorDispatcher visitor, WebFrame* frame) {  \
-    traceFrameImpl(visitor, frame);                                        \
-  }                                                                        \
-  void WebFrame::traceFrames(VisitorDispatcher visitor, WebFrame* frame) { \
-    traceFramesImpl(visitor, frame);                                       \
-  }                                                                        \
-
-DEFINE_VISITOR_METHOD(Visitor*)
-DEFINE_VISITOR_METHOD(InlinedGlobalMarkingVisitor)
-
-#undef DEFINE_VISITOR_METHOD
 
 }  // namespace blink

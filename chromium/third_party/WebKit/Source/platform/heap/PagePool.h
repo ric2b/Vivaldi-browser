@@ -7,35 +7,10 @@
 
 #include "platform/heap/ThreadState.h"
 #include "wtf/Allocator.h"
-#include "wtf/ThreadingPrimitives.h"
 
 namespace blink {
 
-class BasePage;
 class PageMemory;
-
-template <typename DataType>
-class PagePool {
-  USING_FAST_MALLOC(PagePool);
-
- protected:
-  PagePool() {
-    for (int i = 0; i < BlinkGC::NumberOfArenas; ++i)
-      m_pool[i] = nullptr;
-  }
-
-  class PoolEntry {
-    USING_FAST_MALLOC(PoolEntry);
-
-   public:
-    PoolEntry(DataType* data, PoolEntry* next) : data(data), next(next) {}
-
-    DataType* data;
-    PoolEntry* next;
-  };
-
-  PoolEntry* m_pool[BlinkGC::NumberOfArenas];
-};
 
 // Once pages have been used for one type of thread heap they will never be
 // reused for another type of thread heap.  Instead of unmapping, we add the
@@ -45,38 +20,27 @@ class PagePool {
 // types of objects.  Holding on to pages ensures that the same virtual address
 // space cannot be used for objects of another type than the type contained
 // in this page to begin with.
-class FreePagePool : public PagePool<PageMemory> {
+class PagePool {
+  USING_FAST_MALLOC(PagePool);
+
  public:
-  ~FreePagePool();
-  void addFreePage(int, PageMemory*);
-  PageMemory* takeFreePage(int);
+  PagePool();
+  ~PagePool();
+  void add(int, PageMemory*);
+  PageMemory* take(int);
 
  private:
-  Mutex m_mutex[BlinkGC::NumberOfArenas];
-};
+  class PoolEntry {
+    USING_FAST_MALLOC(PoolEntry);
 
-class OrphanedPagePool : public PagePool<BasePage> {
- public:
-  // The orphaned zap value must be zero in the lowest bits to allow for
-  // using the mark bit when tracing.
-  static const uint8_t orphanedZapValue = 0xdc;
+   public:
+    PoolEntry(PageMemory* data, PoolEntry* next) : data(data), next(next) {}
 
-  ~OrphanedPagePool();
-  void addOrphanedPage(int, BasePage*);
-  void decommitOrphanedPages();
-#if DCHECK_IS_ON()
-  bool contains(void*);
-#endif
+    PageMemory* data;
+    PoolEntry* next;
+  };
 
-  // For orphaned pages, we need to memset with ASan disabled, because
-  // the orphaned pages can still contain poisoned memory or annotated
-  // container but we want to forcibly clear the orphaned pages without
-  // causing ASan errors. asanDisabledMemset must not be used for
-  // non-orphaned pages.
-  static void asanDisabledMemset(Address, char, size_t);
-
- private:
-  void clearMemory(PageMemory*);
+  PoolEntry* m_pool[BlinkGC::NumberOfArenas];
 };
 
 }  // namespace blink

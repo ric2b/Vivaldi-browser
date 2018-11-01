@@ -121,8 +121,7 @@ function make_src() {
   defaults write "${TEMPDIR}/${APPNAME}/Contents/Info" \
       CFBundleShortVersionString "1"
   defaults write "${TEMPDIR}/${APPNAME}/Contents/Info" \
-      KSProductID "com.vivaldi.Vivaldi"
-#      KSProductID "com.google.Chrome"
+      KSProductID "com.google.Chrome"
   defaults write "${TEMPDIR}/${APPNAME}/Contents/Info" \
       KSVersion "2"
 }

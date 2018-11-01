@@ -30,9 +30,8 @@ class CSSVisibilityNonInterpolableValue : public NonInterpolableValue {
       return m_start;
     if (fraction >= 1)
       return m_end;
-    if (m_start == EVisibility::kVisible || m_end == EVisibility::kVisible)
-      return EVisibility::kVisible;
-    return fraction < 0.5 ? m_start : m_end;
+    DCHECK(m_start == EVisibility::kVisible || m_end == EVisibility::kVisible);
+    return EVisibility::kVisible;
   }
 
   DECLARE_NON_INTERPOLABLE_VALUE_TYPE();
@@ -134,7 +133,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSVisibilityInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState& state,
+    const StyleResolverState*,
     ConversionCheckers& conversionCheckers) const {
   if (!value.isIdentifierValue())
     return nullptr;
@@ -154,20 +153,30 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSVisibilityInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  return createVisibilityValue(state.style()->visibility());
+    const ComputedStyle& style) const {
+  return createVisibilityValue(style.visibility());
 }
 
 PairwiseInterpolationValue CSSVisibilityInterpolationType::maybeMergeSingles(
     InterpolationValue&& start,
     InterpolationValue&& end) const {
-  return PairwiseInterpolationValue(
-      InterpolableNumber::create(0), InterpolableNumber::create(1),
-      CSSVisibilityNonInterpolableValue::create(
-          toCSSVisibilityNonInterpolableValue(*start.nonInterpolableValue)
-              .visibility(),
-          toCSSVisibilityNonInterpolableValue(*end.nonInterpolableValue)
-              .visibility()));
+  EVisibility startVisibility =
+      toCSSVisibilityNonInterpolableValue(*start.nonInterpolableValue)
+          .visibility();
+  EVisibility endVisibility =
+      toCSSVisibilityNonInterpolableValue(*end.nonInterpolableValue)
+          .visibility();
+  // One side must be "visible".
+  // Spec: https://drafts.csswg.org/css-transitions/#animtype-visibility
+  if (startVisibility != endVisibility &&
+      startVisibility != EVisibility::kVisible &&
+      endVisibility != EVisibility::kVisible) {
+    return nullptr;
+  }
+  return PairwiseInterpolationValue(InterpolableNumber::create(0),
+                                    InterpolableNumber::create(1),
+                                    CSSVisibilityNonInterpolableValue::create(
+                                        startVisibility, endVisibility));
 }
 
 void CSSVisibilityInterpolationType::composite(

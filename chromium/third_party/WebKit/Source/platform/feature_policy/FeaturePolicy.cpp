@@ -4,6 +4,7 @@
 
 #include "platform/feature_policy/FeaturePolicy.h"
 
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/json/JSONValues.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/weborigin/KURL.h"
@@ -59,14 +60,49 @@ const FeaturePolicy::Feature kVibrateFeature{
 const FeaturePolicy::Feature kWebRTC{
     "webrtc", FeaturePolicy::FeatureDefault::EnableForAll};
 
+WebFeaturePolicyFeature FeaturePolicy::getWebFeaturePolicyFeature(
+    const String& feature) {
+  if (feature == "fullscreen")
+    return WebFeaturePolicyFeature::Fullscreen;
+  if (feature == "payment")
+    return WebFeaturePolicyFeature::Payment;
+  if (feature == "vibrate")
+    return WebFeaturePolicyFeature::Vibrate;
+  if (feature == "usermedia")
+    return WebFeaturePolicyFeature::Usermedia;
+  if (RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled()) {
+    if (feature == "cookie")
+      return WebFeaturePolicyFeature::DocumentCookie;
+    if (feature == "domain")
+      return WebFeaturePolicyFeature::DocumentDomain;
+    if (feature == "docwrite")
+      return WebFeaturePolicyFeature::DocumentWrite;
+    if (feature == "geolocation")
+      return WebFeaturePolicyFeature::Geolocation;
+    if (feature == "midi")
+      return WebFeaturePolicyFeature::MidiFeature;
+    if (feature == "notifications")
+      return WebFeaturePolicyFeature::Notifications;
+    if (feature == "push")
+      return WebFeaturePolicyFeature::Push;
+    if (feature == "sync-script")
+      return WebFeaturePolicyFeature::SyncScript;
+    if (feature == "sync-xhr")
+      return WebFeaturePolicyFeature::SyncXHR;
+    if (feature == "webrtc")
+      return WebFeaturePolicyFeature::WebRTC;
+  }
+  return WebFeaturePolicyFeature::NotFound;
+}
+
 // static
 std::unique_ptr<FeaturePolicy::Whitelist> FeaturePolicy::Whitelist::from(
-    const WebFeaturePolicy::ParsedWhitelist& parsedWhitelist) {
+    const WebParsedFeaturePolicyDeclaration& parsedDeclaration) {
   std::unique_ptr<Whitelist> whitelist(new FeaturePolicy::Whitelist);
-  if (parsedWhitelist.matchesAllOrigins) {
+  if (parsedDeclaration.matchesAllOrigins) {
     whitelist->addAll();
   } else {
-    for (const WebSecurityOrigin& origin : parsedWhitelist.origins)
+    for (const WebSecurityOrigin& origin : parsedDeclaration.origins)
       whitelist->add(static_cast<WTF::PassRefPtr<SecurityOrigin>>(origin));
   }
   return whitelist;
@@ -123,6 +159,7 @@ const FeaturePolicy::FeatureList& FeaturePolicy::getDefaultFeatureList() {
 // static
 std::unique_ptr<FeaturePolicy> FeaturePolicy::createFromParentPolicy(
     const FeaturePolicy* parent,
+    const WebParsedFeaturePolicyHeader* containerPolicy,
     RefPtr<SecurityOrigin> currentOrigin,
     FeaturePolicy::FeatureList& features) {
   DCHECK(currentOrigin);
@@ -136,23 +173,50 @@ std::unique_ptr<FeaturePolicy> FeaturePolicy::createFromParentPolicy(
       newPolicy->m_inheritedFeatures.set(feature, false);
     }
   }
+  if (containerPolicy)
+    newPolicy->addContainerPolicy(containerPolicy, parent);
   return newPolicy;
 }
 
 // static
 std::unique_ptr<FeaturePolicy> FeaturePolicy::createFromParentPolicy(
     const FeaturePolicy* parent,
+    const WebParsedFeaturePolicyHeader* containerPolicy,
     RefPtr<SecurityOrigin> currentOrigin) {
-  return createFromParentPolicy(parent, std::move(currentOrigin),
+  return createFromParentPolicy(parent, containerPolicy,
+                                std::move(currentOrigin),
                                 getDefaultFeatureList());
 }
 
+void FeaturePolicy::addContainerPolicy(
+    const WebParsedFeaturePolicyHeader* containerPolicy,
+    const FeaturePolicy* parent) {
+  DCHECK(containerPolicy);
+  DCHECK(parent);
+  for (const WebParsedFeaturePolicyDeclaration& parsedDeclaration :
+       *containerPolicy) {
+    // If a feature is enabled in the parent frame, and the parent chooses to
+    // delegate it to the child frame, using the iframe attribute, then the
+    // feature should be enabled in the child frame.
+    const FeaturePolicy::Feature* feature =
+        featureForName(parsedDeclaration.featureName, m_features);
+    if (!feature)
+      continue;
+    if (Whitelist::from(parsedDeclaration)->contains(*m_origin) &&
+        parent->isFeatureEnabled(*feature)) {
+      m_inheritedFeatures.set(feature, true);
+    } else {
+      m_inheritedFeatures.set(feature, false);
+    }
+  }
+}
+
 // static
-WebParsedFeaturePolicy FeaturePolicy::parseFeaturePolicy(
+WebParsedFeaturePolicyHeader FeaturePolicy::parseFeaturePolicy(
     const String& policy,
     RefPtr<SecurityOrigin> origin,
     Vector<String>* messages) {
-  Vector<WebFeaturePolicy::ParsedWhitelist> whitelists;
+  Vector<WebParsedFeaturePolicyDeclaration> whitelists;
 
   // Use a reasonable parse depth limit; the actual maximum depth is only going
   // to be 4 for a valid policy, but we'll give the featurePolicyParser a chance
@@ -182,7 +246,7 @@ WebParsedFeaturePolicy FeaturePolicy::parseFeaturePolicy(
         continue;
       }
 
-      WebFeaturePolicy::ParsedWhitelist whitelist;
+      WebParsedFeaturePolicyDeclaration whitelist;
       whitelist.featureName = featureName;
       Vector<WebSecurityOrigin> origins;
       String targetString;
@@ -211,14 +275,15 @@ WebParsedFeaturePolicy FeaturePolicy::parseFeaturePolicy(
   return whitelists;
 }
 
-void FeaturePolicy::setHeaderPolicy(const WebParsedFeaturePolicy& policy) {
+void FeaturePolicy::setHeaderPolicy(
+    const WebParsedFeaturePolicyHeader& policy) {
   DCHECK(m_headerWhitelists.isEmpty());
-  for (const WebFeaturePolicy::ParsedWhitelist& parsedWhitelist : policy) {
+  for (const WebParsedFeaturePolicyDeclaration& parsedDeclaration : policy) {
     const FeaturePolicy::Feature* feature =
-        featureForName(parsedWhitelist.featureName, m_features);
+        featureForName(parsedDeclaration.featureName, m_features);
     if (!feature)
       continue;
-    m_headerWhitelists.set(feature, Whitelist::from(parsedWhitelist));
+    m_headerWhitelists.set(feature, Whitelist::from(parsedDeclaration));
   }
 }
 
@@ -226,11 +291,11 @@ bool FeaturePolicy::isFeatureEnabledForOrigin(
     const FeaturePolicy::Feature& feature,
     const SecurityOrigin& origin) const {
   DCHECK(m_inheritedFeatures.contains(&feature));
-  if (!m_inheritedFeatures.get(&feature)) {
+  if (!m_inheritedFeatures.at(&feature)) {
     return false;
   }
   if (m_headerWhitelists.contains(&feature)) {
-    return m_headerWhitelists.get(&feature)->contains(origin);
+    return m_headerWhitelists.at(&feature)->contains(origin);
   }
   if (feature.defaultPolicy == FeaturePolicy::FeatureDefault::EnableForAll) {
     return true;

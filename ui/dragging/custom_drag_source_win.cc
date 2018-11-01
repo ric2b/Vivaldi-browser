@@ -6,8 +6,7 @@
 namespace vivaldi {
 
 CustomDragSourceWin::CustomDragSourceWin(bool dragging_in_progress)
-    : custom_tab_dragging_in_progress_(dragging_in_progress) {
-}
+    : custom_tab_dragging_in_progress_(dragging_in_progress) {}
 
 HRESULT CustomDragSourceWin::GiveFeedback(DWORD effect) {
   if (custom_tab_dragging_in_progress_) {

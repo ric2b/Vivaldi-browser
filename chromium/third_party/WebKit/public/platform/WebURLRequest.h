@@ -136,33 +136,38 @@ class WebURLRequest {
     ReportIntent,  // Report metrics with UI action displayed intent.
   };
 
-  // The Previews state which determines whether to request a Preview version of
+  typedef int PreviewsState;
+
+  // The Previews types which determines whether to request a Preview version of
   // the resource.
-  enum PreviewsState {
+  enum PreviewsTypes {
     PreviewsUnspecified = 0,       // Let the browser process decide whether or
                                    // not to request Preview types.
     ServerLoFiOn = 1 << 0,         // Request a Lo-Fi version of the resource
                                    // from the server.
     ClientLoFiOn = 1 << 1,         // Request a Lo-Fi version of the resource
                                    // from the client.
-    PreviewsNoTransform = 1 << 2,  // Explicitly forbid Previews
+    ServerLitePageOn = 1 << 2,     // Request a Lite Page version of the
+                                   // resource from the server.
+    PreviewsNoTransform = 1 << 3,  // Explicitly forbid Previews
                                    // transformations.
-    PreviewsOff = 1 << 3,          // Request a normal (non-Preview) version of
+    PreviewsOff = 1 << 4,          // Request a normal (non-Preview) version of
                                    // the resource. Server transformations may
                                    // still happen if the page is heavy.
     PreviewsStateLast = PreviewsOff
   };
 
-  // Indicates which types of ServiceWorkers should skip handling this request.
-  enum class SkipServiceWorker {
-    // Request can be handled both by a controlling same-origin worker and
-    // a cross-origin foreign fetch service worker.
-    None,
-    // Request should not be handled by a same-origin controlling worker,
-    // but can be intercepted by a foreign fetch service worker.
-    Controlling,
-    // Request should skip all possible service workers.
-    All
+  // Indicates which service workers will receive fetch events for this request.
+  enum class ServiceWorkerMode {
+    // Relevant local and foreign service workers will get a fetch or
+    // foreignfetch event for this request.
+    All,
+    // Only relevant foreign service workers will get a foreignfetch event for
+    // this request.
+    Foreign,
+    // Neither local nor foreign service workers will get events for this
+    // request.
+    None
   };
 
   enum class LoadingIPCType {
@@ -273,9 +278,10 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT bool useStreamOnResponse() const;
   BLINK_PLATFORM_EXPORT void setUseStreamOnResponse(bool);
 
-  // True if the request should not be handled by the ServiceWorker.
-  BLINK_PLATFORM_EXPORT SkipServiceWorker skipServiceWorker() const;
-  BLINK_PLATFORM_EXPORT void setSkipServiceWorker(SkipServiceWorker);
+  // The service worker mode indicating which service workers should get events
+  // for this request.
+  BLINK_PLATFORM_EXPORT ServiceWorkerMode getServiceWorkerMode() const;
+  BLINK_PLATFORM_EXPORT void setServiceWorkerMode(ServiceWorkerMode);
 
   // True if corresponding AppCache group should be resetted.
   BLINK_PLATFORM_EXPORT bool shouldResetAppCache() const;
@@ -334,6 +340,12 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT LoadingIPCType getLoadingIPCType() const;
 
   BLINK_PLATFORM_EXPORT void setNavigationStartTime(double);
+
+  // PlzNavigate: specify that the request was intended to be loaded as a same
+  // document navigation. No network requests should be made and the request
+  // should be dropped if a different document was loaded in the frame
+  // in-between.
+  BLINK_PLATFORM_EXPORT void setIsSameDocumentNavigation(bool);
 
 #if INSIDE_BLINK
   BLINK_PLATFORM_EXPORT ResourceRequest& toMutableResourceRequest();

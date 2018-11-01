@@ -12,6 +12,7 @@
 #ifndef V8TestInterface2Partial_h
 #define V8TestInterface2Partial_h
 
+#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -26,6 +27,11 @@ class V8TestInterface2Partial {
   STATIC_ONLY(V8TestInterface2Partial);
  public:
   static void initialize();
+
+  // Callback functions
+
+  static void voidMethodPartial1MethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void voidMethodPartial2MethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
 
  private:
   static void installV8TestInterface2Template(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);

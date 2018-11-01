@@ -7,12 +7,13 @@
 /* global PaymentRequest:false */
 
 /**
- * Launches the PaymentRequest UI with Bob Pay as the only payment method.
+ * Launches the PaymentRequest UI with Bob Pay as one of multiple payment
+ * methods.
  */
 function buy() {  // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
-        [{supportedMethods: ['https://bobpay.com']}],
+        [{supportedMethods: ['https://bobpay.com', 'https://alicepay.com']}],
         {total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}}})
         .show()
         .then(function(resp) {

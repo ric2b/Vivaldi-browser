@@ -1,14 +1,5 @@
 {% extends 'interface_base.cpp.tmpl' %}
 
-{% set has_prepare_prototype_and_interface_object =
-    unscopables or has_conditional_attributes_on_prototype or
-    methods | conditionally_exposed(is_partial) %}
-{% set prepare_prototype_and_interface_object_func =
-    '%s::preparePrototypeAndInterfaceObject' % v8_class
-    if has_prepare_prototype_and_interface_object
-    else 'nullptr' %}
-
-
 {##############################################################################}
 {% block indexed_property_getter %}
 {% if indexed_property_getter and not indexed_property_getter.is_custom %}
@@ -48,7 +39,7 @@ static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo
 {% block indexed_property_getter_callback %}
 {% if indexed_property_getter or named_property_getter %}
 {% set getter = indexed_property_getter or named_property_getter %}
-{{exported}}void indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+void {{v8_class_or_partial}}::indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
   {% if indexed_property_getter %}
 
   {% if getter.is_custom %}
@@ -122,7 +113,7 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
 {% block indexed_property_setter_callback %}
 {% if indexed_property_setter or named_property_setter %}
 {% set setter = indexed_property_setter or named_property_setter %}
-{{exported}}void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+void {{v8_class_or_partial}}::indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
   {% if setter.is_ce_reactions %}
   CEReactionsScope ceReactionsScope;
   {% endif %}
@@ -190,7 +181,7 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
 {% block indexed_property_deleter_callback %}
 {% if indexed_property_deleter or named_property_deleter %}
 {% set deleter = indexed_property_deleter or named_property_deleter %}
-{{exported}}void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
+void {{v8_class_or_partial}}::indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   {% if deleter.is_ce_reactions %}
   CEReactionsScope ceReactionsScope;
   {% endif %}
@@ -253,7 +244,7 @@ static void namedPropertyGetter(const AtomicString& name, const v8::PropertyCall
 {% block named_property_getter_callback %}
 {% if named_property_getter %}
 {% set getter = named_property_getter %}
-{{exported}}void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+void {{v8_class_or_partial}}::namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
   if (!name->IsString())
     return;
   const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
@@ -320,7 +311,7 @@ static void namedPropertySetter(const AtomicString& name, v8::Local<v8::Value> v
 {% block named_property_setter_callback %}
 {% if named_property_setter %}
 {% set setter = named_property_setter %}
-{{exported}}void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+void {{v8_class_or_partial}}::namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
   if (!name->IsString())
     return;
   const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
@@ -381,7 +372,7 @@ static void namedPropertyDeleter(const AtomicString& name, const v8::PropertyCal
 {% block named_property_deleter_callback %}
 {% if named_property_deleter %}
 {% set deleter = named_property_deleter %}
-{{exported}}void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
+void {{v8_class_or_partial}}::namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   if (!name->IsString())
     return;
   const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
@@ -435,7 +426,7 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
 {% block named_property_query_callback %}
 {% if named_property_getter and named_property_getter.is_enumerable %}
 {% set getter = named_property_getter %}
-{{exported}}void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
+void {{v8_class_or_partial}}::namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
   if (!name->IsString())
     return;
   const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
@@ -475,7 +466,7 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
 {% block named_property_enumerator_callback %}
 {% if named_property_getter and named_property_getter.is_enumerable %}
 {% set getter = named_property_getter %}
-{{exported}}void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::Array>& info) {
+void {{v8_class_or_partial}}::namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::Array>& info) {
   {% if getter.is_custom_property_enumerator %}
   {{v8_class}}::namedPropertyEnumeratorCustom(info);
   {% else %}
@@ -509,11 +500,14 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Lo
   {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.Holder() is an Object. #}
   V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), name.As<v8::String>(), v8Value);
 }
+{% endif %}
+{% endblock %}
 
-{{exported}}void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info) {
+{% block origin_safe_method_setter_callback %}
+{% if has_origin_safe_method_setter %}
+void {{v8_class_or_partial}}::{{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info) {
   {{cpp_class}}V8Internal::{{cpp_class}}OriginSafeMethodSetter(name, v8Value, info);
 }
-
 {% endif %}
 {% endblock %}
 
@@ -532,7 +526,7 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Lo
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::trace, {{v8_class}}::traceWrappers, 0, {{prepare_prototype_and_interface_object_func}}, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{active_scriptwrappable_inheritance}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::trace, {{v8_class}}::traceWrappers, {{prepare_prototype_and_interface_object_func or 'nullptr'}}, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{active_scriptwrappable_inheritance}}, WrapperTypeInfo::{{lifetime}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -599,36 +593,6 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
 
 {##############################################################################}
-{% block visit_dom_wrapper %}
-{% if has_visit_dom_wrapper %}
-void {{v8_class}}::visitDOMWrapper(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper) {
-  {% if has_visit_dom_wrapper_custom %}
-  {{v8_class}}::visitDOMWrapperCustom(isolate, scriptWrappable, wrapper);
-  {% endif %}
-  {% if set_wrapper_reference_to or set_wrapper_reference_from %}
-  {{cpp_class}}* impl = scriptWrappable->toImpl<{{cpp_class}}>();
-  {% endif %}
-  {% if set_wrapper_reference_to %}
-  {{set_wrapper_reference_to.cpp_type}} {{set_wrapper_reference_to.name}} = impl->{{set_wrapper_reference_to.name}}();
-  if ({{set_wrapper_reference_to.name}}) {
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, {{set_wrapper_reference_to.name}}, isolate);
-  }
-  {% endif %}
-  {% if set_wrapper_reference_from %}
-  // The {{set_wrapper_reference_from}}() method may return a reference or a pointer.
-  if (Node* owner = WTF::getPtr(impl->{{set_wrapper_reference_from}}())) {
-    Node* root = V8GCController::opaqueRootForGC(isolate, owner);
-    isolate->SetReferenceFromGroup(v8::UniqueId(reinterpret_cast<intptr_t>(root)), wrapper);
-    return;
-  }
-  {% endif %}
-}
-
-{% endif %}
-{% endblock %}
-
-
-{##############################################################################}
 {% block constructor_callback %}
 {% if constructors or has_custom_constructor or has_event_constructor or has_html_constructor %}
 void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -665,25 +629,25 @@ void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>
    realm as a hack to support the incumbent realm. Clean this up when Blink
    properly supports the incumbent realm. #}
 {% set getter_callback =
-       '%sV8Internal::%sOriginSafeMethodGetterCallback%s' %
-       (cpp_class, method.name, world_suffix) %}
+       '%s::%sOriginSafeMethodGetterCallback%s' %
+       (v8_class_or_partial, method.name, world_suffix) %}
 {% set setter_callback =
-       '{0}V8Internal::{0}OriginSafeMethodSetterCallback'.format(cpp_class)
-       if not method.is_unforgeable else '0' %}
+       '%s::%sOriginSafeMethodSetterCallback' % (v8_class_or_partial, cpp_class)
+       if not method.is_unforgeable else 'nullptr' %}
 {% if method.is_per_world_bindings %}
 {% set getter_callback_for_main_world = '%sForMainWorld' % getter_callback %}
 {% set setter_callback_for_main_world = '%sForMainWorld' % setter_callback
-       if not method.is_unforgeable else '0' %}
+       if not method.is_unforgeable else 'nullptr' %}
 {% else %}
-{% set getter_callback_for_main_world = '0' %}
-{% set setter_callback_for_main_world = '0' %}
+{% set getter_callback_for_main_world = 'nullptr' %}
+{% set setter_callback_for_main_world = 'nullptr' %}
 {% endif %}
 {% set property_attribute =
        'static_cast<v8::PropertyAttribute>(%s)' %
        ' | '.join(method.property_attributes or ['v8::None']) %}
 {% set holder_check = 'V8DOMConfiguration::CheckHolder' %}
 const V8DOMConfiguration::AttributeConfiguration {{method.name}}OriginSafeAttributeConfiguration = {
-    "{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, nullptr, &{{v8_class}}::wrapperTypeInfo, v8::DEFAULT, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}
+    "{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, nullptr, &{{v8_class}}::wrapperTypeInfo, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}
 };
 V8DOMConfiguration::installAttribute(isolate, world, {{instance_template}}, {{prototype_template}}, {{method.name}}OriginSafeAttributeConfiguration);
 {%- endmacro %}
@@ -692,17 +656,17 @@ V8DOMConfiguration::installAttribute(isolate, world, {{instance_template}}, {{pr
 {##############################################################################}
 {% macro install_indexed_property_handler(target) %}
 {% set indexed_property_getter_callback =
-       '%sV8Internal::indexedPropertyGetterCallback' % cpp_class %}
+       '%s::indexedPropertyGetterCallback' % v8_class_or_partial %}
 {% set indexed_property_setter_callback =
-       '%sV8Internal::indexedPropertySetterCallback' % cpp_class
-       if indexed_property_setter or named_property_setter else '0' %}
-{% set indexed_property_query_callback = '0' %}{# Unused #}
+       '%s::indexedPropertySetterCallback' % v8_class_or_partial
+       if indexed_property_setter or named_property_setter else 'nullptr' %}
+{% set indexed_property_query_callback = 'nullptr' %}{# Unused #}
 {% set indexed_property_deleter_callback =
-       '%sV8Internal::indexedPropertyDeleterCallback' % cpp_class
-       if indexed_property_deleter or named_property_deleter else '0' %}
+       '%s::indexedPropertyDeleterCallback' % v8_class_or_partial
+       if indexed_property_deleter or named_property_deleter else 'nullptr' %}
 {% set indexed_property_enumerator_callback =
        'indexedPropertyEnumerator<%s>' % cpp_class
-       if indexed_property_getter.is_enumerable else '0' %}
+       if indexed_property_getter.is_enumerable else 'nullptr' %}
 {% set property_handler_flags =
        'v8::PropertyHandlerFlags::kNone' %}
 v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig({{indexed_property_getter_callback}}, {{indexed_property_setter_callback}}, {{indexed_property_query_callback}}, {{indexed_property_deleter_callback}}, {{indexed_property_enumerator_callback}}, v8::Local<v8::Value>(), {{property_handler_flags}});
@@ -713,19 +677,19 @@ v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig({{indexed_p
 {##############################################################################}
 {% macro install_named_property_handler(target) %}
 {% set named_property_getter_callback =
-       '%sV8Internal::namedPropertyGetterCallback' % cpp_class %}
+       '%s::namedPropertyGetterCallback' % v8_class_or_partial %}
 {% set named_property_setter_callback =
-       '%sV8Internal::namedPropertySetterCallback' % cpp_class
-       if named_property_setter else '0' %}
+       '%s::namedPropertySetterCallback' % v8_class_or_partial
+       if named_property_setter else 'nullptr' %}
 {% set named_property_query_callback =
-       '%sV8Internal::namedPropertyQueryCallback' % cpp_class
-       if named_property_getter.is_enumerable else '0' %}
+       '%s::namedPropertyQueryCallback' % v8_class_or_partial
+       if named_property_getter.is_enumerable else 'nullptr' %}
 {% set named_property_deleter_callback =
-       '%sV8Internal::namedPropertyDeleterCallback' % cpp_class
-       if named_property_deleter else '0' %}
+       '%s::namedPropertyDeleterCallback' % v8_class_or_partial
+       if named_property_deleter else 'nullptr' %}
 {% set named_property_enumerator_callback =
-       '%sV8Internal::namedPropertyEnumeratorCallback' % cpp_class
-       if named_property_getter.is_enumerable else '0' %}
+       '%s::namedPropertyEnumeratorCallback' % v8_class_or_partial
+       if named_property_getter.is_enumerable else 'nullptr' %}
 {% set property_handler_flags_list =
        ['int(v8::PropertyHandlerFlags::kOnlyInterceptStrings)'] %}
 {% if not is_override_builtins %}
@@ -808,7 +772,8 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
   // Transfer the ownership of the allocated memory to an {{interface_name}} without
   // copying.
   v8::{{interface_name}}::Contents v8Contents = v8buffer->Externalize();
-  WTF::ArrayBufferContents contents(v8Contents.Data(), v8Contents.ByteLength(), WTF::ArrayBufferContents::{% if interface_name == 'ArrayBuffer' %}Not{% endif %}Shared);
+  WTF::ArrayBufferContents::DataHandle data(v8Contents.Data(), WTF::ArrayBufferContents::freeMemory);
+  WTF::ArrayBufferContents contents(std::move(data), v8Contents.ByteLength(), WTF::ArrayBufferContents::{% if interface_name == 'ArrayBuffer' %}Not{% endif %}Shared);
   {{cpp_class}}* buffer = {{cpp_class}}::create(contents);
   v8::Local<v8::Object> associatedWrapper = buffer->associateWithWrapper(v8::Isolate::GetCurrent(), buffer->wrapperTypeInfo(), object);
   DCHECK(associatedWrapper == object);
@@ -889,70 +854,33 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
 
 
 {##############################################################################}
-{% block prepare_prototype_and_interface_object %}
-{% from 'methods.cpp.tmpl' import install_conditionally_enabled_methods with context %}
-{% if has_prepare_prototype_and_interface_object %}
-void {{v8_class}}::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, const DOMWrapperWorld& world, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) {
-  v8::Isolate* isolate = context->GetIsolate();
-{% if unscopables %}
-  {{install_unscopables() | indent(2)}}
-{% endif %}
-{% if has_conditional_attributes_on_prototype %}
-  {{install_conditionally_enabled_attributes_on_prototype() | indent(2)}}
-{% endif %}
-{% if methods | conditionally_exposed(is_partial) %}
-  {{install_conditionally_enabled_methods() | indent(2)}}
-{% endif %}
-}
-
-{% endif %}
-{% endblock %}
-
-
-{##############################################################################}
-{% macro install_unscopables() %}
-v8::Local<v8::Name> unscopablesSymbol(v8::Symbol::GetUnscopables(isolate));
-v8::Local<v8::Object> unscopables;
-if (v8CallBoolean(prototypeObject->HasOwnProperty(context, unscopablesSymbol)))
-  unscopables = prototypeObject->Get(context, unscopablesSymbol).ToLocalChecked().As<v8::Object>();
-else
-  unscopables = v8::Object::New(isolate);
-{% for name, runtime_enabled_feature_name in unscopables %}
-{% filter runtime_enabled(runtime_enabled_feature_name) %}
-unscopables->CreateDataProperty(context, v8AtomicString(isolate, "{{name}}"), v8::True(isolate)).FromJust();
-{% endfilter %}
-{% endfor %}
-prototypeObject->CreateDataProperty(context, unscopablesSymbol, unscopables).FromJust();
-{% endmacro %}
-
-
-{##############################################################################}
-{% macro install_conditionally_enabled_attributes_on_prototype() %}
-{% from 'attributes.cpp.tmpl' import attribute_configuration with context %}
-ExecutionContext* executionContext = toExecutionContext(context);
-v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
-{% for attribute in attributes if (attribute.exposed_test or attribute.secure_context_test) and attribute.on_prototype %}
-{% filter exposed(attribute.exposed_test) %}
-{% filter secure_context(attribute.secure_context_test) %}
-{% filter runtime_enabled(attribute.runtime_enabled_feature_name) %}
-const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = {{attribute_configuration(attribute)}};
-V8DOMConfiguration::installAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfiguration);
-{% endfilter %}{# runtime_enabled #}
-{% endfilter %}{# secure_context #}
-{% endfilter %}{# exposed #}
-{% endfor %}
-{% endmacro %}
-
-
-{##############################################################################}
 {% block partial_interface %}
 {% if has_partial_interface %}
-InstallTemplateFunction {{v8_class}}::install{{v8_class}}TemplateFunction = (InstallTemplateFunction)&{{v8_class}}::install{{v8_class}}Template;
+{% if needs_runtime_enabled_installer %}
+InstallRuntimeEnabledFunction {{v8_class}}::install{{v8_class}}RuntimeEnabledFunction =
+    &{{v8_class}}::installRuntimeEnabledFeatures;
+{% endif %}
 
-void {{v8_class}}::updateWrapperTypeInfo(InstallTemplateFunction installTemplateFunction, PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction) {
-  {{v8_class}}::install{{v8_class}}TemplateFunction = installTemplateFunction;
-  if (preparePrototypeAndInterfaceObjectFunction)
-    {{v8_class}}::wrapperTypeInfo.preparePrototypeAndInterfaceObjectFunction = preparePrototypeAndInterfaceObjectFunction;
+InstallTemplateFunction {{v8_class}}::install{{v8_class}}TemplateFunction =
+    &{{v8_class}}::install{{v8_class}}Template;
+
+void {{v8_class}}::updateWrapperTypeInfo(
+    InstallTemplateFunction installTemplateFunction,
+    InstallRuntimeEnabledFunction installRuntimeEnabledFunction,
+    PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction) {
+  ALLOW_UNUSED_LOCAL(installRuntimeEnabledFunction);
+
+  {{v8_class}}::install{{v8_class}}TemplateFunction =
+      installTemplateFunction;
+  {% if needs_runtime_enabled_installer %}
+  CHECK(installRuntimeEnabledFunction);
+  {{v8_class}}::install{{v8_class}}RuntimeEnabledFunction =
+      installRuntimeEnabledFunction;
+  {% endif %}
+  if (preparePrototypeAndInterfaceObjectFunction) {
+    {{v8_class}}::wrapperTypeInfo.preparePrototypeAndInterfaceObjectFunction =
+        preparePrototypeAndInterfaceObjectFunction;
+  }
 }
 
 {% for method in methods if method.overloads and method.overloads.has_partial_overloads %}

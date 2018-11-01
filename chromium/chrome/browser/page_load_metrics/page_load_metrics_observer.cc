@@ -7,30 +7,52 @@
 namespace page_load_metrics {
 
 PageLoadExtraInfo::PageLoadExtraInfo(
+    base::TimeTicks navigation_start,
     const base::Optional<base::TimeDelta>& first_background_time,
     const base::Optional<base::TimeDelta>& first_foreground_time,
     bool started_in_foreground,
     UserInitiatedInfo user_initiated_info,
-    const GURL& committed_url,
+    const GURL& url,
     const GURL& start_url,
-    UserAbortType abort_type,
-    UserInitiatedInfo abort_user_initiated_info,
-    const base::Optional<base::TimeDelta>& time_to_abort,
-    const PageLoadMetadata& metadata)
-    : first_background_time(first_background_time),
+    bool did_commit,
+    PageEndReason page_end_reason,
+    UserInitiatedInfo page_end_user_initiated_info,
+    const base::Optional<base::TimeDelta>& page_end_time,
+    const PageLoadMetadata& main_frame_metadata,
+    const PageLoadMetadata& child_frame_metadata)
+    : navigation_start(navigation_start),
+      first_background_time(first_background_time),
       first_foreground_time(first_foreground_time),
       started_in_foreground(started_in_foreground),
       user_initiated_info(user_initiated_info),
-      committed_url(committed_url),
+      url(url),
       start_url(start_url),
-      abort_type(abort_type),
-      abort_user_initiated_info(abort_user_initiated_info),
-      time_to_abort(time_to_abort),
-      metadata(metadata) {}
+      did_commit(did_commit),
+      page_end_reason(page_end_reason),
+      page_end_user_initiated_info(page_end_user_initiated_info),
+      page_end_time(page_end_time),
+      main_frame_metadata(main_frame_metadata),
+      child_frame_metadata(child_frame_metadata) {}
 
 PageLoadExtraInfo::PageLoadExtraInfo(const PageLoadExtraInfo& other) = default;
 
 PageLoadExtraInfo::~PageLoadExtraInfo() {}
+
+// static
+PageLoadExtraInfo PageLoadExtraInfo::CreateForTesting(
+    const GURL& url,
+    bool started_in_foreground) {
+  return PageLoadExtraInfo(
+      base::TimeTicks::Now() /* navigation_start */,
+      base::Optional<base::TimeDelta>() /* first_background_time */,
+      base::Optional<base::TimeDelta>() /* first_foreground_time */,
+      started_in_foreground /* started_in_foreground */,
+      UserInitiatedInfo::BrowserInitiated(), url, url, true /* did_commit */,
+      page_load_metrics::END_NONE,
+      page_load_metrics::UserInitiatedInfo::NotUserInitiated(),
+      base::TimeDelta(), page_load_metrics::PageLoadMetadata(),
+      page_load_metrics::PageLoadMetadata());
+}
 
 ExtraRequestInfo::ExtraRequestInfo(bool was_cached,
                                    int64_t raw_body_bytes,

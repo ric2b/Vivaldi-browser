@@ -97,7 +97,7 @@ void InputEventFilter::DidStopFlinging(int routing_id) {
 
 void InputEventFilter::DispatchNonBlockingEventToMainThread(
     int routing_id,
-    blink::WebScopedInputEvent event,
+    ui::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info) {
   DCHECK(target_task_runner_->BelongsToCurrentThread());
   RouteQueueMap::iterator iter = route_queues_.find(routing_id);
@@ -126,7 +126,8 @@ void InputEventFilter::NotifyInputEventHandled(
   queue->EventHandled(type, result, ack_result);
 }
 
-void InputEventFilter::ProcessRafAlignedInput(int routing_id) {
+void InputEventFilter::ProcessRafAlignedInput(int routing_id,
+                                              base::TimeTicks frame_time) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   scoped_refptr<MainThreadEventQueue> queue;
   {
@@ -137,7 +138,7 @@ void InputEventFilter::ProcessRafAlignedInput(int routing_id) {
     queue = iter->second;
   }
 
-  queue->DispatchRafAlignedInput();
+  queue->DispatchRafAlignedInput(frame_time);
 }
 
 void InputEventFilter::OnFilterAdded(IPC::Channel* channel) {
@@ -212,10 +213,10 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message,
   InputMsg_HandleInputEvent::Param params;
   if (!InputMsg_HandleInputEvent::Read(&message, &params))
     return;
-  blink::WebScopedInputEvent event =
+  ui::WebScopedInputEvent event =
       ui::WebInputEventTraits::Clone(*std::get<0>(params));
-  ui::LatencyInfo latency_info = std::get<1>(params);
-  InputEventDispatchType dispatch_type = std::get<2>(params);
+  ui::LatencyInfo latency_info = std::get<2>(params);
+  InputEventDispatchType dispatch_type = std::get<3>(params);
 
   DCHECK(event);
   DCHECK(dispatch_type == DISPATCH_TYPE_BLOCKING ||
@@ -234,7 +235,7 @@ void InputEventFilter::DidForwardToHandlerAndOverscroll(
     int routing_id,
     InputEventDispatchType dispatch_type,
     InputEventAckState ack_state,
-    blink::WebScopedInputEvent event,
+    ui::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info,
     std::unique_ptr<DidOverscrollParams> overscroll_params) {
   bool send_ack = dispatch_type == DISPATCH_TYPE_BLOCKING;
@@ -289,13 +290,14 @@ void InputEventFilter::SendMessageOnIOThread(
 
 void InputEventFilter::HandleEventOnMainThread(
     int routing_id,
-    const blink::WebInputEvent* event,
+    const blink::WebCoalescedInputEvent* event,
     const ui::LatencyInfo& latency_info,
     InputEventDispatchType dispatch_type) {
   TRACE_EVENT_INSTANT0("input", "InputEventFilter::HandlEventOnMainThread",
                        TRACE_EVENT_SCOPE_THREAD);
-  IPC::Message new_msg =
-      InputMsg_HandleInputEvent(routing_id, event, latency_info, dispatch_type);
+  IPC::Message new_msg = InputMsg_HandleInputEvent(
+      routing_id, &event->event(), event->getCoalescedEventsPointers(),
+      latency_info, dispatch_type);
   main_listener_.Run(new_msg);
 }
 

@@ -2,8 +2,6 @@
 
 #include "importer/imported_speeddial_entry.h"
 
-ImportedSpeedDialEntry::ImportedSpeedDialEntry() {
-}
+ImportedSpeedDialEntry::ImportedSpeedDialEntry() {}
 
-ImportedSpeedDialEntry::~ImportedSpeedDialEntry() {
-}
+ImportedSpeedDialEntry::~ImportedSpeedDialEntry() {}

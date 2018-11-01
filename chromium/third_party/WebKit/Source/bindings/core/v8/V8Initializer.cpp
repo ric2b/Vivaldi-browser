@@ -25,6 +25,8 @@
 
 #include "bindings/core/v8/V8Initializer.h"
 
+#include <memory>
+
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/RejectedPromises.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
@@ -32,6 +34,7 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/SourceLocation.h"
+#include "bindings/core/v8/UseCounterCallback.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMException.h"
 #include "bindings/core/v8/V8ErrorEvent.h"
@@ -44,7 +47,6 @@
 #include "bindings/core/v8/V8Window.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
-#include "core/fetch/AccessControlStatus.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -54,17 +56,19 @@
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/loader/fetch/AccessControlStatus.h"
+#include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
+#include "v8/include/v8-debug.h"
+#include "v8/include/v8-profiler.h"
 #include "wtf/AddressSanitizer.h"
+#include "wtf/Assertions.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 #include "wtf/typed_arrays/ArrayBufferContents.h"
-#include <memory>
-#include <v8-debug.h>
-#include <v8-profiler.h>
 
 namespace blink {
 
@@ -116,24 +120,22 @@ static String extractMessageForConsole(v8::Isolate* isolate,
         return exception->toStringForConsole();
     }
   }
-  return emptyString();
+  return emptyString;
 }
 
 namespace {
 MessageLevel MessageLevelFromNonFatalErrorLevel(int errorLevel) {
   MessageLevel level = ErrorMessageLevel;
   switch (errorLevel) {
+    case v8::Isolate::kMessageDebug:
+      level = VerboseMessageLevel;
+      break;
     case v8::Isolate::kMessageLog:
-      level = LogMessageLevel;
+    case v8::Isolate::kMessageInfo:
+      level = InfoMessageLevel;
       break;
     case v8::Isolate::kMessageWarning:
       level = WarningMessageLevel;
-      break;
-    case v8::Isolate::kMessageDebug:
-      level = DebugMessageLevel;
-      break;
-    case v8::Isolate::kMessageInfo:
-      level = InfoMessageLevel;
       break;
     case v8::Isolate::kMessageError:
       level = InfoMessageLevel;
@@ -317,7 +319,7 @@ static bool codeGenerationCheckCallbackInMainThread(
     if (ContentSecurityPolicy* policy =
             toDocument(executionContext)->contentSecurityPolicy())
       return policy->allowEval(ScriptState::from(context),
-                               ContentSecurityPolicy::SendReport,
+                               SecurityViolationReportingPolicy::Report,
                                ContentSecurityPolicy::WillThrowException);
   }
   return false;
@@ -368,18 +370,18 @@ static bool allowWasmInstantiateCallbackInMainThread(
 static void initializeV8Common(v8::Isolate* isolate) {
   isolate->AddGCPrologueCallback(V8GCController::gcPrologue);
   isolate->AddGCEpilogueCallback(V8GCController::gcEpilogue);
-  if (RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-    std::unique_ptr<ScriptWrappableVisitor> visitor(
-        new ScriptWrappableVisitor(isolate));
-    V8PerIsolateData::from(isolate)->setScriptWrappableVisitor(
-        std::move(visitor));
-    isolate->SetEmbedderHeapTracer(
-        V8PerIsolateData::from(isolate)->scriptWrappableVisitor());
-  }
+  std::unique_ptr<ScriptWrappableVisitor> visitor(
+      new ScriptWrappableVisitor(isolate));
+  V8PerIsolateData::from(isolate)->setScriptWrappableVisitor(
+      std::move(visitor));
+  isolate->SetEmbedderHeapTracer(
+      V8PerIsolateData::from(isolate)->scriptWrappableVisitor());
 
   v8::Debug::SetLiveEditEnabled(isolate, false);
 
   isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
+
+  isolate->SetUseCounterCallback(&useCounterCallback);
 }
 
 namespace {
@@ -389,21 +391,17 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   // should respond by throwing a RangeError, per
   // http://www.ecma-international.org/ecma-262/6.0/#sec-createbytedatablock.
   void* Allocate(size_t size) override {
-    void* data;
-    WTF::ArrayBufferContents::allocateMemoryOrNull(
-        size, WTF::ArrayBufferContents::ZeroInitialize, data);
-    return data;
+    return WTF::ArrayBufferContents::allocateMemoryOrNull(
+        size, WTF::ArrayBufferContents::ZeroInitialize);
   }
 
   void* AllocateUninitialized(size_t size) override {
-    void* data;
-    WTF::ArrayBufferContents::allocateMemoryOrNull(
-        size, WTF::ArrayBufferContents::DontInitialize, data);
-    return data;
+    return WTF::ArrayBufferContents::allocateMemoryOrNull(
+        size, WTF::ArrayBufferContents::DontInitialize);
   }
 
   void Free(void* data, size_t size) override {
-    WTF::ArrayBufferContents::freeMemory(data, size);
+    WTF::ArrayBufferContents::freeMemory(data);
   }
 };
 
@@ -470,13 +468,13 @@ void V8Initializer::initializeMainThread() {
 
   isolate->SetPromiseRejectCallback(promiseRejectHandlerInMainThread);
 
-  if (v8::HeapProfiler* profiler = isolate->GetHeapProfiler())
+  if (v8::HeapProfiler* profiler = isolate->GetHeapProfiler()) {
     profiler->SetWrapperClassInfoProvider(
         WrapperTypeInfo::NodeClassId, &RetainedDOMInfo::createRetainedDOMInfo);
+    profiler->SetGetRetainerInfosCallback(&V8GCController::getRetainerInfos);
+  }
 
   ASSERT(ThreadState::mainThreadState());
-  ThreadState::mainThreadState()->addInterruptor(
-      WTF::makeUnique<V8IsolateInterruptor>(isolate));
   ThreadState::mainThreadState()->registerTraceDOMWrappers(
       isolate, V8GCController::traceDOMWrappers,
       ScriptWrappableVisitor::invalidateDeadObjectsInMarkingDeque,
@@ -484,13 +482,6 @@ void V8Initializer::initializeMainThread() {
 
   V8PerIsolateData::from(isolate)->setThreadDebugger(
       WTF::makeUnique<MainThreadDebugger>(isolate));
-}
-
-void V8Initializer::shutdownMainThread() {
-  ASSERT(isMainThread());
-  v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
-  V8PerIsolateData::willBeDestroyed(isolate);
-  V8PerIsolateData::destroy(isolate);
 }
 
 static void reportFatalErrorInWorker(const char* location,

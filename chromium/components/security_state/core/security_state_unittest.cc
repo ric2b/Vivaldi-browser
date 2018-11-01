@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/histogram_tester.h"
-#include "components/security_state/core/switches.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -25,6 +24,12 @@ namespace {
 
 const char kHttpsUrl[] = "https://foo.test/";
 const char kHttpUrl[] = "http://foo.test/";
+
+// This list doesn't include data: URL, as data: URLs will be explicitly marked
+// as not secure.
+const char* const kPseudoUrls[] = {
+    "blob:http://test/some-guid", "filesystem:http://test/some-guid",
+};
 
 bool IsOriginSecure(const GURL& url) {
   return url == kHttpsUrl;
@@ -46,6 +51,9 @@ class TestSecurityStateHelper {
         displayed_credit_card_field_on_http_(false) {}
   virtual ~TestSecurityStateHelper() {}
 
+  void SetCertificate(scoped_refptr<net::X509Certificate> cert) {
+    cert_ = std::move(cert);
+  }
   void set_connection_status(int connection_status) {
     connection_status_ = connection_status;
   }
@@ -102,7 +110,7 @@ class TestSecurityStateHelper {
 
  private:
   GURL url_;
-  const scoped_refptr<net::X509Certificate> cert_;
+  scoped_refptr<net::X509Certificate> cert_;
   int connection_status_;
   net::CertStatus cert_status_;
   bool displayed_mixed_content_;
@@ -260,49 +268,55 @@ TEST(SecurityStateTest, AlwaysWarnOnDataUrls) {
 }
 
 // Tests that password fields cause the security level to be downgraded
-// to HTTP_SHOW_WARNING when the command-line switch is set.
+// to HTTP_SHOW_WARNING.
 TEST(SecurityStateTest, PasswordFieldWarning) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kMarkHttpAs, switches::kMarkHttpWithPasswordsOrCcWithChip);
   TestSecurityStateHelper helper;
   helper.SetUrl(GURL(kHttpUrl));
   helper.set_displayed_password_field_on_http(true);
   SecurityInfo security_info;
   helper.GetSecurityInfo(&security_info);
   EXPECT_TRUE(security_info.displayed_password_field_on_http);
+  EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
+}
+
+// Tests that password fields cause the security level to be downgraded
+// to HTTP_SHOW_WARNING on pseudo URLs.
+TEST(SecurityStateTest, PasswordFieldWarningOnPseudoUrls) {
+  for (const char* const url : kPseudoUrls) {
+    TestSecurityStateHelper helper;
+    helper.SetUrl(GURL(url));
+    helper.set_displayed_password_field_on_http(true);
+    SecurityInfo security_info;
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_TRUE(security_info.displayed_password_field_on_http);
+    EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
+  }
+}
+
+// Tests that credit card fields cause the security level to be downgraded
+// to HTTP_SHOW_WARNING.
+TEST(SecurityStateTest, CreditCardFieldWarning) {
+  TestSecurityStateHelper helper;
+  helper.SetUrl(GURL(kHttpUrl));
+  helper.set_displayed_credit_card_field_on_http(true);
+  SecurityInfo security_info;
+  helper.GetSecurityInfo(&security_info);
+  EXPECT_TRUE(security_info.displayed_credit_card_field_on_http);
   EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
 }
 
 // Tests that credit card fields cause the security level to be downgraded
-// to HTTP_SHOW_WARNING when the command-line switch is set.
-TEST(SecurityStateTest, CreditCardFieldWarning) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kMarkHttpAs, switches::kMarkHttpWithPasswordsOrCcWithChip);
-  TestSecurityStateHelper helper;
-  helper.SetUrl(GURL(kHttpUrl));
-  helper.set_displayed_credit_card_field_on_http(true);
-  SecurityInfo security_info;
-  helper.GetSecurityInfo(&security_info);
-  EXPECT_TRUE(security_info.displayed_credit_card_field_on_http);
-  EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
-}
-
-// Tests that neither password nor credit fields cause the security
-// level to be downgraded to HTTP_SHOW_WARNING when the command-line switch
-// is NOT set.
-TEST(SecurityStateTest, HttpWarningNotSetWithoutSwitch) {
-  TestSecurityStateHelper helper;
-  helper.SetUrl(GURL(kHttpUrl));
-  helper.set_displayed_password_field_on_http(true);
-  SecurityInfo security_info;
-  helper.GetSecurityInfo(&security_info);
-  EXPECT_TRUE(security_info.displayed_password_field_on_http);
-  EXPECT_EQ(NONE, security_info.security_level);
-
-  helper.set_displayed_credit_card_field_on_http(true);
-  helper.GetSecurityInfo(&security_info);
-  EXPECT_TRUE(security_info.displayed_credit_card_field_on_http);
-  EXPECT_EQ(NONE, security_info.security_level);
+// to HTTP_SHOW_WARNING on pseudo URLs.
+TEST(SecurityStateTest, CreditCardFieldWarningOnPseudoUrls) {
+  for (const char* const url : kPseudoUrls) {
+    TestSecurityStateHelper helper;
+    helper.SetUrl(GURL(url));
+    helper.set_displayed_credit_card_field_on_http(true);
+    SecurityInfo security_info;
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_TRUE(security_info.displayed_credit_card_field_on_http);
+    EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
+  }
 }
 
 // Tests that neither |displayed_password_field_on_http| nor
@@ -318,13 +332,26 @@ TEST(SecurityStateTest, PrivateUserDataNotSet) {
   EXPECT_EQ(NONE, security_info.security_level);
 }
 
+// Tests that neither |displayed_password_field_on_http| nor
+// |displayed_credit_card_field_on_http| is set on pseudo URLs when the
+// corresponding VisibleSecurityState flags are not set.
+TEST(SecurityStateTest, PrivateUserDataNotSetOnPseudoUrls) {
+  for (const char* const url : kPseudoUrls) {
+    TestSecurityStateHelper helper;
+    helper.SetUrl(GURL(url));
+    SecurityInfo security_info;
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_FALSE(security_info.displayed_password_field_on_http);
+    EXPECT_FALSE(security_info.displayed_credit_card_field_on_http);
+    EXPECT_EQ(NONE, security_info.security_level);
+  }
+}
+
 // Tests that SSL.MarkHttpAsStatus histogram is updated when security state is
 // computed for a page.
 TEST(SecurityStateTest, MarkHttpAsStatusHistogram) {
   const char* kHistogramName = "SSL.MarkHttpAsStatus";
   base::HistogramTester histograms;
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kMarkHttpAs, switches::kMarkHttpWithPasswordsOrCcWithChip);
   TestSecurityStateHelper helper;
   helper.SetUrl(GURL(kHttpUrl));
 
@@ -340,6 +367,26 @@ TEST(SecurityStateTest, MarkHttpAsStatusHistogram) {
   helper.set_displayed_password_field_on_http(false);
   helper.GetSecurityInfo(&security_info);
   histograms.ExpectUniqueSample(kHistogramName, 2 /* HTTP_SHOW_WARNING */, 2);
+}
+
+TEST(SecurityStateTest, DetectSubjectAltName) {
+  TestSecurityStateHelper helper;
+
+  // Ensure subjectAltName is detected as present when the cert includes it.
+  SecurityInfo san_security_info;
+  helper.GetSecurityInfo(&san_security_info);
+  EXPECT_FALSE(san_security_info.cert_missing_subject_alt_name);
+
+  // Ensure subjectAltName is detected as missing when the cert doesn't
+  // include it.
+  scoped_refptr<net::X509Certificate> cert = net::ImportCertFromFile(
+      net::GetTestCertsDirectory(), "salesforce_com_test.pem");
+  ASSERT_TRUE(cert);
+  helper.SetCertificate(std::move(cert));
+
+  SecurityInfo no_san_security_info;
+  helper.GetSecurityInfo(&no_san_security_info);
+  EXPECT_TRUE(no_san_security_info.cert_missing_subject_alt_name);
 }
 
 }  // namespace security_state

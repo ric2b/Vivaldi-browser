@@ -222,6 +222,14 @@ class MockCryptohomeClient : public CryptohomeClient {
       FlushAndSignBootAttributes,
       void(const cryptohome::FlushAndSignBootAttributesRequest& request,
            const ProtobufMethodCallback& callback));
+  MOCK_METHOD2(
+      RemoveFirmwareManagementParametersFromTpm,
+      void(const cryptohome::RemoveFirmwareManagementParametersRequest& request,
+           const ProtobufMethodCallback& callback));
+  MOCK_METHOD2(
+      SetFirmwareManagementParametersInTpm,
+      void(const cryptohome::SetFirmwareManagementParametersRequest& request,
+           const ProtobufMethodCallback& callback));
 };
 
 }  // namespace chromeos

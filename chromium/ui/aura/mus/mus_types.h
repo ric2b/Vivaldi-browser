@@ -31,8 +31,11 @@ enum class WindowMusType {
   // The window was created by requesting a top level
   // (WindowTree::NewTopLevel()).
   // NOTE: in the window manager (the one responsible for actually creating the
-  // real window) the window is of type LOCAL.
+  // real window) the window is of type TOP_LEVEL_IN_WM.
   TOP_LEVEL,
+
+  // The window is a top level window in the window manager.
+  TOP_LEVEL_IN_WM,
 
   // The window is a display root for the window manager.
   DISPLAY,
@@ -41,7 +44,7 @@ enum class WindowMusType {
   LOCAL,
 
   // Not one of the above. This means the window is visible to the client and
-  // not one of the above values. Practially this means this client is the
+  // not one of the above values. Practically this means this client is the
   // window manager and the window was created by another client.
   OTHER,
 };

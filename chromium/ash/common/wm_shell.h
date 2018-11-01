@@ -41,7 +41,7 @@ class Point;
 }
 
 namespace preferences {
-class PrefObserverStore;
+class PrefClientStore;
 }
 
 namespace views {
@@ -171,7 +171,7 @@ class ASH_EXPORT WmShell : public SessionStateObserver,
 
   PaletteDelegate* palette_delegate() { return palette_delegate_.get(); }
 
-  preferences::PrefObserverStore* pref_store() { return pref_store_.get(); }
+  preferences::PrefClientStore* pref_store() { return pref_store_.get(); }
 
   SessionController* session_controller() { return session_controller_.get(); }
 
@@ -368,6 +368,9 @@ class ASH_EXPORT WmShell : public SessionStateObserver,
   // Called after maximize mode has started, windows might still animate though.
   void OnMaximizeModeStarted();
 
+  // Called after maximize mode is about to end.
+  void OnMaximizeModeEnding();
+
   // Called after maximize mode has ended, windows might still be returning to
   // their original position.
   void OnMaximizeModeEnded();
@@ -430,12 +433,6 @@ class ASH_EXPORT WmShell : public SessionStateObserver,
   void AddLockStateObserver(LockStateObserver* observer);
   void RemoveLockStateObserver(LockStateObserver* observer);
 
-  // Displays the shutdown animation and requests a system shutdown or system
-  // restart depending on the the state of the |RebootOnShutdown| device policy.
-  // TODO(mash): Remove this method and call LockStateController directly when
-  // it is available to code in ash/common.
-  virtual void RequestShutdown() = 0;
-
   void SetShelfDelegateForTesting(std::unique_ptr<ShelfDelegate> test_delegate);
   void SetPaletteDelegateForTesting(
       std::unique_ptr<PaletteDelegate> palette_delegate);
@@ -448,6 +445,9 @@ class ASH_EXPORT WmShell : public SessionStateObserver,
 
   // Enable or disable the laser pointer.
   virtual void SetLaserPointerEnabled(bool enabled) = 0;
+
+  // Enable or disable the partial magnifier.
+  virtual void SetPartialMagnifierEnabled(bool enabled) = 0;
 
   virtual void CreatePointerWatcherAdapter() = 0;
 
@@ -506,7 +506,7 @@ class ASH_EXPORT WmShell : public SessionStateObserver,
   base::ObserverList<ShellObserver> shell_observers_;
   std::unique_ptr<ShellDelegate> delegate_;
 
-  scoped_refptr<preferences::PrefObserverStore> pref_store_;
+  scoped_refptr<preferences::PrefClientStore> pref_store_;
 
   std::unique_ptr<AcceleratorController> accelerator_controller_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;

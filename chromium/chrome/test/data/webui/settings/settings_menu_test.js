@@ -12,7 +12,6 @@ cr.define('settings_menu', function() {
       setup(function() {
         PolymerTest.clearBody();
         settingsMenu = document.createElement('settings-menu');
-        settingsMenu.currentRoute = settings.Route.BASIC;
         document.body.appendChild(settingsMenu);
       });
 
@@ -22,33 +21,32 @@ cr.define('settings_menu', function() {
         assertFalse(settingsMenu.advancedOpened);
         settingsMenu.advancedOpened = true;
         Polymer.dom.flush();
-        assertTrue(settingsMenu.$.advancedPage.opened);
+        assertTrue(settingsMenu.$.advancedSubmenu.opened);
 
         settingsMenu.advancedOpened = false;
         Polymer.dom.flush();
-        assertFalse(settingsMenu.$.advancedPage.opened);
+        assertFalse(settingsMenu.$.advancedSubmenu.opened);
       });
 
       test('tapAdvanced', function() {
         assertFalse(settingsMenu.advancedOpened);
 
-        var advancedTrigger = settingsMenu.$$('#advancedPage .menu-trigger');
-        assertTrue(!!advancedTrigger);
+        var advancedToggle = settingsMenu.$$('#advancedButton');
+        assertTrue(!!advancedToggle);
 
-        MockInteractions.tap(advancedTrigger);
+        MockInteractions.tap(advancedToggle);
         Polymer.dom.flush();
-        assertTrue(settingsMenu.$.advancedPage.opened);
+        assertTrue(settingsMenu.$.advancedSubmenu.opened);
 
-        MockInteractions.tap(advancedTrigger);
+        MockInteractions.tap(advancedToggle);
         Polymer.dom.flush();
-        assertFalse(settingsMenu.$.advancedPage.opened);
+        assertFalse(settingsMenu.$.advancedSubmenu.opened);
       });
 
       test('upAndDownIcons', function() {
         // There should be different icons for a top level menu being open
         // vs. being closed. E.g. arrow-drop-up and arrow-drop-down.
-        var ironIconElement = settingsMenu.$.advancedPage.querySelector(
-            '.menu-trigger iron-icon');
+        var ironIconElement = settingsMenu.$$('#advancedButton iron-icon');
         assertTrue(!!ironIconElement);
 
         settingsMenu.advancedOpened = true;
@@ -61,13 +59,6 @@ cr.define('settings_menu', function() {
         assertNotEquals(openIcon, ironIconElement.icon);
       });
 
-      test('openResetSection', function() {
-        settingsMenu.currentRoute = settings.Route.RESET;
-        var advancedPage = settingsMenu.$.advancedPage;
-        assertEquals('/reset',
-            advancedPage.querySelector('paper-menu').selected);
-      });
-
       // Test that navigating via the paper menu always clears the current
       // search URL parameter.
       test('clearsUrlSearchParam', function() {
@@ -78,6 +69,47 @@ cr.define('settings_menu', function() {
             settings.getQueryParameters().toString());
         MockInteractions.tap(settingsMenu.$.people);
         assertEquals('', settings.getQueryParameters().toString());
+      });
+    });
+
+    suite('SettingsMenuReset', function() {
+      setup(function() {
+        PolymerTest.clearBody();
+        settings.navigateTo(settings.Route.RESET, '');
+        settingsMenu = document.createElement('settings-menu');
+        document.body.appendChild(settingsMenu);
+      });
+
+      teardown(function() { settingsMenu.remove(); });
+
+      test('openResetSection', function() {
+        var selector = settingsMenu.$.subMenu;
+        var path = new window.URL(selector.selected).pathname;
+        assertEquals('/reset', path);
+      });
+
+      test('navigateToAnotherSection', function() {
+        var selector = settingsMenu.$.subMenu;
+        var path = new window.URL(selector.selected).pathname;
+        assertEquals('/reset', path);
+
+        settings.navigateTo(settings.Route.PEOPLE, '');
+        Polymer.dom.flush();
+
+        path = new window.URL(selector.selected).pathname;
+        assertEquals('/people', path);
+      });
+
+      test('navigateToBasic', function() {
+        var selector = settingsMenu.$.subMenu;
+        var path = new window.URL(selector.selected).pathname;
+        assertEquals('/reset', path);
+
+        settings.navigateTo(settings.Route.BASIC, '');
+        Polymer.dom.flush();
+
+        // BASIC has no sub page selected.
+        assertFalse(!!selector.selected);
       });
     });
   }

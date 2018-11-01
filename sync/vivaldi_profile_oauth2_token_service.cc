@@ -16,8 +16,8 @@ VivaldiProfileOAuth2TokenService::PendingRequest::PendingRequest() {}
 VivaldiProfileOAuth2TokenService::PendingRequest::~PendingRequest() {}
 
 VivaldiProfileOAuth2TokenService::VivaldiProfileOAuth2TokenService(
-    OAuth2TokenServiceDelegate* delegate)
-    : ProfileOAuth2TokenService(delegate),
+    std::unique_ptr<OAuth2TokenServiceDelegate> delegate)
+    : ProfileOAuth2TokenService(std::move(delegate)),
       consumer_(NULL),
       weak_ptr_factory_(this) {}
 
@@ -61,4 +61,4 @@ void VivaldiProfileOAuth2TokenService::InvalidateAccessTokenImpl(
     const std::string& access_token) {
   // Do nothing, as we don't have a cache from which to remove the token.
 }
-}
+}  // namespace vivaldi

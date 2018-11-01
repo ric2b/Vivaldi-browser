@@ -8,6 +8,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
@@ -41,6 +42,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class provides the method to start/stop ChildProcess called by native.
+ *
+ * Note about threading. The threading here is complicated and not well documented.
+ * Code can run on these threads: UI, Launcher, async thread pool, binder, and one-off
+ * background threads.
  */
 @JNINamespace("content")
 public class ChildProcessLauncher {
@@ -64,7 +69,8 @@ public class ChildProcessLauncher {
         private final boolean mInSandbox;
         // Each Allocator keeps a queue for the pending spawn data. Once a connection is free, we
         // dequeue the pending spawn data from the same allocator as the connection.
-        private final PendingSpawnQueue mPendingSpawnQueue = new PendingSpawnQueue();
+        // SHOULD BE ACCESSED WITH mConnectionLock.
+        private final Queue<SpawnData> mPendingSpawnQueue = new LinkedList<>();
 
         public ChildConnectionAllocator(boolean inSandbox, int numChildServices,
                 String serviceClassName) {
@@ -77,28 +83,33 @@ public class ChildProcessLauncher {
             mInSandbox = inSandbox;
         }
 
-        public ChildProcessConnection allocate(
-                Context context, ChildProcessConnection.DeathCallback deathCallback,
-                ChromiumLinkerParams chromiumLinkerParams,
-                boolean alwaysInForeground,
-                ChildProcessCreationParams creationParams) {
+        // Allocate or enqueue. If there are no free slots, return null and enqueue the spawn data.
+        public ChildProcessConnection allocate(SpawnData spawnData,
+                ChildProcessConnection.DeathCallback deathCallback,
+                Bundle childProcessCommonParameters, boolean alwaysInForeground) {
+            assert spawnData.inSandbox() == mInSandbox;
             synchronized (mConnectionLock) {
                 if (mFreeConnectionIndices.isEmpty()) {
                     Log.d(TAG, "Ran out of services to allocate.");
+                    if (!spawnData.forWarmUp()) {
+                        mPendingSpawnQueue.add(spawnData);
+                    }
                     return null;
                 }
                 int slot = mFreeConnectionIndices.remove(0);
                 assert mChildProcessConnections[slot] == null;
-                mChildProcessConnections[slot] = new ChildProcessConnectionImpl(context, slot,
-                        mInSandbox, deathCallback, mChildClassName, chromiumLinkerParams,
-                        alwaysInForeground, creationParams);
+                mChildProcessConnections[slot] =
+                        new ChildProcessConnectionImpl(spawnData.context(), slot, mInSandbox,
+                                deathCallback, mChildClassName, childProcessCommonParameters,
+                                alwaysInForeground, spawnData.getCreationParams());
                 Log.d(TAG, "Allocator allocated a connection, sandbox: %b, slot: %d", mInSandbox,
                         slot);
                 return mChildProcessConnections[slot];
             }
         }
 
-        public void free(ChildProcessConnection connection) {
+        // Also return the first SpawnData in the pending queue, if any.
+        public SpawnData free(ChildProcessConnection connection) {
             synchronized (mConnectionLock) {
                 int slot = connection.getServiceNumber();
                 if (mChildProcessConnections[slot] != connection) {
@@ -114,6 +125,7 @@ public class ChildProcessLauncher {
                     Log.d(TAG, "Allocator freed a connection, sandbox: %b, slot: %d", mInSandbox,
                             slot);
                 }
+                return mPendingSpawnQueue.poll();
             }
         }
 
@@ -123,18 +135,34 @@ public class ChildProcessLauncher {
             }
         }
 
-        public PendingSpawnQueue getPendingSpawnQueue() {
-            return mPendingSpawnQueue;
-        }
-
         /** @return the count of connections managed by the allocator */
         @VisibleForTesting
         int allocatedConnectionsCountForTesting() {
             return mChildProcessConnections.length - mFreeConnectionIndices.size();
         }
+
+        @VisibleForTesting
+        ChildProcessConnection[] connectionArrayForTesting() {
+            return mChildProcessConnections;
+        }
+
+        @VisibleForTesting
+        void enqueuePendingQueueForTesting(SpawnData spawnData) {
+            synchronized (mConnectionLock) {
+                mPendingSpawnQueue.add(spawnData);
+            }
+        }
+
+        @VisibleForTesting
+        int pendingSpawnsCountForTesting() {
+            synchronized (mConnectionLock) {
+                return mPendingSpawnQueue.size();
+            }
+        }
     }
 
-    private static class PendingSpawnData {
+    private static class SpawnData {
+        private final boolean mForWarmup; // Do not queue up if failed.
         private final Context mContext;
         private final String[] mCommandLine;
         private final int mChildProcessId;
@@ -144,15 +172,10 @@ public class ChildProcessLauncher {
         private final boolean mInSandbox;
         private final ChildProcessCreationParams mCreationParams;
 
-        private PendingSpawnData(
-                Context context,
-                String[] commandLine,
-                int childProcessId,
-                FileDescriptorInfo[] filesToBeMapped,
-                long clientContext,
-                int callbackType,
-                boolean inSandbox,
-                ChildProcessCreationParams creationParams) {
+        private SpawnData(boolean forWarmUp, Context context, String[] commandLine,
+                int childProcessId, FileDescriptorInfo[] filesToBeMapped, long clientContext,
+                int callbackType, boolean inSandbox, ChildProcessCreationParams creationParams) {
+            mForWarmup = forWarmUp;
             mContext = context;
             mCommandLine = commandLine;
             mChildProcessId = childProcessId;
@@ -161,6 +184,10 @@ public class ChildProcessLauncher {
             mCallbackType = callbackType;
             mInSandbox = inSandbox;
             mCreationParams = creationParams;
+        }
+
+        private boolean forWarmUp() {
+            return mForWarmup;
         }
 
         private Context context() {
@@ -186,37 +213,6 @@ public class ChildProcessLauncher {
         }
         private ChildProcessCreationParams getCreationParams() {
             return mCreationParams;
-        }
-    }
-
-    private static class PendingSpawnQueue {
-        // The list of pending process spawn requests and its lock.
-        // Operations on this queue must be atomical w.r.t. free connections updates.
-        private Queue<PendingSpawnData> mPendingSpawns = new LinkedList<PendingSpawnData>();
-        final Object mPendingSpawnsLock = new Object();
-
-        /**
-         * Queue up a spawn requests to be processed once a free service is available.
-         * Called when a spawn is requested while we are at the capacity.
-         */
-        public void enqueueLocked(final PendingSpawnData pendingSpawn) {
-            assert Thread.holdsLock(mPendingSpawnsLock);
-            mPendingSpawns.add(pendingSpawn);
-        }
-
-        /**
-         * Pop the next request from the queue. Called when a free service is available.
-         * @return the next spawn request waiting in the queue.
-         */
-        public PendingSpawnData dequeueLocked() {
-            assert Thread.holdsLock(mPendingSpawnsLock);
-            return mPendingSpawns.poll();
-        }
-
-        /** @return the count of pending spawns in the queue */
-        public int sizeLocked() {
-            assert Thread.holdsLock(mPendingSpawnsLock);
-            return mPendingSpawns.size();
         }
     }
 
@@ -350,18 +346,14 @@ public class ChildProcessLauncher {
         return sSandboxedChildConnectionAllocatorMap.get(packageName);
     }
 
-    /**
-     * Get the PendingSpawnQueue of the Allocator. Initialize the Allocator if needed.
-     */
-    private static PendingSpawnQueue getPendingSpawnQueue(Context context, String packageName,
-            boolean inSandbox) {
+    private static ChildConnectionAllocator getAllocatorForTesting(
+            Context context, String packageName, boolean inSandbox) {
         initConnectionAllocatorsIfNecessary(context, inSandbox, packageName);
-        return getConnectionAllocator(packageName, inSandbox).getPendingSpawnQueue();
+        return getConnectionAllocator(packageName, inSandbox);
     }
 
-    private static ChildProcessConnection allocateConnection(Context context, boolean inSandbox,
-            ChromiumLinkerParams chromiumLinkerParams, boolean alwaysInForeground,
-            ChildProcessCreationParams creationParams) {
+    private static ChildProcessConnection allocateConnection(
+            SpawnData spawnData, Bundle childProcessCommonParams, boolean alwaysInForeground) {
         ChildProcessConnection.DeathCallback deathCallback =
                 new ChildProcessConnection.DeathCallback() {
                     @Override
@@ -373,12 +365,14 @@ public class ChildProcessLauncher {
                         }
                     }
                 };
-        String packageName = creationParams != null ? creationParams.getPackageName()
-                : context.getPackageName();
+        final ChildProcessCreationParams creationParams = spawnData.getCreationParams();
+        final Context context = spawnData.context();
+        final boolean inSandbox = spawnData.inSandbox();
+        String packageName =
+                creationParams != null ? creationParams.getPackageName() : context.getPackageName();
         initConnectionAllocatorsIfNecessary(context, inSandbox, packageName);
         return getConnectionAllocator(packageName, inSandbox)
-                .allocate(context, deathCallback, chromiumLinkerParams, alwaysInForeground,
-                        creationParams);
+                .allocate(spawnData, deathCallback, childProcessCommonParams, alwaysInForeground);
     }
 
     private static boolean sLinkerInitialized;
@@ -411,19 +405,30 @@ public class ChildProcessLauncher {
         }
     }
 
-    private static ChildProcessConnection allocateBoundConnection(Context context,
-            String[] commandLine, boolean inSandbox, boolean alwaysInForeground,
-            ChildProcessCreationParams creationParams) {
-        ChromiumLinkerParams chromiumLinkerParams = getLinkerParamsForNewConnection();
-        ChildProcessConnection connection = allocateConnection(
-                context, inSandbox, chromiumLinkerParams, alwaysInForeground, creationParams);
+    private static Bundle createCommonParamsBundle(ChildProcessCreationParams params) {
+        Bundle commonParams = new Bundle();
+        commonParams.putParcelable(
+                ChildProcessConstants.EXTRA_LINKER_PARAMS, getLinkerParamsForNewConnection());
+        final boolean bindToCallerCheck = params == null ? false : params.getBindToCallerCheck();
+        commonParams.putBoolean(ChildProcessConstants.EXTRA_BIND_TO_CALLER, bindToCallerCheck);
+        return commonParams;
+    }
+
+    private static ChildProcessConnection allocateBoundConnection(SpawnData spawnData,
+            boolean alwaysInForeground, ChildProcessConnection.StartCallback startCallback) {
+        final Context context = spawnData.context();
+        final boolean inSandbox = spawnData.inSandbox();
+        final ChildProcessCreationParams creationParams = spawnData.getCreationParams();
+        ChildProcessConnection connection = allocateConnection(spawnData,
+                createCommonParamsBundle(spawnData.getCreationParams()), alwaysInForeground);
         if (connection != null) {
-            connection.start(commandLine);
+            connection.start(startCallback);
 
             String packageName = creationParams != null ? creationParams.getPackageName()
-                    : context.getPackageName();
-            if (inSandbox && !getConnectionAllocator(packageName, inSandbox)
-                    .isFreeConnectionAvailable()) {
+                                                        : context.getPackageName();
+            if (inSandbox
+                    && !getConnectionAllocator(packageName, inSandbox)
+                                .isFreeConnectionAvailable()) {
                 // Proactively releases all the moderate bindings once all the sandboxed services
                 // are allocated, which will be very likely to have some of them killed by OOM
                 // killer.
@@ -436,7 +441,7 @@ public class ChildProcessLauncher {
     private static final long FREE_CONNECTION_DELAY_MILLIS = 1;
 
     private static void freeConnection(ChildProcessConnection connection) {
-        synchronized (ChildProcessLauncher.class) {
+        synchronized (sSpareConnectionLock) {
             if (connection.equals(sSpareSandboxedConnection)) sSpareSandboxedConnection = null;
         }
 
@@ -449,7 +454,7 @@ public class ChildProcessLauncher {
         ThreadUtils.postOnUiThreadDelayed(new Runnable() {
             @Override
             public void run() {
-                final PendingSpawnData pendingSpawn = freeConnectionAndDequeuePending(conn);
+                final SpawnData pendingSpawn = freeConnectionAndDequeuePending(conn);
                 if (pendingSpawn != null) {
                     new Thread(new Runnable() {
                         @Override
@@ -465,15 +470,11 @@ public class ChildProcessLauncher {
         }, FREE_CONNECTION_DELAY_MILLIS);
     }
 
-    private static PendingSpawnData freeConnectionAndDequeuePending(ChildProcessConnection conn) {
+    private static SpawnData freeConnectionAndDequeuePending(ChildProcessConnection conn) {
         ChildConnectionAllocator allocator = getConnectionAllocator(
                 conn.getPackageName(), conn.isInSandbox());
         assert allocator != null;
-        PendingSpawnQueue pendingSpawnQueue = allocator.getPendingSpawnQueue();
-        synchronized (pendingSpawnQueue.mPendingSpawnsLock) {
-            allocator.free(conn);
-            return pendingSpawnQueue.dequeueLocked();
-        }
+        return allocator.free(conn);
     }
 
     // Represents an invalid process handle; same as base/process/process.h kNullProcessHandle.
@@ -483,8 +484,16 @@ public class ChildProcessLauncher {
     private static Map<Integer, ChildProcessConnection> sServiceMap =
             new ConcurrentHashMap<Integer, ChildProcessConnection>();
 
+    // Lock and monitor for these members {{{
+    private static final Object sSpareConnectionLock = new Object();
     // A pre-allocated and pre-bound connection ready for connection setup, or null.
     private static ChildProcessConnection sSpareSandboxedConnection;
+    // If sSpareSandboxedConnection is not null, this indicates whether the service is
+    // ready for connection setup. Wait on the monitor lock to be notified when this
+    // state changes. sSpareSandboxedConnection may be null after waiting, if starting
+    // the service failed.
+    private static boolean sSpareConnectionStarting;
+    // }}}
 
     // Manages oom bindings used to bind chind services.
     private static BindingManager sBindingManager = BindingManagerImpl.createBindingManager();
@@ -567,15 +576,38 @@ public class ChildProcessLauncher {
      * @param context the application context used for the connection.
      */
     public static void warmUp(Context context) {
-        synchronized (ChildProcessLauncher.class) {
+        synchronized (sSpareConnectionLock) {
             assert !ThreadUtils.runningOnUiThread();
             if (sSpareSandboxedConnection == null) {
-                ChildProcessCreationParams params = ChildProcessCreationParams.get();
-                if (params != null) {
-                    params = params.copy();
-                }
-                sSpareSandboxedConnection = allocateBoundConnection(context, null, true, false,
-                        params);
+                ChildProcessCreationParams params = ChildProcessCreationParams.getDefault();
+                sSpareConnectionStarting = true;
+
+                ChildProcessConnection.StartCallback startCallback =
+                        new ChildProcessConnection.StartCallback() {
+                            @Override
+                            public void onChildStarted() {
+                                synchronized (sSpareConnectionLock) {
+                                    sSpareConnectionStarting = false;
+                                    sSpareConnectionLock.notify();
+                                }
+                            }
+
+                            @Override
+                            public void onChildStartFailed() {
+                                Log.e(TAG, "Failed to warm up the spare sandbox service");
+                                synchronized (sSpareConnectionLock) {
+                                    sSpareSandboxedConnection = null;
+                                    sSpareConnectionStarting = false;
+                                    sSpareConnectionLock.notify();
+                                }
+                            }
+                        };
+                SpawnData spawnData = new SpawnData(true /* forWarmUp*/, context,
+                        null /* commandLine */, -1 /* child process id */,
+                        null /* filesToBeMapped */, 0 /* clientContext */,
+                        CALLBACK_FOR_RENDERER_PROCESS, true /* inSandbox */, params);
+                sSpareSandboxedConnection = allocateBoundConnection(
+                        spawnData, false /* alwaysInForeground */, startCallback);
             }
         }
     }
@@ -605,22 +637,23 @@ public class ChildProcessLauncher {
      * always comes from the main thread).
      *
      * @param context Context used to obtain the application context.
+     * @param paramId Key used to retrieve ChildProcessCreationParams.
      * @param commandLine The child process command line argv.
      * @param filesToBeMapped File IDs, FDs, offsets, and lengths to pass through.
      * @param clientContext Arbitrary parameter used by the client to distinguish this connection.
      */
+    // TODO(boliu): All tests should use this over startForTesting.
+    @VisibleForTesting
     @CalledByNative
-    private static void start(Context context, final String[] commandLine, int childProcessId,
+    static void start(Context context, int paramId, final String[] commandLine, int childProcessId,
             FileDescriptorInfo[] filesToBeMapped, long clientContext) {
-        assert clientContext != 0;
-
         int callbackType = CALLBACK_FOR_UNKNOWN_PROCESS;
         boolean inSandbox = true;
         String processType =
                 ContentSwitches.getSwitchValue(commandLine, ContentSwitches.SWITCH_PROCESS_TYPE);
-        ChildProcessCreationParams params = ChildProcessCreationParams.get();
-        if (params != null) {
-            params = params.copy();
+        ChildProcessCreationParams params = ChildProcessCreationParams.get(paramId);
+        if (paramId != ChildProcessCreationParams.DEFAULT_ID && params == null) {
+            throw new RuntimeException("CreationParams id " + paramId + " not found");
         }
         if (ContentSwitches.SWITCH_RENDERER_PROCESS.equals(processType)) {
             callbackType = CALLBACK_FOR_RENDERER_PROCESS;
@@ -635,8 +668,10 @@ public class ChildProcessLauncher {
                 // name. In WebAPK, ChildProcessCreationParams are initialized with WebAPK's
                 // package name. Make a copy of the WebAPK's params, but replace the package with
                 // Chrome's package to use when initializing a non-renderer processes.
+                // TODO(boliu): Should fold into |paramId|. Investigate why this is needed.
                 params = new ChildProcessCreationParams(context.getPackageName(),
-                        params.getIsExternalService(), params.getLibraryProcessType());
+                        params.getIsExternalService(), params.getLibraryProcessType(),
+                        params.getBindToCallerCheck());
             }
             if (ContentSwitches.SWITCH_GPU_PROCESS.equals(processType)) {
                 callbackType = CALLBACK_FOR_GPU_PROCESS;
@@ -653,24 +688,33 @@ public class ChildProcessLauncher {
                 callbackType, inSandbox, params);
     }
 
-    private static void startInternal(
-            Context context,
+    private static ChildProcessConnection startInternal(
+            final Context context,
             final String[] commandLine,
-            int childProcessId,
-            FileDescriptorInfo[] filesToBeMapped,
-            long clientContext,
-            int callbackType,
-            boolean inSandbox,
-            ChildProcessCreationParams creationParams) {
+            final int childProcessId,
+            final FileDescriptorInfo[] filesToBeMapped,
+            final long clientContext,
+            final int callbackType,
+            final boolean inSandbox,
+            final ChildProcessCreationParams creationParams) {
         try {
             TraceEvent.begin("ChildProcessLauncher.startInternal");
 
             ChildProcessConnection allocatedConnection = null;
             String packageName = creationParams != null ? creationParams.getPackageName()
                     : context.getPackageName();
-            synchronized (ChildProcessLauncher.class) {
+            synchronized (sSpareConnectionLock) {
                 if (inSandbox && sSpareSandboxedConnection != null
-                        && sSpareSandboxedConnection.getPackageName().equals(packageName)) {
+                        && sSpareSandboxedConnection.getPackageName().equals(packageName)
+                        // Object identity check for getDefault should be enough. The default is
+                        // not supposed to change once set.
+                        && creationParams == ChildProcessCreationParams.getDefault()) {
+                    while (sSpareConnectionStarting) {
+                        try {
+                            sSpareConnectionLock.wait();
+                        } catch (InterruptedException ex) {
+                        }
+                    }
                     allocatedConnection = sSpareSandboxedConnection;
                     sSpareSandboxedConnection = null;
                 }
@@ -678,18 +722,37 @@ public class ChildProcessLauncher {
             if (allocatedConnection == null) {
                 boolean alwaysInForeground = false;
                 if (callbackType == CALLBACK_FOR_GPU_PROCESS) alwaysInForeground = true;
-                PendingSpawnQueue pendingSpawnQueue = getPendingSpawnQueue(
-                        context, packageName, inSandbox);
-                synchronized (pendingSpawnQueue.mPendingSpawnsLock) {
-                    allocatedConnection = allocateBoundConnection(
-                            context, commandLine, inSandbox, alwaysInForeground, creationParams);
-                    if (allocatedConnection == null) {
-                        Log.d(TAG, "Allocation of new service failed. Queuing up pending spawn.");
-                        pendingSpawnQueue.enqueueLocked(new PendingSpawnData(context, commandLine,
-                                childProcessId, filesToBeMapped, clientContext,
-                                callbackType, inSandbox, creationParams));
-                        return;
-                    }
+                ChildProcessConnection.StartCallback startCallback =
+                        new ChildProcessConnection.StartCallback() {
+                            @Override
+                            public void onChildStarted() {}
+
+                            @Override
+                            public void onChildStartFailed() {
+                                Log.e(TAG, "ChildProcessConnection.start failed, trying again");
+                                AsyncTask.THREAD_POOL_EXECUTOR.execute(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        // The child process may already be bound to another client
+                                        // (this can happen if multi-process WebView is used in more
+                                        // than one process), so try starting the process again.
+                                        // This connection that failed to start has not been freed,
+                                        // so a new bound connection will be allocated.
+                                        startInternal(context, commandLine, childProcessId,
+                                                filesToBeMapped, clientContext, callbackType,
+                                                inSandbox, creationParams);
+                                    }
+                                });
+                            }
+                        };
+
+                SpawnData spawnData = new SpawnData(false /* forWarmUp */, context, commandLine,
+                        childProcessId, filesToBeMapped, clientContext, callbackType, inSandbox,
+                        creationParams);
+                allocatedConnection =
+                        allocateBoundConnection(spawnData, alwaysInForeground, startCallback);
+                if (allocatedConnection == null) {
+                    return null;
                 }
             }
 
@@ -697,6 +760,7 @@ public class ChildProcessLauncher {
                     allocatedConnection.getServiceNumber());
             triggerConnectionSetup(allocatedConnection, commandLine, childProcessId,
                     filesToBeMapped, callbackType, clientContext);
+            return allocatedConnection;
         } finally {
             TraceEvent.end("ChildProcessLauncher.startInternal");
         }
@@ -778,25 +842,6 @@ public class ChildProcessLauncher {
     private static IChildProcessCallback createCallback(
             final int childProcessId, final int callbackType) {
         return new IChildProcessCallback.Stub() {
-            /**
-             * This is called by the remote service regularly to tell us about new values. Note that
-             * IPC calls are dispatched through a thread pool running in each process, so the code
-             * executing here will NOT be running in our main thread -- so, to update the UI, we
-             * need to use a Handler.
-             */
-            @Override
-            public void establishSurfacePeer(
-                    int pid, Surface surface, int primaryID, int secondaryID) {
-                // Do not allow a malicious renderer to connect to a producer. This is only used
-                // from stream textures managed by the GPU process.
-                if (callbackType != CALLBACK_FOR_GPU_PROCESS) {
-                    Log.e(TAG, "Illegal callback for non-GPU process.");
-                    return;
-                }
-
-                nativeEstablishSurfacePeer(pid, surface, primaryID, secondaryID);
-            }
-
             @Override
             public void forwardSurfaceForSurfaceRequest(
                     UnguessableToken requestToken, Surface surface) {
@@ -834,16 +879,30 @@ public class ChildProcessLauncher {
     }
 
     @VisibleForTesting
-    static ChildProcessConnection allocateBoundConnectionForTesting(Context context,
-            ChildProcessCreationParams creationParams) {
-        return allocateBoundConnection(context, null, true, false, creationParams);
+    public static ChildProcessConnection startForTesting(Context context, String[] commandLine,
+            FileDescriptorInfo[] filesToMap, ChildProcessCreationParams params) {
+        return startInternal(context, commandLine, 0, filesToMap, 0,
+                CALLBACK_FOR_RENDERER_PROCESS, true, params);
     }
 
     @VisibleForTesting
-    static ChildProcessConnection allocateConnectionForTesting(Context context,
+    static ChildProcessConnection allocateBoundConnectionForTesting(Context context,
             ChildProcessCreationParams creationParams) {
+        return allocateBoundConnection(
+                new SpawnData(false /* forWarmUp */, context, null /* commandLine */,
+                        0 /* childProcessId */, null /* filesToBeMapped */, 0 /* clientContext */,
+                        CALLBACK_FOR_RENDERER_PROCESS, true /* inSandbox */, creationParams),
+                false /* alwaysInForeground */, null);
+    }
+
+    @VisibleForTesting
+    static ChildProcessConnection allocateConnectionForTesting(
+            Context context, ChildProcessCreationParams creationParams) {
         return allocateConnection(
-                context, true, getLinkerParamsForNewConnection(), false, creationParams);
+                new SpawnData(false /* forWarmUp */, context, null /* commandLine */,
+                        0 /* childProcessId */, null /* filesToBeMapped */, 0 /* clientContext */,
+                        CALLBACK_FOR_RENDERER_PROCESS, true /* inSandbox */, creationParams),
+                createCommonParamsBundle(creationParams), false);
     }
 
     /**
@@ -854,13 +913,11 @@ public class ChildProcessLauncher {
             ChildProcessCreationParams creationParams, boolean inSandbox) {
         String packageName = creationParams != null ? creationParams.getPackageName()
                 : context.getPackageName();
-        PendingSpawnQueue pendingSpawnQueue = getPendingSpawnQueue(context,
-                packageName, inSandbox);
-        synchronized (pendingSpawnQueue.mPendingSpawnsLock) {
-            pendingSpawnQueue.enqueueLocked(new PendingSpawnData(context, commandLine, 1,
-                    new FileDescriptorInfo[0], 0, CALLBACK_FOR_RENDERER_PROCESS, true,
-                    creationParams));
-        }
+        ChildConnectionAllocator allocator =
+                getAllocatorForTesting(context, packageName, inSandbox);
+        allocator.enqueuePendingQueueForTesting(new SpawnData(false /* forWarmUp*/, context,
+                commandLine, 1, new FileDescriptorInfo[0], 0, CALLBACK_FOR_RENDERER_PROCESS, true,
+                creationParams));
     }
 
     /**
@@ -872,6 +929,14 @@ public class ChildProcessLauncher {
         initConnectionAllocatorsIfNecessary(context, true, packageName);
         return sSandboxedChildConnectionAllocatorMap.get(packageName)
                 .allocatedConnectionsCountForTesting();
+    }
+
+    /**
+     * @return gets the service connection array for a specific package name.
+     */
+    @VisibleForTesting
+    static ChildProcessConnection[] getSandboxedConnectionArrayForTesting(String packageName) {
+        return sSandboxedChildConnectionAllocatorMap.get(packageName).connectionArrayForTesting();
     }
 
     /** @return the count of services set up and working */
@@ -887,12 +952,11 @@ public class ChildProcessLauncher {
      * @return the count of pending spawns in the queue.
      */
     @VisibleForTesting
-    static int pendingSpawnsCountForTesting(Context context, String packageName,
-            boolean inSandbox) {
-        PendingSpawnQueue pendingSpawnQueue = getPendingSpawnQueue(context, packageName, inSandbox);
-        synchronized (pendingSpawnQueue.mPendingSpawnsLock) {
-            return pendingSpawnQueue.sizeLocked();
-        }
+    static int pendingSpawnsCountForTesting(
+            Context context, String packageName, boolean inSandbox) {
+        ChildConnectionAllocator allocator =
+                getAllocatorForTesting(context, packageName, inSandbox);
+        return allocator.pendingSpawnsCountForTesting();
     }
 
     /**
@@ -913,8 +977,6 @@ public class ChildProcessLauncher {
     }
 
     private static native void nativeOnChildProcessStarted(long clientContext, int pid);
-    private static native void nativeEstablishSurfacePeer(
-            int pid, Surface surface, int primaryID, int secondaryID);
     private static native void nativeCompleteScopedSurfaceRequest(
             UnguessableToken requestToken, Surface surface);
     private static native boolean nativeIsSingleProcess();

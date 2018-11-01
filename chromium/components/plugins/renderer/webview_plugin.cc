@@ -17,7 +17,7 @@
 #include "content/public/renderer/render_view.h"
 #include "gin/converter.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -219,7 +219,8 @@ blink::WebInputEventResult WebViewPlugin::handleInputEvent(
     return blink::WebInputEventResult::HandledSuppressed;
   }
   current_cursor_ = cursor;
-  blink::WebInputEventResult handled = web_view()->handleInputEvent(event);
+  blink::WebInputEventResult handled =
+      web_view()->handleInputEvent(blink::WebCoalescedInputEvent(event));
   cursor = current_cursor_;
 
   return handled;
@@ -253,7 +254,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
   WebLocalFrame* web_frame = WebLocalFrame::create(
-      blink::WebTreeScopeType::Document, this);
+      blink::WebTreeScopeType::Document, this, nullptr, nullptr);
   web_view_->setMainFrame(web_frame);
   // TODO(dcheng): The main frame widget currently has a special case.
   // Eliminate this once WebView is no longer a WebWidget.

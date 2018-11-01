@@ -240,15 +240,46 @@ LayoutMultiColumnSet* LayoutMultiColumnSet::previousSiblingMultiColumnSet()
   return nullptr;
 }
 
-bool LayoutMultiColumnSet::hasFragmentainerGroupForColumnAt(
+bool LayoutMultiColumnSet::needsNewFragmentainerGroupAt(
     LayoutUnit offsetInFlowThread,
     PageBoundaryRule pageBoundaryRule) const {
+  // First the cheap check: Perhaps the last fragmentainer group has sufficient
+  // capacity?
   const MultiColumnFragmentainerGroup& lastRow = lastFragmentainerGroup();
   LayoutUnit maxLogicalBottomInFlowThread =
       lastRow.logicalTopInFlowThread() + fragmentainerGroupCapacity(lastRow);
-  if (pageBoundaryRule == AssociateWithFormerPage)
-    return offsetInFlowThread <= maxLogicalBottomInFlowThread;
-  return offsetInFlowThread < maxLogicalBottomInFlowThread;
+  if (pageBoundaryRule == AssociateWithFormerPage) {
+    if (offsetInFlowThread <= maxLogicalBottomInFlowThread)
+      return false;
+  } else if (offsetInFlowThread < maxLogicalBottomInFlowThread) {
+    return false;
+  }
+
+  // So, there's not enough room in the last fragmentainer group. However,
+  // there can only ever be one fragmentainer group per column set if we're not
+  // nested inside another fragmentation context. We'll just create overflowing
+  // columns if the fragmentainer group cannot hold all the content.
+  if (!multiColumnFlowThread()->enclosingFragmentationContext())
+    return false;
+
+  // We're in a nested fragmentation context, and the last fragmentainer group
+  // cannot hold content at the specified offset without overflowing. This
+  // usually warrants a new fragmentainer group; however, this will not be the
+  // case if we have already allocated all available block space in this
+  // multicol container. When setting up a new fragmentainer group, we always
+  // constrain against the remaining portion of any specified
+  // height/max-height. This means that we shouldn't allow creation of
+  // fragmentainer groups below the bottom of the multicol container, or we'd
+  // end up with zero-height fragmentainer groups (or actually 1px; see
+  // heightAdjustedForRowOffset() in MultiColumnFragmentainerGroup, which
+  // guards against zero-height groups), i.e. potentially a lot of pretty
+  // useless fragmentainer groups, and possibly broken layout too. Instead,
+  // we'll just allow additional (overflowing) columns to be created in the
+  // last fragmentainer group, similar to what we do when we're not nested.
+  LayoutUnit logicalBottom = lastRow.logicalTop() + lastRow.logicalHeight();
+  LayoutUnit spaceUsed = logicalBottom + logicalTopFromMulticolContentEdge();
+  LayoutUnit maxColumnHeight = multiColumnFlowThread()->maxColumnLogicalHeight();
+  return maxColumnHeight - spaceUsed > LayoutUnit();
 }
 
 MultiColumnFragmentainerGroup&
@@ -300,50 +331,6 @@ LayoutUnit LayoutMultiColumnSet::logicalTopInFlowThread() const {
 
 LayoutUnit LayoutMultiColumnSet::logicalBottomInFlowThread() const {
   return lastFragmentainerGroup().logicalBottomInFlowThread();
-}
-
-LayoutRect LayoutMultiColumnSet::flowThreadPortionOverflowRect() const {
-  return overflowRectForFlowThreadPortion(flowThreadPortionRect(),
-                                          !previousSiblingMultiColumnSet(),
-                                          !nextSiblingMultiColumnSet());
-}
-
-LayoutRect LayoutMultiColumnSet::overflowRectForFlowThreadPortion(
-    const LayoutRect& flowThreadPortionRect,
-    bool isFirstPortion,
-    bool isLastPortion) const {
-  if (hasOverflowClip())
-    return flowThreadPortionRect;
-
-  LayoutRect flowThreadOverflow = m_flowThread->visualOverflowRect();
-
-  // Only clip along the flow thread axis.
-  LayoutRect clipRect;
-  if (m_flowThread->isHorizontalWritingMode()) {
-    LayoutUnit minY =
-        isFirstPortion ? flowThreadOverflow.y() : flowThreadPortionRect.y();
-    LayoutUnit maxY = isLastPortion ? std::max(flowThreadPortionRect.maxY(),
-                                               flowThreadOverflow.maxY())
-                                    : flowThreadPortionRect.maxY();
-    LayoutUnit minX =
-        std::min(flowThreadPortionRect.x(), flowThreadOverflow.x());
-    LayoutUnit maxX =
-        std::max(flowThreadPortionRect.maxX(), flowThreadOverflow.maxX());
-    clipRect = LayoutRect(minX, minY, maxX - minX, maxY - minY);
-  } else {
-    LayoutUnit minX =
-        isFirstPortion ? flowThreadOverflow.x() : flowThreadPortionRect.x();
-    LayoutUnit maxX = isLastPortion ? std::max(flowThreadPortionRect.maxX(),
-                                               flowThreadOverflow.maxX())
-                                    : flowThreadPortionRect.maxX();
-    LayoutUnit minY =
-        std::min(flowThreadPortionRect.y(), (flowThreadOverflow.y()));
-    LayoutUnit maxY =
-        std::max(flowThreadPortionRect.y(), (flowThreadOverflow.maxY()));
-    clipRect = LayoutRect(minX, minY, maxX - minX, maxY - minY);
-  }
-
-  return clipRect;
 }
 
 bool LayoutMultiColumnSet::heightIsAuto() const {

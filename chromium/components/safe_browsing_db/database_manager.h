@@ -46,7 +46,8 @@ class SafeBrowsingDatabaseManager
     virtual void OnCheckApiBlacklistUrlResult(const GURL& url,
                                               const ThreatMetadata& metadata) {}
 
-    // Called when the result of checking a browse URL is known.
+    // Called when the result of checking a browse URL is known or the result of
+    // checking the URL for subresource filter is known.
     virtual void OnCheckBrowseUrlResult(const GURL& url,
                                         SBThreatType threat_type,
                                         const ThreatMetadata& metadata) {}
@@ -116,6 +117,15 @@ class SafeBrowsingDatabaseManager
   // Otherwise it returns false, and "client" is called asynchronously with the
   // result when it is ready.
   virtual bool CheckBrowseUrl(const GURL& url, Client* client) = 0;
+
+  // Called on the IO thread to check if the given url belongs to the
+  // subresource filter list. If the url doesn't belong to the list, the check
+  // happens synchronously, otherwise it returns false, and "client" is called
+  // asynchronously with the result when it is ready.
+  // Currently supported only on desktop. Returns TRUE if the list is not yet
+  // available.
+  virtual bool CheckUrlForSubresourceFilter(const GURL& url,
+                                            Client* client) = 0;
 
   // Check if the prefix for |url| is in safebrowsing download add lists.
   // Result will be passed to callback in |client|.
@@ -196,12 +206,16 @@ class SafeBrowsingDatabaseManager
 
   // Called to initialize objects that are used on the io_thread, such as the
   // v4 protocol manager.  This may be called multiple times during the life of
-  // the DatabaseManager. Must be called on IO thread.
+  // the DatabaseManager. Must be called on IO thread. All subclasses should
+  // override this method, set enabled_ to true and call the base class method
+  // at the top of it.
   virtual void StartOnIOThread(
       net::URLRequestContextGetter* request_context_getter,
       const V4ProtocolConfig& config);
 
-  // Called to stop or shutdown operations on the io_thread.
+  // Called to stop or shutdown operations on the io_thread. All subclasses
+  // should override this method, set enabled_ to false and call the base class
+  // method at the bottom of it.
   virtual void StopOnIOThread(bool shutdown);
 
  protected:
@@ -261,6 +275,10 @@ class SafeBrowsingDatabaseManager
   // In-progress checks. This set owns the SafeBrowsingApiCheck pointers and is
   // responsible for deleting them when removing from the set.
   ApiCheckSet api_checks_;
+
+  // Whether the service is running. 'enabled_' is used by the
+  // SafeBrowsingDatabaseManager on the IO thread during normal operations.
+  bool enabled_;
 
   // Created and destroyed via StartOnIOThread/StopOnIOThread.
   std::unique_ptr<V4GetHashProtocolManager> v4_get_hash_protocol_manager_;

@@ -34,31 +34,28 @@
 #include "bindings/core/v8/SharedPersistent.h"
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/CoreExport.h"
-#include "core/fetch/AccessControlStatus.h"
-#include "core/fetch/CrossOriginAccessControl.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/AccessControlStatus.h"
+#include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "v8/include/v8.h"
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 #include "wtf/text/TextPosition.h"
-#include <v8.h>
 
 namespace blink {
 
 class DOMWrapperWorld;
 class Element;
+class FrameViewBase;
 class KURL;
 class ScriptSourceCode;
 class SecurityOrigin;
-class Widget;
 
 typedef WTF::Vector<v8::Extension*> V8Extensions;
 
-enum ReasonForCallingCanExecuteScripts {
-  AboutToExecuteScript,
-  NotAboutToExecuteScript
-};
 
 class CORE_EXPORT ScriptController final
     : public GarbageCollected<ScriptController> {
@@ -114,12 +111,10 @@ class CORE_EXPORT ScriptController final
   // ignored when evaluating resources injected into the DOM.
   bool shouldBypassMainWorldCSP();
 
-  PassRefPtr<SharedPersistent<v8::Object>> createPluginWrapper(Widget*);
+  PassRefPtr<SharedPersistent<v8::Object>> createPluginWrapper(FrameViewBase*);
 
   void enableEval();
   void disableEval(const String& errorMessage);
-
-  bool canExecuteScripts(ReasonForCallingCanExecuteScripts);
 
   TextPosition eventHandlerPosition() const;
 

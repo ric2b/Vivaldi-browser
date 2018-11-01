@@ -44,6 +44,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.ExternalAppId;
 import org.chromium.chrome.browser.KeyboardShortcuts;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
@@ -142,6 +143,15 @@ public class CustomTabActivity extends ChromeActivity {
             mConnection.notifyPageLoadMetric(mSession, PageLoadMetrics.FIRST_CONTENTFUL_PAINT,
                     navigationStartTick, firstContentfulPaintMs);
         }
+
+        @Override
+        public void onLoadEventStart(
+                WebContents webContents, long navigationStartTick, long loadEventStartMs) {
+            if (webContents != mTab.getWebContents()) return;
+
+            mConnection.notifyPageLoadMetric(mSession, PageLoadMetrics.LOAD_EVENT_START,
+                    navigationStartTick, loadEventStartMs);
+        }
     }
 
     private static class CustomTabCreator extends ChromeTabCreator {
@@ -173,8 +183,6 @@ public class CustomTabActivity extends ChromeActivity {
         public void didAddTab(Tab tab, TabLaunchType type) {
             PageLoadMetrics.addObserver(mMetricsObserver);
             tab.addObserver(mTabObserver);
-            getFullscreenManager().setBottomControlsHeight(mBottomBarDelegate.getBottomBarHeight());
-            getFullscreenManager().addListener(mBottomBarDelegate);
         }
 
         @Override
@@ -354,7 +362,8 @@ public class CustomTabActivity extends ChromeActivity {
         // Setting task title and icon to be null will preserve the client app's title and icon.
         ApiCompatibilityUtils.setTaskDescription(this, null, null, toolbarColor);
         showCustomButtonOnToolbar();
-        mBottomBarDelegate = new CustomTabBottomBarDelegate(this, mIntentDataProvider);
+        mBottomBarDelegate = new CustomTabBottomBarDelegate(this, mIntentDataProvider,
+                getFullscreenManager());
         mBottomBarDelegate.showBottomBarIfNecessary();
     }
 
@@ -435,7 +444,6 @@ public class CustomTabActivity extends ChromeActivity {
                         finishAndClose(false);
                     }
                 });
-        getFullscreenManager().setBottomControlsHeight(mBottomBarDelegate.getBottomBarHeight());
 
         mCustomTabContentHandler = new CustomTabContentHandler() {
             @Override
@@ -530,7 +538,9 @@ public class CustomTabActivity extends ChromeActivity {
         }
         RecordHistogram.recordEnumeratedHistogram("CustomTabs.WebContentsStateOnLaunch",
                 webContentsStateOnLaunch, WEBCONTENTS_STATE_MAX);
-        if (webContents == null) webContents = WebContentsFactory.createWebContents(false, false);
+        if (webContents == null) {
+            webContents = WebContentsFactory.createWebContentsWithWarmRenderer(false, false);
+        }
         if (!mHasPrerendered) {
             customTabsConnection.resetPostMessageHandlerForSession(mSession, webContents);
         }
@@ -541,6 +551,11 @@ public class CustomTabActivity extends ChromeActivity {
                         mIntentDataProvider.isOpenedByChrome(),
                         getFullscreenManager().getBrowserVisibilityDelegate()),
                 false, false);
+
+        if (mIntentDataProvider.shouldEnableEmbeddedMediaExperience()) {
+            tab.enableEmbeddedMediaExperience(true);
+        }
+
         initializeMainTab(tab);
         return tab;
     }
@@ -1000,7 +1015,7 @@ public class CustomTabActivity extends ChromeActivity {
             String mediaViewerUrl = mIntentDataProvider.getMediaViewerUrl();
             if (!TextUtils.isEmpty(mediaViewerUrl)) {
                 Uri mediaViewerUri = Uri.parse(mediaViewerUrl);
-                if ("file".equals(mediaViewerUri.getScheme())) {
+                if (UrlConstants.FILE_SCHEME.equals(mediaViewerUri.getScheme())) {
                     url = mediaViewerUrl;
                 }
             }

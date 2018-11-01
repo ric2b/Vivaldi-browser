@@ -28,7 +28,6 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/variations/variations_associated_data.h"
 #include "net/base/host_port_pair.h"
@@ -411,13 +410,10 @@ void DataReductionProxyConfig::ReloadConfig() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(configurator_);
 
-  const std::vector<net::ProxyServer> proxies_for_http =
-      DataReductionProxyServer::ConvertToNetProxyServers(
-          config_values_->proxies_for_http());
   if (enabled_by_user_ && !config_values_->holdback() &&
-      !proxies_for_http.empty()) {
+      !config_values_->proxies_for_http().empty()) {
     configurator_->Enable(!secure_proxy_allowed_ || is_captive_portal_,
-                          proxies_for_http);
+                          config_values_->proxies_for_http());
   } else {
     configurator_->Disable();
   }
@@ -439,28 +435,37 @@ bool DataReductionProxyConfig::IsDataReductionProxy(
   if (!proxy_server.is_valid() || proxy_server.is_direct())
     return false;
 
-  const std::vector<net::ProxyServer> proxy_list =
-      DataReductionProxyServer::ConvertToNetProxyServers(
-          config_values_->proxies_for_http());
+  // Only compare the host port pair of the |proxy_server| since the proxy
+  // scheme of the stored data reduction proxy may be different than the proxy
+  // scheme of |proxy_server|. This may happen even when the |proxy_server| is a
+  // valid data reduction proxy. As an example, the stored data reduction proxy
+  // may have a proxy scheme of HTTPS while |proxy_server| may have QUIC as the
+  // proxy scheme.
+  const net::HostPortPair& host_port_pair = proxy_server.host_port_pair();
 
-  net::HostPortPair host_port_pair = proxy_server.host_port_pair();
-  const auto proxy_it =
-      std::find_if(proxy_list.begin(), proxy_list.end(),
-                   [&host_port_pair](const net::ProxyServer& proxy) {
-                     return proxy.is_valid() &&
-                            proxy.host_port_pair().Equals(host_port_pair);
-                   });
+  const std::vector<DataReductionProxyServer>& data_reduction_proxy_servers =
+      config_values_->proxies_for_http();
 
-  if (proxy_it != proxy_list.end()) {
-    if (proxy_info) {
-      proxy_info->proxy_servers =
-          std::vector<net::ProxyServer>(proxy_it, proxy_list.end());
-      proxy_info->proxy_index =
-          static_cast<size_t>(proxy_it - proxy_list.begin());
-    }
+  const auto proxy_it = std::find_if(
+      data_reduction_proxy_servers.begin(), data_reduction_proxy_servers.end(),
+      [&host_port_pair](const DataReductionProxyServer& proxy) {
+        return proxy.proxy_server().is_valid() &&
+               proxy.proxy_server().host_port_pair().Equals(host_port_pair);
+      });
+
+  if (proxy_it == data_reduction_proxy_servers.end())
+    return false;
+
+  if (!proxy_info)
     return true;
-  }
-  return false;
+
+  proxy_info->proxy_servers =
+      DataReductionProxyServer::ConvertToNetProxyServers(
+          std::vector<DataReductionProxyServer>(
+              proxy_it, data_reduction_proxy_servers.end()));
+  proxy_info->proxy_index =
+      static_cast<size_t>(proxy_it - data_reduction_proxy_servers.begin());
+  return true;
 }
 
 bool DataReductionProxyConfig::IsBypassedByDataReductionProxyLocalRules(
@@ -964,7 +969,7 @@ bool DataReductionProxyConfig::IsEffectiveConnectionTypeSlowerThanThreshold(
          effective_connection_type <= lofi_effective_connection_type_threshold_;
 }
 
-bool DataReductionProxyConfig::ShouldEnableLoFiMode(
+bool DataReductionProxyConfig::ShouldEnableLoFi(
     const net::URLRequest& request) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
@@ -975,7 +980,7 @@ bool DataReductionProxyConfig::ShouldEnableLoFiMode(
       request.context() ? request.context()->network_quality_estimator()
                         : nullptr;
 
-  bool enable_lofi = ShouldEnableLoFiModeInternal(network_quality_estimator);
+  bool enable_lofi = ShouldEnableLoFiInternal(network_quality_estimator);
 
   if (params::IsLoFiSlowConnectionsOnlyViaFlags() ||
       params::IsIncludedInLoFiEnabledFieldTrial()) {
@@ -987,12 +992,23 @@ bool DataReductionProxyConfig::ShouldEnableLoFiMode(
   return enable_lofi;
 }
 
+bool DataReductionProxyConfig::ShouldEnableLitePages(
+    const net::URLRequest& request) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
+  DCHECK(!request.url().SchemeIsCryptographic());
+
+  return ShouldEnableLitePagesInternal(
+      request.context() ? request.context()->network_quality_estimator()
+                        : nullptr);
+}
+
 bool DataReductionProxyConfig::enabled_by_user_and_reachable() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return enabled_by_user_ && !unreachable_;
 }
 
-bool DataReductionProxyConfig::ShouldEnableLoFiModeInternal(
+bool DataReductionProxyConfig::ShouldEnableLoFiInternal(
     const net::NetworkQualityEstimator* network_quality_estimator) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -1022,6 +1038,35 @@ bool DataReductionProxyConfig::ShouldEnableLoFiModeInternal(
   return false;
 }
 
+bool DataReductionProxyConfig::ShouldEnableLitePagesInternal(
+    const net::NetworkQualityEstimator* network_quality_estimator) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // If Lo-Fi has been turned off, its status can't change. This Lo-Fi bit will
+  // be removed when Lo-Fi and Lite Pages are moved over to using the Previews
+  // blacklist.
+  if (lofi_off_)
+    return false;
+
+  if (params::IsLoFiAlwaysOnViaFlags() && params::AreLitePagesEnabledViaFlags())
+    return true;
+
+  if (params::IsLoFiCellularOnlyViaFlags() &&
+      params::AreLitePagesEnabledViaFlags()) {
+    return net::NetworkChangeNotifier::IsConnectionCellular(
+        net::NetworkChangeNotifier::GetConnectionType());
+  }
+
+  if ((params::IsLoFiSlowConnectionsOnlyViaFlags() &&
+       params::AreLitePagesEnabledViaFlags()) ||
+      params::IsIncludedInLitePageFieldTrial() ||
+      params::IsIncludedInLoFiControlFieldTrial()) {
+    return IsNetworkQualityProhibitivelySlow(network_quality_estimator);
+  }
+
+  return false;
+}
+
 void DataReductionProxyConfig::GetNetworkList(
     net::NetworkInterfaceList* interfaces,
     int policy) {
@@ -1040,13 +1085,25 @@ base::TimeTicks DataReductionProxyConfig::GetTicksNow() const {
 }
 
 net::ProxyConfig DataReductionProxyConfig::ProxyConfigIgnoringHoldback() const {
-  std::vector<net::ProxyServer> proxies_for_http =
-      DataReductionProxyServer::ConvertToNetProxyServers(
-          config_values_->proxies_for_http());
-  if (!enabled_by_user_ || proxies_for_http.empty())
+  if (!enabled_by_user_ || config_values_->proxies_for_http().empty())
     return net::ProxyConfig::CreateDirect();
   return configurator_->CreateProxyConfig(!secure_proxy_allowed_,
-                                          proxies_for_http);
+                                          config_values_->proxies_for_http());
+}
+
+bool DataReductionProxyConfig::secure_proxy_allowed() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return secure_proxy_allowed_;
+}
+
+std::vector<DataReductionProxyServer>
+DataReductionProxyConfig::GetProxiesForHttp() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!enabled_by_user_)
+    return std::vector<DataReductionProxyServer>();
+
+  return config_values_->proxies_for_http();
 }
 
 }  // namespace data_reduction_proxy

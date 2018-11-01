@@ -30,7 +30,7 @@
 import os.path
 import sys
 
-import in_generator
+import json5_generator
 import license
 import name_utilities
 import template_expander
@@ -102,12 +102,12 @@ def measure_name(name):
     return 'DocumentCreateEvent' + name
 
 
-class EventFactoryWriter(in_generator.Writer):
-    defaults = {
+class EventFactoryWriter(json5_generator.Writer):
+    default_parameters = {
         'ImplementedAs': None,
         'RuntimeEnabled': None,
     }
-    default_parameters = {
+    default_metadata = {
         'export': '',
         'namespace': '',
         'suffix': '',
@@ -121,28 +121,13 @@ class EventFactoryWriter(in_generator.Writer):
         'measure_name': measure_name,
     }
 
-    def __init__(self, in_file_path):
-        super(EventFactoryWriter, self).__init__(in_file_path)
-        self.namespace = self.in_file.parameters['namespace'].strip('"')
-        self.suffix = self.in_file.parameters['suffix'].strip('"')
-        self._validate_entries()
+    def __init__(self, json5_file_path):
+        super(EventFactoryWriter, self).__init__(json5_file_path)
+        self.namespace = self.json5_file.metadata['namespace'].strip('"')
+        self.suffix = self.json5_file.metadata['suffix'].strip('"')
         self._outputs = {(self.namespace + self.suffix + "Headers.h"): self.generate_headers_header,
                          (self.namespace + self.suffix + ".cpp"): self.generate_implementation,
                         }
-
-    def _validate_entries(self):
-        # If there is more than one entry with the same script name, only the first one will ever
-        # be hit in practice, and so we'll silently ignore any properties requested for the second
-        # (like RuntimeEnabled - see crbug.com/332588).
-        entries_by_script_name = dict()
-        for entry in self.in_file.name_dictionaries:
-            script_name = name_utilities.script_name(entry)
-            if script_name in entries_by_script_name:
-                self._fatal('Multiple entries with script_name=%(script_name)s: %(name1)s %(name2)s' % {
-                    'script_name': script_name,
-                    'name1': entry['name'],
-                    'name2': entries_by_script_name[script_name]['name']})
-            entries_by_script_name[script_name] = entry
 
     def _fatal(self, message):
         print 'FATAL ERROR: ' + message
@@ -185,7 +170,7 @@ class EventFactoryWriter(in_generator.Writer):
             'namespace': self.namespace,
             'suffix': self.suffix,
             'base_header_for_suffix': base_header_for_suffix,
-            'includes': '\n'.join(self._headers_header_includes(self.in_file.name_dictionaries)),
+            'includes': '\n'.join(self._headers_header_includes(self.json5_file.name_dictionaries)),
         }
 
     @template_expander.use_jinja('EventFactory.cpp.tmpl', filters=filters)
@@ -193,9 +178,9 @@ class EventFactoryWriter(in_generator.Writer):
         return {
             'namespace': self.namespace,
             'suffix': self.suffix,
-            'events': self.in_file.name_dictionaries,
+            'events': self.json5_file.name_dictionaries,
         }
 
 
 if __name__ == "__main__":
-    in_generator.Maker(EventFactoryWriter).main(sys.argv)
+    json5_generator.Maker(EventFactoryWriter).main()

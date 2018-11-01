@@ -57,10 +57,6 @@ public abstract class ChromeSwitches {
     /** Enable Contextual Search. */
     public static final String ENABLE_CONTEXTUAL_SEARCH = "enable-contextual-search";
 
-    /** Contextual Search UI integration with Contextual Cards data.*/
-    public static final String CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION =
-            "cs-contextual-cards-bar-integration";
-
     // How many thumbnails should we allow in the cache (per tab stack)?
     public static final String THUMBNAILS = "thumbnails";
 
@@ -116,13 +112,6 @@ public abstract class ChromeSwitches {
      * Native switch - switches::kGoogleBaseURL.
      */
     public static final String GOOGLE_BASE_URL = "google-base-url";
-
-    /**
-     * Use fake device for Media Stream to replace actual camera and microphone.
-     * Native switch - switches::kUseFakeDeviceForMediaStream.
-     */
-    public static final String USE_FAKE_DEVICE_FOR_MEDIA_STREAM =
-            "use-fake-device-for-media-stream";
 
     /**
      * Disable domain reliability
@@ -191,9 +180,6 @@ public abstract class ChromeSwitches {
     public static final String HERB_FLAVOR_CONTROL = "Control";
     public static final String HERB_FLAVOR_DISABLED = "Disabled";
     public static final String HERB_FLAVOR_ELDERBERRY = "Elderberry";
-
-    public static final String DISABLE_APP_LINK = "disable-app-link";
-    public static final String ENABLE_APP_LINK = "enable-app-link";
 
     /**
      * Set the partner-defined homepage URL, for testing.

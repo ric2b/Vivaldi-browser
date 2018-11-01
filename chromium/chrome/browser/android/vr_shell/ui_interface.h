@@ -5,12 +5,17 @@
 #ifndef CHROME_BROWSER_ANDROID_VR_SHELL_UI_INTERFACE_H_
 #define CHROME_BROWSER_ANDROID_VR_SHELL_UI_INTERFACE_H_
 
+#include <memory>
+#include <string>
+
 #include "base/macros.h"
 #include "base/values.h"
 
 class GURL;
 
 namespace vr_shell {
+
+class VrOmnibox;
 
 class UiCommandHandler {
  public:
@@ -22,27 +27,33 @@ class UiCommandHandler {
 class UiInterface {
  public:
   enum Mode {
-    STANDARD,
-    WEB_VR
+    STANDARD = 0,
+    WEB_VR,
   };
 
-  explicit UiInterface(Mode initial_mode, bool fullscreen);
+  explicit UiInterface(Mode initial_mode);
   virtual ~UiInterface();
 
+  // Set HTML UI state or pass events.
   void SetMode(Mode mode);
-  Mode GetMode() { return mode_; }
-  void SetMenuMode(bool enabled);
-  bool GetMenuMode() { return menu_mode_; }
   void SetFullscreen(bool enabled);
-  bool GetFullscreen() { return fullscreen_; }
   void SetSecurityLevel(int level);
   void SetWebVRSecureOrigin(bool secure);
   void SetLoading(bool loading);
   void SetLoadProgress(double progress);
+  void InitTabList();
+  void AppendToTabList(bool incognito, int id, const base::string16& title);
+  void FlushTabList();
+  void UpdateTab(bool incognito, int id, const std::string& title);
+  void RemoveTab(bool incognito, int id);
   void SetURL(const GURL& url);
+  void SetOmniboxSuggestions(std::unique_ptr<base::Value> suggestions);
+  void HandleAppButtonClicked();
 
-  // Called by WebUI when starting VR.
+  // Handlers for HTML UI commands and notifications.
   void OnDomContentsLoaded();
+  void HandleOmniboxInput(const base::DictionaryValue& input);
+
   void SetUiCommandHandler(UiCommandHandler* handler);
 
  private:
@@ -50,11 +61,13 @@ class UiInterface {
   void FlushModeState();
 
   Mode mode_;
-  bool menu_mode_ = false;
   bool fullscreen_ = false;
   UiCommandHandler* handler_;
   bool loaded_ = false;
   base::DictionaryValue updates_;
+  std::unique_ptr<base::ListValue> tab_list_;
+
+  std::unique_ptr<VrOmnibox> omnibox_;
 
   DISALLOW_COPY_AND_ASSIGN(UiInterface);
 };

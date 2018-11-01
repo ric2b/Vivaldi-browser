@@ -31,18 +31,6 @@ cr.define('settings_toggle_button', function() {
         document.body.appendChild(testElement);
       });
 
-      test('responds to checked attribute', function() {
-        assertTrue(testElement.checked);
-
-        testElement.removeAttribute('checked');
-        assertFalse(testElement.checked);
-        assertFalse(testElement.pref.value);
-
-        testElement.setAttribute('checked', '');
-        assertTrue(testElement.checked);
-        assertTrue(testElement.pref.value);
-      });
-
       test('value changes on tap', function() {
         assertTrue(testElement.checked);
         assertTrue(testElement.pref.value);
@@ -76,6 +64,26 @@ cr.define('settings_toggle_button', function() {
         assertFalse(testElement.$.control.checked);
       });
 
+      test('inverted', function() {
+        testElement.inverted = true;
+        testElement.set('pref', {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: true
+        });
+
+        assertTrue(testElement.pref.value);
+        assertFalse(testElement.checked);
+
+        MockInteractions.tap(testElement.$.control);
+        assertFalse(testElement.pref.value);
+        assertTrue(testElement.checked);
+
+        MockInteractions.tap(testElement.$.control);
+        assertTrue(testElement.pref.value);
+        assertFalse(testElement.checked);
+      });
+
       test('numerical pref', function() {
         var prefNum = {
           key: 'test',
@@ -86,11 +94,60 @@ cr.define('settings_toggle_button', function() {
         testElement.set('pref', prefNum);
         assertTrue(testElement.checked);
 
-        testElement.removeAttribute('checked');
+        MockInteractions.tap(testElement.$.control);
         assertFalse(testElement.checked);
         assertEquals(0, prefNum.value);
 
-        testElement.setAttribute('checked', '');
+        MockInteractions.tap(testElement.$.control);
+        assertTrue(testElement.checked);
+        assertEquals(1, prefNum.value);
+      });
+
+      test('numerical pref with custom values', function() {
+        var prefNum = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 5
+        };
+
+        testElement._setNumericUncheckedValue(5);
+
+        testElement.set('pref', prefNum);
+        assertFalse(testElement.checked);
+
+        MockInteractions.tap(testElement.$.control);
+        assertTrue(testElement.checked);
+        assertEquals(1, prefNum.value);
+
+        MockInteractions.tap(testElement.$.control);
+        assertFalse(testElement.checked);
+        assertEquals(5, prefNum.value);
+      });
+
+      test('numerical pref with unknown inital value', function() {
+        prefNum = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 3
+        };
+
+        testElement._setNumericUncheckedValue(5);
+
+        testElement.set('pref', prefNum);
+
+        // Unknown value should still count as checked.
+        assertTrue(testElement.checked);
+
+        // The control should not clobber an existing unknown value.
+        assertEquals(3, prefNum.value);
+
+        // Unchecking should still send the unchecked value to prefs.
+        MockInteractions.tap(testElement.$.control);
+        assertFalse(testElement.checked);
+        assertEquals(5, prefNum.value);
+
+        // Checking should still send the normal checked value to prefs.
+        MockInteractions.tap(testElement.$.control);
         assertTrue(testElement.checked);
         assertEquals(1, prefNum.value);
       });

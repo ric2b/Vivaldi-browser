@@ -9,6 +9,7 @@
 
 #include "base/memory/shared_memory.h"
 #include "content/common/content_export.h"
+#include "content/common/video_capture.mojom.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -23,6 +24,11 @@ typedef int VideoCaptureControllerID;
 // VideoCaptureControllerEventHandler is the interface for
 // VideoCaptureController to notify clients about the events such as
 // BufferReady, FrameInfo, Error, etc.
+
+// OnError and OnEnded need to be scheduled to the end of message queue to
+// guarantee some other clearing jobs are done before they are handled.
+// Other methods can be forwarded synchronously.
+
 // TODO(mcasas): https://crbug.com/654176 merge back into VideoCaptureController
 class CONTENT_EXPORT VideoCaptureControllerEventHandler {
  public:
@@ -40,12 +46,16 @@ class CONTENT_EXPORT VideoCaptureControllerEventHandler {
                                  int buffer_id) = 0;
 
   // A buffer has been filled with a captured VideoFrame.
-  virtual void OnBufferReady(VideoCaptureControllerID id,
-                             int buffer_id,
-                             const scoped_refptr<media::VideoFrame>& frame) = 0;
+  virtual void OnBufferReady(
+      VideoCaptureControllerID id,
+      int buffer_id,
+      const media::mojom::VideoFrameInfoPtr& frame_info) = 0;
 
   // The capture session has ended and no more frames will be sent.
   virtual void OnEnded(VideoCaptureControllerID id) = 0;
+
+  // VideoCaptureDevice has successfully started the device.
+  virtual void OnStarted(VideoCaptureControllerID id) = 0;
 
  protected:
   virtual ~VideoCaptureControllerEventHandler() {}

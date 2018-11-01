@@ -34,7 +34,6 @@
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/ScriptValueSerializer.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/Transferables.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
@@ -68,11 +67,6 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::serialize(
     ExceptionState& exception) {
   return SerializedScriptValueFactory::instance().create(
       isolate, value, transferables, blobInfo, exception);
-}
-
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::serialize(
-    const String& str) {
-  return create(ScriptValueSerializer::serializeWTFString(str));
 }
 
 PassRefPtr<SerializedScriptValue>
@@ -118,7 +112,14 @@ SerializedScriptValue::SerializedScriptValue()
     : m_externallyAllocatedMemory(0) {}
 
 SerializedScriptValue::SerializedScriptValue(const String& wireData)
-    : m_dataString(wireData.isolatedCopy()), m_externallyAllocatedMemory(0) {}
+    : m_externallyAllocatedMemory(0) {
+  size_t byteLength = wireData.length() * 2;
+  m_dataBuffer.reset(static_cast<uint8_t*>(WTF::Partitions::bufferMalloc(
+      byteLength, "SerializedScriptValue buffer")));
+  m_dataBufferSize = byteLength;
+  wireData.copyTo(reinterpret_cast<UChar*>(m_dataBuffer.get()), 0,
+                  wireData.length());
+}
 
 SerializedScriptValue::~SerializedScriptValue() {
   // If the allocated memory was not registered before, then this class is
@@ -132,13 +133,12 @@ SerializedScriptValue::~SerializedScriptValue() {
 }
 
 PassRefPtr<SerializedScriptValue> SerializedScriptValue::nullValue() {
-  return create(ScriptValueSerializer::serializeNullValue());
+  // UChar rather than uint8_t here to get host endian behavior.
+  static const UChar kNullData[] = {0xff09, 0x3000};
+  return create(reinterpret_cast<const char*>(kNullData), sizeof(kNullData));
 }
 
 String SerializedScriptValue::toWireString() const {
-  if (!m_dataString.isNull())
-    return m_dataString;
-
   // Add the padding '\0', but don't put it in |m_dataBuffer|.
   // This requires direct use of uninitialized strings, though.
   UChar* destination;
@@ -155,36 +155,18 @@ String SerializedScriptValue::toWireString() const {
 void SerializedScriptValue::toWireBytes(Vector<char>& result) const {
   DCHECK(result.isEmpty());
 
-  if (m_dataString.isNull()) {
-    size_t wireSizeBytes = (m_dataBufferSize + 1) & ~1;
-    result.resize(wireSizeBytes);
+  size_t wireSizeBytes = (m_dataBufferSize + 1) & ~1;
+  result.resize(wireSizeBytes);
 
-    const UChar* src = reinterpret_cast<UChar*>(m_dataBuffer.get());
-    UChar* dst = reinterpret_cast<UChar*>(result.data());
-    for (size_t i = 0; i < m_dataBufferSize / 2; i++)
-      dst[i] = htons(src[i]);
-
-    // This is equivalent to swapping the byte order of the two bytes (x, 0),
-    // depending on endianness.
-    if (m_dataBufferSize % 2)
-      dst[wireSizeBytes / 2 - 1] = m_dataBuffer[m_dataBufferSize - 1] << 8;
-
-    return;
-  }
-
-  size_t length = m_dataString.length();
-  result.resize(length * sizeof(UChar));
+  const UChar* src = reinterpret_cast<UChar*>(m_dataBuffer.get());
   UChar* dst = reinterpret_cast<UChar*>(result.data());
+  for (size_t i = 0; i < m_dataBufferSize / 2; i++)
+    dst[i] = htons(src[i]);
 
-  if (m_dataString.is8Bit()) {
-    const LChar* src = m_dataString.characters8();
-    for (size_t i = 0; i < length; i++)
-      dst[i] = htons(static_cast<UChar>(src[i]));
-  } else {
-    const UChar* src = m_dataString.characters16();
-    for (size_t i = 0; i < length; i++)
-      dst[i] = htons(src[i]);
-  }
+  // This is equivalent to swapping the byte order of the two bytes (x, 0),
+  // depending on endianness.
+  if (m_dataBufferSize % 2)
+    dst[wireSizeBytes / 2 - 1] = m_dataBuffer[m_dataBufferSize - 1] << 8;
 }
 
 static void accumulateArrayBuffersForAllWorlds(
@@ -208,7 +190,7 @@ static void accumulateArrayBuffersForAllWorlds(
   }
 }
 
-std::unique_ptr<ImageBitmapContentsArray>
+std::unique_ptr<SerializedScriptValue::ImageBitmapContentsArray>
 SerializedScriptValue::transferImageBitmapContents(
     v8::Isolate* isolate,
     const ImageBitmapArray& imageBitmaps,
@@ -231,7 +213,7 @@ SerializedScriptValue::transferImageBitmapContents(
   for (size_t i = 0; i < imageBitmaps.size(); ++i) {
     if (visited.contains(imageBitmaps[i]))
       continue;
-    visited.add(imageBitmaps[i]);
+    visited.insert(imageBitmaps[i]);
     contents->push_back(imageBitmaps[i]->transfer());
   }
   return contents;
@@ -269,7 +251,7 @@ void SerializedScriptValue::transferOffscreenCanvas(
                               " has an associated context.");
       return;
     }
-    visited.add(offscreenCanvases[i].get());
+    visited.insert(offscreenCanvases[i].get());
     offscreenCanvases[i].get()->setNeutered();
   }
 }
@@ -394,7 +376,7 @@ bool SerializedScriptValue::extractTransferables(
   return true;
 }
 
-std::unique_ptr<ArrayBufferContentsArray>
+std::unique_ptr<SerializedScriptValue::ArrayBufferContentsArray>
 SerializedScriptValue::transferArrayBufferContents(
     v8::Isolate* isolate,
     const ArrayBufferArray& arrayBuffers,
@@ -421,7 +403,7 @@ SerializedScriptValue::transferArrayBufferContents(
     DOMArrayBufferBase* arrayBuffer = *it;
     if (visited.contains(arrayBuffer))
       continue;
-    visited.add(arrayBuffer);
+    visited.insert(arrayBuffer);
 
     size_t index = std::distance(arrayBuffers.begin(), it);
     if (arrayBuffer->isShared()) {

@@ -5,14 +5,15 @@
 #ifndef CanvasSurfaceLayerBridge_h
 #define CanvasSurfaceLayerBridge_h
 
+#include <memory>
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "cc/ipc/display_compositor.mojom-blink.h"
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_reference_factory.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/PlatformExport.h"
 #include "public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom-blink.h"
-#include <memory>
 
 namespace cc {
 class Layer;
@@ -22,6 +23,7 @@ class SurfaceInfo;
 namespace blink {
 
 class WebLayer;
+class WebLayerTreeView;
 
 class PLATFORM_EXPORT CanvasSurfaceLayerBridgeObserver {
  public:
@@ -32,15 +34,16 @@ class PLATFORM_EXPORT CanvasSurfaceLayerBridgeObserver {
 };
 
 class PLATFORM_EXPORT CanvasSurfaceLayerBridge
-    : NON_EXPORTED_BASE(public mojom::blink::OffscreenCanvasSurfaceClient) {
+    : NON_EXPORTED_BASE(public cc::mojom::blink::DisplayCompositorClient) {
  public:
-  explicit CanvasSurfaceLayerBridge(CanvasSurfaceLayerBridgeObserver*);
+  explicit CanvasSurfaceLayerBridge(CanvasSurfaceLayerBridgeObserver*,
+                                    WebLayerTreeView*);
   ~CanvasSurfaceLayerBridge();
   void createSolidColorLayer();
   WebLayer* getWebLayer() const { return m_webLayer.get(); }
   const cc::FrameSinkId& getFrameSinkId() const { return m_frameSinkId; }
 
-  // Implementation of mojom::blink::OffscreenCanvasSurfaceClient
+  // Implementation of cc::mojom::blink::DisplayCompositorClient
   void OnSurfaceCreated(const cc::SurfaceInfo&) override;
 
   void satisfyCallback(const cc::SurfaceSequence&);
@@ -56,10 +59,11 @@ class PLATFORM_EXPORT CanvasSurfaceLayerBridge
   CanvasSurfaceLayerBridgeObserver* m_observer;
 
   mojom::blink::OffscreenCanvasSurfacePtr m_service;
-  mojo::Binding<mojom::blink::OffscreenCanvasSurfaceClient> m_binding;
+  mojo::Binding<cc::mojom::blink::DisplayCompositorClient> m_binding;
 
-  cc::FrameSinkId m_frameSinkId;
+  const cc::FrameSinkId m_frameSinkId;
   cc::SurfaceId m_currentSurfaceId;
+  const cc::FrameSinkId m_parentFrameSinkId;
 };
 
 }  // namespace blink

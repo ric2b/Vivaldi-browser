@@ -97,6 +97,9 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   }
 
   void set_ink_drop_base_color(SkColor color) { ink_drop_base_color_ = color; }
+  void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
+    has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
+  }
 
   void SetHotTracked(bool is_hot_tracked);
   bool IsHotTracked() const;
@@ -142,7 +145,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // the current node_data. CustomButton's implementation of StateChanged() does
   // nothing; this method is provided for subclasses that wish to do something
   // on state changes.
-  virtual void StateChanged();
+  virtual void StateChanged(ButtonState old_state);
 
   // Returns true if the event is one that can trigger notifying the listener.
   // This implementation returns true if the left mouse button is down.
@@ -152,10 +155,6 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // holds the mouse down over the button. For this implementation,
   // we simply return IsTriggerableEvent(event).
   virtual bool ShouldEnterPushedState(const ui::Event& event);
-
-  void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
-    has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
-  }
 
   // Returns true if the button should enter hovered state; that is, if the
   // mouse is over the button, and no other window has capture (which would

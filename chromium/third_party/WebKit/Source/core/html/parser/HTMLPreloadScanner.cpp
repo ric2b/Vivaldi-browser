@@ -35,7 +35,6 @@
 #include "core/css/parser/SizesAttributeParser.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptLoader.h"
-#include "core/fetch/IntegrityMetadata.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/SubresourceIntegrity.h"
@@ -49,6 +48,7 @@
 #include "core/loader/LinkLoader.h"
 #include "platform/Histogram.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/network/mime/ContentType.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "wtf/Optional.h"
@@ -122,14 +122,14 @@ static String initiatorFor(const StringImpl* tagImpl) {
   if (match(tagImpl, videoTag))
     return videoTag.localName();
   NOTREACHED();
-  return emptyString();
+  return emptyString;
 }
 
 static bool mediaAttributeMatches(const MediaValuesCached& mediaValues,
                                   const String& attributeValue) {
-  MediaQuerySet* mediaQueries = MediaQuerySet::create(attributeValue);
+  RefPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(attributeValue);
   MediaQueryEvaluator mediaQueryEvaluator(mediaValues);
-  return mediaQueryEvaluator.eval(mediaQueries);
+  return mediaQueryEvaluator.eval(*mediaQueries);
 }
 
 class TokenPreloadScanner::StartTagScanner {
@@ -326,8 +326,9 @@ class TokenPreloadScanner::StartTagScanner {
                match(attributeName, referrerpolicyAttr) &&
                !attributeValue.isNull()) {
       m_referrerPolicySet = true;
-      SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-          attributeValue, &m_referrerPolicy);
+      SecurityPolicy::referrerPolicyFromString(
+          attributeValue, SupportReferrerPolicyLegacyKeywords,
+          &m_referrerPolicy);
     }
   }
 
@@ -359,8 +360,9 @@ class TokenPreloadScanner::StartTagScanner {
                match(attributeName, referrerpolicyAttr) &&
                !attributeValue.isNull()) {
       m_referrerPolicySet = true;
-      SecurityPolicy::referrerPolicyFromString(attributeValue,
-                                               &m_referrerPolicy);
+      SecurityPolicy::referrerPolicyFromString(
+          attributeValue, DoNotSupportReferrerPolicyLegacyKeywords,
+          &m_referrerPolicy);
     }
   }
 
@@ -443,7 +445,7 @@ class TokenPreloadScanner::StartTagScanner {
     // FIXME: Its not clear that this if is needed, the loader probably ignores
     // charset for image requests anyway.
     if (match(m_tagImpl, imgTag) || match(m_tagImpl, videoTag))
-      return emptyString();
+      return emptyString;
     return m_charset;
   }
 
@@ -648,8 +650,9 @@ static void handleMetaReferrer(const String& attributeValue,
                                CSSPreloadScanner* cssScanner) {
   ReferrerPolicy metaReferrerPolicy = ReferrerPolicyDefault;
   if (!attributeValue.isEmpty() && !attributeValue.isNull() &&
-      SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-          attributeValue, &metaReferrerPolicy)) {
+      SecurityPolicy::referrerPolicyFromString(
+          attributeValue, SupportReferrerPolicyLegacyKeywords,
+          &metaReferrerPolicy)) {
     documentParameters->referrerPolicy = metaReferrerPolicy;
   }
   cssScanner->setReferrerPolicy(documentParameters->referrerPolicy);
@@ -859,7 +862,8 @@ void TokenPreloadScanner::updatePredictedBaseURL(const Token& token) {
           token.getAttributeItem(hrefAttr)) {
     KURL url(m_documentURL, stripLeadingAndTrailingHTMLSpaces(
                                 hrefAttribute->value8BitIfNecessary()));
-    m_predictedBaseElementURL = url.isValid() ? url.copy() : KURL();
+    m_predictedBaseElementURL =
+        url.isValid() && !url.protocolIsData() ? url.copy() : KURL();
   }
 }
 

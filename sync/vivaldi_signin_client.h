@@ -3,8 +3,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_VIVALDI_SIGNIN_CLIENT_H_
-#define VIVALDI_SYNC_VIVALDI_SIGNIN_CLIENT_H_
+#ifndef SYNC_VIVALDI_SIGNIN_CLIENT_H_
+#define SYNC_VIVALDI_SIGNIN_CLIENT_H_
+
+#include <list>
+#include <memory>
+#include <string>
 
 #include "base/compiler_specific.h"
 #include "components/signin/core/browser/signin_client.h"
@@ -79,4 +83,4 @@ class VivaldiSigninClient : public SigninClient,
   DISALLOW_COPY_AND_ASSIGN(VivaldiSigninClient);
 };
 
-#endif  // VIVALDI_SYNC_VIVALDI_SIGNIN_CLIENT_H_
+#endif  // SYNC_VIVALDI_SIGNIN_CLIENT_H_

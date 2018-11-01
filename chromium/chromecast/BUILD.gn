@@ -33,13 +33,13 @@ cast_test_group("cast_tests") {
     "//chromecast/base:cast_base_unittests",
     "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
+    "//chromecast/media:cast_media_unittests",
     "//chromecast/system/reboot:cast_reboot_unittests",
     "//content/test:content_unittests",
     "//crypto:crypto_unittests",
     "//media:media_unittests",
     "//media/midi:midi_unittests",
     "//net:net_unittests",
-    "//ppapi:ppapi_unittests",
     "//sandbox/linux:sandbox_linux_unittests",
     "//sql:sql_unittests",
     "//storage/browser:storage_unittests",
@@ -49,6 +49,10 @@ cast_test_group("cast_tests") {
 
   if (!is_cast_audio_only) {
     tests += [ "//gpu:gpu_unittests" ]
+
+    if (use_aura) {
+      tests += [ "//chromecast/graphics:cast_graphics_unittests" ]
+    }
   }
 
   if (is_linux) {
@@ -63,7 +67,6 @@ cast_test_group("cast_tests") {
     tests += [
       ":cast_shell_browsertests",
       ":cast_shell_unittests",
-      "//chromecast/media:cast_media_unittests",
       "//ipc:ipc_tests",
       "//jingle:jingle_unittests",
       "//url:url_unittests",
@@ -133,11 +136,13 @@ cast_test_group("cast_tests") {
       # Disable ProcessUtilTest.* (need to define OS_ANDROID)
       # Disable StackContainer.BufferAlignment (don't support 16-byte alignment)
       # Disable SystemMetrics2Test.GetSystemMemoryInfo (buffers>0 can't be guaranteed)
+      # Disable TimeFormattingTest.TimeFormat* for flakiness on devices (crbug/671429)
       gtest_excludes = [
         "ProcessMetricsTest.GetNumberOfThreads",
         "ProcessUtilTest.*",
         "StackContainer.BufferAlignment",
         "SystemMetrics2Test.GetSystemMemoryInfo",
+        "TimeFormattingTest.TimeFormat*",
       ]
 
       if (is_cast_audio_only) {
@@ -303,6 +308,10 @@ test("cast_shell_browsertests") {
     ":cast_shell_lib",
     "//chromecast/app:test_support",
     "//chromecast/browser:browsertests",
+  ]
+
+  data_deps = [
+    ":chromecast_locales_pak",
   ]
 }
 

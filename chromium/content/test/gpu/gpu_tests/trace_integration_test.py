@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import os
+import sys
 
 from gpu_tests import gpu_integration_test
 from gpu_tests import path_util
@@ -93,7 +94,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     url = self.UrlOfStaticFilePath(test_path)
     tab.Navigate(url, script_to_evaluate_on_commit=test_harness_script)
     tab.action_runner.WaitForJavaScriptCondition(
-      'domAutomationController._finished', timeout_in_seconds=30)
+      'domAutomationController._finished', timeout=30)
 
     # Stop tracing.
     timeline_data = tab.browser.platform.tracing_controller.StopTracing()
@@ -119,10 +120,14 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     return trace_test_expectations.TraceTestExpectations()
 
   @classmethod
-  def setUpClass(cls):
-    super(cls, TraceIntegrationTest).setUpClass()
+  def SetUpProcess(cls):
+    super(cls, TraceIntegrationTest).SetUpProcess()
     path_util.SetupTelemetryPaths()
     cls.CustomizeOptions()
     cls.SetBrowserOptions(cls._finder_options)
     cls.StartBrowser()
     cls.SetStaticServerDirs([data_path])
+
+def load_tests(loader, tests, pattern):
+  del loader, tests, pattern  # Unused.
+  return gpu_integration_test.LoadAllTestsInModule(sys.modules[__name__])

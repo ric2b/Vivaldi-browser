@@ -49,7 +49,7 @@ enum DownloadCountTypes {
   // Downloads that are cancelled before completion (user action or error).
   CANCELLED_COUNT,
 
-  // Downloads that are started. Should be equal to UNTHROTTLED_COUNT.
+  // Downloads that are started.
   START_COUNT,
 
   // Downloads that were interrupted by the OS.
@@ -90,6 +90,18 @@ enum DownloadCountTypes {
   // equivalence) and has a 'Accept-Ranges: bytes' header. These downloads are
   // candidates for partial resumption.
   STRONG_VALIDATOR_AND_ACCEPTS_RANGES,
+
+  // To be used for parallel requests.
+  DOWNLOAD_COUNT_UNUSED_18,
+
+  // Count of new downloads.
+  NEW_DOWNLOAD_COUNT,
+
+  // Count of new downloads that are started in normal profile.
+  NEW_DOWNLOAD_COUNT_NORMAL_PROFILE,
+
+  // Downloads that are actually completed in normal profile.
+  COMPLETED_COUNT_NORMAL_PROFILE,
 
   DOWNLOAD_COUNT_TYPES_LAST_ENTRY
 };
@@ -164,6 +176,9 @@ void RecordDangerousDownloadDiscard(
 
 // Records the mime type of the download.
 void RecordDownloadMimeType(const std::string& mime_type);
+
+// Records the mime type of the download for normal profile.
+void RecordDownloadMimeTypeForNormalProfile(const std::string& mime_type);
 
 // Records usage of Content-Disposition header.
 void RecordDownloadContentDisposition(const std::string& content_disposition);

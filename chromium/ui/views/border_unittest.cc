@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "cc/paint/paint_recorder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -72,6 +73,12 @@ class MockCanvas : public SkCanvas {
                                       draw_rrect_calls_.end());
   }
 
+  const std::vector<SkPaint>& draw_paint_calls() const {
+    return draw_paint_calls_;
+  }
+
+  const SkRect& last_clip_bounds() const { return last_clip_bounds_; }
+
   // SkCanvas overrides:
   void onDrawRect(const SkRect& rect, const SkPaint& paint) override {
     draw_rect_calls_.insert(DrawRectCall(rect, paint));
@@ -81,10 +88,24 @@ class MockCanvas : public SkCanvas {
     draw_rrect_calls_.insert(DrawRRectCall(rrect, paint));
   }
 
+  void onDrawPaint(const SkPaint& paint) override {
+    draw_paint_calls_.push_back(paint);
+  }
+
+  void onClipRect(const SkRect& rect,
+                  SkClipOp op,
+                  ClipEdgeStyle edge_style) override {
+    last_clip_bounds_ = rect;
+  }
+
  private:
   // Stores all the calls for querying by the test, in sorted order.
   std::set<DrawRectCall> draw_rect_calls_;
   std::set<DrawRRectCall> draw_rrect_calls_;
+
+  // Stores the onDrawPaint calls in chronological order.
+  std::vector<SkPaint> draw_paint_calls_;
+  SkRect last_clip_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(MockCanvas);
 };
@@ -125,27 +146,42 @@ namespace views {
 
 class BorderTest : public ViewsTestBase {
  public:
+  enum {
+    // The canvas should be much bigger than the view.
+    kCanvasWidth = 1000,
+    kCanvasHeight = 500,
+  };
+
   void SetUp() override {
     ViewsTestBase::SetUp();
 
     view_.reset(new views::View());
     view_->SetSize(gfx::Size(100, 50));
-    // The canvas should be much bigger than the view.
-    sk_canvas_.reset(new MockCanvas(1000, 500));
-    canvas_.reset(new gfx::Canvas(sk_canvas_.get(), 1.0f));
+    recorder_.reset(new cc::PaintRecorder());
+    canvas_.reset(new gfx::Canvas(
+        recorder_->beginRecording(SkRect::MakeWH(kCanvasWidth, kCanvasHeight)),
+        1.0f));
   }
 
   void TearDown() override {
     ViewsTestBase::TearDown();
 
     canvas_.reset();
-    sk_canvas_.reset();
+    recorder_.reset();
     view_.reset();
   }
 
+  std::unique_ptr<MockCanvas> DrawIntoMockCanvas() {
+    sk_sp<cc::PaintRecord> record = recorder_->finishRecordingAsPicture();
+    std::unique_ptr<MockCanvas> mock(
+        new MockCanvas(kCanvasWidth, kCanvasHeight));
+    record->playback(mock.get());
+    return mock;
+  }
+
  protected:
+  std::unique_ptr<cc::PaintRecorder> recorder_;
   std::unique_ptr<views::View> view_;
-  std::unique_ptr<MockCanvas> sk_canvas_;
   std::unique_ptr<gfx::Canvas> canvas_;
 };
 
@@ -155,24 +191,22 @@ TEST_F(BorderTest, NullBorder) {
 }
 
 TEST_F(BorderTest, SolidBorder) {
-  std::unique_ptr<Border> border(CreateSolidBorder(3, SK_ColorBLUE));
+  const SkColor kBorderColor = SK_ColorMAGENTA;
+  std::unique_ptr<Border> border(CreateSolidBorder(3, kBorderColor));
   EXPECT_EQ(gfx::Size(6, 6), border->GetMinimumSize());
   EXPECT_EQ(gfx::Insets(3, 3, 3, 3), border->GetInsets());
   border->Paint(*view_, canvas_.get());
 
+  std::unique_ptr<MockCanvas> mock = DrawIntoMockCanvas();
   std::vector<MockCanvas::DrawRectCall> draw_rect_calls =
-      sk_canvas_->draw_rect_calls();
-  ASSERT_EQ(4u, draw_rect_calls.size());
-  EXPECT_EQ(SkRect::MakeLTRB(0, 0, 100, 3), draw_rect_calls[0].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[0].paint.getColor());
-  EXPECT_EQ(SkRect::MakeLTRB(0, 3, 3, 47), draw_rect_calls[1].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[1].paint.getColor());
-  EXPECT_EQ(SkRect::MakeLTRB(0, 47, 100, 50), draw_rect_calls[2].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[2].paint.getColor());
-  EXPECT_EQ(SkRect::MakeLTRB(97, 3, 100, 47), draw_rect_calls[3].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[3].paint.getColor());
+      mock->draw_rect_calls();
 
-  EXPECT_TRUE(sk_canvas_->draw_rrect_calls().empty());
+  gfx::Rect bounds = view_->GetLocalBounds();
+  bounds.Inset(border->GetInsets());
+
+  ASSERT_EQ(1u, mock->draw_paint_calls().size());
+  EXPECT_EQ(kBorderColor, mock->draw_paint_calls()[0].getColor());
+  EXPECT_EQ(gfx::RectF(bounds), gfx::SkRectToRectF(mock->last_clip_bounds()));
 }
 
 TEST_F(BorderTest, RoundedRectBorder) {
@@ -181,11 +215,12 @@ TEST_F(BorderTest, RoundedRectBorder) {
   EXPECT_EQ(gfx::Insets(3, 3, 3, 3), border->GetInsets());
   border->Paint(*view_, canvas_.get());
 
+  std::unique_ptr<MockCanvas> mock = DrawIntoMockCanvas();
   SkRRect expected_rrect;
   expected_rrect.setRectXY(SkRect::MakeLTRB(1.5, 1.5, 98.5, 48.5), 4, 4);
-  EXPECT_TRUE(sk_canvas_->draw_rect_calls().empty());
+  EXPECT_TRUE(mock->draw_rect_calls().empty());
   std::vector<MockCanvas::DrawRRectCall> draw_rrect_calls =
-      sk_canvas_->draw_rrect_calls();
+      mock->draw_rrect_calls();
   ASSERT_EQ(1u, draw_rrect_calls.size());
   EXPECT_EQ(expected_rrect, draw_rrect_calls[0].rrect);
   EXPECT_EQ(3, draw_rrect_calls[0].paint.getStrokeWidth());
@@ -210,28 +245,26 @@ TEST_F(BorderTest, EmptyBorder) {
 }
 
 TEST_F(BorderTest, SolidSidedBorder) {
+  const SkColor kBorderColor = SK_ColorMAGENTA;
   const gfx::Insets kInsets(1, 2, 3, 4);
 
   std::unique_ptr<Border> border(
       CreateSolidSidedBorder(kInsets.top(), kInsets.left(), kInsets.bottom(),
-                             kInsets.right(), SK_ColorBLUE));
+                             kInsets.right(), kBorderColor));
   EXPECT_EQ(gfx::Size(6, 4), border->GetMinimumSize());
   EXPECT_EQ(kInsets, border->GetInsets());
   border->Paint(*view_, canvas_.get());
 
+  std::unique_ptr<MockCanvas> mock = DrawIntoMockCanvas();
   std::vector<MockCanvas::DrawRectCall> draw_rect_calls =
-      sk_canvas_->draw_rect_calls();
-  ASSERT_EQ(4u, draw_rect_calls.size());
-  EXPECT_EQ(SkRect::MakeLTRB(0, 0, 100, 1), draw_rect_calls[0].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[0].paint.getColor());
-  EXPECT_EQ(SkRect::MakeLTRB(0, 1, 2, 47), draw_rect_calls[1].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[1].paint.getColor());
-  EXPECT_EQ(SkRect::MakeLTRB(0, 47, 100, 50), draw_rect_calls[2].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[2].paint.getColor());
-  EXPECT_EQ(SkRect::MakeLTRB(96, 1, 100, 47), draw_rect_calls[3].rect);
-  EXPECT_EQ(SK_ColorBLUE, draw_rect_calls[3].paint.getColor());
+      mock->draw_rect_calls();
 
-  EXPECT_TRUE(sk_canvas_->draw_rrect_calls().empty());
+  gfx::Rect bounds = view_->GetLocalBounds();
+  bounds.Inset(border->GetInsets());
+
+  ASSERT_EQ(1u, mock->draw_paint_calls().size());
+  EXPECT_EQ(kBorderColor, mock->draw_paint_calls()[0].getColor());
+  EXPECT_EQ(gfx::RectF(bounds), gfx::SkRectToRectF(mock->last_clip_bounds()));
 }
 
 TEST_F(BorderTest, BorderPainter) {

@@ -116,10 +116,8 @@ source_set("win") {
   deps = [
     "//base:i18n",
     "//components/policy/core/common",
-    "//content/public/common",
     "//crypto",
     "//device/power_save_blocker",
-    "//google_apis",
     "//ipc",
     "//remoting/base",
     "//remoting/host/security_key",
@@ -154,6 +152,7 @@ source_set("unit_tests") {
   ]
 
   deps = [
+    "//ipc",
     "//remoting/host",
     "//remoting/host:test_support",
     "//remoting/host/it2me:common",
@@ -390,7 +389,6 @@ shared_library("remoting_core") {
     "//net",
     "//remoting/base",
     "//remoting/base:breakpad",
-    "//remoting/codec",
     "//remoting/host:host",
     "//remoting/host:remoting_me2me_host_static",
     "//remoting/host/it2me:common",

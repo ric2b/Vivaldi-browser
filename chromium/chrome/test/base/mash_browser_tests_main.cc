@@ -8,13 +8,18 @@
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/debug/stack_trace.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
+#include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/run_loop.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/values.h"
 #include "chrome/test/base/chrome_test_launcher.h"
 #include "chrome/test/base/chrome_test_suite.h"
 #include "chrome/test/base/mojo_test_connector.h"
@@ -22,6 +27,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/test/test_launcher.h"
 #include "mash/package/mash_packaged_service.h"
+#include "mash/session/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -29,12 +35,16 @@
 #include "services/service_manager/public/cpp/standalone_service/standalone_service.h"
 #include "services/service_manager/runner/common/switches.h"
 #include "services/service_manager/runner/init.h"
+#include "services/ui/common/switches.h"
 #include "ui/aura/env.h"
 
 namespace {
 
+const base::FilePath::CharType kCatalogFilename[] =
+    FILE_PATH_LITERAL("mash_browser_tests_catalog.json");
+
 void ConnectToDefaultApps(service_manager::Connector* connector) {
-  connector->Connect("mash_session");
+  connector->Connect(mash::session::mojom::kServiceName);
 }
 
 class MashTestSuite : public ChromeTestSuite {
@@ -44,6 +54,7 @@ class MashTestSuite : public ChromeTestSuite {
   void SetMojoTestConnector(std::unique_ptr<MojoTestConnector> connector) {
     mojo_test_connector_ = std::move(connector);
   }
+
   MojoTestConnector* mojo_test_connector() {
     return mojo_test_connector_.get();
   }
@@ -72,7 +83,8 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
     DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
         content::kSingleProcessTestsFlag));
     DCHECK(test_suite_);
-    test_suite_->SetMojoTestConnector(base::WrapUnique(new MojoTestConnector));
+    test_suite_->SetMojoTestConnector(
+        base::MakeUnique<MojoTestConnector>(ReadCatalogManifest()));
     return test_suite_->mojo_test_connector();
   }
 
@@ -90,13 +102,15 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
       base::CommandLine* command_line,
       base::TestLauncher::LaunchOptions* test_launch_options) override {
     if (!mojo_test_connector_) {
-      mojo_test_connector_ = base::MakeUnique<MojoTestConnector>();
+      mojo_test_connector_ =
+          base::MakeUnique<MojoTestConnector>(ReadCatalogManifest());
       context_.reset(new service_manager::ServiceContext(
           base::MakeUnique<mash::MashPackagedService>(),
           mojo_test_connector_->Init()));
     }
     std::unique_ptr<content::TestState> test_state =
         mojo_test_connector_->PrepareForTest(command_line, test_launch_options);
+
     // Start default apps after chrome, as they may try to connect to chrome on
     // startup. Attempt to connect once per test in case a previous test crashed
     // mash_session.
@@ -109,6 +123,19 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
     // valid.
     context_.reset();
     mojo_test_connector_.reset();
+  }
+
+  std::unique_ptr<base::Value> ReadCatalogManifest() {
+    std::string catalog_contents;
+    base::FilePath exe_path;
+    base::PathService::Get(base::DIR_EXE, &exe_path);
+    base::FilePath catalog_path = exe_path.Append(kCatalogFilename);
+    bool result = base::ReadFileToString(catalog_path, &catalog_contents);
+    DCHECK(result);
+    std::unique_ptr<base::Value> manifest_value =
+        base::JSONReader::Read(catalog_contents);
+    DCHECK(manifest_value);
+    return manifest_value;
   }
 
   std::unique_ptr<MashTestSuite> test_suite_;
@@ -130,12 +157,14 @@ std::unique_ptr<content::ServiceManagerConnection>
 }
 
 void StartChildApp(service_manager::mojom::ServiceRequest service_request) {
-  base::MessageLoop message_loop(base::MessageLoop::TYPE_DEFAULT);
+  // The UI service requires this to be TYPE_UI. We don't know which service
+  // we're going to run yet, so we just always use TYPE_UI for now.
+  base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
   base::RunLoop run_loop;
   service_manager::ServiceContext context(
       base::MakeUnique<mash::MashPackagedService>(),
       std::move(service_request));
-  context.SetConnectionLostClosure(run_loop.QuitClosure());
+  context.SetQuitClosure(run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -143,12 +172,11 @@ void StartChildApp(service_manager::mojom::ServiceRequest service_request) {
 
 bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
   base::CommandLine::Init(argc, argv);
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (!command_line.HasSwitch("run-in-mash"))
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch("run-in-mash"))
     return false;
 
-  if (command_line.HasSwitch(MojoTestConnector::kMashApp)) {
+  if (command_line->HasSwitch(MojoTestConnector::kMashApp)) {
 #if defined(OS_LINUX)
     base::AtExitManager exit_manager;
 #endif
@@ -158,6 +186,7 @@ bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
     base::debug::EnableInProcessStackDumping();
 #endif
 
+    command_line->AppendSwitch(ui::switches::kUseTestConfig);
     service_manager::RunStandaloneService(base::Bind(&StartChildApp));
     *exit_code = 0;
     return true;
@@ -170,8 +199,8 @@ bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
   // ServiceManagerConnection
   // as though we were embedded.
   content::ServiceManagerConnection::Factory service_manager_connection_factory;
-  if (command_line.HasSwitch(content::kSingleProcessTestsFlag) &&
-      !command_line.HasSwitch(switches::kPrimordialPipeToken)) {
+  if (command_line->HasSwitch(content::kSingleProcessTestsFlag) &&
+      !command_line->HasSwitch(switches::kPrimordialPipeToken)) {
     service_manager_connection_factory =
         base::Bind(&CreateServiceManagerConnection, &delegate);
     content::ServiceManagerConnection::SetFactoryForTest(

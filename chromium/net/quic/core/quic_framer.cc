@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
-#include "base/stl_util.h"
 #include "net/quic/core/crypto/crypto_framer.h"
 #include "net/quic/core/crypto/crypto_handshake_message.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
@@ -24,12 +23,11 @@
 #include "net/quic/platform/api/quic_aligned.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 
-using base::ContainsKey;
 using base::StringPiece;
 using std::string;
-#define PREDICT_FALSE(x) (x)
 
 namespace net {
 
@@ -138,8 +136,8 @@ QuicFramer::QuicFramer(const QuicVersionVector& supported_versions,
       error_(QUIC_NO_ERROR),
       last_packet_number_(0),
       largest_packet_number_(0),
-      last_path_id_(kInvalidPathId),
       last_serialized_connection_id_(0),
+      last_version_tag_(0),
       supported_versions_(supported_versions),
       decrypter_level_(ENCRYPTION_NONE),
       alternative_decrypter_level_(ENCRYPTION_NONE),
@@ -698,7 +696,9 @@ bool QuicFramer::AppendPacketHeader(const QuicPacketHeader& header,
   if (header.public_header.version_flag) {
     DCHECK_EQ(Perspective::IS_CLIENT, perspective_);
     QuicTag tag = QuicVersionToQuicTag(quic_version_);
-    writer->WriteUInt32(tag);
+    if (!writer->WriteUInt32(tag)) {
+      return false;
+    }
     QUIC_DVLOG(1) << ENDPOINT << "version = " << quic_version_ << ", tag = '"
                   << QuicTagToString(tag) << "'";
   }
@@ -745,44 +745,10 @@ const QuicTime::Delta QuicFramer::CalculateTimestampFromWire(
   return QuicTime::Delta::FromMicroseconds(time);
 }
 
-bool QuicFramer::IsValidPath(QuicPathId path_id,
-                             QuicPacketNumber* base_packet_number) {
-  if (ContainsKey(closed_paths_, path_id)) {
-    // Path is closed.
-    return false;
-  }
-
-  if (path_id == last_path_id_) {
-    *base_packet_number = largest_packet_number_;
-    return true;
-  }
-
-  if (ContainsKey(largest_packet_numbers_, path_id)) {
-    *base_packet_number = largest_packet_numbers_[path_id];
-  } else {
-    *base_packet_number = 0;
-  }
-
-  return true;
-}
-
 void QuicFramer::SetLastPacketNumber(const QuicPacketHeader& header) {
-  if (header.public_header.multipath_flag && header.path_id != last_path_id_) {
-    if (last_path_id_ != kInvalidPathId) {
-      // Save current last packet number before changing path.
-      largest_packet_numbers_[last_path_id_] = largest_packet_number_;
-    }
-    // Change path.
-    last_path_id_ = header.path_id;
-  }
   last_packet_number_ = header.packet_number;
   largest_packet_number_ =
       std::max(header.packet_number, largest_packet_number_);
-}
-
-void QuicFramer::OnPathClosed(QuicPathId path_id) {
-  closed_paths_.insert(path_id);
-  largest_packet_numbers_.erase(path_id);
 }
 
 QuicPacketNumber QuicFramer::CalculatePacketNumberFromWire(
@@ -966,12 +932,6 @@ bool QuicFramer::ProcessUnauthenticatedHeader(QuicDataReader* encrypted_reader,
   }
 
   QuicPacketNumber base_packet_number = largest_packet_number_;
-  if (header->public_header.multipath_flag &&
-      !IsValidPath(header->path_id, &base_packet_number)) {
-    // Stop processing because path is closed.
-    set_detailed_error("Path is closed.");
-    return false;
-  }
 
   if (!ProcessPacketSequenceNumber(
           encrypted_reader, header->public_header.packet_number_length,
@@ -1526,15 +1486,13 @@ StringPiece QuicFramer::GetAssociatedDataFromEncryptedPacket(
     const QuicEncryptedPacket& encrypted,
     QuicConnectionIdLength connection_id_length,
     bool includes_version,
-    bool includes_path_id,
     bool includes_diversification_nonce,
     QuicPacketNumberLength packet_number_length) {
   // TODO(ianswett): This is identical to QuicData::AssociatedData.
-  return StringPiece(
-      encrypted.data(),
-      GetStartOfEncryptedData(version, connection_id_length, includes_version,
-                              includes_path_id, includes_diversification_nonce,
-                              packet_number_length));
+  return StringPiece(encrypted.data(),
+                     GetStartOfEncryptedData(
+                         version, connection_id_length, includes_version,
+                         includes_diversification_nonce, packet_number_length));
 }
 
 void QuicFramer::SetDecrypter(EncryptionLevel level, QuicDecrypter* decrypter) {
@@ -1575,7 +1533,7 @@ size_t QuicFramer::EncryptInPlace(EncryptionLevel level,
                                   char* buffer) {
   size_t output_length = 0;
   if (!encrypter_[level]->EncryptPacket(
-          quic_version_, path_id, packet_number,
+          quic_version_, packet_number,
           StringPiece(buffer, ad_len),                       // Associated data
           StringPiece(buffer + ad_len, total_len - ad_len),  // Plaintext
           buffer + ad_len,  // Destination buffer
@@ -1588,7 +1546,6 @@ size_t QuicFramer::EncryptInPlace(EncryptionLevel level,
 }
 
 size_t QuicFramer::EncryptPayload(EncryptionLevel level,
-                                  QuicPathId path_id,
                                   QuicPacketNumber packet_number,
                                   const QuicPacket& packet,
                                   char* buffer,
@@ -1603,7 +1560,7 @@ size_t QuicFramer::EncryptPayload(EncryptionLevel level,
   // Encrypt the plaintext into the buffer.
   size_t output_length = 0;
   if (!encrypter_[level]->EncryptPacket(
-          quic_version_, path_id, packet_number, associated_data,
+          quic_version_, packet_number, associated_data,
           packet.Plaintext(quic_version_), buffer + ad_len, &output_length,
           buffer_len - ad_len)) {
     RaiseError(QUIC_ENCRYPTION_FAILURE);
@@ -1640,13 +1597,12 @@ bool QuicFramer::DecryptPayload(QuicDataReader* encrypted_reader,
   DCHECK(decrypter_.get() != nullptr);
   StringPiece associated_data = GetAssociatedDataFromEncryptedPacket(
       quic_version_, packet, header.public_header.connection_id_length,
-      header.public_header.version_flag, header.public_header.multipath_flag,
-      header.public_header.nonce != nullptr,
+      header.public_header.version_flag, header.public_header.nonce != nullptr,
       header.public_header.packet_number_length);
 
   bool success = decrypter_->DecryptPacket(
-      quic_version_, header.path_id, header.packet_number, associated_data,
-      encrypted, decrypted_buffer, decrypted_length, buffer_length);
+      quic_version_, header.packet_number, associated_data, encrypted,
+      decrypted_buffer, decrypted_length, buffer_length);
   if (success) {
     visitor_->OnDecryptedPacket(decrypter_level_);
   } else if (alternative_decrypter_.get() != nullptr) {
@@ -1669,8 +1625,8 @@ bool QuicFramer::DecryptPayload(QuicDataReader* encrypted_reader,
 
     if (try_alternative_decryption) {
       success = alternative_decrypter_->DecryptPacket(
-          quic_version_, header.path_id, header.packet_number, associated_data,
-          encrypted, decrypted_buffer, decrypted_length, buffer_length);
+          quic_version_, header.packet_number, associated_data, encrypted,
+          decrypted_buffer, decrypted_length, buffer_length);
     }
     if (success) {
       visitor_->OnDecryptedPacket(alternative_decrypter_level_);
@@ -2000,7 +1956,7 @@ bool QuicFramer::AppendAckFrameAndTypeByte(const QuicAckFrame& frame,
         ++num_ack_blocks_written;
       }
       if (num_ack_blocks_written >= num_ack_blocks) {
-        if (PREDICT_FALSE(num_ack_blocks_written != num_ack_blocks)) {
+        if (QUIC_PREDICT_FALSE(num_ack_blocks_written != num_ack_blocks)) {
           QUIC_BUG << "Wrote " << num_ack_blocks_written
                    << ", expected to write " << num_ack_blocks;
         }

@@ -1,17 +1,17 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
+<link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="/i18n_setup.html">
-<link rel="import" href="/passwords_and_forms_page/address_edit_dialog.html">
-<link rel="import" href="/passwords_and_forms_page/credit_card_edit_dialog.html">
-<link rel="import" href="/passwords_and_forms_page/passwords_shared_css.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="address_edit_dialog.html">
+<link rel="import" href="credit_card_edit_dialog.html">
+<link rel="import" href="passwords_shared_css.html">
 
 <dom-module id="settings-autofill-section">
-  <link rel="import" type="css" href="chrome://resources/css/action_link.css">
   <template>
-    <style include="settings-shared passwords-shared">
+    <style include="settings-shared passwords-shared action-link">
       .type-column {
         align-items: center;
         flex: 2;
@@ -52,7 +52,11 @@
       }
     </style>
     <div class="settings-box first">
-      <h2>$i18n{addresses}</h2>
+      <h2 class="start">$i18n{addresses}</h2>
+      <paper-button class="secondary-button header-aligned-button"
+          on-tap="onAddAddressTap_">
+        $i18n{add}
+      </paper-button>
     </div>
     <div class="list-frame">
       <div id="addressList" class="vertical-list">
@@ -71,10 +75,15 @@
                 $i18n{googlePayments}
               </span>
             </div>
-            <paper-icon-button id="addressMenu" icon="cr:more-vert"
-                tabindex$="[[tabIndex]]" alt="$i18n{overflowMenu}"
-                on-tap="onAddressMenuTap_">
-            </paper-icon-button>
+            <template is="dom-if" if="[[item.metadata.isLocal]]">
+              <paper-icon-button id="addressMenu" icon="cr:more-vert"
+                  on-tap="onAddressMenuTap_" title="$i18n{moreActions}">
+              </paper-icon-button>
+            </template>
+            <template is="dom-if" if="[[!item.metadata.isLocal]]">
+              <button is="paper-icon-button-light" class="icon-external"
+                  on-tap="onRemoteEditAddressTap_" actionable></button>
+            </template>
           </div>
         </template>
       </div>
@@ -82,15 +91,11 @@
           hidden$="[[hasSome_(addresses)]]">
         $i18n{noAddressesFound}
       </div>
-      <div class="list-item list-button">
-        <a is="action-link" on-tap="onAddAddressTap_">$i18n{addAddress}</a>
-      </div>
     </div>
     <dialog is="cr-action-menu" id="addressSharedMenu">
       <button id="menuEditAddress" class="dropdown-item"
-          on-tap="onMenuEditAddressTap_">$i18n{editAddress}</button>
+          on-tap="onMenuEditAddressTap_">$i18n{edit}</button>
       <button id="menuRemoveAddress" class="dropdown-item"
-          hidden$="[[!activeAddress.metadata.isLocal]]"
           on-tap="onMenuRemoveAddressTap_">$i18n{removeAddress}</button>
     </dialog>
     <template is="dom-if" if="[[showAddressDialog_]]" restamp>
@@ -99,7 +104,11 @@
       </settings-address-edit-dialog>
     </template>
     <div class="settings-box first">
-      <h2>$i18n{creditCards}</h2>
+      <h2 class="start">$i18n{creditCards}</h2>
+      <paper-button class="secondary-button header-aligned-button"
+          on-tap="onAddCreditCardTap_">
+        $i18n{add}
+      </paper-button>
     </div>
     <div class="list-frame">
       <div id="creditCardsHeading" class="list-item column-header"
@@ -124,10 +133,15 @@
             <div class="expiration-column">
               <div id="creditCardExpiration"
                   class="expiration-date">[[expiration_(item)]]</div>
-              <paper-icon-button id="creditCardMenu" icon="cr:more-vert"
-                  tabindex$="[[tabIndex]]" alt="$i18n{overflowMenu}"
-                  on-tap="onCreditCardMenuTap_">
-              </paper-icon-button>
+              <template is="dom-if" if="[[item.metadata.isLocal]]">
+                <paper-icon-button id="creditCardMenu" icon="cr:more-vert"
+                    on-tap="onCreditCardMenuTap_" title="$i18n{moreActions}">
+                </paper-icon-button>
+              </template>
+              <template is="dom-if" if="[[!item.metadata.isLocal]]">
+                <button is="paper-icon-button-light" class="icon-external"
+                    on-tap="onRemoteEditCreditCardTap_" actionable></button>
+              </template>
             </div>
           </div>
         </template>
@@ -136,17 +150,11 @@
           hidden$="[[hasSome_(creditCards)]]">
         $i18n{noCreditCardsFound}
       </div>
-      <div class="list-item list-button">
-        <a is="action-link" on-tap="onAddCreditCardTap_">
-          $i18n{addCreditCard}
-        </a>
-      </div>
     </div>
     <dialog is="cr-action-menu" id="creditCardSharedMenu">
       <button id="menuEditCreditCard" class="dropdown-item"
-          on-tap="onMenuEditCreditCardTap_">$i18n{editCreditCard}</button>
+          on-tap="onMenuEditCreditCardTap_">$i18n{edit}</button>
       <button id="menuRemoveCreditCard" class="dropdown-item"
-          hidden$="[[!activeCreditCard.metadata.isLocal]]"
           on-tap="onMenuRemoveCreditCardTap_">$i18n{removeCreditCard}</button>
       <button id="menuClearCreditCard" class="dropdown-item"
           on-tap="onMenuClearCreditCardTap_"
@@ -160,5 +168,5 @@
       </settings-credit-card-edit-dialog>
     </template>
   </template>
-  <script src="/passwords_and_forms_page/autofill_section.js"></script>
+  <script src="autofill_section.js"></script>
 </dom-module>

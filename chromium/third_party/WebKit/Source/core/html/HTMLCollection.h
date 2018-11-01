@@ -123,11 +123,11 @@ class CORE_EXPORT HTMLCollection
     static NamedItemCache* create() { return new NamedItemCache; }
 
     HeapVector<Member<Element>>* getElementsById(const AtomicString& id) const {
-      return m_idCache.get(id.impl());
+      return m_idCache.at(id.impl());
     }
     HeapVector<Member<Element>>* getElementsByName(
         const AtomicString& name) const {
-      return m_nameCache.get(name.impl());
+      return m_nameCache.at(name.impl());
     }
     void addElementWithId(const AtomicString& id, Element* element) {
       addElementToMap(m_idCache, id, element);
@@ -149,7 +149,7 @@ class CORE_EXPORT HTMLCollection
                                 const AtomicString& key,
                                 Element* element) {
       Member<HeapVector<Member<Element>>>& vector =
-          map.add(key.impl(), nullptr).storedValue->value;
+          map.insert(key.impl(), nullptr).storedValue->value;
       if (!vector)
         vector = new HeapVector<Member<Element>>;
       vector->push_back(element);

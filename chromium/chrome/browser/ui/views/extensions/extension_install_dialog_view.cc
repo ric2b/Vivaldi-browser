@@ -25,9 +25,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/views/harmony/layout_delegate.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/page_navigator.h"
@@ -245,24 +245,19 @@ void ExtensionInstallDialogView::InitView() {
     user_count->SetAutoColorReadabilityEnabled(false);
     user_count->SetEnabledColor(SK_ColorGRAY);
     layout->AddView(user_count);
-
-    layout->StartRow(0, column_set_id);
-    views::Link* store_link = new views::Link(
-        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
-    store_link->SetFontList(small_font_list);
-    store_link->set_listener(this);
-    layout->AddView(store_link);
   }
 
   if (prompt_->ShouldShowPermissions()) {
     layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
     layout->StartRow(0, column_set_id);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL), 3, 1,
-                    views::GridLayout::FILL, views::GridLayout::FILL);
+    layout->AddView(new views::Separator(), 3, 1, views::GridLayout::FILL,
+                    views::GridLayout::FILL);
   }
 
-  const int content_width =
-      left_column_width + views::kPanelHorizMargin + kIconSize;
+  const int content_width = left_column_width +
+                            LayoutDelegate::Get()->GetMetric(
+                                LayoutDelegate::Metric::PANEL_CONTENT_MARGIN) +
+                            kIconSize;
 
   // Create the scrollable view which will contain the permissions and retained
   // files/devices. It will span the full content width.
@@ -434,7 +429,9 @@ views::GridLayout* ExtensionInstallDialogView::CreateLayout(
                         views::GridLayout::USE_PREF,
                         0,  // no fixed width
                         left_column_width);
-  column_set->AddPaddingColumn(0, views::kPanelHorizMargin);
+  column_set->AddPaddingColumn(
+      0, LayoutDelegate::Get()->GetMetric(
+             LayoutDelegate::Metric::PANEL_CONTENT_MARGIN));
   column_set->AddColumn(views::GridLayout::TRAILING, views::GridLayout::LEADING,
                         0,  // no resizing
                         views::GridLayout::USE_PREF,
@@ -557,6 +554,16 @@ void ExtensionInstallDialogView::Layout() {
 
 gfx::Size ExtensionInstallDialogView::GetPreferredSize() const {
   return dialog_size_;
+}
+
+views::View* ExtensionInstallDialogView::CreateExtraView() {
+  if (!prompt_->has_webstore_data())
+    return nullptr;
+
+  views::Link* store_link = new views::Link(
+      l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
+  store_link->set_listener(this);
+  return store_link;
 }
 
 void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)

@@ -24,7 +24,9 @@ SimNetwork::SimNetwork() : m_currentRequest(nullptr) {
 
 SimNetwork::~SimNetwork() {
   Platform::current()->getURLLoaderMockFactory()->setLoaderDelegate(nullptr);
-  Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+  Platform::current()
+      ->getURLLoaderMockFactory()
+      ->unregisterAllURLsAndClearMemoryCache();
   s_network = nullptr;
 }
 
@@ -80,11 +82,11 @@ void SimNetwork::didFinishLoading(WebURLLoaderClient* client,
 }
 
 void SimNetwork::addRequest(SimRequest& request) {
-  m_requests.add(request.url(), &request);
+  m_requests.insert(request.url(), &request);
 }
 
 void SimNetwork::removeRequest(SimRequest& request) {
-  m_requests.remove(request.url());
+  m_requests.erase(request.url());
 }
 
 }  // namespace blink

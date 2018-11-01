@@ -11,10 +11,12 @@
 #include "base/format_macros.h"
 #include "base/location.h"
 #include "base/mac/bind_objc_block.h"
+#include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_internal.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
@@ -191,11 +193,6 @@ class SnapshotCacheTest : public PlatformTest {
     }
   }
 
-  const char* GetPixelData(CGImageRef cgImage) {
-    CFDataRef data = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
-    return reinterpret_cast<const char*>(CFDataGetBytePtr(data));
-  }
-
   void TriggerMemoryWarning() {
     // _performMemoryWarning is a private API and must not be compiled into
     // official builds.
@@ -217,9 +214,6 @@ class SnapshotCacheTest : public PlatformTest {
 // This test also checks that images are correctly removed from the disk.
 TEST_F(SnapshotCacheTest, Cache) {
   SnapshotCache* cache = GetSnapshotCache();
-
-  if (![cache inMemoryCacheIsEnabled])
-    return;
 
   NSUInteger expectedCacheSize = kSessionCount;
   if ([cache usesLRUCache])
@@ -274,12 +268,18 @@ TEST_F(SnapshotCacheTest, SaveToDisk) {
     UIImage* image =
         [UIImage imageWithContentsOfFile:base::SysUTF8ToNSString(path.value())];
     CGImageRef cgImage = [image CGImage];
-    const char* pixels = GetPixelData(cgImage);
+    base::ScopedCFTypeRef<CFDataRef> pixelData(
+        CGDataProviderCopyData(CGImageGetDataProvider(cgImage)));
+    const char* pixels =
+        reinterpret_cast<const char*>(CFDataGetBytePtr(pixelData));
     EXPECT_TRUE(pixels);
 
     UIImage* referenceImage = [testImages_ objectAtIndex:i];
     CGImageRef referenceCgImage = [referenceImage CGImage];
-    const char* referencePixels = GetPixelData(referenceCgImage);
+    base::ScopedCFTypeRef<CFDataRef> referenceData(
+        CGDataProviderCopyData(CGImageGetDataProvider(referenceCgImage)));
+    const char* referencePixels =
+        reinterpret_cast<const char*>(CFDataGetBytePtr(referenceData));
     EXPECT_TRUE(referencePixels);
 
     if (pixels != nil && referencePixels != nil) {
@@ -361,13 +361,8 @@ TEST_F(SnapshotCacheTest, HandleMemoryWarning) {
 
   TriggerMemoryWarning();
 
-  if ([cache inMemoryCacheIsEnabled]) {
-    EXPECT_EQ(YES, [cache hasImageInMemory:firstPinnedID]);
-    EXPECT_EQ(YES, [cache hasImageInMemory:secondPinnedID]);
-  } else {
-    EXPECT_EQ(NO, [cache hasImageInMemory:firstPinnedID]);
-    EXPECT_EQ(NO, [cache hasImageInMemory:secondPinnedID]);
-  }
+  EXPECT_EQ(YES, [cache hasImageInMemory:firstPinnedID]);
+  EXPECT_EQ(YES, [cache hasImageInMemory:secondPinnedID]);
 
   NSString* notPinnedID = [testSessions_ objectAtIndex:2];
   EXPECT_FALSE([cache hasImageInMemory:notPinnedID]);

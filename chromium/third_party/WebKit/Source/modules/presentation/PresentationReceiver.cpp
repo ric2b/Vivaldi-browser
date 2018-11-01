@@ -10,6 +10,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "modules/presentation/PresentationConnection.h"
 #include "modules/presentation/PresentationConnectionList.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
@@ -19,6 +20,7 @@ namespace blink {
 PresentationReceiver::PresentationReceiver(LocalFrame* frame,
                                            WebPresentationClient* client)
     : ContextClient(frame) {
+  recordOriginTypeAccess(frame->document());
   m_connectionList = new PresentationConnectionList(frame->document());
 
   if (client)
@@ -39,7 +41,7 @@ ScriptPromise PresentationReceiver::connectionList(ScriptState* scriptState) {
   return m_connectionListProperty->promise(scriptState->world());
 }
 
-void PresentationReceiver::onReceiverConnectionAvailable(
+WebPresentationConnection* PresentationReceiver::onReceiverConnectionAvailable(
     const WebPresentationSessionInfo& sessionInfo) {
   // take() will call PresentationReceiver::registerConnection()
   // and register the connection.
@@ -47,20 +49,32 @@ void PresentationReceiver::onReceiverConnectionAvailable(
 
   // receiver.connectionList property not accessed
   if (!m_connectionListProperty)
-    return;
+    return connection;
 
   if (m_connectionListProperty->getState() ==
-      ScriptPromisePropertyBase::Pending)
+      ScriptPromisePropertyBase::Pending) {
     m_connectionListProperty->resolve(m_connectionList);
-  else if (m_connectionListProperty->getState() ==
-           ScriptPromisePropertyBase::Resolved)
+  } else if (m_connectionListProperty->getState() ==
+             ScriptPromisePropertyBase::Resolved) {
     m_connectionList->dispatchConnectionAvailableEvent(connection);
+  }
+
+  return connection;
 }
 
 void PresentationReceiver::registerConnection(
     PresentationConnection* connection) {
   DCHECK(m_connectionList);
   m_connectionList->addConnection(connection);
+}
+
+void PresentationReceiver::recordOriginTypeAccess(Document* document) const {
+  DCHECK(document);
+  if (document->isSecureContext()) {
+    UseCounter::count(document, UseCounter::PresentationReceiverSecureOrigin);
+  } else {
+    UseCounter::count(document, UseCounter::PresentationReceiverInsecureOrigin);
+  }
 }
 
 DEFINE_TRACE(PresentationReceiver) {

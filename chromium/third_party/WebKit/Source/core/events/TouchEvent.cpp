@@ -198,44 +198,36 @@ void logTouchTargetHistogram(EventTarget* eventTarget,
 }  // namespace
 
 TouchEvent::TouchEvent()
-    : m_causesScrollingIfUncanceled(false),
-      m_firstTouchMoveOrStart(false),
-      m_defaultPreventedBeforeCurrentTarget(false),
+    : m_defaultPreventedBeforeCurrentTarget(false),
       m_currentTouchAction(TouchActionAuto) {}
 
-TouchEvent::TouchEvent(TouchList* touches,
+TouchEvent::TouchEvent(const WebTouchEvent& event,
+                       TouchList* touches,
                        TouchList* targetTouches,
                        TouchList* changedTouches,
                        const AtomicString& type,
                        AbstractView* view,
-                       PlatformEvent::Modifiers modifiers,
-                       bool cancelable,
-                       bool causesScrollingIfUncanceled,
-                       bool firstTouchMoveOrStart,
-                       TimeTicks platformTimeStamp,
-                       TouchAction currentTouchAction,
-                       WebPointerProperties::PointerType pointerType)
+                       TouchAction currentTouchAction)
     // Pass a sourceCapabilities including the ability to fire touchevents when
     // creating this touchevent, which is always created from input device
     // capabilities from EventHandler.
     : UIEventWithKeyState(
           type,
           true,
-          cancelable,
+          event.isCancelable(),
           view,
           0,
-          modifiers,
-          platformTimeStamp,
+          static_cast<WebInputEvent::Modifiers>(event.modifiers()),
+          TimeTicks::FromSeconds(event.timeStampSeconds()),
           view ? view->getInputDeviceCapabilities()->firesTouchEvents(true)
                : nullptr),
       m_touches(touches),
       m_targetTouches(targetTouches),
       m_changedTouches(changedTouches),
-      m_causesScrollingIfUncanceled(causesScrollingIfUncanceled),
-      m_firstTouchMoveOrStart(firstTouchMoveOrStart),
       m_defaultPreventedBeforeCurrentTarget(false),
-      m_currentTouchAction(currentTouchAction),
-      m_pointerType(pointerType) {}
+      m_currentTouchAction(currentTouchAction) {
+  m_nativeEvent.reset(new WebTouchEvent(event));
+}
 
 TouchEvent::TouchEvent(const AtomicString& type,
                        const TouchEventInit& initializer)
@@ -243,11 +235,7 @@ TouchEvent::TouchEvent(const AtomicString& type,
       m_touches(TouchList::create(initializer.touches())),
       m_targetTouches(TouchList::create(initializer.targetTouches())),
       m_changedTouches(TouchList::create(initializer.changedTouches())),
-      m_causesScrollingIfUncanceled(false),
-      m_firstTouchMoveOrStart(false),
-      m_defaultPreventedBeforeCurrentTarget(false),
-      m_currentTouchAction(TouchActionAuto),
-      m_pointerType(WebPointerProperties::PointerType::Unknown) {}
+      m_currentTouchAction(TouchActionAuto) {}
 
 TouchEvent::~TouchEvent() {}
 
@@ -265,15 +253,42 @@ void TouchEvent::preventDefault() {
   // A common developer error is to wait too long before attempting to stop
   // scrolling by consuming a touchmove event. Generate a warning if this
   // event is uncancelable.
+  MessageSource messageSource = JSMessageSource;
   String warningMessage;
   switch (handlingPassive()) {
     case PassiveMode::NotPassive:
     case PassiveMode::NotPassiveDefault:
       if (!cancelable()) {
-        warningMessage = "Ignored attempt to cancel a " + type() +
-                         " event with cancelable=false, for example "
-                         "because scrolling is in progress and "
-                         "cannot be interrupted.";
+        if (view() && view()->frame()) {
+          UseCounter::count(
+              view()->frame(),
+              UseCounter::UncancellableTouchEventPreventDefaulted);
+        }
+
+        if (m_nativeEvent &&
+            m_nativeEvent->dispatchType ==
+                WebInputEvent::
+                    ListenersForcedNonBlockingDueToMainThreadResponsiveness) {
+          // Non blocking due to main thread responsiveness.
+          if (view() && view()->frame()) {
+            UseCounter::count(
+                view()->frame(),
+                UseCounter::
+                    UncancellableTouchEventDueToMainThreadResponsivenessPreventDefaulted);
+          }
+          messageSource = InterventionMessageSource;
+          warningMessage =
+              "Ignored attempt to cancel a " + type() +
+              " event with cancelable=false. This event was forced to be "
+              "non-cancellable because the page was too busy to handle the "
+              "event promptly.";
+        } else {
+          // Non blocking for any other reason.
+          warningMessage = "Ignored attempt to cancel a " + type() +
+                           " event with cancelable=false, for example "
+                           "because scrolling is in progress and "
+                           "cannot be interrupted.";
+        }
       }
       break;
     case PassiveMode::PassiveForcedDocumentLevel:
@@ -281,6 +296,7 @@ void TouchEvent::preventDefault() {
       // an author may use touch action but call preventDefault for interop with
       // browsers that don't support touch-action.
       if (m_currentTouchAction == TouchActionAuto) {
+        messageSource = InterventionMessageSource;
         warningMessage =
             "Unable to preventDefault inside passive event listener due to "
             "target being treated as passive. See "
@@ -294,7 +310,7 @@ void TouchEvent::preventDefault() {
   if (!warningMessage.isEmpty() && view() && view()->isLocalDOMWindow() &&
       view()->frame()) {
     toLocalDOMWindow(view())->frame()->console().addMessage(
-        ConsoleMessage::create(JSMessageSource, WarningMessageLevel,
+        ConsoleMessage::create(messageSource, WarningMessageLevel,
                                warningMessage));
   }
 
@@ -317,10 +333,16 @@ void TouchEvent::preventDefault() {
   }
 }
 
+bool TouchEvent::isTouchStartOrFirstTouchMove() const {
+  if (!m_nativeEvent)
+    return false;
+  return m_nativeEvent->touchStartOrFirstTouchMove;
+}
+
 void TouchEvent::doneDispatchingEventAtCurrentTarget() {
   // Do not log for non-cancelable events, events that don't block
   // scrolling, have more than one touch point or aren't on the main frame.
-  if (!cancelable() || !m_firstTouchMoveOrStart ||
+  if (!cancelable() || !isTouchStartOrFirstTouchMove() ||
       !(m_touches && m_touches->length() == 1) ||
       !(view() && view()->frame() && view()->frame()->isMainFrame()))
     return;

@@ -38,6 +38,7 @@ var WEB_VIEW_API_METHODS = [
   'setIsFullscreen',
   'setVisible',
   'showPageInfo',
+  'sendRequest',
 ];
 
 WebViewImpl.prototype.setVisible = function (isVisible) {
@@ -126,6 +127,15 @@ WebViewImpl.prototype.resetGestureState = function () {
   }
   WebViewPrivate.resetGestureState(this.guest.getId());
 };
+
+WebViewImpl.prototype.sendRequest =
+  function (url, wasTyped, usePost, postData, extraHeaders) {
+    if (!this.guest.getId()) {
+      return;
+    }
+    WebViewPrivate.sendRequest(
+      this.guest.getId(), url, wasTyped, usePost, postData, extraHeaders);
+  };
 
 // -----------------------------------------------------------------------------
 

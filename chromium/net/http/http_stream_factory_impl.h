@@ -69,6 +69,8 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
 
   void PreconnectStreams(int num_streams, const HttpRequestInfo& info) override;
   const HostMappingRules* GetHostMappingRules() const override;
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_absolute_name) const override;
 
   enum JobType {
     MAIN,
@@ -130,8 +132,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
                              const ProxyInfo& used_proxy_info,
                              bool was_alpn_negotiated,
                              NextProto negotiated_protocol,
-                             bool using_spdy,
-                             const NetLogWithSource& net_log);
+                             bool using_spdy);
 
   // Called when the Job detects that the endpoint indicated by the
   // Alternate-Protocol does not work. Lets the factory update

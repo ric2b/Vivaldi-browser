@@ -4,17 +4,22 @@
 
 #include "android_webview/common/crash_reporter/aw_microdump_crash_reporter.h"
 
+#include <random>
+
 #include "android_webview/common/aw_descriptors.h"
 #include "android_webview/common/aw_paths.h"
 #include "android_webview/common/aw_version_info_values.h"
+#include "android_webview/common/crash_reporter/crash_keys.h"
 #include "base/android/build_info.h"
 #include "base/base_paths_android.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "base/synchronization/lock.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/breakpad_linux.h"
 #include "components/crash/content/app/crash_reporter_client.h"
@@ -25,18 +30,39 @@ namespace crash_reporter {
 
 namespace {
 
+// Use a value of 0.1% for WebView Stable to avoid hitting the crash report
+// upload cap.
+const double minidump_generation_user_fraction = 0.001;
+
+// Returns whether the current process should be reporting crashes through
+// minidumps. This function should only be called once per process - the return
+// value might differ between different calls to this function.
+bool is_process_in_crash_reporting_sample() {
+  // TODO(gsennton): update this method to depend on finch when that is
+  // implemented for WebView.
+  base::Time cur_time = base::Time::Now();
+  std::minstd_rand generator(cur_time.ToInternalValue() /* seed */);
+  std::uniform_real_distribution<double> distribution(0.0, 1.0);
+  return minidump_generation_user_fraction > distribution(generator);
+}
+
 class AwCrashReporterClient : public ::crash_reporter::CrashReporterClient {
  public:
   AwCrashReporterClient()
-      : dump_fd_(kAndroidMinidumpDescriptor), crash_signal_fd_(-1) {}
+      : dump_fd_(kAndroidMinidumpDescriptor),
+        crash_signal_fd_(-1),
+        in_crash_reporting_sample_(is_process_in_crash_reporting_sample()) {}
 
   // Does not use lock, can only be called immediately after creation.
   void set_crash_signal_fd(int fd) { crash_signal_fd_ = fd; }
 
   // crash_reporter::CrashReporterClient implementation.
-  bool IsRunningUnattended() override { return false; }
-  bool GetCollectStatsConsent() override { return false; }
+  size_t RegisterCrashKeys() override;
+  bool UseCrashKeysWhiteList() override { return true; }
+  const char* const* GetCrashKeyWhiteList() override;
 
+  bool IsRunningUnattended() override { return false; }
+  bool GetCollectStatsConsent() override;
   void GetProductNameAndVersion(const char** product_name,
                                 const char** version) override {
     *product_name = "AndroidWebView";
@@ -64,8 +90,31 @@ class AwCrashReporterClient : public ::crash_reporter::CrashReporterClient {
  private:
   int dump_fd_;
   int crash_signal_fd_;
+  bool in_crash_reporting_sample_;
   DISALLOW_COPY_AND_ASSIGN(AwCrashReporterClient);
 };
+
+size_t AwCrashReporterClient::RegisterCrashKeys() {
+  return crash_keys::RegisterWebViewCrashKeys();
+}
+
+const char* const* AwCrashReporterClient::GetCrashKeyWhiteList() {
+  return crash_keys::kWebViewCrashKeyWhiteList;
+}
+
+bool AwCrashReporterClient::GetCollectStatsConsent() {
+#if defined(GOOGLE_CHROME_BUILD)
+  // TODO(gsennton): Enabling minidump-generation unconditionally means we
+  // will generate minidumps even if the user doesn't consent to minidump
+  // uploads. However, we will check user-consent before uploading any
+  // minidumps, if we do not have user consent we will delete the minidumps.
+  // We should investigate whether we can avoid generating minidumps
+  // altogether if we don't have user consent, see crbug.com/692485
+  return in_crash_reporting_sample_;
+#else
+  return false;
+#endif  // !defined(GOOGLE_CHROME_BUILD)
+}
 
 base::LazyInstance<AwCrashReporterClient>::Leaky g_crash_reporter_client =
     LAZY_INSTANCE_INITIALIZER;
@@ -149,15 +198,23 @@ void EnableCrashReporter(const std::string& process_type, int crash_signal_fd) {
     client->set_crash_signal_fd(crash_signal_fd);
   }
   ::crash_reporter::SetCrashReporterClient(client);
+  breakpad::SanitizationInfo sanitization_info;
+  sanitization_info.should_sanitize_dumps = true;
+#if !defined(COMPONENT_BUILD)
+  sanitization_info.skip_dump_if_principal_mapping_not_referenced = true;
+  sanitization_info.address_within_principal_mapping =
+      reinterpret_cast<uintptr_t>(&EnableCrashReporter);
+#endif  // defined(COMPONENT_BUILD)
 
   bool is_browser_process =
       process_type.empty() ||
       process_type == breakpad::kWebViewSingleProcessType ||
       process_type == breakpad::kBrowserProcessType;
   if (is_browser_process) {
-    breakpad::InitCrashReporter("");
+    breakpad::InitCrashReporter("", sanitization_info);
   } else {
-    breakpad::InitNonBrowserCrashReporterForAndroid(process_type);
+    breakpad::InitNonBrowserCrashReporterForAndroid(process_type,
+                                                    sanitization_info);
   }
   g_enabled = true;
 }
@@ -172,6 +229,7 @@ void AddGpuFingerprintToMicrodumpCrashHandler(
 }
 
 bool DumpWithoutCrashingToFd(int fd) {
+  ::crash_reporter::SetCrashReporterClient(g_crash_reporter_client.Pointer());
   return g_crash_reporter_client.Pointer()->DumpWithoutCrashingToFd(fd);
 }
 

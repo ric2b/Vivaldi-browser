@@ -32,6 +32,7 @@
 #include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/QualifiedName.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/editing/EditingUtilities.h"
@@ -69,6 +70,144 @@
 namespace blink {
 
 using namespace HTMLNames;
+
+class SparseAttributeSetter {
+  USING_FAST_MALLOC(SparseAttributeSetter);
+
+ public:
+  virtual void run(const AXObject&,
+                   AXSparseAttributeClient&,
+                   const AtomicString& value) = 0;
+};
+
+class BoolAttributeSetter : public SparseAttributeSetter {
+ public:
+  BoolAttributeSetter(AXBoolAttribute attribute) : m_attribute(attribute) {}
+
+ private:
+  AXBoolAttribute m_attribute;
+
+  void run(const AXObject& obj,
+           AXSparseAttributeClient& attributeMap,
+           const AtomicString& value) override {
+    attributeMap.addBoolAttribute(m_attribute,
+                                  equalIgnoringCase(value, "true"));
+  }
+};
+
+class StringAttributeSetter : public SparseAttributeSetter {
+ public:
+  StringAttributeSetter(AXStringAttribute attribute) : m_attribute(attribute) {}
+
+ private:
+  AXStringAttribute m_attribute;
+
+  void run(const AXObject& obj,
+           AXSparseAttributeClient& attributeMap,
+           const AtomicString& value) override {
+    attributeMap.addStringAttribute(m_attribute, value);
+  }
+};
+
+class ObjectAttributeSetter : public SparseAttributeSetter {
+ public:
+  ObjectAttributeSetter(AXObjectAttribute attribute) : m_attribute(attribute) {}
+
+ private:
+  AXObjectAttribute m_attribute;
+
+  void run(const AXObject& obj,
+           AXSparseAttributeClient& attributeMap,
+           const AtomicString& value) override {
+    if (value.isNull() || value.isEmpty())
+      return;
+
+    Node* node = obj.getNode();
+    if (!node || !node->isElementNode())
+      return;
+    Element* target = toElement(node)->treeScope().getElementById(value);
+    if (!target)
+      return;
+    AXObject* axTarget = obj.axObjectCache().getOrCreate(target);
+    if (axTarget)
+      attributeMap.addObjectAttribute(m_attribute, *axTarget);
+  }
+};
+
+class ObjectVectorAttributeSetter : public SparseAttributeSetter {
+ public:
+  ObjectVectorAttributeSetter(AXObjectVectorAttribute attribute)
+      : m_attribute(attribute) {}
+
+ private:
+  AXObjectVectorAttribute m_attribute;
+
+  void run(const AXObject& obj,
+           AXSparseAttributeClient& attributeMap,
+           const AtomicString& value) override {
+    Node* node = obj.getNode();
+    if (!node || !node->isElementNode())
+      return;
+
+    String attributeValue = value.getString();
+    if (attributeValue.isEmpty())
+      return;
+
+    attributeValue.simplifyWhiteSpace();
+    Vector<String> ids;
+    attributeValue.split(' ', ids);
+    if (ids.isEmpty())
+      return;
+
+    HeapVector<Member<AXObject>> objects;
+    TreeScope& scope = node->treeScope();
+    for (const auto& id : ids) {
+      if (Element* idElement = scope.getElementById(AtomicString(id))) {
+        AXObject* axIdElement = obj.axObjectCache().getOrCreate(idElement);
+        if (axIdElement && !axIdElement->accessibilityIsIgnored())
+          objects.push_back(axIdElement);
+      }
+    }
+
+    attributeMap.addObjectVectorAttribute(m_attribute, objects);
+  }
+};
+
+using AXSparseAttributeSetterMap =
+    HashMap<QualifiedName, SparseAttributeSetter*>;
+
+static AXSparseAttributeSetterMap& getSparseAttributeSetterMap() {
+  // Use a map from attribute name to properties of that attribute.
+  // That way we only need to iterate over the list of attributes once,
+  // rather than calling getAttribute() once for each possible obscure
+  // accessibility attribute.
+  DEFINE_STATIC_LOCAL(AXSparseAttributeSetterMap, axSparseAttributeSetterMap,
+                      ());
+  if (axSparseAttributeSetterMap.isEmpty()) {
+    axSparseAttributeSetterMap.set(
+        aria_activedescendantAttr,
+        new ObjectAttributeSetter(AXObjectAttribute::AriaActiveDescendant));
+    axSparseAttributeSetterMap.set(
+        aria_controlsAttr,
+        new ObjectVectorAttributeSetter(AXObjectVectorAttribute::AriaControls));
+    axSparseAttributeSetterMap.set(
+        aria_flowtoAttr,
+        new ObjectVectorAttributeSetter(AXObjectVectorAttribute::AriaFlowTo));
+    axSparseAttributeSetterMap.set(
+        aria_detailsAttr,
+        new ObjectVectorAttributeSetter(AXObjectVectorAttribute::AriaDetails));
+    axSparseAttributeSetterMap.set(
+        aria_errormessageAttr,
+        new ObjectAttributeSetter(AXObjectAttribute::AriaErrorMessage));
+    axSparseAttributeSetterMap.set(
+        aria_keyshortcutsAttr,
+        new StringAttributeSetter(AXStringAttribute::AriaKeyShortcuts));
+    axSparseAttributeSetterMap.set(
+        aria_roledescriptionAttr,
+        new StringAttributeSetter(AXStringAttribute::AriaRoleDescription));
+  }
+  return axSparseAttributeSetterMap;
+}
 
 AXNodeObject::AXNodeObject(Node* node, AXObjectCacheImpl& axObjectCache)
     : AXObject(axObjectCache),
@@ -281,14 +420,35 @@ const AXObject* AXNodeObject::inheritsPresentationalRoleFrom() const {
   return 0;
 }
 
+// There should only be one banner/contentInfo per page. If header/footer are
+// being used within an article, aside, nave, section, blockquote, details,
+// fieldset, figure, td, or main, then it should not be exposed as whole
+// page's banner/contentInfo.
+static HashSet<QualifiedName>& getLandmarkRolesNotAllowed() {
+  DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, landmarkRolesNotAllowed, ());
+  if (landmarkRolesNotAllowed.isEmpty()) {
+    landmarkRolesNotAllowed.insert(articleTag);
+    landmarkRolesNotAllowed.insert(asideTag);
+    landmarkRolesNotAllowed.insert(navTag);
+    landmarkRolesNotAllowed.insert(sectionTag);
+    landmarkRolesNotAllowed.insert(blockquoteTag);
+    landmarkRolesNotAllowed.insert(detailsTag);
+    landmarkRolesNotAllowed.insert(fieldsetTag);
+    landmarkRolesNotAllowed.insert(figureTag);
+    landmarkRolesNotAllowed.insert(tdTag);
+    landmarkRolesNotAllowed.insert(mainTag);
+  }
+  return landmarkRolesNotAllowed;
+}
+
 bool AXNodeObject::isDescendantOfElementType(
-    const HTMLQualifiedName& tagName) const {
+    HashSet<QualifiedName>& tagNames) const {
   if (!getNode())
     return false;
 
   for (Element* parent = getNode()->parentElement(); parent;
        parent = parent->parentElement()) {
-    if (parent->hasTagName(tagName))
+    if (tagNames.contains(parent->tagQName()))
       return true;
   }
   return false;
@@ -465,22 +625,14 @@ AccessibilityRole AXNodeObject::nativeAccessibilityRoleIgnoringAria() const {
   // being used within an article or section then it should not be exposed as
   // whole page's banner/contentInfo but as a group role.
   if (getNode()->hasTagName(headerTag)) {
-    if (isDescendantOfElementType(articleTag) ||
-        isDescendantOfElementType(sectionTag) ||
-        (getNode()->parentElement() &&
-         getNode()->parentElement()->hasTagName(mainTag))) {
+    if (isDescendantOfElementType(getLandmarkRolesNotAllowed()))
       return GroupRole;
-    }
     return BannerRole;
   }
 
   if (getNode()->hasTagName(footerTag)) {
-    if (isDescendantOfElementType(articleTag) ||
-        isDescendantOfElementType(sectionTag) ||
-        (getNode()->parentElement() &&
-         getNode()->parentElement()->hasTagName(mainTag))) {
+    if (isDescendantOfElementType(getLandmarkRolesNotAllowed()))
       return GroupRole;
-    }
     return FooterRole;
   }
 
@@ -750,6 +902,22 @@ void AXNodeObject::detach() {
   m_node = nullptr;
 }
 
+void AXNodeObject::getSparseAXAttributes(
+    AXSparseAttributeClient& sparseAttributeClient) const {
+  Node* node = this->getNode();
+  if (!node || !node->isElementNode())
+    return;
+
+  AXSparseAttributeSetterMap& axSparseAttributeSetterMap =
+      getSparseAttributeSetterMap();
+  AttributeCollection attributes = toElement(node)->attributesWithoutUpdate();
+  for (const Attribute& attr : attributes) {
+    SparseAttributeSetter* setter = axSparseAttributeSetterMap.at(attr.name());
+    if (setter)
+      setter->run(*this, sparseAttributeClient, attr.value());
+  }
+}
+
 bool AXNodeObject::isAnchor() const {
   return !isNativeImage() && isLink();
 }
@@ -997,6 +1165,24 @@ AccessibilityExpanded AXNodeObject::isExpanded() const {
   return ExpandedUndefined;
 }
 
+bool AXNodeObject::isModal() const {
+  if (roleValue() != DialogRole && roleValue() != AlertDialogRole)
+    return false;
+
+  if (hasAttribute(aria_modalAttr)) {
+    const AtomicString& modal = getAttribute(aria_modalAttr);
+    if (equalIgnoringCase(modal, "true"))
+      return true;
+    if (equalIgnoringCase(modal, "false"))
+      return false;
+  }
+
+  if (getNode() && isHTMLDialogElement(*getNode()))
+    return toElement(getNode())->isInTopLayer();
+
+  return false;
+}
+
 bool AXNodeObject::isPressed() const {
   if (!isButton())
     return false;
@@ -1209,7 +1395,6 @@ void AXNodeObject::markers(Vector<DocumentMarker::MarkerType>& markerTypes,
         markerRanges.push_back(
             AXRange(marker->startOffset(), marker->endOffset()));
         break;
-      case DocumentMarker::InvisibleSpellcheck:
       case DocumentMarker::Composition:
         // No need for accessibility to know about these marker types.
         break;
@@ -1731,6 +1916,19 @@ bool AXNodeObject::nameFromLabelElement() const {
   }
 
   return false;
+}
+
+bool AXNodeObject::nameFromContents() const {
+  Node* node = getNode();
+  if (!node || !node->isElementNode())
+    return AXObject::nameFromContents();
+  // AXObject::nameFromContents determines whether an element should take its
+  // name from its descendant contents based on role. However, <select> is a
+  // special case, as unlike a typical pop-up button it contains its own pop-up
+  // menu's contents, which should not be used as the name.
+  if (isHTMLSelectElement(node))
+    return false;
+  return AXObject::nameFromContents();
 }
 
 void AXNodeObject::getRelativeBounds(AXObject** outContainer,
@@ -2256,10 +2454,12 @@ String AXNodeObject::nativeTextAlternative(
            ++labelIndex) {
         Element* label = labels->item(labelIndex);
         if (nameSources) {
-          if (label->getAttribute(forAttr) == htmlElement->getIdAttribute())
+          if (!label->getAttribute(forAttr).isEmpty() &&
+              label->getAttribute(forAttr) == htmlElement->getIdAttribute()) {
             nameSources->back().nativeSource = AXTextFromNativeHTMLLabelFor;
-          else
+          } else {
             nameSources->back().nativeSource = AXTextFromNativeHTMLLabelWrapped;
+          }
         }
         labelElements.push_back(label);
       }
@@ -2298,6 +2498,28 @@ String AXNodeObject::nativeTextAlternative(
         *foundTextAlternative = true;
       } else {
         return textAlternative;
+      }
+    }
+
+    // Get default value if object is not laid out.
+    // If object is laid out, it will have a layout object for the label.
+    if (!getLayoutObject()) {
+      String defaultLabel = inputElement->valueOrDefaultLabel();
+      if (value.isNull() && !defaultLabel.isNull()) {
+        // default label
+        nameFrom = AXNameFromContents;
+        if (nameSources) {
+          nameSources->push_back(NameSource(*foundTextAlternative));
+          nameSources->back().type = nameFrom;
+        }
+        textAlternative = defaultLabel;
+        if (nameSources) {
+          NameSource& source = nameSources->back();
+          source.text = textAlternative;
+          *foundTextAlternative = true;
+        } else {
+          return textAlternative;
+        }
       }
     }
     return textAlternative;

@@ -5,6 +5,7 @@
 #ifndef UI_VIVALDI_MAIN_MENU_H_
 #define UI_VIVALDI_MAIN_MENU_H_
 
+#include <string>
 #include <vector>
 
 namespace show_menu {
@@ -15,7 +16,7 @@ namespace vivaldi {
 
 void CreateVivaldiMainMenu(
     Profile* profile,
-    std::vector<extensions::vivaldi::show_menu::MenuItem>& items,
+    std::vector<extensions::vivaldi::show_menu::MenuItem>* items,
     const std::string& mode);
 
 }  // namespace vivaldi

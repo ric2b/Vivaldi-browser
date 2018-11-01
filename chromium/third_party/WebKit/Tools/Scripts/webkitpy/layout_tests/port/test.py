@@ -36,6 +36,13 @@ from webkitpy.layout_tests.port.base import Port, VirtualTestSuite
 from webkitpy.layout_tests.port.driver import DeviceFailure, Driver, DriverOutput
 
 
+# Here we use a non-standard location for the layout tests, to ensure that
+# this works. The path contains a '.' in the name because we've seen bugs
+# related to this before.
+LAYOUT_TEST_DIR = '/test.checkout/LayoutTests'
+PERF_TEST_DIR = '/test.checkout/PerformanceTests'
+
+
 # This sets basic expectations for a test. Each individual expectation
 # can be overridden by a keyword argument in TestList.add().
 class TestInstance(object):
@@ -103,8 +110,10 @@ class TestList(object):
 # These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
 TOTAL_TESTS = 106
-TOTAL_SKIPS = 22
+TOTAL_WONTFIX = 3
+TOTAL_SKIPS = 22 + TOTAL_WONTFIX
 TOTAL_CRASHES = 76
+
 UNEXPECTED_PASSES = 1
 UNEXPECTED_FAILURES = 26
 
@@ -259,22 +268,14 @@ layer at (0,0) size 800x34
     return tests
 
 
-# Here we use a non-standard location for the layout tests, to ensure that
-# this works. The path contains a '.' in the name because we've seen bugs
-# related to this before.
-
-LAYOUT_TEST_DIR = '/test.checkout/LayoutTests'
-PERF_TEST_DIR = '/test.checkout/PerformanceTests'
-
-
 # Here we synthesize an in-memory filesystem from the test list
 # in order to fully control the test output and to demonstrate that
 # we don't need a real filesystem to run the tests.
 def add_unit_tests_to_mock_filesystem(filesystem):
     # Add the test_expectations file.
-    filesystem.maybe_make_directory('/mock-checkout/LayoutTests')
-    if not filesystem.exists('/mock-checkout/LayoutTests/TestExpectations'):
-        filesystem.write_text_file('/mock-checkout/LayoutTests/TestExpectations', """
+    filesystem.maybe_make_directory(LAYOUT_TEST_DIR)
+    if not filesystem.exists(LAYOUT_TEST_DIR + '/TestExpectations'):
+        filesystem.write_text_file(LAYOUT_TEST_DIR + '/TestExpectations', """
 Bug(test) failures/expected/crash.html [ Crash ]
 Bug(test) failures/expected/crash_then_text.html [ Failure ]
 Bug(test) failures/expected/image.html [ Failure ]
@@ -296,6 +297,13 @@ Bug(test) failures/expected/leak.html [ Leak ]
 Bug(test) failures/unexpected/pass.html [ Failure ]
 Bug(test) passes/skipped/skip.html [ Skip ]
 Bug(test) passes/text.html [ Pass ]
+""")
+
+    if not filesystem.exists(LAYOUT_TEST_DIR + '/NeverFixTests'):
+        filesystem.write_text_file(LAYOUT_TEST_DIR + '/NeverFixTests', """
+Bug(test) failures/expected/keyboard.html [ WontFix ]
+Bug(test) failures/expected/exception.html [ WontFix ]
+Bug(test) failures/expected/device_failure.html [ WontFix ]
 """)
 
     filesystem.maybe_make_directory(LAYOUT_TEST_DIR + '/reftests/foo')
@@ -356,8 +364,8 @@ class TestPort(Port):
         'win10': ['test-win-win10'],
         'mac10.10': ['test-mac-mac10.10', 'test-mac-mac10.11'],
         'mac10.11': ['test-mac-mac10.11'],
-        'trusty': ['test-linux-trusty', 'test-win-win7'],
-        'precise': ['test-linux-precise', 'test-linux-trusty', 'test-win-win7'],
+        'trusty': ['test-linux-trusty', 'test-win-win10'],
+        'precise': ['test-linux-precise', 'test-linux-trusty', 'test-win-win10'],
     }
 
     @classmethod
@@ -380,7 +388,7 @@ class TestPort(Port):
         # test ports. rebaseline_unittest.py needs to not mix both "real" ports
         # and "test" ports
 
-        self._generic_expectations_path = '/mock-checkout/LayoutTests/TestExpectations'
+        self._generic_expectations_path = LAYOUT_TEST_DIR + '/TestExpectations'
         self._results_directory = None
 
         self._operating_system = 'mac'

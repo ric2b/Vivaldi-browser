@@ -33,11 +33,11 @@
 #define DocumentThreadableLoader_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/RawResource.h"
-#include "core/fetch/ResourceOwner.h"
 #include "core/loader/ThreadableLoader.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/RawResource.h"
+#include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/ResourceError.h"
 #include "platform/weborigin/Referrer.h"
@@ -52,6 +52,7 @@ class KURL;
 class ResourceRequest;
 class SecurityOrigin;
 class ThreadableLoaderClient;
+class ThreadableLoadingContext;
 
 class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
                                                    private RawResourceClient {
@@ -62,13 +63,11 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
                                         const ResourceRequest&,
                                         ThreadableLoaderClient&,
                                         const ThreadableLoaderOptions&,
-                                        const ResourceLoaderOptions&,
-                                        ThreadableLoader::ClientSpec);
-  static DocumentThreadableLoader* create(Document&,
+                                        const ResourceLoaderOptions&);
+  static DocumentThreadableLoader* create(ThreadableLoadingContext&,
                                           ThreadableLoaderClient*,
                                           const ThreadableLoaderOptions&,
-                                          const ResourceLoaderOptions&,
-                                          ThreadableLoader::ClientSpec);
+                                          const ResourceLoaderOptions&);
   ~DocumentThreadableLoader() override;
 
   void start(const ResourceRequest&) override;
@@ -83,12 +82,11 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
  private:
   enum BlockingBehavior { LoadSynchronously, LoadAsynchronously };
 
-  DocumentThreadableLoader(Document&,
+  DocumentThreadableLoader(ThreadableLoadingContext&,
                            ThreadableLoaderClient*,
                            BlockingBehavior,
                            const ThreadableLoaderOptions&,
-                           const ResourceLoaderOptions&,
-                           ClientSpec);
+                           const ResourceLoaderOptions&);
 
   void clear();
 
@@ -185,11 +183,12 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // End of ResourceOwner re-implementation, see above.
 
   const SecurityOrigin* getSecurityOrigin() const;
-  Document& document() const;
+
+  // TODO(kinuko): Remove dependency to document.
+  Document* document() const;
 
   ThreadableLoaderClient* m_client;
-  const ClientSpec m_clientSpec;
-  Member<Document> m_document;
+  Member<ThreadableLoadingContext> m_loadingContext;
 
   const ThreadableLoaderOptions m_options;
   // Some items may be overridden by m_forceDoNotAllowStoredCredentials and

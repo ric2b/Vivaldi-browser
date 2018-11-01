@@ -132,7 +132,8 @@ class TestBrowserWindow : public BrowserWindow {
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
       const signin::ManageAccountsParams& manage_accounts_params,
-      signin_metrics::AccessPoint access_point) override {}
+      signin_metrics::AccessPoint access_point,
+      bool is_source_keyboard) override {}
   int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
@@ -169,7 +170,6 @@ class TestBrowserWindow : public BrowserWindow {
     void UpdateLocationBarVisibility(bool visible, bool animate) override {}
     bool ShowPageActionPopup(const extensions::Extension* extension,
                              bool grant_active_tab) override;
-    void UpdateOpenPDFInReaderPrompt() override {}
     void SaveStateToContents(content::WebContents* contents) override {}
     void Revert() override {}
     const OmniboxView* GetOmniboxView() const override;

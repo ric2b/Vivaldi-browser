@@ -36,6 +36,8 @@
 #include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "wtf/Assertions.h"
 #include "wtf/Noncopyable.h"
@@ -44,10 +46,8 @@
 #include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/text/WTFString.h"
 
-class SkCanvas;
 class SkImage;
 class SkMatrix;
-class SkPaint;
 
 namespace blink {
 
@@ -160,17 +160,14 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     DoNotClampImageToSourceRect
   };
 
-  virtual void draw(SkCanvas*,
-                    const SkPaint&,
+  virtual void draw(PaintCanvas*,
+                    const PaintFlags&,
                     const FloatRect& dstRect,
                     const FloatRect& srcRect,
                     RespectImageOrientationEnum,
-                    ImageClampingMode,
-                    const ColorBehavior&) = 0;
+                    ImageClampingMode) = 0;
 
-  virtual bool applyShader(SkPaint&,
-                           const SkMatrix& localMatrix,
-                           const ColorBehavior&);
+  virtual bool applyShader(PaintFlags&, const SkMatrix& localMatrix);
 
   // Compute the tile which contains a given point (assuming a repeating tile
   // grid). The point and returned value are in destination grid space.

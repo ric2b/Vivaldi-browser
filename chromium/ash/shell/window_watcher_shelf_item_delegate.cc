@@ -21,19 +21,29 @@ WindowWatcherShelfItemDelegate::WindowWatcherShelfItemDelegate(
 
 WindowWatcherShelfItemDelegate::~WindowWatcherShelfItemDelegate() {}
 
-ShelfItemDelegate::PerformedAction WindowWatcherShelfItemDelegate::ItemSelected(
-    const ui::Event& event) {
+ShelfAction WindowWatcherShelfItemDelegate::ItemSelected(
+    ui::EventType event_type,
+    int event_flags,
+    int64_t display_id,
+    ShelfLaunchSource source) {
   aura::Window* window = watcher_->GetWindowByID(id_);
   if (window->type() == ui::wm::WINDOW_TYPE_PANEL)
-    wm::MoveWindowToEventRoot(window, event);
+    wm::MoveWindowToDisplay(window, display_id);
   window->Show();
   wm::ActivateWindow(window);
-  return kExistingWindowActivated;
+  return SHELF_ACTION_WINDOW_ACTIVATED;
 }
 
-ShelfMenuModel* WindowWatcherShelfItemDelegate::CreateApplicationMenu(
+ShelfAppMenuItemList WindowWatcherShelfItemDelegate::GetAppMenuItems(
     int event_flags) {
-  return nullptr;
+  // Return an empty item list to avoid showing an application menu.
+  return ShelfAppMenuItemList();
+}
+
+void WindowWatcherShelfItemDelegate::ExecuteCommand(uint32_t command_id,
+                                                    int event_flags) {
+  // This delegate does not support showing an application menu.
+  NOTIMPLEMENTED();
 }
 
 void WindowWatcherShelfItemDelegate::Close() {}

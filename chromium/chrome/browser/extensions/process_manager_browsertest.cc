@@ -37,6 +37,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/background_page_watcher.h"
@@ -284,7 +285,10 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
       LoadExtension(test_data_dir_.AppendASCII("api_test")
                         .AppendASCII("browser_action")
                         .AppendASCII("none"));
-  ASSERT_TRUE(extension.get());
+  ASSERT_TRUE(extension);
+
+  EXPECT_TRUE(BackgroundInfo::HasPersistentBackgroundPage(extension.get()));
+  EXPECT_EQ(-1, pm->GetLazyKeepaliveCount(extension.get()));
 
   // Process manager gains a background host.
   EXPECT_EQ(1u, pm->background_hosts().size());
@@ -293,7 +297,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   EXPECT_TRUE(pm->GetSiteInstanceForURL(extension->url()));
   EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
   EXPECT_FALSE(pm->IsBackgroundHostClosing(extension->id()));
-  EXPECT_EQ(0, pm->GetLazyKeepaliveCount(extension.get()));
 
   // Unload the extension.
   UnloadExtension(extension->id());
@@ -305,7 +308,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   EXPECT_TRUE(pm->GetSiteInstanceForURL(extension->url()));
   EXPECT_EQ(0u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
   EXPECT_FALSE(pm->IsBackgroundHostClosing(extension->id()));
-  EXPECT_EQ(0, pm->GetLazyKeepaliveCount(extension.get()));
+  EXPECT_EQ(-1, pm->GetLazyKeepaliveCount(extension.get()));
 }
 
 // Test that loading an extension with a browser action does not create a
@@ -322,7 +325,10 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
       LoadExtension(test_data_dir_.AppendASCII("api_test")
                         .AppendASCII("browser_action")
                         .AppendASCII("popup"));
-  ASSERT_TRUE(popup.get());
+  ASSERT_TRUE(popup);
+
+  EXPECT_FALSE(BackgroundInfo::HasBackgroundPage(popup.get()));
+  EXPECT_EQ(-1, pm->GetLazyKeepaliveCount(popup.get()));
 
   // No background host was added.
   EXPECT_EQ(0u, pm->background_hosts().size());
@@ -331,7 +337,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   EXPECT_EQ(0u, pm->GetRenderFrameHostsForExtension(popup->id()).size());
   EXPECT_TRUE(pm->GetSiteInstanceForURL(popup->url()));
   EXPECT_FALSE(pm->IsBackgroundHostClosing(popup->id()));
-  EXPECT_EQ(0, pm->GetLazyKeepaliveCount(popup.get()));
 
   // Simulate clicking on the action to open a popup.
   BrowserActionTestUtil test_util(browser());
@@ -350,7 +355,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(popup->id()).size());
   EXPECT_TRUE(pm->GetSiteInstanceForURL(popup->url()));
   EXPECT_FALSE(pm->IsBackgroundHostClosing(popup->id()));
-  EXPECT_EQ(0, pm->GetLazyKeepaliveCount(popup.get()));
+  EXPECT_EQ(-1, pm->GetLazyKeepaliveCount(popup.get()));
 }
 
 // Content loaded from http://hlogonemlfkgpejgnedahbkiabcdhnnn should not
@@ -437,7 +442,9 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, NoBackgroundPage) {
 // Child extension frames should only appear if it is hosted in an extension
 // process (i.e. if the top-level frame is an extension page, or if OOP frames
 // are enabled for extensions).
-IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, FrameClassification) {
+// Disabled due to flake: https://crbug.com/693287.
+IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
+                       DISABLED_FrameClassification) {
   const Extension* extension1 = CreateExtension("Extension 1", false);
   const Extension* extension2 = CreateExtension("Extension 2", true);
   embedded_test_server()->ServeFilesFromDirectory(extension1->path());
@@ -609,7 +616,9 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, KeepaliveOnNetworkRequest) {
   // Keepalive count at this point is unpredictable as there may be an
   // outstanding event dispatch. We use the current keepalive count as a
   // reliable baseline for future expectations.
+  EXPECT_TRUE(BackgroundInfo::HasLazyBackgroundPage(extension.get()));
   int baseline_keepalive = pm->GetLazyKeepaliveCount(extension.get());
+  EXPECT_LE(0, baseline_keepalive);
 
   // Simulate some network events. This test assumes no other network requests
   // are pending, i.e., that there are no conflicts with the fake request IDs

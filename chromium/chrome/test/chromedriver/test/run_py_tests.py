@@ -63,16 +63,23 @@ _NEGATIVE_FILTER = [
     'ChromeDriverAndroidTest.testMultipleScreenOrientationChanges',
     'ChromeDriverAndroidTest.testDeleteScreenOrientationManual',
     'ChromeDriverAndroidTest.testScreenOrientationAcrossMultipleTabs',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
+    'ChromeDriverTest.testShadowDomHover',
+    'ChromeDriverTest.testMouseMoveTo',
+    'ChromeDriverTest.testHoverOverElement',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
-    'ChromeDriverTest.testShadowDomHover',
-    'ChromeDriverTest.testMouseMoveTo',
-    'ChromeDriverTest.testHoverOverElement',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1673
+    'ChromeDownloadDirTest.testFileDownloadWithGet',
+    'ChromeDriverPageLoadTimeoutTest.*',
+]
+_VERSION_SPECIFIC_FILTER['57'] = [
+    # https://code.google.com/p/chromedriver/issues/detail?id=992
+    'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625
     'ChromeDriverTest.testWindowMaximize',
     'ChromeDriverTest.testWindowPosition',
@@ -80,18 +87,6 @@ _VERSION_SPECIFIC_FILTER['HEAD'] = [
     'ChromeExtensionsCapabilityTest.testCanInspectBackgroundPage',
     'ChromeExtensionsCapabilityTest.testCanLaunchApp',
     'MobileEmulationCapabilityTest.testDeviceMetricsWithStandardWidth',
-]
-_VERSION_SPECIFIC_FILTER['55'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
-    'ChromeDriverTest.testShadowDomHover',
-    'ChromeDriverTest.testMouseMoveTo',
-    'ChromeDriverTest.testHoverOverElement',
-]
-_VERSION_SPECIFIC_FILTER['56'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
-    'ChromeDriverTest.testShadowDomHover',
-    'ChromeDriverTest.testMouseMoveTo',
-    'ChromeDriverTest.testHoverOverElement',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -175,6 +170,8 @@ _ANDROID_NEGATIVE_FILTER['chromium'] = (
         'ChromeDriverTest.testHoverOverElement',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1478
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1673
+        'ChromeDriverPageLoadTimeoutTest.testPageLoadTimeoutCrossDomain',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -2187,7 +2184,7 @@ class PerformanceLoggerTest(ChromeDriverBaseTest):
   def testPerformanceLogger(self):
     driver = self.CreateDriver(
         experimental_options={'perfLoggingPrefs': {
-            'traceCategories': 'webkit.console,blink.console'
+            'traceCategories': 'blink.console'
           }}, logging_prefs={'performance':'ALL'})
     driver.Load(
         ChromeDriverTest._http_server.GetUrl() + '/chromedriver/empty.html')
@@ -2209,9 +2206,7 @@ class PerformanceLoggerTest(ChromeDriverBaseTest):
       self.assertTrue('params' in devtools_message)
       self.assertTrue(isinstance(devtools_message['params'], dict))
       cat = devtools_message['params'].get('cat', '')
-      # Depending on Chrome version, the events may occur for the webkit.console
-      # or blink.console category. They will only occur for one of them.
-      if (cat == 'blink.console' or cat == 'webkit.console'):
+      if cat == 'blink.console':
         self.assertTrue(devtools_message['params']['name'] == 'foobar')
         marked_timeline_events.append(devtools_message)
     self.assertEquals(2, len(marked_timeline_events))
@@ -2253,6 +2248,8 @@ class RemoteBrowserTest(ChromeDriverBaseTest):
     if util.IsLinux() and not util.Is64Bit():
       # Workaround for crbug.com/611886.
       cmd.append('--no-sandbox')
+      # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1695
+      cmd.append('--disable-gpu')
     process = subprocess.Popen(cmd)
     if process is None:
       raise RuntimeError('Chrome could not be started with debugging port')

@@ -22,17 +22,21 @@ constexpr const char kTestExperimentGroupName[] = "GroupNameShouldNotMatter";
 
 ScopedSubresourceFilterFeatureToggle::ScopedSubresourceFilterFeatureToggle(
     base::FeatureList::OverrideState feature_state,
-    const std::string& maximum_activation_state,
+    const std::string& maximum_activation_level,
     const std::string& activation_scope,
     const std::string& activation_lists,
-    const std::string& performance_measurement_rate)
+    const std::string& performance_measurement_rate,
+    const std::string& suppress_notifications,
+    const std::string& whitelist_site_on_reload)
     : ScopedSubresourceFilterFeatureToggle(
           feature_state,
-          {{kActivationStateParameterName, maximum_activation_state},
+          {{kActivationLevelParameterName, maximum_activation_level},
            {kActivationScopeParameterName, activation_scope},
            {kActivationListsParameterName, activation_lists},
            {kPerformanceMeasurementRateParameterName,
-            performance_measurement_rate}}) {}
+            performance_measurement_rate},
+           {kSuppressNotificationsParameterName, suppress_notifications},
+           {kWhitelistSiteOnReloadParameterName, whitelist_site_on_reload}}) {}
 
 ScopedSubresourceFilterFeatureToggle::ScopedSubresourceFilterFeatureToggle(
     base::FeatureList::OverrideState feature_state,

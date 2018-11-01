@@ -18,7 +18,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
-#include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
@@ -33,6 +32,7 @@ namespace trace_event {
 class MemoryDumpManagerDelegate;
 class MemoryDumpProvider;
 class MemoryDumpSessionState;
+class MemoryDumpScheduler;
 
 // This is the interface exposed to the rest of the codebase to deal with
 // memory tracing. The main entry point for clients is represented by
@@ -117,8 +117,14 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   void OnTraceLogEnabled() override;
   void OnTraceLogDisabled() override;
 
+  // Enable heap profiling if kEnableHeapProfiling is specified.
+  void EnableHeapProfilingIfNeeded();
+
   // Returns true if the dump mode is allowed for current tracing session.
   bool IsDumpModeAllowed(MemoryDumpLevelOfDetail dump_mode);
+
+  // Lets tests see if a dump provider is registered.
+  bool IsDumpProviderRegisteredForTesting(MemoryDumpProvider*);
 
   // Returns the MemoryDumpSessionState object, which is shared by all the
   // ProcessMemoryDump and MemoryAllocatorDump instances through all the tracing
@@ -152,6 +158,7 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   friend struct DefaultSingletonTraits<MemoryDumpManager>;
   friend class MemoryDumpManagerDelegate;
   friend class MemoryDumpManagerTest;
+  friend class MemoryDumpScheduler;
 
   // Descriptor used to hold information about registered MDPs.
   // Some important considerations about lifetime of this object:
@@ -274,31 +281,6 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     DISALLOW_COPY_AND_ASSIGN(ProcessMemoryDumpAsyncState);
   };
 
-  // Sets up periodic memory dump timers to start global dump requests based on
-  // the dump triggers from trace config.
-  class BASE_EXPORT PeriodicGlobalDumpTimer {
-   public:
-    PeriodicGlobalDumpTimer();
-    ~PeriodicGlobalDumpTimer();
-
-    void Start(const std::vector<TraceConfig::MemoryDumpConfig::Trigger>&
-                   triggers_list);
-    void Stop();
-
-    bool IsRunning();
-
-   private:
-    // Periodically called by the timer.
-    void RequestPeriodicGlobalDump();
-
-    RepeatingTimer timer_;
-    uint32_t periodic_dumps_count_;
-    uint32_t light_dump_rate_;
-    uint32_t heavy_dump_rate_;
-
-    DISALLOW_COPY_AND_ASSIGN(PeriodicGlobalDumpTimer);
-  };
-
   static const int kMaxConsecutiveFailuresCount;
   static const char* const kSystemAllocatorPoolName;
 
@@ -308,9 +290,6 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   static void SetInstanceForTesting(MemoryDumpManager* instance);
   static void FinalizeDumpAndAddToTrace(
       std::unique_ptr<ProcessMemoryDumpAsyncState> pmd_async_state);
-
-  // Enable heap profiling if kEnableHeapProfiling is specified.
-  void EnableHeapProfilingIfNeeded();
 
   // Internal, used only by MemoryDumpManagerDelegate.
   // Creates a memory dump for the current process and appends it to the trace.
@@ -335,7 +314,8 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   // record all data from dump providers. This value is approximate to trade-off
   // speed, and not consistent with the rest of the memory-infra metrics. Must
   // be called on the dump thread.
-  void PollFastMemoryTotal(uint64_t* memory_total);
+  // Returns true if |memory_total| was updated by polling at least 1 MDP.
+  bool PollFastMemoryTotal(uint64_t* memory_total);
 
   // Helper for RegierDumpProvider* functions.
   void RegisterDumpProviderInternal(
@@ -384,8 +364,8 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   // dump_providers_enabled_ list) when tracing is not enabled.
   subtle::AtomicWord memory_tracing_enabled_;
 
-  // For time-triggered periodic dumps.
-  PeriodicGlobalDumpTimer periodic_dump_timer_;
+  // For triggering memory dumps.
+  std::unique_ptr<MemoryDumpScheduler> dump_scheduler_;
 
   // Thread used for MemoryDumpProviders which don't specify a task runner
   // affinity.

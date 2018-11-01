@@ -11,8 +11,6 @@
 #ifndef NET_TOOLS_QUIC_QUIC_SERVER_H_
 #define NET_TOOLS_QUIC_QUIC_SERVER_H_
 
-#include <stddef.h>
-
 #include <memory>
 
 #include "base/macros.h"
@@ -54,7 +52,7 @@ class QuicServer : public EpollCallbackInterface {
   void WaitForEvents();
 
   // Server deletion is imminent.  Start cleaning up the epoll server.
-  void Shutdown();
+  virtual void Shutdown();
 
   // From EpollCallbackInterface
   void OnRegistration(EpollServer* eps, int fd, int event_mask) override {}
@@ -89,6 +87,8 @@ class QuicServer : public EpollCallbackInterface {
 
   QuicHttpResponseCache* response_cache() { return response_cache_; }
 
+  void set_silent_close(bool value) { silent_close_ = value; }
+
  private:
   friend class net::test::QuicServerPeer;
 
@@ -114,6 +114,10 @@ class QuicServer : public EpollCallbackInterface {
   // True if the kernel supports SO_RXQ_OVFL, the number of packets dropped
   // because the socket would otherwise overflow.
   bool overflow_supported_;
+
+  // If true, do not call Shutdown on the dispatcher.  Connections will close
+  // without sending a final connection close.
+  bool silent_close_;
 
   // config_ contains non-crypto parameters that are negotiated in the crypto
   // handshake.

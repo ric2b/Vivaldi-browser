@@ -139,7 +139,7 @@ void RuleSet::addToRuleSet(const AtomicString& key,
                            PendingRuleMap& map,
                            const RuleData& ruleData) {
   Member<HeapLinkedStack<RuleData>>& rules =
-      map.add(key, nullptr).storedValue->value;
+      map.insert(key, nullptr).storedValue->value;
   if (!rules)
     rules = new HeapLinkedStack<RuleData>;
   rules->push(ruleData);
@@ -302,7 +302,7 @@ void RuleSet::addChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
     } else if (rule->isMediaRule()) {
       StyleRuleMedia* mediaRule = toStyleRuleMedia(rule);
       if (!mediaRule->mediaQueries() ||
-          medium.eval(mediaRule->mediaQueries(),
+          medium.eval(*mediaRule->mediaQueries(),
                       &m_features.viewportDependentMediaQueryResults(),
                       &m_features.deviceDependentMediaQueryResults()))
         addChildRules(mediaRule->childRules(), medium, addRuleFlags);
@@ -330,7 +330,7 @@ void RuleSet::addRulesFromSheet(StyleSheetContents* sheet,
     StyleRuleImport* importRule = importRules[i].get();
     if (importRule->styleSheet() &&
         (!importRule->mediaQueries() ||
-         medium.eval(importRule->mediaQueries(),
+         medium.eval(*importRule->mediaQueries(),
                      &m_features.viewportDependentMediaQueryResults(),
                      &m_features.deviceDependentMediaQueryResults())))
       addRulesFromSheet(importRule->styleSheet(), medium, addRuleFlags);
@@ -351,7 +351,7 @@ void RuleSet::compactPendingRules(PendingRuleMap& pendingMap,
   for (auto& item : pendingMap) {
     HeapLinkedStack<RuleData>* pendingRules = item.value.release();
     CompactRuleMap::ValueType* compactRules =
-        compactMap.add(item.key, nullptr).storedValue;
+        compactMap.insert(item.key, nullptr).storedValue;
 
     HeapTerminatedArrayBuilder<RuleData> builder(compactRules->value.release());
     builder.grow(pendingRules->size());

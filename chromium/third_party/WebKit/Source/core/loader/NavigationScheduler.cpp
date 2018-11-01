@@ -32,11 +32,12 @@
 
 #include "core/loader/NavigationScheduler.h"
 
+#include <memory>
 #include "bindings/core/v8/ScriptController.h"
 #include "core/events/Event.h"
-#include "core/fetch/ResourceLoaderOptions.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -45,18 +46,17 @@
 #include "core/loader/FormSubmission.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/FrameLoaderStateMachine.h"
 #include "core/page/Page.h"
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebScheduler.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -154,7 +154,7 @@ class ScheduledURLNavigation : public ScheduledNavigation {
  protected:
   ScheduledURLNavigation(double delay,
                          Document* originDocument,
-                         const String& url,
+                         const KURL& url,
                          bool replacesCurrentItem,
                          bool isLocationChange)
       : ScheduledNavigation(delay,
@@ -185,10 +185,10 @@ class ScheduledURLNavigation : public ScheduledNavigation {
     frame->loader().load(request);
   }
 
-  String url() const { return m_url; }
+  KURL url() const { return m_url; }
 
  private:
-  String m_url;
+  KURL m_url;
   ContentSecurityPolicyDisposition m_shouldCheckMainWorldContentSecurityPolicy;
 };
 
@@ -196,7 +196,7 @@ class ScheduledRedirect final : public ScheduledURLNavigation {
  public:
   static ScheduledRedirect* create(double delay,
                                    Document* originDocument,
-                                   const String& url,
+                                   const KURL& url,
                                    bool replacesCurrentItem) {
     return new ScheduledRedirect(delay, originDocument, url,
                                  replacesCurrentItem);
@@ -225,7 +225,7 @@ class ScheduledRedirect final : public ScheduledURLNavigation {
  private:
   ScheduledRedirect(double delay,
                     Document* originDocument,
-                    const String& url,
+                    const KURL& url,
                     bool replacesCurrentItem)
       : ScheduledURLNavigation(delay,
                                originDocument,
@@ -239,7 +239,7 @@ class ScheduledRedirect final : public ScheduledURLNavigation {
 class ScheduledLocationChange final : public ScheduledURLNavigation {
  public:
   static ScheduledLocationChange* create(Document* originDocument,
-                                         const String& url,
+                                         const KURL& url,
                                          bool replacesCurrentItem) {
     return new ScheduledLocationChange(originDocument, url,
                                        replacesCurrentItem);
@@ -247,13 +247,13 @@ class ScheduledLocationChange final : public ScheduledURLNavigation {
 
  private:
   ScheduledLocationChange(Document* originDocument,
-                          const String& url,
+                          const KURL& url,
                           bool replacesCurrentItem)
       : ScheduledURLNavigation(0.0,
                                originDocument,
                                url,
                                replacesCurrentItem,
-                               !protocolIsJavaScript(url)) {}
+                               !url.protocolIsJavaScript()) {}
 };
 
 class ScheduledReload final : public ScheduledNavigation {
@@ -381,13 +381,13 @@ inline bool NavigationScheduler::shouldScheduleReload() const {
 }
 
 inline bool NavigationScheduler::shouldScheduleNavigation(
-    const String& url) const {
+    const KURL& url) const {
   return m_frame->page() && m_frame->isNavigationAllowed() &&
-         (protocolIsJavaScript(url) ||
+         (url.protocolIsJavaScript() ||
           NavigationDisablerForBeforeUnload::isNavigationAllowed());
 }
 
-void NavigationScheduler::scheduleRedirect(double delay, const String& url) {
+void NavigationScheduler::scheduleRedirect(double delay, const KURL& url) {
   if (!shouldScheduleNavigation(url))
     return;
   if (delay < 0 || delay > INT_MAX / 1000)
@@ -421,7 +421,7 @@ bool NavigationScheduler::mustReplaceCurrentItem(LocalFrame* targetFrame) {
 }
 
 void NavigationScheduler::scheduleLocationChange(Document* originDocument,
-                                                 const String& url,
+                                                 const KURL& url,
                                                  bool replacesCurrentItem) {
   if (!shouldScheduleNavigation(url))
     return;
@@ -434,12 +434,9 @@ void NavigationScheduler::scheduleLocationChange(Document* originDocument,
   // minimize the navigator's ability to execute timing attacks.
   if (originDocument->getSecurityOrigin()->canAccess(
           m_frame->document()->getSecurityOrigin())) {
-    KURL parsedURL(ParsedURLString, url);
-    if (parsedURL.hasFragmentIdentifier() &&
-        equalIgnoringFragmentIdentifier(m_frame->document()->url(),
-                                        parsedURL)) {
-      FrameLoadRequest request(originDocument,
-                               m_frame->document()->completeURL(url), "_self");
+    if (url.hasFragmentIdentifier() &&
+        equalIgnoringFragmentIdentifier(m_frame->document()->url(), url)) {
+      FrameLoadRequest request(originDocument, url, "_self");
       request.setReplacesCurrentItem(replacesCurrentItem);
       if (replacesCurrentItem)
         request.setClientRedirect(ClientRedirectPolicy::ClientRedirect);
@@ -480,13 +477,13 @@ void NavigationScheduler::navigateTask() {
   if (!m_frame->page())
     return;
   if (m_frame->page()->suspended()) {
-    InspectorInstrumentation::frameClearedScheduledNavigation(m_frame);
+    probe::frameClearedScheduledNavigation(m_frame);
     return;
   }
 
   ScheduledNavigation* redirect(m_redirect.release());
   redirect->fire(m_frame);
-  InspectorInstrumentation::frameClearedScheduledNavigation(m_frame);
+  probe::frameClearedScheduledNavigation(m_frame);
 }
 
 void NavigationScheduler::schedule(ScheduledNavigation* redirect) {
@@ -531,15 +528,14 @@ void NavigationScheduler::startTimer() {
                                      wrapWeakPersistent(this)),
           m_redirect->delay() * 1000.0);
 
-  InspectorInstrumentation::frameScheduledNavigation(m_frame,
-                                                     m_redirect->delay());
+  probe::frameScheduledNavigation(m_frame, m_redirect->delay());
 }
 
 void NavigationScheduler::cancel() {
   if (m_navigateTaskHandle.isActive()) {
     Platform::current()->currentThread()->scheduler()->removePendingNavigation(
         m_frameType);
-    InspectorInstrumentation::frameClearedScheduledNavigation(m_frame);
+    probe::frameClearedScheduledNavigation(m_frame);
   }
   m_navigateTaskHandle.cancel();
   m_redirect.clear();

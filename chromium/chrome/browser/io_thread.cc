@@ -28,7 +28,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
-#include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -124,6 +123,9 @@
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
 #include "chrome/browser/android/net/external_estimate_provider_android.h"
 #include "components/data_usage/android/traffic_stats_amortizer.h"
+#include "net/cert/cert_net_fetcher.h"
+#include "net/cert/cert_verify_proc_android.h"
+#include "net/cert_net/cert_net_fetcher_impl.h"
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
@@ -186,6 +188,10 @@ class SystemURLRequestContext : public net::URLRequestContext {
   SystemURLRequestContext() {
 #if defined(USE_NSS_CERTS)
     net::SetURLRequestContextForNSSHttpIO(this);
+#endif
+#if defined(OS_ANDROID)
+    net::CertVerifyProcAndroid::SetCertNetFetcher(
+        net::CreateCertNetFetcher(this));
 #endif
   }
 
@@ -266,7 +272,7 @@ void UpdateMetricsUsagePrefsOnUIThread(const std::string& service_name,
                     bool is_cellular) {
                    // Some unit tests use IOThread but do not initialize
                    // MetricsService. In that case it's fine to skip the update.
-                   auto metrics_service = g_browser_process->metrics_service();
+                   auto* metrics_service = g_browser_process->metrics_service();
                    if (metrics_service) {
                      metrics_service->UpdateMetricsUsagePrefs(service_name,
                                                               message_size,
@@ -398,8 +404,8 @@ IOThread::IOThread(
           local_state,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
-  base::Value* dns_client_enabled_default = new base::FundamentalValue(
-      chrome_browser_net::ConfigureAsyncDnsFieldTrial());
+  base::Value* dns_client_enabled_default =
+      new base::Value(chrome_browser_net::ConfigureAsyncDnsFieldTrial());
   local_state->SetDefaultPrefValue(prefs::kBuiltInDnsClientEnabled,
                                    dns_client_enabled_default);
   chrome_browser_net::LogAsyncDnsPrefSource(
@@ -565,7 +571,8 @@ void IOThread::Init() {
 #endif  // defined(OS_ANDROID)
   // Pass ownership.
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
-      std::move(external_estimate_provider), network_quality_estimator_params));
+      std::move(external_estimate_provider), network_quality_estimator_params,
+      net_log_));
 
   UpdateDnsClientEnabled();
 #if defined(OS_CHROMEOS)
@@ -589,8 +596,8 @@ void IOThread::Init() {
   // Add built-in logs
   ct_verifier->AddLogs(globals_->ct_logs);
 
-  ct_tree_tracker_.reset(
-      new certificate_transparency::TreeStateTracker(globals_->ct_logs));
+  ct_tree_tracker_.reset(new certificate_transparency::TreeStateTracker(
+      globals_->ct_logs, net_log_));
   // Register the ct_tree_tracker_ as observer for new STHs.
   RegisterSTHObserver(ct_tree_tracker_.get());
   // Register the ct_tree_tracker_ as observer for verified SCTs.
@@ -611,9 +618,7 @@ void IOThread::Init() {
       content::CreateCookieStore(content::CookieStoreConfig());
   // In-memory channel ID store.
   globals_->system_channel_id_service.reset(
-      new net::ChannelIDService(
-          new net::DefaultChannelIDStore(NULL),
-          base::WorkerPool::GetTaskRunner(true)));
+      new net::ChannelIDService(new net::DefaultChannelIDStore(NULL)));
   globals_->system_cookie_store->SetChannelIDServiceID(
       globals_->system_channel_id_service->GetUniqueID());
   globals_->dns_probe_service.reset(new chrome_browser_net::DnsProbeService());
@@ -688,6 +693,10 @@ void IOThread::CleanUp() {
 
 #if defined(USE_NSS_CERTS)
   net::ShutdownNSSHttpIO();
+#endif
+
+#if defined(OS_ANDROID)
+  net::CertVerifyProcAndroid::ShutdownCertNetFetcher();
 #endif
 
   system_url_request_context_getter_ = NULL;

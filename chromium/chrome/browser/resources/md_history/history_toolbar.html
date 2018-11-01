@@ -7,8 +7,7 @@
 <link rel="import" href="chrome://history/icons.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
-<!-- Lazy loaded: iron-dropdown, paper-button, paper-icon-button-light,
-  paper-tab, paper-tabs. -->
+<!-- Lazy loaded: iron-dropdown, paper-button, paper-icon-button-light. -->
 
 <dom-module id="history-toolbar">
   <template>
@@ -66,17 +65,22 @@
         width: 20px;
       }
 
-      iron-dropdown {
-        margin-top: 28px;  /** Height of icon + 8px spacing. */
-      }
-
-      .dropdown-content {
+      #sync-notice {
         @apply(--shadow-elevation-2dp);
         background-color: white;
         border-radius: 2px;
         color: var(--primary-text-color);
         overflow: hidden;
         padding: 12px 20px;
+        position: absolute;
+        right: 24px;
+        top: 46px;
+        z-index: 1;
+      }
+
+      :host-context([dir=rtl]) #sync-notice {
+        right: auto;
+        left: 24px;
       }
 
       /* Selection overlay. */
@@ -103,67 +107,6 @@
         -webkit-margin-end: 24px;
         -webkit-margin-start: 2px;
       }
-
-      /* Grouped toolbar. */
-
-      paper-tabs {
-        /* TODO(tsergeant): Align tabs with cards. */
-        --paper-tabs: {
-          font-size: inherit;
-        };
-        --paper-tabs-selection-bar-color: #fff;
-        -webkit-margin-start: 32px;
-        height: calc(var(--toolbar-grouped-height) - var(--toolbar-height));
-        min-width: 300px;
-      }
-
-      paper-tab {
-        --paper-tab-ink: rgba(255, 255, 255, 0.4);
-        text-transform: uppercase;
-      }
-
-      #grouped-buttons-container {
-        align-items: center;
-        display: flex;
-      }
-
-      #grouped-nav-container {
-        -webkit-margin-end: 16px;
-        align-items: center;
-        display: flex;
-        flex: 1;
-        justify-content: flex-end;
-        overflow: hidden;
-        transition: opacity 150ms;
-      }
-
-      :host([grouped-range='0']) #grouped-nav-container {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      #grouped-date {
-        -webkit-margin-end: 8px;
-        flex: 0 1 auto;
-        opacity: 0.7;
-        overflow: hidden;
-        text-align: right;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      #grouped-nav-container button {
-        -webkit-margin-start: 8px;
-        flex: 0 0 auto;
-      }
-
-      #grouped-nav-container button[disabled] {
-        color: rgba(255, 255, 255, 0.5);
-      }
-
-      :host-context([dir=rtl]) .rtl-reversible {
-        transform: rotate(180deg);
-      }
     </style>
     <div id="toolbar-container">
       <cr-toolbar id="main-toolbar"
@@ -189,14 +132,9 @@
           </template>
         </div>
       </cr-toolbar>
-      <template is="cr-lazy-render" id="syncNotice">
-        <iron-dropdown vertical-align="top" horizontal-align="right"
-            allow-outside-scroll>
-          <div class="dropdown-content">
-            $i18nRaw{hasSyncedResults}
-          </div>
-        </iron-dropdown>
-      </template>
+      <div id="sync-notice" hidden="[[!syncNoticeVisible_]]">
+        $i18nRaw{hasSyncedResults}
+      </div>
       <template is="dom-if" if="[[itemsSelected_]]">
         <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
           <div id="overlay-buttons">
@@ -218,44 +156,6 @@
         </div>
       </template>
     </div>
-    <template is="dom-if" if="[[isGroupedMode]]">
-      <div id="grouped-buttons-container">
-        <paper-tabs attr-for-selected="value" selected="{{groupedRange}}">
-          <paper-tab value="0">$i18n{rangeAllTime}</paper-tab>
-          <paper-tab value="1">$i18n{rangeWeek}</paper-tab>
-          <paper-tab value="2">$i18n{rangeMonth}</paper-tab>
-        </paper-tabs>
-        <div id="grouped-nav-container">
-          <span id="grouped-date">
-            {{getHistoryInterval_(queryStartTime, queryEndTime)}}
-          </span>
-          <button is="paper-icon-button-light"
-              id="today-button"
-              class="icon-button"
-              title="$i18n{rangeToday}"
-              on-tap="onTodayTap_"
-              disabled="[[isToday_(groupedOffset)]]">
-            <iron-icon icon="history:today"></iron-icon>
-          </button>
-          <button is="paper-icon-button-light"
-              id="prev-button"
-              title="$i18n{rangePrevious}"
-              class="icon-button rtl-reversible"
-              on-tap="onPrevTap_"
-              disabled="[[!hasMoreResults]]">
-            <iron-icon icon="history:chevron-left"></iron-icon>
-          </button>
-          <button is="paper-icon-button-light"
-              id="next-button"
-              title="$i18n{rangeNext}"
-              class="icon-button rtl-reversible"
-              on-tap="onNextTap_"
-              disabled="[[isToday_(groupedOffset)]]">
-            <iron-icon icon="cr:chevron-right"></iron-icon>
-          </button>
-        </div>
-      </div>
-    </template>
   </template>
   <script src="chrome://history/history_toolbar.js"></script>
 </dom-module>

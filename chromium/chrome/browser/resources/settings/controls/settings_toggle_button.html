@@ -1,11 +1,22 @@
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
-<link rel="import" href="/controls/settings_boolean_control_behavior.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="settings_boolean_control_behavior.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-toggle-button">
   <template>
     <style include="settings-shared">
+      :host([elide-label]),
+      :host([elide-label]) #outerRow,
+      :host([elide-label]) #outerRow > div.flex {
+        min-width: 0;
+      }
+
+      :host([elide-label]) .label {
+        @apply(--settings-text-elide);
+      }
+
       #outerRow {
         align-items: center;
         display: flex;
@@ -28,15 +39,18 @@
     </style>
     <div id="outerRow" noSubLabel$="[[!subLabel]]">
       <div class="flex" on-tap="onLabelWrapperTap_"
-          actionable$="[[!controlDisabled_(disabled, pref)]]">
-        <div>[[label]]</div>
-        <div class="secondary">[[subLabel]]</div>
+          actionable$="[[!controlDisabled_(disabled, pref.*)]]">
+        <div id="label" class="label">
+          [[label]]
+        </div>
+        <div class="secondary label">[[subLabel]]</div>
       </div>
-      <content selector=".more-actions"></content>
-      <template is="dom-if" if="[[pref.controlledBy]]">
+      <content select=".more-actions"></content>
+      <template is="dom-if" if="[[pref.controlledBy]]" restamp>
         <cr-policy-pref-indicator pref="[[pref]]"></cr-policy-pref-indicator>
       </template>
       <paper-toggle-button id="control" checked="{{checked}}"
+          on-change="notifyChangedByUserInteraction" aria-labelledby="label"
           disabled="[[controlDisabled_(disabled, pref)]]">
       </paper-toggle-button>
     </div>

@@ -3,16 +3,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
+#include "notes/notes_model.h"
+#include "notes/notesnode.h"
 #include "sync/test/integration/notes_helper.h"
 #include "sync/test/integration/notes_sync_test.h"
 #include "ui/base/layout.h"
-#include "notes/notes_model.h"
-#include "notes/notesnode.h"
 
 using notes_helper::AddFolder;
 using notes_helper::AddNote;
@@ -62,9 +66,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   const Notes_Node* tier1_b_url1 =
       AddNote(0, tier1_b, 0, "tier1_b_url1", GURL("http://www.vg.no"));
 
-  Notes_Node *trash_node = GetNotesModel(0)->trash_node();
-  const Notes_Node* trash_1_url0 =
-    AddNote(0, trash_node, 0, "trash_1_url0", GURL("http://www.microsoft.com"));
+  Notes_Node* trash_node = GetNotesModel(0)->trash_node();
+  const Notes_Node* trash_1_url0 = AddNote(0, trash_node, 0, "trash_1_url0",
+                                           GURL("http://www.microsoft.com"));
 
   // Setup sync, wait for its completion, and make sure changes were synced.
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";

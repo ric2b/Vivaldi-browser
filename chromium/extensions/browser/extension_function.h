@@ -53,7 +53,7 @@ class QuotaLimitHeuristic;
 #define EXTENSION_FUNCTION_VALIDATE(test) \
   do {                                    \
     if (!(test)) {                        \
-      this->set_bad_message(true);        \
+      this->SetBadMessage();              \
       return ValidationFailure(this);     \
     }                                     \
   } while (0)
@@ -65,7 +65,7 @@ class QuotaLimitHeuristic;
 #define EXTENSION_FUNCTION_PRERUN_VALIDATE(test) \
   do {                                           \
     if (!(test)) {                               \
-      this->set_bad_message(true);               \
+      this->SetBadMessage();                     \
       return false;                              \
     }                                            \
   } while (0)
@@ -76,7 +76,7 @@ class QuotaLimitHeuristic;
 #define EXTENSION_FUNCTION_ERROR(error) \
   do {                                  \
     error_ = error;                     \
-    this->set_bad_message(true);        \
+    this->SetBadMessage();              \
     return ValidationFailure(this);     \
   } while (0)
 
@@ -84,10 +84,14 @@ class QuotaLimitHeuristic;
 // supply a unique |histogramvalue| used for histograms of extension function
 // invocation (add new ones at the end of the enum in
 // extension_function_histogram_value.h).
-#define DECLARE_EXTENSION_FUNCTION(name, histogramvalue) \
-  public: static const char* function_name() { return name; } \
-  public: static extensions::functions::HistogramValue histogram_value() \
-    { return extensions::functions::histogramvalue; }
+#define DECLARE_EXTENSION_FUNCTION(name, histogramvalue)                     \
+ public:                                                                     \
+  static constexpr const char* function_name() { return name; }              \
+                                                                             \
+ public:                                                                     \
+  static constexpr extensions::functions::HistogramValue histogram_value() { \
+    return extensions::functions::histogramvalue;                            \
+  }
 
 // Traits that describe how ExtensionFunction should be deleted. This just calls
 // the virtual "Destruct" method on ExtensionFunction, allowing derived classes
@@ -153,7 +157,8 @@ class ExtensionFunction
 
   // The action to use when returning from RunAsync.
   //
-  // Use RespondNow() or RespondLater() rather than this class directly.
+  // Use RespondNow() or RespondLater() or AlreadyResponded() rather than this
+  // class directly.
   class ResponseActionObject {
    public:
     virtual ~ResponseActionObject() {}
@@ -240,8 +245,7 @@ class ExtensionFunction
   // Retrieves any error string from the function.
   virtual const std::string& GetError() const;
 
-  bool bad_message() const { return bad_message_; }
-  void set_bad_message(bool bad_message) { bad_message_ = bad_message; }
+  virtual void SetBadMessage();
 
   // Specifies the name of the function. A long-lived string (such as a string
   // literal) must be provided.
@@ -371,6 +375,28 @@ class ExtensionFunction
   ResponseAction RespondNow(ResponseValue result) WARN_UNUSED_RESULT;
   // Don't respond now, but promise to call Respond(...) later.
   ResponseAction RespondLater() WARN_UNUSED_RESULT;
+  // Respond() was already called before Run() finished executing.
+  //
+  // Assume Run() uses some helper system that accepts callback that Respond()s.
+  // If that helper system calls the synchronously in some cases, then use
+  // this return value in those cases.
+  //
+  // FooExtensionFunction::Run() {
+  //   Helper::FetchResults(..., base::Bind(&Success));
+  //   if (did_respond()) return AlreadyResponded();
+  //   return RespondLater();
+  // }
+  // FooExtensionFunction::Success() {
+  //   Respond(...);
+  // }
+  //
+  // Helper::FetchResults(..., callback) {
+  //   if (...)
+  //     callback.Run(..);  // Synchronously call |callback|.
+  //   else
+  //     // Asynchronously call |callback|.
+  // }
+  ResponseAction AlreadyResponded() WARN_UNUSED_RESULT;
 
   // This is the return value of the EXTENSION_FUNCTION_VALIDATE macro, which
   // needs to work from Run(), RunAsync(), and RunSync(). The former of those
@@ -484,6 +510,7 @@ class UIThreadExtensionFunction : public ExtensionFunction {
   UIThreadExtensionFunction* AsUIThreadExtensionFunction() override;
 
   bool PreRunValidation(std::string* error) override;
+  void SetBadMessage() final;
 
   // Called when a message was received.
   // Should return true if it processed the message.
@@ -582,6 +609,7 @@ class IOThreadExtensionFunction : public ExtensionFunction {
   IOThreadExtensionFunction();
 
   IOThreadExtensionFunction* AsIOThreadExtensionFunction() override;
+  void SetBadMessage() final;
 
   void set_ipc_sender(
       base::WeakPtr<extensions::IOThreadExtensionMessageFilter> ipc_sender,

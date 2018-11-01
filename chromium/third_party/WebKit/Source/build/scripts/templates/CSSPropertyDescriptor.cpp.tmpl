@@ -14,14 +14,23 @@ static_assert(
     "CSSPropertyDescriptor must be a POD to support using initializer lists.");
 
 static CSSPropertyDescriptor cssPropertyDescriptors[] = {
-    // An invalid CSSPropertyDescriptor. When functions are added to
-    // CSSPropertyAPI, add a nullptr to represent their function pointers in the
-    // struct initaliser.
-    { nullptr, false },
-    // When functions are added to CSSPropertyAPI, also add them to the struct
-    // initaliser below.
+    // An invalid CSSPropertyDescriptor.
+    {
+      {% for api_method in ordered_api_method_names %}
+        nullptr,
+      {% endfor %}
+    },
+    // CSSPropertyDescriptors for all valid properties.
     {% for api_class in api_classes %}
-    { {{api_class.classname}}::parseSingleValue, true },
+    {
+      {% for api_method_name in ordered_api_method_names %}
+      {% if api_method_name in api_class.methods_for_class %}
+      {{api_class.classname}}::{{api_method_name}},
+      {% else %}
+      nullptr,
+      {% endif %}
+      {% endfor %}
+    },
     {% endfor %}
 };
 

@@ -15,8 +15,9 @@
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "components/safe_browsing_db/util.h"
-#include "components/subresource_filter/content/common/document_load_statistics.h"
+#include "components/subresource_filter/core/common/document_load_statistics.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -30,9 +31,8 @@ class SafeBrowsingServiceTest;
 
 namespace subresource_filter {
 
-class ContentSubresourceFilterDriver;
 class SubresourceFilterClient;
-enum class ActivationState;
+enum class ActivationLevel;
 enum class ActivationList;
 
 using HostPathSet = std::set<std::string>;
@@ -40,16 +40,49 @@ using URLToActivationListsMap =
     std::unordered_map<std::string, std::set<ActivationList>>;
 
 // Controls the activation of subresource filtering for each page load in a
-// WebContents and manufactures the per-frame ContentSubresourceFilterDrivers.
+// WebContents and is responsible for sending the activation signal to all the
+// per-frame SubresourceFilterAgents on the renderer side.
 class ContentSubresourceFilterDriverFactory
     : public base::SupportsUserData::Data,
       public content::WebContentsObserver {
  public:
+  // NOTE: ActivationDecision backs a UMA histogram, so it is append-only.
+  enum class ActivationDecision {
+    // The activation decision is unknown, or not known yet.
+    UNKNOWN,
+
+    // Subresource filtering was activated.
+    ACTIVATED,
+
+    // Did not activate because subresource filtering was disabled.
+    ACTIVATION_DISABLED,
+
+    // Did not activate because the main frame document URL had an unsupported
+    // scheme.
+    UNSUPPORTED_SCHEME,
+
+    // Did not activate because the main frame document URL was whitelisted.
+    URL_WHITELISTED,
+
+    // Did not activate because the main frame document URL did not match the
+    // activation list.
+    ACTIVATION_LIST_NOT_MATCHED,
+
+    // Max value for enum.
+    ACTIVATION_DECISION_MAX
+  };
+
   static void CreateForWebContents(
       content::WebContents* web_contents,
       std::unique_ptr<SubresourceFilterClient> client);
   static ContentSubresourceFilterDriverFactory* FromWebContents(
       content::WebContents* web_contents);
+
+  // Whether the |url|, |referrer|, and |transition| are considered to be
+  // associated with a page reload.
+  static bool NavigationIsPageReload(const GURL& url,
+                                     const content::Referrer& referrer,
+                                     ui::PageTransition transition);
 
   explicit ContentSubresourceFilterDriverFactory(
       content::WebContents* web_contents,
@@ -74,22 +107,17 @@ class ContentSubresourceFilterDriverFactory
   // Reloads the page and inserts the host of its URL to the whitelist.
   void OnReloadRequested();
 
+  // Returns the |ActivationDecision| for the current main frame
+  // document.
+  ActivationDecision GetActivationDecisionForLastCommittedPageLoad() const {
+    return activation_decision_;
+  }
+
  private:
   friend class ContentSubresourceFilterDriverFactoryTest;
   friend class safe_browsing::SafeBrowsingServiceTest;
 
-  typedef std::map<content::RenderFrameHost*,
-                   std::unique_ptr<ContentSubresourceFilterDriver>>
-      FrameHostToOwnedDriverMap;
-
-  void SetDriverForFrameHostForTesting(
-      content::RenderFrameHost* render_frame_host,
-      std::unique_ptr<ContentSubresourceFilterDriver> driver);
-
-  void CreateDriverForFrameHostIfNeeded(
-      content::RenderFrameHost* render_frame_host);
-  ContentSubresourceFilterDriver* DriverFromFrameHost(
-      content::RenderFrameHost* render_frame_host);
+  void ResetActivationState();
 
   void OnFirstSubresourceLoadDisallowed();
 
@@ -102,8 +130,6 @@ class ContentSubresourceFilterDriverFactory
       content::NavigationHandle* navigation_handle) override;
   void DidRedirectNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
-  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
@@ -111,9 +137,10 @@ class ContentSubresourceFilterDriverFactory
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
 
-  // Checks base on the value of |urr| and current activation scope if
+  // Checks base on the value of |url| and current activation scope if
   // activation signal should be sent.
-  bool ShouldActivateForMainFrameURL(const GURL& url) const;
+  ActivationDecision ComputeActivationDecisionForMainFrameURL(
+      const GURL& url) const;
   void ActivateForFrameHostIfNeeded(content::RenderFrameHost* render_frame_host,
                                     const GURL& url);
 
@@ -121,19 +148,21 @@ class ContentSubresourceFilterDriverFactory
   // NavigationHandle to ease unit tests.
   void ReadyToCommitNavigationInternal(
       content::RenderFrameHost* render_frame_host,
-      const GURL& url);
+      const GURL& url,
+      const content::Referrer& referrer,
+      ui::PageTransition page_transition);
 
   bool DidURLMatchCurrentActivationList(const GURL& url) const;
 
   void AddActivationListMatch(const GURL& url, ActivationList match_type);
   void RecordRedirectChainMatchPattern() const;
 
-  FrameHostToOwnedDriverMap frame_drivers_;
   std::unique_ptr<SubresourceFilterClient> client_;
 
   HostPathSet whitelisted_hosts_;
 
-  ActivationState activation_state_;
+  ActivationLevel activation_level_;
+  ActivationDecision activation_decision_;
   bool measure_performance_;
 
   // The URLs in the navigation chain.

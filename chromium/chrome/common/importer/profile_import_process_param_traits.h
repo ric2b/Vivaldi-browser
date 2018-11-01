@@ -8,4 +8,3 @@
 #include "chrome/common/importer/profile_import_process_param_traits_macros.h"
 
 #endif  // CHROME_COMMON_IMPORTER_PROFILE_IMPORT_PROCESS_PARAM_TRAITS_H_
-

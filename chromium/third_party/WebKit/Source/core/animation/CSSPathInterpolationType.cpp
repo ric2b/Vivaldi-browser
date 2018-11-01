@@ -85,7 +85,7 @@ InterpolationValue CSSPathInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSPathInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState& state,
+    const StyleResolverState*,
     ConversionCheckers& conversionCheckers) const {
   if (!value.isPathValue()) {
     DCHECK_EQ(toCSSIdentifierValue(value).getValueID(), CSSValueNone);
@@ -97,10 +97,9 @@ InterpolationValue CSSPathInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSPathInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
+    const ComputedStyle& style) const {
   DCHECK_EQ(cssProperty(), CSSPropertyD);
-  return PathInterpolationFunctions::convertValue(
-      state.style()->svgStyle().d());
+  return PathInterpolationFunctions::convertValue(style.svgStyle().d());
 }
 
 PairwiseInterpolationValue CSSPathInterpolationType::maybeMergeSingles(

@@ -8,14 +8,17 @@ import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 import android.app.Instrumentation;
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.os.Build;
 import android.util.AndroidRuntimeException;
 import android.util.Log;
+import android.view.ViewGroup;
 
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
+import org.chromium.android_webview.AwContents.DependencyFactory;
+import org.chromium.android_webview.AwContents.InternalAccessDelegate;
+import org.chromium.android_webview.AwContents.NativeDrawGLFunctorFactory;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.AwSwitches;
@@ -104,9 +107,14 @@ public class AwTestBase
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mBrowserContext = new AwBrowserContext(prefs, appContext);
+                mBrowserContext = createAwBrowserContextOnUiThread(prefs, appContext);
             }
         });
+    }
+
+    protected AwBrowserContext createAwBrowserContextOnUiThread(
+            InMemorySharedPreferences prefs, Context appContext) {
+        return new AwBrowserContext(prefs, appContext);
     }
 
     protected void startBrowserProcess() throws Exception {
@@ -366,6 +374,16 @@ public class AwTestBase
         ch.waitForCallback(chCount);
     }
 
+    public void insertVisualStateCallbackOnUIThread(final AwContents awContents,
+            final long requestId, final AwContents.VisualStateCallback callback) {
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                awContents.insertVisualStateCallback(requestId, callback);
+            }
+        });
+    }
+
     // Waits for the pixel at the center of AwContents to color up into expectedColor.
     // Note that this is a stricter condition that waiting for a visual state callback,
     // as visual state callback only indicates that *something* has appeared in WebView.
@@ -374,10 +392,8 @@ public class AwTestBase
         pollUiThread(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
-                Bitmap bitmap = GraphicsTestUtils.drawAwContents(awContents, 2, 2,
-                        -(float) testContainerView.getWidth() / 2,
-                        -(float) testContainerView.getHeight() / 2);
-                return bitmap.getPixel(0, 0) == expectedColor;
+                return GraphicsTestUtils.getPixelColorAtCenterOfView(awContents, testContainerView)
+                        == expectedColor;
             }
         });
     }
@@ -416,7 +432,17 @@ public class AwTestBase
         public AwSettings createAwSettings(Context context, boolean supportsLegacyQuirks) {
             return new AwSettings(context, false /* isAccessFromFileURLsGrantedByDefault */,
                     supportsLegacyQuirks, false /* allowEmptyDocumentPersistence */,
-                    true /* allowGeolocationOnInsecureOrigins */);
+                    true /* allowGeolocationOnInsecureOrigins */,
+                    false /* doNotUpdateSelectionOnMutatingSelectionRange */);
+        }
+
+        public AwContents createAwContents(AwBrowserContext browserContext, ViewGroup containerView,
+                Context context, InternalAccessDelegate internalAccessAdapter,
+                NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
+                AwContentsClient contentsClient, AwSettings settings,
+                DependencyFactory dependencyFactory) {
+            return new AwContents(browserContext, containerView, context, internalAccessAdapter,
+                    nativeDrawGLFunctorFactory, contentsClient, settings, dependencyFactory);
         }
     }
 
@@ -426,13 +452,13 @@ public class AwTestBase
 
     public AwTestContainerView createAwTestContainerView(
             final AwContentsClient awContentsClient) {
-        return createAwTestContainerView(awContentsClient, false);
+        return createAwTestContainerView(awContentsClient, false, null);
     }
 
-    public AwTestContainerView createAwTestContainerView(
-            final AwContentsClient awContentsClient, boolean supportsLegacyQuirks) {
-        AwTestContainerView testContainerView =
-                createDetachedAwTestContainerView(awContentsClient, supportsLegacyQuirks);
+    public AwTestContainerView createAwTestContainerView(final AwContentsClient awContentsClient,
+            boolean supportsLegacyQuirks, final TestDependencyFactory testDependencyFactory) {
+        AwTestContainerView testContainerView = createDetachedAwTestContainerView(
+                awContentsClient, supportsLegacyQuirks, testDependencyFactory);
         getActivity().addView(testContainerView);
         testContainerView.requestFocus();
         return testContainerView;
@@ -444,24 +470,28 @@ public class AwTestBase
 
     public AwTestContainerView createDetachedAwTestContainerView(
             final AwContentsClient awContentsClient) {
-        return createDetachedAwTestContainerView(awContentsClient, false);
+        return createDetachedAwTestContainerView(awContentsClient, false, null);
     }
 
     public AwTestContainerView createDetachedAwTestContainerView(
-            final AwContentsClient awContentsClient, boolean supportsLegacyQuirks) {
-        final TestDependencyFactory testDependencyFactory = createTestDependencyFactory();
-
+            final AwContentsClient awContentsClient, boolean supportsLegacyQuirks,
+            TestDependencyFactory testDependencyFactory) {
+        if (testDependencyFactory == null) {
+            testDependencyFactory = createTestDependencyFactory();
+        }
         boolean allowHardwareAcceleration = isHardwareAcceleratedTest();
         final AwTestContainerView testContainerView =
-                testDependencyFactory.createAwTestContainerView(getActivity(),
-                        allowHardwareAcceleration);
+                testDependencyFactory.createAwTestContainerView(
+                        getActivity(), allowHardwareAcceleration);
 
-        AwSettings awSettings = testDependencyFactory.createAwSettings(getActivity(),
-                supportsLegacyQuirks);
-        testContainerView.initialize(new AwContents(mBrowserContext, testContainerView,
-                testContainerView.getContext(), testContainerView.getInternalAccessDelegate(),
+        AwSettings awSettings =
+                testDependencyFactory.createAwSettings(getActivity(), supportsLegacyQuirks);
+        AwContents awContents = testDependencyFactory.createAwContents(mBrowserContext,
+                testContainerView, testContainerView.getContext(),
+                testContainerView.getInternalAccessDelegate(),
                 testContainerView.getNativeDrawGLFunctorFactory(), awContentsClient, awSettings,
-                testDependencyFactory));
+                testDependencyFactory);
+        testContainerView.initialize(awContents);
         return testContainerView;
     }
 
@@ -471,15 +501,21 @@ public class AwTestBase
 
     public AwTestContainerView createAwTestContainerViewOnMainSync(
             final AwContentsClient client) throws Exception {
-        return createAwTestContainerViewOnMainSync(client, false);
+        return createAwTestContainerViewOnMainSync(client, false, null);
     }
 
     public AwTestContainerView createAwTestContainerViewOnMainSync(
             final AwContentsClient client, final boolean supportsLegacyQuirks) {
+        return createAwTestContainerViewOnMainSync(client, supportsLegacyQuirks, null);
+    }
+
+    public AwTestContainerView createAwTestContainerViewOnMainSync(final AwContentsClient client,
+            final boolean supportsLegacyQuirks, final TestDependencyFactory testDependencyFactory) {
         return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<AwTestContainerView>() {
             @Override
             public AwTestContainerView call() {
-                return createAwTestContainerView(client, supportsLegacyQuirks);
+                return createAwTestContainerView(
+                        client, supportsLegacyQuirks, testDependencyFactory);
             }
         });
     }
@@ -625,6 +661,15 @@ public class AwTestBase
             @Override
             public Boolean call() throws Exception {
                 return awContents.canZoomOut();
+            }
+        });
+    }
+
+    public void killRenderProcessOnUiThreadAsync(final AwContents awContents) throws Exception {
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                awContents.killRenderProcess();
             }
         });
     }

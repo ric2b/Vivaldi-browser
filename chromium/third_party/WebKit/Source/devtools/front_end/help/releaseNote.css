@@ -1,0 +1,57 @@
+/*
+ * Copyright 2017 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+.release-note-container {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.release-note-update-text {
+    font-weight: bold;
+}
+
+.release-note-content-container {
+    display: flex;
+    flex-direction: row;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 12px 12px 0 12px;
+}
+
+.release-note-text-container {
+    min-width: 220px;
+    max-width: 300px;
+}
+
+.release-note-action-container {
+    padding: 12px;
+    min-height: 48px;
+}
+
+.release-note-highlight-container {
+    line-height: 1.5;
+    -webkit-padding-start: 16px;
+}
+
+.release-note-link, .release-note-featured-link {
+    color: #039be5;
+    text-decoration: none;
+}
+
+.release-note-link:hover,
+.release-note-featured-link:hover,
+.image-hover .release-note-featured-link {
+    text-decoration: underline;
+}
+
+.release-note-image {
+    width: 200px;
+}
+
+.close-release-note {
+    margin-left: 4px;
+}

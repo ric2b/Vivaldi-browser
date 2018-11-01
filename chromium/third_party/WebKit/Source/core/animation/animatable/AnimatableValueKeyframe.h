@@ -12,6 +12,8 @@
 
 namespace blink {
 
+// TODO(alancutter): Delete this class once TransitionKeyframe has completely
+// replaced it.
 class CORE_EXPORT AnimatableValueKeyframe : public Keyframe {
  public:
   static PassRefPtr<AnimatableValueKeyframe> create() {
@@ -22,11 +24,11 @@ class CORE_EXPORT AnimatableValueKeyframe : public Keyframe {
     m_propertyValues.set(property, std::move(value));
   }
   void clearPropertyValue(CSSPropertyID property) {
-    m_propertyValues.remove(property);
+    m_propertyValues.erase(property);
   }
   AnimatableValue* propertyValue(CSSPropertyID property) const {
     DCHECK(m_propertyValues.contains(property));
-    return m_propertyValues.get(property);
+    return m_propertyValues.at(property);
   }
   PropertyHandleSet properties() const override;
 
@@ -51,7 +53,7 @@ class CORE_EXPORT AnimatableValueKeyframe : public Keyframe {
         double offset,
         PassRefPtr<TimingFunction> easing) const final;
     PassRefPtr<Interpolation> createInterpolation(
-        PropertyHandle,
+        const PropertyHandle&,
         const Keyframe::PropertySpecificKeyframe& end) const final;
 
    private:
@@ -80,7 +82,7 @@ class CORE_EXPORT AnimatableValueKeyframe : public Keyframe {
 
   PassRefPtr<Keyframe> clone() const override;
   PassRefPtr<Keyframe::PropertySpecificKeyframe> createPropertySpecificKeyframe(
-      PropertyHandle) const override;
+      const PropertyHandle&) const override;
 
   bool isAnimatableValueKeyframe() const override { return true; }
 

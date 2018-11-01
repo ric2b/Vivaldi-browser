@@ -96,6 +96,10 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
     return r.name;
   }
 
+  static const base::string16& id(const autofill::FormFieldData& r) {
+    return r.id;
+  }
+
   static const base::string16& value(const autofill::FormFieldData& r) {
     return r.value;
   }
@@ -448,6 +452,11 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
 
   static bool new_password_marked_by_site(const autofill::PasswordForm& r) {
     return r.new_password_marked_by_site;
+  }
+
+  static const base::string16& confirmation_password_element(
+      const autofill::PasswordForm& r) {
+    return r.confirmation_password_element;
   }
 
   static bool preferred(const autofill::PasswordForm& r) { return r.preferred; }

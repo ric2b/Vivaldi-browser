@@ -252,7 +252,7 @@ void MockInputMethod::ClearComposition() {
   result_text_.clear();
 }
 
-// A Textfield wrapper to intercept OnKey[Pressed|Released]() ressults.
+// A Textfield wrapper to intercept OnKey[Pressed|Released]() results.
 class TestTextfield : public views::Textfield {
  public:
   TestTextfield()
@@ -508,18 +508,20 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
     SendKeyEvent(key_code, false, false);
   }
 
-  void SendKeyEvent(base::char16 ch) {
+  void SendKeyEvent(base::char16 ch) { SendKeyEvent(ch, ui::EF_NONE); }
+
+  void SendKeyEvent(base::char16 ch, int flags) {
     if (ch < 0x80) {
       ui::KeyboardCode code =
           ch == ' ' ? ui::VKEY_SPACE :
           static_cast<ui::KeyboardCode>(ui::VKEY_A + ch - 'a');
-      SendKeyEvent(code);
+      SendKeyPress(code, flags);
     } else {
       // For unicode characters, assume they come from IME rather than the
       // keyboard. So they are dispatched directly to the input method. But on
       // Mac, key events don't pass through InputMethod. Hence they are
       // dispatched regularly.
-      ui::KeyEvent event(ch, ui::VKEY_UNKNOWN, ui::EF_NONE);
+      ui::KeyEvent event(ch, ui::VKEY_UNKNOWN, flags);
 #if defined(OS_MACOSX)
       event_generator_->Dispatch(&event);
 #else
@@ -769,6 +771,27 @@ TEST_F(TextfieldTest, KeyTest) {
   else
     EXPECT_STR_EQ("TexT!1!1", textfield_->text());
 }
+
+#if defined(OS_LINUX)
+// Control key shouldn't generate a printable character on Linux.
+TEST_F(TextfieldTest, KeyTestControlModifier) {
+  InitTextfield();
+  // 0x0448 is for 'CYRILLIC SMALL LETTER SHA'.
+  SendKeyEvent(0x0448, 0);
+  SendKeyEvent(0x0448, ui::EF_CONTROL_DOWN);
+  // 0x044C is for 'CYRILLIC SMALL LETTER FRONT YER'.
+  SendKeyEvent(0x044C, 0);
+  SendKeyEvent(0x044C, ui::EF_CONTROL_DOWN);
+  SendKeyEvent('i', 0);
+  SendKeyEvent('i', ui::EF_CONTROL_DOWN);
+  SendKeyEvent('m', 0);
+  SendKeyEvent('m', ui::EF_CONTROL_DOWN);
+
+  EXPECT_EQ(WideToUTF16(L"\x0448\x044C"
+                        L"im"),
+            textfield_->text());
+}
+#endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_KeysWithModifiersTest KeysWithModifiersTest
@@ -1463,7 +1486,7 @@ TEST_F(TextfieldTest, DoubleAndTripleClickTest) {
 }
 
 // Tests text selection behavior on a right click.
-TEST_F(TextfieldTest, SelectWordOnRightClick) {
+TEST_F(TextfieldTest, SelectionOnRightClick) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
 
@@ -1478,10 +1501,23 @@ TEST_F(TextfieldTest, SelectWordOnRightClick) {
   // Verify right clicking outside the selection, selects the word under the
   // cursor on platforms where this is expected.
   MoveMouseTo(gfx::Point(GetCursorPositionX(8), cursor_y));
-  const char* expected_right_click =
+  const char* expected_right_click_word =
       PlatformStyle::kSelectWordOnRightClick ? "world" : "ello";
   ClickRightMouseButton();
-  EXPECT_STR_EQ(expected_right_click, textfield_->GetSelectedText());
+  EXPECT_STR_EQ(expected_right_click_word, textfield_->GetSelectedText());
+
+  // Verify right clicking inside an unfocused textfield selects all the text on
+  // platforms where this is expected. Else the older selection is retained.
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_FALSE(textfield_->HasFocus());
+  MoveMouseTo(gfx::Point(GetCursorPositionX(0), cursor_y));
+  ClickRightMouseButton();
+  EXPECT_TRUE(textfield_->HasFocus());
+  const char* expected_right_click_unfocused =
+      PlatformStyle::kSelectAllOnRightClickWhenUnfocused
+          ? "hello world"
+          : expected_right_click_word;
+  EXPECT_STR_EQ(expected_right_click_unfocused, textfield_->GetSelectedText());
 }
 
 TEST_F(TextfieldTest, DragToSelect) {
@@ -2361,6 +2397,37 @@ TEST_F(TextfieldTest, TextCursorDisplayInRTLTest) {
   base::i18n::SetICUDefaultLocale(locale);
 }
 
+TEST_F(TextfieldTest, TextCursorPositionInRTLTest) {
+  std::string locale = base::i18n::GetConfiguredLocale();
+  base::i18n::SetICUDefaultLocale("he");
+
+  InitTextfield();
+  // LTR-RTL string in RTL context.
+  int text_cursor_position_prev = test_api_->GetCursorViewOrigin().x();
+  SendKeyEvent('a');
+  SendKeyEvent('b');
+  EXPECT_STR_EQ("ab", textfield_->text());
+  int text_cursor_position_new = test_api_->GetCursorViewOrigin().x();
+  // Text cursor stays at same place after inserting new charactors in RTL mode.
+  EXPECT_EQ(text_cursor_position_prev, text_cursor_position_new);
+
+  // Reset locale.
+  base::i18n::SetICUDefaultLocale(locale);
+}
+
+TEST_F(TextfieldTest, TextCursorPositionInLTRTest) {
+  InitTextfield();
+
+  // LTR-RTL string in LTR context.
+  int text_cursor_position_prev = test_api_->GetCursorViewOrigin().x();
+  SendKeyEvent('a');
+  SendKeyEvent('b');
+  EXPECT_STR_EQ("ab", textfield_->text());
+  int text_cursor_position_new = test_api_->GetCursorViewOrigin().x();
+  // Text cursor moves to right after inserting new charactors in LTR mode.
+  EXPECT_LT(text_cursor_position_prev, text_cursor_position_new);
+}
+
 TEST_F(TextfieldTest, HitInsideTextAreaTest) {
   InitTextfield();
   textfield_->SetText(WideToUTF16(L"ab\x05E1\x5E2"));
@@ -3043,6 +3110,17 @@ TEST_F(TextfieldTest, AccessiblePasswordTest) {
   EXPECT_EQ(ASCIIToUTF16("********"),
             node_data_protected.GetString16Attribute(ui::AX_ATTR_VALUE));
   EXPECT_TRUE(node_data_protected.HasStateFlag(ui::AX_STATE_PROTECTED));
+}
+
+// Verify that cursor visibility is controlled by SetCursorEnabled.
+TEST_F(TextfieldTest, CursorVisibility) {
+  InitTextfield();
+
+  textfield_->SetCursorEnabled(false);
+  EXPECT_FALSE(test_api_->IsCursorVisible());
+
+  textfield_->SetCursorEnabled(true);
+  EXPECT_TRUE(test_api_->IsCursorVisible());
 }
 
 }  // namespace views

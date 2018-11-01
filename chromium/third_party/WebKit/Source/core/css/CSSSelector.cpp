@@ -269,6 +269,8 @@ PseudoId CSSSelector::pseudoId(PseudoType type) {
     case PseudoListBox:
     case PseudoHostHasAppearance:
     case PseudoSlotted:
+    case PseudoVideoPersistent:
+    case PseudoVideoPersistentAncestor:
       return PseudoIdNone;
   }
 
@@ -305,6 +307,9 @@ const static NameToPseudoStruct pseudoTypeWithoutArgumentsMap[] = {
      CSSSelector::PseudoHostHasAppearance},
     {"-internal-spatial-navigation-focus",
      CSSSelector::PseudoSpatialNavigationFocus},
+    {"-internal-video-persistent", CSSSelector::PseudoVideoPersistent},
+    {"-internal-video-persistent-ancestor",
+     CSSSelector::PseudoVideoPersistentAncestor},
     {"-webkit-any-link", CSSSelector::PseudoAnyLink},
     {"-webkit-autofill", CSSSelector::PseudoAutofill},
     {"-webkit-drag", CSSSelector::PseudoDrag},
@@ -599,6 +604,8 @@ void CSSSelector::updatePseudoType(const AtomicString& value,
     case PseudoVertical:
     case PseudoVisited:
     case PseudoWindowInactive:
+    case PseudoVideoPersistent:
+    case PseudoVideoPersistentAncestor:
       if (m_match != PseudoClass)
         m_pseudoType = PseudoUnknown;
   }

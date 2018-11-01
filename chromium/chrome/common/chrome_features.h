@@ -18,6 +18,10 @@ namespace features {
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+#if defined(OS_ANDROID)
+extern const base::Feature kAllowAutoplayUnmutedInWebappManifestScope;
+#endif  // defined(OS_ANDROID)
+
 #if defined(OS_MACOSX)
 extern const base::Feature kAppleScriptExecuteJavaScript;
 #endif  // defined(OS_MACOSX)
@@ -46,11 +50,16 @@ extern const base::Feature kBlockPromptsIfDismissedOften;
 
 extern const base::Feature kBrowserHangFixesExperiment;
 
+#if defined(OS_MACOSX)
+extern const base::Feature kBrowserTouchBar;
+#endif  // defined(OS_MACOSX)
+
 #if defined(OS_ANDROID)
 extern const base::Feature kConsistentOmniboxGeolocation;
 #endif
 
 #if defined(OS_WIN)
+extern const base::Feature kDesktopIOSPromotion;
 extern const base::Feature kDisableFirstRunAutoImportWin;
 #endif  // defined(OS_WIN)
 
@@ -60,9 +69,15 @@ extern const base::Feature kExpectCTReporting;
 
 extern const base::Feature kExperimentalKeyboardLockUI;
 
+#if defined(OS_WIN)
+extern const base::Feature kGdiTextPrinting;
+#endif
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kHappinessTrackingSystem;
 #endif
+
+extern const base::Feature kImprovedRecoveryComponent;
 
 #if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
@@ -74,6 +89,7 @@ extern const base::Feature kMaterialDesignBookmarks;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const base::Feature kMaterialDesignExtensions;
+extern const base::Feature kAcknowledgeNtpOverrideOnDeactivate;
 #endif
 
 extern const base::Feature kMaterialDesignHistory;
@@ -97,13 +113,17 @@ extern const base::Feature kNativeNotifications;
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
-extern const base::Feature kOverrideYouTubeFlashEmbed;
-
 extern const base::Feature kPermissionsBlacklist;
+
+#if defined(OS_WIN)
+extern const base::Feature kPostScriptPrinting;
+#endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 extern const base::Feature kPreferHtmlOverPlugins;
 #endif
+
+extern const base::Feature kPrefService;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kPreloadLockScreen;
@@ -139,6 +159,8 @@ extern const base::Feature kUseGroupedPermissionInfobars;
 extern const base::Feature kOptInImeMenu;
 
 extern const base::Feature kQuickUnlockPin;
+
+extern const base::Feature kQuickUnlockFingerprint;
 
 extern const base::Feature kEHVInputOnImeMenu;
 

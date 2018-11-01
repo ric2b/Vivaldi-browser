@@ -12,6 +12,7 @@
 #include "core/workers/WorkerThreadStartupData.h"
 #include "core/workers/WorkerThreadTestHelper.h"
 #include "core/workers/WorkletThreadHolder.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -62,8 +63,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
   void countFeature(UseCounter::Feature feature) {
     EXPECT_TRUE(isCurrentThread());
     globalScope()->countFeature(feature);
-    workerReportingProxy()
-        .getParentFrameTaskRunners()
+    getParentFrameTaskRunners()
         ->get(TaskType::UnspecedTimer)
         ->postTask(BLINK_FROM_HERE, crossThreadBind(&testing::exitRunLoop));
   }
@@ -79,8 +79,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
     String consoleMessage = consoleMessageStorage()->at(0)->message();
     EXPECT_TRUE(consoleMessage.contains("deprecated"));
 
-    workerReportingProxy()
-        .getParentFrameTaskRunners()
+    getParentFrameTaskRunners()
         ->get(TaskType::UnspecedTimer)
         ->postTask(BLINK_FROM_HERE, crossThreadBind(&testing::exitRunLoop));
   }
@@ -114,12 +113,15 @@ class ThreadedWorkletMessagingProxyForTest
     WorkerClients* workerClients = nullptr;
     Vector<String> originTrialTokens;
     std::unique_ptr<WorkerSettings> workerSettings = nullptr;
-    m_workerThread->start(WorkerThreadStartupData::create(
-        scriptURL, "fake user agent", "// fake source code",
-        std::move(cachedMetaData), DontPauseWorkerGlobalScopeOnStart,
-        &contentSecurityPolicyHeaders, referrerPolicy, m_securityOrigin.get(),
-        workerClients, WebAddressSpaceLocal, &originTrialTokens,
-        std::move(workerSettings), WorkerV8Settings::Default()));
+    m_workerThread->start(
+        WorkerThreadStartupData::create(
+            scriptURL, "fake user agent", "// fake source code",
+            std::move(cachedMetaData), DontPauseWorkerGlobalScopeOnStart,
+            &contentSecurityPolicyHeaders, referrerPolicy,
+            m_securityOrigin.get(), workerClients, WebAddressSpaceLocal,
+            &originTrialTokens, std::move(workerSettings),
+            WorkerV8Settings::Default()),
+        getParentFrameTaskRunners());
     workerInspectorProxy()->workerThreadCreated(
         toDocument(getExecutionContext()), m_workerThread.get(), scriptURL);
   }
@@ -173,8 +175,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   EXPECT_FALSE(UseCounter::isCounted(document(), feature1));
   workerThread()->postTask(
       BLINK_FROM_HERE,
-      createCrossThreadTask(&ThreadedWorkletThreadForTest::countFeature,
-                            crossThreadUnretained(workerThread()), feature1));
+      crossThreadBind(&ThreadedWorkletThreadForTest::countFeature,
+                      crossThreadUnretained(workerThread()), feature1));
   testing::enterRunLoop();
   EXPECT_TRUE(UseCounter::isCounted(document(), feature1));
 
@@ -186,8 +188,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   EXPECT_FALSE(UseCounter::isCounted(document(), feature2));
   workerThread()->postTask(
       BLINK_FROM_HERE,
-      createCrossThreadTask(&ThreadedWorkletThreadForTest::countDeprecation,
-                            crossThreadUnretained(workerThread()), feature2));
+      crossThreadBind(&ThreadedWorkletThreadForTest::countDeprecation,
+                      crossThreadUnretained(workerThread()), feature2));
   testing::enterRunLoop();
   EXPECT_TRUE(UseCounter::isCounted(document(), feature2));
 }

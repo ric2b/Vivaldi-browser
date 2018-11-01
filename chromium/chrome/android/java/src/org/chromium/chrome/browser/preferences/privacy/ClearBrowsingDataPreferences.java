@@ -21,6 +21,7 @@ import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.preferences.ButtonPreference;
 import org.chromium.chrome.browser.preferences.ClearBrowsingDataCheckBoxPreference;
@@ -71,7 +72,12 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
             mCheckbox.setOnPreferenceClickListener(this);
             mCheckbox.setEnabled(enabled);
             mCheckbox.setChecked(selected);
-            mCheckbox.setSummaryOff("");  // No summary when unchecked.
+
+            if (!ClearBrowsingDataTabsFragment.isFeatureEnabled()) {
+                // No summary when unchecked. The redesigned basic and advanced
+                // CBD views will always show the checkbox summary.
+                mCheckbox.setSummaryOff("");
+            }
         }
 
         public void destroy() {
@@ -100,6 +106,9 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         @Override
         public void onCounterFinished(String result) {
             mCheckbox.setSummaryOn(result);
+            if (ClearBrowsingDataTabsFragment.isFeatureEnabled()) {
+                mCheckbox.setSummaryOff(result);
+            }
             if (mShouldAnnounceCounterResult) {
                 mCheckbox.announceForAccessibility(result);
             }
@@ -230,7 +239,10 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     // important domains from being cleared.
     private ConfirmImportantSitesDialogFragment mConfirmImportantSitesDialog;
 
-    private final EnumSet<DialogOption> getSelectedOptions() {
+    /**
+     * @return The currently selected DialogOptions.
+     */
+    protected final EnumSet<DialogOption> getSelectedOptions() {
         EnumSet<DialogOption> selected = EnumSet.noneOf(DialogOption.class);
         for (Item item : mItems) {
             if (item.isSelected()) selected.add(item.getOption());
@@ -264,6 +276,9 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         } else {
             PrefServiceBridge.getInstance().clearBrowsingData(this, dataTypes, timePeriod);
         }
+
+        // Clear all reported entities.
+        AppIndexingReporter.getInstance().clearHistory();
     }
 
     private void dismissProgressDialog() {
@@ -277,7 +292,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
      * Returns the Array of dialog options. Options are displayed in the same
      * order as they appear in the array.
      */
-    private DialogOption[] getDialogOptions() {
+    protected DialogOption[] getDialogOptions() {
         return new DialogOption[] {
                 DialogOption.CLEAR_HISTORY,
                 DialogOption.CLEAR_COOKIES_AND_SITE_DATA,
@@ -311,6 +326,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
 
     /**
      * Decides whether a given dialog option should be selected when the dialog is initialized.
+     *
      * @param option The option in question.
      * @return boolean Whether the given option should be preselected.
      */
@@ -374,16 +390,24 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     @Override
     public boolean onPreferenceClick(Preference preference) {
         if (preference.getKey().equals(PREF_CLEAR_BUTTON)) {
-            if (shouldShowImportantSitesDialog()) {
-                showImportantDialogThenClear();
-                return true;
-            }
-            // If sites haven't been fetched, just clear the browsing data regularly rather than
-            // waiting to show the important sites dialog.
-            clearBrowsingData(getSelectedOptions(), null, null, null, null);
+            onClearButtonClicked();
             return true;
         }
         return false;
+    }
+
+    /**
+     * Either shows the important sites dialog or clears browsing data according to the selected
+     * options.
+     */
+    protected final void onClearButtonClicked() {
+        if (shouldShowImportantSitesDialog()) {
+            showImportantDialogThenClear();
+            return;
+        }
+        // If sites haven't been fetched, just clear the browsing data regularly rather than
+        // waiting to show the important sites dialog.
+        clearBrowsingData(getSelectedOptions(), null, null, null, null);
     }
 
     @Override
@@ -405,11 +429,18 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     /**
      * Disable the "Clear" button if none of the options are selected. Otherwise, enable it.
      */
-    private void updateButtonState() {
+    protected void updateButtonState() {
         ButtonPreference clearButton = (ButtonPreference) findPreference(PREF_CLEAR_BUTTON);
         if (clearButton == null) return;
         boolean isEnabled = !getSelectedOptions().isEmpty();
         clearButton.setEnabled(isEnabled);
+    }
+
+    /**
+     * @return The id of the preference xml that should be displayed.
+     */
+    protected int getPreferenceXmlId() {
+        return R.xml.clear_browsing_data_preferences;
     }
 
     @Override
@@ -419,7 +450,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         mMaxImportantSites = PrefServiceBridge.getMaxImportantSites();
         PrefServiceBridge.getInstance().requestInfoAboutOtherFormsOfBrowsingHistory(this);
         getActivity().setTitle(R.string.clear_browsing_data_title);
-        addPreferencesFromResource(R.xml.clear_browsing_data_preferences);
+        addPreferencesFromResource(getPreferenceXmlId());
         DialogOption[] options = getDialogOptions();
         mItems = new Item[options.length];
         for (int i = 0; i < options.length; i++) {
@@ -465,11 +496,28 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         assert spinnerOptionIndex != -1;
         spinner.setOptions(spinnerOptions, spinnerOptionIndex);
 
-        // The "Clear" button.
+        initClearButtonPreference();
+        initFootnote();
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.IMPORTANT_SITES_IN_CBD)) {
+            PrefServiceBridge.fetchImportantSites(this);
+        }
+    }
+
+    /**
+     * Initialize the ButtonPreference.
+     */
+    protected void initClearButtonPreference() {
         ButtonPreference clearButton = (ButtonPreference) findPreference(PREF_CLEAR_BUTTON);
         clearButton.setOnPreferenceClickListener(this);
         clearButton.setShouldDisableView(true);
+    }
 
+    /**
+     * Set the texts that notify the user about data in their google account and that deleting
+     * cookies doesn't sign you out of chrome.
+     */
+    protected void initFootnote() {
         // The general information footnote informs users about data that will not be deleted.
         // If the user is signed in, it also informs users about the behavior of synced deletions.
         // and we show an additional Google-specific footnote. This footnote informs users that they
@@ -503,9 +551,6 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         } else {
             getPreferenceScreen().removePreference(google_summary);
             general_summary.setSummary(R.string.clear_browsing_data_footnote_site_settings);
-        }
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.IMPORTANT_SITES_IN_CBD)) {
-            PrefServiceBridge.fetchImportantSites(this);
         }
     }
 
@@ -586,9 +631,9 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     }
 
     @Override
-    public void onImportantRegisterableDomainsReady(
-            String[] domains, String[] exampleOrigins, int[] importantReasons) {
-        if (domains == null) return;
+    public void onImportantRegisterableDomainsReady(String[] domains, String[] exampleOrigins,
+            int[] importantReasons, boolean dialogDisabled) {
+        if (domains == null || dialogDisabled) return;
         // mMaxImportantSites is a constant on the C++ side. While 0 is valid, use 1 as the minimum
         // because histogram code assumes a min >= 1; the underflow bucket will record the 0s.
         RecordHistogram.recordLinearCountHistogram("History.ClearBrowsingData.NumImportant",

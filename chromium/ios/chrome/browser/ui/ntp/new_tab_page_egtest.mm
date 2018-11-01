@@ -20,6 +20,10 @@
 #import "ios/testing/wait_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @implementation NewTabPageController (ExposedForTesting)
 - (GoogleLandingController*)googleLandingController {
   return googleLandingController_;
@@ -73,8 +77,8 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
       tag = IDC_SHOW_OTHER_DEVICES;
     }
     if (tag) {
-      base::scoped_nsobject<GenericChromeCommand> command(
-          [[GenericChromeCommand alloc] initWithTag:tag]);
+      GenericChromeCommand* command =
+          [[GenericChromeCommand alloc] initWithTag:tag];
       chrome_test_util::RunCommandWithActiveViewController(command);
     }
   }
@@ -110,14 +114,12 @@ void AssertNTPScrolledToTop(bool scrolledToTop) {
 // Tests that all items are accessible on the most visited page.
 - (void)testAccessibilityOnMostVisited {
   SelectNewTabPagePanel(NewTabPage::kMostVisitedPanel);
-  // TODO(crbug.com/640179): Implement and call
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
 }
 
 // Tests that all items are accessible on the open tabs page.
 - (void)testAccessibilityOnOpenTabs {
   SelectNewTabPagePanel(NewTabPage::kOpenTabsPanel);
-  // TODO(crbug.com/640179): Implement and call
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
   DismissNewTabPagePanel();
 }
@@ -125,7 +127,6 @@ void AssertNTPScrolledToTop(bool scrolledToTop) {
 // Tests that all items are accessible on the bookmarks page.
 - (void)testAccessibilityOnBookmarks {
   SelectNewTabPagePanel(NewTabPage::kBookmarksPanel);
-  // TODO(crbug.com/640179): Implement and call
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
   DismissNewTabPagePanel();
 }
@@ -135,7 +136,6 @@ void AssertNTPScrolledToTop(bool scrolledToTop) {
   chrome_test_util::OpenNewIncognitoTab();
   SelectNewTabPagePanel(NewTabPage::kIncognitoPanel);
   WaitForHistoryToDisappear();
-  // TODO(crbug.com/640179): Implement and call
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
   chrome_test_util::CloseAllIncognitoTabs();
 }

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/format_macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
@@ -691,9 +692,7 @@ CallbacksAssociatedPtrInfo
 WebIDBDatabaseImpl::IOThreadHelper::GetCallbacksProxy(
     std::unique_ptr<IndexedDBCallbacksImpl> callbacks) {
   CallbacksAssociatedPtrInfo ptr_info;
-  indexed_db::mojom::CallbacksAssociatedRequest request;
-  database_.associated_group()->CreateAssociatedInterface(
-      mojo::AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
+  auto request = mojo::MakeRequest(&ptr_info);
   mojo::MakeStrongAssociatedBinding(std::move(callbacks), std::move(request));
   return ptr_info;
 }

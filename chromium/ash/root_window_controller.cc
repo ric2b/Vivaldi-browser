@@ -35,6 +35,7 @@
 #include "ash/common/wm/switchable_windows.h"
 #include "ash/common/wm/system_modal_container_layout_manager.h"
 #include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm/workspace/workspace_layout_manager.h"
 #include "ash/common/wm/workspace_controller.h"
 #include "ash/common/wm_shell.h"
@@ -66,6 +67,7 @@
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/mus/window_mus.h"
+#include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -174,15 +176,20 @@ void ReparentWindow(WmWindow* window, WmWindow* new_parent) {
   bool update_bounds =
       (state->IsNormalOrSnapped() || state->IsMinimized()) &&
       new_parent->GetShellWindowId() != kShellWindowId_DockedContainer;
+  gfx::Rect work_area_in_new_parent =
+      wm::GetDisplayWorkAreaBoundsInParent(new_parent);
+
   gfx::Rect local_bounds;
   if (update_bounds) {
     local_bounds = state->window()->GetBounds();
     MoveOriginRelativeToSize(src_size, dst_size, &local_bounds);
+    local_bounds.AdjustToFit(work_area_in_new_parent);
   }
 
   if (has_restore_bounds) {
     restore_bounds = state->GetRestoreBoundsInParent();
     MoveOriginRelativeToSize(src_size, dst_size, &restore_bounds);
+    restore_bounds.AdjustToFit(work_area_in_new_parent);
   }
 
   new_parent->AddChild(window);
@@ -248,6 +255,11 @@ void ReparentAllWindows(WmWindow* src, WmWindow* dst) {
 WmWindow* CreateContainer(int window_id, const char* name, WmWindow* parent) {
   WmWindow* window = WmShell::Get()->NewWindow(ui::wm::WINDOW_TYPE_UNKNOWN,
                                                ui::LAYER_NOT_DRAWN);
+  if (WmShell::Get()->IsRunningInMash()) {
+    aura::WindowPortMus::Get(window->aura_window())
+        ->SetEventTargetingPolicy(
+            ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+  }
   window->SetShellWindowId(window_id);
   window->SetName(name);
   parent->AddChild(window);
@@ -591,22 +603,22 @@ void RootWindowController::CloseChildWindows() {
 
   // Explicitly destroy top level windows. We do this because such windows may
   // query the RootWindow for state.
-  WmWindowTracker non_toplevel_windows;
+  aura::WindowTracker non_toplevel_windows;
   WmWindow* root = GetWindow();
-  non_toplevel_windows.Add(root);
+  non_toplevel_windows.Add(root->aura_window());
   while (!non_toplevel_windows.windows().empty()) {
-    WmWindow* non_toplevel_window = non_toplevel_windows.Pop();
-    WmWindowTracker toplevel_windows;
-    for (WmWindow* child : non_toplevel_window->GetChildren()) {
-      if (!ShouldDestroyWindowInCloseChildWindows(child))
+    aura::Window* non_toplevel_window = non_toplevel_windows.Pop();
+    aura::WindowTracker toplevel_windows;
+    for (aura::Window* child : non_toplevel_window->children()) {
+      if (!ShouldDestroyWindowInCloseChildWindows(WmWindow::Get(child)))
         continue;
-      if (child->HasNonClientArea())
+      if (child->delegate())
         toplevel_windows.Add(child);
       else
         non_toplevel_windows.Add(child);
     }
     while (!toplevel_windows.windows().empty())
-      toplevel_windows.Pop()->Destroy();
+      delete toplevel_windows.Pop();
   }
   // And then remove the containers.
   while (!root->GetChildren().empty()) {

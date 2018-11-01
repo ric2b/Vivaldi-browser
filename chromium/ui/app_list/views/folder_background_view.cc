@@ -25,7 +25,7 @@ const int kBubbleTransitionDurationMs = 200;
 FolderBackgroundView::FolderBackgroundView()
     : folder_view_(NULL),
       show_state_(NO_BUBBLE) {
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 }
 
@@ -79,13 +79,12 @@ void FolderBackgroundView::OnPaint(gfx::Canvas* canvas) {
     return;
 
   // Draw ink bubble that shows the folder boundary.
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setAntiAlias(true);
-  paint.setColor(kFolderBubbleColor);
+  cc::PaintFlags flags;
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setAntiAlias(true);
+  flags.setColor(kFolderBubbleColor);
   canvas->DrawCircle(GetContentsBounds().CenterPoint(),
-                     GetFolderContainerBubbleRadius(),
-                     paint);
+                     GetFolderContainerBubbleRadius(), flags);
 }
 
 void FolderBackgroundView::OnImplicitAnimationsCompleted() {

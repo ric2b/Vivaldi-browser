@@ -61,21 +61,19 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
     MAX_CONFIGURE_RESULT
   };
 
-  typedef base::Callback<
-      void(ConfigureResult, const SyncMergeResult&, const SyncMergeResult&)>
-      StartCallback;
+  using StartCallback = base::Callback<
+      void(ConfigureResult, const SyncMergeResult&, const SyncMergeResult&)>;
 
-  typedef base::Callback<void(ModelType, const SyncError&)> ModelLoadCallback;
+  using ModelLoadCallback = base::Callback<void(ModelType, const SyncError&)>;
 
-  typedef base::Callback<void(const ModelType,
-                              std::unique_ptr<base::ListValue>)>
-      AllNodesCallback;
+  using AllNodesCallback =
+      base::Callback<void(const ModelType, std::unique_ptr<base::ListValue>)>;
 
-  typedef base::Callback<void(ModelType, const StatusCounters&)>
-      StatusCountersCallback;
+  using StatusCountersCallback =
+      base::Callback<void(ModelType, const StatusCounters&)>;
 
-  typedef std::map<ModelType, std::unique_ptr<DataTypeController>> TypeMap;
-  typedef std::map<ModelType, DataTypeController::State> StateMap;
+  using TypeMap = std::map<ModelType, std::unique_ptr<DataTypeController>>;
+  using StateMap = std::map<ModelType, DataTypeController::State>;
 
   // Returns true if the start result should trigger an unrecoverable error.
   // Public so unit tests can use this function as well.
@@ -90,6 +88,12 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   // successfully before starting configuration. Directory based types should
   // return false while USS datatypes should return true.
   virtual bool ShouldLoadModelBeforeConfigure() const = 0;
+
+  // Called right before LoadModels. This method allows controller to register
+  // the type with sync engine. Directory datatypes download initial data in
+  // parallel with LoadModels and thus should be ready to receive updates with
+  // initial data before LoadModels finishes.
+  virtual void BeforeLoadModels(ModelTypeConfigurer* configurer) = 0;
 
   // Begins asynchronous operation of loading the model to get it ready for
   // model association. Once the models are loaded the callback will be invoked

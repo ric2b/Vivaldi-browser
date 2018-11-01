@@ -33,6 +33,7 @@ class NGLayoutInlineItemsBuilderTest : public ::testing::Test {
     for (int i = 0; i < size; i++)
       builder.Append(inputs[i], style_.get());
     text_ = builder.ToString();
+    ValidateItems();
     return text_;
   }
 
@@ -44,6 +45,24 @@ class NGLayoutInlineItemsBuilderTest : public ::testing::Test {
   const String& TestAppend(const String& input1, const String& input2) {
     String inputs[] = {input1, input2};
     return TestAppend(inputs, 2);
+  }
+
+  const String& TestAppend(const String& input1,
+                           const String& input2,
+                           const String& input3) {
+    String inputs[] = {input1, input2, input3};
+    return TestAppend(inputs, 3);
+  }
+
+  void ValidateItems() {
+    unsigned current_offset = 0;
+    for (unsigned i = 0; i < items_.size(); i++) {
+      const NGLayoutInlineItem& item = items_[i];
+      EXPECT_EQ(current_offset, item.StartOffset());
+      EXPECT_LT(item.StartOffset(), item.EndOffset());
+      current_offset = item.EndOffset();
+    }
+    EXPECT_EQ(current_offset, text_.length());
   }
 
   Vector<NGLayoutInlineItem> items_;
@@ -93,7 +112,49 @@ TEST_F(NGLayoutInlineItemsBuilderTest, CollapseAcrossElements) {
 }
 
 TEST_F(NGLayoutInlineItemsBuilderTest, CollapseLeadingSpaces) {
-  EXPECT_EQ("text", TestAppend("  text")) << "Leading spaces are removed.";
+  EXPECT_EQ("text", TestAppend("  text"));
+  EXPECT_EQ("text", TestAppend(" ", "text"));
+  EXPECT_EQ("text", TestAppend(" ", " text"));
+}
+
+TEST_F(NGLayoutInlineItemsBuilderTest, CollapseTrailingSpaces) {
+  EXPECT_EQ("text", TestAppend("text  "));
+  EXPECT_EQ("text", TestAppend("text", " "));
+  EXPECT_EQ("text", TestAppend("text ", " "));
+}
+
+TEST_F(NGLayoutInlineItemsBuilderTest, CollapseAllSpaces) {
+  EXPECT_EQ("", TestAppend("  "));
+  EXPECT_EQ("", TestAppend("  ", "  "));
+  EXPECT_EQ("", TestAppend("  ", "\n"));
+  EXPECT_EQ("", TestAppend("\n", "  "));
+}
+
+TEST_F(NGLayoutInlineItemsBuilderTest, CollapseLeadingNewlines) {
+  EXPECT_EQ("text", TestAppend("\ntext"));
+  EXPECT_EQ("text", TestAppend("\n\ntext"));
+  EXPECT_EQ("text", TestAppend("\n", "text"));
+  EXPECT_EQ("text", TestAppend("\n\n", "text"));
+  EXPECT_EQ("text", TestAppend(" \n", "text"));
+  EXPECT_EQ("text", TestAppend("\n", " text"));
+  EXPECT_EQ("text", TestAppend("\n\n", " text"));
+  EXPECT_EQ("text", TestAppend(" \n", " text"));
+  EXPECT_EQ("text", TestAppend("\n", "\ntext"));
+  EXPECT_EQ("text", TestAppend("\n\n", "\ntext"));
+  EXPECT_EQ("text", TestAppend(" \n", "\ntext"));
+}
+
+TEST_F(NGLayoutInlineItemsBuilderTest, CollapseTrailingNewlines) {
+  EXPECT_EQ("text", TestAppend("text\n"));
+  EXPECT_EQ("text", TestAppend("text", "\n"));
+  EXPECT_EQ("text", TestAppend("text\n", "\n"));
+  EXPECT_EQ("text", TestAppend("text\n", " "));
+  EXPECT_EQ("text", TestAppend("text ", "\n"));
+}
+
+TEST_F(NGLayoutInlineItemsBuilderTest, CollapseBeforeNewlineAcrossElements) {
+  EXPECT_EQ("text text", TestAppend("text ", "\ntext"));
+  EXPECT_EQ("text text", TestAppend("text", " ", "\ntext"));
 }
 
 TEST_F(NGLayoutInlineItemsBuilderTest, CollapseBeforeAndAfterNewline) {
@@ -116,8 +177,6 @@ TEST_F(NGLayoutInlineItemsBuilderTest,
 TEST_F(NGLayoutInlineItemsBuilderTest, CollapseZeroWidthSpaces) {
   EXPECT_EQ("text text", TestAppend("text\ntext"))
       << "Newline is converted to a space.";
-  EXPECT_EQ("text ", TestAppend("text\n"))
-      << "Newline at end is converted to a space.";
 
   EXPECT_EQ(String(u"text\u200Btext"), TestAppend(u"text\u200B\ntext"))
       << "Newline is removed if the character before is ZWS.";
@@ -171,6 +230,11 @@ TEST_F(NGLayoutInlineItemsBuilderTest, AppendAsOpaqueToSpaceCollapsing) {
   builder.AppendAsOpaqueToSpaceCollapsing(firstStrongIsolateCharacter);
   builder.Append(" World", style_.get());
   EXPECT_EQ(String(u"Hello \u2068World"), builder.ToString());
+}
+
+TEST_F(NGLayoutInlineItemsBuilderTest, AppendEmptyString) {
+  EXPECT_EQ("", TestAppend(""));
+  EXPECT_EQ(0u, items_.size());
 }
 
 TEST_F(NGLayoutInlineItemsBuilderTest, Empty) {

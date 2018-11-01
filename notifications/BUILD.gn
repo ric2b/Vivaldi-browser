@@ -5,6 +5,7 @@ source_set("notifications") {
   ]
   deps = [
     "//base:base",
+    "//chrome/common",
     "//components/content_settings/core/common:common",
     "//mojo/public/cpp/bindings",
     "//skia",

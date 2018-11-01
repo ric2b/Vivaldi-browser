@@ -27,6 +27,7 @@ class InlineLoginHandlerImpl : public InlineLoginHandler,
   ~InlineLoginHandlerImpl() override;
 
   using InlineLoginHandler::web_ui;
+  using InlineLoginHandler::CloseDialogFromJavascript;
 
   base::WeakPtr<InlineLoginHandlerImpl> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -117,11 +118,9 @@ class InlineLoginHandlerImpl : public InlineLoginHandler,
                                   Profile* profile,
                                   Profile::CreateStatus status);
 
-  // Overridden from content::WebContentsObserver overrides.
-  void DidCommitProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override;
+  // content::WebContentsObserver implementation:
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
   // True if the user has navigated to untrusted domains during the signin
   // process.

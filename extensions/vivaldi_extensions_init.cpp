@@ -12,28 +12,24 @@ namespace extensions {
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiExtensionInit> >
     g_factory = LAZY_INSTANCE_INITIALIZER;
 
-
 VivaldiExtensionInit::VivaldiExtensionInit(content::BrowserContext* context) {
-
   ExtensionFunctionRegistry* registry =
       ExtensionFunctionRegistry::GetInstance();
 
   // Generated APIs from Vivaldi.
   extensions::vivaldi::VivaldiGeneratedFunctionRegistry::RegisterAll(registry);
-
 }
 
-VivaldiExtensionInit::~VivaldiExtensionInit() {
-}
+VivaldiExtensionInit::~VivaldiExtensionInit() {}
 
-VivaldiExtensionInit*
-VivaldiExtensionInit::Get(content::BrowserContext* context) {
+VivaldiExtensionInit* VivaldiExtensionInit::Get(
+    content::BrowserContext* context) {
   return BrowserContextKeyedAPIFactory<VivaldiExtensionInit>::Get(context);
 }
 
 BrowserContextKeyedAPIFactory<VivaldiExtensionInit>*
-    VivaldiExtensionInit::GetFactoryInstance() {
+VivaldiExtensionInit::GetFactoryInstance() {
   return g_factory.Pointer();
 }
 
-} // namespace extensions
+}  // namespace extensions

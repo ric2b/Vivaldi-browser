@@ -8,9 +8,15 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "third_party/skia/include/core/SkPicture.h"
+#include "platform/graphics/paint/PaintRecord.h"
 
 namespace blink {
+
+#if DCHECK_IS_ON()
+static bool gListModificationCheckDisabled = false;
+DisableListModificationCheck::DisableListModificationCheck()
+    : m_disabler(&gListModificationCheckDisabled, true) {}
+#endif
 
 DrawingRecorder::DrawingRecorder(GraphicsContext& context,
                                  const DisplayItemClient& displayItemClient,
@@ -22,7 +28,7 @@ DrawingRecorder::DrawingRecorder(GraphicsContext& context,
       m_knownToBeOpaque(false)
 #if DCHECK_IS_ON()
       ,
-      m_displayItemPosition(
+      m_initialDisplayItemListSize(
           m_context.getPaintController().newDisplayItemList().size())
 #endif
 {
@@ -75,15 +81,18 @@ DrawingRecorder::~DrawingRecorder() {
     m_context.restore();
 
   m_context.setInDrawingRecorder(false);
-  DCHECK(m_displayItemPosition ==
-         m_context.getPaintController().newDisplayItemList().size());
+
+  if (!gListModificationCheckDisabled) {
+    DCHECK(m_initialDisplayItemListSize ==
+           m_context.getPaintController().newDisplayItemList().size());
+  }
 #endif
 
-  sk_sp<const SkPicture> picture = m_context.endRecording();
+  sk_sp<const PaintRecord> picture = m_context.endRecording();
 
 #if DCHECK_IS_ON()
   if (!RuntimeEnabledFeatures::slimmingPaintStrictCullRectClippingEnabled() &&
-      !m_context.getPaintController().isForSkPictureBuilder() &&
+      !m_context.getPaintController().isForPaintRecordBuilder() &&
       m_displayItemClient.paintedOutputOfObjectHasNoEffectRegardlessOfSize()) {
     DCHECK_EQ(0, picture->approximateOpCount())
         << m_displayItemClient.debugName();

@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_H_
-#define VIVALDI_SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_H_
+#ifndef SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_H_
+#define SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_H_
 
 #include <string>
 #include <vector>
@@ -32,7 +32,8 @@ class VivaldiProfileOAuth2TokenService : public ProfileOAuth2TokenService {
     base::WeakPtr<RequestImpl> request;
   };
 
-  VivaldiProfileOAuth2TokenService(OAuth2TokenServiceDelegate* delegate);
+  explicit VivaldiProfileOAuth2TokenService(
+      std::unique_ptr<OAuth2TokenServiceDelegate> delegate);
   ~VivaldiProfileOAuth2TokenService() override;
 
   void SetConsumer(VivaldiSyncManager* consumer);
@@ -63,6 +64,6 @@ class VivaldiProfileOAuth2TokenService : public ProfileOAuth2TokenService {
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiProfileOAuth2TokenService);
 };
-}
+}  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_H_
+#endif  // SYNC_VIVALDI_PROFILE_OAUTH2_TOKEN_SERVICE_H_

@@ -3,8 +3,8 @@
 ## Main style guides
 
   * [Chromium C++ style guide](c++/c++.md)
-  * [Google Objective-C style guide](https://google.github.io/styleguide/objcguide.xml)
-  * [Java style guide for Android](https://sites.google.com/a/chromium.org/dev/developers/coding-style/java)
+  * [Chromium Objective-C style guide](objective-c/objective-c.md)
+  * [Java style guide for Android](java/java.md)
   * [GN style guide](../tools/gn/docs/style_guide.md) for build files
 
 Chromium also uses these languages to a lesser degree:

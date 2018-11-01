@@ -10,13 +10,8 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "media/base/test_data_util.h"
+#include "media/media_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-// This test assumes proprietary media support built into FFmpeg, which is not
-// the case when USE_SYSTEM_PROPRIETARY_CODECS is defined.
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#undef USE_PROPRIETARY_CODECS
-#endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 namespace media {
 
@@ -43,7 +38,7 @@ TEST(MediaFileCheckerTest, Audio) {
   RunMediaFileChecker("sfx.ogg", true);
 }
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 TEST(MediaFileCheckerTest, MP3) {
   RunMediaFileChecker("sfx.mp3", true);
 }

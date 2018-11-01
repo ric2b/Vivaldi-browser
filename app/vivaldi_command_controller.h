@@ -1,7 +1,7 @@
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
-#ifndef APP_VIVALDI_COMMAND_CONTROLLER_H
-#define APP_VIVALDI_COMMAND_CONTROLLER_H
+#ifndef APP_VIVALDI_COMMAND_CONTROLLER_H_
+#define APP_VIVALDI_COMMAND_CONTROLLER_H_
 
 class CommandUpdater;
 class Browser;
@@ -15,8 +15,8 @@ enum VivaldiScrollType {
 };
 
 void SetVivaldiScrollType(int scrollType);
-void UpdateCommandsForVivaldi(CommandUpdater &);
-bool ExecuteVivaldiCommands(Browser *browser, int id);
+void UpdateCommandsForVivaldi(CommandUpdater*);
+bool ExecuteVivaldiCommands(Browser* browser, int id);
 }
 
-#endif //APP_VIVALDI_COMMAND_CONTROLLER_H
+#endif  // APP_VIVALDI_COMMAND_CONTROLLER_H_

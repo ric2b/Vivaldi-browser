@@ -36,6 +36,7 @@ class Size;
 namespace gpu {
 
 struct Mailbox;
+struct SyncToken;
 
 namespace gles2 {
 
@@ -54,31 +55,25 @@ struct ContextCreationAttribHelper;
 struct ContextState;
 
 struct DisallowedFeatures {
-  DisallowedFeatures()
-      : gpu_memory_manager(false),
-        npot_support(false),
-        chromium_color_buffer_float_rgba(false),
-        chromium_color_buffer_float_rgb(false),
-        ext_color_buffer_float(false),
-        oes_texture_float_linear(false),
-        oes_texture_half_float_linear(false) {
-  }
+  DisallowedFeatures() {}
 
   void AllowExtensions() {
     chromium_color_buffer_float_rgba = false;
     chromium_color_buffer_float_rgb = false;
     ext_color_buffer_float = false;
+    ext_color_buffer_half_float = false;
     oes_texture_float_linear = false;
     oes_texture_half_float_linear = false;
   }
 
-  bool gpu_memory_manager;
-  bool npot_support;
-  bool chromium_color_buffer_float_rgba;
-  bool chromium_color_buffer_float_rgb;
-  bool ext_color_buffer_float;
-  bool oes_texture_float_linear;
-  bool oes_texture_half_float_linear;
+  bool gpu_memory_manager = false;
+  bool npot_support = false;
+  bool chromium_color_buffer_float_rgba = false;
+  bool chromium_color_buffer_float_rgb = false;
+  bool ext_color_buffer_float = false;
+  bool ext_color_buffer_half_float = false;
+  bool oes_texture_float_linear = false;
+  bool oes_texture_half_float_linear = false;
 };
 
 typedef base::Callback<void(const std::string& key,
@@ -91,10 +86,7 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
  public:
   typedef error::Error Error;
   typedef base::Callback<void(uint64_t release)> FenceSyncReleaseCallback;
-  typedef base::Callback<bool(gpu::CommandBufferNamespace namespace_id,
-                              gpu::CommandBufferId command_buffer_id,
-                              uint64_t release)>
-      WaitFenceSyncCallback;
+  typedef base::Callback<bool(const gpu::SyncToken&)> WaitSyncTokenCallback;
   typedef base::Callback<void(void)> NoParamCallback;
 
   // The default stencil mask, which has all bits set.  This really should be a
@@ -287,11 +279,12 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   virtual void SetShaderCacheCallback(const ShaderCacheCallback& callback) = 0;
 
   // Sets the callback for fence sync release and wait calls. The wait call
-  // returns true if the channel is still scheduled.
+  // returns false if the wait was a nop or invalid and the command buffer is
+  // still scheduled.
   virtual void SetFenceSyncReleaseCallback(
       const FenceSyncReleaseCallback& callback) = 0;
-  virtual void SetWaitFenceSyncCallback(
-      const WaitFenceSyncCallback& callback) = 0;
+  virtual void SetWaitSyncTokenCallback(
+      const WaitSyncTokenCallback& callback) = 0;
 
   // Sets the callback for the DescheduleUntilFinished and
   // RescheduleAfterFinished calls.

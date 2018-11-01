@@ -35,6 +35,10 @@ enum class UMAWebBluetoothFunction {
   REMOTE_GATT_SERVER_DISCONNECT = 8,
   SERVICE_GET_CHARACTERISTICS = 9,
   GET_PRIMARY_SERVICES = 10,
+  DESCRIPTOR_READ_VALUE = 11,
+  DESCRIPTOR_WRITE_VALUE = 12,
+  CHARACTERISTIC_GET_DESCRIPTOR = 13,
+  CHARACTERISTIC_GET_DESCRIPTORS = 14,
   // NOTE: Add new actions immediately above this line. Make sure to update
   // the enum list in tools/metrics/histograms/histograms.xml accordingly.
   COUNT
@@ -51,6 +55,7 @@ enum class CacheQueryOutcome {
   NO_DEVICE = 2,
   NO_SERVICE = 3,
   NO_CHARACTERISTIC = 4,
+  NO_DESCRIPTOR = 5,
 };
 
 // requestDevice() Metrics
@@ -182,7 +187,21 @@ enum class UMAGetCharacteristicOutcome {
   NO_CHARACTERISTICS = 5,
   // Note: Add new outcomes immediately above this line.
   // Make sure to update the enum list in
-  // tools/metrisc/histogram/histograms.xml accordingly.
+  // tools/metrics/histogram/histograms.xml accordingly.
+  COUNT
+};
+
+enum class UMAGetDescriptorOutcome {
+  SUCCESS = 0,
+  NO_DEVICE = 1,
+  NO_SERVICE = 2,
+  NO_CHARACTERISTIC = 3,
+  NOT_FOUND = 4,
+  BLOCKLISTED = 5,
+  NO_DESCRIPTORS = 6,
+  // Note: Add new outcomes immediately above this line.
+  // Make sure to update the enum list in
+  // tools/metrics/histogram/histograms.xml accordingly.
   COUNT
 };
 
@@ -206,6 +225,27 @@ void RecordGetCharacteristicsOutcome(
 void RecordGetCharacteristicsCharacteristic(
     blink::mojom::WebBluetoothGATTQueryQuantity quantity,
     const base::Optional<device::BluetoothUUID>& characteristic);
+
+// There should be a call to this function whenever
+// RemoteServiceGetDescriptorsCallback is run.
+// Pass blink::mojom::WebBluetoothGATTQueryQuantity::SINGLE for
+// getDescriptor.
+// Pass blink::mojom::WebBluetoothGATTQueryQuantity::MULTIPLE for
+// getDescriptors.
+void RecordGetDescriptorsOutcome(
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    UMAGetDescriptorOutcome outcome);
+
+// Records the outcome of the cache query for getDescriptors. Should only be
+// called if QueryCacheForService fails.
+void RecordGetDescriptorsOutcome(
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    CacheQueryOutcome outcome);
+
+// Records the UUID of the descriptor used when calling getDescriptor.
+void RecordGetDescriptorsDescriptor(
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    const base::Optional<device::BluetoothUUID>& descriptor);
 
 // GATT Operations Metrics
 
@@ -236,6 +276,8 @@ enum class UMAGATTOperation {
   CHARACTERISTIC_READ,
   CHARACTERISTIC_WRITE,
   START_NOTIFICATIONS,
+  DESCRIPTOR_READ,
+  DESCRIPTOR_WRITE,
   // Note: Add new GATT Operations immediately above this line.
   COUNT
 };
@@ -275,6 +317,26 @@ void RecordStartNotificationsOutcome(UMAGATTOperationOutcome outcome);
 // Records the outcome of a cache query for startNotifications. Should only be
 // called if QueryCacheForCharacteristic fails.
 void RecordStartNotificationsOutcome(CacheQueryOutcome outcome);
+
+// Descriptor.readValue() Metrics
+// There should be a call to this function for every call to
+// Send(BluetoothMsg_ReadDescriptorValueSuccess) and
+// Send(BluetoothMsg_ReadDescriptorValueError).
+void RecordDescriptorReadValueOutcome(UMAGATTOperationOutcome error);
+
+// Records the outcome of a cache query for readValue. Should only be called if
+// QueryCacheForDescriptor fails.
+void RecordDescriptorReadValueOutcome(CacheQueryOutcome outcome);
+
+// Descriptor.writeValue() Metrics
+// There should be a call to this function for every call to
+// Send(BluetoothMsg_ReadDescriptorValueSuccess) and
+// Send(BluetoothMsg_ReadDescriptorValueError).
+void RecordDescriptorWriteValueOutcome(UMAGATTOperationOutcome error);
+
+// Records the outcome of a cache query for writeValue. Should only be called if
+// QueryCacheForDescriptor fails.
+void RecordDescriptorWriteValueOutcome(CacheQueryOutcome outcome);
 
 enum class UMARSSISignalStrengthLevel {
   LESS_THAN_OR_EQUAL_TO_MIN_RSSI,

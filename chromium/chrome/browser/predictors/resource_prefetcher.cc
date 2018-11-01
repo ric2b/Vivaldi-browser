@@ -4,11 +4,14 @@
 
 #include "chrome/browser/predictors/resource_prefetcher.h"
 
+#include <algorithm>
 #include <iterator>
 #include <utility>
 
+#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/referrer.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/request_priority.h"
@@ -24,6 +27,27 @@ static const size_t kResourceBufferSizeBytes = 50000;
 
 namespace predictors {
 
+ResourcePrefetcher::PrefetchedRequestStats::PrefetchedRequestStats(
+    const GURL& resource_url,
+    bool was_cached,
+    size_t total_received_bytes)
+    : resource_url(resource_url),
+      was_cached(was_cached),
+      total_received_bytes(total_received_bytes) {}
+
+ResourcePrefetcher::PrefetchedRequestStats::~PrefetchedRequestStats() {}
+
+ResourcePrefetcher::PrefetcherStats::PrefetcherStats(const GURL& url)
+    : url(url) {}
+
+ResourcePrefetcher::PrefetcherStats::~PrefetcherStats() {}
+
+ResourcePrefetcher::PrefetcherStats::PrefetcherStats(
+    const PrefetcherStats& other)
+    : url(other.url),
+      start_time(other.start_time),
+      requests_stats(other.requests_stats) {}
+
 ResourcePrefetcher::ResourcePrefetcher(
     Delegate* delegate,
     const ResourcePrefetchPredictorConfig& config,
@@ -32,7 +56,10 @@ ResourcePrefetcher::ResourcePrefetcher(
     : state_(INITIALIZED),
       delegate_(delegate),
       config_(config),
-      main_frame_url_(main_frame_url) {
+      main_frame_url_(main_frame_url),
+      prefetched_count_(0),
+      prefetched_bytes_(0),
+      stats_(base::MakeUnique<PrefetcherStats>(main_frame_url)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   std::copy(urls.begin(), urls.end(), std::back_inserter(request_queue_));
@@ -47,6 +74,7 @@ void ResourcePrefetcher::Start() {
   CHECK_EQ(state_, INITIALIZED);
   state_ = RUNNING;
 
+  stats_->start_time = base::TimeTicks::Now();
   TryToLaunchPrefetchRequests();
 }
 
@@ -99,20 +127,33 @@ void ResourcePrefetcher::TryToLaunchPrefetchRequests() {
     CHECK(host_inflight_counts_.empty());
     CHECK(request_queue_.empty() || state_ == STOPPED);
 
+    UMA_HISTOGRAM_COUNTS_100(
+        internal::kResourcePrefetchPredictorPrefetchedCountHistogram,
+        prefetched_count_);
+    UMA_HISTOGRAM_COUNTS_10000(
+        internal::kResourcePrefetchPredictorPrefetchedSizeHistogram,
+        prefetched_bytes_ / 1024);
+
     state_ = FINISHED;
-    delegate_->ResourcePrefetcherFinished(this);
+    delegate_->ResourcePrefetcherFinished(this, std::move(stats_));
   }
 }
 
 void ResourcePrefetcher::SendRequest(const GURL& url) {
   std::unique_ptr<net::URLRequest> url_request =
-      delegate_->GetURLRequestContext()->CreateRequest(url, net::LOW, this);
+      delegate_->GetURLRequestContext()->CreateRequest(url, net::IDLE, this);
   host_inflight_counts_[url.host()] += 1;
 
   url_request->set_method("GET");
   url_request->set_first_party_for_cookies(main_frame_url_);
   url_request->set_initiator(url::Origin(main_frame_url_));
-  url_request->SetReferrer(main_frame_url_.spec());
+
+  content::Referrer referrer(main_frame_url_, blink::WebReferrerPolicyDefault);
+  content::Referrer sanitized_referrer =
+      content::Referrer::SanitizeForRequest(url, referrer);
+  content::Referrer::SetReferrerForRequest(url_request.get(),
+                                           sanitized_referrer);
+
   url_request->SetLoadFlags(url_request->load_flags() | net::LOAD_PREFETCH);
   StartURLRequest(url_request.get());
   inflight_requests_.insert(
@@ -149,11 +190,26 @@ void ResourcePrefetcher::ReadFullResponse(net::URLRequest* request) {
     if (bytes_read == net::ERR_IO_PENDING) {
       return;
     } else if (bytes_read <= 0) {
+      if (bytes_read == 0)
+        RequestComplete(request);
       FinishRequest(request);
       return;
     }
-
   } while (bytes_read > 0);
+}
+
+void ResourcePrefetcher::RequestComplete(net::URLRequest* request) {
+  ++prefetched_count_;
+  int64_t total_received_bytes = request->GetTotalReceivedBytes();
+  prefetched_bytes_ += total_received_bytes;
+
+  UMA_HISTOGRAM_ENUMERATION(
+      internal::kResourcePrefetchPredictorCachePatternHistogram,
+      request->response_info().cache_entry_status,
+      net::HttpResponseInfo::CacheEntryStatus::ENTRY_MAX);
+
+  stats_->requests_stats.emplace_back(request->url(), request->was_cached(),
+                                      total_received_bytes);
 }
 
 void ResourcePrefetcher::OnReceivedRedirect(

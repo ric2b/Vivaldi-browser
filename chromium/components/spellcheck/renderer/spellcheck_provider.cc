@@ -6,7 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
-#include "components/spellcheck/common/spellcheck_marker.h"
 #include "components/spellcheck/common/spellcheck_messages.h"
 #include "components/spellcheck/common/spellcheck_result.h"
 #include "components/spellcheck/renderer/spellcheck.h"
@@ -34,8 +33,6 @@ static_assert(int(blink::WebTextDecorationTypeSpelling) ==
               int(SpellCheckResult::SPELLING), "mismatching enums");
 static_assert(int(blink::WebTextDecorationTypeGrammar) ==
               int(SpellCheckResult::GRAMMAR), "mismatching enums");
-static_assert(int(blink::WebTextDecorationTypeInvisibleSpellcheck) ==
-              int(SpellCheckResult::INVISIBLE), "mismatching enums");
 
 SpellCheckProvider::SpellCheckProvider(
     content::RenderView* render_view,
@@ -56,8 +53,7 @@ SpellCheckProvider::~SpellCheckProvider() {
 
 void SpellCheckProvider::RequestTextChecking(
     const base::string16& text,
-    WebTextCheckingCompletion* completion,
-    const std::vector<SpellCheckMarker>& markers) {
+    WebTextCheckingCompletion* completion) {
   // Ignore invalid requests.
   if (text.empty() || !HasWordCharacters(text, 0)) {
     completion->didCancelCheckingText();
@@ -79,16 +75,11 @@ void SpellCheckProvider::RequestTextChecking(
   // over IPC or return an empty result if the checker is not
   // available.
   Send(new SpellCheckHostMsg_RequestTextCheck(
-      routing_id(),
-      text_check_completions_.Add(completion),
-      text,
-      markers));
+      routing_id(), text_check_completions_.Add(completion), text));
 #else
   Send(new SpellCheckHostMsg_CallSpellingService(
-      routing_id(),
-      text_check_completions_.Add(completion),
-      base::string16(text),
-      markers));
+      routing_id(), text_check_completions_.Add(completion),
+      base::string16(text)));
 #endif  // !USE_BROWSER_SPELLCHECKER
 }
 
@@ -127,14 +118,18 @@ void SpellCheckProvider::checkSpelling(
     int& offset,
     int& length,
     WebVector<WebString>* optional_suggestions) {
-  base::string16 word(text);
+  base::string16 word = text.utf16();
   std::vector<base::string16> suggestions;
   const int kWordStart = 0;
   spellcheck_->SpellCheckWord(
       word.c_str(), kWordStart, word.size(), routing_id(),
       &offset, &length, optional_suggestions ? & suggestions : NULL);
   if (optional_suggestions) {
-    *optional_suggestions = suggestions;
+    WebVector<WebString> web_suggestions(suggestions.size());
+    std::transform(
+        suggestions.begin(), suggestions.end(), web_suggestions.begin(),
+        [](const base::string16& s) { return WebString::fromUTF16(s); });
+    *optional_suggestions = web_suggestions;
     UMA_HISTOGRAM_COUNTS("SpellCheck.api.check.suggestions", word.size());
   } else {
     UMA_HISTOGRAM_COUNTS("SpellCheck.api.check", word.size());
@@ -146,15 +141,8 @@ void SpellCheckProvider::checkSpelling(
 
 void SpellCheckProvider::requestCheckingOfText(
     const WebString& text,
-    const WebVector<uint32_t>& markers,
-    const WebVector<unsigned>& marker_offsets,
     WebTextCheckingCompletion* completion) {
-  std::vector<SpellCheckMarker> spellcheck_markers;
-  for (size_t i = 0; i < markers.size(); ++i) {
-    spellcheck_markers.push_back(
-        SpellCheckMarker(markers[i], marker_offsets[i]));
-  }
-  RequestTextChecking(text, completion, spellcheck_markers);
+  RequestTextChecking(text.utf16(), completion);
   UMA_HISTOGRAM_COUNTS("SpellCheck.api.async", text.length());
 }
 
@@ -180,8 +168,8 @@ bool SpellCheckProvider::isShowingSpellingUI() {
 void SpellCheckProvider::updateSpellingUIWithMisspelledWord(
     const WebString& word) {
 #if BUILDFLAG(USE_BROWSER_SPELLCHECKER)
-  Send(new SpellCheckHostMsg_UpdateSpellingPanelWithMisspelledWord(routing_id(),
-                                                                   word));
+  Send(new SpellCheckHostMsg_UpdateSpellingPanelWithMisspelledWord(
+      routing_id(), word.utf16()));
 #endif
 }
 
@@ -296,6 +284,8 @@ bool SpellCheckProvider::SatisfyRequestFromCache(
     const base::string16& text,
     WebTextCheckingCompletion* completion) {
   size_t last_length = last_request_.length();
+  if (!last_length)
+    return false;
 
   // Send back the |last_results_| if the |last_request_| is a substring of
   // |text| and |text| does not have more words to check. Provider cannot cancel
@@ -310,15 +300,8 @@ bool SpellCheckProvider::SatisfyRequestFromCache(
       completion->didFinishCheckingText(last_results_);
       return true;
     }
-    int code = 0;
-    int length = static_cast<int>(text_length);
-    U16_PREV(text.data(), 0, length, code);
-    UErrorCode error = U_ZERO_ERROR;
-    if (uscript_getScript(code, &error) != USCRIPT_COMMON) {
-      completion->didCancelCheckingText();
-      return true;
-    }
   }
+
   // Create a subset of the cached results and return it if the given text is a
   // substring of the cached text.
   if (text_length < last_length &&

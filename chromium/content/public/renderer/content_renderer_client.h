@@ -171,8 +171,7 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Allows the embedder to override creating a WebAudioDevice.  If it
   // returns NULL the content layer will create the audio device.
-  virtual blink::WebAudioDevice* OverrideCreateAudioDevice(
-      double sample_rate);
+  virtual blink::WebAudioDevice* OverrideCreateAudioDevice();
 
   // Allows the embedder to override the blink::WebClipboard used. If it
   // returns NULL the content layer will handle clipboard interactions.
@@ -362,6 +361,9 @@ class CONTENT_EXPORT ContentRendererClient {
       std::vector<base::SchedulerWorkerPoolParams>* params_vector,
       base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
           index_to_traits_callback) {}
+
+  // Returns true if the media pipeline can be suspended, or false otherwise.
+  virtual bool AllowMediaSuspend();
 };
 
 }  // namespace content

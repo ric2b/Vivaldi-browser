@@ -10,8 +10,8 @@
 #include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEventResult.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 namespace ui {
@@ -33,7 +33,8 @@ class CONTENT_EXPORT InputHandlerManagerClient {
                                        blink::WebInputEvent::Type type,
                                        blink::WebInputEventResult result,
                                        InputEventAckState ack_result) = 0;
-  virtual void ProcessRafAlignedInput(int routing_id) = 0;
+  virtual void ProcessRafAlignedInput(int routing_id,
+                                      base::TimeTicks frame_time) = 0;
 
   // Called from the compositor thread.
   virtual void RegisterRoutingID(int routing_id) = 0;
@@ -47,7 +48,7 @@ class CONTENT_EXPORT InputHandlerManagerClient {
   virtual void DidStopFlinging(int routing_id) = 0;
   virtual void DispatchNonBlockingEventToMainThread(
       int routing_id,
-      blink::WebScopedInputEvent event,
+      ui::WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info) = 0;
 
  protected:

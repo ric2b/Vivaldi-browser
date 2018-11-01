@@ -90,7 +90,7 @@ void HTMLScriptElement::parseAttribute(
   } else if (params.name == nonceAttr) {
     if (params.newValue == ContentSecurityPolicy::getNonceReplacementString())
       return;
-    m_nonce = params.newValue;
+    setNonce(params.newValue);
     if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled()) {
       setAttribute(nonceAttr,
                    ContentSecurityPolicy::getNonceReplacementString());
@@ -126,7 +126,7 @@ void HTMLScriptElement::setAsync(bool async) {
 }
 
 bool HTMLScriptElement::async() const {
-  return fastHasAttribute(asyncAttr) || (m_loader->forceAsync());
+  return fastHasAttribute(asyncAttr) || m_loader->isNonBlocking();
 }
 
 KURL HTMLScriptElement::src() const {

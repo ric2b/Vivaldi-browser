@@ -6,8 +6,6 @@ cr.define('chrome.ntp_tiles_internals', function() {
   'use strict';
 
   var initialize = function() {
-    receiveSites({});
-
     $('submit-update').addEventListener('click', function(event) {
       event.preventDefault();
       chrome.send('update', [{
@@ -16,7 +14,21 @@ cr.define('chrome.ntp_tiles_internals', function() {
           "overrideCountry": $('override-country').value,
           "overrideVersion": $('override-version').value,
         },
-      }])
+      }]);
+    });
+
+    $('suggestions-fetch').addEventListener('click', function(event) {
+      event.preventDefault();
+      chrome.send('fetchSuggestions');
+    });
+
+    $('popular-view-json').addEventListener('click', function(event) {
+      event.preventDefault();
+      if ($('popular-json-value').textContent === "") {
+        chrome.send('viewPopularSitesJson');
+      } else {
+        $('popular-json-value').textContent = "";
+      }
     });
 
     chrome.send('registerForEvents');

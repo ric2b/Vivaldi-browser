@@ -30,6 +30,7 @@
 #include "content/common/accessibility_mode_enums.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
+#include "content/common/content_security_policy/content_security_policy.h"
 #include "content/common/download/mhtml_save_status.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_message_enums.h"
@@ -37,16 +38,18 @@
 #include "content/common/image_downloader/image_downloader.mojom.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/javascript_message_type.h"
+#include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "net/http/http_response_headers.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
+#include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/mojo/window_open_disposition.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -78,9 +81,8 @@ class Range;
 }
 
 namespace content {
-class AppWebMessagePortMessageFilter;
 class AssociatedInterfaceProviderImpl;
-class CrossProcessFrameConnector;
+class FeaturePolicy;
 class FrameTree;
 class FrameTreeNode;
 class MediaInterfaceProxy;
@@ -120,6 +122,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   using AXTreeSnapshotCallback =
       base::Callback<void(
           const ui::AXTreeUpdate&)>;
+  using SmartClipCallback = base::Callback<void(const base::string16& text,
+                                                const base::string16& html)>;
 
   // An accessibility reset is only allowed to prevent very rare corner cases
   // or race conditions where the browser and renderer get out of sync. If
@@ -128,13 +132,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   static RenderFrameHostImpl* FromID(int process_id, int routing_id);
   static RenderFrameHostImpl* FromAXTreeID(
-      AXTreeIDRegistry::AXTreeID ax_tree_id);
+      ui::AXTreeIDRegistry::AXTreeID ax_tree_id);
 
   ~RenderFrameHostImpl() override;
 
   // RenderFrameHost
   int GetRoutingID() override;
-  AXTreeIDRegistry::AXTreeID GetAXTreeID() override;
+  ui::AXTreeIDRegistry::AXTreeID GetAXTreeID() override;
   SiteInstanceImpl* GetSiteInstance() override;
   RenderProcessHost* GetProcess() override;
   RenderWidgetHostView* GetView() override;
@@ -177,7 +181,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void RequestTextSurroundingSelection(
       const TextSurroundingSelectionCallback& callback,
       int max_length) override;
-  void RequestFocusedFormFieldData(FormFieldDataCallback& callback) override;
+  void AllowBindings(int binding_flags) override;
+  int GetEnabledBindings() const override;
 
   // mojom::FrameHost
   void GetInterfaceProvider(
@@ -308,32 +313,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   GlobalFrameRoutingId GetGlobalFrameRoutingId();
 
-#if defined(OS_ANDROID)
-  scoped_refptr<AppWebMessagePortMessageFilter>
-  GetAppWebMessagePortMessageFilter(int routing_id);
-#endif
-
-  // This function is called when this is a swapped out RenderFrameHost that
-  // lives in the same process as the parent frame. The
-  // |cross_process_frame_connector| allows the non-swapped-out
-  // RenderFrameHost for a frame to communicate with the parent process
-  // so that it may composite drawing data.
-  //
-  // Ownership is not transfered.
-  void set_cross_process_frame_connector(
-      CrossProcessFrameConnector* cross_process_frame_connector) {
-    cross_process_frame_connector_ = cross_process_frame_connector;
-  }
-
-  void set_render_frame_proxy_host(RenderFrameProxyHost* proxy) {
-    render_frame_proxy_host_ = proxy;
-  }
-
-  // Returns a bitwise OR of bindings types that have been enabled for this
-  // RenderFrameHostImpl's RenderView. See BindingsPolicy for details.
-  // TODO(creis): Make bindings frame-specific, to support cases like <webview>.
-  int GetEnabledBindings();
-
   // The unique ID of the latest NavigationEntry that this RenderFrameHost is
   // showing. This may change even when this frame hasn't committed a page,
   // such as for a new subframe navigation in a different frame.
@@ -453,24 +432,41 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // cross-process window.focus() calls.
   void SetFocusedFrame();
 
+  // Continues sequential focus navigation in this frame. |source_proxy|
+  // represents the frame that requested a focus change. It must be in the same
+  // process as this or |nullptr|.
+  void AdvanceFocus(blink::WebFocusType type,
+                    RenderFrameProxyHost* source_proxy);
+
   // Deletes the current selection plus the specified number of characters
   // before and after the selection or caret.
   void ExtendSelectionAndDelete(size_t before, size_t after);
 
   // Deletes text before and after the current cursor position, excluding the
-  // selection.
+  // selection. The lengths are supplied in Java chars (UTF-16 Code Unit), not
+  // in code points or in glyphs.
   void DeleteSurroundingText(size_t before, size_t after);
+
+  // Deletes text before and after the current cursor position, excluding the
+  // selection. The lengths are supplied in code points, not in Java chars
+  // (UTF-16 Code Unit) or in glyphs. Do nothing if there are one or more
+  // invalid surrogate pairs in the requested range.
+  void DeleteSurroundingTextInCodePoints(int before, int after);
 
   // Notifies the RenderFrame that the JavaScript message that was shown was
   // closed by the user.
   void JavaScriptDialogClosed(IPC::Message* reply_msg,
                               bool success,
                               const base::string16& user_input,
+                              bool is_before_unload_dialog,
                               bool dialog_was_suppressed);
 
   // Get the accessibility mode from the delegate and Send a message to the
   // renderer process to change the accessibility mode.
   void UpdateAccessibilityMode();
+
+  // Samsung Galaxy Note-specific "smart clip" stylus text getter.
+  void RequestSmartClipExtract(SmartClipCallback callback, gfx::Rect rect);
 
   // Request a one-time snapshot of the accessibility tree without changing
   // the accessibility mode.
@@ -494,7 +490,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Set the AX tree ID of the embedder RFHI, if this is a browser plugin guest.
   void set_browser_plugin_embedder_ax_tree_id(
-      AXTreeIDRegistry::AXTreeID ax_tree_id) {
+      ui::AXTreeIDRegistry::AXTreeID ax_tree_id) {
     browser_plugin_embedder_ax_tree_id_ = ax_tree_id;
   }
 
@@ -543,6 +539,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Indicates that a navigation failed and that this RenderFrame should display
   // an error page.
   void FailedNavigation(const CommonNavigationParams& common_params,
+                        const BeginNavigationParams& begin_params,
                         const RequestNavigationParams& request_params,
                         bool has_stale_copy_in_cache,
                         int error_code);
@@ -587,6 +584,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // in a non-loading state.
   void ResetLoadingState();
 
+  // Returns the feature policy which should be enforced on this RenderFrame.
+  FeaturePolicy* get_feature_policy() { return feature_policy_.get(); }
+
+  // Clears any existing policy and constructs a new policy for this frame,
+  // based on its parent frame.
+  void ResetFeaturePolicy();
+
   // Tells the renderer that this RenderFrame will soon be swapped out, and thus
   // not to create any new modal dialogs until it happens.  This must be done
   // separately so that the ScopedPageLoadDeferrers of any current dialogs are
@@ -596,6 +600,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void SetHasReceivedUserGesture();
 
   void ClearFocusedElement();
+
+  // Returns whether the given URL is allowed to commit in the current process.
+  // This is a more conservative check than RenderProcessHost::FilterURL, since
+  // it will be used to kill processes that commit unauthorized URLs.
+  bool CanCommitURL(const GURL& url);
 
   // PlzNavigate: returns the PreviewsState of the last successful navigation
   // that made a network request. The PreviewsState is a bitmask of potentially
@@ -647,8 +656,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            RenderViewHostIsNotReusedAfterDelayedSwapOutACK);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
-                           RenderViewHostStaysActiveWithLateSwapoutACK);
-  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            LoadEventForwardingWhilePendingDeletion);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            ContextMenuAfterCrossProcessNavigation);
@@ -667,6 +674,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       base::TimeTicks ui_timestamp);
   void OnDidStartProvisionalLoad(
       const GURL& url,
+      const std::vector<GURL>& redirect_chain,
       const base::TimeTicks& navigation_start);
   void OnDidFailProvisionalLoadWithError(
       const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params);
@@ -686,11 +694,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnContextMenu(const ContextMenuParams& params);
   void OnJavaScriptExecuteResponse(int id, const base::ListValue& result);
   void OnVisualStateResponse(uint64_t id);
-  void OnRunJavaScriptMessage(const base::string16& message,
-                              const base::string16& default_prompt,
-                              const GURL& frame_url,
-                              JavaScriptMessageType type,
-                              IPC::Message* reply_msg);
+  void OnRunJavaScriptDialog(const base::string16& message,
+                             const base::string16& default_prompt,
+                             const GURL& frame_url,
+                             JavaScriptDialogType dialog_type,
+                             IPC::Message* reply_msg);
   void OnRunBeforeUnloadConfirm(const GURL& frame_url,
                                 bool is_reload,
                                 IPC::Message* reply_msg);
@@ -698,13 +706,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnTextSurroundingSelectionResponse(const base::string16& content,
                                           uint32_t start_offset,
                                           uint32_t end_offset);
-  void OnFocusedFormFieldDataResponse(int request_id,
-                                      const FormFieldData& field_data);
   void OnDidAccessInitialDocument();
   void OnDidChangeOpener(int32_t opener_routing_id);
   void OnDidChangeName(const std::string& name, const std::string& unique_name);
-  void OnDidSetFeaturePolicyHeader(const ParsedFeaturePolicy& parsed_header);
-  void OnDidAddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
+  void OnDidSetFeaturePolicyHeader(
+      const ParsedFeaturePolicyHeader& parsed_header);
+  void OnDidAddContentSecurityPolicy(
+      const ContentSecurityPolicyHeader& header,
+      const std::vector<ContentSecurityPolicy>& policy);
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
   void OnDidChangeSandboxFlags(int32_t frame_routing_id,
@@ -730,6 +739,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnAccessibilitySnapshotResponse(
       int callback_id,
       const AXContentTreeUpdate& snapshot);
+  void OnSmartClipDataExtracted(uint32_t id,
+                                base::string16 text,
+                                base::string16 html);
   void OnToggleFullscreen(bool enter_fullscreen);
   void OnDidStartLoading(bool to_different_document);
   void OnDidStopLoading();
@@ -764,11 +776,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // relevant.
   void ResetWaitingState();
 
-  // Returns whether the given URL is allowed to commit in the current process.
-  // This is a more conservative check than RenderProcessHost::FilterURL, since
-  // it will be used to kill processes that commit unauthorized URLs.
-  bool CanCommitURL(const GURL& url);
-
   // Returns whether the given origin is allowed to commit in the current
   // RenderFrameHost. The |url| is used to ensure it matches the origin in cases
   // where it is applicable. This is a more conservative check than
@@ -780,9 +787,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // context (and crashes if not), then returns whether the given frame is
   // part of the same site instance.
   bool IsSameSiteInstance(RenderFrameHostImpl* other_render_frame_host);
-
-  // Informs the content client that geolocation permissions were used.
-  void DidUseGeolocationPermission();
 
   // Returns whether the current RenderProcessHost has read access to all the
   // files reported in |state|.
@@ -810,11 +814,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Map a routing ID from a frame in the same frame tree to a globally
   // unique AXTreeID.
-  AXTreeIDRegistry::AXTreeID RoutingIDToAXTreeID(int routing_id);
+  ui::AXTreeIDRegistry::AXTreeID RoutingIDToAXTreeID(int routing_id);
 
   // Map a browser plugin instance ID to the AXTreeID of the plugin's
   // main frame.
-  AXTreeIDRegistry::AXTreeID BrowserPluginInstanceIDToAXTreeID(int routing_id);
+  ui::AXTreeIDRegistry::AXTreeID BrowserPluginInstanceIDToAXTreeID(
+      int routing_id);
 
   // Convert the content-layer-specific AXContentNodeData to a general-purpose
   // AXNodeData structure.
@@ -867,6 +872,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnRendererConnect(const service_manager::ServiceInfo& local_info,
                          const service_manager::ServiceInfo& remote_info);
 
+  void SendJavaScriptDialogReply(IPC::Message* reply_msg,
+                                 bool success,
+                                 const base::string16& user_input);
+
   // Returns ownership of the NavigationHandle associated with a navigation that
   // just committed.
   std::unique_ptr<NavigationHandleImpl> TakeNavigationHandleForCommit(
@@ -892,24 +901,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // method has the side effect of creating the process if it doesn't exist.
   // Cache a pointer to avoid unnecessary process creation.
   RenderProcessHost* process_;
-
-  // |cross_process_frame_connector_| passes messages from an out-of-process
-  // child frame to the parent process for compositing.
-  //
-  // This is only non-NULL when this is the swapped out RenderFrameHost in
-  // the same site instance as this frame's parent.
-  //
-  // See the class comment above CrossProcessFrameConnector for more
-  // information.
-  //
-  // This will move to RenderFrameProxyHost when that class is created.
-  CrossProcessFrameConnector* cross_process_frame_connector_;
-
-  // The proxy created for this RenderFrameHost. It is used to send and receive
-  // IPC messages while in swapped out state.
-  // TODO(nasko): This can be removed once we don't have a swapped out state on
-  // RenderFrameHosts. See https://crbug.com/357747.
-  RenderFrameProxyHost* render_frame_proxy_host_;
 
   // Reference to the whole frame tree that this RenderFrameHost belongs to.
   // Allows this RenderFrameHost to add and remove nodes in response to
@@ -940,9 +931,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // ExecuteJavaScript and their corresponding callbacks.
   std::map<int, JavaScriptResultCallback> javascript_callbacks_;
   std::map<uint64_t, VisualStateCallback> visual_state_callbacks_;
-
-  // Callbacks for getting text input info.
-  std::map<int, FormFieldDataCallback> form_field_data_callbacks_;
 
   // RenderFrameHosts that need management of the rendering and input events
   // for their frame subtrees require RenderWidgetHosts. This typically
@@ -1026,12 +1014,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   int on_connect_handler_id_ = 0;
 
-#if defined(OS_ANDROID)
-  // The filter for MessagePort messages between an Android apps and web.
-  scoped_refptr<AppWebMessagePortMessageFilter>
-      app_web_message_port_message_filter_;
-#endif
-
   std::list<std::unique_ptr<WebBluetoothServiceImpl>> web_bluetooth_services_;
 
   // The object managing the accessibility tree for this frame.
@@ -1050,11 +1032,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   AXContentTreeData ax_content_tree_data_;
 
   // The AX tree ID of the embedder, if this is a browser plugin guest.
-  AXTreeIDRegistry::AXTreeID browser_plugin_embedder_ax_tree_id_;
+  ui::AXTreeIDRegistry::AXTreeID browser_plugin_embedder_ax_tree_id_;
 
   // The mapping from callback id to corresponding callback for pending
   // accessibility tree snapshot calls created by RequestAXTreeSnapshot.
   std::map<int, AXTreeSnapshotCallback> ax_tree_snapshot_callbacks_;
+
+  // Samsung Galaxy Note-specific "smart clip" stylus text getter.
+  std::map<uint32_t, SmartClipCallback> smart_clip_callbacks_;
 
   // Callback when an event is received, for testing.
   base::Callback<void(RenderFrameHostImpl*, ui::AXEvent, int)>
@@ -1109,6 +1094,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   mojo::Binding<mojom::FrameHost> frame_host_binding_;
   mojom::FramePtr frame_;
+  mojom::FrameBindingsControlAssociatedPtr frame_bindings_control_;
 
   // If this is true then this object was created in response to a renderer
   // initiated request. Init() will be called, and until then navigation
@@ -1135,6 +1121,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   std::unique_ptr<AssociatedInterfaceProviderImpl>
       remote_associated_interfaces_;
+
+  // A bitwise OR of bindings types that have been enabled for this RenderFrame.
+  // See BindingsPolicy for details.
+  int enabled_bindings_ = 0;
+
+  // Tracks the feature policy which has been set on this frame.
+  std::unique_ptr<FeaturePolicy> feature_policy_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

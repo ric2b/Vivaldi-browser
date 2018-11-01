@@ -52,7 +52,7 @@ bool GLSurface::DeferDraws() {
   return false;
 }
 
-bool GLSurface::SupportsSwapBuffersWithDamage() {
+bool GLSurface::SupportsSwapBuffersWithBounds() {
   return false;
 }
 
@@ -76,10 +76,8 @@ void GLSurface::SwapBuffersAsync(const SwapCompletionCallback& callback) {
   NOTREACHED();
 }
 
-gfx::SwapResult GLSurface::SwapBuffersWithDamage(int x,
-                                                 int y,
-                                                 int width,
-                                                 int height) {
+gfx::SwapResult GLSurface::SwapBuffersWithBounds(
+    const std::vector<gfx::Rect>& rects) {
   return gfx::SwapResult::SWAP_FAILED;
 }
 
@@ -135,11 +133,6 @@ unsigned long GLSurface::GetCompatibilityKey() {
   return 0;
 }
 
-GLSurfaceFormat GLSurface::GetFormat() {
-  NOTIMPLEMENTED();
-  return GLSurfaceFormat();
-}
-
 gfx::VSyncProvider* GLSurface::GetVSyncProvider() {
   return NULL;
 }
@@ -172,6 +165,14 @@ bool GLSurface::FlipsVertically() const {
 }
 
 bool GLSurface::BuffersFlipped() const {
+  return false;
+}
+
+bool GLSurface::SupportsSetDrawRectangle() const {
+  return false;
+}
+
+bool GLSurface::SetDrawRectangle(const gfx::Rect& rect) {
   return false;
 }
 
@@ -241,11 +242,9 @@ void GLSurfaceAdapter::SwapBuffersAsync(
   surface_->SwapBuffersAsync(callback);
 }
 
-gfx::SwapResult GLSurfaceAdapter::SwapBuffersWithDamage(int x,
-                                                        int y,
-                                                        int width,
-                                                        int height) {
-  return surface_->SwapBuffersWithDamage(x, y, width, height);
+gfx::SwapResult GLSurfaceAdapter::SwapBuffersWithBounds(
+    const std::vector<gfx::Rect>& rects) {
+  return surface_->SwapBuffersWithBounds(rects);
 }
 
 gfx::SwapResult GLSurfaceAdapter::PostSubBuffer(int x,
@@ -273,8 +272,8 @@ void GLSurfaceAdapter::CommitOverlayPlanesAsync(
   surface_->CommitOverlayPlanesAsync(callback);
 }
 
-bool GLSurfaceAdapter::SupportsSwapBuffersWithDamage() {
-  return surface_->SupportsSwapBuffersWithDamage();
+bool GLSurfaceAdapter::SupportsSwapBuffersWithBounds() {
+  return surface_->SupportsSwapBuffersWithBounds();
 }
 
 bool GLSurfaceAdapter::SupportsPostSubBuffer() {
@@ -356,6 +355,18 @@ bool GLSurfaceAdapter::FlipsVertically() const {
 
 bool GLSurfaceAdapter::BuffersFlipped() const {
   return surface_->BuffersFlipped();
+}
+
+bool GLSurfaceAdapter::SupportsSetDrawRectangle() const {
+  return surface_->SupportsSetDrawRectangle();
+}
+
+bool GLSurfaceAdapter::SetDrawRectangle(const gfx::Rect& rect) {
+  return surface_->SetDrawRectangle(rect);
+}
+
+void GLSurfaceAdapter::OnSetSwapInterval(int interval) {
+  surface_->OnSetSwapInterval(interval);
 }
 
 GLSurfaceAdapter::~GLSurfaceAdapter() {}

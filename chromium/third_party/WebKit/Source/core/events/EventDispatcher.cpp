@@ -94,7 +94,7 @@ void EventDispatcher::dispatchSimulatedClick(
   if (nodesDispatchingSimulatedClicks.contains(&node))
     return;
 
-  nodesDispatchingSimulatedClicks.add(&node);
+  nodesDispatchingSimulatedClicks.insert(&node);
 
   if (mouseEventOptions == SendMouseOverUpDownEvents)
     EventDispatcher(node, MouseEvent::create(EventTypeNames::mouseover,
@@ -123,7 +123,7 @@ void EventDispatcher::dispatchSimulatedClick(
                                            underlyingEvent, creationScope))
       .dispatch();
 
-  nodesDispatchingSimulatedClicks.remove(&node);
+  nodesDispatchingSimulatedClicks.erase(&node);
 }
 
 DispatchEventResult EventDispatcher::dispatch() {
@@ -218,11 +218,6 @@ inline void EventDispatcher::dispatchEventAtBubbling() {
     } else if (m_event->bubbles() && !m_event->cancelBubble()) {
       m_event->setEventPhase(Event::kBubblingPhase);
     } else {
-      if (m_event->bubbles() && m_event->cancelBubble() &&
-          eventContext.node() &&
-          eventContext.node()->hasEventListeners(m_event->type()))
-        UseCounter::count(eventContext.node()->document(),
-                          UseCounter::EventCancelBubbleAffected);
       continue;
     }
     eventContext.handleLocalEvents(*m_event);
@@ -232,17 +227,6 @@ inline void EventDispatcher::dispatchEventAtBubbling() {
   if (m_event->bubbles() && !m_event->cancelBubble()) {
     m_event->setEventPhase(Event::kBubblingPhase);
     m_event->eventPath().windowEventContext().handleLocalEvents(*m_event);
-  } else if (m_event->bubbles() &&
-             m_event->eventPath().windowEventContext().window() &&
-             m_event->eventPath()
-                 .windowEventContext()
-                 .window()
-                 ->hasEventListeners(m_event->type())) {
-    UseCounter::count(m_event->eventPath()
-                          .windowEventContext()
-                          .window()
-                          ->getExecutionContext(),
-                      UseCounter::EventCancelBubbleAffected);
   }
 }
 
@@ -259,11 +243,6 @@ inline void EventDispatcher::dispatchEventPostProcess(
   // 16. Set event’s currentTarget attribute to null.
   m_event->setCurrentTarget(nullptr);
 
-  // Pass the data from the preDispatchEventHandler to the
-  // postDispatchEventHandler.
-  m_node->postDispatchEventHandler(m_event.get(),
-                                   preDispatchEventHandlerResult);
-
   bool isClick = m_event->isMouseEvent() &&
                  toMouseEvent(*m_event).type() == EventTypeNames::click;
   if (isClick) {
@@ -272,6 +251,14 @@ inline void EventDispatcher::dispatchEventPostProcess(
     if (AXObjectCache* cache = m_node->document().existingAXObjectCache())
       cache->handleClicked(m_event->target()->toNode());
   }
+
+  // Pass the data from the preDispatchEventHandler to the
+  // postDispatchEventHandler.
+  // This may dispatch an event, and m_node and m_event might be altered.
+  m_node->postDispatchEventHandler(m_event.get(),
+                                   preDispatchEventHandlerResult);
+  // TODO(tkent): Is it safe to kick defaultEventHandler() with such altered
+  // m_event?
 
   // The DOM Events spec says that events dispatched by JS (other than "click")
   // should not have their default handlers invoked.

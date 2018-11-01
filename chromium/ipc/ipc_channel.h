@@ -18,13 +18,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
-#include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
+#include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
 
 #if defined(OS_POSIX)
 #include <sys/types.h>
@@ -90,9 +91,10 @@ class IPC_EXPORT Channel : public Sender {
 
     virtual ~AssociatedInterfaceSupport() {}
 
-    // Accesses the AssociatedGroup used to associate new interface endpoints
-    // with this Channel. Must be safe to call from any thread.
-    virtual mojo::AssociatedGroup* GetAssociatedGroup() = 0;
+    // Returns a ThreadSafeForwarded for this channel which can be used to
+    // safely send mojom::Channel requests from arbitrary threads.
+    virtual std::unique_ptr<mojo::ThreadSafeForwarder<mojom::Channel>>
+    CreateThreadSafeChannel() = 0;
 
     // Adds an interface factory to this channel for interface |name|. Must be
     // safe to call from any thread.
@@ -121,8 +123,7 @@ class IPC_EXPORT Channel : public Sender {
     template <typename Interface>
     void GetRemoteAssociatedInterface(
         mojo::AssociatedInterfacePtr<Interface>* proxy) {
-      mojo::AssociatedInterfaceRequest<Interface> request =
-          mojo::MakeRequest(proxy, GetAssociatedGroup());
+      auto request = mojo::MakeRequest(proxy);
       GetGenericRemoteAssociatedInterface(
           Interface::Name_, request.PassHandle());
     }

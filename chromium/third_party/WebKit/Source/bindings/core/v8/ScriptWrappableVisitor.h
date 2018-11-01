@@ -5,20 +5,21 @@
 #ifndef ScriptWrappableVisitor_h
 #define ScriptWrappableVisitor_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/HeapPage.h"
+#include "platform/heap/VisitorImpl.h"
 #include "platform/heap/WrapperVisitor.h"
+#include "v8/include/v8.h"
 #include "wtf/Deque.h"
 #include "wtf/Vector.h"
-#include <v8.h>
 
 namespace blink {
 
 class HeapObjectHeader;
 template <typename T>
 class Member;
+class ScriptWrappable;
 template <typename T>
 class TraceWrapperV8Reference;
 
@@ -99,6 +100,10 @@ class CORE_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer,
   static void writeBarrier(const void*,
                            const TraceWrapperV8Reference<v8::Value>*);
 
+  // TODO(mlippautz): Remove once ScriptWrappable is converted to
+  // TraceWrapperV8Reference.
+  static void writeBarrier(const v8::Persistent<v8::Object>*);
+
   template <typename T>
   static void writeBarrier(const void* object, const Member<T> value) {
     writeBarrier(object, value.get());
@@ -108,9 +113,6 @@ class CORE_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer,
   static void writeBarrier(const void* srcObject, const T* dstObject) {
     static_assert(!NeedsAdjustAndMark<T>::value,
                   "wrapper tracing is not supported within mixins");
-    if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-      return;
-    }
     if (!srcObject || !dstObject) {
       return;
     }
@@ -169,6 +171,9 @@ class CORE_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer,
     return &m_headersToUnmark;
   }
 
+  // Immediately cleans up all wrappers if necessary.
+  void performCleanup();
+
  protected:
   bool pushToMarkingDeque(
       void (*traceWrappersCallback)(const WrapperVisitor*, const void*),
@@ -189,7 +194,6 @@ class CORE_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer,
     return true;
   }
 
- private:
   // Returns true if wrapper tracing is currently in progress, i.e.,
   // TracePrologue has been called, and TraceEpilogue has not yet been called.
   bool m_tracingInProgress = false;
@@ -207,9 +211,6 @@ class CORE_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer,
   // Indicates whether cleanup should currently happen. The flag is used to
   // avoid cleaning up in the next GC cycle.
   bool m_shouldCleanup = false;
-
-  // Immediately cleans up all wrappers.
-  void performCleanup();
 
   // Schedule an idle task to perform a lazy (incremental) clean up of
   // wrappers.

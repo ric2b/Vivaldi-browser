@@ -9,12 +9,13 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/shelf/shelf_item_types.h"
+#include "ui/base/class_property.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace aura {
 template <typename T>
-struct WindowProperty;
+using WindowProperty = ui::ClassProperty<T>;
 }
 
 namespace ash {
@@ -46,9 +47,6 @@ enum class WidgetCreationType {
 // bounds outside of its root window is set.
 ASH_EXPORT extern const aura::WindowProperty<bool>* const kLockedToRootKey;
 
-// If true (and the window is a panel), it's attached to its shelf item.
-ASH_EXPORT extern const aura::WindowProperty<bool>* const kPanelAttachedKey;
-
 // A property key which stores the bounds to restore a window to. These take
 // preference over the current bounds/state. This is used by e.g. the always
 // maximized mode window manager.
@@ -63,9 +61,6 @@ ASH_EXPORT extern const aura::WindowProperty<ui::WindowShowState>* const
 
 // A property key to store the id for a window's shelf item.
 ASH_EXPORT extern const aura::WindowProperty<ShelfID>* const kShelfIDKey;
-
-// A property key to store the type of a window's shelf item.
-ASH_EXPORT extern const aura::WindowProperty<int32_t>* const kShelfItemTypeKey;
 
 // Containers with this property (true) are aligned with physical pixel
 // boundary.

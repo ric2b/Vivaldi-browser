@@ -17,6 +17,8 @@
 #include "base/values.h"
 #include "components/cryptauth/cryptauth_enrollment_manager.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
+#include "components/cryptauth/remote_device_loader.h"
+#include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "components/proximity_auth/ble/pref_names.h"
@@ -24,9 +26,7 @@
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/messenger.h"
 #include "components/proximity_auth/remote_device_life_cycle_impl.h"
-#include "components/proximity_auth/remote_device_loader.h"
 #include "components/proximity_auth/remote_status_update.h"
-#include "components/proximity_auth/secure_context.h"
 #include "components/proximity_auth/webui/reachable_phone_flow.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -350,11 +350,11 @@ void ProximityAuthWebUIHandler::ToggleConnection(const base::ListValue* args) {
 
       // TODO(sacomoto): Pass an instance of ProximityAuthPrefManager. This is
       // used to get the address of BLE devices.
-      remote_device_loader_.reset(new RemoteDeviceLoader(
+      remote_device_loader_.reset(new cryptauth::RemoteDeviceLoader(
           std::vector<cryptauth::ExternalDeviceInfo>(1, unlock_key),
           proximity_auth_client_->GetAccountId(),
           enrollment_manager->GetUserPrivateKey(),
-          proximity_auth_client_->CreateSecureMessageDelegate(), nullptr));
+          proximity_auth_client_->CreateSecureMessageDelegate()));
       remote_device_loader_->Load(
           base::Bind(&ProximityAuthWebUIHandler::OnRemoteDevicesLoaded,
                      weak_ptr_factory_.GetWeakPtr()));

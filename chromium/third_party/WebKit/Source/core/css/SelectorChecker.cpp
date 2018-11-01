@@ -50,6 +50,7 @@
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLSlotElement.h"
+#include "core/html/HTMLVideoElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/track/vtt/VTTElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -764,103 +765,97 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       return result;
     }
     case CSSSelector::PseudoFirstChild:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle) {
+      if (m_mode == ResolvingStyle) {
+        if (ContainerNode* parent = element.parentElementOrDocumentFragment())
           parent->setChildrenAffectedByFirstChildRules();
-          element.setAffectedByFirstChildRules();
-        }
-        return isFirstChild(element);
+        element.setAffectedByFirstChildRules();
       }
-      break;
+      return isFirstChild(element);
     case CSSSelector::PseudoFirstOfType:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle)
+      if (m_mode == ResolvingStyle) {
+        if (ContainerNode* parent = element.parentElementOrDocumentFragment())
           parent->setChildrenAffectedByForwardPositionalRules();
-        return isFirstOfType(element, element.tagQName());
       }
-      break;
-    case CSSSelector::PseudoLastChild:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle) {
+      return isFirstOfType(element, element.tagQName());
+    case CSSSelector::PseudoLastChild: {
+      ContainerNode* parent = element.parentElementOrDocumentFragment();
+      if (m_mode == ResolvingStyle) {
+        if (parent)
           parent->setChildrenAffectedByLastChildRules();
-          element.setAffectedByLastChildRules();
-        }
-        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
-          return false;
-        return isLastChild(element);
+        element.setAffectedByLastChildRules();
       }
-      break;
-    case CSSSelector::PseudoLastOfType:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle)
+      if (!m_isQuerySelector && parent && !parent->isFinishedParsingChildren())
+        return false;
+      return isLastChild(element);
+    }
+    case CSSSelector::PseudoLastOfType: {
+      ContainerNode* parent = element.parentElementOrDocumentFragment();
+      if (m_mode == ResolvingStyle) {
+        if (parent)
           parent->setChildrenAffectedByBackwardPositionalRules();
-        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
-          return false;
-        return isLastOfType(element, element.tagQName());
       }
-      break;
-    case CSSSelector::PseudoOnlyChild:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle) {
+      if (!m_isQuerySelector && parent && !parent->isFinishedParsingChildren())
+        return false;
+      return isLastOfType(element, element.tagQName());
+    }
+    case CSSSelector::PseudoOnlyChild: {
+      ContainerNode* parent = element.parentElementOrDocumentFragment();
+      if (m_mode == ResolvingStyle) {
+        if (parent) {
           parent->setChildrenAffectedByFirstChildRules();
           parent->setChildrenAffectedByLastChildRules();
-          element.setAffectedByFirstChildRules();
-          element.setAffectedByLastChildRules();
         }
-        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
-          return false;
-        return isFirstChild(element) && isLastChild(element);
+        element.setAffectedByFirstChildRules();
+        element.setAffectedByLastChildRules();
       }
-      break;
-    case CSSSelector::PseudoOnlyOfType:
+      if (!m_isQuerySelector && parent && !parent->isFinishedParsingChildren())
+        return false;
+      return isFirstChild(element) && isLastChild(element);
+    }
+    case CSSSelector::PseudoOnlyOfType: {
       // FIXME: This selector is very slow.
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle) {
-          parent->setChildrenAffectedByForwardPositionalRules();
-          parent->setChildrenAffectedByBackwardPositionalRules();
-        }
-        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
-          return false;
-        return isFirstOfType(element, element.tagQName()) &&
-               isLastOfType(element, element.tagQName());
+      ContainerNode* parent = element.parentElementOrDocumentFragment();
+      if (m_mode == ResolvingStyle && parent) {
+        parent->setChildrenAffectedByForwardPositionalRules();
+        parent->setChildrenAffectedByBackwardPositionalRules();
       }
-      break;
+      if (!m_isQuerySelector && parent && !parent->isFinishedParsingChildren())
+        return false;
+      return isFirstOfType(element, element.tagQName()) &&
+             isLastOfType(element, element.tagQName());
+    }
     case CSSSelector::PseudoPlaceholderShown:
       if (isTextControlElement(element))
         return toTextControlElement(element).isPlaceholderVisible();
       break;
     case CSSSelector::PseudoNthChild:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle)
+      if (m_mode == ResolvingStyle) {
+        if (ContainerNode* parent = element.parentElementOrDocumentFragment())
           parent->setChildrenAffectedByForwardPositionalRules();
-        return selector.matchNth(NthIndexCache::nthChildIndex(element));
       }
-      break;
+      return selector.matchNth(NthIndexCache::nthChildIndex(element));
     case CSSSelector::PseudoNthOfType:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle)
+      if (m_mode == ResolvingStyle) {
+        if (ContainerNode* parent = element.parentElementOrDocumentFragment())
           parent->setChildrenAffectedByForwardPositionalRules();
-        return selector.matchNth(NthIndexCache::nthOfTypeIndex(element));
       }
-      break;
-    case CSSSelector::PseudoNthLastChild:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle)
-          parent->setChildrenAffectedByBackwardPositionalRules();
-        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
-          return false;
-        return selector.matchNth(NthIndexCache::nthLastChildIndex(element));
-      }
-      break;
-    case CSSSelector::PseudoNthLastOfType:
-      if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
-        if (m_mode == ResolvingStyle)
-          parent->setChildrenAffectedByBackwardPositionalRules();
-        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
-          return false;
-        return selector.matchNth(NthIndexCache::nthLastOfTypeIndex(element));
-      }
-      break;
+      return selector.matchNth(NthIndexCache::nthOfTypeIndex(element));
+    case CSSSelector::PseudoNthLastChild: {
+      ContainerNode* parent = element.parentElementOrDocumentFragment();
+      if (m_mode == ResolvingStyle && parent)
+        parent->setChildrenAffectedByBackwardPositionalRules();
+      if (!m_isQuerySelector && parent && !parent->isFinishedParsingChildren())
+        return false;
+      return selector.matchNth(NthIndexCache::nthLastChildIndex(element));
+    }
+    case CSSSelector::PseudoNthLastOfType: {
+      ContainerNode* parent = element.parentElementOrDocumentFragment();
+      if (m_mode == ResolvingStyle && parent)
+        parent->setChildrenAffectedByBackwardPositionalRules();
+      if (!m_isQuerySelector && parent && !parent->isFinishedParsingChildren())
+        return false;
+      return selector.matchNth(NthIndexCache::nthLastOfTypeIndex(element));
+    }
     case CSSSelector::PseudoTarget:
       return element == element.document().cssTarget();
     case CSSSelector::PseudoAny: {
@@ -920,8 +915,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       }
       if (!shouldMatchHoverOrActive(context))
         return false;
-      if (InspectorInstrumentation::forcePseudoState(&element,
-                                                     CSSSelector::PseudoHover))
+      if (probe::forcePseudoState(&element, CSSSelector::PseudoHover))
         return true;
       return element.isHovered();
     case CSSSelector::PseudoActive:
@@ -937,8 +931,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       }
       if (!shouldMatchHoverOrActive(context))
         return false;
-      if (InspectorInstrumentation::forcePseudoState(&element,
-                                                     CSSSelector::PseudoActive))
+      if (probe::forcePseudoState(&element, CSSSelector::PseudoActive))
         return true;
       return element.isActive();
     case CSSSelector::PseudoEnabled:
@@ -1014,6 +1007,12 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       return Fullscreen::isCurrentFullScreenElement(element);
     case CSSSelector::PseudoFullScreenAncestor:
       return element.containsFullScreenElement();
+    case CSSSelector::PseudoVideoPersistent:
+      if (!m_isUARule || !isHTMLVideoElement(element))
+        return false;
+      return toHTMLVideoElement(element).isPersistent();
+    case CSSSelector::PseudoVideoPersistentAncestor:
+      return m_isUARule && element.containsPersistentVideo();
     case CSSSelector::PseudoInRange:
       if (m_mode == ResolvingStyle)
         element.document().setContainsValidityStyleRules();
@@ -1314,8 +1313,8 @@ bool SelectorChecker::checkScrollbarPseudoClass(
 }
 
 bool SelectorChecker::matchesFocusPseudoClass(const Element& element) {
-  if (InspectorInstrumentation::forcePseudoState(const_cast<Element*>(&element),
-                                                 CSSSelector::PseudoFocus))
+  if (probe::forcePseudoState(const_cast<Element*>(&element),
+                              CSSSelector::PseudoFocus))
     return true;
   return element.isFocused() && isFrameFocused(element);
 }

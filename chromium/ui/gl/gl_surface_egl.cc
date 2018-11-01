@@ -31,6 +31,7 @@
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/scoped_make_current.h"
+#include "ui/gl/sync_control_vsync_provider.h"
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
 extern "C" {
@@ -136,9 +137,40 @@ bool g_egl_surfaceless_context_supported = false;
 bool g_egl_surface_orientation_supported = false;
 bool g_use_direct_composition = false;
 
-base::LazyInstance<ANGLEPlatformImpl> g_angle_platform_impl =
-    LAZY_INSTANCE_INITIALIZER;
-ANGLEPlatformShutdownFunc g_angle_platform_shutdown = nullptr;
+class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
+ public:
+  explicit EGLSyncControlVSyncProvider(EGLSurface surface)
+      : SyncControlVSyncProvider(),
+        surface_(surface) {
+  }
+
+  ~EGLSyncControlVSyncProvider() override {}
+
+ protected:
+  bool GetSyncValues(int64_t* system_time,
+                     int64_t* media_stream_counter,
+                     int64_t* swap_buffer_counter) override {
+    uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
+    bool result = eglGetSyncValuesCHROMIUM(
+        g_display, surface_, &u_system_time,
+        &u_media_stream_counter, &u_swap_buffer_counter) == EGL_TRUE;
+    if (result) {
+      *system_time = static_cast<int64_t>(u_system_time);
+      *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
+      *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
+    }
+    return result;
+  }
+
+  bool GetMscRate(int32_t* numerator, int32_t* denominator) override {
+    return false;
+  }
+
+ private:
+  EGLSurface surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(EGLSyncControlVSyncProvider);
+};
 
 EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
                                    EGLenum platform_type,
@@ -242,6 +274,7 @@ bool ValidateEglConfig(EGLDisplay display,
 EGLConfig ChooseConfig(GLSurfaceFormat format) {
   // Choose an EGL configuration.
   // On X this is only used for PBuffer surfaces.
+
   std::vector<EGLint> renderable_types;
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableES3GLContext)) {
@@ -252,6 +285,9 @@ EGLConfig ChooseConfig(GLSurfaceFormat format) {
   EGLint buffer_size = format.GetBufferSize();
   EGLint alpha_size = 8;
   bool want_rgb565 = buffer_size == 16;
+  EGLint depth_size = format.GetDepthBits();
+  EGLint stencil_size = format.GetStencilBits();
+  EGLint samples = format.GetSamples();
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
   // If we're using ANGLE_NULL, we may not have a display, in which case we
@@ -278,6 +314,12 @@ EGLConfig ChooseConfig(GLSurfaceFormat format) {
                                     8,
                                     EGL_RED_SIZE,
                                     8,
+                                    EGL_SAMPLES,
+                                    samples,
+                                    EGL_DEPTH_SIZE,
+                                    depth_size,
+                                    EGL_STENCIL_SIZE,
+                                    stencil_size,
                                     EGL_RENDERABLE_TYPE,
                                     renderable_type,
                                     EGL_SURFACE_TYPE,
@@ -292,6 +334,12 @@ EGLConfig ChooseConfig(GLSurfaceFormat format) {
                                    6,
                                    EGL_RED_SIZE,
                                    5,
+                                   EGL_SAMPLES,
+                                   samples,
+                                   EGL_DEPTH_SIZE,
+                                   depth_size,
+                                   EGL_STENCIL_SIZE,
+                                   stencil_size,
                                    EGL_RENDERABLE_TYPE,
                                    renderable_type,
                                    EGL_SURFACE_TYPE,
@@ -379,7 +427,7 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
                         std::vector<DisplayType>* init_displays) {
   // SwiftShader does not use the platform extensions
   if (command_line->GetSwitchValueASCII(switches::kUseGL) ==
-      kGLImplementationSwiftShaderName) {
+      kGLImplementationSwiftShaderForWebGLName) {
     init_displays->push_back(SWIFT_SHADER);
     return;
   }
@@ -433,31 +481,6 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   if (init_displays->empty()) {
     init_displays->push_back(DEFAULT);
   }
-}
-
-EGLSyncControlVSyncProvider::EGLSyncControlVSyncProvider(EGLSurface surface)
-    : SyncControlVSyncProvider(), surface_(surface) {}
-
-EGLSyncControlVSyncProvider::~EGLSyncControlVSyncProvider() {}
-
-bool EGLSyncControlVSyncProvider::GetSyncValues(int64_t* system_time,
-                                                int64_t* media_stream_counter,
-                                                int64_t* swap_buffer_counter) {
-  uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
-  bool result = eglGetSyncValuesCHROMIUM(g_display, surface_, &u_system_time,
-                                         &u_media_stream_counter,
-                                         &u_swap_buffer_counter) == EGL_TRUE;
-  if (result) {
-    *system_time = static_cast<int64_t>(u_system_time);
-    *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
-    *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
-  }
-  return result;
-}
-
-bool EGLSyncControlVSyncProvider::GetMscRate(int32_t* numerator,
-                                             int32_t* denominator) {
-  return false;
 }
 
 GLSurfaceEGL::GLSurfaceEGL() {}
@@ -549,9 +572,7 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
 
 // static
 void GLSurfaceEGL::ShutdownOneOff() {
-  if (g_angle_platform_shutdown) {
-    g_angle_platform_shutdown();
-  }
+  ResetANGLEPlatform(g_display);
 
   if (g_display != EGL_NO_DISPLAY)
     eglTerminate(g_display);
@@ -626,17 +647,6 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
 
   g_native_display = native_display;
 
-  // Init ANGLE platform here, before we call GetPlatformDisplay().
-  ANGLEPlatformInitializeFunc angle_platform_init =
-      reinterpret_cast<ANGLEPlatformInitializeFunc>(
-          eglGetProcAddress("ANGLEPlatformInitialize"));
-  if (angle_platform_init) {
-    angle_platform_init(&g_angle_platform_impl.Get());
-
-    g_angle_platform_shutdown = reinterpret_cast<ANGLEPlatformShutdownFunc>(
-        eglGetProcAddress("ANGLEPlatformShutdown"));
-  }
-
   // If EGL_EXT_client_extensions not supported this call to eglQueryString
   // will return NULL.
   const char* client_extensions =
@@ -668,6 +678,13 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
     if (display == EGL_NO_DISPLAY) {
       LOG(ERROR) << "EGL display query failed with error "
                  << GetLastEGLErrorString();
+    }
+
+    // Init ANGLE platform now that we have the global display.
+    if (supports_angle_d3d || supports_angle_opengl || supports_angle_null) {
+      if (!InitializeANGLEPlatform(display)) {
+        LOG(ERROR) << "ANGLE Platform initialization failed.";
+      }
     }
 
     if (!eglInitialize(display, nullptr, nullptr)) {
@@ -787,9 +804,7 @@ bool NativeViewGLSurfaceEGL::Initialize(
   }
 
   supports_swap_buffer_with_damage_ =
-      g_driver_egl.ext.b_EGL_KHR_swap_buffers_with_damage &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableSwapBuffersWithDamage);
+      g_driver_egl.ext.b_EGL_KHR_swap_buffers_with_damage;
 
   if (sync_provider)
     vsync_provider_ = std::move(sync_provider);
@@ -930,10 +945,6 @@ EGLSurface NativeViewGLSurfaceEGL::GetHandle() {
   return surface_;
 }
 
-bool NativeViewGLSurfaceEGL::SupportsSwapBuffersWithDamage() {
-  return supports_swap_buffer_with_damage_;
-}
-
 bool NativeViewGLSurfaceEGL::SupportsPostSubBuffer() {
   return supports_post_sub_buffer_;
 }
@@ -946,25 +957,18 @@ bool NativeViewGLSurfaceEGL::BuffersFlipped() const {
   return g_use_direct_composition;
 }
 
-gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffersWithDamage(int x,
-                                                              int y,
-                                                              int width,
-                                                              int height) {
+gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffersWithDamage(
+    const std::vector<int>& rects) {
   DCHECK(supports_swap_buffer_with_damage_);
   UpdateSwapInterval();
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
     return gfx::SwapResult::SWAP_FAILED;
   }
-  if (flips_vertically_) {
-    // With EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE the contents are rendered
-    // inverted, but the damage rectangle is still measured from the
-    // bottom left.
-    y = GetSize().height() - y - height;
-  }
 
-  EGLint damage_rect[4] = {x, y, width, height};
-  if (!eglSwapBuffersWithDamageKHR(GetDisplay(), surface_, damage_rect, 1)) {
+  if (!eglSwapBuffersWithDamageKHR(GetDisplay(), surface_,
+                                   const_cast<EGLint*>(rects.data()),
+                                   static_cast<EGLint>(rects.size() / 4))) {
     DVLOG(1) << "eglSwapBuffersWithDamageKHR failed with error "
              << GetLastEGLErrorString();
     return gfx::SwapResult::SWAP_FAILED;

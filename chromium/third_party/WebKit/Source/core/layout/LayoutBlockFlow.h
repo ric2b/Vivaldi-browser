@@ -382,7 +382,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   PositionWithAffinity positionForPoint(const LayoutPoint&) override;
 
-  LayoutUnit lowestFloatLogicalBottom(EClear = ClearBoth) const;
+  LayoutUnit lowestFloatLogicalBottom(EClear = EClear::kBoth) const;
 
   bool hasOverhangingFloats() const {
     return parent() && containsFloats() &&
@@ -677,8 +677,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                     positiveMarginAfterDefault(block),
                     negativeMarginAfterDefault(block)),
           m_multiColumnFlowThread(nullptr),
-          m_breakBefore(BreakAuto),
-          m_breakAfter(BreakAuto),
+          m_breakBefore(static_cast<unsigned>(EBreakBetween::kAuto)),
+          m_breakAfter(static_cast<unsigned>(EBreakBetween::kAuto)),
           m_lineBreakToAvoidWidow(-1),
           m_didBreakAtLineToAvoidWidow(false),
           m_discardMarginBefore(false),
@@ -814,12 +814,12 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   // Apply any forced fragmentainer break that's set on the current class A
   // break point.
-  LayoutUnit applyForcedBreak(LayoutUnit logicalOffset, EBreak);
+  LayoutUnit applyForcedBreak(LayoutUnit logicalOffset, EBreakBetween);
 
-  void setBreakBefore(EBreak);
-  void setBreakAfter(EBreak);
-  EBreak breakBefore() const override;
-  EBreak breakAfter() const override;
+  void setBreakBefore(EBreakBetween);
+  void setBreakAfter(EBreakBetween);
+  EBreakBetween breakBefore() const override;
+  EBreakBetween breakAfter() const override;
 
   LayoutUnit adjustBlockChildForPagination(LayoutUnit logicalTop,
                                            LayoutBox& child,
@@ -940,6 +940,11 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                       const BidiStatus& endLineStatus);
   void deleteEllipsisLineBoxes();
   void checkLinesForTextOverflow();
+  void tryPlacingEllipsisOnAtomicInlines(RootInlineBox*,
+                                         LayoutUnit blockRightEdge,
+                                         LayoutUnit blockLeftEdge,
+                                         LayoutUnit width,
+                                         const AtomicString&);
   void markLinesDirtyInBlockRange(LayoutUnit logicalTop,
                                   LayoutUnit logicalBottom,
                                   RootInlineBox* highest = nullptr);

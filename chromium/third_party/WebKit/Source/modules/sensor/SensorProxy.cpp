@@ -7,7 +7,6 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "modules/sensor/SensorProviderProxy.h"
-#include "modules/sensor/SensorReading.h"
 #include "modules/sensor/SensorReadingUpdater.h"
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/Platform.h"
@@ -18,18 +17,14 @@ namespace blink {
 
 SensorProxy::SensorProxy(SensorType sensorType,
                          SensorProviderProxy* provider,
-                         Document* document,
-                         std::unique_ptr<SensorReadingFactory> readingFactory)
-    : PageVisibilityObserver(document->page()),
+                         Page* page)
+    : PageVisibilityObserver(page),
       m_type(sensorType),
       m_mode(ReportingMode::CONTINUOUS),
       m_provider(provider),
       m_clientBinding(this),
       m_state(SensorProxy::Uninitialized),
-      m_suspended(false),
-      m_document(document),
-      m_readingFactory(std::move(readingFactory)),
-      m_maximumFrequency(0.0) {}
+      m_suspended(false) {}
 
 SensorProxy::~SensorProxy() {}
 
@@ -38,9 +33,7 @@ void SensorProxy::dispose() {
 }
 
 DEFINE_TRACE(SensorProxy) {
-  visitor->trace(m_document);
   visitor->trace(m_readingUpdater);
-  visitor->trace(m_reading);
   visitor->trace(m_observers);
   visitor->trace(m_provider);
   PageVisibilityObserver::trace(visitor);
@@ -48,11 +41,11 @@ DEFINE_TRACE(SensorProxy) {
 
 void SensorProxy::addObserver(Observer* observer) {
   if (!m_observers.contains(observer))
-    m_observers.add(observer);
+    m_observers.insert(observer);
 }
 
 void SensorProxy::removeObserver(Observer* observer) {
-  m_observers.remove(observer);
+  m_observers.erase(observer);
 }
 
 void SensorProxy::initialize() {
@@ -120,9 +113,12 @@ const SensorConfiguration* SensorProxy::defaultConfig() const {
   return m_defaultConfig.get();
 }
 
+Document* SensorProxy::document() const {
+  return m_provider->supplementable()->document();
+}
+
 void SensorProxy::updateSensorReading() {
   DCHECK(isInitialized());
-  DCHECK(m_readingFactory);
   int readAttempts = 0;
   const int kMaxReadAttemptsCount = 10;
   device::SensorReading readingData;
@@ -133,7 +129,7 @@ void SensorProxy::updateSensorReading() {
     }
   }
 
-  m_reading = m_readingFactory->createSensorReading(readingData);
+  m_reading = readingData;
 }
 
 void SensorProxy::notifySensorChanged(double timestamp) {
@@ -165,16 +161,10 @@ void SensorProxy::pageVisibilityChanged() {
   }
 }
 
-void SensorProxy::handleSensorError(ExceptionCode code,
-                                    String sanitizedMessage,
-                                    String unsanitizedMessage) {
-  if (!Platform::current()) {
-    // TODO(rockot): Remove this hack once renderer shutdown sequence is fixed.
-    return;
-  }
-
+void SensorProxy::handleSensorError() {
   m_state = Uninitialized;
   m_frequenciesUsed.clear();
+  m_reading = device::SensorReading();
 
   // The m_sensor.reset() will release all callbacks and its bound parameters,
   // therefore, handleSensorError accepts messages by value.
@@ -183,17 +173,18 @@ void SensorProxy::handleSensorError(ExceptionCode code,
   m_sharedBufferHandle.reset();
   m_defaultConfig.reset();
   m_clientBinding.Close();
-  m_reading = nullptr;
 
-  for (Observer* observer : m_observers)
-    observer->onSensorError(code, sanitizedMessage, unsanitizedMessage);
+  for (Observer* observer : m_observers) {
+    observer->onSensorError(NotReadableError, "Could not connect to a sensor",
+                            String());
+  }
 }
 
 void SensorProxy::onSensorCreated(SensorInitParamsPtr params,
                                   SensorClientRequest clientRequest) {
   DCHECK_EQ(Initializing, m_state);
   if (!params) {
-    handleSensorError(NotFoundError, "Sensor is not present on the platform.");
+    handleSensorError();
     return;
   }
   const size_t kReadBufferSize = sizeof(ReadingBuffer);
@@ -219,13 +210,17 @@ void SensorProxy::onSensorCreated(SensorInitParamsPtr params,
     handleSensorError();
     return;
   }
+  m_frequencyLimits.first = params->minimum_frequency;
+  m_frequencyLimits.second = params->maximum_frequency;
 
-  m_maximumFrequency = params->maximum_frequency;
-  DCHECK(m_maximumFrequency <= SensorConfiguration::kMaxAllowedFrequency);
+  DCHECK_GT(m_frequencyLimits.first, 0.0);
+  DCHECK_GE(m_frequencyLimits.second, m_frequencyLimits.first);
+  constexpr double kMaxAllowedFrequency =
+      SensorConfiguration::kMaxAllowedFrequency;
+  DCHECK_GE(kMaxAllowedFrequency, m_frequencyLimits.second);
 
   auto errorCallback =
-      WTF::bind(&SensorProxy::handleSensorError, wrapWeakPersistent(this),
-                UnknownError, String("Internal error"), String());
+      WTF::bind(&SensorProxy::handleSensorError, wrapWeakPersistent(this));
   m_sensor.set_connection_error_handler(
       convertToBaseCallback(std::move(errorCallback)));
 

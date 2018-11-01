@@ -1,33 +1,34 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="/a11y_page/a11y_page.html">
-<link rel="import" href="/appearance_page/appearance_page.html">
-<link rel="import" href="/downloads_page/downloads_page.html">
-<link rel="import" href="/languages_page/languages_page.html">
-<link rel="import" href="/on_startup_page/on_startup_page.html">
-<link rel="import" href="/passwords_and_forms_page/passwords_and_forms_page.html">
-<link rel="import" href="/people_page/people_page.html">
-<link rel="import" href="/printing_page/printing_page.html">
-<link rel="import" href="/privacy_page/privacy_page.html">
-<link rel="import" href="/reset_page/reset_page.html">
-<link rel="import" href="/reset_page/reset_profile_banner.html">
-<link rel="import" href="/search_page/search_page.html">
-<link rel="import" href="/settings_page/main_page_behavior.html">
-<link rel="import" href="/settings_page/settings_page_visibility.html">
-<link rel="import" href="/settings_page/settings_section.html">
-<link rel="import" href="/settings_page_css.html">
-<link rel="import" href="/settings_vars_css.html">
+<link rel="import" href="../a11y_page/a11y_page.html">
+<link rel="import" href="../appearance_page/appearance_page.html">
+<link rel="import" href="../controls/settings_idle_render.html">
+<link rel="import" href="../downloads_page/downloads_page.html">
+<link rel="import" href="../languages_page/languages_page.html">
+<link rel="import" href="../on_startup_page/on_startup_page.html">
+<link rel="import" href="../passwords_and_forms_page/passwords_and_forms_page.html">
+<link rel="import" href="../people_page/people_page.html">
+<link rel="import" href="../printing_page/printing_page.html">
+<link rel="import" href="../privacy_page/privacy_page.html">
+<link rel="import" href="../reset_page/reset_page.html">
+<link rel="import" href="../reset_page/reset_profile_banner.html">
+<link rel="import" href="../search_page/search_page.html">
+<link rel="import" href="../settings_page/main_page_behavior.html">
+<link rel="import" href="../settings_page/settings_page_visibility.html">
+<link rel="import" href="../settings_page/settings_section.html">
+<link rel="import" href="../settings_page_css.html">
+<link rel="import" href="../settings_vars_css.html">
 
 <if expr="chromeos">
-<link rel="import" href="/android_apps_page/android_apps_page.html">
-<link rel="import" href="/bluetooth_page/bluetooth_page.html">
-<link rel="import" href="/date_time_page/date_time_page.html">
-<link rel="import" href="/device_page/device_page.html">
-<link rel="import" href="/internet_page/internet_page.html">
+<link rel="import" href="../android_apps_page/android_apps_page.html">
+<link rel="import" href="../bluetooth_page/bluetooth_page.html">
+<link rel="import" href="../date_time_page/date_time_page.html">
+<link rel="import" href="../device_page/device_page.html">
+<link rel="import" href="../internet_page/internet_page.html">
 </if>
 
 <if expr="not chromeos">
-<link rel="import" href="/default_browser_page/default_browser_page.html">
-<link rel="import" href="/system_page/system_page.html">
+<link rel="import" href="../default_browser_page/default_browser_page.html">
+<link rel="import" href="../system_page/system_page.html">
 </if>
 
 <!-- TODO(michaelpg): Rename to something better than "basic" now that this page
@@ -46,6 +47,25 @@
         margin-top: 12px;  /* Part of a 48px spacer (33px + 12px + 3px). */
         min-height: 32px;
         padding: 0 12px;
+      }
+
+      #secondaryUserBanner {
+        @apply(--shadow-elevation-2dp);
+        background-color: white;
+        border-radius: 2px;
+        margin: 21px 0;
+      }
+
+      #secondaryUserIcon {
+        /* TODO(stevenjb): Replace this with the correct variable or color once
+         * established by UX, see crbug.com/687749. */
+        background-color : rgb(210, 210, 212);
+        background-image: url(chrome://theme/IDR_SECONDARY_USER_SETTINGS);
+        background-position: center;
+        background-repeat: no-repeat;
+        height: 55px;
+        margin: 18px;
+        width: 58px;
       }
 
       #toggleContainer {
@@ -68,10 +88,17 @@
     <template is="dom-if" if="[[showBasicPage_(
         currentRoute_, inSearchMode, hasExpandedSection_)]]">
       <div id="basicPage">
-        <template is="dom-if" if="[[showResetProfileBanner_]]">
-          <settings-reset-profile-banner on-reset-done="onResetDone_">
+        <template is="dom-if" if="[[showResetProfileBanner_]]" restamp>
+          <settings-reset-profile-banner on-close="onResetProfileBannerClosed_">
           </settings-reset-profile-banner>
         </template>
+<if expr="chromeos">
+        <div id="secondaryUserBanner" class="layout horizontal center"
+            hidden="[[!showSecondaryUserBanner_]]">
+          <div id="secondaryUserIcon"></div>
+          <div class="flex">$i18n{secondaryUserBannerText}</div>
+        </div>
+</if>
 <if expr="chromeos">
         <template is="dom-if" if="[[showPage(pageVisibility.internet)]]"
             restamp>
@@ -79,6 +106,14 @@
               section="internet">
             <settings-internet-page prefs="{{prefs}}">
             </settings-internet-page>
+          </settings-section>
+        </template>
+        <template is="dom-if" if="[[showPage(pageVisibility.bluetooth)]]"
+            restamp>
+          <settings-section page-title="$i18n{bluetoothPageTitle}"
+              section="bluetooth">
+            <settings-bluetooth-page prefs="{{prefs}}">
+            </settings-bluetooth-page>
           </settings-section>
         </template>
 </if>
@@ -106,7 +141,8 @@
         </template>
 </if>
         <template is="dom-if" if="[[showPage(pageVisibility.search)]]" restamp>
-          <settings-section page-title="$i18n{searchPageTitle}" section="search">
+          <settings-section page-title="$i18n{searchPageTitle}"
+              section="search">
             <settings-search-page prefs="{{prefs}}"></settings-search-page>
           </settings-section>
         </template>
@@ -140,8 +176,7 @@
       </div>
     </template>
 
-    <template is="dom-if"
-        if="[[showAdvancedSettings_(pageVisibility.advancedSettings)]]">
+    <template is="dom-if" if="[[showAdvancedSettings_(pageVisibility.advancedSettings)]]">
       <template is="dom-if" if="[[showAdvancedToggle_(
           inSearchMode, hasExpandedSection_)]]">
         <div id="toggleSpacer"></div>
@@ -155,10 +190,10 @@
         </h2>
       </template>
 
-      <template is="dom-if" if="[[showAdvancedPage_(
-          currentRoute_, inSearchMode, hasExpandedSection_,
-          advancedToggleExpanded)]]">
-        <div id="advancedPage">
+      <template is="settings-idle-render" id="advancedPageTemplate">
+        <div id="advancedPage" hidden$="[[!showAdvancedPage_(
+            currentRoute_, inSearchMode, hasExpandedSection_,
+            advancedToggleExpanded)]]">
 <if expr="chromeos">
           <template is="dom-if" if="[[showPage(pageVisibility.dateTime)]]"
               restamp>
@@ -179,16 +214,6 @@
               </settings-privacy-page>
             </settings-section>
           </template>
-<if expr="chromeos">
-          <template is="dom-if" if="[[showPage(pageVisibility.bluetooth)]]"
-              restamp>
-            <settings-section page-title="$i18n{bluetoothPageTitle}"
-                section="bluetooth">
-              <settings-bluetooth-page prefs="{{prefs}}">
-              </settings-bluetooth-page>
-            </settings-section>
-          </template>
-</if>
           <template is="dom-if"
               if="[[showPage(pageVisibility.passwordsAndForms)]]" restamp>
             <settings-section

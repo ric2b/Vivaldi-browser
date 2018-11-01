@@ -78,6 +78,21 @@ MostVisitedSites::~MostVisitedSites() {
     supervisor_->SetObserver(nullptr);
 }
 
+bool MostVisitedSites::DoesSourceExist(NTPTileSource source) const {
+  switch (source) {
+    case NTPTileSource::TOP_SITES:
+      return top_sites_ != nullptr;
+    case NTPTileSource::SUGGESTIONS_SERVICE:
+      return suggestions_service_ != nullptr;
+    case NTPTileSource::POPULAR:
+      return popular_sites_ != nullptr;
+    case NTPTileSource::WHITELIST:
+      return supervisor_ != nullptr;
+  }
+  NOTREACHED();
+  return false;
+}
+
 void MostVisitedSites::SetMostVisitedURLsObserver(Observer* observer,
                                                   int num_sites) {
   DCHECK(observer);
@@ -103,9 +118,8 @@ void MostVisitedSites::SetMostVisitedURLsObserver(Observer* observer,
     top_sites_observer_.Add(top_sites_.get());
   }
 
-  suggestions_subscription_ = suggestions_service_->AddCallback(
-      base::Bind(&MostVisitedSites::OnSuggestionsProfileAvailable,
-                 base::Unretained(this)));
+  suggestions_subscription_ = suggestions_service_->AddCallback(base::Bind(
+      &MostVisitedSites::OnSuggestionsProfileChanged, base::Unretained(this)));
 
   // Immediately build the current set of tiles, getting suggestions from the
   // SuggestionsService's cache or, if that is empty, sites from TopSites.
@@ -159,14 +173,6 @@ void MostVisitedSites::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kNumPersonalTiles, 0);
 }
 
-void MostVisitedSites::BuildCurrentTiles() {
-  // Get the current suggestions from cache. If the cache is empty, this will
-  // fall back to TopSites.
-  OnSuggestionsProfileAvailable(
-      suggestions_service_->GetSuggestionsDataFromCache().value_or(
-          SuggestionsProfile()));
-}
-
 void MostVisitedSites::InitiateTopSitesQuery() {
   if (!top_sites_)
     return;
@@ -201,10 +207,8 @@ void MostVisitedSites::OnMostVisitedURLsAvailable(
       std::min(visited_list.size(), static_cast<size_t>(num_sites_));
   for (size_t i = 0; i < num_tiles; ++i) {
     const history::MostVisitedURL& visited = visited_list[i];
-    if (visited.url.is_empty()) {
-      num_tiles = i;
+    if (visited.url.is_empty())
       break;  // This is the signal that there are no more real visited sites.
-    }
     if (supervisor_ && supervisor_->IsBlocked(visited.url))
       continue;
 
@@ -222,8 +226,24 @@ void MostVisitedSites::OnMostVisitedURLsAvailable(
   NotifyMostVisitedURLsObserver();
 }
 
-void MostVisitedSites::OnSuggestionsProfileAvailable(
+void MostVisitedSites::OnSuggestionsProfileChanged(
     const SuggestionsProfile& suggestions_profile) {
+  if (suggestions_profile.suggestions_size() == 0 &&
+      mv_source_ != NTPTileSource::SUGGESTIONS_SERVICE) {
+    return;
+  }
+
+  BuildCurrentTilesGivenSuggestionsProfile(suggestions_profile);
+}
+
+void MostVisitedSites::BuildCurrentTiles() {
+  BuildCurrentTilesGivenSuggestionsProfile(
+      suggestions_service_->GetSuggestionsDataFromCache().value_or(
+          SuggestionsProfile()));
+}
+
+void MostVisitedSites::BuildCurrentTilesGivenSuggestionsProfile(
+    const suggestions::SuggestionsProfile& suggestions_profile) {
   int num_tiles = suggestions_profile.suggestions_size();
   // With no server suggestions, fall back to local TopSites.
   if (num_tiles == 0 ||
@@ -275,6 +295,9 @@ NTPTilesVector MostVisitedSites::CreateWhitelistEntryPointTiles(
     personal_hosts.insert(tile.url.host());
 
   for (const auto& whitelist : supervisor_->whitelists()) {
+    if (whitelist_tiles.size() >= num_whitelist_tiles)
+      break;
+
     // Skip blacklisted sites.
     if (top_sites_ && top_sites_->IsBlacklisted(whitelist.entry_point))
       continue;
@@ -293,10 +316,7 @@ NTPTilesVector MostVisitedSites::CreateWhitelistEntryPointTiles(
     tile.url = whitelist.entry_point;
     tile.source = NTPTileSource::WHITELIST;
     tile.whitelist_icon_path = whitelist.large_icon_path;
-
     whitelist_tiles.push_back(std::move(tile));
-    if (whitelist_tiles.size() >= num_whitelist_tiles)
-      break;
   }
 
   return whitelist_tiles;
@@ -317,7 +337,8 @@ NTPTilesVector MostVisitedSites::CreatePopularSitesTiles(
   size_t num_popular_sites_tiles = num_sites_ - num_tiles;
   NTPTilesVector popular_sites_tiles;
 
-  if (num_popular_sites_tiles > 0 && popular_sites_) {
+  if (num_popular_sites_tiles > 0 && popular_sites_ &&
+      ShouldShowPopularSites()) {
     std::set<std::string> hosts;
     for (const auto& tile : personal_tiles)
       hosts.insert(tile.url.host());
@@ -338,9 +359,10 @@ NTPTilesVector MostVisitedSites::CreatePopularSitesTiles(
       tile.source = NTPTileSource::POPULAR;
 
       popular_sites_tiles.push_back(std::move(tile));
-      icon_cacher_->StartFetch(
-          popular_site, base::Bind(&MostVisitedSites::OnIconMadeAvailable,
-                                   base::Unretained(this), popular_site.url));
+      base::Closure icon_available =
+          base::Bind(&MostVisitedSites::OnIconMadeAvailable,
+                     base::Unretained(this), popular_site.url);
+      icon_cacher_->StartFetch(popular_site, icon_available, icon_available);
       if (popular_sites_tiles.size() >= num_popular_sites_tiles)
         break;
     }
@@ -398,14 +420,14 @@ void MostVisitedSites::OnPopularSitesDownloaded(bool success) {
     return;
   }
 
-  // Re-build the tile list. Once done, this will notify the observer.
-  BuildCurrentTiles();
+  for (const PopularSites::Site& popular_site : popular_sites_->sites()) {
+    // Ignore callback; these icons will be seen on the *next* NTP.
+    icon_cacher_->StartFetch(popular_site, base::Closure(), base::Closure());
+  }
 }
 
-void MostVisitedSites::OnIconMadeAvailable(const GURL& site_url,
-                                           bool newly_available) {
-  if (newly_available)
-    observer_->OnIconMadeAvailable(site_url);
+void MostVisitedSites::OnIconMadeAvailable(const GURL& site_url) {
+  observer_->OnIconMadeAvailable(site_url);
 }
 
 void MostVisitedSites::TopSitesLoaded(TopSites* top_sites) {}

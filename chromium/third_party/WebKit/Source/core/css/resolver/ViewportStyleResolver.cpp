@@ -103,7 +103,7 @@ void ViewportStyleResolver::collectViewportChildRules(
     } else if (rule->isMediaRule()) {
       StyleRuleMedia* mediaRule = toStyleRuleMedia(rule);
       if (!mediaRule->mediaQueries() ||
-          m_initialViewportMedium->eval(mediaRule->mediaQueries(),
+          m_initialViewportMedium->eval(*mediaRule->mediaQueries(),
                                         &m_viewportDependentMediaQueryResults,
                                         &m_deviceDependentMediaQueryResults))
         collectViewportChildRules(mediaRule->childRules(), origin);
@@ -123,7 +123,7 @@ void ViewportStyleResolver::collectViewportRulesFromImports(
     if (!importRule->styleSheet()->hasViewportRule())
       continue;
     if (importRule->mediaQueries() &&
-        m_initialViewportMedium->eval(importRule->mediaQueries(),
+        m_initialViewportMedium->eval(*importRule->mediaQueries(),
                                       &m_viewportDependentMediaQueryResults,
                                       &m_deviceDependentMediaQueryResults))
       collectViewportRulesFromAuthorSheetContents(*importRule->styleSheet());
@@ -144,7 +144,7 @@ void ViewportStyleResolver::collectViewportRulesFromAuthorSheet(
   if (!contents.hasViewportRule() && contents.importRules().isEmpty())
     return;
   if (sheet.mediaQueries() &&
-      !m_initialViewportMedium->eval(sheet.mediaQueries(),
+      !m_initialViewportMedium->eval(*sheet.mediaQueries(),
                                      &m_viewportDependentMediaQueryResults,
                                      &m_deviceDependentMediaQueryResults))
     return;
@@ -304,8 +304,8 @@ void ViewportStyleResolver::initialViewportChanged() {
 
   auto& results = m_viewportDependentMediaQueryResults;
   for (unsigned i = 0; i < results.size(); i++) {
-    if (m_initialViewportMedium->eval(results[i]->expression()) !=
-        results[i]->result()) {
+    if (m_initialViewportMedium->eval(results[i].expression()) !=
+        results[i].result()) {
       m_needsUpdate = CollectRules;
       break;
     }
@@ -338,8 +338,6 @@ DEFINE_TRACE(ViewportStyleResolver) {
   visitor->trace(m_document);
   visitor->trace(m_propertySet);
   visitor->trace(m_initialViewportMedium);
-  visitor->trace(m_viewportDependentMediaQueryResults);
-  visitor->trace(m_deviceDependentMediaQueryResults);
 }
 
 }  // namespace blink

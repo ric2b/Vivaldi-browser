@@ -39,6 +39,12 @@ class RecentTabHelper
   void DocumentAvailableInMainFrame() override;
   void DocumentOnLoadCompletedInMainFrame() override;
   void WebContentsDestroyed() override;
+  void WasHidden() override;
+  void WasShown() override;
+
+  // Notifies that the tab of the associated WebContents will (most probably) be
+  // closed. This call is expected to always happen before the one to WasHidden.
+  void WillCloseTab();
 
   // SnapshotController::Client
   void StartSnapshot() override;
@@ -50,64 +56,59 @@ class RecentTabHelper
     virtual ~Delegate() {}
     virtual std::unique_ptr<OfflinePageArchiver> CreatePageArchiver(
         content::WebContents* web_contents) = 0;
-    virtual scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() = 0;
     // There is no expectations that tab_id is always present.
     virtual bool GetTabId(content::WebContents* web_contents, int* tab_id) = 0;
+    virtual bool IsLowEndDevice() = 0;
   };
   void SetDelegate(std::unique_ptr<RecentTabHelper::Delegate> delegate);
 
-  // Support for Download Page feature. The Download Page button does this:
-  // 1. Creates suspended request for Background Offliner.
-  // 2. Calls this method with properly filled ClientId.
-  // 3. This tab helper observes the page load and captures the page
-  //    if the load progresses far enough, as indicated by SnapshotController.
-  // 4. If capture is successful, this tab helper removes the suspended request.
-  //    Otherwise (navigation to other page, close tab) tab helper un-suspends
-  //    the request so the Background Offliner starts working on it.
-  // 5. If Chrome is killed at any point, next time Background Offliner loads
-  //    it converts all suspended requests from last session into active.
+  // Creates a request to download the current page with a properly filled
+  // |client_id| and valid |request_id| issued by RequestCoordinator from a
+  // suspended request. This method might be called multiple times for the same
+  // page at any point after its navigation commits. There are some important
+  // points about how requests are handled:
+  // a) While there is an ongoing request, new requests are ignored (no
+  //    overlapping snapshots).
+  // b) The page has to be sufficiently loaded to be considerer of minimum
+  //    quality for the request to be started immediately.
+  // c) Any calls made before the page is considered to have minimal quality
+  //    will be scheduled to be executed once that happens. The scheduled
+  //    request is considered "ongoing" for a) purposes.
+  // d) If the save operation is successful the dormant request with
+  //    RequestCoordinator is canceled; otherwise it is resumed. This logic is
+  //    robust to crashes.
+  // e) At the moment the page reaches high quality, if there was a successful
+  //    snapshot saved at a lower quality then a new snapshot is automatically
+  //    requested to replace it.
+  // Note #1: Page quality is determined by SnapshotController and is based on
+  // its assessment of "how much loaded" it is.
+  // Note #2: Currently this method only accepts download requests from the
+  // downloads namespace.
   void ObserveAndDownloadCurrentPage(const ClientId& client_id,
                                      int64_t request_id);
 
  private:
-  // Keeps client_id/request_id that will be used for the offline snapshot.
-  struct SnapshotProgressInfo {
-   public:
-    // For a downloads snapshot request, where the |request_id| is defined.
-    SnapshotProgressInfo(const ClientId& client_id, int64_t request_id)
-        : client_id(client_id), request_id(request_id) {}
-
-    // For a last_n snapshot request.
-    explicit SnapshotProgressInfo(const ClientId& client_id)
-        : client_id(client_id) {}
-
-    bool IsForLastN();
-
-    // The ClientID to go with the offline page.
-    ClientId client_id;
-
-    // Id of the suspended request in Background Offliner. Used to un-suspend
-    // the request if the capture of the current page was not possible (e.g.
-    // the user navigated to another page before current one was loaded).
-    // 0 if this is a "last_n" info.
-    int64_t request_id = OfflinePageModel::kInvalidOfflineId;
-
-    // True if there was at least one snapshot successfully completed.
-    bool page_snapshot_completed = false;
-  };
+  struct SnapshotProgressInfo;
 
   explicit RecentTabHelper(content::WebContents* web_contents);
   friend class content::WebContentsUserData<RecentTabHelper>;
 
-  void EnsureInitialized();
-  void ContinueSnapshotWithIdsToPurge(const std::vector<int64_t>& page_ids);
-  void ContinueSnapshotAfterPurge(OfflinePageModel::DeletePageResult result);
-  void SavePageCallback(OfflinePageModel::SavePageResult result,
+  bool EnsureInitialized();
+  void ContinueSnapshotWithIdsToPurge(SnapshotProgressInfo* snapshot_info,
+                                      const std::vector<int64_t>& page_ids);
+  void ContinueSnapshotAfterPurge(SnapshotProgressInfo* snapshot_info,
+                                  OfflinePageModel::DeletePageResult result);
+  void SavePageCallback(SnapshotProgressInfo* snapshot_info,
+                        OfflinePageModel::SavePageResult result,
                         int64_t offline_id);
-  void ReportSnapshotCompleted();
-  void ReportDownloadStatusToRequestCoordinator();
-  bool IsSamePage() const;
+  void ReportSnapshotCompleted(SnapshotProgressInfo* snapshot_info,
+                               bool success);
+  void ReportDownloadStatusToRequestCoordinator(
+      SnapshotProgressInfo* snapshot_info,
+      bool cancel_background_request);
   ClientId GetRecentPagesClientId() const;
+  void SaveSnapshotForDownloads(bool replace_latest);
+  void CancelInFlightSnapshots();
 
   // Page model is a service, no ownership. Can be null - for example, in
   // case when tab is in incognito profile.
@@ -117,25 +118,39 @@ class RecentTabHelper
   // Not page-specific.
   bool snapshots_enabled_ = false;
 
-  // Becomes true during navigation if the page is ready for snapshot as
-  // indicated by at least one callback from SnapshotController.
-  bool is_page_ready_for_snapshot_ = false;
+  // Snapshot progress information for an ongoing snapshot requested by
+  // downloads. Null if there's no ongoing request.
+  std::unique_ptr<SnapshotProgressInfo> downloads_ongoing_snapshot_info_;
 
-  // Info for the offline page to capture. Null if the tab is not capturing
-  // current page.
-  std::unique_ptr<SnapshotProgressInfo> snapshot_info_;
+  // This is set to true if the ongoing snapshot for downloads is waiting on the
+  // page to reach a minimal quality level to start.
+  bool downloads_snapshot_on_hold_ = false;
+
+  // Snapshot information for the last successful snapshot requested by
+  // downloads. Null if no successful one has ever completed.
+  std::unique_ptr<SnapshotProgressInfo> downloads_latest_saved_snapshot_info_;
+
+  // Snapshot progress information for a last_n triggered request. Null if
+  // last_n is not currently capturing the current page.
+  std::unique_ptr<SnapshotProgressInfo> last_n_ongoing_snapshot_info_;
 
   // If empty, the tab does not have AndroidId and can not capture pages.
   std::string tab_id_;
 
-  // The URL of the page that is currently being snapshotted. Used to check,
-  // during async operations, that WebContents still contains the same page.
-  GURL snapshot_url_;
-  // This starts out null and used as a flag for EnsureInitialized() to do the
-  // initialization only once.
+  // Monitors page loads and starts snapshots when a download request exist. It
+  // is also used as an initialization flag for EnsureInitialized() to be run
+  // only once.
   std::unique_ptr<SnapshotController> snapshot_controller_;
 
   std::unique_ptr<Delegate> delegate_;
+
+  // Set at each navigation to control if last_n should save snapshots of the
+  // current page being loaded.
+  bool last_n_listen_to_tab_hidden_ = false;
+
+  // Set to true when the tab containing the associated WebContents is in the
+  // process of being closed.
+  bool tab_is_closing_ = false;
 
   base::WeakPtrFactory<RecentTabHelper> weak_ptr_factory_;
 

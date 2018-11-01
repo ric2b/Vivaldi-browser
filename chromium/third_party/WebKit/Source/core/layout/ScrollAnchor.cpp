@@ -76,18 +76,17 @@ static LayoutRect relativeBounds(const LayoutObject* layoutObject,
     localBounds = toLayoutBox(layoutObject)->borderBoxRect();
     if (!layoutObject->hasOverflowClip()) {
       // borderBoxRect doesn't include overflow content and floats.
-      LayoutUnit maxHeight =
-          std::max(localBounds.height(),
-                   toLayoutBox(layoutObject)->layoutOverflowRect().height());
+      LayoutUnit maxY =
+          std::max(localBounds.maxY(),
+                   toLayoutBox(layoutObject)->layoutOverflowRect().maxY());
       if (layoutObject->isLayoutBlockFlow() &&
           toLayoutBlockFlow(layoutObject)->containsFloats()) {
         // Note that lowestFloatLogicalBottom doesn't include floating
         // grandchildren.
-        maxHeight = std::max(
-            maxHeight,
-            toLayoutBlockFlow(layoutObject)->lowestFloatLogicalBottom());
+        maxY = std::max(
+            maxY, toLayoutBlockFlow(layoutObject)->lowestFloatLogicalBottom());
       }
-      localBounds.setHeight(maxHeight);
+      localBounds.shiftMaxYEdgeTo(maxY);
     }
   } else if (layoutObject->isText()) {
     // TODO(skobes): Use first and last InlineTextBox only?
@@ -140,7 +139,7 @@ ScrollAnchor::ExamineResult ScrollAnchor::examine(
   if (!candidateMayMoveWithScroller(candidate, m_scroller))
     return ExamineResult(Skip);
 
-  if (candidate->style()->overflowAnchor() == EOverflowAnchor::None)
+  if (candidate->style()->overflowAnchor() == EOverflowAnchor::kNone)
     return ExamineResult(Skip);
 
   LayoutRect candidateRect = relativeBounds(candidate, m_scroller);

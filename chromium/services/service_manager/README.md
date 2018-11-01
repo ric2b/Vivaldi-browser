@@ -68,7 +68,7 @@ first learns about the service, and OnConnect(), which the Service Manager calls
  every time some other service tries to connect to this one.
 
 Services have a link back to the Service Manager too, primarily in the form of
-the service_manager.mojom.Connector interface. The Connector allows services to 
+the service_manager.mojom.Connector interface. The Connector allows services to
 open connections to other services.
 
 A unique connection from the Service Manager to a service is called an
@@ -89,12 +89,9 @@ Consider this simple application that implements the Service interface:
 
 **my_service.cc:**
 
-    #include "mojo/public/c/system/main.h"
-    #include "services/service_manager/public/cpp/application_runner.h"
-    #include "services/service_manager/public/cpp/connector.h"
-    #include "services/service_manager/public/cpp/connection.h"
-    #include "services/service_manager/public/cpp/identity.h"
+    #include "services/service_manager/public/c/main.h"
     #include "services/service_manager/public/cpp/service.h"
+    #include "services/service_manager/public/cpp/service_runner.h"
 
     class MyService : public service_manager::Service {
      public:
@@ -102,9 +99,9 @@ Consider this simple application that implements the Service interface:
       ~MyService() override {}
 
       // Overridden from service_manager::Service:
-      void OnStart(const service_manager::ServiceInfo& info) override {
+      void OnStart() override {
       }
-      bool OnConnect(const service_manager::SerivceInfo& remote_info,
+      bool OnConnect(const service_manager::ServiceInfo& remote_info,
                      service_manager::InterfaceRegistry* registry) override {
         return true;
       }
@@ -118,7 +115,7 @@ Consider this simple application that implements the Service interface:
 **manifest.json:**
 
     {
-      "name": "service:my_service",
+      "name": "my_service",
       "display_name": "My Service",
       "inteface_provider_spec": {
         "service_manager:connector": {}
@@ -127,12 +124,12 @@ Consider this simple application that implements the Service interface:
 
 **BUILD.gn:**
 
-    import("//mojo/public/mojo_application.gni")
+    import("//services/service_manager/public/cpp/service.gni")
+    import("//services/service_manager/public/service_manifest.gni")
 
     service("my_service") {
       sources = [ "my_service.cc" ]
       deps = [ "//base", "//services/service_manager/public/cpp" ]
-      data_deps = [ ":manifest" ]
     }
 
     service_manifest("manifest") {
@@ -143,7 +140,7 @@ Consider this simple application that implements the Service interface:
 What does all this do? Building the app target produces two files in the output
 directory: Packages/my_service/my_service.library and
 Packages/my_service/manifest.json. app.library is a DSO loaded by the Service
-Manager in its own process when another service connects to the 
+Manager in its own process when another service connects to the
 service:my_service name. This is not the only way (nor even the most likely one)
  you can implement a Service, but it's the simplest and easiest to reason about.
 
@@ -647,29 +644,21 @@ previous section. The connect flow in the service that launches the target
     mojo::edk::HandlePassingInformation info;
     pair.PrepareToPassClientHandleToChildProcess(&target_command_line, &info);
 
-    std::string token = mojo::edk::GenerateRandomToken();
+    mojo::edk::PendingProcessConnection connection;
+    std::string token;
+    mojo::ScopedMessagePipeHandle pipe = connection.CreateMessagePipe(&token);
     target_command_line.AppendSwitchASCII(switches::kPrimordialPipeToken,
                                           token);
 
-    mojo::ScopedMessagePipeHandle pipe =
-        mojo::edk::CreateParentMessagePipe(token);
-
-    service_manager::mojom::ServiceFactoryPtr factory;
-    factory.Bind(
-        mojo::InterfacePtrInfo<service_manager::mojom::ServiceFactory>(
-            std::move(pipe), 0u));
+    service_manager::Identity target("exe:target",
+                                     service_manager::mojom::kInheritUserID);
     service_manager::mojom::PIDReceiverPtr receiver;
-
-    service_manager::Identity target("exe:target",service_manager::mojom::kInheritUserID);
-    service_manager::Connector::ConnectParams params(target);
-    params.set_client_process_connection(std::move(factory),
-                                         MakeRequest(&receiver));
-    std::unique_ptr<service_manager::Connection> connection = connector->Connect(&params);
+    connector->RegisterService(target, std::move(pipe), MakeRequest(&receiver));
 
     base::LaunchOptions options;
     options.handles_to_inherit = &info;
     base::Process process = base::LaunchProcess(target_command_line, options);
-    mojo::edk::ChildProcessLaunched(process.Handle(), pair.PassServerHandle());
+    connection.Connect(process.Handle(), pair.PassServerHandle());
 
 That's a lot. But it boils down to these steps:
 1. Creating the message pipe to connect the target process and the Service

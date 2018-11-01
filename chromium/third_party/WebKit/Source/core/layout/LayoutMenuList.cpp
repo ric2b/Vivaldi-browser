@@ -70,7 +70,7 @@ void LayoutMenuList::createInnerBlock() {
   ASSERT(!firstChild());
   m_innerBlock = createAnonymousBlock();
 
-  m_buttonText = new LayoutText(&document(), StringImpl::empty());
+  m_buttonText = new LayoutText(&document(), StringImpl::empty);
   // We need to set the text explicitly though it was specified in the
   // constructor because LayoutText doesn't refer to the text
   // specified in the constructor in a case of re-transforming.
@@ -186,7 +186,7 @@ void LayoutMenuList::updateOptionsWidth() const {
 void LayoutMenuList::updateFromElement() {
   HTMLSelectElement* select = selectElement();
   HTMLOptionElement* option = select->optionToBeShown();
-  String text = emptyString();
+  String text = emptyString;
   m_optionStyle.clear();
 
   if (select->isMultiple()) {

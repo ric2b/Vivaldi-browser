@@ -24,10 +24,12 @@ namespace ui {
 class Event;
 class KeyEvent;
 class LocatedEvent;
+class PointerEvent;
 
 namespace ws {
 
 class Accelerator;
+struct DeepestWindow;
 class DragController;
 class DragSource;
 class DragTargetConnection;
@@ -62,9 +64,9 @@ class EventDispatcher : public ServerWindowObserver, public DragCursorUpdater {
     return mouse_pointer_last_location_;
   }
 
-  // If we still have the window of the last mouse move, returns true and sets
-  // the current cursor to use to |cursor_out|.
-  bool GetCurrentMouseCursor(ui::mojom::Cursor* cursor_out);
+  // Returns the cursor for the current target, or POINTER if the mouse is not
+  // over a valid target.
+  ui::mojom::Cursor GetCurrentMouseCursor() const;
 
   // |capture_window_| will receive all input. See window_tree.mojom for
   // details.
@@ -113,6 +115,11 @@ class EventDispatcher : public ServerWindowObserver, public DragCursorUpdater {
     return mouse_cursor_source_window_;
   }
 
+  // Returns the window the mouse cursor is taken from. This does not take
+  // into account drags. In other words if there is a drag on going the mouse
+  // comes comes from a different window.
+  const ServerWindow* GetWindowForMouseCursor() const;
+
   // If the mouse cursor is still over |mouse_cursor_source_window_|, updates
   // whether we are in the non-client area. Used when
   // |mouse_cursor_source_window_| has changed its properties.
@@ -160,6 +167,8 @@ class EventDispatcher : public ServerWindowObserver, public DragCursorUpdater {
 
     bool is_pointer_down;
   };
+
+  void SetMouseCursorSourceWindow(ServerWindow* window);
 
   void ProcessKeyEvent(const ui::KeyEvent& event,
                        AcceleratorMatchPhase match_phase);
@@ -225,7 +234,7 @@ class EventDispatcher : public ServerWindowObserver, public DragCursorUpdater {
   Accelerator* FindAccelerator(const ui::KeyEvent& event,
                                const ui::mojom::AcceleratorPhase phase);
 
-  ServerWindow* FindDeepestVisibleWindowForEvents(gfx::Point* location);
+  DeepestWindow FindDeepestVisibleWindowForEvents(const gfx::Point& location);
 
   // Clears the implicit captures in |pointer_targets_|, with the exception of
   // |window|. |window| may be null. |client_id| is the target client of

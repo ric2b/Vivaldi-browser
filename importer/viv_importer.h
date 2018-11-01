@@ -1,9 +1,13 @@
 // Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
 
-#include "chrome/utility/importer/importer.h"
+#ifndef IMPORTER_VIV_IMPORTER_H_
+#define IMPORTER_VIV_IMPORTER_H_
 
-#ifndef  VIVALDI_IMPORTER_VIV_IMPORTER_H_
-#define VIVALDI_IMPORTER_VIV_IMPORTER_H_
+#include <string>
+#include <vector>
+
+#include "chrome/common/importer/importer_data_types.h"
+#include "chrome/utility/importer/importer.h"
 
 namespace base {
 class DictionaryValue;
@@ -19,36 +23,35 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles);
 
 class OperaImporter : public Importer {
  public:
-  OperaImporter(const importer::ImportConfig &import_config);
+  explicit OperaImporter(const importer::ImportConfig& import_config);
 
   void StartImport(const importer::SourceProfile& source_profile,
-                           uint16_t items,
-                           ImporterBridge* bridge) override;
+                   uint16_t items,
+                   ImporterBridge* bridge) override;
 
  private:
   ~OperaImporter() override;
 
   // Returns false on error in which case error is filled with an error message.
-  bool ImportBookMarks(std::string& error);
+  bool ImportBookMarks(std::string* error);
 
-  //void ReadFaviconIndexFile(base::string16 domain, );
+  // void ReadFaviconIndexFile(base::string16 domain, );
 
-  bool ImportNotes(std::string& error);
-  bool ImportSpeedDial(std::string& error);
+  bool ImportNotes(std::string* error);
+  bool ImportSpeedDial(std::string* error);
 
-  bool ImportWand(std::string& error);
-  bool ImportWand_ReadEntryHTML(std::string::iterator &buffer,
-                                std::string::iterator &buffer_end,
-                                std::vector<autofill::PasswordForm> &passwords,
-                                bool ignore_entry=false);
-  bool ImportWand_ReadEntryAuth(std::string::iterator &buffer,
-                                std::string::iterator &buffer_end,
-                                std::vector<autofill::PasswordForm> &passwords,
-                                bool ignore_entry=false);
+  bool ImportWand(std::string* error);
+  bool ImportWand_ReadEntryHTML(std::string::iterator* buffer,
+                                const std::string::iterator& buffer_end,
+                                std::vector<autofill::PasswordForm>* passwords,
+                                bool ignore_entry = false);
+  bool ImportWand_ReadEntryAuth(std::string::iterator* buffer,
+                                const std::string::iterator& buffer_end,
+                                std::vector<autofill::PasswordForm>* passwords,
+                                bool ignore_entry = false);
   bool GetMasterPasswordInfo();
 
  private:
-
   base::FilePath profile_dir_;
   base::FilePath::StringType bookmarkfilename_;
   base::FilePath::StringType notesfilename_;
@@ -74,5 +77,4 @@ class OperaImporter : public Importer {
   DISALLOW_COPY_AND_ASSIGN(OperaImporter);
 };
 
-
-#endif // VIVALDI_IMPORTER_VIV_IMPORTER_H_
+#endif  // IMPORTER_VIV_IMPORTER_H_

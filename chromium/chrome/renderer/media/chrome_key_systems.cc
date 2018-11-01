@@ -20,6 +20,7 @@
 #include "content/public/renderer/render_thread.h"
 #include "media/base/eme_constants.h"
 #include "media/base/key_system_properties.h"
+#include "media/media_features.h"
 #include "ppapi/features/features.h"
 
 #if defined(OS_ANDROID)
@@ -62,6 +63,8 @@ static bool IsPepperCdmAvailable(
 // External Clear Key (used for testing).
 static void AddExternalClearKey(
     std::vector<std::unique_ptr<KeySystemProperties>>* concrete_key_systems) {
+  // TODO(xhwang): Move these into an array so we can use a for loop to add
+  // supported key systems below.
   static const char kExternalClearKeyKeySystem[] =
       "org.chromium.externalclearkey";
   static const char kExternalClearKeyDecryptOnlyKeySystem[] =
@@ -78,6 +81,8 @@ static void AddExternalClearKey(
       "org.chromium.externalclearkey.initializefail";
   static const char kExternalClearKeyCrashKeySystem[] =
       "org.chromium.externalclearkey.crash";
+  static const char kExternalClearKeyVerifyCdmHostTestKeySystem[] =
+      "org.chromium.externalclearkey.verifycdmhosttest";
 
   std::vector<base::string16> additional_param_names;
   std::vector<base::string16> additional_param_values;
@@ -119,6 +124,10 @@ static void AddExternalClearKey(
   // A key system that triggers a crash in ClearKeyCdm.
   concrete_key_systems->emplace_back(
       new cdm::ExternalClearKeyProperties(kExternalClearKeyCrashKeySystem));
+
+  // A key system that triggers the verify host files test in ClearKeyCdm.
+  concrete_key_systems->emplace_back(new cdm::ExternalClearKeyProperties(
+      kExternalClearKeyVerifyCdmHostTestKeySystem));
 }
 
 #if defined(WIDEVINE_CDM_AVAILABLE)
@@ -180,21 +189,21 @@ static void AddPepperBasedWidevine(
   // as those may offer a higher level of protection.
   supported_codecs |= media::EME_CODEC_WEBM_OPUS;
   supported_codecs |= media::EME_CODEC_WEBM_VORBIS;
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   supported_codecs |= media::EME_CODEC_MP4_AAC;
-#endif  // defined(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
   for (size_t i = 0; i < codecs.size(); ++i) {
     if (codecs[i] == kCdmSupportedCodecVp8)
       supported_codecs |= media::EME_CODEC_WEBM_VP8;
     if (codecs[i] == kCdmSupportedCodecVp9)
       supported_codecs |= media::EME_CODEC_WEBM_VP9;
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     if (codecs[i] == kCdmSupportedCodecAvc1)
       supported_codecs |= media::EME_CODEC_MP4_AVC1;
     if (codecs[i] == kCdmSupportedCodecVp9)
       supported_codecs |= media::EME_CODEC_MP4_VP9;
-#endif  // defined(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
   }
 
   using Robustness = cdm::WidevineKeySystemProperties::Robustness;

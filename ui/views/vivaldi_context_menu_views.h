@@ -9,8 +9,10 @@
 // the entire chain of render_view_context_menu which we do not want because
 // of limited support for accelerators and no support for icons.
 
-#ifndef VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
-#define VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
+#ifndef UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
+#define UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
+
+#include <memory>
 
 #include "content/public/common/context_menu_params.h"
 #include "ui/vivaldi_context_menu.h"
@@ -66,4 +68,4 @@ class VivaldiContextMenuViews : public vivaldi::VivaldiContextMenu {
   DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuViews);
 };
 
-#endif  // VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
+#endif  // UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_

@@ -26,6 +26,7 @@
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/win/pe_image.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
@@ -36,6 +37,8 @@
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/install_verification/win/install_verification.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
+#include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_config.h"
+#include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_controller.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/uninstall_browser_prompt.h"
@@ -77,10 +80,6 @@
 #include "chrome/browser/google/did_run_updater_win.h"
 #endif
 
-#if BUILDFLAG(ENABLE_KASKO)
-#include "syzygy/kasko/api/reporter.h"
-#endif
-
 namespace {
 
 typedef HRESULT (STDAPICALLTYPE* RegisterApplicationRestartProc)(
@@ -113,41 +112,6 @@ class TranslationDelegate : public installer::TranslationDelegate {
  public:
   base::string16 GetLocalizedString(int installer_string_id) override;
 };
-
-#if BUILDFLAG(ENABLE_KASKO)
-void ObserveFailedCrashReportDirectory(const base::FilePath& path, bool error) {
-  DCHECK(!error);
-  if (error)
-    return;
-  base::FileEnumerator enumerator(path, true, base::FileEnumerator::FILES);
-  for (base::FilePath report_file = enumerator.Next(); !report_file.empty();
-       report_file = enumerator.Next()) {
-    if (report_file.Extension() ==
-        kasko::api::kPermanentFailureMinidumpExtension) {
-      UMA_HISTOGRAM_BOOLEAN("CrashReport.PermanentUploadFailure", true);
-    }
-    bool result = base::DeleteFile(report_file, false);
-    DCHECK(result);
-  }
-}
-
-void StartFailedKaskoCrashReportWatcher(base::FilePathWatcher* watcher) {
-  base::FilePath watcher_data_directory;
-  if (!PathService::Get(chrome::DIR_WATCHER_DATA, &watcher_data_directory)) {
-    NOTREACHED();
-  } else {
-    base::FilePath permanent_failure_directory =
-        watcher_data_directory.Append(kPermanentlyFailedReportsSubdir);
-    if (!watcher->Watch(permanent_failure_directory, true,
-                        base::Bind(&ObserveFailedCrashReportDirectory))) {
-      NOTREACHED();
-    }
-
-    // Call it once to observe any files present prior to the Watch() call.
-    ObserveFailedCrashReportDirectory(permanent_failure_directory, false);
-  }
-}
-#endif  // BUILDFLAG(ENABLE_KASKO)
 
 void DetectFaultTolerantHeap() {
   enum FTHFlags {
@@ -350,10 +314,11 @@ void ChromeBrowserMainPartsWin::PreMainMessageLoopStart() {
 }
 
 int ChromeBrowserMainPartsWin::PreCreateThreads() {
-// Record whether the machine is domain joined in a crash key. This will be used
-// to better identify whether crashes are from enterprise users.
-  base::debug::SetCrashKeyValue(crash_keys::kEnrolledToDomain,
-                                base::win::IsEnrolledToDomain() ? "yes" : "no");
+  // Record whether the machine is enterprise managed in a crash key. This will
+  // be used to better identify whether crashes are from enterprise users.
+  base::debug::SetCrashKeyValue(
+      crash_keys::kIsEnterpriseManaged,
+      base::win::IsEnterpriseManaged() ? "yes" : "no");
 
   int rv = ChromeBrowserMainParts::PreCreateThreads();
 
@@ -406,17 +371,13 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
 
   InitializeChromeElf();
 
-#if BUILDFLAG(ENABLE_KASKO)
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&StartFailedKaskoCrashReportWatcher,
-                 base::Unretained(&failed_kasko_crash_report_watcher_)),
-      base::TimeDelta::FromMinutes(5));
-#endif  // BUILDFLAG(ENABLE_KASKO)
-
-#if defined(GOOGLE_CHROME_BUILD)
-  did_run_updater_.reset(new DidRunUpdater);
-#endif
+  if (base::FeatureList::IsEnabled(safe_browsing::kSettingsResetPrompt)) {
+    content::BrowserThread::PostAfterStartupTask(
+        FROM_HERE,
+        content::BrowserThread::GetTaskRunnerForThread(
+            content::BrowserThread::UI),
+        base::Bind(safe_browsing::MaybeShowSettingsResetPromptWithDelay));
+  }
 
   // Record UMA data about whether the fault-tolerant heap is enabled.
   // Use a delayed task to minimize the impact on startup time.

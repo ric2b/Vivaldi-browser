@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/macros.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_notification.h"
 
@@ -36,8 +37,13 @@ class CupsPrintJobNotificationManager : public CupsPrintJobManager::Observer {
   void OnPrintJobResumed(CupsPrintJob* job) override;
   void OnPrintJobDone(CupsPrintJob* job) override;
   void OnPrintJobError(CupsPrintJob* job) override;
+  void OnPrintJobCancelled(CupsPrintJob* job) override;
+
+  void OnPrintJobNotificationRemoved(CupsPrintJobNotification* notification);
 
  private:
+  void UpdateNotification(CupsPrintJob* job);
+
   PrintJobNotificationMap notification_map_;
   CupsPrintJobManager* print_job_manager_;
   Profile* profile_;

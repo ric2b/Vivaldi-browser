@@ -40,7 +40,7 @@ class JavaScriptAppModalDialog : public AppModalDialog {
       content::WebContents* web_contents,
       ExtraDataMap* extra_data_map,
       const base::string16& title,
-      content::JavaScriptMessageType javascript_message_type,
+      content::JavaScriptDialogType javascript_dialog_type,
       const base::string16& message_text,
       const base::string16& default_prompt_text,
       bool display_suppress_checkbox,
@@ -52,7 +52,7 @@ class JavaScriptAppModalDialog : public AppModalDialog {
   // Overridden from AppModalDialog:
   NativeAppModalDialog* CreateNativeDialog() override;
   bool IsJavaScriptModalDialog() override;
-  void Invalidate(bool suppress_callbacks) override;
+  void Invalidate() override;
 
   // Callbacks from NativeDialog when the user accepts or cancels the dialog.
   void OnCancel(bool suppress_js_messages);
@@ -67,8 +67,8 @@ class JavaScriptAppModalDialog : public AppModalDialog {
   void SetOverridePromptText(const base::string16& prompt_text);
 
   // Accessors
-  content::JavaScriptMessageType javascript_message_type() const {
-    return javascript_message_type_;
+  content::JavaScriptDialogType javascript_dialog_type() const {
+    return javascript_dialog_type_;
   }
   base::string16 message_text() const { return message_text_; }
   base::string16 default_prompt_text() const { return default_prompt_text_; }
@@ -89,7 +89,7 @@ class JavaScriptAppModalDialog : public AppModalDialog {
   ExtraDataMap* extra_data_map_;
 
   // Information about the message box is held in the following variables.
-  const content::JavaScriptMessageType javascript_message_type_;
+  const content::JavaScriptDialogType javascript_dialog_type_;
   base::string16 message_text_;
   base::string16 default_prompt_text_;
   bool display_suppress_checkbox_;

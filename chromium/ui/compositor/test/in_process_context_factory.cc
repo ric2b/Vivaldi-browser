@@ -20,7 +20,7 @@
 #include "cc/surfaces/direct_compositor_frame_sink.h"
 #include "cc/surfaces/display.h"
 #include "cc/surfaces/display_scheduler.h"
-#include "cc/surfaces/surface_id_allocator.h"
+#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -38,6 +38,9 @@
 
 namespace ui {
 namespace {
+// The client_id used here should not conflict with the client_id generated
+// from RenderWidgetHostImpl.
+constexpr uint32_t kDefaultClientId = 0u;
 
 class FakeReflector : public Reflector {
  public:
@@ -52,9 +55,11 @@ class FakeReflector : public Reflector {
 // GL surface.
 class DirectOutputSurface : public cc::OutputSurface {
  public:
-  DirectOutputSurface(scoped_refptr<InProcessContextProvider> context_provider)
-      : cc::OutputSurface(std::move(context_provider)),
-        weak_ptr_factory_(this) {}
+  explicit DirectOutputSurface(
+      scoped_refptr<InProcessContextProvider> context_provider)
+      : cc::OutputSurface(context_provider), weak_ptr_factory_(this) {
+    capabilities_.flipped_output_surface = true;
+  }
 
   ~DirectOutputSurface() override {}
 
@@ -67,6 +72,7 @@ class DirectOutputSurface : public cc::OutputSurface {
   void BindFramebuffer() override {
     context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+  void SetDrawRectangle(const gfx::Rect& rect) override {}
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
@@ -77,11 +83,11 @@ class DirectOutputSurface : public cc::OutputSurface {
   }
   void SwapBuffers(cc::OutputSurfaceFrame frame) override {
     DCHECK(context_provider_.get());
-    if (frame.sub_buffer_rect == gfx::Rect(frame.size)) {
-      context_provider_->ContextSupport()->Swap();
-    } else {
+    if (frame.sub_buffer_rect) {
       context_provider_->ContextSupport()->PartialSwapBuffers(
-          frame.sub_buffer_rect);
+          *frame.sub_buffer_rect);
+    } else {
+      context_provider_->ContextSupport()->Swap();
     }
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
     const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
@@ -127,7 +133,7 @@ struct InProcessContextFactory::PerCompositorData {
 InProcessContextFactory::InProcessContextFactory(
     bool context_factory_for_test,
     cc::SurfaceManager* surface_manager)
-    : next_surface_client_id_(1u),
+    : frame_sink_id_allocator_(kDefaultClientId),
       use_test_surface_(true),
       context_factory_for_test_(context_factory_for_test),
       surface_manager_(surface_manager) {
@@ -221,6 +227,8 @@ void InProcessContextFactory::CreateCompositorFrameSink(
       shared_worker_context_provider_, &gpu_memory_buffer_manager_,
       &shared_bitmap_manager_);
   compositor->SetCompositorFrameSink(std::move(compositor_frame_sink));
+
+  data->display->Resize(compositor->size());
 }
 
 std::unique_ptr<Reflector> InProcessContextFactory::CreateReflector(
@@ -281,7 +289,7 @@ cc::TaskGraphRunner* InProcessContextFactory::GetTaskGraphRunner() {
 }
 
 cc::FrameSinkId InProcessContextFactory::AllocateFrameSinkId() {
-  return cc::FrameSinkId(next_surface_client_id_++, 0);
+  return frame_sink_id_allocator_.NextFrameSinkId();
 }
 
 cc::SurfaceManager* InProcessContextFactory::GetSurfaceManager() {

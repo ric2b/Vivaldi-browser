@@ -30,6 +30,7 @@
 
 #include "platform/graphics/PictureSnapshot.h"
 
+#include <memory>
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/LoggingCanvas.h"
@@ -50,7 +51,6 @@
 #include "wtf/PtrUtil.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/TextEncoding.h"
-#include <memory>
 
 namespace blink {
 

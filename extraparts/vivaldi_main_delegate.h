@@ -12,5 +12,4 @@ class VivaldiMainDelegate : public ChromeMainDelegate {
   ~VivaldiMainDelegate() override;
 };
 
-
-#endif // EXTRAPARTS_VIVALDI_MAIN_DELEGATE_H_
+#endif  // EXTRAPARTS_VIVALDI_MAIN_DELEGATE_H_

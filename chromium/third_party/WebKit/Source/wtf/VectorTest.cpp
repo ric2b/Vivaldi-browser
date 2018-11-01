@@ -284,12 +284,12 @@ static HashSet<void*> constructedWrappedInts;
 class WrappedInt {
  public:
   WrappedInt(int i = 0) : m_originalThisPtr(this), m_i(i) {
-    constructedWrappedInts.add(this);
+    constructedWrappedInts.insert(this);
   }
 
   WrappedInt(const WrappedInt& other)
       : m_originalThisPtr(this), m_i(other.m_i) {
-    constructedWrappedInts.add(this);
+    constructedWrappedInts.insert(this);
   }
 
   WrappedInt& operator=(const WrappedInt& other) {
@@ -300,7 +300,7 @@ class WrappedInt {
   ~WrappedInt() {
     EXPECT_EQ(m_originalThisPtr, this);
     EXPECT_TRUE(constructedWrappedInts.contains(this));
-    constructedWrappedInts.remove(this);
+    constructedWrappedInts.erase(this);
   }
 
   int get() const { return m_i; }
@@ -362,12 +362,12 @@ TEST(VectorTest, SwapWithInlineCapacity) {
 #if defined(ANNOTATE_CONTIGUOUS_CONTAINER)
 TEST(VectorTest, ContainerAnnotations) {
   Vector<int> vectorA;
-  vectorA.append(10);
+  vectorA.push_back(10);
   vectorA.reserveCapacity(32);
 
   volatile int* intPointerA = vectorA.data();
   EXPECT_DEATH(intPointerA[1] = 11, "container-overflow");
-  vectorA.append(11);
+  vectorA.push_back(11);
   intPointerA[1] = 11;
   EXPECT_DEATH(intPointerA[2] = 12, "container-overflow");
   EXPECT_DEATH((void)intPointerA[2], "container-overflow");
@@ -384,7 +384,7 @@ TEST(VectorTest, ContainerAnnotations) {
   Vector<int> vectorC((Vector<int>(vectorA)));
   volatile int* intPointerC = vectorC.data();
   EXPECT_DEATH((void)intPointerC[2], "container-overflow");
-  vectorC.append(13);
+  vectorC.push_back(13);
   vectorC.swap(vectorB);
 
   volatile int* intPointerB2 = vectorB.data();

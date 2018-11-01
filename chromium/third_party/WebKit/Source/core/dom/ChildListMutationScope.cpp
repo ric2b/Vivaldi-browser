@@ -63,13 +63,13 @@ void ChildListMutationAccumulator::leaveMutationScope() {
   if (!--m_mutationScopes) {
     if (!isEmpty())
       enqueueMutationRecord();
-    accumulatorMap().remove(m_target.get());
+    accumulatorMap().erase(m_target.get());
   }
 }
 
 ChildListMutationAccumulator* ChildListMutationAccumulator::getOrCreate(
     Node& target) {
-  AccumulatorMap::AddResult result = accumulatorMap().add(&target, nullptr);
+  AccumulatorMap::AddResult result = accumulatorMap().insert(&target, nullptr);
   ChildListMutationAccumulator* accumulator;
   if (!result.isNewEntry) {
     accumulator = result.storedValue->value;

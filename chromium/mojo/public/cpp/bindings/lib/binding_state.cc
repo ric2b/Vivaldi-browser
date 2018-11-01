@@ -4,8 +4,6 @@
 
 #include "mojo/public/cpp/bindings/lib/binding_state.h"
 
-#include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
-
 namespace mojo {
 namespace internal {
 
@@ -48,13 +46,13 @@ void BindingStateBase::Close() {
 void BindingStateBase::CloseWithReason(uint32_t custom_reason,
                                        const std::string& description) {
   if (endpoint_client_)
-    endpoint_client_->control_message_proxy()->SendDisconnectReason(
-        custom_reason, description);
+    endpoint_client_->CloseWithReason(custom_reason, description);
+
   Close();
 }
 
 void BindingStateBase::FlushForTesting() {
-  endpoint_client_->control_message_proxy()->FlushForTesting();
+  endpoint_client_->FlushForTesting();
 }
 
 void BindingStateBase::EnableTestingMode() {

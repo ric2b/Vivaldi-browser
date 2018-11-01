@@ -20,6 +20,7 @@ MockGenericURLRequestJobDelegate::~MockGenericURLRequestJobDelegate() {}
 
 bool MockGenericURLRequestJobDelegate::BlockOrRewriteRequest(
     const GURL& url,
+    const std::string& devtools_id,
     const std::string& method,
     const std::string& referrer,
     GenericURLRequestJob::RewriteCallback callback) {
@@ -31,6 +32,7 @@ bool MockGenericURLRequestJobDelegate::BlockOrRewriteRequest(
 const GenericURLRequestJob::HttpResponse*
 MockGenericURLRequestJobDelegate::MaybeMatchResource(
     const GURL& url,
+    const std::string& devtools_id,
     const std::string& method,
     const net::HttpRequestHeaders& request_headers) {
   return nullptr;
@@ -38,6 +40,7 @@ MockGenericURLRequestJobDelegate::MaybeMatchResource(
 
 void MockGenericURLRequestJobDelegate::OnResourceLoadComplete(
     const GURL& final_url,
+    const std::string& devtools_id,
     const std::string& mime_type,
     int http_response_code) {}
 
@@ -65,7 +68,6 @@ void MockCookieStore::SetCookieWithDetailsAsync(
     bool secure,
     bool http_only,
     net::CookieSameSite same_site,
-    bool enforce_strict_secure,
     net::CookiePriority priority,
     const SetCookiesCallback& callback) {
   CHECK(false);

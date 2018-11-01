@@ -9,10 +9,10 @@
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 #include "platform/graphics/paint/PaintArtifact.h"
+#include "platform/graphics/paint/PaintFlags.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/core/SkPicture.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "wtf/Assertions.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -27,19 +27,19 @@ class TestPaintArtifact::DummyRectClient : public DisplayItemClient {
       : m_rect(rect), m_color(color) {}
   String debugName() const final { return "<dummy>"; }
   LayoutRect visualRect() const final { return enclosingLayoutRect(m_rect); }
-  sk_sp<SkPicture> makePicture() const;
+  sk_sp<PaintRecord> makeRecord() const;
 
  private:
   FloatRect m_rect;
   Color m_color;
 };
 
-sk_sp<SkPicture> TestPaintArtifact::DummyRectClient::makePicture() const {
-  SkPictureRecorder recorder;
-  SkCanvas* canvas = recorder.beginRecording(m_rect);
-  SkPaint paint;
-  paint.setColor(m_color.rgb());
-  canvas->drawRect(m_rect, paint);
+sk_sp<PaintRecord> TestPaintArtifact::DummyRectClient::makeRecord() const {
+  PaintRecorder recorder;
+  PaintCanvas* canvas = recorder.beginRecording(m_rect);
+  PaintFlags flags;
+  flags.setColor(m_color.rgb());
+  canvas->drawRect(m_rect, flags);
   return recorder.finishRecordingAsPicture();
 }
 
@@ -48,12 +48,11 @@ TestPaintArtifact::TestPaintArtifact() : m_displayItemList(0), m_built(false) {}
 TestPaintArtifact::~TestPaintArtifact() {}
 
 TestPaintArtifact& TestPaintArtifact::chunk(
-    PassRefPtr<TransformPaintPropertyNode> transform,
-    PassRefPtr<ClipPaintPropertyNode> clip,
-    PassRefPtr<EffectPaintPropertyNode> effect,
-    PassRefPtr<ScrollPaintPropertyNode> scroll) {
-  PropertyTreeState propertyTreeState(transform.get(), clip.get(), effect.get(),
-                                      scroll.get());
+    PassRefPtr<const TransformPaintPropertyNode> transform,
+    PassRefPtr<const ClipPaintPropertyNode> clip,
+    PassRefPtr<const EffectPaintPropertyNode> effect) {
+  PropertyTreeState propertyTreeState(transform.get(), clip.get(),
+                                      effect.get());
   PaintChunkProperties properties(propertyTreeState);
   return chunk(properties);
 }
@@ -74,7 +73,7 @@ TestPaintArtifact& TestPaintArtifact::rectDrawing(const FloatRect& bounds,
   std::unique_ptr<DummyRectClient> client =
       WTF::makeUnique<DummyRectClient>(bounds, color);
   m_displayItemList.allocateAndConstruct<DrawingDisplayItem>(
-      *client, DisplayItem::kDrawingFirst, client->makePicture());
+      *client, DisplayItem::kDrawingFirst, client->makeRecord());
   m_dummyClients.push_back(std::move(client));
   return *this;
 }

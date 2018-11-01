@@ -156,6 +156,8 @@ bool supportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::PseudoListBox:
     case CSSSelector::PseudoHostHasAppearance:
     case CSSSelector::PseudoSlotted:
+    case CSSSelector::PseudoVideoPersistent:
+    case CSSSelector::PseudoVideoPersistentAncestor:
       return true;
     case CSSSelector::PseudoUnknown:
     case CSSSelector::PseudoLeftPage:
@@ -229,7 +231,7 @@ InvalidationSet& ensureInvalidationSet(
     const AtomicString& key,
     InvalidationType type) {
   RefPtr<InvalidationSet>& invalidationSet =
-      map.add(key, nullptr).storedValue->value;
+      map.insert(key, nullptr).storedValue->value;
   return storedInvalidationSet(invalidationSet, type);
 }
 
@@ -241,13 +243,14 @@ InvalidationSet& ensureInvalidationSet(
     CSSSelector::PseudoType key,
     InvalidationType type) {
   RefPtr<InvalidationSet>& invalidationSet =
-      map.add(key, nullptr).storedValue->value;
+      map.insert(key, nullptr).storedValue->value;
   return storedInvalidationSet(invalidationSet, type);
 }
 
 void extractInvalidationSets(InvalidationSet* invalidationSet,
                              DescendantInvalidationSet*& descendants,
                              SiblingInvalidationSet*& siblings) {
+  RELEASE_ASSERT(invalidationSet->isAlive());
   if (invalidationSet->type() == InvalidateDescendants) {
     descendants = toDescendantInvalidationSet(invalidationSet);
     siblings = nullptr;
@@ -271,17 +274,33 @@ DEFINE_TRACE(RuleFeature) {
   visitor->trace(rule);
 }
 
+RuleFeatureSet::RuleFeatureSet() : m_isAlive(true) {}
+
+RuleFeatureSet::~RuleFeatureSet() {
+  RELEASE_ASSERT(m_isAlive);
+
+  m_metadata.clear();
+  m_classInvalidationSets.clear();
+  m_attributeInvalidationSets.clear();
+  m_idInvalidationSets.clear();
+  m_pseudoInvalidationSets.clear();
+  m_universalSiblingInvalidationSet.clear();
+  m_nthInvalidationSet.clear();
+
+  m_isAlive = false;
+}
+
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureClassInvalidationSet(
     const AtomicString& className,
     InvalidationType type) {
-  DCHECK(!className.isEmpty());
+  RELEASE_ASSERT(!className.isEmpty());
   return ensureInvalidationSet(m_classInvalidationSets, className, type);
 }
 
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureAttributeInvalidationSet(
     const AtomicString& attributeName,
     InvalidationType type) {
-  DCHECK(!attributeName.isEmpty());
+  RELEASE_ASSERT(!attributeName.isEmpty());
   return ensureInvalidationSet(m_attributeInvalidationSets, attributeName,
                                type);
 }
@@ -289,14 +308,14 @@ ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureAttributeInvalidationSet(
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureIdInvalidationSet(
     const AtomicString& id,
     InvalidationType type) {
-  DCHECK(!id.isEmpty());
+  RELEASE_ASSERT(!id.isEmpty());
   return ensureInvalidationSet(m_idInvalidationSets, id, type);
 }
 
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensurePseudoInvalidationSet(
     CSSSelector::PseudoType pseudoType,
     InvalidationType type) {
-  DCHECK(pseudoType != CSSSelector::PseudoUnknown);
+  RELEASE_ASSERT(pseudoType != CSSSelector::PseudoUnknown);
   return ensureInvalidationSet(m_pseudoInvalidationSets, pseudoType, type);
 }
 
@@ -422,6 +441,8 @@ InvalidationSet* RuleFeatureSet::invalidationSetForSimpleSelector(
       case CSSSelector::PseudoOutOfRange:
       case CSSSelector::PseudoUnresolved:
       case CSSSelector::PseudoDefined:
+      case CSSSelector::PseudoVideoPersistent:
+      case CSSSelector::PseudoVideoPersistentAncestor:
         return &ensurePseudoInvalidationSet(selector.getPseudoType(), type);
       case CSSSelector::PseudoFirstOfType:
       case CSSSelector::PseudoLastOfType:
@@ -467,8 +488,7 @@ void RuleFeatureSet::updateInvalidationSets(const RuleData& ruleData) {
   const CSSSelector* nextCompound =
       lastInCompound ? lastInCompound->tagHistory() : &ruleData.selector();
   if (!nextCompound) {
-    if (!features.hasFeaturesForRuleSetInvalidation)
-      m_metadata.needsFullRecalcForRuleSetInvalidation = true;
+    updateRuleSetInvalidation(features);
     return;
   }
   if (lastInCompound)
@@ -476,9 +496,28 @@ void RuleFeatureSet::updateInvalidationSets(const RuleData& ruleData) {
                                  siblingFeatures, features);
 
   addFeaturesToInvalidationSets(*nextCompound, siblingFeatures, features);
+  updateRuleSetInvalidation(features);
+}
 
-  if (!features.hasFeaturesForRuleSetInvalidation)
+void RuleFeatureSet::updateRuleSetInvalidation(
+    const InvalidationSetFeatures& features) {
+  if (features.hasFeaturesForRuleSetInvalidation)
+    return;
+  if (features.forceSubtree ||
+      (!features.customPseudoElement && features.tagNames.isEmpty())) {
     m_metadata.needsFullRecalcForRuleSetInvalidation = true;
+    return;
+  }
+
+  ensureTypeRuleInvalidationSet();
+
+  if (features.customPseudoElement) {
+    m_typeRuleInvalidationSet->setCustomPseudoInvalid();
+    m_typeRuleInvalidationSet->setTreeBoundaryCrossing();
+  }
+
+  for (auto tagName : features.tagNames)
+    m_typeRuleInvalidationSet->addTagName(tagName);
 }
 
 void RuleFeatureSet::updateInvalidationSetsForContentAttribute(
@@ -608,7 +647,7 @@ const CSSSelector* RuleFeatureSet::extractInvalidationSetFeaturesFromCompound(
     if (!simpleSelector->tagHistory() ||
         simpleSelector->relation() != CSSSelector::SubSelector) {
       features.hasFeaturesForRuleSetInvalidation =
-          features.hasTagIdClassOrAttribute();
+          features.hasIdClassOrAttribute();
       return simpleSelector;
     }
   }
@@ -767,6 +806,7 @@ void RuleFeatureSet::addFeaturesToInvalidationSets(
 
 RuleFeatureSet::SelectorPreMatch RuleFeatureSet::collectFeaturesFromRuleData(
     const RuleData& ruleData) {
+  RELEASE_ASSERT(m_isAlive);
   FeatureMetadata metadata;
   if (collectFeaturesFromSelector(ruleData.selector(), metadata) ==
       SelectorNeverMatches)
@@ -883,7 +923,9 @@ void RuleFeatureSet::FeatureMetadata::clear() {
 }
 
 void RuleFeatureSet::add(const RuleFeatureSet& other) {
-  DCHECK(&other != this);
+  RELEASE_ASSERT(m_isAlive);
+  RELEASE_ASSERT(other.m_isAlive);
+  RELEASE_ASSERT(&other != this);
   for (const auto& entry : other.m_classInvalidationSets)
     ensureInvalidationSet(m_classInvalidationSets, entry.key,
                           entry.value->type())
@@ -917,6 +959,7 @@ void RuleFeatureSet::add(const RuleFeatureSet& other) {
 }
 
 void RuleFeatureSet::clear() {
+  RELEASE_ASSERT(m_isAlive);
   m_siblingRules.clear();
   m_uncommonAttributeRules.clear();
   m_metadata.clear();
@@ -1128,6 +1171,22 @@ DescendantInvalidationSet& RuleFeatureSet::ensureNthInvalidationSet() {
   return *m_nthInvalidationSet;
 }
 
+void RuleFeatureSet::collectTypeRuleInvalidationSet(
+    InvalidationLists& invalidationLists,
+    ContainerNode& rootNode) const {
+  if (m_typeRuleInvalidationSet) {
+    invalidationLists.descendants.push_back(m_typeRuleInvalidationSet);
+    TRACE_SCHEDULE_STYLE_INVALIDATION(rootNode, *m_typeRuleInvalidationSet,
+                                      ruleSetInvalidation);
+  }
+}
+
+DescendantInvalidationSet& RuleFeatureSet::ensureTypeRuleInvalidationSet() {
+  if (!m_typeRuleInvalidationSet)
+    m_typeRuleInvalidationSet = DescendantInvalidationSet::create();
+  return *m_typeRuleInvalidationSet;
+}
+
 void RuleFeatureSet::addFeaturesToUniversalSiblingInvalidationSet(
     const InvalidationSetFeatures& siblingFeatures,
     const InvalidationSetFeatures& descendantFeatures) {
@@ -1147,8 +1206,6 @@ void RuleFeatureSet::addFeaturesToUniversalSiblingInvalidationSet(
 DEFINE_TRACE(RuleFeatureSet) {
   visitor->trace(m_siblingRules);
   visitor->trace(m_uncommonAttributeRules);
-  visitor->trace(m_viewportDependentMediaQueryResults);
-  visitor->trace(m_deviceDependentMediaQueryResults);
 }
 
 void RuleFeatureSet::InvalidationSetFeatures::add(
@@ -1174,9 +1231,8 @@ bool RuleFeatureSet::InvalidationSetFeatures::hasFeatures() const {
          !tagNames.isEmpty() || customPseudoElement;
 }
 
-bool RuleFeatureSet::InvalidationSetFeatures::hasTagIdClassOrAttribute() const {
-  return !classes.isEmpty() || !attributes.isEmpty() || !ids.isEmpty() ||
-         !tagNames.isEmpty();
+bool RuleFeatureSet::InvalidationSetFeatures::hasIdClassOrAttribute() const {
+  return !classes.isEmpty() || !attributes.isEmpty() || !ids.isEmpty();
 }
 
 }  // namespace blink

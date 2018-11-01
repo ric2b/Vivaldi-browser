@@ -39,6 +39,7 @@ class BluetoothTestMac : public BluetoothTestBase {
   void InitWithDefaultAdapter() override;
   void InitWithoutDefaultAdapter() override;
   void InitWithFakeAdapter() override;
+  void ResetEventCounts() override;
   BluetoothDevice* SimulateLowEnergyDevice(int device_ordinal) override;
   void SimulateConnectedLowEnergyDevice(
       ConnectedDeviceType device_ordinal) override;
@@ -73,12 +74,19 @@ class BluetoothTestMac : public BluetoothTestBase {
   void SimulateGattNotifySessionStartError(
       BluetoothRemoteGattCharacteristic* characteristic,
       BluetoothRemoteGattService::GattErrorCode error_code) override;
+  void SimulateGattNotifySessionStopped(
+      BluetoothRemoteGattCharacteristic* characteristic) override;
+  void SimulateGattNotifySessionStopError(
+      BluetoothRemoteGattCharacteristic* characteristic,
+      BluetoothRemoteGattService::GattErrorCode error_code) override;
   void SimulateGattCharacteristicChanged(
       BluetoothRemoteGattCharacteristic* characteristic,
       const std::vector<uint8_t>& value) override;
   void SimulateGattCharacteristicRemoved(
       BluetoothRemoteGattService* service,
       BluetoothRemoteGattCharacteristic* characteristic) override;
+  void ExpectedChangeNotifyValueAttempts(int attempts) override;
+  void ExpectedNotifyValue(NotifyValueState expected_value_state) override;
 
   // Callback for the bluetooth central manager mock.
   void OnFakeBluetoothDeviceConnectGattCalled();
@@ -88,7 +96,7 @@ class BluetoothTestMac : public BluetoothTestBase {
   void OnFakeBluetoothServiceDiscovery();
   void OnFakeBluetoothCharacteristicReadValue();
   void OnFakeBluetoothCharacteristicWriteValue(std::vector<uint8_t> value);
-  void OnFakeBluetoothGattSetCharacteristicNotification();
+  void OnFakeBluetoothGattSetCharacteristicNotification(bool notify_value);
 
   // Returns the service UUIDs used to retrieve connected peripherals.
   BluetoothDevice::UUIDSet RetrieveConnectedPeripheralServiceUUIDs();
@@ -113,6 +121,9 @@ class BluetoothTestMac : public BluetoothTestBase {
 
   BluetoothAdapterMac* adapter_mac_ = nullptr;
   std::unique_ptr<ScopedMockCentralManager> mock_central_manager_;
+
+  // Value set by -[CBPeripheral setNotifyValue:forCharacteristic:] call.
+  bool last_notify_value_ = false;
 };
 
 // Defines common test fixture name. Use TEST_F(BluetoothTest, YourTestName).

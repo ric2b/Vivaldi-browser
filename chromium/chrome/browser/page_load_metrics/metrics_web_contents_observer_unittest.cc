@@ -99,7 +99,7 @@ class FilteringPageLoadMetricsObserver : public PageLoadMetricsObserver {
 
   void OnComplete(const PageLoadTiming& timing,
                   const PageLoadExtraInfo& extra_info) override {
-    completed_filtered_urls_->push_back(extra_info.committed_url);
+    completed_filtered_urls_->push_back(extra_info.url);
   }
 
  private:
@@ -279,7 +279,7 @@ TEST_F(MetricsWebContentsObserverTest, NotInMainFrame) {
   ASSERT_EQ(0, CountUpdatedTimingReported());
   ASSERT_EQ(1, CountCompleteTimingReported());
   ASSERT_EQ(1, CountEmptyCompleteTimingReported());
-  CheckErrorEvent(ERR_IPC_FROM_WRONG_FRAME, 1);
+  CheckErrorEvent(ERR_TIMING_IPC_FROM_SUBFRAME, 1);
   CheckErrorEvent(ERR_NO_IPCS_RECEIVED, 1);
   CheckTotalErrorEvents();
 }
@@ -368,7 +368,7 @@ TEST_F(MetricsWebContentsObserverTest, NotInMainError) {
   subframe_tester->SimulateNavigationStart(GURL(kDefaultTestUrl2));
   subframe_tester->SimulateNavigationCommit(GURL(kDefaultTestUrl2));
   SimulateTimingUpdate(timing, subframe);
-  CheckErrorEvent(ERR_IPC_FROM_WRONG_FRAME, 1);
+  CheckErrorEvent(ERR_TIMING_IPC_FROM_SUBFRAME, 1);
   CheckTotalErrorEvents();
   ASSERT_EQ(0, CountUpdatedTimingReported());
   ASSERT_EQ(0, CountCompleteTimingReported());

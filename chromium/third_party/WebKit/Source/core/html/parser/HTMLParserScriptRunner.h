@@ -28,9 +28,9 @@
 
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "core/dom/PendingScript.h"
-#include "core/fetch/ResourceClient.h"
 #include "core/html/parser/HTMLParserReentryPermit.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/ResourceClient.h"
 #include "wtf/Deque.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/TextPosition.h"
@@ -107,12 +107,16 @@ class HTMLParserScriptRunner final
 
   void requestParsingBlockingScript(Element*);
   void requestDeferredScript(Element*);
-  bool requestPendingScript(PendingScript*, Element*) const;
+  PendingScript* requestPendingScript(Element*) const;
 
   // Processes the provided script element, but does not execute any
   // parsing-blocking scripts that may remain after execution.
   void processScriptElementInternal(Element*,
                                     const TextPosition& scriptStartPosition);
+
+  const PendingScript* parserBlockingScript() const {
+    return m_parserBlockingScript;
+  }
 
   bool isParserBlockingScriptReady();
 
@@ -121,8 +125,11 @@ class HTMLParserScriptRunner final
   RefPtr<HTMLParserReentryPermit> m_reentryPermit;
   Member<Document> m_document;
   Member<HTMLParserScriptRunnerHost> m_host;
+
+  // https://html.spec.whatwg.org/#pending-parsing-blocking-script
   Member<PendingScript> m_parserBlockingScript;
-  // http://www.whatwg.org/specs/web-apps/current-work/#list-of-scripts-that-will-execute-when-the-document-has-finished-parsing
+
+  // https://html.spec.whatwg.org/#list-of-scripts-that-will-execute-when-the-document-has-finished-parsing
   HeapDeque<Member<PendingScript>> m_scriptsToExecuteAfterParsing;
 };
 

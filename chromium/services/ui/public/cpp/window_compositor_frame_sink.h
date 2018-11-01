@@ -10,8 +10,8 @@
 #include "cc/output/compositor_frame_sink.h"
 #include "cc/output/context_provider.h"
 #include "cc/scheduler/begin_frame_source.h"
+#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface_id.h"
-#include "cc/surfaces/surface_id_allocator.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace ui {
@@ -39,8 +39,6 @@ class WindowCompositorFrameSink
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
 
  private:
-  friend class Window;
-
   WindowCompositorFrameSink(
       const cc::FrameSinkId& frame_sink_id,
       scoped_refptr<cc::ContextProvider> context_provider,
@@ -52,14 +50,16 @@ class WindowCompositorFrameSink
   void DidReceiveCompositorFrameAck() override;
   void OnBeginFrame(const cc::BeginFrameArgs& begin_frame_args) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface() override;
+  void WillDrawSurface(const cc::LocalSurfaceId& local_surface_id,
+                       const gfx::Rect& damage_rect) override;
 
   // cc::ExternalBeginFrameSourceClient implementation.
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
+  void OnDidFinishFrame(const cc::BeginFrameAck& ack) override;
 
   gfx::Size last_submitted_frame_size_;
-  cc::LocalFrameId local_frame_id_;
-  cc::SurfaceIdAllocator id_allocator_;
+  cc::LocalSurfaceId local_surface_id_;
+  cc::LocalSurfaceIdAllocator id_allocator_;
   std::unique_ptr<cc::ExternalBeginFrameSource> begin_frame_source_;
   cc::mojom::MojoCompositorFrameSinkPtrInfo compositor_frame_sink_info_;
   cc::mojom::MojoCompositorFrameSinkClientRequest client_request_;
@@ -74,7 +74,7 @@ class WindowCompositorFrameSink
 
 // A WindowCompositorFrameSinkBinding is a bundle of mojo interfaces that is
 // created by WindowCompositorFrameSink::Create and is used by or implemented by
-// Mus when passed into Window::AttachCompositorFrameSink.
+// Mus when a window is attached to a frame-sink..
 // WindowCompositorFrameSinkBinding has no standalone functionality. Its purpose
 // is to allow safely creating and attaching a CompositorFrameSink on one
 // thread and using it on another.
@@ -82,8 +82,10 @@ class WindowCompositorFrameSinkBinding {
  public:
   ~WindowCompositorFrameSinkBinding();
 
+  cc::mojom::MojoCompositorFrameSinkRequest TakeFrameSinkRequest();
+  cc::mojom::MojoCompositorFrameSinkClientPtrInfo TakeFrameSinkClient();
+
  private:
-  friend class Window;
   friend class WindowCompositorFrameSink;
 
   WindowCompositorFrameSinkBinding(

@@ -127,7 +127,7 @@ class CC_EXPORT LayerTreeHostCommon {
       CalcDrawPropsImplInputsForTesting* inputs);
 
   template <typename Function>
-  static void CallFunctionForEveryLayer(LayerTree* layer,
+  static void CallFunctionForEveryLayer(LayerTreeHost* host,
                                         const Function& function);
 
   template <typename Function>
@@ -161,21 +161,6 @@ class CC_EXPORT LayerTreeHostCommon {
   };
 };
 
-// A container for the state that was reported to the main thread during
-// BeginMainFrame, but could not be applied/resolved on the main thread.
-struct CC_EXPORT ReflectedMainFrameState {
-  struct ScrollUpdate {
-    int layer_id = Layer::LayerIdLabels::INVALID_ID;
-    gfx::Vector2dF scroll_delta;
-  };
-
-  ReflectedMainFrameState();
-  ~ReflectedMainFrameState();
-
-  std::vector<ScrollUpdate> scrolls;
-  float page_scale_delta;
-};
-
 struct CC_EXPORT ScrollAndScaleSet {
   ScrollAndScaleSet();
   ~ScrollAndScaleSet();
@@ -198,7 +183,7 @@ struct CC_EXPORT ScrollAndScaleSet {
 };
 
 template <typename Function>
-void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTree* host,
+void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeHost* host,
                                                     const Function& function) {
   for (auto* layer : *host) {
     function(layer);

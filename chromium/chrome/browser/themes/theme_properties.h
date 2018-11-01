@@ -40,12 +40,7 @@ class ThemeProperties {
     COLOR_NTP_BACKGROUND,
     COLOR_NTP_TEXT,
     COLOR_NTP_LINK,
-    COLOR_NTP_LINK_UNDERLINE,
     COLOR_NTP_HEADER,
-    COLOR_NTP_SECTION,
-    COLOR_NTP_SECTION_TEXT,
-    COLOR_NTP_SECTION_LINK,
-    COLOR_NTP_SECTION_LINK_UNDERLINE,
     COLOR_BUTTON_BACKGROUND,
 
     TINT_BUTTONS,
@@ -84,6 +79,9 @@ class ThemeProperties {
   // OverwritableByUserThemeProperties.
   enum NotOverwritableByUserThemeProperty {
     COLOR_CONTROL_BACKGROUND = 1000,
+
+    // The color of the border drawn around the location bar.
+    COLOR_LOCATION_BAR_BORDER,
 
     // The color of the line separating the bottom of the toolbar from the
     // contents.
@@ -124,10 +122,6 @@ class ThemeProperties {
 
     // These colors don't have constant default values. They are derived from
     // the runtime value of other colors.
-    COLOR_NTP_SECTION_HEADER_TEXT,
-    COLOR_NTP_SECTION_HEADER_TEXT_HOVER,
-    COLOR_NTP_SECTION_HEADER_RULE,
-    COLOR_NTP_SECTION_HEADER_RULE_LIGHT,
     COLOR_NTP_TEXT_LIGHT,
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     COLOR_SUPERVISED_USER_LABEL,

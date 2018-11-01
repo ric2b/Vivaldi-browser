@@ -84,7 +84,7 @@ enum RTCIceConnectionState {
     readonly attribute RTCIceConnectionState iceConnectionState;
     // readonly attribute boolean? canTrickleIceCandidates;
     // RTCConfiguration getConfiguration();
-    // void setConfiguration(RTCConfiguration configuration);
+    [CallWith=ScriptState, RaisesException] void setConfiguration(RTCConfiguration configuration);
     // TODO(guidou): close() should never throw an exception.
     [RaisesException] void close();
     attribute EventHandler onnegotiationneeded;
@@ -110,12 +110,12 @@ enum RTCIceConnectionState {
     // TODO(hbos): The spec has an optional |selector| argument that is not
     // supported yet. There is a discussion about what to do with it (clarify
     // spec, remove it or change it?): https://github.com/w3c/webrtc-stats/issues/116
-    [CallWith=ScriptState, RuntimeEnabled=RTCPeerConnectionNewGetStats] Promise<RTCStatsReport> getStats();
+    [CallWith=ScriptState] Promise<RTCStatsReport> getStats();
 
     // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
     // TODO(guidou): The label argument should have [TreatNullAs=EmptyString]
     // and be non-nullable.
-    [CallWith=ExecutionContext, RaisesException] RTCDataChannel createDataChannel(DOMString? label, optional Dictionary options);
+    [CallWith=ScriptState, RaisesException] RTCDataChannel createDataChannel(DOMString? label, optional Dictionary options);
     attribute EventHandler ondatachannel;
 
     // Certificate management
@@ -123,11 +123,10 @@ enum RTCIceConnectionState {
     [RaisesException, CallWith=ScriptState] static Promise<RTCCertificate> generateCertificate(AlgorithmIdentifier keygenAlgorithm);
 
     // Non-standard or removed from the spec:
-    [Measure, CallWith=ExecutionContext, RaisesException] void updateIce(optional RTCConfiguration configuration, optional Dictionary mediaConstraints);
     [Measure] sequence<MediaStream> getLocalStreams();
     [Measure] sequence<MediaStream> getRemoteStreams();
     [Measure] MediaStream getStreamById(DOMString streamId);
-    [Measure, CallWith=ExecutionContext, RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
+    [Measure, CallWith=ScriptState, RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
     [Measure, RaisesException] void removeStream(MediaStream? stream);
     [Measure, RaisesException] RTCDTMFSender createDTMFSender(MediaStreamTrack track);
     attribute EventHandler onaddstream;

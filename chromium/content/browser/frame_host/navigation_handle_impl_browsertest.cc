@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/weak_ptr.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
@@ -29,15 +30,6 @@ class NavigationHandleObserver : public WebContentsObserver {
   NavigationHandleObserver(WebContents* web_contents,
                            const GURL& expected_start_url)
       : WebContentsObserver(web_contents),
-        handle_(nullptr),
-        has_committed_(false),
-        is_error_(false),
-        is_main_frame_(false),
-        is_parent_main_frame_(false),
-        is_renderer_initiated_(true),
-        is_same_page_(false),
-        was_redirected_(false),
-        frame_tree_node_id_(-1),
         page_transition_(ui::PAGE_TRANSITION_LINK),
         expected_start_url_(expected_start_url) {}
 
@@ -70,6 +62,7 @@ class NavigationHandleObserver : public WebContentsObserver {
     DCHECK_EQ(frame_tree_node_id_, navigation_handle->GetFrameTreeNodeId());
 
     was_redirected_ = navigation_handle->WasServerRedirect();
+    net_error_code_ = navigation_handle->GetNetErrorCode();
 
     if (navigation_handle->HasCommitted()) {
       has_committed_ = true;
@@ -100,22 +93,25 @@ class NavigationHandleObserver : public WebContentsObserver {
 
   ui::PageTransition page_transition() { return page_transition_; }
 
+  net::Error net_error_code() { return net_error_code_; }
+
  private:
   // A reference to the NavigationHandle so this class will track only
   // one navigation at a time. It is set at DidStartNavigation and cleared
   // at DidFinishNavigation before the NavigationHandle is destroyed.
-  NavigationHandle* handle_;
-  bool has_committed_;
-  bool is_error_;
-  bool is_main_frame_;
-  bool is_parent_main_frame_;
-  bool is_renderer_initiated_;
-  bool is_same_page_;
-  bool was_redirected_;
-  int frame_tree_node_id_;
-  ui::PageTransition page_transition_;
+  NavigationHandle* handle_ = nullptr;
+  bool has_committed_ = false;
+  bool is_error_ = false;
+  bool is_main_frame_ = false;
+  bool is_parent_main_frame_ = false;
+  bool is_renderer_initiated_ = true;
+  bool is_same_page_ = false;
+  bool was_redirected_ = false;
+  int frame_tree_node_id_ = -1;
+  ui::PageTransition page_transition_ = ui::PAGE_TRANSITION_LINK;
   GURL expected_start_url_;
   GURL last_committed_url_;
+  net::Error net_error_code_ = net::OK;
 };
 
 // A test NavigationThrottle that will return pre-determined checks and run
@@ -185,7 +181,7 @@ class TestNavigationThrottle : public NavigationThrottle {
   base::Closure did_call_will_start_;
   base::Closure did_call_will_redirect_;
   base::Closure did_call_will_process_;
-  RequestContextType request_context_type_;
+  RequestContextType request_context_type_ = REQUEST_CONTEXT_TYPE_UNSPECIFIED;
 };
 
 // Install a TestNavigationThrottle on all following requests and allows waiting
@@ -203,11 +199,8 @@ class TestNavigationThrottleInstaller : public WebContentsObserver {
         will_start_result_(will_start_result),
         will_redirect_result_(will_redirect_result),
         will_process_result_(will_process_result),
-        will_start_called_(0),
-        will_redirect_called_(0),
-        will_process_called_(0),
-        navigation_throttle_(nullptr) {}
-  ~TestNavigationThrottleInstaller() override{};
+        weak_factory_(this) {}
+  ~TestNavigationThrottleInstaller() override {}
 
   TestNavigationThrottle* navigation_throttle() { return navigation_throttle_; }
 
@@ -239,18 +232,21 @@ class TestNavigationThrottleInstaller : public WebContentsObserver {
   int will_redirect_called() { return will_redirect_called_; }
   int will_process_called() { return will_process_called_; }
 
+  int install_count() { return install_count_; }
+
  private:
   void DidStartNavigation(NavigationHandle* handle) override {
     std::unique_ptr<NavigationThrottle> throttle(new TestNavigationThrottle(
         handle, will_start_result_, will_redirect_result_, will_process_result_,
         base::Bind(&TestNavigationThrottleInstaller::DidCallWillStartRequest,
-                   base::Unretained(this)),
+                   weak_factory_.GetWeakPtr()),
         base::Bind(&TestNavigationThrottleInstaller::DidCallWillRedirectRequest,
-                   base::Unretained(this)),
+                   weak_factory_.GetWeakPtr()),
         base::Bind(&TestNavigationThrottleInstaller::DidCallWillProcessResponse,
-                   base::Unretained(this))));
+                   weak_factory_.GetWeakPtr())));
     navigation_throttle_ = static_cast<TestNavigationThrottle*>(throttle.get());
     handle->RegisterThrottleForTesting(std::move(throttle));
+    ++install_count_;
   }
 
   void DidFinishNavigation(NavigationHandle* handle) override {
@@ -282,13 +278,18 @@ class TestNavigationThrottleInstaller : public WebContentsObserver {
   NavigationThrottle::ThrottleCheckResult will_start_result_;
   NavigationThrottle::ThrottleCheckResult will_redirect_result_;
   NavigationThrottle::ThrottleCheckResult will_process_result_;
-  int will_start_called_;
-  int will_redirect_called_;
-  int will_process_called_;
-  TestNavigationThrottle* navigation_throttle_;
+  int will_start_called_ = 0;
+  int will_redirect_called_ = 0;
+  int will_process_called_ = 0;
+  TestNavigationThrottle* navigation_throttle_ = nullptr;
+  int install_count_ = 0;
   scoped_refptr<MessageLoopRunner> will_start_loop_runner_;
   scoped_refptr<MessageLoopRunner> will_redirect_loop_runner_;
   scoped_refptr<MessageLoopRunner> will_process_loop_runner_;
+
+  // The throttle installer can be deleted before all tasks posted by its
+  // throttles are run, so it must be referenced via weak pointers.
+  base::WeakPtrFactory<TestNavigationThrottleInstaller> weak_factory_;
 };
 
 // Records all navigation start URLs from the WebContents.
@@ -731,36 +732,32 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
   TestNavigationManager b_manager(shell()->web_contents(), b_url);
   TestNavigationManager c_manager(shell()->web_contents(), c_url);
   NavigationStartUrlRecorder url_recorder(shell()->web_contents());
-  TestNavigationThrottle* previous_throttle = nullptr;
 
   // Starts and verifies the main frame navigation.
   shell()->LoadURL(main_url);
   EXPECT_TRUE(main_manager.WaitForRequestStart());
-  // The throttle should not be null.
-  EXPECT_NE(previous_throttle, installer.navigation_throttle());
+  // For each navigation a new throttle should have been installed.
+  EXPECT_EQ(1, installer.install_count());
   // Checks the only URL recorded so far is the one expected for the main frame.
   EXPECT_EQ(main_url, url_recorder.urls().back());
   EXPECT_EQ(1ul, url_recorder.urls().size());
   // Checks the main frame RequestContextType.
   EXPECT_EQ(REQUEST_CONTEXT_TYPE_LOCATION,
             installer.navigation_throttle()->request_context_type());
-  // For each navigations the throttle should be a different instance.
-  previous_throttle = installer.navigation_throttle();
 
   // Ditto for frame b navigation.
   main_manager.WaitForNavigationFinished();
   EXPECT_TRUE(b_manager.WaitForRequestStart());
-  EXPECT_NE(previous_throttle, installer.navigation_throttle());
+  EXPECT_EQ(2, installer.install_count());
   EXPECT_EQ(b_url, url_recorder.urls().back());
   EXPECT_EQ(2ul, url_recorder.urls().size());
   EXPECT_EQ(REQUEST_CONTEXT_TYPE_LOCATION,
             installer.navigation_throttle()->request_context_type());
-  previous_throttle = installer.navigation_throttle();
 
   // Ditto for frame c navigation.
   b_manager.WaitForNavigationFinished();
   EXPECT_TRUE(c_manager.WaitForRequestStart());
-  EXPECT_NE(previous_throttle, installer.navigation_throttle());
+  EXPECT_EQ(3, installer.install_count());
   EXPECT_EQ(c_url, url_recorder.urls().back());
   EXPECT_EQ(3ul, url_recorder.urls().size());
   EXPECT_EQ(REQUEST_CONTEXT_TYPE_LOCATION,
@@ -841,6 +838,71 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
   EXPECT_FALSE(installer.navigation_throttle());
 }
 
+// Checks that the error code is properly set on the NavigationHandle when a
+// NavigationThrottle cancels.
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
+                       ErrorCodeOnThrottleCancelNavigation) {
+  const GURL kUrl = embedded_test_server()->GetURL("/title1.html");
+  const GURL kRedirectingUrl =
+      embedded_test_server()->GetURL("/server-redirect?" + kUrl.spec());
+
+  {
+    // Set up a NavigationThrottle that will cancel the navigation in
+    // WillStartRequest.
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::CANCEL_AND_IGNORE,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), kUrl);
+
+    // Try to navigate to the url. The navigation should be canceled and the
+    // NavigationHandle should have the right error code.
+    EXPECT_FALSE(NavigateToURL(shell(), kUrl));
+    EXPECT_EQ(net::ERR_ABORTED, observer.net_error_code());
+  }
+
+  {
+    // Set up a NavigationThrottle that will cancel the navigation in
+    // WillRedirectRequest.
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::CANCEL_AND_IGNORE, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), kRedirectingUrl);
+
+    // Try to navigate to the url. The navigation should be canceled and the
+    // NavigationHandle should have the right error code.
+    EXPECT_FALSE(NavigateToURL(shell(), kRedirectingUrl));
+    EXPECT_EQ(net::ERR_ABORTED, observer.net_error_code());
+  }
+
+  {
+    // Set up a NavigationThrottle that will cancel the navigation in
+    // WillProcessResponse.
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::PROCEED, NavigationThrottle::CANCEL_AND_IGNORE);
+    NavigationHandleObserver observer(shell()->web_contents(), kUrl);
+
+    // Try to navigate to the url. The navigation should be canceled and the
+    // NavigationHandle should have the right error code.
+    EXPECT_FALSE(NavigateToURL(shell(), kUrl));
+    EXPECT_EQ(net::ERR_ABORTED, observer.net_error_code());
+  }
+
+  {
+    // Set up a NavigationThrottle that will block the navigation in
+    // WillStartRequest.
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::BLOCK_REQUEST,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), kUrl);
+
+    // Try to navigate to the url. The navigation should be canceled and the
+    // NavigationHandle should have the right error code.
+    EXPECT_FALSE(NavigateToURL(shell(), kUrl));
+    EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, observer.net_error_code());
+  }
+}
+
 // Specialized test that verifies the NavigationHandle gets the HTTPS upgraded
 // URL from the very beginning of the navigation.
 class NavigationHandleImplHttpsUpgradeBrowserTest
@@ -902,6 +964,75 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplHttpsUpgradeBrowserTest,
   GURL cross_site_iframe_secure_url("https://other.com/title1.html");
 
   CheckHttpsUpgradedIframeNavigation(start_url, cross_site_iframe_secure_url);
+}
+
+// Ensure that browser-initiated same-document navigations are detected and
+// don't issue network requests.  See crbug.com/663777.
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
+                       SamePageBrowserInitiatedNoReload) {
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  GURL url_fragment_1(embedded_test_server()->GetURL("/title1.html#id_1"));
+  GURL url_fragment_2(embedded_test_server()->GetURL("/title1.html#id_2"));
+
+  // 1) Perform a new-document navigation.
+  {
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), url);
+    EXPECT_TRUE(NavigateToURL(shell(), url));
+    EXPECT_EQ(1, installer.will_start_called());
+    EXPECT_EQ(1, installer.will_process_called());
+    EXPECT_FALSE(observer.is_same_page());
+  }
+
+  // 2) Perform a same-document navigation by adding a fragment.
+  {
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), url_fragment_1);
+    EXPECT_TRUE(NavigateToURL(shell(), url_fragment_1));
+    EXPECT_EQ(0, installer.will_start_called());
+    EXPECT_EQ(0, installer.will_process_called());
+    EXPECT_TRUE(observer.is_same_page());
+  }
+
+  // 3) Perform a same-document navigation by modifying the fragment.
+  {
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), url_fragment_2);
+    EXPECT_TRUE(NavigateToURL(shell(), url_fragment_2));
+    EXPECT_EQ(0, installer.will_start_called());
+    EXPECT_EQ(0, installer.will_process_called());
+    EXPECT_TRUE(observer.is_same_page());
+  }
+
+  // 4) Redo the last navigation, but this time it should trigger a reload.
+  {
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), url_fragment_2);
+    EXPECT_TRUE(NavigateToURL(shell(), url_fragment_2));
+    EXPECT_EQ(1, installer.will_start_called());
+    EXPECT_EQ(1, installer.will_process_called());
+    EXPECT_FALSE(observer.is_same_page());
+  }
+
+  // 5) Perform a new-document navigation by removing the fragment.
+  {
+    TestNavigationThrottleInstaller installer(
+        shell()->web_contents(), NavigationThrottle::PROCEED,
+        NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+    NavigationHandleObserver observer(shell()->web_contents(), url);
+    EXPECT_TRUE(NavigateToURL(shell(), url));
+    EXPECT_EQ(1, installer.will_start_called());
+    EXPECT_EQ(1, installer.will_process_called());
+    EXPECT_FALSE(observer.is_same_page());
+  }
 }
 
 }  // namespace content

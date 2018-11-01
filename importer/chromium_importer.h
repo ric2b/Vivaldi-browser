@@ -1,32 +1,31 @@
 // Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
 
-#include "chrome/utility/importer/importer.h"
-#include "chrome/common/importer/importer_data_types.h"
+#ifndef IMPORTER_CHROMIUM_IMPORTER_H_
+#define IMPORTER_CHROMIUM_IMPORTER_H_
+
+#include <vector>
+
 #include "base/values.h"
-#include "components/autofill/core/common/password_form.h"
+#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/importer/importer_url_row.h"
-
-#ifndef  VIVALDI_CHROMIUM_IMPORTER_H_
-#define VIVALDI_CHROMIUM_IMPORTER_H_
-
+#include "chrome/utility/importer/importer.h"
+#include "components/autofill/core/common/password_form.h"
 
 class ImportedNoteEntry;
 
-class ChromiumImporter : public Importer
-{
+class ChromiumImporter : public Importer {
  public:
-   ChromiumImporter();
-   ChromiumImporter(const importer::ImportConfig &import_config);
-   void ImportPasswords();
+  ChromiumImporter();
+  explicit ChromiumImporter(const importer::ImportConfig& import_config);
+  void ImportPasswords();
 
-   // Importer
-   void StartImport(const importer::SourceProfile& source_profile,
-    uint16_t items,
-    ImporterBridge* bridge) override;
-
+  // Importer
+  void StartImport(const importer::SourceProfile& source_profile,
+                   uint16_t items,
+                   ImporterBridge* bridge) override;
 
  protected:
-   ~ChromiumImporter() override;
+  ~ChromiumImporter() override;
 
  private:
   base::FilePath profile_dir_;
@@ -34,12 +33,12 @@ class ChromiumImporter : public Importer
   void ImportBookMarks();
   void ImportHistory();
   bool ReadAndParseSignons(const base::FilePath& sqlite_file,
-    std::vector<autofill::PasswordForm>* forms);
+                           std::vector<autofill::PasswordForm>* forms);
 
   bool ReadAndParseHistory(const base::FilePath& sqlite_file,
-    std::vector<ImporterURLRow>* forms);
+                           std::vector<ImporterURLRow>* forms);
 
   DISALLOW_COPY_AND_ASSIGN(ChromiumImporter);
 };
 
-#endif // VIVALDI_CHROMIUM_IMPORTER_H_
+#endif  // IMPORTER_CHROMIUM_IMPORTER_H_

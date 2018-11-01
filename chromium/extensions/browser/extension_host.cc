@@ -90,7 +90,7 @@ ExtensionHost::ExtensionHost(const Extension* extension,
   // recreating.
   if (vivaldi::IsVivaldiRunning() &&
       extension_host_type_ == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE) {
-    auto guest_view_manager =
+    auto* guest_view_manager =
         guest_view::GuestViewManager::FromBrowserContext(browser_context_);
     if (!guest_view_manager) {
       guest_view_manager = guest_view::GuestViewManager::CreateWithDelegate(
@@ -110,7 +110,7 @@ ExtensionHost::ExtensionHost(const Extension* extension,
               guest_create_params);
       // We don't need to clutter the taskmanager with this.
       task_manager::WebContentsTags::ClearTag(guest_content);
-      auto guest = WebViewGuest::FromWebContents(guest_content);
+      auto* guest = WebViewGuest::FromWebContents(guest_content);
       create_params.guest_delegate = guest;
     }
   }

@@ -6,6 +6,7 @@
 
 #include "base/critical_closure.h"
 #import "base/mac/bind_objc_block.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/metrics/metrics_service.h"
 #import "ios/chrome/app/main_application_delegate.h"
 #import "ios/chrome/app/application_delegate/app_navigation.h"
@@ -373,10 +374,11 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
       ->CancelDistributionNotifications();
 
   // Halt the tabs, so any outstanding requests get cleaned up, without actually
-  // closing the tabs.
+  // closing the tabs. Set the BVC to inactive to cancel all the dialogs.
   if ([_browserLauncher browserInitializationStage] >=
       INITIALIZATION_STAGE_FOREGROUND) {
     [[_browserLauncher browserViewInformation] haltAllTabs];
+    [_browserLauncher browserViewInformation].currentBVC.active = NO;
   }
 
   // TODO(crbug.com/585700): remove this.

@@ -22,7 +22,7 @@
 #include "components/physical_web/data_source/physical_web_data_source.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -117,8 +117,7 @@ CategoryInfo PhysicalWebPageSuggestionsProvider::GetCategoryInfo(
   return CategoryInfo(l10n_util::GetStringUTF16(
                           IDS_NTP_PHYSICAL_WEB_PAGE_SUGGESTIONS_SECTION_HEADER),
                       ContentSuggestionsCardLayout::FULL_CARD,
-                      /*has_more_action=*/false,
-                      /*has_reload_action=*/false,
+                      /*has_fetch_action=*/false,
                       /*has_view_all_action=*/false,
                       /*show_if_empty=*/false,
                       l10n_util::GetStringUTF16(

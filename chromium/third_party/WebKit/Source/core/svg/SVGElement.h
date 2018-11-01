@@ -58,6 +58,10 @@ class CORE_EXPORT SVGElement : public Element {
   int tabIndex() const override;
   bool supportsFocus() const override { return false; }
 
+  // The TreeScope this element should resolve id's against. This differs from
+  // the regular Node::treeScope() by taking <use> into account.
+  TreeScope& treeScopeForIdResolution() const;
+
   bool isOutermostSVGSVGElement() const;
 
   bool hasTagName(const SVGQualifiedName& name) const {
@@ -76,10 +80,9 @@ class CORE_EXPORT SVGElement : public Element {
 
   enum CTMScope {
     NearestViewportScope,  // Used by SVGGraphicsElement::getCTM()
-    ScreenScope,           // Used by SVGGraphicsElement::getScreenCTM()
     AncestorScope  // Used by SVGSVGElement::get{Enclosure|Intersection}List()
   };
-  virtual AffineTransform localCoordinateSpaceTransform(CTMScope) const;
+  virtual AffineTransform localCoordinateSpaceTransform() const;
   virtual bool needsPendingResourceHandling() const { return true; }
 
   bool instanceUpdatesBlocked() const;
@@ -144,6 +147,7 @@ class CORE_EXPORT SVGElement : public Element {
   void synchronizeAnimatedSVGAttribute(const QualifiedName&) const;
 
   PassRefPtr<ComputedStyle> customStyleForLayoutObject() final;
+  bool layoutObjectIsNeeded(const ComputedStyle&) override;
 
 #if DCHECK_IS_ON()
   virtual bool isAnimatableAttribute(const QualifiedName&) const;
@@ -230,6 +234,8 @@ class CORE_EXPORT SVGElement : public Element {
   static void markForLayoutAndParentResourceInvalidation(LayoutObject*);
 
   virtual bool selfHasRelativeLengths() const { return false; }
+
+  bool hasSVGParent() const;
 
   SVGElementRareData* ensureSVGRareData();
   inline bool hasSVGRareData() const { return m_SVGRareData; }

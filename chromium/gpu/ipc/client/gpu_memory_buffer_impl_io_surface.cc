@@ -21,6 +21,7 @@ uint32_t LockFlags(gfx::BufferUsage usage) {
       return kIOSurfaceLockAvoidSync;
     case gfx::BufferUsage::GPU_READ:
     case gfx::BufferUsage::SCANOUT:
+    case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
       return 0;
   }
@@ -116,15 +117,20 @@ void GpuMemoryBufferImplIOSurface::SetColorSpaceForScanout(
   if (color_space == color_space_)
     return;
   color_space_ = color_space;
-  std::vector<char> icc_profile =
-      gfx::ICCProfile::FromColorSpace(color_space).GetData();
-  if (icc_profile.size()) {
-    base::ScopedCFTypeRef<CFDataRef> cf_data_icc_profile(CFDataCreate(
-        nullptr, reinterpret_cast<const UInt8*>(icc_profile.data()),
-        icc_profile.size()));
-    IOSurfaceSetValue(io_surface_, CFSTR("IOSurfaceColorSpace"),
-                      cf_data_icc_profile);
+
+  // Retrieve the ICC profile data.
+  gfx::ICCProfile icc_profile;
+  if (!color_space_.GetICCProfile(&icc_profile)) {
+    DLOG(ERROR) << "Failed to set color space for scanout: no ICC profile.";
+    return;
   }
+
+  // Package it as a CFDataRef and send it to the IOSurface.
+  base::ScopedCFTypeRef<CFDataRef> cf_data_icc_profile(CFDataCreate(
+      nullptr, reinterpret_cast<const UInt8*>(icc_profile.GetData().data()),
+      icc_profile.GetData().size()));
+  IOSurfaceSetValue(io_surface_, CFSTR("IOSurfaceColorSpace"),
+                    cf_data_icc_profile);
 }
 
 gfx::GpuMemoryBufferHandle GpuMemoryBufferImplIOSurface::GetHandle() const {

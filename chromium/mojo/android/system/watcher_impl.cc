@@ -26,7 +26,7 @@ namespace {
 
 class WatcherImpl {
  public:
-  WatcherImpl() {}
+  WatcherImpl() : watcher_(FROM_HERE) {}
 
   ~WatcherImpl() = default;
 
@@ -85,7 +85,7 @@ static jint Start(JNIEnv* env,
                   jlong watcher_ptr,
                   jint mojo_handle,
                   jint signals) {
-  auto watcher = reinterpret_cast<WatcherImpl*>(watcher_ptr);
+  auto* watcher = reinterpret_cast<WatcherImpl*>(watcher_ptr);
   return watcher->Start(env, jcaller, mojo_handle, signals);
 }
 

@@ -23,7 +23,7 @@
 #include "media/base/timestamp_constants.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/filters/pass_through_decoder_texture.h"
+#include "platform_media/renderer/decoders/pass_through_decoder_texture.h"
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 namespace media {

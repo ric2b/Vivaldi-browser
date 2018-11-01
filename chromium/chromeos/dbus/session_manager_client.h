@@ -218,6 +218,10 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
       const std::string& policy_blob,
       const StorePolicyCallback& callback) = 0;
 
+  // Returns whether session manager can be used to restart Chrome in order to
+  // apply per-user session flags.
+  virtual bool SupportsRestartToApplyUserFlags() const = 0;
+
   // Sets the flags to be applied next time by the session manager when Chrome
   // is restarted inside an already started session for a particular user.
   virtual void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
@@ -274,14 +278,6 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // reached).
   virtual void StopArcInstance(const ArcCallback& callback) = 0;
 
-  // Deprecated. Use SetArcCpuRestriction() instead.
-  // TODO(yusukes): Remove the interface.
-  // Prioritizes the ARC instance by removing cgroups restrictions that
-  // session_manager applies to the instance by default. Upon completion,
-  // invokes |callback| with the result; true on success, false on failure.
-  // All calls after the first one will have no effect.
-  virtual void PrioritizeArcInstance(const ArcCallback& callback) = 0;
-
   // Adjusts the amount of CPU the ARC instance is allowed to use. When
   // |restriction_state| is CONTAINER_CPU_RESTRICTION_FOREGROUND the limit is
   // adjusted so ARC can use all the system's CPU if needed. When it is
@@ -294,7 +290,8 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
       const ArcCallback& callback) = 0;
 
   // Emits the "arc-booted" upstart signal.
-  virtual void EmitArcBooted() = 0;
+  virtual void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                             const ArcCallback& callback) = 0;
 
   // Asynchronously retrieves the timestamp which ARC instance is invoked or
   // returns false if there is no ARC instance or ARC is not available.

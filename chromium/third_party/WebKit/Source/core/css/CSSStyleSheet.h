@@ -47,6 +47,8 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   WTF_MAKE_NONCOPYABLE(CSSStyleSheet);
 
  public:
+  static const Document* singleOwnerDocument(const CSSStyleSheet*);
+
   static CSSStyleSheet* create(StyleSheetContents*,
                                CSSImportRule* ownerRule = nullptr);
   static CSSStyleSheet* create(StyleSheetContents*, Node& ownerNode);
@@ -98,8 +100,8 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
 
   void clearOwnerRule() { m_ownerRule = nullptr; }
   Document* ownerDocument() const;
-  const MediaQuerySet* mediaQueries() const { return m_mediaQueries; }
-  void setMediaQueries(MediaQuerySet*);
+  const MediaQuerySet* mediaQueries() const { return m_mediaQueries.get(); }
+  void setMediaQueries(RefPtr<MediaQuerySet>);
   bool matchesMediaQueries(const MediaQueryEvaluator&);
   const MediaQueryResultList& viewportDependentMediaQueryResults() const {
     return m_viewportDependentMediaQueryResults;
@@ -162,7 +164,7 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   bool m_isDisabled = false;
   bool m_loadCompleted = false;
   String m_title;
-  Member<MediaQuerySet> m_mediaQueries;
+  RefPtr<MediaQuerySet> m_mediaQueries;
   MediaQueryResultList m_viewportDependentMediaQueryResults;
   MediaQueryResultList m_deviceDependentMediaQueryResults;
 

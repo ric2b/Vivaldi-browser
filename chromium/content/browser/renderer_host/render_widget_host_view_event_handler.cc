@@ -35,6 +35,8 @@
 #include "ui/display/screen.h"
 #endif  // defined(OS_WIN)
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // In mouse lock mode, we need to prevent the (invisible) cursor from hitting
@@ -254,7 +256,11 @@ void RenderWidgetHostViewEventHandler::OnKeyEvent(ui::KeyEvent* event) {
     if (host_tracker_.get() && !host_tracker_->windows().empty()) {
       aura::Window* host = *(host_tracker_->windows().begin());
       aura::client::FocusClient* client = aura::client::GetFocusClient(host);
-      if (client) {
+      // NOTE(andre@vivaldi.com): the host_view here is not the originating
+      // AppWindow, and setting focus to it causes the focus state machine to
+      // fail. Leaving the edit caret hidden. This code is never reached in
+      // Chrome.
+      if (!vivaldi::IsVivaldiRunning() && client) {
         // Calling host->Focus() may delete |this|. We create a local observer
         // for that. In that case we exit without further access to any members.
         auto local_tracker = std::move(host_tracker_);
@@ -266,8 +272,8 @@ void RenderWidgetHostViewEventHandler::OnKeyEvent(ui::KeyEvent* event) {
         }
       }
     }
-    delegate_->Shutdown();
     host_tracker_.reset();
+    delegate_->Shutdown();
   } else {
     if (event->key_code() == ui::VKEY_RETURN) {
       // Do not forward return key release events if no press event was handled.
@@ -469,7 +475,8 @@ void RenderWidgetHostViewEventHandler::OnTouchEvent(ui::TouchEvent* event) {
 
   // Set unchanged touch point to StateStationary for touchmove and
   // touchcancel to make sure only send one ack per WebTouchEvent.
-  MarkUnchangedTouchPointsAsStationary(&touch_event, event->touch_id());
+  MarkUnchangedTouchPointsAsStationary(&touch_event,
+                                       event->pointer_details().id);
   if (ShouldRouteEvent(event)) {
     host_->delegate()->GetInputEventRouter()->RouteTouchEvent(
         host_view_, &touch_event, *event->latency());
@@ -638,16 +645,12 @@ void RenderWidgetHostViewEventHandler::HandleGestureForTouchSelection(
     ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_LONG_PRESS:
-      if (delegate_->selection_controller()->WillHandleLongPressEvent(
-              event->time_stamp(), event->location_f())) {
-        event->SetHandled();
-      }
+      delegate_->selection_controller()->HandleLongPressEvent(
+          event->time_stamp(), event->location_f());
       break;
     case ui::ET_GESTURE_TAP:
-      if (delegate_->selection_controller()->WillHandleTapEvent(
-              event->location_f(), event->details().tap_count())) {
-        event->SetHandled();
-      }
+      delegate_->selection_controller()->HandleTapEvent(
+          event->location_f(), event->details().tap_count());
       break;
     case ui::ET_GESTURE_SCROLL_BEGIN:
       delegate_->selection_controller_client()->OnScrollStarted();
@@ -694,8 +697,14 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
     blink::WebMouseWheelEvent mouse_wheel_event =
         ui::MakeWebMouseWheelEvent(static_cast<ui::MouseWheelEvent&>(*event),
                                    base::Bind(&GetScreenLocationFromEvent));
-    if (mouse_wheel_event.deltaX != 0 || mouse_wheel_event.deltaY != 0)
-      host_->ForwardWheelEvent(mouse_wheel_event);
+    if (mouse_wheel_event.deltaX != 0 || mouse_wheel_event.deltaY != 0) {
+      if (ShouldRouteEvent(event)) {
+        host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
+            host_view_, &mouse_wheel_event, *event->latency());
+      } else {
+        ProcessMouseWheelEvent(mouse_wheel_event, *event->latency());
+      }
+    }
     return;
   }
 
@@ -753,7 +762,12 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
     // Forward event to renderer.
     if (CanRendererHandleEvent(event, mouse_locked_, is_selection_popup) &&
         !(event->flags() & ui::EF_FROM_TOUCH)) {
-      host_->ForwardMouseEvent(mouse_event);
+      if (ShouldRouteEvent(event)) {
+        host_->delegate()->GetInputEventRouter()->RouteMouseEvent(
+            host_view_, &mouse_event, *event->latency());
+      } else {
+        ProcessMouseEvent(mouse_event, *event->latency());
+      }
       // Ensure that we get keyboard focus on mouse down as a plugin window
       // may have grabbed keyboard focus.
       if (event->type() == ui::ET_MOUSE_PRESSED)
@@ -842,10 +856,22 @@ bool RenderWidgetHostViewEventHandler::ShouldRouteEvent(
   //    in a similar manner to RenderWidgetHostViewGuest.
   bool result = host_->delegate() && host_->delegate()->GetInputEventRouter() &&
                 !disable_input_event_router_for_testing_;
+
+  // Do not route events that are currently targeted to page popups such as
+  // <select> element drop-downs, since these cannot contain cross-process
+  // frames.
+  if (host_->delegate() && !host_->delegate()->IsWidgetForMainFrame(host_))
+    return false;
+
   // ScrollEvents get transformed into MouseWheel events, and so are treated
   // the same as mouse events for routing purposes.
   if (event->IsMouseEvent() || event->type() == ui::ET_SCROLL)
-    result = result && SiteIsolationPolicy::AreCrossProcessFramesPossible();
+    result = result && SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
+  // NOTE(andre@vivaldi.com) : We still need to skip routing of mouse events in
+  // Vivaldi because of interstitial pages. See bug VB-26634. Also, any
+  // changes here should be made for mac as well in
+  // RenderWidgetHostViewMac::ShouldRouteEvent()
+      !vivaldi::IsVivaldiRunning();
   return result;
 }
 

@@ -35,6 +35,7 @@ using syncer::EntityDataMap;
 using syncer::MetadataChangeList;
 using syncer::ModelError;
 using syncer::ModelTypeChangeProcessor;
+using syncer::ModelTypeSyncBridge;
 using syncer::MutableDataBatch;
 
 namespace autofill {
@@ -57,15 +58,21 @@ void* UserDataKey() {
   return reinterpret_cast<void*>(&user_data_key);
 }
 
+std::string EscapeIdentifiers(const AutofillSpecifics& specifics) {
+  return net::EscapePath(specifics.name()) +
+         std::string(kAutocompleteTagDelimiter) +
+         net::EscapePath(specifics.value());
+}
+
 std::unique_ptr<EntityData> CreateEntityData(const AutofillEntry& entry) {
   auto entity_data = base::MakeUnique<EntityData>();
-  entity_data->non_unique_name = base::UTF16ToUTF8(entry.key().name());
   AutofillSpecifics* autofill = entity_data->specifics.mutable_autofill();
   autofill->set_name(base::UTF16ToUTF8(entry.key().name()));
   autofill->set_value(base::UTF16ToUTF8(entry.key().value()));
   autofill->add_usage_timestamp(entry.date_created().ToInternalValue());
   if (entry.date_created() != entry.date_last_used())
     autofill->add_usage_timestamp(entry.date_last_used().ToInternalValue());
+  entity_data->non_unique_name = EscapeIdentifiers(*autofill);
   return entity_data;
 }
 
@@ -143,17 +150,19 @@ class SyncDifferenceTracker {
       return ModelError(FROM_HERE, "Failed reading from WebDatabase.");
     } else if (!local) {
       save_to_local_.push_back(remote);
-    } else if (remote != local.value()) {
-      if (specifics.usage_timestamp().empty()) {
-        // Skip merging if there are no timestamps. We don't want to wipe out
-        // a local value of |date_created| if the remote copy is oddly formed.
-        save_to_sync_.push_back(local.value());
-      } else {
-        const AutofillEntry merged = MergeEntryDates(local.value(), remote);
-        save_to_local_.push_back(merged);
-        save_to_sync_.push_back(merged);
-      }
+    } else {
       unique_to_local_.erase(local.value());
+      if (remote != local.value()) {
+        if (specifics.usage_timestamp().empty()) {
+          // Skip merging if there are no timestamps. We don't want to wipe out
+          // a local value of |date_created| if the remote copy is oddly formed.
+          save_to_sync_.push_back(local.value());
+        } else {
+          const AutofillEntry merged = MergeEntryDates(local.value(), remote);
+          save_to_local_.push_back(merged);
+          save_to_sync_.push_back(merged);
+        }
+      }
     }
     return {};
   }
@@ -283,10 +292,11 @@ void AutocompleteSyncBridge::CreateForWebDataServiceAndBackend(
 }
 
 // static
-AutocompleteSyncBridge* AutocompleteSyncBridge::FromWebDataService(
+base::WeakPtr<ModelTypeSyncBridge> AutocompleteSyncBridge::FromWebDataService(
     AutofillWebDataService* web_data_service) {
   return static_cast<AutocompleteSyncBridge*>(
-      web_data_service->GetDBUserData()->GetUserData(UserDataKey()));
+             web_data_service->GetDBUserData()->GetUserData(UserDataKey()))
+      ->AsWeakPtr();
 }
 
 AutocompleteSyncBridge::AutocompleteSyncBridge(
@@ -318,8 +328,7 @@ Optional<syncer::ModelError> AutocompleteSyncBridge::MergeSyncData(
     EntityDataMap entity_data_map) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // TODO(skym, crbug.com/680218): Uncomment and add unit tests.
-  /*SyncDifferenceTracker tracker(GetAutofillTable());
+  SyncDifferenceTracker tracker(GetAutofillTable());
   for (auto kv : entity_data_map) {
     DCHECK(kv.second->specifics.has_autofill());
     RETURN_IF_ERROR(tracker.IncorporateRemoteSpecifics(
@@ -330,7 +339,7 @@ Optional<syncer::ModelError> AutocompleteSyncBridge::MergeSyncData(
   RETURN_IF_ERROR(tracker.FlushToSync(true, std::move(metadata_change_list),
                                 change_processor()));
   web_data_backend_->RemoveExpiredFormElements();
-  web_data_backend_->NotifyThatSyncHasStarted(syncer::AUTOFILL);*/
+  web_data_backend_->NotifyThatSyncHasStarted(syncer::AUTOFILL);
   return {};
 }
 
@@ -449,11 +458,8 @@ void AutocompleteSyncBridge::LoadMetadata() {
 std::string AutocompleteSyncBridge::GetClientTag(
     const EntityData& entity_data) {
   DCHECK(entity_data.specifics.has_autofill());
-  const AutofillSpecifics specifics = entity_data.specifics.autofill();
   return std::string(kAutocompleteEntryNamespaceTag) +
-         net::EscapePath(specifics.name()) +
-         std::string(kAutocompleteTagDelimiter) +
-         net::EscapePath(specifics.value());
+         EscapeIdentifiers(entity_data.specifics.autofill());
 }
 
 std::string AutocompleteSyncBridge::GetStorageKey(

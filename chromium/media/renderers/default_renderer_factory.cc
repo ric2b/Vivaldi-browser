@@ -30,16 +30,16 @@
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/pipeline_stats.h"
-#include "media/filters/ipc_demuxer.h"
-#include "media/filters/pass_through_audio_decoder.h"
-#include "media/filters/pass_through_video_decoder.h"
+#include "platform_media/common/pipeline_stats.h"
+#include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
+#include "platform_media/renderer/decoders/pass_through_video_decoder.h"
 #if defined(OS_MACOSX)
-#include "media/filters/at_audio_decoder.h"
+#include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
 #endif
 #if defined(OS_WIN)
-#include "media/filters/wmf_audio_decoder.h"
-#include "media/filters/wmf_video_decoder.h"
+#include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
+#include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
 #endif
 #endif
 
@@ -98,6 +98,8 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
   // Create our video decoders and renderer.
   ScopedVector<VideoDecoder> video_decoders;
 
+  // Prefer an external decoder since one will only exist if it is hardware
+  // accelerated.
   if (gpu_factories) {
     // |gpu_factories_| requires that its entry points be called on its
     // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
@@ -153,8 +155,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
     const RequestSurfaceCB& request_surface_cb,
-    bool use_platform_media_pipeline,
-    bool platform_pipeline_enlarges_buffers_on_underflow) {
+    bool use_platform_media_pipeline) {
   DCHECK(audio_renderer_sink);
 
   std::unique_ptr<AudioRenderer> audio_renderer(new AudioRendererImpl(

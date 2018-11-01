@@ -24,6 +24,8 @@
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/navigation_type.h"
+#include "content/public/browser/restore_type.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/request_context_type.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
@@ -76,12 +78,15 @@ class ServiceWorkerNavigationHandle;
 // the RenderFrameHost still apply.
 class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
  public:
+  // If |redirect_chain| is empty, then the redirect chain will be created to
+  // start with |url|. Otherwise |redirect_chain| is used as the starting point.
   // |navigation_start| comes from the DidStartProvisionalLoad IPC, which tracks
   // both renderer-initiated and browser-initiated navigation start.
   // PlzNavigate: This value always comes from the CommonNavigationParams
   // associated with this navigation.
   static std::unique_ptr<NavigationHandleImpl> Create(
       const GURL& url,
+      const std::vector<GURL>& redirect_chain,
       FrameTreeNode* frame_tree_node,
       bool is_renderer_initiated,
       bool is_same_page,
@@ -90,6 +95,21 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool started_from_context_menu);
   ~NavigationHandleImpl() override;
 
+  // Used to track the state the navigation is currently in.
+  enum State {
+    INITIAL = 0,
+    WILL_SEND_REQUEST,
+    DEFERRING_START,
+    WILL_REDIRECT_REQUEST,
+    DEFERRING_REDIRECT,
+    CANCELING,
+    WILL_PROCESS_RESPONSE,
+    DEFERRING_RESPONSE,
+    READY_TO_COMMIT,
+    DID_COMMIT,
+    DID_COMMIT_ERROR_PAGE,
+  };
+
   // NavigationHandle implementation:
   const GURL& GetURL() override;
   SiteInstance* GetStartingSiteInstance() override;
@@ -97,6 +117,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool IsParentMainFrame() override;
   bool IsRendererInitiated() override;
   bool WasServerRedirect() override;
+  const std::vector<GURL>& GetRedirectChain() override;
   int GetFrameTreeNodeId() override;
   int GetParentFrameTreeNodeId() override;
   const base::TimeTicks& NavigationStart() override;
@@ -110,6 +131,11 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool IsSamePage() override;
   bool HasCommitted() override;
   bool IsErrorPage() override;
+  bool HasSubframeNavigationEntryCommitted() override;
+  bool DidReplaceEntry() override;
+  bool ShouldUpdateHistory() override;
+  const GURL& GetPreviousURL() override;
+  net::HostPortPair GetSocketAddress() override;
   const net::HttpResponseHeaders* GetResponseHeaders() override;
   net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() override;
   void Resume() override;
@@ -135,9 +161,14 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool WasStartedFromContextMenu() const override;
   const GURL& GetSearchableFormURL() override;
   const std::string& GetSearchableFormEncoding() override;
+  ReloadType GetReloadType() override;
+  RestoreType GetRestoreType() override;
   const GlobalRequestID& GetGlobalRequestID() override;
 
   NavigationData* GetNavigationData() override;
+
+  // Used in tests.
+  State state_for_testing() const { return state_; }
 
   // The NavigatorDelegate to notify/query for various navigation events.
   // Normally this is the WebContents, except if this NavigationHandle was
@@ -274,9 +305,16 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // Called when the navigation was committed in |render_frame_host|. This will
   // update the |state_|.
+  // |navigation_entry_committed| indicates whether the navigation changed which
+  // NavigationEntry is current.
+  // |did_replace_entry| is true if the committed entry has replaced the
+  // existing one. A non-user initiated redirect causes such replacement.
   void DidCommitNavigation(
       const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
-      bool same_page,
+      bool navigation_entry_committed,
+      bool did_replace_entry,
+      const GURL& previous_url,
+      NavigationType navigation_type,
       RenderFrameHostImpl* render_frame_host);
 
   // Called during commit. Takes ownership of the embedder's NavigationData
@@ -295,30 +333,28 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     return navigation_ui_data_.get();
   }
 
+  const GURL& base_url() { return base_url_; }
+
   void set_searchable_form_url(const GURL& url) { searchable_form_url_ = url; }
   void set_searchable_form_encoding(const std::string& encoding) {
     searchable_form_encoding_ = encoding;
   }
 
+  NavigationType navigation_type() {
+    DCHECK_GE(state_, DID_COMMIT);
+    return navigation_type_;
+  }
+
+  void set_response_headers_for_testing(
+      scoped_refptr<net::HttpResponseHeaders> response_headers) {
+    response_headers_ = response_headers;
+  }
+
  private:
   friend class NavigationHandleImplTest;
 
-  // Used to track the state the navigation is currently in.
-  enum State {
-    INITIAL = 0,
-    WILL_SEND_REQUEST,
-    DEFERRING_START,
-    WILL_REDIRECT_REQUEST,
-    DEFERRING_REDIRECT,
-    CANCELING,
-    WILL_PROCESS_RESPONSE,
-    DEFERRING_RESPONSE,
-    READY_TO_COMMIT,
-    DID_COMMIT,
-    DID_COMMIT_ERROR_PAGE,
-  };
-
   NavigationHandleImpl(const GURL& url,
+                       const std::vector<GURL>& redirect_chain,
                        FrameTreeNode* frame_tree_node,
                        bool is_renderer_initiated,
                        bool is_same_page,
@@ -353,6 +389,11 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Populates |throttles_| with the throttles for this navigation.
   void RegisterNavigationThrottles();
 
+  // Checks for attempts to navigate to a page that is already referenced more
+  // than once in the frame's ancestors.  This is a helper function used by
+  // WillStartRequest and WillRedirectRequest to prevent the navigation.
+  bool IsSelfReferentialURL();
+
   // See NavigationHandle for a description of those member variables.
   GURL url_;
   scoped_refptr<SiteInstance> starting_site_instance_;
@@ -365,6 +406,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   const bool is_renderer_initiated_;
   const bool is_same_page_;
   bool was_redirected_;
+  bool did_replace_entry_;
+  bool should_update_history_;
+  bool subframe_entry_committed_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
   net::HttpResponseInfo::ConnectionInfo connection_info_;
 
@@ -450,8 +494,19 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // False by default unless the navigation started within a context menu.
   bool started_from_context_menu_;
 
+  // Stores the reload type, or NONE if it's not a reload.
+  ReloadType reload_type_;
+
+  // Stores the restore type, or NONE it it's not a restore.
+  RestoreType restore_type_;
+
   GURL searchable_form_url_;
   std::string searchable_form_encoding_;
+
+  GURL previous_url_;
+  GURL base_url_;
+  net::HostPortPair socket_address_;
+  NavigationType navigation_type_;
 
   base::WeakPtrFactory<NavigationHandleImpl> weak_factory_;
 

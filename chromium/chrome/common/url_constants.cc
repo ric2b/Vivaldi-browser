@@ -108,10 +108,10 @@ const char kChromeUIJavaCrashURL[] = "chrome://java-crash/";
 const char kChromeUINativeScheme[] = "chrome-native";
 const char kChromeUINativeNewTabURL[] = "chrome-native://newtab/";
 const char kChromeUINativeBookmarksURL[] = "chrome-native://bookmarks/";
-const char kChromeUINativeHistoryURL[] = "chrome-native://history/";
 const char kChromeUINativePhysicalWebDiagnosticsURL[] =
     "chrome-native://physical-web-diagnostics/";
 const char kChromeUINativeRecentTabsURL[] = "chrome-native://recent-tabs/";
+const char kChromeUIWebApksURL[] = "chrome://webapks/";
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -287,9 +287,10 @@ const char kChromeUIOfflineInternalsHost[] = "offline-internals";
 const char kChromeUIPhysicalWebDiagnosticsHost[] = "physical-web-diagnostics";
 const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
+const char kChromeUIWebApksHost[] = "webapks";
 #endif
 
-#if defined(ENABLE_VR_SHELL) || defined(ENABLE_WEBVR)
+#if defined(ENABLE_WEBVR)
 const char kChromeUIVrShellUIHost[] = "vr-shell-ui";
 #endif
 
@@ -351,20 +352,21 @@ const char kChromeUICastHost[] = "cast";
 #endif
 #endif
 
-// Option sub pages.
-// Add sub page paths to kChromeSettingsSubPages in builtin_provider.cc to be
-// listed by the built-in AutocompleteProvider.
+// Settings sub pages.
+
+// NOTE: Add sub page paths to kChromeSettingsSubPages in
+// chrome_autocomplete_provider_client.cc to be listed by the built-in
+// AutocompleteProvider.
+
 const char kAutofillSubPage[] = "autofill";
 const char kClearBrowserDataSubPage[] = "clearBrowserData";
 const char kContentSettingsSubPage[] = "content";
-const char kCreateProfileSubPage[] = "createProfile";
 const char kDeprecatedOptionsContentSettingsExceptionsSubPage[] =
     "contentExceptions";
-const char kExtensionsSubPage[] = "extensions";
+const char kDeprecatedExtensionsSubPage[] = "extensions";
 const char kHandlerSettingsSubPage[] = "handlers";
 const char kImportDataSubPage[] = "importData";
 const char kLanguageOptionsSubPage[] = "languages";
-const char kManageProfileSubPage[] = "manageProfile";
 const char kPasswordManagerSubPage[] = "passwords";
 const char kResetProfileSettingsSubPage[] = "resetProfileSettings";
 const char kSearchEnginesSubPage[] = "searchEngines";
@@ -374,11 +376,17 @@ const char kTriggeredResetProfileSettingsSubPage[] =
     "triggeredResetProfileSettings";
 #if defined(OS_CHROMEOS)
 const char kAccessibilitySubPage[] = "accessibility";
-const char kBluetoothSubPage[] = "bluetooth";
+const char kBluetoothSubPage[] = "bluetoothDevices";
 const char kDateTimeSubPage[] = "dateTime";
 const char kDeprecatedOptionsSearchSubPage[] = "search";
-const char kInternetOptionsSubPage[] = "internet";
-const char kPowerOptionsSubPage[] = "power-overlay";
+const char kDisplaySubPage[] = "display";
+const char kInternetSubPage[] = "internet";
+const char kNetworkDetailSubPage[] = "networkDetail";
+const char kPowerSubPage[] = "power";
+const char kStylusSubPage[] = "stylus";
+#else
+const char kCreateProfileSubPage[] = "createProfile";
+const char kManageProfileSubPage[] = "manageProfile";
 #endif
 
 // Extension sub pages.
@@ -391,6 +399,9 @@ const char kSyncGoogleDashboardURL[] =
 
 const char kGoogleAccountActivityControlsURL[] =
     "https://myaccount.google.com/activitycontrols/search";
+
+const char kContentSettingsExceptionsLearnMoreURL[] =
+    "https://support.google.com/chrome/?p=settings_manage_exceptions";
 
 const char kPasswordManagerLearnMoreURL[] =
 #if defined(OS_CHROMEOS)
@@ -644,6 +655,7 @@ const char* const kChromeHostURLs[] = {
     kChromeUIPolicyHost,
     kChromeUIPredictorsHost,
     kChromeUIProfilerHost,
+    kChromeUIQuotaInternalsHost,
     kChromeUISignInInternalsHost,
     kChromeUISiteEngagementHost,
     kChromeUINTPTilesInternalsHost,
@@ -680,7 +692,6 @@ const char* const kChromeHostURLs[] = {
     kChromeUIFlashHost,
     kChromeUIHelpHost,
     kChromeUIInspectHost,
-    kChromeUIQuotaInternalsHost,
     kChromeUISettingsHost,
     kChromeUISystemInfoHost,
     kChromeUIUberHost,
@@ -690,6 +701,7 @@ const char* const kChromeHostURLs[] = {
     kChromeUIOfflineInternalsHost,
     kChromeUIPopularSitesInternalsHost,
     kChromeUISnippetsInternalsHost,
+    kChromeUIWebApksHost,
 #endif
 #if defined(OS_CHROMEOS)
     kChromeUICertificateManagerHost,
@@ -747,6 +759,7 @@ const char* const kChromeDebugURLs[] = {content::kChromeUIBadCastCrashURL,
                                         content::kChromeUIPpapiFlashCrashURL,
                                         content::kChromeUIPpapiFlashHangURL,
 #if defined(OS_ANDROID)
+                                        content::kChromeUIGpuJavaCrashURL,
                                         chrome::kChromeUIJavaCrashURL,
 #endif
                                         chrome::kChromeUIQuitURL,

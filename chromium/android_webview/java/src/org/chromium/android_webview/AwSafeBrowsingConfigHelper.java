@@ -12,7 +12,6 @@ import android.content.pm.PackageManager;
 import android.os.AsyncTask;
 import android.provider.Settings;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.JNINamespace;
@@ -35,7 +34,7 @@ public class AwSafeBrowsingConfigHelper {
                 @Override
                 public void run() {
                     AwContentsStatics.setSafeBrowsingEnabled(
-                            isHarmfulAppDetectionEnabled(appContext));
+                            isScanDeviceForSecurityThreatsEnabled(appContext));
                 }
             });
         }
@@ -43,11 +42,10 @@ public class AwSafeBrowsingConfigHelper {
 
     private static boolean shouldEnableSafeBrowsingSupport(Context appContext) {
         return CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
-                || (BuildInfo.isAtLeastO()
-                           && !appHasMetadataKeyValue(appContext, OPT_IN_META_DATA_STR, false));
+                || appHasOptedIn(appContext);
     }
 
-    private static boolean appHasMetadataKeyValue(Context appContext, String key, boolean value) {
+    private static boolean appHasOptedIn(Context appContext) {
         try {
             ApplicationInfo info = appContext.getPackageManager().getApplicationInfo(
                     appContext.getPackageName(), PackageManager.GET_META_DATA);
@@ -55,7 +53,9 @@ public class AwSafeBrowsingConfigHelper {
                 // null means no such tag was found.
                 return false;
             }
-            return info.metaData.containsKey(key) ? info.metaData.getBoolean(key) == value : false;
+            return info.metaData.containsKey(OPT_IN_META_DATA_STR)
+                    ? info.metaData.getBoolean(OPT_IN_META_DATA_STR)
+                    : false;
         } catch (PackageManager.NameNotFoundException e) {
             // This should never happen.
             Log.e(TAG, "App could not find itself by package name!");
@@ -64,14 +64,11 @@ public class AwSafeBrowsingConfigHelper {
     }
 
     @SuppressLint("NewApi") // android.provider.Settings.Global#getInt requires API level 17
-    private static boolean isHarmfulAppDetectionEnabled(Context applicationContext) {
-        // Determine if the "Improve harmful app detection" functionality is enabled in
+    private static boolean isScanDeviceForSecurityThreatsEnabled(Context applicationContext) {
+        // Determine if the "Scan device for security threats" functionality is enabled in
         // Android->System->Google->Security settings.
         ContentResolver contentResolver = applicationContext.getContentResolver();
-        boolean user_consent =
-                Settings.Secure.getInt(contentResolver, "package_verifier_user_consent", 1) > 0;
-        boolean apk_upload = Settings.Global.getInt(contentResolver, "upload_apk_enable", 1) > 0;
-        return user_consent && apk_upload;
+        return Settings.Secure.getInt(contentResolver, "package_verifier_user_consent", 1) > 0;
     }
 
     // Not meant to be instantiated.

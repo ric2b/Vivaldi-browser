@@ -85,7 +85,6 @@ class CORE_EXPORT InputMethodController final
   // Deletes the existing composition text.
   void cancelComposition();
 
-  void cancelCompositionIfSelectionIsInvalid();
   EphemeralRange compositionEphemeralRange() const;
   Range* compositionRange() const;
 
@@ -102,6 +101,7 @@ class CORE_EXPORT InputMethodController final
                                          int end,
                                          size_t textLength) const;
   void deleteSurroundingText(int before, int after);
+  void deleteSurroundingTextInCodePoints(int before, int after);
   WebTextInputInfo textInputInfo() const;
   WebTextInputType textInputType() const;
 
@@ -126,13 +126,17 @@ class CORE_EXPORT InputMethodController final
 
   String composingText() const;
   void selectComposition() const;
+
+  EphemeralRange ephemeralRangeForOffsets(const PlainTextRange&) const;
+
+  // Returns true if selection offsets were successfully set.
   bool setSelectionOffsets(
       const PlainTextRange&,
       FrameSelection::SetSelectionOptions = FrameSelection::CloseTyping);
 
   void addCompositionUnderlines(const Vector<CompositionUnderline>& underlines,
-                                ContainerNode* rootEditableElement,
-                                unsigned offset);
+                                ContainerNode* baseElement,
+                                unsigned offsetInPlainChars);
 
   bool insertText(const String&);
   bool insertTextAndMoveCaret(const String&,

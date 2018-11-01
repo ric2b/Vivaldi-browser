@@ -10,8 +10,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/common/material_design/material_design_controller.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
@@ -20,16 +18,13 @@
 #include "ui/display/display.h"
 #include "ui/wm/public/window_types.h"
 
-#if defined(OS_WIN)
-#include "ui/base/win/scoped_ole_initializer.h"
-#endif
-
 namespace aura {
 class Window;
 class WindowDelegate;
 }  // namespace aura
 
 namespace display {
+class Display;
 class DisplayManager;
 
 namespace test {
@@ -143,17 +138,7 @@ class AshTestBase : public testing::Test {
   // Returns the rotation currently active for the internal display.
   static display::Display::Rotation GetCurrentInternalDisplayRotation();
 
-  // Proxy to AshTestHelper::SupportsMultipleDisplays().
-  static bool SupportsMultipleDisplays();
-
   void set_start_session(bool start_session) { start_session_ = start_session; }
-
-  // Sets material mode for the test. This will override material mode set via
-  // command line switches.
-  void set_material_mode(MaterialDesignController::Mode material_mode) {
-    CHECK(!setup_called_);
-    material_mode_ = material_mode;
-  }
 
   AshTestHelper* ash_test_helper() { return ash_test_helper_.get(); }
 
@@ -184,6 +169,8 @@ class AshTestBase : public testing::Test {
   // Swap the primary display with the secondary.
   void SwapPrimaryDisplay();
 
+  display::Display GetSecondaryDisplay();
+
  private:
   friend class ash::AshTestImplAura;
 
@@ -191,13 +178,9 @@ class AshTestBase : public testing::Test {
   bool teardown_called_;
   // |SetUp()| doesn't activate session if this is set to false.
   bool start_session_;
-  MaterialDesignController::Mode material_mode_;
   std::unique_ptr<AshTestEnvironment> ash_test_environment_;
   std::unique_ptr<AshTestHelper> ash_test_helper_;
   std::unique_ptr<ui::test::EventGenerator> event_generator_;
-#if defined(OS_WIN)
-  ui::ScopedOleInitializer ole_initializer_;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(AshTestBase);
 };

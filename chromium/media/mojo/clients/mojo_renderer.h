@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <vector>
+
 #include "base/macros.h"
 #include "base/time/default_tick_clock.h"
 #include "base/unguessable_token.h"
@@ -22,7 +25,7 @@ class SingleThreadTaskRunner;
 
 namespace media {
 
-class DemuxerStreamProvider;
+class MediaResource;
 class MojoDemuxerStreamImpl;
 class VideoOverlayFactory;
 class VideoRendererSink;
@@ -46,7 +49,7 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
   ~MojoRenderer() override;
 
   // Renderer implementation.
-  void Initialize(DemuxerStreamProvider* demuxer_stream_provider,
+  void Initialize(MediaResource* media_resource,
                   media::RendererClient* client,
                   const PipelineStatusCB& init_cb) override;
   void SetCdm(CdmContext* cdm_context,
@@ -85,19 +88,20 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
   // called asynchronously.
   void BindRemoteRendererIfNeeded();
 
-  // Initialize the remote renderer when |demuxer_stream_provider| is of type
-  // DemuxerSteamProvider::Type::STREAM.
+  // Initialize the remote renderer when |media_resource| is of type
+  // MediaResource::Type::STREAM.
   void InitializeRendererFromStreams(media::RendererClient* client);
 
-  // Initialize the remote renderer when |demuxer_stream_provider| is of type
-  // DemuxerSteamProvider::Type::URL.
+  // Initialize the remote renderer when |media_resource| is of type
+  // MediaResource::Type::URL.
   void InitializeRendererFromUrl(media::RendererClient* client);
 
   // Callback for connection error on |remote_renderer_|.
   void OnConnectionError();
 
-  // Callback for connection error on |audio_stream_| and |video_stream_|.
-  void OnDemuxerStreamConnectionError(DemuxerStream::Type type);
+  // Callback for connection error on any of |streams_|. The |stream| parameter
+  // indicates which stream the error happened on.
+  void OnDemuxerStreamConnectionError(MojoDemuxerStreamImpl* stream);
 
   // Callbacks for |remote_renderer_| methods.
   void OnInitialized(media::RendererClient* client, bool success);
@@ -120,7 +124,7 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
 
   // Provider of audio/video DemuxerStreams. Must be valid throughout the
   // lifetime of |this|.
-  DemuxerStreamProvider* demuxer_stream_provider_ = nullptr;
+  MediaResource* media_resource_ = nullptr;
 
   // Client of |this| renderer passed in Initialize.
   media::RendererClient* client_ = nullptr;
@@ -128,11 +132,10 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
   // Mojo demuxer streams.
   // Owned by MojoRenderer instead of remote mojom::Renderer
   // becuase these demuxer streams need to be destroyed as soon as |this| is
-  // destroyed. The local demuxer streams returned by DemuxerStreamProvider
-  // cannot be used after |this| is destroyed.
+  // destroyed. The local demuxer streams returned by MediaResource cannot be
+  // used after |this| is destroyed.
   // TODO(alokp): Add tests for MojoDemuxerStreamImpl.
-  std::unique_ptr<MojoDemuxerStreamImpl> audio_stream_;
-  std::unique_ptr<MojoDemuxerStreamImpl> video_stream_;
+  std::vector<std::unique_ptr<MojoDemuxerStreamImpl>> streams_;
 
   // This class is constructed on one thread and used exclusively on another
   // thread. This member is used to safely pass the RendererPtr from one thread

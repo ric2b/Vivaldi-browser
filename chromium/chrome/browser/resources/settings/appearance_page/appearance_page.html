@@ -5,18 +5,18 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="/appearance_page/appearance_browser_proxy.html">
-<link rel="import" href="/controls/controlled_radio_button.html">
-<link rel="import" href="/controls/extension_controlled_indicator.html">
-<link rel="import" href="/controls/settings_dropdown_menu.html">
-<link rel="import" href="/controls/settings_input.html">
-<link rel="import" href="/controls/settings_radio_group.html">
-<link rel="import" href="/controls/settings_toggle_button.html">
-<link rel="import" href="/route.html">
-<link rel="import" href="/settings_page/settings_animated_pages.html">
-<link rel="import" href="/settings_page/settings_subpage.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/settings_vars_css.html">
+<link rel="import" href="appearance_browser_proxy.html">
+<link rel="import" href="../controls/controlled_radio_button.html">
+<link rel="import" href="../controls/extension_controlled_indicator.html">
+<link rel="import" href="../controls/settings_dropdown_menu.html">
+<link rel="import" href="../controls/settings_input.html">
+<link rel="import" href="../controls/settings_radio_group.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../settings_page/settings_animated_pages.html">
+<link rel="import" href="../settings_page/settings_subpage.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
 <link rel="import" href="appearance_fonts_page.html">
 
 <dom-module id="settings-appearance-page">
@@ -41,9 +41,13 @@
             hidden="[[!pageVisibility.setWallpaper]]">
           <div class="start">
             $i18n{setWallpaper}
-            <div class="secondary">$i18n{openWallpaperApp}</div>
+            <div class="secondary" id="wallpaperSecondary">
+              $i18n{openWallpaperApp}
+            </div>
           </div>
-          <button class="icon-external" is="paper-icon-button-light"></button>
+          <button class="icon-external" is="paper-icon-button-light"
+              aria-label="$i18n{setWallpaper}"
+              aria-describedby="wallpaperSecondary"></button>
         </div>
         <div class="settings-box two-line"
             hidden="[[!pageVisibility.setTheme]]">
@@ -54,10 +58,14 @@
 </if>
           <div class="start two-line" on-tap="onThemesTap_" actionable>
             <div class="flex">
-              <div>$i18n{themes}</div>
-              <div class="secondary">[[themeSublabel_]]</div>
+              $i18n{themes}
+              <div class="secondary" id="themesSecondary">
+                [[themeSublabel_]]
+              </div>
             </div>
-            <button class="icon-external" is="paper-icon-button-light"></button>
+            <button class="icon-external" is="paper-icon-button-light"
+                aria-label="$i18n{themes}"
+                aria-describedby="themesSecondary"></button>
           </div>
 <if expr="not is_linux or chromeos">
           <template is="dom-if" if="[[prefs.extensions.theme.id.value]]">
@@ -91,7 +99,7 @@
         </div>
         <div class="settings-box"
             hidden="[[!pageVisibility.homeButton]]">
-          <settings-toggle-button class="start"
+          <settings-toggle-button class="start" elide-label
               pref="{{prefs.browser.show_home_button}}"
               label="$i18n{showHomeButton}"
               sub-label="[[getShowHomeSubLabel_(
@@ -156,10 +164,12 @@
         <div id="customize-fonts-subpage-trigger" class="settings-box two-line"
             on-tap="onCustomizeFontsTap_" actionable>
           <div class="start">
-            <div>$i18n{customizeFonts}</div>
-            <div class="secondary">$i18n{chooseFonts}</div>
+            $i18n{customizeFonts}
+            <div class="secondary" id="fontsSecondary">$i18n{chooseFonts}</div>
           </div>
-          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label="$i18n{customizeFonts}"
+              aria-describedby="fontsSecondary"></button>
         </div>
         <div class="settings-box"
             hidden="[[!pageVisibility.pageZoom]]">

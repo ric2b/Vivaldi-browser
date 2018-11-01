@@ -1,0 +1,105 @@
+<link rel="import" href="chrome://resources/cr_elements/cr_scrollable_behavior.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../icons.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="bluetooth_device_dialog.html">
+<link rel="import" href="bluetooth_device_list_item.html">
+
+<dom-module id="settings-bluetooth-subpage">
+  <template>
+    <style include="settings-shared">
+      .container {
+        @apply(--settings-list-frame-padding);
+        min-height: 10px;
+        overflow-y: auto;
+      }
+
+      .header {
+        margin-top: 10px;
+      }
+
+      paper-spinner {
+        @apply(--cr-icon-height-width);
+      }
+
+      #onoff[on] {
+        color: var(--settings-toggle-color);
+      }
+    </style>
+
+    <div class="settings-box first">
+      <div id="onoff" class="start" on$="[[bluetoothEnabled]]">
+        [[getOnOffString_(bluetoothEnabled,
+          '$i18nPolymer{deviceOn}', '$i18nPolymer{deviceOff}')]]
+      </div>
+      <paper-toggle-button id="enableBluetooth" checked="{{bluetoothEnabled}}"
+          aria-label="$i18n{bluetoothToggleA11yLabel}">
+      </paper-toggle-button>
+    </div>
+
+    <!-- Paired device list -->
+    <div class="settings-box first header" hidden$="[[!bluetoothEnabled]]">
+      <div class="start">$i18n{bluetoothDeviceListPaired}</div>
+    </div>
+    <div id="noPairedDevices" class="list-frame"
+        hidden$="[[!showNoDevices_(bluetoothEnabled, pairedDeviceList_)]]">
+      $i18n{bluetoothNoDevices}
+    </div>
+    <div id="pairedContainer" class="container layout vertical"
+        scrollable on-device-event="onDeviceEvent_"
+        hidden="[[!showDevices_(bluetoothEnabled, pairedDeviceList_)]]">
+      <iron-list id="pairedDevices" class="vertical-list"
+          items="[[pairedDeviceList_]]"
+          selection-enabled selected-item="{{selectedPairedItem_}}"
+          scroll-target="pairedContainer">
+        <template>
+          <bluetooth-device-list-item device="[[item]]"
+              tabindex$="[[tabIndex]]">
+          </bluetooth-device-list-item>
+        </template>
+      </iron-list>
+    </div>
+
+    <!-- Unpaired device list -->
+    <div class="settings-box first header" hidden$="[[!bluetoothEnabled]]">
+      <div class="start">$i18n{bluetoothDeviceListUnpaired}</div>
+      <paper-spinner active="[[showSpinner_]]">
+      </paper-spinner>
+    </div>
+    <div id="noUnpairedDevices" class="list-frame"
+        hidden$="[[!showNoDevices_(bluetoothEnabled, unpairedDeviceList_)]]">
+      $i18n{bluetoothNoDevicesFound}
+    </div>
+    <div id="unpairedContainer" class="container layout vertical"
+        scrollable on-device-event="onDeviceEvent_"
+        hidden="[[!showDevices_(bluetoothEnabled, unpairedDeviceList_)]]">
+      <iron-list id="unpairedDevices" class="vertical-list"
+          items="[[unpairedDeviceList_]]"
+          selection-enabled selected-item="{{selectedUnpairedItem_}}"
+          scroll-target="unpairedContainer">
+        <template>
+          <bluetooth-device-list-item device="[[item]]"
+              tabindex$="[[tabIndex]]">
+          </bluetooth-device-list-item>
+        </template>
+      </iron-list>
+    </div>
+
+    <bluetooth-device-dialog id="deviceDialog"
+        bluetooth-private="[[bluetoothPrivate]]"
+        dialog-id="[[dialogId_]]"
+        error-message="[[errorMessage_]]"
+        on-close="onDialogClosed_"
+        on-device-event="onDeviceEvent_"
+        pairing-device="[[pairingDevice_]]">
+    </bluetooth-device-dialog>
+
+  </template>
+  <script src="bluetooth_subpage.js"></script>
+</dom-module>

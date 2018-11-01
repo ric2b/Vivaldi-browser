@@ -15,6 +15,7 @@ import "device/bluetooth/public/interfaces/uuid.mojom";
 // contains additional properties pertaining to the characteristic.
 // The properties |RELIABLE_WRITE| and |WRITABLE_AUXILIARIES| are retrieved from
 // that characteristic.
+// TODO(crbug.com/684168): Remove assignment of values when this is automated.
 enum Property {
   NONE = 0,
   BROADCAST = 1,
@@ -31,6 +32,21 @@ enum Property {
   WRITE_ENCRYPTED = 2048,
   READ_ENCRYPTED_AUTHENTICATED = 4096,
   WRITE_ENCRYPTED_AUTHENTICATED = 8192
+};
+
+enum GattResult {
+  SUCCESS,
+  UNKNOWN,
+  FAILED,
+  IN_PROGRESS,
+  INVALID_LENGTH,
+  NOT_PERMITTED,
+  NOT_AUTHORIZED,
+  NOT_PAIRED,
+  NOT_SUPPORTED,
+  SERVICE_NOT_FOUND,
+  CHARACTERISTIC_NOT_FOUND,
+  DESCRIPTOR_NOT_FOUND
 };
 
 // TODO(crbug.com/657632): Remove when numerical values can be optional.
@@ -56,6 +72,13 @@ struct CharacteristicInfo {
   string id;
   UUID uuid;
   uint32 properties;
+  array<uint8> last_known_value;
+};
+
+struct DescriptorInfo {
+  string id;
+  UUID uuid;
+  array<uint8> last_known_value;
 };
 
 interface Device {
@@ -70,6 +93,39 @@ interface Device {
   GetServices() => (array<ServiceInfo> services);
 
   // Gets the GATT Characteristics in the GATT Service with |service_id|.
+  // If |characteristics| is null, an error occured while attempting to retrieve
+  // the array of characteristics. If |characteristics| is empty, this simply
+  // means that no characteristics were found.
   GetCharacteristics(string service_id) =>
-      (array<CharacteristicInfo> characteristics);
+      (array<CharacteristicInfo>? characteristics);
+
+  // Reads the value for the GATT Characteristic with |characteristic_id| in
+  // the GATT Service with |service_id|.
+  ReadValueForCharacteristic(string service_id, string characteristic_id) =>
+      (GattResult result, array<uint8>? value);
+
+  // Writes the |value| to the GATT Characteristic with |characteristic_id| in
+  // the GATT Service with |service_id|.
+  WriteValueForCharacteristic(string service_id, string characteristic_id,
+      array<uint8> value) => (GattResult result);
+
+  // Gets the GATT Descriptors of the GATT Characteristic with matching
+  // |characteristic_id| in the GATT Service with matching |service_id|.
+  // If |descriptors| is null, an error occured while attempting to retrieve
+  // the array of descriptors. If |descriptors| is empty, this simply
+  // means that no descriptors were found.
+  GetDescriptors(string service_id, string characteristic_id) =>
+      (array<DescriptorInfo>? descriptors);
+
+  // Reads the value for the GATT Descriptor with |descriptor_id| in the GATT
+  // Characteristic with |characteristic_id| in the GATT Service with
+  // |service_id|.
+  ReadValueForDescriptor(string service_id, string characteristic_id,
+      string descriptor_id) => (GattResult result, array<uint8>? value);
+
+  // Writes the |value| for the GATT Descriptor with |descriptor_id| in the GATT
+  // Characteristic with |characteristic_id| in the GATT Service with
+  // |service_id|.
+  WriteValueForDescriptor(string service_id, string characteristic_id,
+      string descriptor_id, array<uint8> value) => (GattResult result);
 };

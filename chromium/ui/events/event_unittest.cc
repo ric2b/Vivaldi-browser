@@ -680,11 +680,14 @@ TEST(EventTest, PointerDetailsStylus) {
   ui::MouseEvent stylus_event(ET_MOUSE_PRESSED, gfx::Point(0, 0),
                               gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
   ui::PointerDetails pointer_details(EventPointerType::POINTER_TYPE_PEN,
-      /* radius_x */ 0.0f,
-      /* radius_y */ 0.0f,
-      /* force */ 21.0f,
-      /* tilt_x */ 45.0f,
-      /* tilt_y */ -45.0f);
+                                     /* radius_x */ 0.0f,
+                                     /* radius_y */ 0.0f,
+                                     /* force */ 21.0f,
+                                     /* tilt_x */ 45.0f,
+                                     /* tilt_y */ -45.0f,
+                                     /* tangential_pressure */ 0.7f,
+                                     /* twist */ 196,
+                                     /* pointer_id*/ 0);
 
   stylus_event.set_pointer_details(pointer_details);
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
@@ -694,6 +697,8 @@ TEST(EventTest, PointerDetailsStylus) {
   EXPECT_EQ(-45.0f, stylus_event.pointer_details().tilt_y);
   EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_x);
   EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_y);
+  EXPECT_EQ(0.7f, stylus_event.pointer_details().tangential_pressure);
+  EXPECT_EQ(196, stylus_event.pointer_details().twist);
 
   ui::MouseEvent stylus_event_copy(stylus_event);
   EXPECT_EQ(stylus_event.pointer_details(),
@@ -717,7 +722,10 @@ TEST(EventTest, PointerDetailsCustomTouch) {
                                      /* radius_y */ 6.0f,
                                      /* force */ 21.0f,
                                      /* tilt_x */ 45.0f,
-                                     /* tilt_y */ -45.0f);
+                                     /* tilt_y */ -45.0f,
+                                     /* tangential_pressure */ 0.7f,
+                                     /* twist */ 196,
+                                     /* pointer_id*/ 0);
   touch_event.set_pointer_details(pointer_details);
 
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
@@ -727,6 +735,8 @@ TEST(EventTest, PointerDetailsCustomTouch) {
   EXPECT_EQ(-45.0f, touch_event.pointer_details().tilt_y);
   EXPECT_EQ(5.0f, touch_event.pointer_details().radius_x);
   EXPECT_EQ(6.0f, touch_event.pointer_details().radius_y);
+  EXPECT_EQ(0.7f, touch_event.pointer_details().tangential_pressure);
+  EXPECT_EQ(196, touch_event.pointer_details().twist);
 
   ui::TouchEvent touch_event_copy(touch_event);
   EXPECT_EQ(touch_event.pointer_details(), touch_event_copy.pointer_details());
@@ -810,14 +820,15 @@ TEST(EventTest, PointerEventId) {
     ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0),
                                gfx::Point(0, 0), base::TimeTicks(), 0, 0);
     ui::PointerEvent pointer_event(mouse_event);
-    EXPECT_EQ(pointer_event.pointer_id(), ui::PointerEvent::kMousePointerId);
+    EXPECT_EQ(pointer_event.pointer_details().id,
+              ui::PointerEvent::kMousePointerId);
   }
 
   for (int touch_id = 0; touch_id < 8; touch_id++) {
     ui::TouchEvent touch_event(ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), touch_id,
                                base::TimeTicks());
     ui::PointerEvent pointer_event(touch_event);
-    EXPECT_EQ(pointer_event.pointer_id(), touch_id);
+    EXPECT_EQ(pointer_event.pointer_details().id, touch_id);
   }
 }
 
@@ -855,7 +866,8 @@ TEST(EventTest, PointerEventClone) {
     ui::PointerEvent* clone_as_ptr = clone->AsPointerEvent();
 
     EXPECT_EQ(ptr_event.type(), clone_as_ptr->type());
-    EXPECT_EQ(ptr_event.pointer_id(), clone_as_ptr->pointer_id());
+    EXPECT_EQ(ptr_event.pointer_details().id,
+              clone_as_ptr->pointer_details().id);
     EXPECT_EQ(ptr_event.pointer_details(), clone_as_ptr->pointer_details());
     EXPECT_EQ(ptr_event.location(), clone_as_ptr->location());
     EXPECT_EQ(ptr_event.root_location(), clone_as_ptr->root_location());
@@ -870,7 +882,8 @@ TEST(EventTest, PointerEventClone) {
     ui::PointerEvent* clone_as_ptr = clone->AsPointerEvent();
 
     EXPECT_EQ(ptr_event.type(), clone_as_ptr->type());
-    EXPECT_EQ(ptr_event.pointer_id(), clone_as_ptr->pointer_id());
+    EXPECT_EQ(ptr_event.pointer_details().id,
+              clone_as_ptr->pointer_details().id);
     EXPECT_EQ(ptr_event.pointer_details(), clone_as_ptr->pointer_details());
     EXPECT_EQ(ptr_event.location(), clone_as_ptr->location());
     EXPECT_EQ(ptr_event.root_location(), clone_as_ptr->root_location());
@@ -962,7 +975,8 @@ TEST(EventTest, PointerEventToTouchEventDetails) {
 
   EXPECT_EQ(pointer_event.location(), touch_event.location());
   EXPECT_EQ(pointer_event.flags(), touch_event.flags());
-  EXPECT_EQ(pointer_event.pointer_id(), touch_event.touch_id());
+  EXPECT_EQ(pointer_event.pointer_details().id,
+            touch_event.pointer_details().id);
   EXPECT_EQ(pointer_event.pointer_details(), touch_event.pointer_details());
   EXPECT_EQ(pointer_event.time_stamp(), touch_event.time_stamp());
 }

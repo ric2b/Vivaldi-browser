@@ -26,6 +26,9 @@
       Se estiver definida como verdadeira ou não for definida, as estatísticas são comunicadas.</translation>
 <translation id="1046484220783400299">Ativar funcionalidades das plataformas Web desatualizadas por um tempo limitado</translation>
 <translation id="1047128214168693844">Não permitir que os site registem a localização física dos utilizadores</translation>
+<translation id="1049138910114524876">Configura o local que é aplicado no ecrã de início de sessão do <ph name="PRODUCT_OS_NAME" />.
+
+      Se esta política estiver definida, o ecrã de início de sessão é sempre apresentado no local que é fornecido pelo primeiro valor desta política (a política está definida como uma lista para a compatibilidade com as versões futuras). Se esta política não estiver definida ou estiver definida como uma lista vazia, o ecrã de início de sessão é apresentado no local da última sessão do utilizador. Se esta política estiver definida como um valor que não é um local válido, o ecrã de início de sessão é apresentado num local alternativo (atualmente, en-US).</translation>
 <translation id="1062011392452772310">Ativar a comprovação remota para o dispositivo</translation>
 <translation id="1090892140761957285">URL para validar o símbolo de autenticação de cliente de acesso remoto.
 
@@ -273,6 +276,7 @@
       Se não especificar uma definição, é utilizado um valor predefinido.
 
       Se não definir esta política, são utilizadas predefinições para todas as definições.</translation>
+<translation id="1960840544413786116">Se deve ou não autorizar os certificados emitidos por âncoras fidedignas locais que têm a extensão subjectAlternativeName em falta</translation>
 <translation id="1964634611280150550">Modo de navegação anónima desativado</translation>
 <translation id="1964802606569741174">Esta política não tem qualquer efeito na aplicação YouTube para Android. Se for necessário aplicar o modo de segurança no YouTube, a autorização para instalar a aplicação YouTube para Android deve ser removida.</translation>
 <translation id="1969212217917526199">Substitui políticas em compilações de Depuração do anfitrião de acesso remoto.
@@ -327,6 +331,21 @@
       Se a política HardwareAccelerationModeEnabled estiver definida como falsa, a política Disable3DAPIs é ignorada e é equivalente à definição da política Disable3DAPIs como verdadeira.</translation>
 <translation id="2168397434410358693">Atraso de inatividade quando o dispositivo está ligado à eletricidade</translation>
 <translation id="2170233653554726857">Ativar otimização WPAD</translation>
+<translation id="2176565653304920879">Quando esta política está definida, o fluxo da deteção automática do fuso horário é um dos seguintes, consoante o valor da definição:
+
+      Se estiver definida como TimezoneAutomaticDetectionUsersDecide, os utilizadores podem controlar a deteção automática do fuso horário ao utilizar controlos normais em chrome://settings.
+
+      Se estiver definida como TimezoneAutomaticDetectionDisabled, os controlos automáticos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre desativada.
+
+      Se estiver definida como TimezoneAutomaticDetectionIPOnly, os controlos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre ativada. A deteção do fuso horário utiliza o método apenas de IP para resolver a localização.
+
+      Se estiver definida como TimezoneAutomaticDetectionSendWiFiAccessPoints, os controlos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre ativada. A lista de pontos de acesso Wi-Fi visíveis é sempre enviada para o servidor da API de geolocalização, de modo a permitir a deteção precisa do fuso horário.
+
+      Se estiver definida como TimezoneAutomaticDetectionSendAllLocationInfo, os controlos automáticos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre ativada. As informações da localização (tal como pontos de acesso Wi-Fi, torres de difusão alcançáveis, GPS) serão enviadas para um servidor para uma deteção precisa do fuso horário.
+
+      Se esta política não estiver definida, o comportamento é o mesmo como se TimezoneAutomaticDetectionUsersDecide estivesse definido.
+
+      Se a política SystemTimezone estiver definida, substitui esta política. Nesse caso, a deteção automática do fuso horário está totalmente desativada.</translation>
 <translation id="2178899310296064282">Aplicar pelo menos o Modo restrito moderado no YouTube</translation>
 <translation id="2183294522275408937">Esta definição controla a frequência com que o ecrã de bloqueio solicita a introdução da palavra-passe para continuar a utilizar o desbloqueio rápido. Sempre que se acede ao ecrã de bloqueio, se a última introdução da palavra-passe tiver sido superior a esta definição, o desbloqueio rápido não estará disponível ao entrar no ecrã de bloqueio. Se o utilizador se mantiver no ecrã de bloqueio após este período de tempo, será solicitada uma palavra-passe da próxima vez que o utilizador introduzir o código errado ou voltar a aceder ao ecrã de bloqueio, o que ocorrer primeiro.
 
@@ -363,11 +382,12 @@
 
       Se esta definição não estiver configurada, os utilizadores podem optar por utilizar o serviço de verificação ortográfica ou não.</translation>
 <translation id="2294382669900758280">A reprodução de vídeos em aplicações Android não é tida em consideração mesmo que esta política esteja definida como <ph name="TRUE" />.</translation>
+<translation id="2298647742290373702">Configurar a página Novo separador predefinida no <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2299220924812062390">Especificar uma lista de plug-ins ativados</translation>
 <translation id="2309390639296060546">Definição de geolocalização predefinida</translation>
 <translation id="2312134445771258233">Permite-lhe configurar as páginas que são carregadas no arranque. O conteúdo da lista "URLs a abrir no aranque" é ignorado, a menos que selecione "Abrir uma lista de URLs" em "Ação no arranque".</translation>
+<translation id="23323722127921515">Mostra o ícone da barra de ferramentas do Google Cast</translation>
 <translation id="2337466621458842053">Permite definir uma lista de padrões de URL que especificam os Web sites autorizados a apresentar imagens. Se esta política não for definida, será utilizado o valor global predefinido para todos os Web sites, seja a partir da política "DefaultImagesSetting", caso esteja definida, ou a partir da configuração pessoal do utilizador.</translation>
-<translation id="2366415278352956652">Ativa a transmissão</translation>
 <translation id="2372547058085956601">O atraso do início automático da sessão pública.
 
       Se a política |DeviceLocalAccountAutoLoginId| não estiver definida, esta política não tem efeito. Se não for esse o caso:
@@ -496,6 +516,7 @@
 
       Se esta política estiver definida como Falso, será apresentada uma mensagem de erro em vez de um pedido de configuração da rede.</translation>
 <translation id="2498238926436517902">Ocultar automaticamente a prateleira sempre</translation>
+<translation id="2503514368596117142">Configura políticas para o Google Cast, uma funcionalidade que permite aos utilizadores enviar o conteúdo de separadores, de sites ou do ambiente de trabalho a partir do navegador para sistemas de som e ecrãs remotos.</translation>
 <translation id="2514328368635166290">Especifica o URL do ícone favorito do fornecedor de pesquisas predefinido. Esta política é opcional. Se não for definida, não será apresentado qualquer ícone para o fornecedor de pesquisas. Esta política aplica-se apenas se a política "DefaultSearchProviderEnabled" estiver ativada.</translation>
 <translation id="2516525961735516234">Especifica se a atividade do vídeo afeta a gestão da energia.
 
@@ -513,6 +534,9 @@
 <translation id="2529880111512635313">Configurar a lista de aplicações e extensões de instalação forçada</translation>
 <translation id="253135976343875019">Atraso do aviso de inatividade quando o dispositivo está ligado à eletricidade</translation>
 <translation id="2552966063069741410">Fuso Horário</translation>
+<translation id="2558917182010914102">Se esta política estiver definida como verdadeira ou não estiver definida, o Google Cast está ativado e os utilizadores podem iniciá-lo a partir do menu da aplicação, dos menus de contexto da página, dos controlos multimédia nos Websites compatíveis com o Google Cast e (se apresentado) do ícone da barra de ferramentas do Google Cast.
+
+          Se esta política estiver definida como falsa, o Google Cast está desativado.</translation>
 <translation id="2562339630163277285">Especifica o URL do motor de pesquisa utilizado para apresentar resultados instantâneos. O URL deve incluir a string <ph name="SEARCH_TERM_MARKER" />, que, no momento da consulta, será substituída pelo texto que o utilizador tenha introduzido.
 
           Esta política é opcional. Se não for definida, não são apresentados resultados da pesquisa instantâneos.
@@ -896,6 +920,11 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
 
           Se esta definição ficar por configurar, não serão impostas restrições aos tipos de extensões/aplicações aceitáveis.</translation>
 <translation id="3780152581321609624">Incluir porta não padrão no SPN do Kerberos</translation>
+<translation id="3780319008680229708">Se esta política estiver definida como verdadeira, o ícone da barra de ferramentas do Google Cast é sempre apresentado na barra de ferramentas ou no menu adicional e os utilizadores não podem removê-lo.
+
+          Se esta política estiver definida como falsa ou não estiver definida, os utilizadores podem fixar ou remover o ícone através do respetivo menu de contexto.
+
+          Se a política "EnableMediaRouter" estiver definida como falsa, o respetivo valor não tem nenhum efeito e o ícone da barra de ferramentas não é apresentado.</translation>
 <translation id="3788662722837364290">Definições de gestão de energia quando o utilizador fica inativo</translation>
 <translation id="3793095274466276777">Configura o navegador predefinido, verifica o <ph name="PRODUCT_NAME" /> e impede que os utilizadores as alterem. Se ativar esta definição, o <ph name="PRODUCT_NAME" /> verificará sempre, durante o arranque, se é o navegador predefinido e registar-se-á automaticamente, se possível. Se esta definição estiver desativada, o <ph name="PRODUCT_NAME" /> nunca verificará se é o navegador predefinido e desativará os controlos dos utilizadors para definirem esta opção. Se a opção não for definida, o <ph name="PRODUCT_NAME" /> permitirá que os utilizadores controlem se é o navegador predefinido e se deverão ser mostradas as notificações de utilizador caso não o seja.</translation>
 <translation id="379659290574555063">Tratar os dispositivos de armazenamento externo como só de leitura.</translation>
@@ -988,6 +1017,9 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 
           Se não estiver definida ou estiver definida como falsa, os utilizadores poderão transferir ficheiros para o Google Drive.</translation>
 <translation id="3915395663995367577">URL para um ficheiro .pac de proxy</translation>
+<translation id="3926940573869375969">Configura os esquemas de teclado que são permitidos no ecrã de início de sessão do <ph name="PRODUCT_OS_NAME" />.
+
+      Se esta política estiver definida como uma lista de identificadores de métodos de introdução, os métodos de introdução fornecidos são disponibilizados no ecrã de início de sessão. O primeiro método de introdução fornecido é pré-selecionado. Enquanto um agrupamento de utilizadores está centrado no ecrã de início de sessão, o método de introdução utilizado menos recentemente é disponibilizado, para além dos métodos de introdução fornecidos por esta política. Se esta política não estiver definida, os métodos de introdução no ecrã de início de sessão são derivados do local no qual o ecrã de início de sessão é apresentado. Os valores que não são identificadores de métodos de introdução válidos são ignorados.</translation>
 <translation id="3939893074578116847">Envie pacotes de rede para o servidor de gestão para monitorizar o estado online, de modo a permitir
       que o servidor detete se o dispositivo está offline.
 
@@ -1070,6 +1102,17 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 
       Se esta política estiver definida como falsa, os utilizadores não podem bloquear o ecrã (podem apenas terminar a sessão de utilizador). Se esta política estiver definida como verdadeira ou não estiver definida, os utilizadores que efetuaram a autenticação com uma palavra-passe podem bloquear o ecrã.</translation>
 <translation id="4121350739760194865">Impedir a apresentação de promoções de aplicações na página de novo separador</translation>
+<translation id="4133301551755536858">Configura o URL da página Novo separador predefinida no <ph name="PRODUCT_NAME" /> e impede que os utilizadores a alterem.
+
+          A página Novo separador é a página aberta quando são criados novos separadores (incluindo os abertos em novas janelas).
+
+          Esta política não decide as páginas que devem ser abertas no arranque, as quais são controladas pelas políticas RestoreOnStartup, que podem definir a abertura da página Novo separador.
+
+          A política NewTabPageLocation pode ser definida para um URL que aqui especificar. Também afetará a Página inicial se estiver definida para abrir a página Novo separador, bem como a página inicial de origem, se estiver definida como a página Novo separador.
+
+          Se a política não for definida ou for deixada vazia, será utilizada a página Novo separador predefinida.
+
+          Esta política não está disponível nas instâncias do Windows que não estejam associadas a um domínio do Active Directory.</translation>
 <translation id="4147054660081653009">Certificado de cliente para associação a RemoteAccessHostTokenValidationUrl.
 
           Se esta política estiver definida, o anfitrião utiliza um certificado de cliente com o CN do emissor indicado para autenticar para RemoteAccessHostTokenValidationUrl. Defina-o para "*" para utilizar qualquer certificado de cliente disponível.
@@ -1099,6 +1142,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
           Se esta política não for definida, é utilizado o valor global predefinido para todos os sites, seja a partir da política "DefaultKeygenSetting", se estiver definida, ou a partir da configuração pessoal do utilizador.</translation>
 <translation id="4239720644496144453">A cache não é utilizada para aplicações Android. Se vários utilizadores instalarem a mesma aplicação Android, é transferida uma nova para cada utilizador.</translation>
 <translation id="4250680216510889253">Não</translation>
+<translation id="4261820385751181068">Local do ecrã de início de sessão do dispositivo</translation>
 <translation id="4272136423200695428">Ativa o início de sessão forçado no <ph name="PRODUCT_NAME" />.</translation>
 <translation id="427632463972968153">Especifica os parâmetros utilizados ao efetuar uma pesquisa de imagens com POST. Consiste em pares de nome/valor separados por vírgulas. Se um valor for o parâmetro de um modelo, como {imageThumbnail} no exemplo acima, será substituído por dados de miniatura de imagem reais.
 
@@ -1147,9 +1191,9 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="4467952432486360968">Bloquear cookies de terceiros</translation>
 <translation id="4474167089968829729">Permitir guardar palavras-passe no gestor de palavras-passe</translation>
 <translation id="4476769083125004742">Se esta política estiver definida como <ph name="BLOCK_GEOLOCATION_SETTING" />, as aplicações Android não podem aceder às informações de localização. Se definir esta política com qualquer outro valor ou se a deixar por definir, é pedido a autorização ao utilizador quando uma aplicação Android pretender aceder a informações de localização.</translation>
-<translation id="447686899376429408">Se esta política estiver definida como verdadeira ou não estiver definida, os utilizadores podem transmitir separadores, sites ou o ambiente de trabalho a partir do navegador. Se estiver definida como falsa, a opção está desativada.</translation>
 <translation id="4480694116501920047">Forçar Pesquisa Segura</translation>
 <translation id="4482640907922304445">Apresenta o botão Página Inicial na barra de ferramentas do <ph name="PRODUCT_NAME" />. Se ativar esta definição, o botão Página Inicial é sempre apresentado. Se desativar esta definição, o botão Página Inicial nunca é apresentado. Se ativar ou desativar esta definição, os utilizadores não a poderão alterar ou substituir no <ph name="PRODUCT_NAME" />. Se deixar esta política por definir, permitirá que o utilizador decida se pretende ou não apresentar o botão Página Inicial.</translation>
+<translation id="4485425108474077672">Configurar o URL da página Novo separador</translation>
 <translation id="4492287494009043413">Desativar capturas de ecrã</translation>
 <translation id="450537894712826981">Configura o tamanho da cache que o <ph name="PRODUCT_NAME" /> utilizará para armazenar ficheiros multimédia em cache no disco.
 
@@ -1252,6 +1296,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
           Se esta política estiver definida como verdadeira ou não estiver definida, os bloqueios da ativação do ecrã serão cumpridos no que toca à gestão da alimentação.
 
           Se esta política estiver definida como falsa, os pedidos de bloqueio da ativação do ecrã serão ignorados.</translation>
+<translation id="4876805738539874299">Versão SSL máxima ativada</translation>
 <translation id="4882546920824859909">Definir domínios com permissão para aceder ao Google Apps</translation>
 <translation id="4890209226533226410">Definir o tipo de lupa que está ativada.
 
@@ -1316,13 +1361,6 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 
       Se esta política não for definida ou for definida para Falso, o modo de programador continuará disponível para o dispositivo.</translation>
 <translation id="5208240613060747912">Permite definir uma lista de padrões de URL que especificam os Web sites não autorizados a apresentar notificações. Se esta política não for definida, será utilizado o valor global predefinido para todos os Web sites, seja a partir da política "DefaultNotificationsSetting", caso esteja definida, ou a partir da configuração pessoal do utilizador.</translation>
-<translation id="5209594095390052164">Permite escolher se o controlo de rede está ativado ou não.
-      Isto aplica-se a todos os utilizadores e a todas as interfaces no dispositivo.
-      Depois de definido, o controlo mantém-se até a política ser alterada de modo a 
-      desativá-lo.
-
-      Se definido como falso, não há controlo.
-      Se definido como verdadeiro, o sistema é controlado para obter as taxas de carregamento e de transferência indicadas (em kbits/s).</translation>
 <translation id="5219844027738217407">Para aplicações Android, esta política afeta apenas o microfone. Se esta política estiver definida como verdadeira, o som do microfone é desativado para todas as aplicações Android, sem exceções.</translation>
 <translation id="5226033722357981948">Especificar se o localizador de plug-ins deverá ser desativado</translation>
 <translation id="523505283826916779">Definições de acessibilidade</translation>
@@ -1361,6 +1399,13 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="5378985487213287085">Permite definir se os Web sites estão autorizados a apresentar notificações no ambiente de trabalho. A apresentação de notificações no ambiente de trabalho pode ser permitida por predefinição, negada por predefinição ou o utilizador pode ser questionado sempre que um Web site pretenda apresentar notificações no ambiente de trabalho. Se esta política não for definida, será utilizada a definição "AskNotifications" e o utilizador poderá alterá-la.</translation>
 <translation id="538108065117008131">Permitir que o <ph name="PRODUCT_FRAME_NAME" /> processe os seguintes tipos de conteúdo.</translation>
 <translation id="5388730678841939057">Seleciona a estratégia utilizada para libertar espaço no disco durante a limpeza automática (obsoleto)</translation>
+<translation id="5392172595902933844">As informações sobre o estado do Android são enviadas novamente para o
+      servidor.
+
+      Se a política estiver definida como falsa ou não definida, não são comunicadas quaisquer informações de estado.
+      Se estiver definida como verdadeira, são comunicadas informações de estado.
+
+      Esta política aplica-se apenas se as aplicações Android estiverem ativadas.</translation>
 <translation id="5395271912574071439">Ativa a proteção de anfitriões de acesso remoto enquanto existir uma ligação em progresso.
 
           Se esta definição estiver ativada, então, os dispositivos de entrada e saída físicos do anfitrião são desativados enquanto existir uma ligação remota em progresso.
@@ -1398,15 +1443,6 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
       Quando o valor desta política estiver definido e não for 0, o utilizador de demonstração com sessão iniciada atualmente verá a sua sessão terminada uma vez decorrido o tempo de inatividade especificado.
 
       O valor da política deverá ser especificado em milissegundos.</translation>
-<translation id="5506213378070007377">As informações sobre o estado do Android são enviadas novamente para o
-      servidor.
-
-      Se a política estiver definida como falsa, não são comunicadas quaisquer 
-      informações de estado.
-      Se definida como verdadeira ou não for definida, são comunicadas informações
-      do estado.
-
-      Esta política aplica-se apenas se as aplicações Android estiverem ativadas.</translation>
 <translation id="5511702823008968136">Ativar Barra de Marcadores</translation>
 <translation id="5512418063782665071">URL da página inicial</translation>
 <translation id="5523812257194833591">O início automático de uma sessão pública após um atraso.
@@ -1442,6 +1478,11 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
       Se definir esta política, os utilizadores não poderão alterá-la ou substituí-la.
 
       Se a política ficar por definir, os utilizadores poderão escolher se a prateleira deverá ser ocultada automaticamente.</translation>
+<translation id="557360560705413259">Quando esta definição está ativada, o <ph name="PRODUCT_NAME" /> utiliza o commonName do certificado de um servidor para fazer corresponder a um nome de anfitrião se o certificado tiver uma extensão subjectAlternativeName em falta, desde que valide e crie uma cadeia para certificados da AC instalados localmente.
+
+      Tenha em atenção que esta ação não é recomendada, dado que pode permitir ignorar a extensão nameConstraints que restringe os nomes de anfitriões para os quais um determinado certificado pode ser autorizado.
+
+      Se esta política não estiver definida ou for definida como falsa, os certificados de servidor que não possuam uma extensão subjectAlternativeName com um nome DNS ou um endereço IP não serão fidedignos.</translation>
 <translation id="557658534286111200">Ativa ou desativa a edição de marcadores</translation>
 <translation id="5586942249556966598">Não fazer nada</translation>
 <translation id="5613179474872285001">Configura o nome do domínio do cliente obrigatório que é imposto aos clientes de acesso remoto e impede os utilizadores de o alterar.
@@ -1549,6 +1590,12 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 
           Se esta definição estiver desativada ou não estiver configurada, os pedidos de autenticação não serão utilizados com proxy.</translation>
 <translation id="5898486742390981550">Quando vários utilizadores têm sessão iniciada, apenas o utilizador principal pode utilizar aplicações Android.</translation>
+<translation id="5906199912611534122">Permite a ativação ou a desativação do controlo de rede.
+      Aplica-se a todos os utilizadores e a todas as interfaces no dispositivo. Depois de definido,
+      o controlo mantém-se até a política ser alterada de modo a desativá-lo.
+
+      Se for definido como falso, não há controlo.
+      Se for definido como verdadeiro, o sistema é controlado para obter as taxas de carregamento e de transferência indicadas (em kbits/s).</translation>
 <translation id="5921713479449475707">Permitir transferências de atualização automática por HTTP</translation>
 <translation id="5921888683953999946">Definir o estado predefinido da funcionalidade de acessibilidade do cursor grande no ecrã de início de sessão.
 
@@ -1565,6 +1612,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 
       Se desativar esta definição ou não definir um valor, a Pesquisa Segura na Pesquisa do Google não será imposta.</translation>
 <translation id="5937539742111853215">Esta política controla apenas o modo de programador do <ph name="PRODUCT_OS_NAME" />. Se quiser evitar o acesso às Opções de programador do Android, tem de definir a política <ph name="DEVELOPER_TOOLS_POLICY" />.</translation>
+<translation id="5940306398763671235">Ativa o Google Cast</translation>
 <translation id="5946082169633555022">Canal Beta</translation>
 <translation id="5950205771952201658">Na medida em que as verificações de revogação online de falha suave não fornecem uma vantagem de segurança eficaz, estas estão desativadas por predefinição na versão 19 e posterior do <ph name="PRODUCT_NAME" />. Ao definir esta política como verdadeira, o comportamento anterior é restaurado e são efetuadas verificações OCSP/CRL online.
 
@@ -1588,6 +1636,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
       Se esta política estiver definida como verdadeira ou não estiver definida, a aceleração de hardware é ativada, a menos que alguma funcionalidade da GPU seja colocada na lista negra.
 
       Se esta política estiver definida como falsa, a aceleração de hardware é desativada.</translation>
+<translation id="6070667616071269965">Esquemas de teclado do ecrã de início de sessão do dispositivo</translation>
 <translation id="6074963268421707432">Não permitir que os sites mostrem notificações do ambiente de trabalho</translation>
 <translation id="6076099373507468537">Define a lista de dispositivos USB que estão autorizados a ser desligados do respetivo controlador de kernel para serem utilizados diretamente através da API chrome.usb numa aplicação Web. As entradas são pares de identificador de fornecedor de USB e identificador de produto para identificar um hardware específico.
 
@@ -1879,6 +1928,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
       De qualquer forma, as informações de memória são enviadas num relatório por página, independentemente do valor da opção, mas os tamanhos dos relatórios são
       quantificados e a frequência de atualizações é limitada por motivos de segurança. Para obter dados exatos em tempo real,
       utilize ferramentas como a Telemetry.</translation>
+<translation id="6894178810167845842">URL da página Novo separador</translation>
 <translation id="6899705656741990703">Detetar automaticamente definições do proxy</translation>
 <translation id="6903814433019432303">Esta política está ativa apenas no modo de retalho.
 
@@ -1998,6 +2048,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="7132877481099023201">URLs aos quais será concedido acesso a dispositivos de captura de vídeo imediatamente</translation>
 <translation id="7167436895080860385">Permitir que os utilizadores mostrem palavras-passe no Gestor de palavras-passe (descontinuado)</translation>
 <translation id="7173856672248996428">Perfil efémero</translation>
+<translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="718956142899066210">Tipos de ligação permitidos para atualizações</translation>
 <translation id="7194407337890404814">Nome do fornecedor de pesquisas predefinido</translation>
 <translation id="7195064223823777550">Especificar a ação a realizar quando o utilizador fecha a tampa.
@@ -2131,6 +2182,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="7625444193696794922">Especifica o canal de lançamento ao qual este aparelho deve estar bloqueado.</translation>
 <translation id="7632724434767231364">Nome da biblioteca GSSAPI</translation>
 <translation id="7635471475589566552">Configura o local da aplicação no <ph name="PRODUCT_NAME" /> e impede que os utilizadores o alterem. Se ativar esta definição, o <ph name="PRODUCT_NAME" /> utilizará o local indicado. Se o local configurado não for suportado, será utilizado "en-US". Se esta definição estiver desativada ou não for definida, o <ph name="PRODUCT_NAME" /> utilizará o local preferencial indicado pelo utilizador (se estiver configurado), o local do sistema ou o local alternativo "en-US".</translation>
+<translation id="7638300388094655454">Google Cast</translation>
 <translation id="7651739109954974365">Determina se o roaming de dados deve estar ativado para o aparelho. Se a política estiver definida como verdadeira, o roaming de dados é permitido. Se ficar por configurar ou for definida como falsa, o roaming de dados não estará disponível.</translation>
 <translation id="76810863974142048">URL onde os clientes de acesso remoto devem obter o respetivo símbolo de autenticação.
 
@@ -2210,6 +2262,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 
           Para obter mais opções e exemplos detalhados, aceda a:
           <ph name="PROXY_HELP_URL" />.</translation>
+<translation id="7781069478569868053">Página Novo separador</translation>
 <translation id="7788511847830146438">Por Perfil</translation>
 <translation id="7796141075993499320">Permite definir uma lista de padrões de URL que especificam os Web sites autorizados a executar plug-ins. Se esta política não for definida, será utilizado o valor global predefinido para todos os Web sites, seja a partir da política "DefaultPluginsSetting", caso esteja definida, ou a partir da configuração pessoal do utilizador.</translation>
 <translation id="7801886189430766248">Quando esta política está definida como verdadeira, os dados de aplicações Android são carregados para os servidores do Android Backup Service e restaurados a partir dos mesmos após a reinstalação de aplicações compatíveis.
@@ -2236,19 +2289,6 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="7842869978353666042">Configurar as opções do Google Drive</translation>
 <translation id="7843525027689416831">Especifica os sinalizadores que devem ser aplicados ao <ph name="PRODUCT_NAME" /> quando este inicia. Os sinalizadores especificados são aplicados apenas no ecrã de início de sessão. Os sinalizadores definidos através desta política não se propagam para as sessões de utilizador.</translation>
 <translation id="7848840259379156480">Permite-lhe configurar o processador de HTML predefinido quando é instalado o <ph name="PRODUCT_FRAME_NAME" />. A predefinição é permitir que o navegador anfitrião efetue o pro, mas, se pretender, pode substituir esta predefinição e fazer com que o <ph name="PRODUCT_FRAME_NAME" /> processe as páginas HTML por predefinição.</translation>
-<translation id="7853178359124471330">Quando esta política está definida, o fluxo da deteção automática do fuso horário é um dos seguintes, consoante o valor da definição:
-
-      Se estiver definida como TimezoneAutomaticDetectionUsersDecide, os utilizadores podem controlar a deteção automática do fuso horário ao utilizar controlos normais em chrome://settings.
-
-      Se estiver definida como TimezoneAutomaticDetectionDisabled, os controlos automáticos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre desativada.
-
-      Se estiver definida como TimezoneAutomaticDetectionIPOnly, os controlos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre ativada. A deteção do fuso horário utiliza o método apenas de IP para resolver a localização.
-
-      Se estiver definida como TimezoneAutomaticDetectionSendWiFiAccessPoints, os controlos do fuso horário disponíveis em chrome://settings estão desativados. A deteção automática do fuso horário está sempre ativada. A lista de pontos de acesso Wi-Fi visíveis é sempre enviada para o servidor da API de geolocalização, de modo a permitir a deteção precisa do fuso horário.
-
-      Se esta política não estiver definida, o comportamento é o mesmo como se TimezoneAutomaticDetectionUsersDecide estivesse definido.
-
-      Se a política SystemTimezone estiver definida, substitui esta política. Nesse caso, a deteção automática do fuso horário está totalmente desativada.</translation>
 <translation id="787125417158068494">Se estiverem definidos para SyncDisabled ou não estiverem configurados, os certificados do <ph name="PRODUCT_OS_NAME" /> não ficam disponíveis para aplicações ARC.
 
       Se estiverem definidos para CopyCaCerts, todos os certificados da AC (Autoridade de certificação) instalados pelo ONC com <ph name="WEB_TRUSTED_BIT" /> ficam disponíveis para aplicações ARC.</translation>
@@ -2286,6 +2326,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="7937766917976512374">Permitir ou impedir a captura de vídeo</translation>
 <translation id="7941975817681987555">Não prever ações de rede em nenhuma ligação de rede</translation>
 <translation id="7953256619080733119">Anfitriões de exceção no manual do utilizador gerido</translation>
+<translation id="7965394584578183156">Enviar sempre pontos de acesso Wi-Fi para o servidor durante a resolução do fuso horário.</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Esta política já não é suportada. Ativa a utilização de servidores STUN e de transmissão ao estabelecer ligação a um cliente remoto. Se esta definição estiver ativada, o computador poderá localizar e estabelecer ligação a computadores anfitrião remotos, mesmo que estejam separados por uma firewall. Se esta definição estiver desativada e as ligações UDP de saída forem filtradas pela firewall, este computador apenas poderá estabelecer ligação a computadores anfitrião dentro da rede local.</translation>
 <translation id="7986374692540430898">Não pode forçar as aplicações Android a utilizar um proxy. É disponibilizado um subconjunto de definições de proxy para aplicações Android, que estas podem optar voluntariamente por aceitar. Para mais informações, consulte a política <ph name="PROXY_MODE_POLICY" />.</translation>
@@ -2440,6 +2481,7 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
 <translation id="8390049129576938611">Desativa o visualizador de PDF interno no <ph name="PRODUCT_NAME" />. Em vez disso, trata-o como uma transferência e permite ao utilizador abrir ficheiros PDF com a aplicação predefinida.
 
       Se esta política não for definida ou for desativada, é utilizado o plug-in de PDF para abrir ficheiros PDF, a menos que o utilizador o desative.</translation>
+<translation id="8398203849316312944">Enviar sempre quaisquer sinais de localização disponíveis para o servidor durante a resolução do fuso horário.</translation>
 <translation id="8402079500086185021">Abrir sempre ficheiros PDF externamente</translation>
 <translation id="8412312801707973447">Se são ou não efetuadas verificações OCSP/CRL on-line</translation>
 <translation id="8413348101535146315">Ativa a conclusão de processos no Gestor de tarefas do <ph name="PRODUCT_NAME" />.
@@ -2555,7 +2597,6 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
       Se esta política for definida como falsa, nem o utilizador nem quaisquer aplicações ou extensões podem entrar no modo de ecrã inteiro.
 
       Em todas as plataformas, exceto em <ph name="PRODUCT_OS_NAME" />, o modo quiosque está indisponível quando o modo de ecrã inteiro está desativado.</translation>
-<translation id="8795495354632096254">Enviar sempre pontos de acesso Wi-Fi para o servidor durante a resolução do fuso horário.</translation>
 <translation id="8818173863808665831">Comunique a localização geográfica do dispositivo.
 
       Se a política não estiver definida, ou estiver definida como falsa, a localização não será comunicada.</translation>
@@ -2678,6 +2719,11 @@ Se desativar ou não definir esta opção, permite que o utilizador use as Ferra
       Se a política estiver ativada, não é possível efetuar capturas de ecrã com atalhos de teclado ou APIs de extensões.
 
       Se a política estiver desativada ou não for especificada, as capturas de ecrã são permitidas.</translation>
+<translation id="9212233969680267790">Aviso: a política da versão TLS máxima será totalmente removida do <ph name="PRODUCT_NAME" /> perto da versão 66 (por volta de fevereiro de 2018).
+
+      Se esta política não estiver configurada, o <ph name="PRODUCT_NAME" /> utiliza a versão máxima predefinida.
+
+      Caso contrário, pode ser definida para um dos seguintes valores: "tls1.2" ou "tls1.3". Quando estiver definida, o <ph name="PRODUCT_NAME" /> não utiliza as versões SSL/TLS superiores à versão especificada. Um valor não reconhecido será ignorado.</translation>
 <translation id="9213347477683611358">Configure uma imagem de fundo ao nível do dispositivo mostrada no ecrã de início de sessão se nenhum utilizador tiver iniciado sessão no dispositivo. A política é definida ao especificar o URL a partir do qual o dispositivo com o SO Chrome pode transferir a imagem de fundo e um hash criptográfico para verificar a integridade da transferência. A imagem tem de estar no formato JPEG e o tamanho do ficheiro não pode exceder 16 MB. O URL tem de ser acessível sem nenhuma autenticação. A imagem de fundo é transferida e colocada na cache. É transferida sempre que o URL ou o hash for alterado.
 
       A política deve ser especificada como uma string que expressa o URL e o hash no formato JSON, por exemplo,

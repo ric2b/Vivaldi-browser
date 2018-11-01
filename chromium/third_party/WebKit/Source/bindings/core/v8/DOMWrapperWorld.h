@@ -31,14 +31,15 @@
 #ifndef DOMWrapperWorld_h
 #define DOMWrapperWorld_h
 
+#include <memory>
+
 #include "bindings/core/v8/ScriptState.h"
 #include "core/CoreExport.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "v8/include/v8.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
@@ -70,10 +71,6 @@ class CORE_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
   static void allWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld>>& worlds);
   static void markWrappersInAllWorlds(ScriptWrappable*,
                                       const ScriptWrappableVisitor*);
-  static void setWrapperReferencesInAllWorlds(
-      const v8::Persistent<v8::Object>& parent,
-      ScriptWrappable*,
-      v8::Isolate*);
 
   static DOMWrapperWorld& world(v8::Local<v8::Context> context) {
     return ScriptState::from(context)->world();

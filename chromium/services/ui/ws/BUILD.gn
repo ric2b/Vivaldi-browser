@@ -4,8 +4,10 @@
 
 import("//build/config/ui.gni")
 import("//testing/test.gni")
+import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 
 static_library("lib") {
   sources = [
@@ -15,6 +17,8 @@ static_library("lib") {
     "access_policy_delegate.h",
     "accessibility_manager.cc",
     "accessibility_manager.h",
+    "cursor_location_manager.cc",
+    "cursor_location_manager.h",
     "default_access_policy.cc",
     "default_access_policy.h",
     "display.cc",
@@ -114,7 +118,7 @@ static_library("lib") {
   public_deps = [
     "//base",
     "//cc",
-    "//cc/ipc:internal_interfaces",
+    "//cc/ipc:interfaces",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//mojo/common:common_base",
@@ -200,17 +204,15 @@ group("tests") {
   }
 }
 
-test("mus_ws_unittests") {
+service_test("mus_ws_unittests") {
   sources = [
+    "cursor_location_manager_unittest.cc",
     "cursor_unittest.cc",
     "display_unittest.cc",
     "drag_controller_unittest.cc",
     "event_dispatcher_unittest.cc",
     "event_matcher_unittest.cc",
     "focus_controller_unittest.cc",
-    "frame_generator_unittest.cc",
-    "server_window_compositor_frame_sink_manager_test_api.cc",
-    "server_window_compositor_frame_sink_manager_test_api.h",
     "server_window_drawn_tracker_unittest.cc",
     "test_server_window_delegate.cc",
     "test_server_window_delegate.h",
@@ -227,6 +229,8 @@ test("mus_ws_unittests") {
     "window_tree_unittest.cc",
   ]
 
+  catalog = ":mus_ws_unittests_catalog"
+
   deps = [
     ":lib",
     ":test_support",
@@ -238,12 +242,10 @@ test("mus_ws_unittests") {
     "//mojo/public/cpp/bindings:bindings",
     "//services/service_manager/public/cpp:service_test_support",
     "//services/service_manager/public/cpp:sources",
-    "//services/service_manager/public/cpp/test:run_all_service_tests",
     "//services/service_manager/public/interfaces",
     "//services/ui/common:mus_common",
     "//services/ui/common:task_runner_test_base",
     "//services/ui/public/cpp",
-    "//services/ui/public/cpp:internal_or_test",
     "//services/ui/public/interfaces",
     "//testing/gtest",
     "//third_party/mesa:osmesa",
@@ -256,13 +258,15 @@ test("mus_ws_unittests") {
     "//ui/gfx/geometry/mojo",
     "//ui/gl",
   ]
-
-  data_deps = [
-    ":mus_ws_unittests_app_manifest",
-  ]
 }
 
 service_manifest("mus_ws_unittests_app_manifest") {
   name = "mus_ws_unittests_app"
   source = "mus_ws_unittests_app_manifest.json"
+}
+
+catalog("mus_ws_unittests_catalog") {
+  embedded_services = [ ":mus_ws_unittests_app_manifest" ]
+
+  standalone_services = [ "//services/ui:manifest" ]
 }

@@ -14,7 +14,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_observer.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 
 namespace aura {
 
@@ -32,7 +32,7 @@ WindowPortMus::WindowPortMus(WindowTreeClient* client,
     : WindowMus(window_mus_type), window_tree_client_(client) {}
 
 WindowPortMus::~WindowPortMus() {
-  if (surface_info_.id().is_valid())
+  if (surface_info_.is_valid())
     SetSurfaceInfoFromServer(cc::SurfaceInfo());
 
   // DESTROY is only scheduled from DestroyFromServer(), meaning if DESTROY is
@@ -66,6 +66,11 @@ void WindowPortMus::SetPredefinedCursor(ui::mojom::Cursor cursor_id) {
   predefined_cursor_ = cursor_id;
 }
 
+void WindowPortMus::SetEventTargetingPolicy(
+    ui::mojom::EventTargetingPolicy policy) {
+  window_tree_client_->SetEventTargetingPolicy(this, policy);
+}
+
 void WindowPortMus::Embed(
     ui::mojom::WindowTreeClientPtr client,
     uint32_t flags,
@@ -73,14 +78,14 @@ void WindowPortMus::Embed(
   window_tree_client_->Embed(window_, std::move(client), flags, callback);
 }
 
-std::unique_ptr<WindowCompositorFrameSink>
+std::unique_ptr<ui::WindowCompositorFrameSink>
 WindowPortMus::RequestCompositorFrameSink(
     scoped_refptr<cc::ContextProvider> context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
-  std::unique_ptr<WindowCompositorFrameSinkBinding>
+  std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
       compositor_frame_sink_binding;
-  std::unique_ptr<WindowCompositorFrameSink> compositor_frame_sink =
-      WindowCompositorFrameSink::Create(
+  std::unique_ptr<ui::WindowCompositorFrameSink> compositor_frame_sink =
+      ui::WindowCompositorFrameSink::Create(
           cc::FrameSinkId(server_id(), 0), std::move(context_provider),
           gpu_memory_buffer_manager, &compositor_frame_sink_binding);
   AttachCompositorFrameSink(std::move(compositor_frame_sink_binding));
@@ -88,13 +93,11 @@ WindowPortMus::RequestCompositorFrameSink(
 }
 
 void WindowPortMus::AttachCompositorFrameSink(
-    std::unique_ptr<WindowCompositorFrameSinkBinding>
+    std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
         compositor_frame_sink_binding) {
   window_tree_client_->AttachCompositorFrameSink(
-      server_id(),
-      std::move(compositor_frame_sink_binding->compositor_frame_sink_request_),
-      mojo::MakeProxy(std::move(
-          compositor_frame_sink_binding->compositor_frame_sink_client_)));
+      server_id(), compositor_frame_sink_binding->TakeFrameSinkRequest(),
+      mojo::MakeProxy(compositor_frame_sink_binding->TakeFrameSinkClient()));
 }
 
 WindowPortMus::ServerChangeIdType WindowPortMus::ScheduleChange(
@@ -221,8 +224,6 @@ void WindowPortMus::SetVisibleFromServer(bool visible) {
 }
 
 void WindowPortMus::SetOpacityFromServer(float opacity) {
-  // TODO(sky): route to server.
-  // Changes to opacity don't make it back to the server.
   window_->layer()->SetOpacity(opacity);
 }
 
@@ -244,7 +245,7 @@ void WindowPortMus::SetPropertyFromServer(
 
 void WindowPortMus::SetSurfaceInfoFromServer(
     const cc::SurfaceInfo& surface_info) {
-  if (surface_info_.id().is_valid()) {
+  if (surface_info_.is_valid()) {
     const cc::SurfaceId& existing_surface_id = surface_info_.id();
     const cc::SurfaceId& new_surface_id = surface_info.id();
     if (existing_surface_id.is_valid() &&
@@ -255,10 +256,10 @@ void WindowPortMus::SetSurfaceInfoFromServer(
 
   // The fact that SetSurfaceIdFromServer was called means that this window
   // corresponds to an embedded client.
-  if (!client_surface_embedder && surface_info.id().is_valid())
+  if (!client_surface_embedder && surface_info.is_valid())
     client_surface_embedder = base::MakeUnique<ClientSurfaceEmbedder>(window_);
 
-  if (surface_info.id().is_valid())
+  if (surface_info.is_valid())
     client_surface_embedder->UpdateSurface(surface_info);
   else
     client_surface_embedder.reset();
@@ -417,14 +418,25 @@ void WindowPortMus::OnDidChangeBounds(const gfx::Rect& old_bounds,
     window_tree_client_->OnWindowMusBoundsChanged(this, old_bounds, new_bounds);
 }
 
-std::unique_ptr<WindowPortPropertyData> WindowPortMus::OnWillChangeProperty(
+std::unique_ptr<ui::PropertyData> WindowPortMus::OnWillChangeProperty(
     const void* key) {
+  // |window_| is null if a property is set on the aura::Window before
+  // Window::Init() is called. It's safe to ignore the change in this case as
+  // once Window::Init() is called the Window is queried for the current set of
+  // properties.
+  if (!window_)
+    return nullptr;
+
   return window_tree_client_->OnWindowMusWillChangeProperty(this, key);
 }
 
 void WindowPortMus::OnPropertyChanged(
     const void* key,
-    std::unique_ptr<WindowPortPropertyData> data) {
+    std::unique_ptr<ui::PropertyData> data) {
+  // See comment in OnWillChangeProperty() as to why |window_| may be null.
+  if (!window_)
+    return;
+
   ServerChangeData change_data;
   change_data.property_name =
       GetPropertyConverter()->GetTransportNameForPropertyKey(key);

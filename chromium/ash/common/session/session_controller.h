@@ -80,7 +80,7 @@ class ASH_EXPORT SessionController
 
   // Switches the active user to the next or previous user, with the same
   // ordering as user sessions are created.
-  void CycleActiveUser(bool next_user);
+  void CycleActiveUser(CycleUserDirection direction);
 
   void AddSessionStateObserver(SessionStateObserver* observer);
   void RemoveSessionStateObserver(SessionStateObserver* observer);
@@ -103,7 +103,6 @@ class ASH_EXPORT SessionController
   mojom::SessionControllerClientPtr client_;
 
   // Cached session info.
-  uint32_t max_users_ = 0u;
   bool can_lock_ = false;
   bool should_lock_screen_automatically_ = false;
   AddUserSessionPolicy add_user_session_policy_ = AddUserSessionPolicy::ALLOWED;

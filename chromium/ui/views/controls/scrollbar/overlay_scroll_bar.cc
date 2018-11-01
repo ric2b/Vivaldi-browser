@@ -5,6 +5,7 @@
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
 
 #include "base/macros.h"
+#include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
@@ -34,7 +35,7 @@ OverlayScrollBar::Thumb::Thumb(OverlayScrollBar* scroll_bar)
 OverlayScrollBar::Thumb::~Thumb() {}
 
 void OverlayScrollBar::Thumb::Init() {
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   // Animate all changes to the layer except the first one.
   OnStateChanged();
@@ -51,21 +52,22 @@ gfx::Size OverlayScrollBar::Thumb::GetPreferredSize() const {
 }
 
 void OverlayScrollBar::Thumb::OnPaint(gfx::Canvas* canvas) {
-  SkPaint fill_paint;
-  fill_paint.setStyle(SkPaint::kFill_Style);
-  fill_paint.setColor(SK_ColorBLACK);
+  cc::PaintFlags fill_flags;
+  fill_flags.setStyle(cc::PaintFlags::kFill_Style);
+  fill_flags.setColor(SK_ColorBLACK);
   gfx::RectF fill_bounds(GetLocalBounds());
   fill_bounds.Inset(gfx::InsetsF(IsHorizontal() ? kThumbHoverOffset : 0,
                                  IsHorizontal() ? 0 : kThumbHoverOffset, 0, 0));
   fill_bounds.Inset(gfx::InsetsF(kThumbStroke, kThumbStroke,
                                  IsHorizontal() ? 0 : kThumbStroke,
                                  IsHorizontal() ? kThumbStroke : 0));
-  canvas->DrawRect(fill_bounds, fill_paint);
+  canvas->DrawRect(fill_bounds, fill_flags);
 
-  SkPaint stroke_paint;
-  stroke_paint.setStyle(SkPaint::kStroke_Style);
-  stroke_paint.setColor(SK_ColorWHITE);
-  stroke_paint.setStrokeWidth(kThumbStroke);
+  cc::PaintFlags stroke_flags;
+  stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  stroke_flags.setColor(SK_ColorWHITE);
+  stroke_flags.setStrokeWidth(kThumbStroke);
+  stroke_flags.setStrokeCap(cc::PaintFlags::kSquare_Cap);
   gfx::RectF stroke_bounds(fill_bounds);
   stroke_bounds.Inset(gfx::InsetsF(kThumbStroke / 2.f));
   // The stroke doesn't apply to the far edge of the thumb.
@@ -79,7 +81,7 @@ void OverlayScrollBar::Thumb::OnPaint(gfx::Canvas* canvas) {
   } else {
     path.lineTo(gfx::PointFToSkPoint(stroke_bounds.bottom_right()));
   }
-  canvas->DrawPath(path, stroke_paint);
+  canvas->DrawPath(path, stroke_flags);
 }
 
 void OverlayScrollBar::Thumb::OnBoundsChanged(
@@ -109,11 +111,11 @@ void OverlayScrollBar::Thumb::OnStateChanged() {
 
 OverlayScrollBar::OverlayScrollBar(bool horizontal)
     : BaseScrollBar(horizontal), hide_timer_(false, false) {
-  auto thumb = new Thumb(this);
+  auto* thumb = new Thumb(this);
   SetThumb(thumb);
   thumb->Init();
   set_notify_enter_exit_on_child(true);
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetMasksToBounds(true);
   layer()->SetFillsBoundsOpaquely(false);
 }

@@ -26,13 +26,14 @@ process one HTTP request, deliver the prearranged response to the client, and
 write the entire request to stdout. It will then terminate.
 
 This server is written in Python since it provides a simple HTTP stack, and
-because parsing Chunked encoding is safer and easier in a memory-safe language.
+because parsing chunked encoding is safer and easier in a memory-safe language.
 This could easily have been written in C++ instead.
 """
 
 import BaseHTTPServer
 import struct
 import sys
+import zlib
 
 class BufferedReadFile(object):
   """A File-like object that stores all read contents into a buffer."""
@@ -80,11 +81,20 @@ class RequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     RequestHandler.raw_request = self.rfile.buffer
     self.rfile.buffer = ''
 
-    if self.headers.get('Transfer-Encoding', '') == 'Chunked':
+    if self.headers.get('Transfer-Encoding', '').lower() == 'chunked':
+      if 'Content-Length' in self.headers:
+        raise AssertionError
       body = self.handle_chunked_encoding()
     else:
       length = int(self.headers.get('Content-Length', -1))
       body = self.rfile.read(length)
+
+    if self.headers.get('Content-Encoding', '').lower() == 'gzip':
+      # 15 is the value of |wbits|, which should be at the maximum possible
+      # value to ensure that any gzip stream can be decoded. The offset of 16
+      # specifies that the stream to decompress will be formatted with a gzip
+      # wrapper.
+      body = zlib.decompress(body, 16 + 15)
 
     RequestHandler.raw_request += body
 
@@ -129,6 +139,10 @@ class RequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_response(400)  # Bad request.
       return -1
     return int(chunk_size_and_ext_line[:chunk_size_end], base=16)
+
+  def log_request(self, code='-', size='-'):
+    # The default implementation logs these to sys.stderr, which is just noise.
+    pass
 
 
 def Main():

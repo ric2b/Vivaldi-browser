@@ -55,10 +55,10 @@
             "optional": true,
             "description": "The jpg encoding quality if format is 'jpg', otherwise ignored. Default is 90, which is very high quality."
           },
-          "saveToBasePath": {
-            "type": "string",
+          "saveToDisk": {
+            "type": "boolean",
             "optional": true,
-            "description": "The resulting image is saved under the |saveToBasePath| location in the OS Pictures directory."
+            "description": "The resulting image is saved under the configurable directory. Default is false."
           },
           "showFileInPath": {
             "type": "boolean",
@@ -107,10 +107,10 @@
             "optional": true,
             "description": "The resulting height of the capture after scaling or if onlyVisible is false, the maximum number of pixels to capture in height."
           },
-          "saveToBasePath": {
-            "type": "string",
+          "saveToDisk": {
+            "type": "boolean",
             "optional": true,
-            "description": "The resulting image is saved under the |saveToBasePath| location in the OS Pictures directory."
+            "description": "The resulting image is saved under the configurable directory. Default is false."
           },
           "showFileInPath": {
             "type": "boolean",

@@ -4,13 +4,13 @@
 
 #include "core/html/parser/CSSPreloadScanner.h"
 
-#include "core/fetch/FetchContext.h"
-#include "core/fetch/Resource.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Heap.h"
+#include "platform/loader/fetch/FetchContext.h"
+#include "platform/loader/fetch/Resource.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
@@ -63,7 +63,7 @@ TEST_F(CSSPreloadScannerTest, ScanFromResourceClient) {
   KURL url(ParsedURLString, "http://127.0.0.1/foo.css");
   CSSStyleSheetResource* resource =
       CSSStyleSheetResource::createForTest(ResourceRequest(url), "utf-8");
-  resource->setStatus(Resource::Pending);
+  resource->setStatus(ResourceStatus::Pending);
 
   PreloadRecordingCSSPreloaderResourceClient* resourceClient =
       new PreloadRecordingCSSPreloaderResourceClient(resource, preloader);
@@ -90,7 +90,7 @@ TEST_F(CSSPreloadScannerTest, DestroyClientBeforeDataSent) {
   KURL url(ParsedURLString, "http://127.0.0.1/foo.css");
   Persistent<CSSStyleSheetResource> resource =
       CSSStyleSheetResource::createForTest(ResourceRequest(url), "utf-8");
-  resource->setStatus(Resource::Pending);
+  resource->setStatus(ResourceStatus::Pending);
 
   new PreloadRecordingCSSPreloaderResourceClient(resource, preloader);
 
@@ -141,7 +141,7 @@ TEST_F(CSSPreloadScannerTest, DoNotExpectValidDocument) {
   KURL url(ParsedURLString, "http://127.0.0.1/foo.css");
   CSSStyleSheetResource* resource =
       CSSStyleSheetResource::createForTest(ResourceRequest(url), "utf-8");
-  resource->setStatus(Resource::Pending);
+  resource->setStatus(ResourceStatus::Pending);
 
   PreloadRecordingCSSPreloaderResourceClient* resourceClient =
       new PreloadRecordingCSSPreloaderResourceClient(resource, preloader);

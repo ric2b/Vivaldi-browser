@@ -354,17 +354,11 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_NAME_FIELD_HEADER" desc="Title shown above bookmark name field on Edit Bookmark screen. [Length: 20em]">
         Name
       </message>
-      <message name="IDS_IOS_BOOKMARK_NEW_ALL_BOOKMARKS_LABEL" desc="A label for a button that takes the user to a screen where they can see all their bookmarks. [Length: 30em.]">
-        All Bookmarks
-      </message>
       <message name="IDS_IOS_BOOKMARK_NEW_BACK_LABEL" desc="Accessibility label for a button that takes the user back to the previous screen. [Length: 30em.]">
         Back
       </message>
       <message name="IDS_IOS_BOOKMARK_NEW_BOOKMARKS_BAR_TITLE" desc="Text that describes the bookmarks present in the bookmarks bar for chrome on desktop. [Length: 30em.] [iOS only]">
         Bookmarks Bar
-      </message>
-      <message name="IDS_IOS_BOOKMARK_NEW_BOOKMARKS_LABEL" desc="A title for the screen where the user can see all their bookmarks. [Length: 30em.]">
-        Bookmarks
       </message>
       <message name="IDS_IOS_BOOKMARK_NEW_BOOKMARK_CREATED" desc="A description presented to the user that they just created a bookmark. [Length: 30em.] [iOS only]">
         Item created
@@ -513,6 +507,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CLEAR_BUTTON" desc="Title for the button used to clear data. [Length: 20em] [iOS only]">
         Clear Browsing Data
       </message>
+      <message name="IDS_IOS_CONFIRM_CLEAR_BUTTON" desc="Accessibility label for the button used to confirm clearing data. [iOS only]">
+        Confirm Clear Browsing Data
+      </message>
       <message name="IDS_IOS_CLEAR_CACHE" desc="Label for the option in settings to clear the cache. In titlecase. [Length: 20em] [iOS only]">
         Cached Images and Files
       </message>
@@ -548,6 +545,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_DOWNLOADIMAGE" desc="The name of the Download Image command in the content area context menu">
         Download Image
+      </message>
+      <message name="IDS_IOS_CONTENT_SUGGESTIONS_DELETE" desc="The name of the Delete command in the Content Suggestions articles context menu">
+        Delete
       </message>
       <message name="IDS_IOS_CONTENT_SETTINGS_TITLE" desc="Title for content settings dialog [Length: 29em] [iOS only]">
         Content Settings
@@ -710,7 +710,7 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_IOS_ICON_SEARCH" desc="Accessibility label for the search icon [iOS only].">
         Search
       </message>
-      <message name="IDS_IOS_JAVA_SCRIPT_DIALOG_BLOCKING_BUTTON_TEXT" desc="The text used for the button added to JavaScript dialogs to prevent a page from spamming the user with endless alerts. [Length:25em]">
+      <message name="IDS_IOS_JAVA_SCRIPT_DIALOG_BLOCKING_BUTTON_TEXT" desc="The text used for the button added to JavaScript dialogs to prevent a page from spamming the user with endless alerts. [Length:27em]">
         Suppress Dialogs
       </message>
       <message name="IDS_IOS_KEYBOARD_BOOKMARK_THIS_PAGE" desc="In Title Case: Title of the keyboard shortcut that bookmarks the current page. [Length: 20 em] [iOS only]">
@@ -939,56 +939,11 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD_FOR_ACCOUNT" desc="Infobar message to update a password for named account, referring to PASSWORD_MANAGER_BRAND as the  [Length:70em]">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to update your password for <ph name="USERNAME">$2<ex>don.john.lemon@example.com</ex></ph> for this site?
       </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_ADD_METHOD_BUTTON" desc="Label of the button to add a new payment method (credit card) [iOS only].">
-        Add Card...
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_CANCEL_BUTTON" desc="Label of the button to cancel the request for payment presented to the user [iOS only].">
-        Cancel
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_METHOD_SELECTION_BUTTON" desc="Label of the button to select a payment method (credit card) [iOS only].">
-        Select
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_METHOD_SELECTION_TITLE" desc="Title of the view that allows the user to select the payment method (available credit cards or payment apps) for satisfying a payment request [iOS only].">
-        Payment
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_PAYMENT_ITEMS_TITLE" desc="Title of the view that displays the payment items in a payment request (for example subtotal, tax, shipping cost) to the user [iOS only].">
-        Order Summary
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_SHIPPING_ADDRESS_HEADER" desc="Label of the header of the section which displays the currently selected shipping address and the available shipping options for satisfying a payment request [iOS only].">
-        Shipping
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_ADD_SHIPPING_ADDRESS_BUTTON" desc="Label of the button to add a shipping address [iOS only].">
-        Add
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_SHIPPING_ADDRESS_SELECTION_TITLE" desc="Title of the view that allows the user to select the shipping address for satisfying a payment request [iOS only].">
-        Shipping Address
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_SHIPPING_OPTION_SELECTION_TITLE" desc="Title of the view that allows the user to select the shipping option for satisfying a payment request [iOS only].">
-        Shipping Method
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_SHIPPING_ADDRESS_SELECTION_ADD_BUTTON" desc="Label of the button to add a new shipping address [iOS only].">
-        Add Address...
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_PAYMENT_METHOD_HEADER" desc="Label of the header of the section which displays the options (available credit cards or payment apps) for satisfying a payment request [iOS only].">
-        Payment
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_PAY_BUTTON" desc="Label of the button to confirm that the user wishes to pay for a good or service [iOS only].">
-        Pay
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_TITLE" desc="Title of the dialog that presents a request for payment for some good or service [iOS only].">
-        Your Payment
-      </message>
-      <message name="IDS_IOS_PAYMENT_REQUEST_TOTAL_HEADER" desc="Label of the header of the section which displays the total charge for a payment request [iOS only].">
-        Total
-      </message>
       <message name="IDS_IOS_PHOTO_LIBRARY_USAGE_DESCRIPTION" desc="Specifies the reason for accessing the user's photo library while the app is in use [Length: unlimited] [iOS only].">
         This lets you save and upload photos.
       </message>
       <message name="IDS_IOS_PLACEHOLDER_FIND_IN_PAGE" desc="The iOS placeholder for searching in the current page [Length: 30em] [iOS only]">
         Find in page...
-      </message>
-      <message name="IDS_IOS_PLATFORM_LABEL" desc="Label for Platform. [Length: unlimited] [iOS only]">
-        Platform
       </message>
       <message name="IDS_IOS_POPUPS_ALLOWED" desc="Label for the list of sites that the user has allowed to show pop-ups. [Length: 20em] [iOS only]">
         Pop-ups Allowed
@@ -1048,7 +1003,7 @@ Handoff must also be enabled in the General section of Settings, and your device
         On
       </message>
       <message name="IDS_IOS_QR_SCANNER_VIEWPORT_CAPTION" desc="Message displayed below the QR scanner viewport instructing the user to position the scanned QR or bar code inside the viewport. [Length: unlimited] [iOS only]">
-        QR Code or barcode
+        Position QR code or barcode in this frame
       </message>
       <message name="IDS_IOS_READING_LIST_SNACKBAR_MESSAGE" desc="Message briefly displayed at the bottom of the screen to the user to inform that the selected page has been added to the reading list. [Length: 35em]" meaning="The selected page has been added to your reading list. [Length: 35em]">
         Added to Reading List
@@ -1064,6 +1019,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_READING_LIST_CANCEL_BUTTON" desc="Label of the button to stop editing the reading list entries (delete, mark as read/unread) [Length: 25em]" meaning="Stop editing. [Length: 25em]">
         Cancel
+      </message>
+      <message name="IDS_IOS_READING_LIST_CONTENT_CONTEXT_OFFLINE" desc="Title of the button to display the Offline version instead of the Online one. [Length: 50em]">
+        View Offline Version in New Tab
       </message>
       <message name="IDS_IOS_READING_LIST_DELETE_ALL_READ_BUTTON" desc="Label of the button to delete all the reading list entries read [Length: 25em]" meaning="Delete all the read entries. [Length: 25em]">
         Delete Read
@@ -1299,6 +1257,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SPOTLIGHT_KEYWORD_TWO" desc="Keyword used in Spotlight that will be linked to the Chrome App. [iOS only]">
         Internet
       </message>
+      <message name="IDS_IOS_SUGGESTIONS_DONE" desc="Label of the navigation bar button to close the view.">
+        Done
+      </message>
       <message name="IDS_IOS_SWITCH_BROWSER_MODE_ENTER_INCOGNITO" desc="The accessibility label of the switch browser mode button to enter the Incognito mode [iOS only]">
         Enter Incognito Mode
       </message>
@@ -1515,6 +1476,9 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       </message>
       <message name="IDS_IOS_TOOLS_MENU_SHARE" desc="The iOS menu item for sharing the current URL [Length: 15em] [iOS only]">
         Share...
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_SUGGESTIONS" desc="The iOS menu item for displaying the Suggestions UI [Length: 15em] [iOS only]">
+        Suggestions
       </message>
       <message name="IDS_IOS_TRANSLATE_SETTING" desc="Title for the view and option in Settings for Translate. [Length: 25em] [iOS only]">
         Google Translate

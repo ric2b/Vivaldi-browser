@@ -36,8 +36,8 @@
 #if defined(USE_ASH)
 // Note: gn check complains here, despite the correct conditional //ash dep.
 #include "ash/common/shelf/shelf_item_types.h"    // nogncheck
+#include "ash/public/cpp/window_properties.h"     // nogncheck
 #include "ash/resources/grit/ash_resources.h"     // nogncheck
-#include "ash/wm/window_properties.h"             // nogncheck
 #include "ash/wm/window_util.h"                   // nogncheck
 #include "chrome/browser/ui/ash/ash_util.h"       // nogncheck
 #include "ui/aura/client/aura_constants.h"
@@ -50,10 +50,6 @@
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif  // defined(OS_WIN)
-
-#if defined(USE_ASH)
-#include "ash/shell.h"
-#endif  // defined(USE_ASH)
 
 namespace task_manager {
 
@@ -82,10 +78,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   gfx::NativeWindow context =
       browser ? browser->window()->GetNativeWindow() : nullptr;
 #if defined(USE_ASH)
-  // NOTE(jarle@vivaldi): Do not call ash::wm::GetActiveWindow unless we have a
-  // valid Shell instance, otherwise it will terminate the process via
-  // Shell::GetPrimaryRootWindow. [VB-10963]
-  if (!chrome::IsRunningInMash() && !context && ash::Shell::HasInstance())
+  if (!ash_util::IsRunningInMash() && !context)
     context = ash::wm::GetActiveWindow();
 #endif
 

@@ -40,6 +40,7 @@
 #include "platform/graphics/Image.h"
 #include "platform/graphics/LinkHighlight.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/RasterInvalidationTracking.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -110,18 +111,11 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
       m_contentsLayerId(0),
       m_scrollableArea(nullptr),
       m_renderingContext3d(0),
-      m_colorBehavior(ColorBehavior::transformToGlobalTarget()),
       m_hasPreferredRasterBounds(false) {
 #if DCHECK_IS_ON()
   if (m_client)
     m_client->verifyNotPainting();
 #endif
-
-  // In true color mode, no inputs are adjusted, and all colors are converted
-  // at rasterization time.
-  if (RuntimeEnabledFeatures::trueColorRenderingEnabled())
-    m_colorBehavior = ColorBehavior::tag();
-
   m_contentLayerDelegate = WTF::makeUnique<ContentLayerDelegate>(this);
   m_layer = Platform::current()->compositorSupport()->createContentLayer(
       m_contentLayerDelegate.get());
@@ -298,11 +292,11 @@ void GraphicsLayer::paint(const IntRect* interestRect,
     getPaintController().commitNewDisplayItems(
         offsetFromLayoutObjectWithSubpixelAccumulation());
     if (RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled()) {
-      sk_sp<SkPicture> newPicture = capturePicture();
-      checkPaintUnderInvalidations(*newPicture);
+      sk_sp<PaintRecord> record = captureRecord();
+      checkPaintUnderInvalidations(*record);
       RasterInvalidationTracking& tracking =
           rasterInvalidationTrackingMap().add(this);
-      tracking.lastPaintedPicture = std::move(newPicture);
+      tracking.lastPaintedRecord = std::move(record);
       tracking.lastInterestRect = m_previousInterestRect;
       tracking.rasterInvalidationRegionSinceLastPaint = Region();
     }
@@ -333,8 +327,7 @@ bool GraphicsLayer::paintWithoutCommit(
     return false;
   }
 
-  GraphicsContext context(getPaintController(), disabledMode, nullptr,
-                          m_colorBehavior);
+  GraphicsContext context(getPaintController(), disabledMode, nullptr);
 
   m_previousInterestRect = *interestRect;
   m_client->paintContents(this, context, m_paintingPhase, *interestRect);
@@ -409,14 +402,14 @@ void GraphicsLayer::registerContentsLayer(WebLayer* layer) {
     s_registeredLayerSet = new HashSet<int>;
   if (s_registeredLayerSet->contains(layer->id()))
     CRASH();
-  s_registeredLayerSet->add(layer->id());
+  s_registeredLayerSet->insert(layer->id());
 }
 
 void GraphicsLayer::unregisterContentsLayer(WebLayer* layer) {
   DCHECK(s_registeredLayerSet);
   if (!s_registeredLayerSet->contains(layer->id()))
     CRASH();
-  s_registeredLayerSet->remove(layer->id());
+  s_registeredLayerSet->erase(layer->id());
 }
 
 void GraphicsLayer::setContentsTo(WebLayer* layer) {
@@ -1071,8 +1064,9 @@ void GraphicsLayer::setContentsRect(const IntRect& rect) {
 void GraphicsLayer::setContentsToImage(
     Image* image,
     RespectImageOrientationEnum respectImageOrientation) {
-  sk_sp<SkImage> skImage =
-      image ? image->imageForCurrentFrame(m_colorBehavior) : nullptr;
+  sk_sp<SkImage> skImage = image ? image->imageForCurrentFrame(
+                                       ColorBehavior::transformToGlobalTarget())
+                                 : nullptr;
 
   if (image && skImage && image->isBitmapImage()) {
     if (respectImageOrientation == RespectImageOrientation) {
@@ -1151,21 +1145,12 @@ void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea,
   m_scrollableArea = scrollableArea;
 
   // VisualViewport scrolling may involve pinch zoom and gets routed through
-  // WebViewImpl explicitly rather than via GraphicsLayer::didScroll since it
+  // WebViewImpl explicitly rather than via ScrollableArea::didScroll since it
   // needs to be set in tandem with the page scale delta.
   if (isVisualViewport)
-    m_layer->layer()->setScrollClient(0);
+    m_layer->layer()->setScrollClient(nullptr);
   else
-    m_layer->layer()->setScrollClient(this);
-}
-
-void GraphicsLayer::didScroll() {
-  if (m_scrollableArea) {
-    ScrollOffset newOffset =
-        toFloatSize(m_layer->layer()->scrollPositionDouble() -
-                    m_scrollableArea->scrollOrigin());
-    m_scrollableArea->setScrollOffset(newOffset, CompositorScroll);
-  }
+    m_layer->layer()->setScrollClient(scrollableArea);
 }
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
@@ -1210,14 +1195,13 @@ void GraphicsLayer::setCompositorMutableProperties(uint32_t properties) {
     layer->setCompositorMutableProperties(properties);
 }
 
-sk_sp<SkPicture> GraphicsLayer::capturePicture() {
+sk_sp<PaintRecord> GraphicsLayer::captureRecord() {
   if (!drawsContent())
     return nullptr;
 
   IntSize intSize = expandedIntSize(size());
   GraphicsContext graphicsContext(getPaintController(),
-                                  GraphicsContext::NothingDisabled, nullptr,
-                                  m_colorBehavior);
+                                  GraphicsContext::NothingDisabled, nullptr);
   graphicsContext.beginRecording(IntRect(IntPoint(0, 0), intSize));
   getPaintController().paintArtifact().replay(graphicsContext);
   return graphicsContext.endRecording();
@@ -1238,7 +1222,7 @@ static bool pixelsDiffer(SkColor p1, SkColor p2) {
          pixelComponentsDiffer(SkColorGetB(p1), SkColorGetB(p2));
 }
 
-void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture) {
+void GraphicsLayer::checkPaintUnderInvalidations(const PaintRecord& newRecord) {
   if (!drawsContent())
     return;
 
@@ -1247,7 +1231,7 @@ void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture) {
   if (!tracking)
     return;
 
-  if (!tracking->lastPaintedPicture)
+  if (!tracking->lastPaintedRecord)
     return;
 
   IntRect rect = intersection(tracking->lastInterestRect, interestRect());
@@ -1258,20 +1242,20 @@ void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture) {
   oldBitmap.allocPixels(
       SkImageInfo::MakeN32Premul(rect.width(), rect.height()));
   {
-    SkCanvas canvas(oldBitmap);
+    PaintCanvas canvas(oldBitmap);
     canvas.clear(SK_ColorTRANSPARENT);
     canvas.translate(-rect.x(), -rect.y());
-    canvas.drawPicture(tracking->lastPaintedPicture.get());
+    canvas.drawPicture(tracking->lastPaintedRecord.get());
   }
 
   SkBitmap newBitmap;
   newBitmap.allocPixels(
       SkImageInfo::MakeN32Premul(rect.width(), rect.height()));
   {
-    SkCanvas canvas(newBitmap);
+    PaintCanvas canvas(newBitmap);
     canvas.clear(SK_ColorTRANSPARENT);
     canvas.translate(-rect.x(), -rect.y());
-    canvas.drawPicture(&newPicture);
+    canvas.drawPicture(&newRecord);
   }
 
   oldBitmap.lockPixels();
@@ -1312,12 +1296,12 @@ void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture) {
   // Visualize under-invalidations by overlaying the new bitmap (containing red
   // pixels indicating under-invalidations, and transparent pixels otherwise)
   // onto the painting.
-  SkPictureRecorder recorder;
+  PaintRecorder recorder;
   recorder.beginRecording(rect);
   recorder.getRecordingCanvas()->drawBitmap(newBitmap, rect.x(), rect.y());
-  sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
+  sk_sp<PaintRecord> record = recorder.finishRecordingAsPicture();
   getPaintController().appendDebugDrawingAfterCommit(
-      *this, picture, offsetFromLayoutObjectWithSubpixelAccumulation());
+      *this, record, offsetFromLayoutObjectWithSubpixelAccumulation());
 }
 
 }  // namespace blink

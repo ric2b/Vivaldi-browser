@@ -9,6 +9,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/parse_number.h"
 #include "net/base/port_util.h"
@@ -72,6 +73,10 @@ std::string HostPortPair::HostForURL() const {
   }
 
   return host_;
+}
+
+size_t HostPortPair::EstimateMemoryUsage() const {
+  return base::trace_event::EstimateMemoryUsage(host_);
 }
 
 }  // namespace net

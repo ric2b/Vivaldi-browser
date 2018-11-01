@@ -173,8 +173,7 @@ IntersectionObserver::IntersectionObserver(
       m_rightMargin(Fixed),
       m_bottomMargin(Fixed),
       m_leftMargin(Fixed),
-      m_rootIsImplicit(root ? 0 : 1),
-      m_initialState(InitialState::kHidden) {
+      m_rootIsImplicit(root ? 0 : 1) {
   switch (rootMargin.size()) {
     case 0:
       break;
@@ -243,40 +242,21 @@ void IntersectionObserver::observe(Element* target,
   if (target->ensureIntersectionObserverData().getObservationFor(*this))
     return;
 
-  bool isDOMDescendant = true;
-  bool shouldReportRootBounds = false;
+  bool shouldReportRootBounds = true;
   if (rootIsImplicit()) {
     Frame* rootFrame = targetFrame->tree().top();
     DCHECK(rootFrame);
-    if (rootFrame == targetFrame) {
-      shouldReportRootBounds = true;
-    } else {
+    if (rootFrame != targetFrame) {
       shouldReportRootBounds =
           targetFrame->securityContext()->getSecurityOrigin()->canAccess(
               rootFrame->securityContext()->getSecurityOrigin());
     }
-  } else {
-    shouldReportRootBounds = true;
-    isDOMDescendant = root()->isShadowIncludingInclusiveAncestorOf(target);
   }
 
   IntersectionObservation* observation =
       new IntersectionObservation(*this, *target, shouldReportRootBounds);
   target->ensureIntersectionObserverData().addObservation(*observation);
-  m_observations.add(observation);
-
-  if (!isDOMDescendant) {
-    root()->document().addConsoleMessage(
-        ConsoleMessage::create(JSMessageSource, WarningMessageLevel,
-                               "IntersectionObserver.observe(target): target "
-                               "element is not a descendant of root."));
-  }
-
-  if (m_initialState == InitialState::kAuto) {
-    for (auto& observation : m_observations)
-      observation->setLastThresholdIndex(std::numeric_limits<unsigned>::max());
-  }
-
+  m_observations.insert(observation);
   if (FrameView* frameView = targetFrame->view())
     frameView->scheduleAnimation();
 }
@@ -313,11 +293,6 @@ void IntersectionObserver::disconnect(ExceptionState& exceptionState) {
     observation->disconnect();
   m_observations.clear();
   m_entries.clear();
-}
-
-void IntersectionObserver::setInitialState(InitialState initialState) {
-  DCHECK(m_observations.isEmpty());
-  m_initialState = initialState;
 }
 
 HeapVector<Member<IntersectionObserverEntry>> IntersectionObserver::takeRecords(

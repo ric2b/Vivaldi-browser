@@ -4,7 +4,6 @@
 
 #include "net/quic/test_tools/quic_connection_peer.h"
 
-#include "base/stl_util.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packet_writer.h"
@@ -213,13 +212,6 @@ QuicEncryptedPacket* QuicConnectionPeer::GetConnectionClosePacket(
 QuicPacketHeader* QuicConnectionPeer::GetLastHeader(
     QuicConnection* connection) {
   return &connection->last_header_;
-}
-
-// static
-void QuicConnectionPeer::SetPacketNumberOfLastSentPacket(
-    QuicConnection* connection,
-    QuicPacketNumber number) {
-  connection->packet_number_of_last_sent_packet_ = number;
 }
 
 // static

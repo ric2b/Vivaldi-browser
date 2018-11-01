@@ -24,6 +24,8 @@ source_set("key_systems") {
 
 source_set("base") {
   sources = [
+    "audio_device_ids.cc",
+    "audio_device_ids.h",
     "decrypt_context_impl.cc",
     "decrypt_context_impl.h",
     "decrypt_context_impl_clearkey.cc",
@@ -34,6 +36,10 @@ source_set("base") {
     "media_codec_support.h",
     "media_resource_tracker.cc",
     "media_resource_tracker.h",
+    "supported_codec_profile_levels_memo.cc",
+    "supported_codec_profile_levels_memo.h",
+    "video_mode_switcher.cc",
+    "video_mode_switcher.h",
     "video_plane_controller.cc",
     "video_plane_controller.h",
   ]
@@ -53,7 +59,6 @@ source_set("base") {
   deps = [
     "//base",
     "//chromecast/base",
-    "//chromecast/media/cma/backend",
     "//crypto",
     "//crypto:platform",
     "//media",

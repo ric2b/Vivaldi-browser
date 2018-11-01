@@ -71,10 +71,11 @@ bool StructTraits<cc::mojom::RenderPassQuadStateDataView, cc::DrawQuad>::Read(
   // RenderPass ids are never zero.
   if (!quad->render_pass_id)
     return false;
-  return data.ReadMaskUvScale(&quad->mask_uv_scale) &&
+  return data.ReadMaskUvRect(&quad->mask_uv_rect) &&
          data.ReadMaskTextureSize(&quad->mask_texture_size) &&
          data.ReadFiltersScale(&quad->filters_scale) &&
-         data.ReadFiltersOrigin(&quad->filters_origin);
+         data.ReadFiltersOrigin(&quad->filters_origin) &&
+         data.ReadTexCoordRect(&quad->tex_coord_rect);
 }
 
 // static
@@ -102,11 +103,41 @@ bool StructTraits<cc::mojom::StreamVideoQuadStateDataView, cc::DrawQuad>::Read(
 }
 
 // static
+cc::mojom::SurfaceDrawQuadType
+EnumTraits<cc::mojom::SurfaceDrawQuadType, cc::SurfaceDrawQuadType>::ToMojom(
+    cc::SurfaceDrawQuadType surface_draw_quad_type) {
+  switch (surface_draw_quad_type) {
+    case cc::SurfaceDrawQuadType::PRIMARY:
+      return cc::mojom::SurfaceDrawQuadType::PRIMARY;
+    case cc::SurfaceDrawQuadType::FALLBACK:
+      return cc::mojom::SurfaceDrawQuadType::FALLBACK;
+  }
+  NOTREACHED();
+  return cc::mojom::SurfaceDrawQuadType::PRIMARY;
+}
+
+// static
+bool EnumTraits<cc::mojom::SurfaceDrawQuadType, cc::SurfaceDrawQuadType>::
+    FromMojom(cc::mojom::SurfaceDrawQuadType input,
+              cc::SurfaceDrawQuadType* out) {
+  switch (input) {
+    case cc::mojom::SurfaceDrawQuadType::PRIMARY:
+      *out = cc::SurfaceDrawQuadType::PRIMARY;
+      return true;
+    case cc::mojom::SurfaceDrawQuadType::FALLBACK:
+      *out = cc::SurfaceDrawQuadType::FALLBACK;
+      return true;
+  }
+  return false;
+}
+
+// static
 bool StructTraits<cc::mojom::SurfaceQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::SurfaceQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::SurfaceDrawQuad* quad = static_cast<cc::SurfaceDrawQuad*>(out);
-  return data.ReadSurface(&quad->surface_id);
+  return data.ReadSurfaceDrawQuadType(&quad->surface_draw_quad_type) &&
+         data.ReadSurface(&quad->surface_id);
 }
 
 // static

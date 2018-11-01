@@ -294,7 +294,7 @@ void AudioParamHandler::connect(AudioNodeOutput& output) {
     return;
 
   output.addParam(*this);
-  m_outputs.add(&output);
+  m_outputs.insert(&output);
   changedOutputs();
 }
 
@@ -302,7 +302,7 @@ void AudioParamHandler::disconnect(AudioNodeOutput& output) {
   ASSERT(deferredTaskHandler().isGraphOwner());
 
   if (m_outputs.contains(&output)) {
-    m_outputs.remove(&output);
+    m_outputs.erase(&output);
     changedOutputs();
     output.removeParam(*this);
   }

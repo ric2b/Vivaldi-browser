@@ -26,6 +26,8 @@ DisplayOutputSurface::DisplayOutputSurface(
       weak_ptr_factory_(this) {
   capabilities_.flipped_output_surface =
       context_provider->ContextCapabilities().flips_vertically;
+  capabilities_.supports_stencil =
+      context_provider->ContextCapabilities().num_stencil_bits > 0;
   context_provider->SetSwapBuffersCompletionCallback(
       base::Bind(&DisplayOutputSurface::OnGpuSwapBuffersCompleted,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -52,22 +54,37 @@ void DisplayOutputSurface::BindFramebuffer() {
   context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void DisplayOutputSurface::SetDrawRectangle(const gfx::Rect& rect) {
+  if (set_draw_rectangle_for_frame_)
+    return;
+  DCHECK(gfx::Rect(size_).Contains(rect));
+  DCHECK(has_set_draw_rectangle_since_last_resize_ ||
+         (gfx::Rect(size_) == rect));
+  set_draw_rectangle_for_frame_ = true;
+  has_set_draw_rectangle_since_last_resize_ = true;
+  context_provider()->ContextGL()->SetDrawRectangleCHROMIUM(
+      rect.x(), rect.y(), rect.width(), rect.height());
+}
+
 void DisplayOutputSurface::Reshape(const gfx::Size& size,
                                    float device_scale_factor,
                                    const gfx::ColorSpace& color_space,
                                    bool has_alpha,
                                    bool use_stencil) {
+  size_ = size;
+  has_set_draw_rectangle_since_last_resize_ = false;
   context_provider()->ContextGL()->ResizeCHROMIUM(
       size.width(), size.height(), device_scale_factor, has_alpha);
 }
 
 void DisplayOutputSurface::SwapBuffers(cc::OutputSurfaceFrame frame) {
   DCHECK(context_provider_);
-  if (frame.sub_buffer_rect == gfx::Rect(frame.size)) {
-    context_provider_->ContextSupport()->Swap();
-  } else {
+  set_draw_rectangle_for_frame_ = false;
+  if (frame.sub_buffer_rect) {
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        frame.sub_buffer_rect);
+        *frame.sub_buffer_rect);
+  } else {
+    context_provider_->ContextSupport()->Swap();
   }
 }
 
@@ -101,11 +118,15 @@ bool DisplayOutputSurface::HasExternalStencilTest() const {
 
 void DisplayOutputSurface::ApplyExternalStencil() {}
 
+void DisplayOutputSurface::DidReceiveSwapBuffersAck(gfx::SwapResult result) {
+  client_->DidReceiveSwapBuffersAck();
+}
+
 void DisplayOutputSurface::OnGpuSwapBuffersCompleted(
     const std::vector<ui::LatencyInfo>& latency_info,
     gfx::SwapResult result,
     const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
-  client_->DidReceiveSwapBuffersAck();
+  DidReceiveSwapBuffersAck(result);
 }
 
 void DisplayOutputSurface::OnVSyncParametersUpdated(base::TimeTicks timebase,

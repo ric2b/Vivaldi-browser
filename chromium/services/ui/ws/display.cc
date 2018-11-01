@@ -256,6 +256,8 @@ void Display::CreateRootWindow(const gfx::Size& size) {
   root_.reset(window_server_->CreateServerWindow(
       display_manager()->GetAndAdvanceNextRootId(),
       ServerWindow::Properties()));
+  root_->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   root_->SetBounds(gfx::Rect(size));
   root_->SetVisible(true);
   focus_controller_ = base::MakeUnique<FocusController>(this, root_.get());
@@ -270,13 +272,6 @@ ServerWindow* Display::GetRootWindow() {
   return root_.get();
 }
 
-ServerWindow* Display::GetActiveRootWindow() {
-  WindowManagerDisplayRoot* display_root = GetActiveWindowManagerDisplayRoot();
-  if (display_root)
-    return display_root->root();
-  return nullptr;
-}
-
 void Display::OnAcceleratedWidgetAvailable() {
   display_manager()->OnDisplayAcceleratedWidgetAvailable(this);
   InitWindowManagerDisplayRoots();
@@ -289,7 +284,7 @@ bool Display::IsInHighContrastMode() {
 void Display::OnEvent(const ui::Event& event) {
   WindowManagerDisplayRoot* display_root = GetActiveWindowManagerDisplayRoot();
   if (display_root)
-    display_root->window_manager_state()->ProcessEvent(event);
+    display_root->window_manager_state()->ProcessEvent(event, GetId());
   window_server_
       ->GetUserActivityMonitorForUser(
           window_server_->user_id_tracker()->active_id())
@@ -311,6 +306,13 @@ void Display::OnViewportMetricsChanged(
   root_->SetBounds(new_bounds);
   for (auto& pair : window_manager_display_root_map_)
     pair.second->root()->SetBounds(new_bounds);
+}
+
+ServerWindow* Display::GetActiveRootWindow() {
+  WindowManagerDisplayRoot* display_root = GetActiveWindowManagerDisplayRoot();
+  if (display_root)
+    return display_root->root();
+  return nullptr;
 }
 
 bool Display::CanHaveActiveChildren(ServerWindow* window) const {

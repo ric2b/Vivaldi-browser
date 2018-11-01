@@ -25,10 +25,6 @@ bool TestPaletteDelegate::HasNoteApp() {
   return has_note_app_;
 }
 
-void TestPaletteDelegate::SetPartialMagnifierState(bool enabled) {
-  partial_magnifier_state_ = enabled;
-}
-
 bool TestPaletteDelegate::ShouldAutoOpenPalette() {
   return should_auto_open_palette_;
 }

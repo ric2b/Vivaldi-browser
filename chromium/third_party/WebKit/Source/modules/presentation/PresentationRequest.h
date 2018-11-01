@@ -23,7 +23,7 @@ namespace blink {
 class MODULES_EXPORT PresentationRequest final
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<PresentationRequest>,
-      public ContextLifecycleObserver {
+      public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationRequest);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -61,6 +61,8 @@ class MODULES_EXPORT PresentationRequest final
 
  private:
   PresentationRequest(ExecutionContext*, const Vector<KURL>&);
+
+  void recordOriginTypeAccess(ExecutionContext*) const;
 
   Member<PresentationAvailabilityProperty> m_availabilityProperty;
   Vector<KURL> m_urls;

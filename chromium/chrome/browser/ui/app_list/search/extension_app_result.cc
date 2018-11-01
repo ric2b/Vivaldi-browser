@@ -44,20 +44,30 @@ ExtensionAppResult::ExtensionAppResult(Profile* profile,
 
   is_platform_app_ = extension->is_platform_app();
 
-  icon_.reset(
-      new extensions::IconImage(profile,
-                                extension,
-                                extensions::IconsInfo::GetIcons(extension),
-                                GetPreferredIconDimension(),
-                                extensions::util::GetDefaultAppIcon(),
-                                this));
-  UpdateIcon();
+  CreateOrUpdateIcon();
 
   StartObservingExtensionRegistry();
 }
 
 ExtensionAppResult::~ExtensionAppResult() {
   StopObservingExtensionRegistry();
+}
+
+void ExtensionAppResult::CreateOrUpdateIcon() {
+  if (icon_ && icon_->is_valid()) {
+    UpdateIcon();
+    return;
+  }
+
+  const extensions::Extension* extension =
+      extensions::ExtensionRegistry::Get(profile())->GetInstalledExtension(
+          app_id());
+  DCHECK(extension);
+
+  icon_ = base::MakeUnique<extensions::IconImage>(
+      profile(), extension, extensions::IconsInfo::GetIcons(extension),
+      GetPreferredIconDimension(), extensions::util::GetDefaultAppIcon(), this);
+  UpdateIcon();
 }
 
 void ExtensionAppResult::Open(int event_flags) {
@@ -90,9 +100,9 @@ void ExtensionAppResult::Open(int event_flags) {
 }
 
 std::unique_ptr<SearchResult> ExtensionAppResult::Duplicate() const {
-  std::unique_ptr<SearchResult> copy(
-      new ExtensionAppResult(profile(), app_id(), controller(),
-                             display_type() == DISPLAY_RECOMMENDATION));
+  std::unique_ptr<SearchResult> copy = base::MakeUnique<ExtensionAppResult>(
+      profile(), app_id(), controller(),
+      display_type() == DISPLAY_RECOMMENDATION);
   copy->set_title(title());
   copy->set_title_tags(title_tags());
   copy->set_relevance(relevance());
@@ -184,7 +194,9 @@ void ExtensionAppResult::ExtensionEnableFlowAborted(bool user_initiated) {
 void ExtensionAppResult::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension) {
-  UpdateIcon();
+  // Old |icon_| might be invalidated for forever in case extension gets
+  // updated. In this case we need re-create icon again.
+  CreateOrUpdateIcon();
 }
 
 void ExtensionAppResult::OnShutdown(extensions::ExtensionRegistry* registry) {

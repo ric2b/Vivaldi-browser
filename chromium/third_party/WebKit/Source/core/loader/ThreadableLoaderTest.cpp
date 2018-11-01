@@ -4,17 +4,18 @@
 
 #include "core/loader/ThreadableLoader.h"
 
-#include "core/dom/ExecutionContextTask.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceLoaderOptions.h"
+#include <memory>
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
+#include "core/loader/ThreadableLoadingContext.h"
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerThreadTestHelper.h"
 #include "platform/WaitableEvent.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
@@ -33,7 +34,6 @@
 #include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
-#include <memory>
 
 namespace blink {
 
@@ -45,6 +45,8 @@ using ::testing::InvokeWithoutArgs;
 using ::testing::StrEq;
 using ::testing::Truly;
 using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
+
+constexpr char kFileName[] = "fox-null-terminated.html";
 
 class MockThreadableLoaderClient : public ThreadableLoaderClient {
  public:
@@ -130,8 +132,8 @@ class DocumentThreadableLoaderTestHelper : public ThreadableLoaderTestHelper {
     options.crossOriginRequestPolicy = crossOriginRequestPolicy;
     ResourceLoaderOptions resourceLoaderOptions;
     m_loader = DocumentThreadableLoader::create(
-        document(), client, options, resourceLoaderOptions,
-        ThreadableLoader::ClientSpec::kTesting);
+        *ThreadableLoadingContext::create(document()), client, options,
+        resourceLoaderOptions);
   }
 
   void startLoader(const ResourceRequest& request) override {
@@ -241,10 +243,12 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper,
         ParentFrameTaskRunners::create(&m_dummyPageHolder->frame());
     m_workerThread = WTF::wrapUnique(
         new WorkerThreadForTest(this, *m_mockWorkerReportingProxy));
+    m_loadingContext = ThreadableLoadingContext::create(document());
 
     expectWorkerLifetimeReportingCalls();
     m_workerThread->startWithSourceCode(m_securityOrigin.get(),
-                                        "//fake source code");
+                                        "//fake source code",
+                                        m_parentFrameTaskRunners.get());
     m_workerThread->waitForInit();
   }
 
@@ -300,8 +304,7 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper,
     DCHECK(m_workerThread->globalScope()->isWorkerGlobalScope());
 
     m_loader = ThreadableLoader::create(*m_workerThread->globalScope(), client,
-                                        options, resourceLoaderOptions,
-                                        ThreadableLoader::ClientSpec::kTesting);
+                                        options, resourceLoaderOptions);
     DCHECK(m_loader);
     event->signal();
   }
@@ -325,16 +328,13 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper,
   }
 
   // WorkerLoaderProxyProvider methods.
-  void postTaskToLoader(const WebTraceLocation& location,
-                        std::unique_ptr<ExecutionContextTask> task) override {
+  void postTaskToLoader(
+      const WebTraceLocation& location,
+      std::unique_ptr<WTF::CrossThreadClosure> task) override {
     DCHECK(m_workerThread);
     DCHECK(m_workerThread->isCurrentThread());
     m_parentFrameTaskRunners->get(TaskType::Networking)
-        ->postTask(
-            BLINK_FROM_HERE,
-            crossThreadBind(&ExecutionContextTask::performTaskIfContextIsValid,
-                            WTF::passed(std::move(task)),
-                            wrapCrossThreadWeakPersistent(&document())));
+        ->postTask(BLINK_FROM_HERE, std::move(task));
   }
 
   void postTaskToWorkerGlobalScope(
@@ -344,15 +344,22 @@ class WorkerThreadableLoaderTestHelper : public ThreadableLoaderTestHelper,
     m_workerThread->postTask(location, std::move(task));
   }
 
+  ThreadableLoadingContext* getThreadableLoadingContext() override {
+    return m_loadingContext.get();
+  }
+
   RefPtr<SecurityOrigin> m_securityOrigin;
   std::unique_ptr<MockWorkerReportingProxy> m_mockWorkerReportingProxy;
   std::unique_ptr<WorkerThreadForTest> m_workerThread;
 
   std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
-  Persistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
+  // Accessed cross-thread when worker thread posts tasks to the parent.
+  CrossThreadPersistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
   Checkpoint m_checkpoint;
   // |m_loader| must be touched only from the worker thread only.
   CrossThreadPersistent<ThreadableLoader> m_loader;
+
+  Persistent<ThreadableLoadingContext> m_loadingContext;
 };
 
 class ThreadableLoaderTest
@@ -406,14 +413,15 @@ class ThreadableLoaderTest
 
   void TearDown() override {
     m_helper->onTearDown();
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    memoryCache()->evictResources();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
     m_client.reset();
   }
 
   void setUpSuccessURL() {
     URLTestHelpers::registerMockedURLLoad(
-        successURL(), "fox-null-terminated.html", "text/html");
+        successURL(), testing::webTestDataPath(kFileName), "text/html");
   }
 
   void setUpErrorURL() {
@@ -434,7 +442,7 @@ class ThreadableLoaderTest
     response.addHTTPHeaderField("Access-Control-Allow-Origin", "null");
 
     URLTestHelpers::registerMockedURLLoadWithCustomResponse(
-        url, "fox-null-terminated.html", "", response);
+        url, testing::webTestDataPath(kFileName), response);
   }
 
   void setUpRedirectLoopURL() {
@@ -451,7 +459,7 @@ class ThreadableLoaderTest
     response.addHTTPHeaderField("Access-Control-Allow-Origin", "null");
 
     URLTestHelpers::registerMockedURLLoadWithCustomResponse(
-        url, "fox-null-terminated.html", "", response);
+        url, testing::webTestDataPath(kFileName), response);
   }
 
   std::unique_ptr<MockThreadableLoaderClient> m_client;

@@ -36,9 +36,9 @@
 #include "core/frame/VisualViewport.h"
 #include "core/page/Page.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebSettings.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -51,7 +51,7 @@ namespace blink {
 // These tests cover browser controls scrolling on main-thread.
 // The animation for completing a partial show/hide is done in compositor so
 // it is not covered here.
-class BrowserControlsTest : public testing::Test {
+class BrowserControlsTest : public ::testing::Test {
  public:
   BrowserControlsTest() : m_baseURL("http://www.test.com/") {
     registerMockedHttpURLLoad("large-div.html");
@@ -65,8 +65,9 @@ class BrowserControlsTest : public testing::Test {
   }
 
   ~BrowserControlsTest() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   WebViewImpl* initialize(const std::string& pageName = "large-div.html") {
@@ -93,14 +94,14 @@ class BrowserControlsTest : public testing::Test {
   }
 
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(m_baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
   }
 
-  WebGestureEvent generateEvent(WebInputEvent::Type type,
-                                int deltaX = 0,
-                                int deltaY = 0) {
+  WebCoalescedInputEvent generateEvent(WebInputEvent::Type type,
+                                       int deltaX = 0,
+                                       int deltaY = 0) {
     WebGestureEvent event(type, WebInputEvent::NoModifiers,
                           WebInputEvent::TimeStampForTesting);
     event.sourceDevice = WebGestureDeviceTouchscreen;
@@ -110,7 +111,7 @@ class BrowserControlsTest : public testing::Test {
       event.data.scrollUpdate.deltaX = deltaX;
       event.data.scrollUpdate.deltaY = deltaY;
     }
-    return event;
+    return WebCoalescedInputEvent(event);
   }
 
   void verticalScroll(float deltaY) {

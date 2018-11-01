@@ -4,8 +4,8 @@
 
 #include "components/spellcheck/renderer/spellcheck_provider_test.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-#include "components/spellcheck/common/spellcheck_marker.h"
 #include "components/spellcheck/common/spellcheck_messages.h"
 #include "components/spellcheck/renderer/spellcheck.h"
 #include "components/spellcheck/spellcheck_build_features.h"
@@ -62,14 +62,14 @@ bool TestingSpellCheckProvider::Send(IPC::Message* message)  {
   }
 #endif
 
-  messages_.push_back(message);
+  messages_.push_back(base::WrapUnique<IPC::Message>(message));
   return true;
 }
 
-void TestingSpellCheckProvider::OnCallSpellingService(int route_id,
-                           int identifier,
-                           const base::string16& text,
-                           const std::vector<SpellCheckMarker>& markers) {
+void TestingSpellCheckProvider::OnCallSpellingService(
+    int route_id,
+    int identifier,
+    const base::string16& text) {
 #if BUILDFLAG(USE_BROWSER_SPELLCHECKER)
   NOTREACHED();
 #else
@@ -111,4 +111,3 @@ bool TestingSpellCheckProvider::SatisfyRequestFromCache(
 
 SpellCheckProviderTest::SpellCheckProviderTest() {}
 SpellCheckProviderTest::~SpellCheckProviderTest() {}
-

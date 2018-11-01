@@ -31,11 +31,14 @@ source_set("unit_tests") {
   ]
   deps = [
     ":content",
+    "//base/test:test_support",
     "//components/favicon/core",
+    "//components/favicon/core/test:test_support",
     "//content/public/browser",
     "//content/public/common",
     "//content/test:test_support",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 }

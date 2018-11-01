@@ -17,9 +17,8 @@ import android.text.TextUtils;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
@@ -31,6 +30,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
+import javax.annotation.Nullable;
 
 /**
  * Utilities for detecting multi-window/multi-instance support.
@@ -57,9 +58,7 @@ public class MultiWindowUtils implements ActivityStateListener {
      */
     public static MultiWindowUtils getInstance() {
         if (sInstance.get() == null) {
-            ChromeApplication application =
-                    (ChromeApplication) ContextUtils.getApplicationContext();
-            sInstance.compareAndSet(null, application.createMultiWindowUtils());
+            sInstance.compareAndSet(null, AppHooks.get().createMultiWindowUtils());
         }
         return sInstance.get();
     }
@@ -159,8 +158,8 @@ public class MultiWindowUtils implements ActivityStateListener {
      * @param context The current Context, used to retrieve the ActivityManager system service.
      * @return The ChromeTabbedActivity to use for the incoming intent.
      */
-    public Class<? extends ChromeTabbedActivity> getTabbedActivityForIntent(Intent intent,
-            Context context) {
+    public Class<? extends ChromeTabbedActivity> getTabbedActivityForIntent(
+            @Nullable Intent intent, Context context) {
         // 1. Exit early if the build version doesn't support Android N+ multi-window mode or
         // ChromeTabbedActivity2 isn't running.
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M
@@ -169,7 +168,7 @@ public class MultiWindowUtils implements ActivityStateListener {
         }
 
         // 2. If the intent has a window id set, use that.
-        if (intent.hasExtra(IntentHandler.EXTRA_WINDOW_ID)) {
+        if (intent != null && IntentUtils.safeHasExtra(intent, IntentHandler.EXTRA_WINDOW_ID)) {
             int windowId = IntentUtils.safeGetIntExtra(intent, IntentHandler.EXTRA_WINDOW_ID, 0);
             if (windowId == 1) return ChromeTabbedActivity.class;
             if (windowId == 2) return ChromeTabbedActivity2.class;

@@ -172,9 +172,11 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
 #endif  // defined(OS_WIN)
 
   if (vivaldi::IsVivaldiRunning())
-    command_line->AppendSwitchNoDup(switches::kRunningVivaldi);
+    vivaldi::CommandLineAppendSwitchNoDup(command_line.get(),
+                                          switches::kRunningVivaldi);
   else
-    command_line->AppendSwitchNoDup(switches::kDisableVivaldi);
+    vivaldi::CommandLineAppendSwitchNoDup(command_line.get(),
+                                          switches::kDisableVivaldi);
 
   static const char* const kSwitchesToCopy[] = {
     switches::kCloudPrintSetupProxy,

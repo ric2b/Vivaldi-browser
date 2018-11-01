@@ -31,12 +31,11 @@
 /**
  * @unrestricted
  */
-SDK.ServiceWorkerManager = class extends SDK.SDKObject {
+SDK.ServiceWorkerManager = class extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} target
-   * @param {!SDK.SubTargetsManager} subTargetsManager
    */
-  constructor(target, subTargetsManager) {
+  constructor(target) {
     super(target);
     target.registerServiceWorkerDispatcher(new SDK.ServiceWorkerDispatcher(this));
     this._lastAnonymousTargetId = 0;
@@ -48,7 +47,7 @@ SDK.ServiceWorkerManager = class extends SDK.SDKObject {
     if (this._forceUpdateSetting.get())
       this._forceUpdateSettingChanged();
     this._forceUpdateSetting.addChangeListener(this._forceUpdateSettingChanged, this);
-    new SDK.ServiceWorkerContextNamer(target, this, subTargetsManager);
+    new SDK.ServiceWorkerContextNamer(target, this);
   }
 
   enable() {
@@ -243,6 +242,8 @@ SDK.ServiceWorkerManager = class extends SDK.SDKObject {
     this._agent.setForceUpdateOnPageLoad(this._forceUpdateSetting.get());
   }
 };
+
+SDK.SDKModel.register(SDK.ServiceWorkerManager, SDK.Target.Capability.Target | SDK.Target.Capability.Browser);
 
 /** @enum {symbol} */
 SDK.ServiceWorkerManager.Events = {
@@ -530,12 +531,10 @@ SDK.ServiceWorkerContextNamer = class {
   /**
    * @param {!SDK.Target} target
    * @param {!SDK.ServiceWorkerManager} serviceWorkerManager
-   * @param {!SDK.SubTargetsManager} subTargetsManager
    */
-  constructor(target, serviceWorkerManager, subTargetsManager) {
+  constructor(target, serviceWorkerManager) {
     this._target = target;
     this._serviceWorkerManager = serviceWorkerManager;
-    this._subTargetsManager = subTargetsManager;
     /** @type {!Map<string, !SDK.ServiceWorkerVersion>} */
     this._versionByTargetId = new Map();
     serviceWorkerManager.addEventListener(
@@ -581,10 +580,7 @@ SDK.ServiceWorkerContextNamer = class {
     var parent = target.parentTarget();
     if (!parent || parent.parentTarget() !== this._target)
       return null;
-    var targetInfo = this._subTargetsManager.targetInfo(parent);
-    if (!targetInfo || targetInfo.type !== 'service_worker')
-      return null;
-    return targetInfo.id;
+    return parent.id();
   }
 
   _updateAllContextLabels() {
@@ -603,11 +599,12 @@ SDK.ServiceWorkerContextNamer = class {
    * @param {?SDK.ServiceWorkerVersion} version
    */
   _updateContextLabel(context, version) {
+    if (!version) {
+      context.setLabel('');
+      return;
+    }
     var parsedUrl = context.origin.asParsedURL();
     var label = parsedUrl ? parsedUrl.lastPathComponentWithFragment() : context.name;
-    if (version)
-      context.setLabel(label + ' #' + version.id + ' (' + version.status + ')');
-    else
-      context.setLabel(label);
+    context.setLabel(label + ' #' + version.id + ' (' + version.status + ')');
   }
 };

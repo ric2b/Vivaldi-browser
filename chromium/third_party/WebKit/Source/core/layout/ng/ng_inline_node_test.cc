@@ -4,6 +4,7 @@
 
 #include "core/layout/ng/ng_inline_node.h"
 
+#include "core/layout/LayoutTestHelper.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment_builder.h"
@@ -23,6 +24,8 @@ class NGInlineNodeForTest : public NGInlineNode {
     block_style_ = const_cast<ComputedStyle*>(block_style);
   }
   using NGInlineNode::NGInlineNode;
+
+  LayoutObject* GetLayoutObject() override { return nullptr; }
 
   String& Text() { return text_content_; }
   Vector<NGLayoutInlineItem>& Items() { return items_; }
@@ -52,30 +55,44 @@ class NGInlineNodeForTest : public NGInlineNode {
     is_bidi_enabled_ = true;
     NGInlineNode::SegmentText();
   }
+
+  using NGInlineNode::ShapeText;
 };
 
-class NGInlineNodeTest : public ::testing::Test {
+class NGInlineNodeTest : public RenderingTest {
  protected:
   void SetUp() override {
+    RenderingTest::SetUp();
     style_ = ComputedStyle::create();
     style_->font().update(nullptr);
   }
 
-  void CreateLine(
-      NGInlineNode* node,
-      HeapVector<Member<const NGPhysicalTextFragment>>* fragments_out) {
-    NGConstraintSpace* constraint_space =
-        NGConstraintSpaceBuilder(kHorizontalTopBottom).ToConstraintSpace();
-    NGLineBuilder line_builder(node, constraint_space);
-    NGTextLayoutAlgorithm* algorithm =
-        new NGTextLayoutAlgorithm(node, constraint_space);
-    algorithm->LayoutInline(&line_builder);
+  void setAhemToStyle() {
+    // Get Ahem from document. Loading "Ahem.woff" using |createTestFont| fails
+    // on linux_chromium_asan_rel_ng.
+    loadAhem();
+    setBodyInnerHTML("<div id=t style='font:10px Ahem'></div>");
+    LayoutObject* layout_object = getLayoutObjectByElementId("t");
+    style_->setFont(layout_object->style()->font());
+  }
 
-    NGFragmentBuilder fragment_builder(NGPhysicalFragment::kFragmentBox);
+  void CreateLine(NGInlineNode* node,
+                  Vector<RefPtr<const NGPhysicalTextFragment>>* fragments_out) {
+    RefPtr<NGConstraintSpace> constraint_space =
+        NGConstraintSpaceBuilder(kHorizontalTopBottom)
+            .ToConstraintSpace(kHorizontalTopBottom);
+    NGLineBuilder line_builder(node, constraint_space.get());
+
+    NGTextLayoutAlgorithm algorithm(node, constraint_space.get());
+    algorithm.LayoutInline(&line_builder);
+
+    NGFragmentBuilder fragment_builder(NGPhysicalFragment::kFragmentBox, node);
     line_builder.CreateFragments(&fragment_builder);
-    NGPhysicalBoxFragment* fragment = fragment_builder.ToBoxFragment();
-    for (const NGPhysicalFragment* child : fragment->Children()) {
-      fragments_out->push_back(toNGPhysicalTextFragment(child));
+    RefPtr<NGLayoutResult> result = fragment_builder.ToBoxFragment();
+    for (const auto& child :
+         toNGPhysicalBoxFragment(result->PhysicalFragment().get())
+             ->Children()) {
+      fragments_out->push_back(toNGPhysicalTextFragment(child.get()));
     }
   }
 
@@ -176,22 +193,54 @@ TEST_F(NGInlineNodeTest, SegmentBidiIsolate) {
   TEST_ITEM_OFFSET_DIR(items[8], 22u, 28u, TextDirection::kLtr);
 }
 
-#define TEST_TEXT_FRAGMENT(fragment, node, start_index, end_index, dir) \
-  EXPECT_EQ(node, fragment->Node());                                    \
-  EXPECT_EQ(start_index, fragment->StartIndex());                       \
-  EXPECT_EQ(end_index, fragment->EndIndex());                           \
-  EXPECT_EQ(dir, node->Items()[fragment->StartIndex()].Direction())
+#define TEST_TEXT_FRAGMENT(fragment, node, index, start_offset, end_offset, \
+                           dir)                                             \
+  EXPECT_EQ(node, fragment->Node());                                        \
+  EXPECT_EQ(index, fragment->ItemIndex());                                  \
+  EXPECT_EQ(start_offset, fragment->StartOffset());                         \
+  EXPECT_EQ(end_offset, fragment->EndOffset());                             \
+  EXPECT_EQ(dir, node->Items()[fragment->ItemIndex()].Direction())
 
 TEST_F(NGInlineNodeTest, CreateLineBidiIsolate) {
-  NGInlineNodeForTest* node = CreateBidiIsolateNode(style_.get());
-  HeapVector<Member<const NGPhysicalTextFragment>> fragments;
+  RefPtr<ComputedStyle> style = ComputedStyle::create();
+  style->setLineHeight(Length(1, Fixed));
+  style->font().update(nullptr);
+  NGInlineNodeForTest* node = CreateBidiIsolateNode(style.get());
+  Vector<RefPtr<const NGPhysicalTextFragment>> fragments;
   CreateLine(node, &fragments);
   ASSERT_EQ(5u, fragments.size());
-  TEST_TEXT_FRAGMENT(fragments[0], node, 0u, 1u, TextDirection::kLtr);
-  TEST_TEXT_FRAGMENT(fragments[1], node, 6u, 7u, TextDirection::kRtl);
-  TEST_TEXT_FRAGMENT(fragments[2], node, 4u, 5u, TextDirection::kLtr);
-  TEST_TEXT_FRAGMENT(fragments[3], node, 2u, 3u, TextDirection::kRtl);
-  TEST_TEXT_FRAGMENT(fragments[4], node, 8u, 9u, TextDirection::kLtr);
+  TEST_TEXT_FRAGMENT(fragments[0], node, 0u, 0u, 6u, TextDirection::kLtr);
+  TEST_TEXT_FRAGMENT(fragments[1], node, 6u, 16u, 21u, TextDirection::kRtl);
+  TEST_TEXT_FRAGMENT(fragments[2], node, 4u, 14u, 15u, TextDirection::kLtr);
+  TEST_TEXT_FRAGMENT(fragments[3], node, 2u, 7u, 13u, TextDirection::kRtl);
+  TEST_TEXT_FRAGMENT(fragments[4], node, 8u, 22u, 28u, TextDirection::kLtr);
+}
+
+TEST_F(NGInlineNodeTest, MinAndMaxContentSizes) {
+  setAhemToStyle();
+  NGInlineNodeForTest* node = new NGInlineNodeForTest(style_.get());
+  node->Append("AB CDE", style_.get());
+  node->ShapeText();
+  MinAndMaxContentSizes sizes = node->ComputeMinAndMaxContentSizes();
+  // TODO(kojii): min_content should be 20, but is 30 until NGLineBuilder
+  // implements trailing spaces correctly.
+  EXPECT_EQ(30, sizes.min_content);
+  EXPECT_EQ(60, sizes.max_content);
+}
+
+TEST_F(NGInlineNodeTest, MinAndMaxContentSizesElementBoundary) {
+  setAhemToStyle();
+  NGInlineNodeForTest* node = new NGInlineNodeForTest(style_.get());
+  node->Append("A B", style_.get());
+  node->Append("C D", style_.get());
+  node->ShapeText();
+  MinAndMaxContentSizes sizes = node->ComputeMinAndMaxContentSizes();
+  // |min_content| should be the width of "BC" because there is an element
+  // boundary between "B" and "C" but no break opportunities.
+  // TODO(kojii): min_content should be 20, but is 30 until NGLineBuilder
+  // implements trailing spaces correctly.
+  EXPECT_EQ(30, sizes.min_content);
+  EXPECT_EQ(60, sizes.max_content);
 }
 
 }  // namespace blink

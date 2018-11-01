@@ -1,18 +1,28 @@
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="/settings_page/settings_subpage_search.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/site_settings/cookie_tree_behavior.html">
-<link rel="import" href="/site_settings/site_settings_behavior.html">
+<link rel="import" href="../settings_page/settings_subpage_search.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="cookie_tree_behavior.html">
+<link rel="import" href="site_settings_behavior.html">
 
 <dom-module id="site-data">
   <template>
     <style include="settings-shared">
-      paper-button#removeButton {
+      #removeShowingSites {
         -webkit-margin-start: auto;
+      }
+
+      #removeSecondary {
+        -webkit-padding-start: 0;
+      }
+
+      .remove-site {
+        -webkit-margin-end: 0;
       }
 
       .subtitle-row {
@@ -28,10 +38,10 @@
       </settings-subpage-search>
     </div>
     <div class="settings-box continuation">
-      <paper-button class="secondary-button" id="removeButton"
-          on-tap="onConfirmDeleteMultipleSites_"
+      <paper-button class="secondary-button" id="removeShowingSites"
+          on-tap="onRemoveShowingSitesTap_"
           hidden$="[[!isRemoveButtonVisible_(sites, renderedItemCount)]]">
-          [[computeRemoveLabel_(filterString_)]]
+        [[computeRemoveLabel_(filterString_)]]
       </paper-button>
     </div>
     <div class="list-frame vertical-list">
@@ -42,15 +52,24 @@
           </div>
           <div class="middle">
             [[item.site]]
-            <div class="secondary">[[item.localData]]</div>
+            <div class="secondary" id="siteSecondary">[[item.localData]]</div>
           </div>
-          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label$="[[item.site]]"
+              aria-describedby="siteSecondary"></button>
+          <div class="secondary-action" id="removeSecondary">
+            <button is="paper-icon-button-light" class="remove-site"
+                title$="[[i18n('siteSettingsCookieRemoveSite', item.site)]]"
+                on-tap="onRemoveSiteTap_">
+              <iron-icon icon="cr:delete"></iron-icon>
+            </button>
+          </div>
         </div>
       </template>
     </div>
 
     <!-- Confirm Delete dialog -->
-    <dialog is="cr-dialog" id="confirmDeleteDialog">
+    <dialog is="cr-dialog" id="confirmDeleteDialog" close-text="$i18n{close}">
       <div class="title">$i18n{siteSettingsCookieRemoveDialogTitle}</div>
       <div class="body">[[confirmationDeleteMsg_]]</div>
       <div class="button-container">

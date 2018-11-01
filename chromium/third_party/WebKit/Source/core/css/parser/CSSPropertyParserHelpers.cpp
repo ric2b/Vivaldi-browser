@@ -14,6 +14,7 @@
 #include "core/css/CSSStringValue.h"
 #include "core/css/CSSURIValue.h"
 #include "core/css/CSSValuePair.h"
+#include "core/css/CSSVariableData.h"
 #include "core/css/StyleColor.h"
 #include "core/css/parser/CSSParserContext.h"
 #include "core/frame/UseCounter.h"
@@ -22,6 +23,50 @@
 namespace blink {
 
 namespace CSSPropertyParserHelpers {
+
+namespace {
+
+// Add CSSVariableData to variableData vector.
+bool addCSSPaintArgument(const Vector<CSSParserToken>& tokens,
+                         Vector<RefPtr<CSSVariableData>>* const variableData) {
+  CSSParserTokenRange tokenRange(tokens);
+  if (!tokenRange.atEnd()) {
+    RefPtr<CSSVariableData> unparsedCSSVariableData =
+        CSSVariableData::create(tokenRange, false, false);
+    if (unparsedCSSVariableData.get()) {
+      variableData->push_back(std::move(unparsedCSSVariableData));
+      return true;
+    }
+  }
+  return false;
+}
+
+// Consume input arguments, if encounter function, will return the function
+// block as a Vector of CSSParserToken, otherwise, will just return a Vector of
+// a single CSSParserToken.
+Vector<CSSParserToken> consumeFunctionArgsOrNot(CSSParserTokenRange& args) {
+  Vector<CSSParserToken> argumentTokens;
+  if (args.peek().getBlockType() == CSSParserToken::BlockStart) {
+    // Function block.
+    // Push the function name and initial right parenthesis.
+    // Since we don't have any upfront knowledge about the input argument types
+    // here, we should just leave the token as it is and resolve it later in
+    // the variable parsing phase.
+    argumentTokens.push_back(args.peek());
+    CSSParserTokenRange contents = args.consumeBlock();
+    while (!contents.atEnd()) {
+      argumentTokens.push_back(contents.consume());
+    }
+    argumentTokens.push_back(
+        CSSParserToken(RightParenthesisToken, CSSParserToken::BlockEnd));
+
+  } else {
+    argumentTokens.push_back(args.consumeIncludingWhitespace());
+  }
+  return argumentTokens;
+}
+
+}  // namespace
 
 void complete4Sides(CSSValue* side[4]) {
   if (side[3])
@@ -351,12 +396,17 @@ CSSIdentifierValue* consumeIdentRange(CSSParserTokenRange& range,
   return consumeIdent(range);
 }
 
+CSSCustomIdentValue* consumeCustomIdentWithToken(const CSSParserToken& token) {
+  if (token.type() != IdentToken || isCSSWideKeyword(token.value()))
+    return nullptr;
+  return CSSCustomIdentValue::create(token.value().toAtomicString());
+}
+
 CSSCustomIdentValue* consumeCustomIdent(CSSParserTokenRange& range) {
   if (range.peek().type() != IdentToken ||
       isCSSWideKeyword(range.peek().value()))
     return nullptr;
-  return CSSCustomIdentValue::create(
-      range.consumeIncludingWhitespace().value().toAtomicString());
+  return consumeCustomIdentWithToken(range.consumeIncludingWhitespace());
 }
 
 CSSStringValue* consumeString(CSSParserTokenRange& range) {
@@ -433,10 +483,9 @@ static bool parseRGBParameters(CSSParserTokenRange& range,
     double alpha;
     if (!consumeNumberRaw(args, alpha))
       return false;
-    // Convert the floating pointer number of alpha to an integer in the range
-    // [0, 256), with an equal distribution across all 256 values.
-    int alphaComponent = static_cast<int>(clampTo<double>(alpha, 0.0, 1.0) *
-                                          nextafter(256.0, 0.0));
+    // W3 standard stipulates a 2.55 alpha value multiplication factor.
+    int alphaComponent =
+        static_cast<int>(lroundf(clampTo<double>(alpha, 0.0, 1.0) * 255.0f));
     result =
         makeRGBA(colorArray[0], colorArray[1], colorArray[2], alphaComponent);
   } else {
@@ -541,6 +590,15 @@ CSSValue* consumeColor(CSSParserTokenRange& range,
       !parseColorFunction(range, color))
     return nullptr;
   return CSSColorValue::create(color);
+}
+
+CSSValue* consumeLineWidth(CSSParserTokenRange& range,
+                           CSSParserMode cssParserMode,
+                           UnitlessQuirk unitless) {
+  CSSValueID id = range.peek().id();
+  if (id == CSSValueThin || id == CSSValueMedium || id == CSSValueThick)
+    return consumeIdent(range);
+  return consumeLength(range, cssParserMode, ValueRangeNonNegative, unitless);
 }
 
 static CSSValue* consumePositionComponent(CSSParserTokenRange& range,
@@ -1115,11 +1173,43 @@ static CSSValue* consumePaint(CSSParserTokenRange& args,
                               const CSSParserContext* context) {
   DCHECK(RuntimeEnabledFeatures::cssPaintAPIEnabled());
 
-  CSSCustomIdentValue* name = consumeCustomIdent(args);
+  const CSSParserToken& nameToken = args.consumeIncludingWhitespace();
+  CSSCustomIdentValue* name = consumeCustomIdentWithToken(nameToken);
   if (!name)
     return nullptr;
 
-  return CSSPaintValue::create(name);
+  if (args.atEnd())
+    return CSSPaintValue::create(name);
+
+  if (!RuntimeEnabledFeatures::cssPaintAPIArgumentsEnabled()) {
+    // Arguments not enabled, but exists. Invalid.
+    return nullptr;
+  }
+
+  // Begin parse paint arguments.
+  if (!consumeCommaIncludingWhitespace(args))
+    return nullptr;
+
+  // Consume arguments.
+  // TODO(renjieliu): We may want to optimize the implementation by resolve
+  // variables early if paint function is registered.
+  Vector<CSSParserToken> argumentTokens;
+  Vector<RefPtr<CSSVariableData>> variableData;
+  while (!args.atEnd()) {
+    if (args.peek().type() != CommaToken) {
+      argumentTokens.appendVector(consumeFunctionArgsOrNot(args));
+    } else {
+      if (!addCSSPaintArgument(argumentTokens, &variableData))
+        return nullptr;
+      argumentTokens.clear();
+      if (!consumeCommaIncludingWhitespace(args))
+        return nullptr;
+    }
+  }
+  if (!addCSSPaintArgument(argumentTokens, &variableData))
+    return nullptr;
+
+  return CSSPaintValue::create(name, variableData);
 }
 
 static CSSValue* consumeGeneratedImage(CSSParserTokenRange& range,
@@ -1134,16 +1224,12 @@ static CSSValue* consumeGeneratedImage(CSSParserTokenRange& range,
     result = consumeRadialGradient(args, context->mode(), Repeating);
   } else if (id == CSSValueWebkitLinearGradient) {
     // FIXME: This should send a deprecation message.
-    if (context->isUseCounterRecordingEnabled())
-      context->useCounter()->count(UseCounter::DeprecatedWebKitLinearGradient);
+    context->count(UseCounter::DeprecatedWebKitLinearGradient);
     result = consumeLinearGradient(args, context->mode(), NonRepeating,
                                    CSSPrefixedLinearGradient);
   } else if (id == CSSValueWebkitRepeatingLinearGradient) {
     // FIXME: This should send a deprecation message.
-    if (context->isUseCounterRecordingEnabled()) {
-      context->useCounter()->count(
-          UseCounter::DeprecatedWebKitRepeatingLinearGradient);
-    }
+    context->count(UseCounter::DeprecatedWebKitRepeatingLinearGradient);
     result = consumeLinearGradient(args, context->mode(), Repeating,
                                    CSSPrefixedLinearGradient);
   } else if (id == CSSValueRepeatingLinearGradient) {
@@ -1154,20 +1240,15 @@ static CSSValue* consumeGeneratedImage(CSSParserTokenRange& range,
                                    CSSLinearGradient);
   } else if (id == CSSValueWebkitGradient) {
     // FIXME: This should send a deprecation message.
-    if (context->isUseCounterRecordingEnabled())
-      context->useCounter()->count(UseCounter::DeprecatedWebKitGradient);
+    context->count(UseCounter::DeprecatedWebKitGradient);
     result = consumeDeprecatedGradient(args, context->mode());
   } else if (id == CSSValueWebkitRadialGradient) {
     // FIXME: This should send a deprecation message.
-    if (context->isUseCounterRecordingEnabled())
-      context->useCounter()->count(UseCounter::DeprecatedWebKitRadialGradient);
+    context->count(UseCounter::DeprecatedWebKitRadialGradient);
     result =
         consumeDeprecatedRadialGradient(args, context->mode(), NonRepeating);
   } else if (id == CSSValueWebkitRepeatingRadialGradient) {
-    if (context->isUseCounterRecordingEnabled()) {
-      context->useCounter()->count(
-          UseCounter::DeprecatedWebKitRepeatingRadialGradient);
-    }
+    context->count(UseCounter::DeprecatedWebKitRepeatingRadialGradient);
     result = consumeDeprecatedRadialGradient(args, context->mode(), Repeating);
   } else if (id == CSSValueWebkitCrossFade) {
     result = consumeCrossFade(args, context);

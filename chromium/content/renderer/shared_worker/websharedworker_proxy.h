@@ -5,7 +5,10 @@
 #ifndef CONTENT_RENDERER_SHARED_WORKER_WEBSHAREDWORKER_PROXY_H_
 #define CONTENT_RENDERER_SHARED_WORKER_WEBSHAREDWORKER_PROXY_H_
 
+#include <set>
+
 #include "base/macros.h"
+#include "content/common/message_port.h"
 #include "ipc/ipc_listener.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerConnectListener.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerCreationErrors.h"
@@ -22,11 +25,9 @@ class MessageRouter;
 
 namespace content {
 
-// Implementation of the WebSharedWorker APIs. This object is intended to only
-// live long enough to allow the caller to send a "connect" event to the worker
-// thread. Once the connect event has been sent, all future communication will
-// happen via the WebMessagePortChannel. This instance will self-destruct when a
-// connection is established.
+// A proxy between a renderer process hosting a document and the browser
+// process. This instance has the same lifetime as a shared worker, and
+// self-destructs when the worker is destroyed.
 class WebSharedWorkerProxy : private IPC::Listener {
  public:
   // |channel| should be passed with its ownership.
@@ -45,7 +46,9 @@ class WebSharedWorkerProxy : private IPC::Listener {
 
   void OnWorkerCreated();
   void OnWorkerScriptLoadFailed();
-  void OnWorkerConnected();
+  void OnWorkerConnected(const std::set<uint32_t>& used_features);
+  void OnWorkerDestroyed();
+  void OnCountFeature(uint32_t feature);
 
   // Routing id associated with this worker - used to receive messages from the
   // worker, and also to route messages to the worker (WorkerService contains
@@ -55,7 +58,7 @@ class WebSharedWorkerProxy : private IPC::Listener {
 
   IPC::MessageRouter* const router_;
 
-  int message_port_id_;
+  MessagePort message_port_;
   std::unique_ptr<blink::WebSharedWorkerConnectListener> listener_;
 
   DISALLOW_COPY_AND_ASSIGN(WebSharedWorkerProxy);

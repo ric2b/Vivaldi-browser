@@ -9,8 +9,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/wm/overview/scoped_transform_overview_window.h"
-#include "ash/common/wm_window_observer.h"
 #include "base/macros.h"
+#include "ui/aura/window_observer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/button/button.h"
@@ -26,10 +26,6 @@ namespace views {
 class ImageButton;
 }
 
-namespace wm {
-class Shadow;
-}
-
 namespace ash {
 
 class WindowSelector;
@@ -37,7 +33,7 @@ class WmWindow;
 
 // This class represents an item in overview mode.
 class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
-                                      public WmWindowObserver {
+                                      public aura::WindowObserver {
  public:
   // An image button with a close window icon.
   class OverviewCloseButton : public views::ImageButton {
@@ -121,9 +117,9 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // WmWindowObserver:
-  void OnWindowDestroying(WmWindow* window) override;
-  void OnWindowTitleChanged(WmWindow* window) override;
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowTitleChanged(aura::Window* window) override;
 
  private:
   class CaptionContainerView;
@@ -197,9 +193,6 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // |caption_container_view_| as its contents view. The widget is backed by a
   // NOT_DRAWN layer since most of its surface is transparent.
   std::unique_ptr<views::Widget> item_widget_;
-
-  // Shadow around the item in overview.
-  std::unique_ptr<::wm::Shadow> shadow_;
 
   // Container view that owns a Button view covering the |transform_window_|.
   // That button serves as an event shield to receive all events such as clicks

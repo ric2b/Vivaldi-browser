@@ -9,16 +9,19 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/ntp_tiles/constants.h"
+#include "components/ntp_tiles/field_trial.h"
 #include "components/ntp_tiles/pref_names.h"
 #include "components/ntp_tiles/switches.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -29,6 +32,13 @@
 #include "components/variations/variations_associated_data.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+#include "base/json/json_reader.h"
+#include "components/grit/components_resources.h"
+#include "ui/base/resource/resource_bundle.h"
+#endif
 
 #if defined(OS_IOS)
 #include "components/ntp_tiles/country_code_ios.h"
@@ -121,8 +131,49 @@ PopularSites::SitesVector ParseSiteList(const base::ListValue& list) {
 
     sites.emplace_back(title, GURL(url), GURL(favicon_url),
                        GURL(large_icon_url), GURL(thumbnail_url));
+    item->GetInteger("default_icon_resource",
+                     &sites.back().default_icon_resource);
   }
   return sites;
+}
+
+#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_ANDROID) || defined(OS_IOS))
+void SetDefaultResourceForSite(int index,
+                               int resource_id,
+                               base::ListValue* sites) {
+  base::DictionaryValue* site;
+  if (!sites->GetDictionary(index, &site)) {
+    return;
+  }
+  site->SetInteger("default_icon_resource", resource_id);
+}
+#endif
+
+// Creates the list of popular sites based on a snapshot available for mobile.
+std::unique_ptr<base::ListValue> DefaultPopularSites() {
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  return base::MakeUnique<base::ListValue>();
+#else
+  if (!base::FeatureList::IsEnabled(kPopularSitesBakedInContentFeature)) {
+    return base::MakeUnique<base::ListValue>();
+  }
+  std::unique_ptr<base::ListValue> sites =
+      base::ListValue::From(base::JSONReader::Read(
+          ResourceBundle::GetSharedInstance().GetRawDataResource(
+              IDR_DEFAULT_POPULAR_SITES_JSON)));
+  DCHECK(sites);
+#if defined(GOOGLE_CHROME_BUILD)
+  int index = 0;
+  for (int icon_resource :
+       {IDR_DEFAULT_POPULAR_SITES_ICON0, IDR_DEFAULT_POPULAR_SITES_ICON1,
+        IDR_DEFAULT_POPULAR_SITES_ICON2, IDR_DEFAULT_POPULAR_SITES_ICON3,
+        IDR_DEFAULT_POPULAR_SITES_ICON4, IDR_DEFAULT_POPULAR_SITES_ICON5,
+        IDR_DEFAULT_POPULAR_SITES_ICON6, IDR_DEFAULT_POPULAR_SITES_ICON7}) {
+    SetDefaultResourceForSite(index++, icon_resource, sites.get());
+  }
+#endif  // GOOGLE_CHROME_BUILD
+  return sites;
+#endif  // OS_ANDROID || OS_IOS
 }
 
 }  // namespace
@@ -136,7 +187,8 @@ PopularSites::Site::Site(const base::string16& title,
       url(url),
       favicon_url(favicon_url),
       large_icon_url(large_icon_url),
-      thumbnail_url(thumbnail_url) {}
+      thumbnail_url(thumbnail_url),
+      default_icon_resource(-1) {}
 
 PopularSites::Site::Site(const Site& other) = default;
 
@@ -158,6 +210,7 @@ PopularSitesImpl::PopularSitesImpl(
       download_context_(download_context),
       parse_json_(std::move(parse_json)),
       is_fallback_(false),
+      sites_(ParseSiteList(*prefs->GetList(kPopularSitesJsonPref))),
       weak_ptr_factory_(this) {
   // If valid path provided, remove local files created by older versions.
   if (!directory.empty() && blocking_runner_) {
@@ -194,17 +247,7 @@ bool PopularSitesImpl::MaybeStartFetch(bool force_download,
     FetchPopularSites();
     return true;
   }
-
-  const base::ListValue* json = prefs_->GetList(kPopularSitesJsonPref);
-  if (!json) {
-    // Cache didn't exist.
-    FetchPopularSites();
-    return true;
-  } else {
-    // Note that we don't run the callback.
-    sites_ = ParseSiteList(*json);
-    return false;
-  }
+  return false;
 }
 
 const PopularSites::SitesVector& PopularSitesImpl::sites() const {
@@ -289,11 +332,33 @@ void PopularSitesImpl::RegisterProfilePrefs(
 
   user_prefs->RegisterInt64Pref(kPopularSitesLastDownloadPref, 0);
   user_prefs->RegisterStringPref(kPopularSitesURLPref, std::string());
-  user_prefs->RegisterListPref(kPopularSitesJsonPref);
+  user_prefs->RegisterListPref(kPopularSitesJsonPref,
+                               DefaultPopularSites().release());
 }
 
 void PopularSitesImpl::FetchPopularSites() {
-  fetcher_ = URLFetcher::Create(pending_url_, URLFetcher::GET, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("popular_sites_fetch", R"(
+        semantics {
+          sender: "Popular Sites New Tab Fetch"
+          description:
+            "Google Chrome may display a list of regionally-popular web sites "
+            "on the New Tab Page. This service fetches the list of these sites."
+          trigger:
+            "Once per day, unless no popular web sites are required because "
+            "the New Tab Page is filled with suggestions based on the user's "
+            "browsing history."
+          data: "A two letter country code based on the user's location."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled in settings."
+          policy_exception_justification:
+            "Not implemented, considered not useful."
+        })");
+  fetcher_ = URLFetcher::Create(pending_url_, URLFetcher::GET, this,
+                                traffic_annotation);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_.get(), data_use_measurement::DataUseUserData::NTP_TILES);
   fetcher_->SetRequestContext(download_context_);

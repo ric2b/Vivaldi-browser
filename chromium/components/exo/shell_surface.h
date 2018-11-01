@@ -47,9 +47,21 @@ class ShellSurface : public SurfaceDelegate,
                      public WMHelper::ActivationObserver,
                      public WMHelper::AccessibilityObserver {
  public:
+  enum class BoundsMode { SHELL, CLIENT, FIXED };
+
+  // The |origin| is in screen coordinates. When bounds are controlled by the
+  // shell or fixed, it determines the initial position of the shell surface.
+  // In that case, the position specified as part of the geometry is relative
+  // to the shell surface.
+  //
+  // When bounds are controlled by the client, it represents the origin of a
+  // coordinate system to which the position of the shell surface, specified
+  // as part of the geometry, is relative. The client must acknowledge changes
+  // to the origin, and offset the geometry accordingly.
   ShellSurface(Surface* surface,
                ShellSurface* parent,
-               const gfx::Rect& initial_bounds,
+               BoundsMode bounds_mode,
+               const gfx::Point& origin,
                bool activatable,
                bool can_minimize,
                int container);
@@ -85,7 +97,8 @@ class ShellSurface : public SurfaceDelegate,
       base::Callback<uint32_t(const gfx::Size& size,
                               ash::wm::WindowStateType state_type,
                               bool resizing,
-                              bool activated)>;
+                              bool activated,
+                              const gfx::Point& origin)>;
   void set_configure_callback(const ConfigureCallback& configure_callback) {
     configure_callback_ = configure_callback;
   }
@@ -116,6 +129,9 @@ class ShellSurface : public SurfaceDelegate,
 
   // Pins the shell surface. |trusted| flag is ignored when |pinned| is false.
   void SetPinned(bool pinned, bool trusted);
+
+  // Sets whether or not the shell surface should autohide the system UI.
+  void SetSystemUiVisibility(bool autohide);
 
   // Set title for surface.
   void SetTitle(const base::string16& title);
@@ -204,6 +220,11 @@ class ShellSurface : public SurfaceDelegate,
   bool CanMaximize() const override;
   bool CanMinimize() const override;
   base::string16 GetWindowTitle() const override;
+  void SaveWindowPlacement(const gfx::Rect& bounds,
+                           ui::WindowShowState show_state) override;
+  bool GetSavedWindowPlacement(const views::Widget* widget,
+                               gfx::Rect* bounds,
+                               ui::WindowShowState* show_state) const override;
   void WindowClosing() override;
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
@@ -244,8 +265,8 @@ class ShellSurface : public SurfaceDelegate,
   // Overridden from ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
-  aura::Window* shadow_overlay() { return shadow_overlay_; }
-  aura::Window* shadow_underlay() { return shadow_underlay_; }
+  aura::Window* shadow_overlay() { return shadow_overlay_.get(); }
+  aura::Window* shadow_underlay() { return shadow_underlay_.get(); }
 
   Surface* surface_for_testing() { return surface_; }
 
@@ -287,14 +308,21 @@ class ShellSurface : public SurfaceDelegate,
   // Updates the bounds of widget to match the current surface bounds.
   void UpdateWidgetBounds();
 
+  // Updates the bounds of surface to match the current widget bounds.
+  void UpdateSurfaceBounds();
+
   // Creates, deletes and update the shadow bounds based on
   // |pending_shadow_content_bounds_|.
   void UpdateShadow();
 
+  // Applies |system_modal_| to |widget_|.
+  void UpdateSystemModal();
+
   views::Widget* widget_ = nullptr;
   Surface* surface_;
   aura::Window* parent_;
-  gfx::Rect initial_bounds_;
+  const BoundsMode bounds_mode_;
+  gfx::Point origin_;
   bool activatable_ = true;
   const bool can_minimize_;
   // Container Window Id (see ash/public/cpp/shell_window_ids.h)
@@ -314,13 +342,13 @@ class ShellSurface : public SurfaceDelegate,
   ConfigureCallback configure_callback_;
   ScopedConfigure* scoped_configure_ = nullptr;
   bool ignore_window_bounds_changes_ = false;
-  gfx::Point origin_;
+  gfx::Vector2d origin_offset_;
   gfx::Vector2d pending_origin_offset_;
-  gfx::Vector2d pending_origin_config_offset_;
+  gfx::Vector2d pending_origin_offset_accumulator_;
   int resize_component_ = HTCAPTION;  // HT constant (see ui/base/hit_test.h)
   int pending_resize_component_ = HTCAPTION;
-  aura::Window* shadow_overlay_ = nullptr;
-  aura::Window* shadow_underlay_ = nullptr;
+  std::unique_ptr<aura::Window> shadow_overlay_;
+  std::unique_ptr<aura::Window> shadow_underlay_;
   std::unique_ptr<ui::EventHandler> shadow_underlay_event_handler_;
   gfx::Rect shadow_content_bounds_;
   float shadow_background_opacity_ = 1.0;
@@ -330,6 +358,8 @@ class ShellSurface : public SurfaceDelegate,
   int top_inset_height_ = 0;
   int pending_top_inset_height_ = 0;
   bool shadow_underlay_in_surface_ = true;
+  bool pending_shadow_underlay_in_surface_ = true;
+  bool system_modal_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurface);
 };

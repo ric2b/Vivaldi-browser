@@ -8,6 +8,7 @@
 #include "core/css/CSSFontSelectorClient.h"
 #include "modules/canvas2d/ClipList.h"
 #include "platform/fonts/Font.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/transforms/AffineTransform.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "wtf/Vector.h"
@@ -74,7 +75,7 @@ class CanvasRenderingContext2DState final
   void clipPath(const SkPath&, AntiAliasingMode);
   bool hasClip() const { return m_hasClip; }
   bool hasComplexClip() const { return m_hasComplexClip; }
-  void playbackClips(SkCanvas* canvas) const { m_clipList.playback(canvas); }
+  void playbackClips(PaintCanvas* canvas) const { m_clipList.playback(canvas); }
   const SkPath& getCurrentClipPath() const {
     return m_clipList.getCurrentClipPath();
   }
@@ -95,6 +96,8 @@ class CanvasRenderingContext2DState final
   sk_sp<SkImageFilter> getFilter(Element*,
                                  IntSize canvasSize,
                                  CanvasRenderingContext2D*) const;
+  sk_sp<SkImageFilter> getFilterForOffscreenCanvas(IntSize canvasSize) const;
+  bool hasFilterForOffscreenCanvas(IntSize canvasSize) const;
   bool hasFilter(Element*, IntSize canvasSize, CanvasRenderingContext2D*) const;
   void clearResolvedFilter() const;
 
@@ -118,28 +121,28 @@ class CanvasRenderingContext2DState final
   TextBaseline getTextBaseline() const { return m_textBaseline; }
 
   void setLineWidth(double lineWidth) {
-    m_strokePaint.setStrokeWidth(lineWidth);
+    m_strokeFlags.setStrokeWidth(lineWidth);
   }
-  double lineWidth() const { return m_strokePaint.getStrokeWidth(); }
+  double lineWidth() const { return m_strokeFlags.getStrokeWidth(); }
 
   void setLineCap(LineCap lineCap) {
-    m_strokePaint.setStrokeCap(static_cast<SkPaint::Cap>(lineCap));
+    m_strokeFlags.setStrokeCap(static_cast<PaintFlags::Cap>(lineCap));
   }
   LineCap getLineCap() const {
-    return static_cast<LineCap>(m_strokePaint.getStrokeCap());
+    return static_cast<LineCap>(m_strokeFlags.getStrokeCap());
   }
 
   void setLineJoin(LineJoin lineJoin) {
-    m_strokePaint.setStrokeJoin(static_cast<SkPaint::Join>(lineJoin));
+    m_strokeFlags.setStrokeJoin(static_cast<PaintFlags::Join>(lineJoin));
   }
   LineJoin getLineJoin() const {
-    return static_cast<LineJoin>(m_strokePaint.getStrokeJoin());
+    return static_cast<LineJoin>(m_strokeFlags.getStrokeJoin());
   }
 
   void setMiterLimit(double miterLimit) {
-    m_strokePaint.setStrokeMiter(miterLimit);
+    m_strokeFlags.setStrokeMiter(miterLimit);
   }
-  double miterLimit() const { return m_strokePaint.getStrokeMiter(); }
+  double miterLimit() const { return m_strokeFlags.getStrokeMiter(); }
 
   void setShadowOffsetX(double);
   void setShadowOffsetY(double);
@@ -178,7 +181,7 @@ class CanvasRenderingContext2DState final
 
   // If paint will not be used for painting a bitmap, set bitmapOpacity to
   // Opaque.
-  const SkPaint* getPaint(PaintType, ShadowMode, ImageType = NoImage) const;
+  const PaintFlags* getFlags(PaintType, ShadowMode, ImageType = NoImage) const;
 
  private:
   CanvasRenderingContext2DState();
@@ -204,9 +207,9 @@ class CanvasRenderingContext2DState final
   Member<CanvasStyle> m_strokeStyle;
   Member<CanvasStyle> m_fillStyle;
 
-  mutable SkPaint m_strokePaint;
-  mutable SkPaint m_fillPaint;
-  mutable SkPaint m_imagePaint;
+  mutable PaintFlags m_strokeFlags;
+  mutable PaintFlags m_fillFlags;
+  mutable PaintFlags m_imageFlags;
 
   FloatSize m_shadowOffset;
   double m_shadowBlur;

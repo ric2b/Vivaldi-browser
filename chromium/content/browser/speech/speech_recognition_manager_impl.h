@@ -20,7 +20,7 @@
 #include "content/public/common/speech_recognition_error.h"
 
 namespace media {
-class AudioManager;
+class AudioSystem;
 }
 
 namespace content {
@@ -72,9 +72,6 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl :
   int GetSession(int render_process_id,
                  int render_view_id,
                  int request_id) const override;
-  bool HasAudioInputDevices() override;
-  base::string16 GetAudioInputDeviceModel() override;
-  void ShowAudioInputSettings() override;
 
   // SpeechRecognitionEventListener methods.
   void OnRecognitionStart(int session_id) override;
@@ -99,7 +96,7 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl :
   friend class BrowserMainLoop;
   // Needed for dtor.
   friend std::default_delete<SpeechRecognitionManagerImpl>;
-  SpeechRecognitionManagerImpl(media::AudioManager* audio_manager,
+  SpeechRecognitionManagerImpl(media::AudioSystem* audio_system,
                                MediaStreamManager* media_stream_manager);
   ~SpeechRecognitionManagerImpl() override;
 
@@ -174,7 +171,7 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl :
   SpeechRecognitionEventListener* GetDelegateListener() const;
   int GetNextSessionID();
 
-  media::AudioManager* audio_manager_;
+  media::AudioSystem* audio_system_;
   MediaStreamManager* media_stream_manager_;
   typedef std::map<int, Session*> SessionsTable;
   SessionsTable sessions_;

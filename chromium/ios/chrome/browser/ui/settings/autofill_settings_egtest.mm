@@ -8,6 +8,7 @@
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_controller.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#include "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -16,8 +17,8 @@
 #include "ios/web/public/test/http_server_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
-using chrome_test_util::buttonWithAccessibilityLabel;
-using chrome_test_util::buttonWithAccessibilityLabelId;
+using chrome_test_util::ButtonWithAccessibilityLabel;
+using chrome_test_util::ButtonWithAccessibilityLabelId;
 
 namespace {
 
@@ -74,7 +75,7 @@ NSString* GetTextFieldForID(int categoryId) {
 // of the value being empty is handled gracefully.
 void ClearCountryValue() {
   // Switch on edit mode.
-  [[EarlGrey selectElementWithMatcher:buttonWithAccessibilityLabelId(
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                           IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON)]
       performAction:grey_tap()];
 
@@ -100,7 +101,7 @@ void ClearCountryValue() {
                                           nil)] performAction:grey_tap()];
 
   // Switch off edit mode.
-  [[EarlGrey selectElementWithMatcher:buttonWithAccessibilityLabelId(
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                           IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)]
       performAction:grey_tap()];
 }
@@ -134,7 +135,7 @@ void ClearCountryValue() {
       selectElementWithMatcher:grey_accessibilityID(kToolsMenuSettingsId)]
       performAction:grey_tap()];
   NSString* label = l10n_util::GetNSString(IDS_IOS_AUTOFILL);
-  [[EarlGrey selectElementWithMatcher:buttonWithAccessibilityLabel(label)]
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(label)]
       performAction:grey_tap()];
 
   // Tap on the 'George Washington' result.
@@ -158,7 +159,7 @@ void ClearCountryValue() {
                                    grey_accessibilityTrait(
                                        UIAccessibilityTraitButton),
                                    nil)] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:buttonWithAccessibilityLabelId(
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                           IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)]
       performAction:grey_tap()];
   // Wait for UI components to finish loading.
@@ -195,7 +196,7 @@ void ClearCountryValue() {
     ClearCountryValue();
 
     // Switch on edit mode.
-    [[EarlGrey selectElementWithMatcher:buttonWithAccessibilityLabelId(
+    [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                             IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON)]
         performAction:grey_tap()];
 
@@ -205,7 +206,7 @@ void ClearCountryValue() {
         performAction:grey_typeText(expectation.user_typed_country)];
 
     // Switch off edit mode.
-    [[EarlGrey selectElementWithMatcher:buttonWithAccessibilityLabelId(
+    [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                             IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)]
         performAction:grey_tap()];
 
@@ -218,6 +219,28 @@ void ClearCountryValue() {
                                  expectation.expected_result])]
         assertWithMatcher:grey_notNil()];
   }
+
+  [self exitSettingsMenu];
+}
+
+// Test that the page for viewing autofill profile details is accessible.
+- (void)testAccessibilityOnAutofillProfileViewPage {
+  [self loadAndSubmitTheForm];
+  [self openEditAddress:@"George Washington, 1600 Pennsylvania Ave NW"];
+  chrome_test_util::VerifyAccessibilityForCurrentScreen();
+
+  [self exitSettingsMenu];
+}
+
+// Test that the page for editing autofill profile details is accessible.
+- (void)testAccessibilityOnAutofillProfileEditPage {
+  [self loadAndSubmitTheForm];
+  [self openEditAddress:@"George Washington, 1600 Pennsylvania Ave NW"];
+  // Switch on edit mode.
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                          IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON)]
+      performAction:grey_tap()];
+  chrome_test_util::VerifyAccessibilityForCurrentScreen();
 
   [self exitSettingsMenu];
 }

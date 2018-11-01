@@ -70,6 +70,10 @@ enum WebBluetoothResult {
   DEVICE_NO_LONGER_IN_RANGE,
   GATT_NOT_PAIRED,
   GATT_OPERATION_IN_PROGRESS,
+  GATT_SERVER_DISCONNECTED,
+  GATT_SERVER_NOT_CONNECTED,
+  GATT_SERVER_DISCONNECTED_WHILE_RETRIEVING_CHARACTERISTICS,
+  GATT_SERVER_NOT_CONNECTED_CANNOT_RETRIEVE_CHARACTERISTICS,
   UNTRANSLATED_CONNECT_ERROR_CODE,
   // NotFoundError:
   NO_BLUETOOTH_ADAPTER,
@@ -102,7 +106,7 @@ enum WebBluetoothResult {
   NOT_ALLOWED_TO_ACCESS_SERVICE,
   REQUEST_DEVICE_WITH_BLOCKLISTED_UUID,
   REQUEST_DEVICE_FROM_CROSS_ORIGIN_IFRAME,
-  REQUEST_DEVICE_WITHOUT_FRAME,
+  DESCRIPTOR_NO_LONGER_EXISTS,
 };
 
 struct WebBluetoothScanFilter {
@@ -239,6 +243,24 @@ interface WebBluetoothService {
     bluetooth.mojom.UUID? descriptor_uuid) => (
       WebBluetoothResult result,
       array<WebBluetoothRemoteGATTDescriptor>? descriptors);
+
+  // Reads the value for the descriptor identified by
+  // |descriptor_instance_id|. If the value is successfully read the callback
+  // will be run with WebBluetoothResult::SUCCESS and the descriptor's value. If
+  // the value is not successfully read the callback with be run with the
+  // corresponding error and nullptr for value
+  RemoteDescriptorReadValue(
+    string descriptor_instance_id) => (
+    WebBluetoothResult result,
+    array<uint8>? value);
+
+  // Writes a value to the descriptor identified by
+  // |descriptor_instance_id|. The callback is run with
+  // WebBluetoothResult::SUCCESS if the value was successfully
+  // written.
+  RemoteDescriptorWriteValue(
+    string descriptor_instance_id,
+    array<uint8> value) => (WebBluetoothResult result);
 };
 
 // Classes should implement this interface and pass an associated pointer

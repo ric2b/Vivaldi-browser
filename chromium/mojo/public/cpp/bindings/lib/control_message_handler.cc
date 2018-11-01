@@ -19,9 +19,9 @@ namespace internal {
 namespace {
 
 bool ValidateControlRequestWithResponse(Message* message) {
-  ValidationContext validation_context(
-      message->data(), message->data_num_bytes(), message->handles()->size(),
-      message, "ControlRequestValidator");
+  ValidationContext validation_context(message->payload(),
+                                       message->payload_num_bytes(), 0, 0,
+                                       message, "ControlRequestValidator");
   if (!ValidateMessageIsRequestExpectingResponse(message, &validation_context))
     return false;
 
@@ -35,9 +35,9 @@ bool ValidateControlRequestWithResponse(Message* message) {
 }
 
 bool ValidateControlRequestWithoutResponse(Message* message) {
-  ValidationContext validation_context(
-      message->data(), message->data_num_bytes(), message->handles()->size(),
-      message, "ControlRequestValidator");
+  ValidationContext validation_context(message->payload(),
+                                       message->payload_num_bytes(), 0, 0,
+                                       message, "ControlRequestValidator");
   if (!ValidateMessageIsRequestWithoutResponse(message, &validation_context))
     return false;
 
@@ -116,8 +116,9 @@ bool ControlMessageHandler::Run(Message* message,
   size_t size =
       PrepareToSerialize<interface_control::RunResponseMessageParamsDataView>(
           response_params_ptr, &context_);
-  ResponseMessageBuilder builder(interface_control::kRunMessageId, size,
-                                 message->request_id());
+  MessageBuilder builder(interface_control::kRunMessageId,
+                         Message::kFlagIsResponse, size, 0);
+  builder.message()->set_request_id(message->request_id());
 
   interface_control::internal::RunResponseMessageParams_Data* response_params =
       nullptr;
@@ -141,13 +142,6 @@ bool ControlMessageHandler::RunOrClosePipe(Message* message) {
   auto& input = *params_ptr->input;
   if (input.is_require_version())
     return interface_version_ >= input.get_require_version()->version;
-  else if (input.is_send_disconnect_reason()) {
-    disconnect_custom_reason_ =
-        input.get_send_disconnect_reason()->custom_reason;
-    disconnect_description_ =
-        std::move(input.get_send_disconnect_reason()->description);
-    return true;
-  }
 
   return false;
 }

@@ -43,7 +43,6 @@
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/screen_orientation_provider.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
@@ -419,8 +418,6 @@ void ContentViewCoreImpl::UpdateFrameInfo(
     const gfx::SizeF& viewport_size,
     const float top_controls_height,
     const float top_controls_shown_ratio,
-    const float bottom_controls_height,
-    const float bottom_controls_shown_ratio,
     bool is_mobile_optimized_hint,
     const gfx::SelectionBound& selection_start) {
   JNIEnv* env = AttachCurrentThread();
@@ -450,18 +447,9 @@ void ContentViewCoreImpl::UpdateFrameInfo(
       page_scale_factor_limits.x(), page_scale_factor_limits.y(),
       content_size.width(), content_size.height(), viewport_size.width(),
       viewport_size.height(), top_controls_height, top_controls_shown_ratio,
-      bottom_controls_height, bottom_controls_shown_ratio,
       is_mobile_optimized_hint, has_insertion_marker,
       is_insertion_marker_visible, insertion_marker_horizontal,
       insertion_marker_top, insertion_marker_bottom);
-}
-
-void ContentViewCoreImpl::OnBackgroundColorChanged(SkColor color) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  Java_ContentViewCore_onBackgroundColorChanged(env, obj, color);
 }
 
 void ContentViewCoreImpl::ShowSelectPopupMenu(
@@ -640,29 +628,22 @@ void ContentViewCoreImpl::OnSelectionEvent(ui::SelectionEventType event,
       selection_rect.bottom());
 }
 
-void ContentViewCoreImpl::ShowPastePopup(int x_dip, int y_dip) {
+bool ContentViewCoreImpl::ShowPastePopup(const ContextMenuParams& params) {
+  // Display paste pop-up only when selection is empty and editable.
+  if (!(params.is_editable && params.selection_text.empty()))
+    return false;
+
   RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   if (!view)
-    return;
+    return false;
 
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
-    return;
-  Java_ContentViewCore_showPastePopup(env, obj, x_dip,
-                                      y_dip);
-}
-
-void ContentViewCoreImpl::StartContentIntent(const GURL& content_url,
-                                             bool is_main_frame) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
-  if (j_obj.is_null())
-    return;
-  ScopedJavaLocalRef<jstring> jcontent_url =
-      ConvertUTF8ToJavaString(env, content_url.spec());
-  Java_ContentViewCore_startContentIntent(env, j_obj, jcontent_url,
-                                          is_main_frame);
+    return false;
+  Java_ContentViewCore_showPastePopup(env, obj, params.selection_start.x(),
+                                      params.selection_start.y());
+  return true;
 }
 
 void ContentViewCoreImpl::ShowDisambiguationPopup(
@@ -967,22 +948,20 @@ jboolean ContentViewCoreImpl::OnTouchEvent(
                                : rwhv->OnTouchEvent(event);
 }
 
-jboolean ContentViewCoreImpl::SendMouseEvent(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jlong time_ms,
-    jint android_action,
-    jfloat x,
-    jfloat y,
-    jint pointer_id,
-    jfloat pressure,
-    jfloat orientation,
-    jfloat tilt,
-    jint android_changed_button,
-    jint android_button_state,
-    jint android_meta_state,
-    jint android_tool_type) {
-
+jboolean ContentViewCoreImpl::SendMouseEvent(JNIEnv* env,
+                                             const JavaParamRef<jobject>& obj,
+                                             jlong time_ms,
+                                             jint android_action,
+                                             jfloat x,
+                                             jfloat y,
+                                             jint pointer_id,
+                                             jfloat pressure,
+                                             jfloat orientation,
+                                             jfloat tilt,
+                                             jint android_action_button,
+                                             jint android_button_state,
+                                             jint android_meta_state,
+                                             jint android_tool_type) {
   RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
   if (!rwhv)
     return false;
@@ -1013,7 +992,7 @@ jboolean ContentViewCoreImpl::SendMouseEvent(
 
   // Note: This relies on identical button enum values in MotionEvent and
   // MotionEventAndroid.
-  rwhv->SendMouseEvent(motion_event, android_changed_button);
+  rwhv->SendMouseEvent(motion_event, android_action_button);
 
   return true;
 }
@@ -1398,26 +1377,7 @@ void ContentViewCoreImpl::SendOrientationChangeEventInternal() {
   if (rwhv)
     rwhv->UpdateScreenInfo(GetViewAndroid());
 
-  static_cast<WebContentsImpl*>(web_contents())
-      ->GetScreenOrientationProvider()
-      ->OnOrientationChange();
-}
-
-void ContentViewCoreImpl::ExtractSmartClipData(JNIEnv* env,
-                                               const JavaParamRef<jobject>& obj,
-                                               jint x,
-                                               jint y,
-                                               jint width,
-                                               jint height) {
-  gfx::Rect rect(
-      static_cast<int>(x / dpi_scale()),
-      static_cast<int>(y / dpi_scale()),
-      static_cast<int>((width > 0 && width < dpi_scale()) ?
-          1 : (int)(width / dpi_scale())),
-      static_cast<int>((height > 0 && height < dpi_scale()) ?
-          1 : (int)(height / dpi_scale())));
-  GetWebContents()->Send(new ViewMsg_ExtractSmartClipData(
-      GetWebContents()->GetRenderViewHost()->GetRoutingID(), rect));
+  static_cast<WebContentsImpl*>(web_contents())->OnScreenOrientationChange();
 }
 
 jint ContentViewCoreImpl::GetCurrentRenderProcessId(
@@ -1523,21 +1483,6 @@ void ContentViewCoreImpl::HidePopupsAndPreserveSelection() {
     return;
 
   Java_ContentViewCore_hidePopupsAndPreserveSelection(env, obj);
-}
-
-void ContentViewCoreImpl::OnSmartClipDataExtracted(
-    const base::string16& text,
-    const base::string16& html,
-    const gfx::Rect& clip_rect) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  ScopedJavaLocalRef<jstring> jtext = ConvertUTF16ToJavaString(env, text);
-  ScopedJavaLocalRef<jstring> jhtml = ConvertUTF16ToJavaString(env, html);
-  ScopedJavaLocalRef<jobject> clip_rect_object(CreateJavaRect(env, clip_rect));
-  Java_ContentViewCore_onSmartClipDataExtracted(env, obj, jtext, jhtml,
-                                                clip_rect_object);
 }
 
 void ContentViewCoreImpl::WebContentsDestroyed() {

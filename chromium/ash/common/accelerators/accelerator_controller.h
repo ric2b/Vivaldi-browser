@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "ash/ash_export.h"
 #include "ash/common/accelerators/accelerator_table.h"
@@ -60,10 +61,10 @@ class ASH_EXPORT AcceleratorController
     RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION
   };
 
-  // Registers a global keyboard accelerator for the specified target. If
-  // multiple targets are registered for an accelerator, a target registered
-  // later has higher priority.
-  void Register(const ui::Accelerator& accelerator,
+  // Registers global keyboard accelerators for the specified target. If
+  // multiple targets are registered for any given accelerator, a target
+  // registered later has higher priority.
+  void Register(const std::vector<ui::Accelerator>& accelerators,
                 ui::AcceleratorTarget* target);
 
   // Unregisters the specified keyboard accelerator for the specified target.
@@ -164,6 +165,17 @@ class ASH_EXPORT AcceleratorController
   // of -1 to get restrictions that apply for the current context.
   AcceleratorProcessingRestriction GetAcceleratorProcessingRestriction(
       int action);
+
+  // If |accelerator| is a deprecated accelerator, it performs the appropriate
+  // deprecated accelerator pre-handling.
+  // Returns PROCEED if the accelerator's action should be performed (i.e. if
+  // |accelerator| is not a deprecated accelerator, or it's an enabled
+  // deprecated accelerator), and STOP otherwise (if the accelerator is a
+  // disabled deprecated accelerator).
+  enum class AcceleratorProcessingStatus { PROCEED, STOP };
+  AcceleratorProcessingStatus MaybeDeprecatedAcceleratorPressed(
+      AcceleratorAction action,
+      const ui::Accelerator& accelerator) const;
 
   AcceleratorControllerDelegate* delegate_;
 

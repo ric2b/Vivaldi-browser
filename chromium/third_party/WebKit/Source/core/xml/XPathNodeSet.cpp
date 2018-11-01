@@ -127,7 +127,8 @@ static void sortBlock(unsigned from,
   // each group.
   HeapHashSet<Member<Node>> parentNodes;
   for (unsigned i = from; i < to; ++i)
-    parentNodes.add(parentWithDepth(commonAncestorDepth + 1, parentMatrix[i]));
+    parentNodes.insert(
+        parentWithDepth(commonAncestorDepth + 1, parentMatrix[i]));
 
   unsigned previousGroupEnd = from;
   unsigned groupEnd = from;
@@ -147,7 +148,7 @@ static void sortBlock(unsigned from,
       DCHECK_NE(previousGroupEnd, groupEnd);
       previousGroupEnd = groupEnd;
 #if DCHECK_IS_ON()
-      parentNodes.remove(n);
+      parentNodes.erase(n);
 #endif
     }
   }
@@ -217,7 +218,7 @@ void NodeSet::traversalSort() const {
   DCHECK_GT(nodeCount, 1u);
   for (unsigned i = 0; i < nodeCount; ++i) {
     Node* node = m_nodes[i].get();
-    nodes.add(node);
+    nodes.insert(node);
     if (node->isAttributeNode())
       containsAttributeNodes = true;
   }

@@ -44,10 +44,6 @@ bool WebClient::IsAppSpecificURL(const GURL& url) const {
   return false;
 }
 
-bool WebClient::AllowWebViewAllocInit() const {
-  return false;
-}
-
 base::string16 WebClient::GetPluginNotSupportedText() const {
   return base::string16();
 }
@@ -56,7 +52,7 @@ std::string WebClient::GetProduct() const {
   return std::string();
 }
 
-std::string WebClient::GetUserAgent(bool desktop_user_agent) const {
+std::string WebClient::GetUserAgent(UserAgentType type) const {
   return std::string();
 }
 

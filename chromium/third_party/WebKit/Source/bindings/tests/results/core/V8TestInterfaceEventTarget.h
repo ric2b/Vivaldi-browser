@@ -12,6 +12,7 @@
 #ifndef V8TestInterfaceEventTarget_h
 #define V8TestInterfaceEventTarget_h
 
+#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -42,8 +43,7 @@ class V8TestInterfaceEventTarget {
   }
   CORE_EXPORT static TestInterfaceEventTarget* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
   CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-  template<typename VisitorDispatcher>
-  static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable) {
+  static void trace(Visitor* visitor, ScriptWrappable* scriptWrappable) {
     visitor->trace(scriptWrappable->toImpl<TestInterfaceEventTarget>());
   }
   static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
@@ -51,6 +51,8 @@ class V8TestInterfaceEventTarget {
   }
   static const int eventListenerCacheIndex = v8DefaultWrapperInternalFieldCount + 0;
   static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 1;
+
+  // Callback functions
 };
 
 template <>

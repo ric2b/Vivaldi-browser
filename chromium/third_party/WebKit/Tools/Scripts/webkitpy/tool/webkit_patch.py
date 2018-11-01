@@ -65,6 +65,9 @@ _log = logging.getLogger(__name__)
 
 
 class WebKitPatch(Host):
+    # FIXME: It might make more sense if this class had a Host attribute
+    # instead of being a Host subclass.
+
     global_options = [
         optparse.make_option(
             "-v", "--verbose", action="store_true", dest="verbose", default=False,
@@ -112,7 +115,6 @@ class WebKitPatch(Host):
 
         command.set_option_parser(option_parser)
         (options, args) = command.parse_args(args)
-        self.initialize_scm()
 
         (should_execute, failure_reason) = self._should_execute_command(command)
         if not should_execute:
@@ -150,9 +152,9 @@ class WebKitPatch(Host):
             option_parser.add_option(option)
 
     def _should_execute_command(self, command):
-        if command.requires_local_commits and not self.scm().supports_local_commits():
+        if command.requires_local_commits and not self.git().supports_local_commits():
             failure_reason = "%s requires local commits using %s in %s." % (
-                command.name, self.scm().display_name(), self.scm().checkout_root)
+                command.name, self.git().display_name(), self.git().checkout_root)
             return (False, failure_reason)
         return (True, None)
 
@@ -163,7 +165,7 @@ class WebKitPatch(Host):
         if not command.show_in_main_help:
             return False
         if command.requires_local_commits:
-            return self.scm().supports_local_commits()
+            return self.git().supports_local_commits()
         return True
 
     def command_by_name(self, command_name):

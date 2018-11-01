@@ -12,16 +12,13 @@
 #include "V8TestInterface2.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
-#include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8Iterator.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
 #include "core/dom/Document.h"
-#include "core/dom/Element.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/GetPtr.h"
@@ -35,7 +32,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::trace, V8TestInterface2::traceWrappers, V8TestInterface2::visitDOMWrapper, nullptr, "TestInterface2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::InheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent };
+WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::trace, V8TestInterface2::traceWrappers, nullptr, "TestInterface2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::InheritFromActiveScriptWrappable, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -78,10 +75,6 @@ static void legacyCallerMethod(const v8::FunctionCallbackInfo<v8::Value>& info) 
   v8SetReturnValue(info, impl->legacyCaller(index));
 }
 
-CORE_EXPORT  void legacyCallerMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::legacyCallerMethod(info);
-}
-
 static void itemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "item");
 
@@ -102,10 +95,6 @@ static void itemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
   v8SetReturnValue(info, result);
-}
-
-CORE_EXPORT  void itemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::itemMethod(info);
 }
 
 static void setItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -138,10 +127,6 @@ static void setItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8SetReturnValue(info, result);
 }
 
-CORE_EXPORT  void setItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::setItemMethod(info);
-}
-
 static void deleteItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "deleteItem");
 
@@ -164,10 +149,6 @@ static void deleteItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8SetReturnValueBool(info, result);
 }
 
-CORE_EXPORT  void deleteItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::deleteItemMethod(info);
-}
-
 static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "namedItem");
 
@@ -188,10 +169,6 @@ static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
   v8SetReturnValue(info, result);
-}
-
-CORE_EXPORT  void namedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::namedItemMethod(info);
 }
 
 static void setNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -224,10 +201,6 @@ static void setNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) 
   v8SetReturnValue(info, result);
 }
 
-CORE_EXPORT  void setNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::setNamedItemMethod(info);
-}
-
 static void deleteNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "deleteNamedItem");
 
@@ -250,18 +223,10 @@ static void deleteNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& inf
   v8SetReturnValueBool(info, result);
 }
 
-CORE_EXPORT  void deleteNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::deleteNamedItemMethod(info);
-}
-
 static void stringifierMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
   v8SetReturnValueString(info, impl->stringifierMethod(), info.GetIsolate());
-}
-
-CORE_EXPORT  void stringifierMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::stringifierMethodMethod(info);
 }
 
 static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -278,10 +243,6 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8SetReturnValue(info, result);
 }
 
-CORE_EXPORT  void keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::keysMethod(info);
-}
-
 static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "values");
 
@@ -296,10 +257,6 @@ static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8SetReturnValue(info, result);
 }
 
-CORE_EXPORT  void valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::valuesMethod(info);
-}
-
 static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "entries");
 
@@ -312,10 +269,6 @@ static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
   v8SetReturnValue(info, result);
-}
-
-CORE_EXPORT  void entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::entriesMethod(info);
 }
 
 static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -347,10 +300,6 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   }
 }
 
-CORE_EXPORT  void forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::forEachMethod(info);
-}
-
 static void hasMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::ExecutionContext, "TestInterface2", "has");
 
@@ -378,18 +327,10 @@ static void hasMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8SetReturnValueBool(info, result);
 }
 
-CORE_EXPORT  void hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::hasMethod(info);
-}
-
 static void toStringMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
   v8SetReturnValueString(info, impl->stringifierMethod(), info.GetIsolate());
-}
-
-CORE_EXPORT  void toStringMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::toStringMethod(info);
 }
 
 static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -404,10 +345,6 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
   v8SetReturnValue(info, result);
-}
-
-CORE_EXPORT  void iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::iteratorMethod(info);
 }
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -426,14 +363,6 @@ static void namedPropertyGetter(const AtomicString& name, const v8::PropertyCall
   if (!result)
     return;
   v8SetReturnValueFast(info, result, impl);
-}
-
-CORE_EXPORT void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
-  if (!name->IsString())
-    return;
-  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
-
-  TestInterface2V8Internal::namedPropertyGetter(propertyName, info);
 }
 
 static void namedPropertySetter(const AtomicString& name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
@@ -455,14 +384,6 @@ static void namedPropertySetter(const AtomicString& name, v8::Local<v8::Value> v
   v8SetReturnValue(info, v8Value);
 }
 
-CORE_EXPORT void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
-  if (!name->IsString())
-    return;
-  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
-
-  TestInterface2V8Internal::namedPropertySetter(propertyName, v8Value, info);
-}
-
 static void namedPropertyDeleter(const AtomicString& name, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   const CString& nameInUtf8 = name.utf8();
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::DeletionContext, "TestInterface2", nameInUtf8.data());
@@ -477,14 +398,6 @@ static void namedPropertyDeleter(const AtomicString& name, const v8::PropertyCal
   v8SetReturnValue(info, result == DeleteSuccess);
 }
 
-CORE_EXPORT void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
-  if (!name->IsString())
-    return;
-  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
-
-  TestInterface2V8Internal::namedPropertyDeleter(propertyName, info);
-}
-
 static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
   const CString& nameInUtf8 = name.utf8();
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::GetterContext, "TestInterface2", nameInUtf8.data());
@@ -497,14 +410,6 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
   v8SetReturnValueInt(info, v8::None);
 }
 
-CORE_EXPORT void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
-  if (!name->IsString())
-    return;
-  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
-
-  TestInterface2V8Internal::namedPropertyQuery(propertyName, info);
-}
-
 static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::EnumerationContext, "TestInterface2");
 
@@ -515,10 +420,6 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
   if (exceptionState.hadException())
     return;
   v8SetReturnValue(info, ToV8(names, info.Holder(), info.GetIsolate()).As<v8::Array>());
-}
-
-CORE_EXPORT void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::Array>& info) {
-  TestInterface2V8Internal::namedPropertyEnumerator(info);
 }
 
 static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
@@ -535,10 +436,6 @@ static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo
 
   TestInterfaceEmpty* result = impl->item(index, exceptionState);
   v8SetReturnValueFast(info, result, impl);
-}
-
-CORE_EXPORT void indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::indexedPropertyGetter(index, info);
 }
 
 static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
@@ -559,10 +456,6 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
   v8SetReturnValue(info, v8Value);
 }
 
-CORE_EXPORT void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
-  TestInterface2V8Internal::indexedPropertySetter(index, v8Value, info);
-}
-
 static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::IndexedDeletionContext, "TestInterface2");
 
@@ -576,37 +469,131 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
   v8SetReturnValue(info, result == DeleteSuccess);
 }
 
-CORE_EXPORT void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
+} // namespace TestInterface2V8Internal
+
+void V8TestInterface2::legacyCallerMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::legacyCallerMethod(info);
+}
+
+void V8TestInterface2::itemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::itemMethod(info);
+}
+
+void V8TestInterface2::setItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::setItemMethod(info);
+}
+
+void V8TestInterface2::deleteItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::deleteItemMethod(info);
+}
+
+void V8TestInterface2::namedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::namedItemMethod(info);
+}
+
+void V8TestInterface2::setNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::setNamedItemMethod(info);
+}
+
+void V8TestInterface2::deleteNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::deleteNamedItemMethod(info);
+}
+
+void V8TestInterface2::stringifierMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::stringifierMethodMethod(info);
+}
+
+void V8TestInterface2::keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::keysMethod(info);
+}
+
+void V8TestInterface2::valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::valuesMethod(info);
+}
+
+void V8TestInterface2::entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::entriesMethod(info);
+}
+
+void V8TestInterface2::forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::forEachMethod(info);
+}
+
+void V8TestInterface2::hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::hasMethod(info);
+}
+
+void V8TestInterface2::toStringMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::toStringMethod(info);
+}
+
+void V8TestInterface2::iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::iteratorMethod(info);
+}
+
+void V8TestInterface2::namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  if (!name->IsString())
+    return;
+  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
+
+  TestInterface2V8Internal::namedPropertyGetter(propertyName, info);
+}
+
+void V8TestInterface2::namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  if (!name->IsString())
+    return;
+  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
+
+  TestInterface2V8Internal::namedPropertySetter(propertyName, v8Value, info);
+}
+
+void V8TestInterface2::namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
+  if (!name->IsString())
+    return;
+  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
+
+  TestInterface2V8Internal::namedPropertyDeleter(propertyName, info);
+}
+
+void V8TestInterface2::namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
+  if (!name->IsString())
+    return;
+  const AtomicString& propertyName = toCoreAtomicString(name.As<v8::String>());
+
+  TestInterface2V8Internal::namedPropertyQuery(propertyName, info);
+}
+
+void V8TestInterface2::namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::Array>& info) {
+  TestInterface2V8Internal::namedPropertyEnumerator(info);
+}
+
+void V8TestInterface2::indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::indexedPropertyGetter(index, info);
+}
+
+void V8TestInterface2::indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  TestInterface2V8Internal::indexedPropertySetter(index, v8Value, info);
+}
+
+void V8TestInterface2::indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   TestInterface2V8Internal::indexedPropertyDeleter(index, info);
 }
 
-} // namespace TestInterface2V8Internal
-
-void V8TestInterface2::visitDOMWrapper(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper) {
-  TestInterface2* impl = scriptWrappable->toImpl<TestInterface2>();
-  // The ownerNode() method may return a reference or a pointer.
-  if (Node* owner = WTF::getPtr(impl->ownerNode())) {
-    Node* root = V8GCController::opaqueRootForGC(isolate, owner);
-    isolate->SetReferenceFromGroup(v8::UniqueId(reinterpret_cast<intptr_t>(root)), wrapper);
-    return;
-  }
-}
-
 const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
-    {"legacyCaller", TestInterface2V8Internal::legacyCallerMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"item", TestInterface2V8Internal::itemMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"setItem", TestInterface2V8Internal::setItemMethodCallback, 0, 2, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"deleteItem", TestInterface2V8Internal::deleteItemMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"namedItem", TestInterface2V8Internal::namedItemMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"setNamedItem", TestInterface2V8Internal::setNamedItemMethodCallback, 0, 2, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"deleteNamedItem", TestInterface2V8Internal::deleteNamedItemMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"stringifierMethod", TestInterface2V8Internal::stringifierMethodMethodCallback, 0, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"keys", TestInterface2V8Internal::keysMethodCallback, 0, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"values", TestInterface2V8Internal::valuesMethodCallback, 0, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"entries", TestInterface2V8Internal::entriesMethodCallback, 0, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"forEach", TestInterface2V8Internal::forEachMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"has", TestInterface2V8Internal::hasMethodCallback, 0, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
-    {"toString", TestInterface2V8Internal::toStringMethodCallback, 0, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder},
+    {"legacyCaller", V8TestInterface2::legacyCallerMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"item", V8TestInterface2::itemMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"setItem", V8TestInterface2::setItemMethodCallback, nullptr, 2, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"deleteItem", V8TestInterface2::deleteItemMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"namedItem", V8TestInterface2::namedItemMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"setNamedItem", V8TestInterface2::setNamedItemMethodCallback, nullptr, 2, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"deleteNamedItem", V8TestInterface2::deleteNamedItemMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"stringifierMethod", V8TestInterface2::stringifierMethodMethodCallback, nullptr, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"keys", V8TestInterface2::keysMethodCallback, nullptr, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"values", V8TestInterface2::valuesMethodCallback, nullptr, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"entries", V8TestInterface2::entriesMethodCallback, nullptr, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"forEach", V8TestInterface2::forEachMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"has", V8TestInterface2::hasMethodCallback, nullptr, 1, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
+    {"toString", V8TestInterface2::toStringMethodCallback, nullptr, 0, v8::None, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess},
 };
 
 void V8TestInterface2::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -645,14 +632,14 @@ void V8TestInterface2::installV8TestInterface2Template(v8::Isolate* isolate, con
   V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface2Methods, WTF_ARRAY_LENGTH(V8TestInterface2Methods));
 
   // Indexed properties
-  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(TestInterface2V8Internal::indexedPropertyGetterCallback, TestInterface2V8Internal::indexedPropertySetterCallback, 0, TestInterface2V8Internal::indexedPropertyDeleterCallback, indexedPropertyEnumerator<TestInterface2>, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
+  v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(V8TestInterface2::indexedPropertyGetterCallback, V8TestInterface2::indexedPropertySetterCallback, nullptr, V8TestInterface2::indexedPropertyDeleterCallback, indexedPropertyEnumerator<TestInterface2>, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
   instanceTemplate->SetHandler(indexedPropertyHandlerConfig);
   // Named properties
-  v8::NamedPropertyHandlerConfiguration namedPropertyHandlerConfig(TestInterface2V8Internal::namedPropertyGetterCallback, TestInterface2V8Internal::namedPropertySetterCallback, TestInterface2V8Internal::namedPropertyQueryCallback, TestInterface2V8Internal::namedPropertyDeleterCallback, TestInterface2V8Internal::namedPropertyEnumeratorCallback, v8::Local<v8::Value>(), static_cast<v8::PropertyHandlerFlags>(int(v8::PropertyHandlerFlags::kOnlyInterceptStrings) | int(v8::PropertyHandlerFlags::kNonMasking)));
+  v8::NamedPropertyHandlerConfiguration namedPropertyHandlerConfig(V8TestInterface2::namedPropertyGetterCallback, V8TestInterface2::namedPropertySetterCallback, V8TestInterface2::namedPropertyQueryCallback, V8TestInterface2::namedPropertyDeleterCallback, V8TestInterface2::namedPropertyEnumeratorCallback, v8::Local<v8::Value>(), static_cast<v8::PropertyHandlerFlags>(int(v8::PropertyHandlerFlags::kOnlyInterceptStrings) | int(v8::PropertyHandlerFlags::kNonMasking)));
   instanceTemplate->SetHandler(namedPropertyHandlerConfig);
 
   // Iterator (@@iterator)
-  const V8DOMConfiguration::SymbolKeyedMethodConfiguration symbolKeyedIteratorConfiguration = { v8::Symbol::GetIterator, TestInterface2V8Internal::iteratorMethodCallback, 0, v8::DontEnum, V8DOMConfiguration::OnPrototype };
+  const V8DOMConfiguration::SymbolKeyedMethodConfiguration symbolKeyedIteratorConfiguration = { v8::Symbol::GetIterator, V8TestInterface2::iteratorMethodCallback, 0, v8::DontEnum, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder, V8DOMConfiguration::DoNotCheckAccess };
   V8DOMConfiguration::installMethod(isolate, world, prototypeTemplate, signature, symbolKeyedIteratorConfiguration);
 
   instanceTemplate->SetCallAsFunctionHandler(TestInterface2V8Internal::legacyCallerMethodCallback);
@@ -674,12 +661,21 @@ TestInterface2* V8TestInterface2::toImplWithTypeCheck(v8::Isolate* isolate, v8::
   return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
-InstallTemplateFunction V8TestInterface2::installV8TestInterface2TemplateFunction = (InstallTemplateFunction)&V8TestInterface2::installV8TestInterface2Template;
+InstallTemplateFunction V8TestInterface2::installV8TestInterface2TemplateFunction =
+    &V8TestInterface2::installV8TestInterface2Template;
 
-void V8TestInterface2::updateWrapperTypeInfo(InstallTemplateFunction installTemplateFunction, PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction) {
-  V8TestInterface2::installV8TestInterface2TemplateFunction = installTemplateFunction;
-  if (preparePrototypeAndInterfaceObjectFunction)
-    V8TestInterface2::wrapperTypeInfo.preparePrototypeAndInterfaceObjectFunction = preparePrototypeAndInterfaceObjectFunction;
+void V8TestInterface2::updateWrapperTypeInfo(
+    InstallTemplateFunction installTemplateFunction,
+    InstallRuntimeEnabledFunction installRuntimeEnabledFunction,
+    PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction) {
+  ALLOW_UNUSED_LOCAL(installRuntimeEnabledFunction);
+
+  V8TestInterface2::installV8TestInterface2TemplateFunction =
+      installTemplateFunction;
+  if (preparePrototypeAndInterfaceObjectFunction) {
+    V8TestInterface2::wrapperTypeInfo.preparePrototypeAndInterfaceObjectFunction =
+        preparePrototypeAndInterfaceObjectFunction;
+  }
 }
 
 }  // namespace blink

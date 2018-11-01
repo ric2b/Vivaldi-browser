@@ -88,6 +88,12 @@ Press any key to continue exploring.
   <message name="IDS_FLAGS_NEW_ZIP_UNPACKER_DESCRIPTION" desc="Description of about::flags option for the new ZIP unpacker based on the File System Provider API.">
     New ZIP unpacker flow, based on the File System Provider API.
   </message>
+  <message name="IDS_FLAGS_SHOW_ARC_FILES_APP_NAME" desc="Name of about::flags option for showing Android Files app in launcher.">
+    Show Android Files app
+  </message>
+  <message name="IDS_FLAGS_SHOW_ARC_FILES_APP_DESCRIPTION" desc="Description of the about::flag option for showing ARC Files app in launcher.">
+    Show Android Files app in Chrome OS launcher. This is only effective on a device with access to Play Store.
+  </message>
   <message name="IDS_FILE_SYSTEM_PROVIDER_UNRESPONSIVE_WARNING" desc="A warning shown in a notification that an operation is taking longer than expected.">
     An operation is taking longer than expected. Do you want to abort it?
   </message>
@@ -178,19 +184,19 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_STATUS_COLUMN_LABEL" desc="Status column label.  This column reflects the cloud import status of files.  The status is an icon depicting whether a file has been imported, and if so, where to - for example, a Drive icon if a file has been imported to Google Drive.  For unimported files, this column is blank. ">
     Status
   </message>
-  <message name="IDS_FILE_BROWSER_TOTAL_FILE_COUNT_LABEL" desc="Total count of files that user selects in Files app">
+  <message name="IDS_FILE_BROWSER_TOTAL_FILE_COUNT_LABEL" desc="Total count of files that user selects in the Files app">
     Total file count
   </message>
-  <message name="IDS_FILE_BROWSER_TOTAL_FILE_SIZE_LABEL" desc="Total size of files that user selects in Files app">
+  <message name="IDS_FILE_BROWSER_TOTAL_FILE_SIZE_LABEL" desc="Total size of files that user selects in the Files app">
     Total file size
   </message>
-  <message name="IDS_FILE_BROWSER_IMAGE_RESOLUTION_COLUMN_LABEL" desc="Image resolution of a file that user selects in Files app">
+  <message name="IDS_FILE_BROWSER_IMAGE_RESOLUTION_COLUMN_LABEL" desc="Image resolution of a file that user selects in the Files app">
     Image resolution
   </message>
-  <message name="IDS_FILE_BROWSER_MEDIA_TITLE_COLUMN_LABEL" desc="Artist of a music file that user selects in Files app">
+  <message name="IDS_FILE_BROWSER_MEDIA_TITLE_COLUMN_LABEL" desc="Artist of a music file that user selects in the Files app">
     Title
   </message>
-  <message name="IDS_FILE_BROWSER_MEDIA_ARTIST_COLUMN_LABEL" desc="Title of a music file that user selects in Files app">
+  <message name="IDS_FILE_BROWSER_MEDIA_ARTIST_COLUMN_LABEL" desc="Title of a music file that user selects in the Files app">
     Artist
   </message>
   <message name="IDS_FILE_BROWSER_TYPE_COLUMN_LABEL" desc="Type column label.">
@@ -268,7 +274,7 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_CLOSE_VOLUME_BUTTON_LABEL" desc="Title of the action for closing either an archive volume or a volume provided by an extension.">
     Close
   </message>
-  <message name="IDS_FILE_BROWSER_ADD_NEW_SERVICES_BUTTON_LABEL" desc="Title of the button in the left nav to add new services (file systems) to Files app.">
+  <message name="IDS_FILE_BROWSER_ADD_NEW_SERVICES_BUTTON_LABEL" desc="Title of the button in the left nav to add new services (file systems) to the Files app.">
     Add new services
   </message>
   <message name="IDS_FILE_BROWSER_INSTALL_NEW_EXTENSION_LABEL" desc="Title of the menu item for installing new extensions from the web store.">
@@ -741,7 +747,7 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_SUGGEST_DIALOG_TITLE" desc="Title of the suggest app dialog, which shows the list of the apps which supports the selected file.">
     Select an app to open this file
   </message>
-  <message name="IDS_FILE_BROWSER_SUGGEST_DIALOG_FOR_PROVIDERS_TITLE" desc="Title of the suggest app dialog, which shows the list of the apps that can be added to the left nav of Files app.">
+  <message name="IDS_FILE_BROWSER_SUGGEST_DIALOG_FOR_PROVIDERS_TITLE" desc="Title of the suggest app dialog, which shows the list of the apps that can be added to the left nav of the Files app.">
     Available services
   </message>
   <message name="IDS_FILE_BROWSER_SUGGEST_DIALOG_LINK_TO_WEBSTORE" desc="Text of the link to the app list on Chrome Webstore, which shows the more apps than in the suggest app dialog.">
@@ -1003,10 +1009,10 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_NO_TASK_FOR_DMG" desc="Message shown when user tries to open a windows executable file, which we can't handle.">
     This file is designed for a computer using Macintosh software. This is not compatible with your device which runs Chrome OS. Please search the <ph name="BEGIN_LINK">&lt;a target='_blank' href='$1'&gt;<ex>&lt;a target='_blank' href='$1'&gt;</ex></ph>Chrome Web Store<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> for a suitable replacement app.<ph name="BEGIN_LINK_HELP">&lt;a target='_blank' href='$2'&gt;<ex>&lt;a target='_blank' href='$2'&gt;</ex></ph>Learn More<ph name="END_LINK_HELP">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
-  <message name="IDS_FILE_BROWSER_NO_TASK_FOR_CRX_TITLE" desc="Message shown when a user tries to open a *.crx file, which we don't handle in Files.app.">
+  <message name="IDS_FILE_BROWSER_NO_TASK_FOR_CRX_TITLE" desc="Message shown when a user tries to open a *.crx file, which we don't handle in the Files app.">
     Wait just a sec
   </message>
-  <message name="IDS_FILE_BROWSER_NO_TASK_FOR_CRX" desc="Message shown when a user tries to open a *.crx file, which we don't handle in Files.app.">
+  <message name="IDS_FILE_BROWSER_NO_TASK_FOR_CRX" desc="Message shown when a user tries to open a *.crx file, which we don't handle in the Files app.">
     We're constantly looking for ways to make your browsing safer. Previously, any website could prompt you to add an extension into your browser. In the latest versions of Google Chrome, you must explicitly tell Chrome that you want to install these extensions by adding them through the Extensions page. <ph name="BEGIN_LINK">&lt;a target='_blank' href='https://support.google.com/chrome_webstore/answer/2664769?p=crx_warning&amp;rd=1'&gt;</ph>Learn more<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
 
@@ -1160,10 +1166,10 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_THUMBNAIL_VIEW_TOOLTIP" desc="Tooltip for the Thumbnail View button.">
     Thumbnail view
   </message>
-  <message name="IDS_FILE_BROWSER_SORT_BUTTON_TOOLTIP" desc="Tooltip for the button which provides sort options in Files.app.">
+  <message name="IDS_FILE_BROWSER_SORT_BUTTON_TOOLTIP" desc="Tooltip for the button which provides sort options in the Files app.">
     Sort options
   </message>
-  <message name="IDS_FILE_BROWSER_GEAR_BUTTON_TOOLTIP" desc="Tooltip for the gear button in Files.app.">
+  <message name="IDS_FILE_BROWSER_GEAR_BUTTON_TOOLTIP" desc="Tooltip for the gear button in the Files app.">
     Settings
   </message>
 
@@ -1416,17 +1422,17 @@ Press any key to continue exploring.
   <message name="IDS_FLAGS_WAKE_ON_PACKETS_DESCRIPTION" desc="Description for the flag to enable wake on packets.">
     Enables waking the device based on the receipt of some network packets.
   </message>
-  <message name="IDS_FLAGS_FULLSCREEN_APP_LIST_NAME" desc="Description for the flag to enable experimental fullscreen app list.">
-    Enables the fullscreen app-list in touch-view mode.
-  </message>
-  <message name="IDS_FLAGS_FULLSCREEN_APP_LIST_DESCRIPTION" desc="Description for the flag to enable experimental fullscreen app list.">
-    The app-list will appear as fullscreen mode when it's in touch view mode. This flag does nothing outside of the mode.
-  </message>
   <message name="IDS_FLAGS_QUICK_UNLOCK_PIN" desc="Title of the flag used to enable quick unlock pin.">
     Quick Unlock (PIN)
   </message>
   <message name="IDS_FLAGS_QUICK_UNLOCK_PIN_DESCRIPTION" desc="Description of the flag used to enable quick unlock pin.">
     Enabling PIN quick unlock allows you to use a PIN to unlock your Chromebook on the lock screen after you have signed into your device.
+  </message>
+  <message name="IDS_FLAGS_QUICK_UNLOCK_FINGERPRINT" desc="Title of the flag used to enable quick unlock fingerprint.">
+    Quick Unlock (Fingerprint)
+  </message>
+  <message name="IDS_FLAGS_QUICK_UNLOCK_FINGERPRINT_DESCRIPTION" desc="Description of the flag used to enable quick unlock fingerprint.">
+    Enabling fingerprint quick unlock allows you to setup and use a fingerprint to unlock your Chromebook on the lock screen after you have signed into your device.
   </message>
   <message name="IDS_OFFERS_CONSENT_INFOBAR_LABEL_LEARN_MORE" desc="Text of the Learn More link in the echo dialog.">
     Learn More
@@ -1674,20 +1680,23 @@ Press any key to continue exploring.
   <message name="IDS_KEYBOARD_DROPDOWN_TITLE" desc="Title of keyboard selection dropdown menu" meaning="Small title near keyboard dropdown menu suggesting that this is a keyboard layout selector.">
     Keyboard
   </message>
-  <message name="IDS_OOBE_WELCOME_NEXT_BUTTON_TEXT" desc="Text on 'Start to use ChromeOS' button" meaning="This is the text label displayed on the 'Next' button for the first ChromeOS initial device setup screen ('Welcome screen').">
+  <message name="IDS_OOBE_WELCOME_NEXT_BUTTON_TEXT" desc="Text on 'Start to use Chrome OS' button" meaning="This is the text label displayed on the 'Next' button for the first Chrome OS initial device setup screen ('Welcome screen').">
     Let's go
   </message>
-  <message name="IDS_OOBE_OK_BUTTON_TEXT" desc="Text on 'OK' button" meaning="This is 'OK' text for all 'OK' buttons on ChromeOS initial device setup screens.">
+  <message name="IDS_OOBE_OK_BUTTON_TEXT" desc="Text on 'OK' button" meaning="This is 'OK' text for all 'OK' buttons on Chrome OS initial device setup screens.">
     OK
   </message>
-  <message name="IDS_LANGUAGE_SECTION_TITLE" desc="Title of language selection screen" meaning="A title of the dialog where user should select ChromeOS UI language and default keyboard layout during initial device setup.">
+  <message name="IDS_LANGUAGE_BUTTON_LABEL" desc="Navigation label attached to the 'Select Language' button on Chrome OS initial device setup screen" meaning="The button itself displays only current language name. But for accessibility mode we need full description of this button. So this label suggests that pressing on a button will allow to change current language and input method. And it should also include the name of currently selected language.">
+    Select language and keyboard button. Currently selected language is <ph name="LANGUAGE">$1<ex>English (United States)</ex></ph>.
+  </message>
+  <message name="IDS_LANGUAGE_SECTION_TITLE" desc="Title of language selection screen" meaning="A title of the dialog where user should select Chrome OS UI language and default keyboard layout during initial device setup.">
     Choose your language &amp; keyboard
   </message>
-  <message name="IDS_ACCESSIBILITY_SECTION_TITLE" desc="Title of accessibility options screen" meaning="A title of the dialog where user can control ChromeOS UI accessibility (like large cursor or screen reader) options during initial device setup.">
+  <message name="IDS_ACCESSIBILITY_SECTION_TITLE" desc="Title of accessibility options screen" meaning="A title of the dialog where user can control Chrome OS UI accessibility (like large cursor or screen reader) options during initial device setup.">
     Accessibility settings
   </message>
-  <message name="IDS_ACCESSIBILITY_SECTION_HINT" desc="Under-title line on the accessibility options screen" meaning="A hint to the user that these settings help to make device more usable.">
-    Configure your device to be more usable.
+  <message name="IDS_ACCESSIBILITY_SECTION_HINT" desc="Under-title line on the accessibility options screen" meaning="A hint to the user what these settings do and how to update them later.">
+    You can customize this device to fit your needs. These accessibility features can be changed later in Settings.
   </message>
   <message name="IDS_NETWORK_SECTION_TITLE" desc="Title of network selection screen" meaning="A title of the dialog where user should select network to connect to Internet">
     Connect to network
@@ -1749,6 +1758,12 @@ Press any key to continue exploring.
   <message name="IDS_OOBE_CLOSE_ACCESSIBILITY_MENU" desc="Text to be spoken when focus is set to the close button of accessibility options menu.">
     Close accessibility menu
   </message>
+  <message name="IDS_LANGUAGE_DROPDOWN_LABEL" desc="Navigation label attached to the 'List of languages' dropdown menu on Chrome OS Language and keyboard initial device setup screen" meaning="The menu itself displays only current language name. But for accessibility mode we need full description of this menu. So this label suggests that activating a menu will allow to change current language.">
+    Select language
+  </message>
+  <message name="IDS_KEYBOARD_DROPDOWN_LABEL" desc="Navigation label attached to the 'List of keyboards' dropdown menu on Chrome OS Language and keyboard initial device setup screen" meaning="The menu itself displays only current keyboard layout name. But for accessibility mode we need full description of this menu. So this label suggests that activating a menu will allow to change current input method.">
+    Select keyboard
+  </message>
   <message name="IDS_OOBE_OTHER_LANGUAGES" desc="Option group name dividing vendor-configured languages from other available languages in out-of-box 'Select language' select control.">
     Other languages
   </message>
@@ -1764,8 +1779,14 @@ Press any key to continue exploring.
   <message name="IDS_TIMEZONE_DROPDOWN_TITLE" desc="Title of timezone selection dropdown menu" meaning="Small title near timezone dropdown menu suggesting that this is a timezone selector.">
     Timezone
   </message>
+  <message name="IDS_TIMEZONE_DROPDOWN_LABEL" desc="Navigation label attached to the 'List of timezones' dropdown menu on Chrome OS Timezone initial device setup screen" meaning="The menu itself displays only current timezone name. But for accessibility mode we need full description of this menu. So this label suggests that activating a menu will allow to change current timezone.">
+    Select timezone
+  </message>
   <message name="IDS_OOBE_EULA_SECTION_TITLE" desc="Title of Terms of Service screen">
-    Google Chrome OS Terms
+    Google Chrome OS terms
+  </message>
+  <message name="IDS_OOBE_EULA_IFRAME_LABEL" desc="Accessibility label on an iframe with full Chrome OS Terms text">
+    Google Chrome OS Terms contents
   </message>
   <message name="IDS_OOBE_EULA_ACCEPT_AND_CONTINUE_BUTTON_TEXT" desc="Label on a button on the Title of Terms of Service OOBE screen to accept EULA and continue.">
     Accept and continue
@@ -2086,6 +2107,15 @@ Press any key to continue exploring.
   <message name="IDS_CREATE_SUPERVISED_USER_TPM_ERROR_BUTTON" desc="Supervised user dialog, error page, tpm error during creation, button title">
     OK
   </message>
+  <message name="IDS_CREATE_SUPERVISED_USER_SECURE_MODULE_ERROR_TITLE" desc="Supervised user dialog, error page, secure module error during creation, title">
+    Oops, secure module error.
+  </message>
+  <message name="IDS_CREATE_SUPERVISED_USER_SECURE_MODULE_ERROR" desc="Supervised user dialog, error page, secure module error during creation, text">
+    Something is wrong with device.  To recover from this error you will need to reboot device and try again.
+  </message>
+  <message name="IDS_CREATE_SUPERVISED_USER_SECURE_MODULE_ERROR_BUTTON" desc="Supervised user dialog, error page, secure module error during creation, button title">
+    OK
+  </message>
   <message name="IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_TITLE" desc="Supervised user dialog, error page, generic error during creation, title">
     Oops, something went wrong
   </message>
@@ -2315,9 +2345,6 @@ Press any key to continue exploring.
   </message>
 
   <!-- Strings used in <cr-network-list>, used in Settings and OOBE -->
-  <message name="IDS_NETWORK_LIST_DISABLED" desc="Text in the network list element when the network type is disabled.">
-    Disabled
-  </message>
   <message name="IDS_NETWORK_LIST_NOT_CONNECTED" desc="Text in the network list element when there is no network for the type.">
     No network
   </message>
@@ -2358,7 +2385,7 @@ Press any key to continue exploring.
     Unrecognized error: <ph name="desc">$1<ex>ShillErrorString</ex></ph>
   </message>
   <message name="IDS_NETWORK_CELLULAR_ACTIVATED_TITLE" desc="Title for cellular activated notification">
-    Cellular Activated
+    Mobile Data Activated
   </message>
   <message name="IDS_NETWORK_CELLULAR_ACTIVATED" desc="Text of the cellular activated notification">
     Congratulations! Your '<ph name="name">$1<ex>Generic Wireless</ex></ph>' data service has been activated and is ready to go.
@@ -3531,8 +3558,11 @@ Press any key to continue exploring.
     <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Note:<ph name="END_BOLD">&lt;/strong&gt;</ph> Only enable if you know what you are doing or if you have been asked to do so, as collection of data may reduce performance.
   </message>
 
-  <message name="IDS_EULA_BACK_BUTTON" desc="Back button shown on EULA screen.">
+  <message name="IDS_EULA_BACK_BUTTON" desc="Back button shown on EULA/OOBE screens.">
     Back
+  </message>
+  <message name="IDS_EULA_NEXT_BUTTON" desc="Next button shown on EULA/OOBE screens.">
+    Next
   </message>
   <message name="IDS_EULA_ACCEPT_AND_CONTINUE_BUTTON" desc="Accept button text below EULA terms of service">
     Accept and continue
@@ -3567,7 +3597,24 @@ Press any key to continue exploring.
   <message name="IDS_EULA_TPM_DISABLED" desc="Tooltip text describing why 'System security setting' link is disabled.">
     Trusted Platform Module (TPM) chip is disabled or absent.
   </message>
-
+  <message name="IDS_EULA_SECURE_MODULE_DESCRIPTION" desc="Description of what a secure module does in the eula page.">
+    Your computer contains a secure module, which is used to implement many critical security features in Chrome OS. Visit the Chromebook Help Center to learn more: https://support.google.com/chromebook/?p=sm
+  </message>
+  <message name="IDS_EULA_SECURE_MODULE_KEY_DESCRIPTION" desc="Description of the generated secure module password in the eula page.">
+    Below is the randomly generated secure module password that has been assigned to your computer:
+  </message>
+  <message name="IDS_EULA_SECURE_MODULE_KEY_DESCRIPTION_POWERWASH" desc="Notifies users that a secure module password is unavailabe after a powerwash.">
+    The randomly generated secure module password is not available. This is normal after a Powerwash.
+  </message>
+  <message name="IDS_EULA_SECURE_MODULE_WAIT" desc="Message that is shown to users on the eula page while the secure module is being set up.">
+    The secure module is being set up. Please be patient; this may take a few minutes.
+  </message>
+  <message name="IDS_EULA_SECURE_MODULE_BUSY" desc="Message that is shown to users on the eula page while the secure module is being prepared.">
+    Secure module is being prepared, please wait (this may take a few minutes)...
+  </message>
+  <message name="IDS_EULA_SECURE_MODULE_DISABLED" desc="Tooltip text describing why 'System security setting' link is disabled.">
+    Secure module is disabled or absent.
+  </message>
   <message name="IDS_ENABLE_DEBUGGING_SCREEN_TITLE" desc="Title of the enable debugging features screen">
     Enable debugging features
   </message>
@@ -3942,10 +3989,13 @@ Press any key to continue exploring.
     Bluetooth
   </message>
   <message name="IDS_NETWORK_TYPE_CELLULAR" desc="The cellular network type.">
-    Cellular
+    Mobile
   </message>
   <message name="IDS_NETWORK_TYPE_VPN" desc="The vpn network type.">
     VPN
+  </message>
+  <message name="IDS_NETWORK_TYPE_VPN_BUILTIN" desc="The built-in VPN types (Open VPN and L2TP/IPSec).">
+    OpenVPN / L2TP
   </message>
   <message name="IDS_STATUSBAR_NETWORK_DEVICE_CONNECTING" desc="The network device status connecting.">
     Connecting...
@@ -4188,13 +4238,13 @@ Battery full
   <message name="IDS_REMOVABLE_DEVICE_DETECTION_TITLE" desc="Text of notification message which is shown when user inserts removable device (SD card, USB key...)">
     Removable device detected
   </message>
-  <message name="IDS_REMOVABLE_DEVICE_NAVIGATION_MESSAGE" desc="Text of notification message to navigate users to Files.app. If user clicks a button in the notification, Files.app opens.">
+  <message name="IDS_REMOVABLE_DEVICE_NAVIGATION_MESSAGE" desc="Text of notification message to navigate users to the Files app. If user clicks a button in the notification, the Files app opens.">
     Explore the device's content in the Files app.
   </message>
-  <message name="IDS_REMOVABLE_DEVICE_NAVIGATION_MESSAGE_READONLY_POLICY" desc="Text of notification message to navigate users to Files.app when attaching a removable media, but the administrator's poilcy forbids writing data to them. If user clicks a button in the notification, Files.app opens.">
+  <message name="IDS_REMOVABLE_DEVICE_NAVIGATION_MESSAGE_READONLY_POLICY" desc="Text of notification message to navigate users to the Files app when attaching a removable media, but the administrator's poilcy forbids writing data to them. If user clicks a button in the notification, the Files app opens.">
     Explore the device's content in the Files app. The content is restricted by an admin and can’t be modified.
   </message>
-  <message name="IDS_REMOVABLE_DEVICE_NAVIGATION_BUTTON_LABEL" desc="Text of a button label in a notification to navigate users to Files.app. If user clicks the button, Files.app opens.">
+  <message name="IDS_REMOVABLE_DEVICE_NAVIGATION_BUTTON_LABEL" desc="Text of a button label in a notification to navigate users to the Files app. If user clicks the button, the Files app opens.">
     Open Files app
   </message>
   <message name="IDS_REMOVABLE_DEVICE_IMPORT_MESSAGE" desc="Text of notification message to start the media import flow. If user clicks a button in the notification, the import flow begins.">
@@ -4215,7 +4265,7 @@ Battery full
   <message name="IDS_DEVICE_UNKNOWN_MESSAGE" desc="Text of notification message which is shown when user inserts removable device (SD card, USB key...)">
    Sorry, the device <ph name="DEVICE_LABEL">$1<ex>My SD card</ex></ph> could not be recognized.
   </message>
-  <message name="IDS_DEVICE_UNKNOWN_BUTTON_LABEL" desc="Text of a button label in a notification to format the device. If user clicks the button, Files.app opens and focus on unknown the device.">
+  <message name="IDS_DEVICE_UNKNOWN_BUTTON_LABEL" desc="Text of a button label in a notification to format the device. If user clicks the button, the Files app opens and focus on unknown the device.">
     Format this device
   </message>
   <message name="IDS_DEVICE_UNKNOWN_DEFAULT_MESSAGE" desc="Text of notification message which is shown when user inserts removable device (SD card, USB key...)">
@@ -4824,6 +4874,9 @@ Battery full
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_CHROMEVOX_SPOKEN_FEEDBACK" desc="The text in the keyboard overlay to explain the shortcut (enable or disable spoken feedback).">
     ChromeVox (spoken feedback)
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE" desc="The text in the keyboard overlay to explain the shortcut (Toggle high contrast mode).">
+    Toggle High Contrast Mode
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_PROJECTION_TOUCH_HUD" desc="The text in the keyboard overlay to explain the shortcut.">
     Projection touch HUD
@@ -5465,6 +5518,9 @@ Battery full
   <message name="IDS_ENTERPRISE_LOGIN_ERROR_WHITELIST" desc="Couldn't sign in because user is not whitelisted by the administrator.">
     You are not authorized to use this device. Please contact the administrator for sign-in permission.
   </message>
+  <message name="IDS_LOGIN_ERROR_GOOGLE_ACCOUNT_NOT_ALLOWED" desc="Couldn't sign into Google account on the Active Directory managed device.">
+    Sorry, Google accounts are not allowed on this device.
+  </message>
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_2ND_TIME" desc="Couldn't sign in because password is invalid for the 2nd time">
     Sorry, your password still could not be verified. Note: if you changed your password recently, your new password will be applied once you sign out, please use the old password here.
   </message>
@@ -5713,7 +5769,7 @@ Battery full
     You are currently offline.
   </message>
   <message name="IDS_UPGRADE_DISALLOWED" desc="Status label: Upgrade disallowed for the current network">
-    You are currently connected to the <ph name="NETWORK_TYPE">$1<ex>cellular</ex></ph> network.
+    You are currently connected to the <ph name="NETWORK_TYPE">$1<ex>mobile</ex></ph> network.
   </message>
   <message name="IDS_UPGRADE_NETWORK_LIST_CELLULAR_ALLOWED" desc="Status label: for updates you need to connect to an Ethernet, Wi-Fi or mobile data">
     To check for updates, please use Ethernet, Wi-Fi or mobile data.
@@ -5723,11 +5779,8 @@ Battery full
   </message>
 
   <!-- EOL Notification Strings -->
-  <message name="IDS_ABOUT_PAGE_EOL_SECURITY_ONLY" desc="The message in the about page to inform the user that software updates for this device are no longer available.">
+  <message name="IDS_ABOUT_PAGE_EOL_EOL" desc="The message in the about page to inform the user that software updates for this device are no longer available.">
     Software updates for this device are no longer available.
-  </message>
-  <message name="IDS_ABOUT_PAGE_EOL_EOL" desc="The message in the about page to inform the user that security updates for this device are no longer available.">
-    Security updates for this device are no longer available.
   </message>
   <message name="IDS_ABOUT_PAGE_EOL_LEARN_MORE" desc="The message in the about page to provide more information of device end of life, containing the URLs.">
      Please consider upgrading. <ph name="BEGIN_LINK_EOL">&lt;a target="_blank" href="$1"&gt;</ph>Learn more<ph name="END_LINK_EOL">&lt;/a&gt;</ph>
@@ -5735,11 +5788,8 @@ Battery full
   <message name="IDS_EOL_NOTIFICATION_TITLE" desc="Notification title shown to inform the user that this device is no longer supported.">
     This device is no longer supported
   </message>
-  <message name="IDS_EOL_NOTIFICATION_SECURITY_ONLY" desc="Notification shown to inform the user that this device will no longer receive software updates.">
+  <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification shown to inform the user that this device will no longer receive software updates.">
     Software updates for this device are no longer available. Please consider upgrading.
-  </message>
-  <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification shown to inform the user that this device will no longer receive regular security updates.">
-    Security updates for this device are no longer available. Please consider upgrading.
   </message>
   <message name="IDS_EOL_MORE_INFO_BUTTON" desc="A button label shown in the notification for eol status change to get more information.">
     Learn more
@@ -5752,6 +5802,14 @@ Battery full
   </message>
   <message name="IDS_FLAGS_EOL_NOTIFICATION_DESCRIPTION" desc="Description of the about:flag option to disable eol notification.">
     Disable Notifcation when Device is End of Life.
+  </message>
+
+  <!-- Stylus strings -->
+  <message name="IDS_FLAGS_FORCE_ENABLE_STYLUS_TOOLS_NAME" desc="Name of the about:flag option to enable stylus tools.">
+    Force enable stylus features
+  </message>
+  <message name="IDS_FLAGS_FORCE_ENABLE_STYLUS_TOOLS_DESCRIPTION" desc="Description of the about:flag option to enable stylus tools.">
+    Forces display of the stylus tools menu in the shelf and the stylus section in settings, even if there is no attached stylus device.
   </message>
 
   <!-- Genius App -->
@@ -5888,7 +5946,7 @@ All users must sign out to continue.
     Google Chrome will use cellular data if you're not connected to another network.
   </message>
   <message name="IDS_3G_DATASAVER_TITLE" desc="Title of the 3G data notification prompting user to install Data Saver.">
-    You are using cellular data
+    You are using mobile data
   </message>
   <message name="IDS_3G_DATASAVER_MESSAGE" desc="Text of the 3G data notification prompting user to install Data Saver.">
     Save data and browse faster using Google Data Saver. Click to learn more.
@@ -6215,8 +6273,8 @@ All users must sign out to continue.
   <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_ACTIVE_DIRECTORY_POLICY_FETCH" desc="Error message shown on the enrollment screen when the system failed to fetch device policy from Active Directory.">
     Oops!  The system failed to fetch policy from Microsoft® Active Directory®.
   </message>
-  <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_STORE_DM_TOKEN_FAILED" desc="Error message shown on the enrollment screen when the system failed to store DM token into the local state.">
-    Oops!  The system failed to store DM token on the device.
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_SAVE_DEVICE_CONFIGURATION" desc="Error message shown on the enrollment screen when the system failed to save some part of the device configuration. E.g. token from the Device Management server.">
+    Oops!  The system failed to save device configuration.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_SCREEN_TITLE" desc="The title on the enterprise enrollment dialog.">
     Enterprise enrollment

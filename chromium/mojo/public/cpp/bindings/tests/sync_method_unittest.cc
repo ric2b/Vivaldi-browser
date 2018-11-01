@@ -269,11 +269,8 @@ class SyncMethodAssociatedTest : public SyncMethodTest {
   void SetUp() override {
     master_impl_.reset(new TestSyncMasterImpl(MakeRequest(&master_ptr_)));
 
-    master_ptr_.associated_group()->CreateAssociatedInterface(
-        AssociatedGroup::WILL_PASS_REQUEST, &asso_ptr_info_, &asso_request_);
-    master_ptr_.associated_group()->CreateAssociatedInterface(
-        AssociatedGroup::WILL_PASS_PTR, &opposite_asso_ptr_info_,
-        &opposite_asso_request_);
+    asso_request_ = MakeRequest(&asso_ptr_info_);
+    opposite_asso_request_ = MakeRequest(&opposite_asso_ptr_info_);
 
     master_impl_->set_send_interface_handler(
         [this](TestSyncAssociatedPtrInfo ptr) {
@@ -335,8 +332,8 @@ TestSync::AsyncEchoCallback BindAsyncEchoCallback(Func func) {
   return base::Bind(&CallAsyncEchoCallback<Func>, func);
 }
 
-// TestSync and TestSyncMaster exercise Router and MultiplexRouter,
-// respectively.
+// TestSync (without associated interfaces) and TestSyncMaster (with associated
+// interfaces) exercise MultiplexRouter with different configurations.
 using InterfaceTypes = testing::Types<TestSync, TestSyncMaster>;
 TYPED_TEST_CASE(SyncMethodCommonTest, InterfaceTypes);
 

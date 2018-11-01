@@ -241,9 +241,8 @@ void ClearBrowsingDataHandler::OnClearingTaskFinished(
   UMA_HISTOGRAM_BOOLEAN(
       "History.ClearBrowsingData.ShownHistoryNoticeAfterClearing", show_notice);
 
-  ResolveJavascriptCallback(
-      base::StringValue(webui_callback_id),
-      base::FundamentalValue(show_notice));
+  ResolveJavascriptCallback(base::StringValue(webui_callback_id),
+                            base::Value(show_notice));
   task_observer_.reset();
 }
 
@@ -255,7 +254,7 @@ void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
   // Needed because WebUI doesn't handle renderer crashes. See crbug.com/610450.
   task_observer_.reset();
 
-  OnStateChanged();
+  UpdateSyncState();
   RefreshHistoryNotice();
 
   // Restart the counters each time the dialog is reopened.
@@ -267,12 +266,15 @@ void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
       *base::Value::CreateNullValue() /* Promise<void> */);
 }
 
-void ClearBrowsingDataHandler::OnStateChanged() {
+void ClearBrowsingDataHandler::OnStateChanged(syncer::SyncService* sync) {
+  UpdateSyncState();
+}
+
+void ClearBrowsingDataHandler::UpdateSyncState() {
   CallJavascriptFunction(
-      "cr.webUIListenerCallback",
-      base::StringValue("update-footer"),
-      base::FundamentalValue(sync_service_ && sync_service_->IsSyncActive()),
-      base::FundamentalValue(show_history_footer_));
+      "cr.webUIListenerCallback", base::StringValue("update-footer"),
+      base::Value(sync_service_ && sync_service_->IsSyncActive()),
+      base::Value(show_history_footer_));
 }
 
 void ClearBrowsingDataHandler::RefreshHistoryNotice() {
@@ -300,7 +302,7 @@ void ClearBrowsingDataHandler::RefreshHistoryNotice() {
 
 void ClearBrowsingDataHandler::UpdateHistoryNotice(bool show) {
   show_history_footer_ = show;
-  OnStateChanged();
+  UpdateSyncState();
 
   UMA_HISTOGRAM_BOOLEAN(
       "History.ClearBrowsingData.HistoryNoticeShownInFooterWhenUpdated",

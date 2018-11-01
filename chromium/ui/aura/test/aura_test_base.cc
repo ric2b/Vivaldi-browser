@@ -169,6 +169,8 @@ bool AuraTestBase::OnWmSetProperty(
   return true;
 }
 
+void AuraTestBase::OnWmSetCanFocus(Window* window, bool can_focus) {}
+
 Window* AuraTestBase::OnWmCreateTopLevelWindow(
     ui::mojom::WindowType window_type,
     std::map<std::string, std::vector<uint8_t>>* properties) {
@@ -226,10 +228,6 @@ bool AuraTestBase::IsWindowActive(aura::Window* window) { return false; }
 
 void AuraTestBase::OnWmDeactivateWindow(Window* window) {}
 
-client::CaptureClient* AuraTestBase::GetCaptureClient() {
-  return helper_->capture_client();
-}
-
 PropertyConverter* AuraTestBase::GetPropertyConverter() {
   return &property_converter_;
 }
@@ -244,6 +242,15 @@ void AuraTestBaseWithType::SetUp() {
   DCHECK(!setup_called_);
   setup_called_ = true;
   ConfigureBackend(GetParam());
+  AuraTestBase::SetUp();
+}
+
+AuraTestBaseMus::AuraTestBaseMus() {}
+
+AuraTestBaseMus::~AuraTestBaseMus() {}
+
+void AuraTestBaseMus::SetUp() {
+  ConfigureBackend(test::BackendType::MUS);
   AuraTestBase::SetUp();
 }
 

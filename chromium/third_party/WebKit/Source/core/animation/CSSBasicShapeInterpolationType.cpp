@@ -102,7 +102,7 @@ InterpolationValue CSSBasicShapeInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSBasicShapeInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   if (!value.isBaseValueList())
     return BasicShapeInterpolationFunctions::maybeConvertCSSValue(value);
@@ -126,8 +126,7 @@ PairwiseInterpolationValue CSSBasicShapeInterpolationType::maybeMergeSingles(
 
 InterpolationValue
 CSSBasicShapeInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  const ComputedStyle& style = *state.style();
+    const ComputedStyle& style) const {
   return BasicShapeInterpolationFunctions::maybeConvertBasicShape(
       BasicShapePropertyFunctions::getBasicShape(cssProperty(), style),
       style.effectiveZoom());

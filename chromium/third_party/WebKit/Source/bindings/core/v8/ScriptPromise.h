@@ -35,10 +35,10 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -85,11 +85,6 @@ class CORE_EXPORT ScriptPromise final {
   bool isEmpty() const { return m_promise.isEmpty(); }
 
   void clear() { m_promise.clear(); }
-
-  void setReference(const v8::Persistent<v8::Object>& parent,
-                    v8::Isolate* isolate) {
-    m_promise.setReference(parent, isolate);
-  }
 
   bool operator==(const ScriptPromise& value) const {
     return m_promise == value.m_promise;

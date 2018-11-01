@@ -46,7 +46,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/border.h"
-#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
@@ -170,8 +169,6 @@ class InternalPageInfoPopupView : public views::BubbleDialogDelegateView {
   ~InternalPageInfoPopupView() override;
 
   // views::BubbleDialogDelegateView:
-  views::NonClientFrameView* CreateNonClientFrameView(
-      views::Widget* widget) override;
   void OnWidgetDestroying(views::Widget* widget) override;
   int GetDialogButtons() const override;
 
@@ -326,16 +323,6 @@ InternalPageInfoPopupView::InternalPageInfoPopupView(
 InternalPageInfoPopupView::~InternalPageInfoPopupView() {
 }
 
-views::NonClientFrameView* InternalPageInfoPopupView::CreateNonClientFrameView(
-    views::Widget* widget) {
-  views::BubbleFrameView* frame = static_cast<views::BubbleFrameView*>(
-      BubbleDialogDelegateView::CreateNonClientFrameView(widget));
-  // Padding around icon + half of icon width.
-  frame->bubble_border()->set_arrow_offset(
-      kSpacing + 8 + frame->bubble_border()->GetBorderThickness());
-  return frame;
-}
-
 void InternalPageInfoPopupView::OnWidgetDestroying(views::Widget* widget) {
   g_shown_popup_type = WebsiteSettingsPopupView::POPUP_NONE;
 }
@@ -455,7 +442,7 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
   layout->AddView(header_);
 
   layout->StartRow(0, content_column);
-  separator_ = new views::Separator(views::Separator::HORIZONTAL);
+  separator_ = new views::Separator();
   layout->AddView(separator_);
 
   layout->AddPaddingRow(1, kHeaderMarginBottom);

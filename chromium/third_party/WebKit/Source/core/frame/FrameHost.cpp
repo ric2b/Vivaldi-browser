@@ -34,7 +34,6 @@
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/PageScaleConstraints.h"
-#include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/VisualViewport.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/page/Page.h"
@@ -52,7 +51,6 @@ FrameHost* FrameHost::create(Page& page) {
 FrameHost::FrameHost(Page& page)
     : m_page(&page),
       m_browserControls(BrowserControls::create(*this)),
-      m_pageScaleConstraintsSet(PageScaleConstraintsSet::create()),
       m_visualViewport(VisualViewport::create(*this)),
       m_overscrollController(
           OverscrollController::create(*m_visualViewport,
@@ -72,42 +70,6 @@ Page& FrameHost::page() {
 
 const Page& FrameHost::page() const {
   return *m_page;
-}
-
-Settings& FrameHost::settings() {
-  return m_page->settings();
-}
-
-const Settings& FrameHost::settings() const {
-  return m_page->settings();
-}
-
-ChromeClient& FrameHost::chromeClient() {
-  return m_page->chromeClient();
-}
-
-const ChromeClient& FrameHost::chromeClient() const {
-  return m_page->chromeClient();
-}
-
-UseCounter& FrameHost::useCounter() {
-  return m_page->useCounter();
-}
-
-const UseCounter& FrameHost::useCounter() const {
-  return m_page->useCounter();
-}
-
-Deprecation& FrameHost::deprecation() {
-  return m_page->deprecation();
-}
-
-const Deprecation& FrameHost::deprecation() const {
-  return m_page->deprecation();
-}
-
-float FrameHost::deviceScaleFactorDeprecated() const {
-  return m_page->deviceScaleFactor();
 }
 
 BrowserControls& FrameHost::browserControls() {
@@ -135,11 +97,11 @@ const VisualViewport& FrameHost::visualViewport() const {
 }
 
 PageScaleConstraintsSet& FrameHost::pageScaleConstraintsSet() {
-  return *m_pageScaleConstraintsSet;
+  return page().pageScaleConstraintsSet();
 }
 
 const PageScaleConstraintsSet& FrameHost::pageScaleConstraintsSet() const {
-  return *m_pageScaleConstraintsSet;
+  return page().pageScaleConstraintsSet();
 }
 
 EventHandlerRegistry& FrameHost::eventHandlerRegistry() {
@@ -193,45 +155,12 @@ int FrameHost::subframeCount() const {
 }
 
 void FrameHost::setDefaultPageScaleLimits(float minScale, float maxScale) {
-  PageScaleConstraints newDefaults =
-      pageScaleConstraintsSet().defaultConstraints();
-  newDefaults.minimumScale = minScale;
-  newDefaults.maximumScale = maxScale;
-
-  if (newDefaults == pageScaleConstraintsSet().defaultConstraints())
-    return;
-
-  pageScaleConstraintsSet().setDefaultConstraints(newDefaults);
-  pageScaleConstraintsSet().computeFinalConstraints();
-  pageScaleConstraintsSet().setNeedsReset(true);
-
-  if (!page().mainFrame() || !page().mainFrame()->isLocalFrame())
-    return;
-
-  FrameView* rootView = page().deprecatedLocalMainFrame()->view();
-
-  if (!rootView)
-    return;
-
-  rootView->setNeedsLayout();
+  page().setDefaultPageScaleLimits(minScale, maxScale);
 }
 
 void FrameHost::setUserAgentPageScaleConstraints(
     const PageScaleConstraints& newConstraints) {
-  if (newConstraints == pageScaleConstraintsSet().userAgentConstraints())
-    return;
-
-  pageScaleConstraintsSet().setUserAgentConstraints(newConstraints);
-
-  if (!page().mainFrame() || !page().mainFrame()->isLocalFrame())
-    return;
-
-  FrameView* rootView = page().deprecatedLocalMainFrame()->view();
-
-  if (!rootView)
-    return;
-
-  rootView->setNeedsLayout();
+  page().setUserAgentPageScaleConstraints(newConstraints);
 }
 
 }  // namespace blink

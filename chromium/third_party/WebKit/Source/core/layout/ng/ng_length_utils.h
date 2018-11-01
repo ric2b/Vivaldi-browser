@@ -18,7 +18,6 @@ class Length;
 struct MinAndMaxContentSizes;
 class NGConstraintSpace;
 struct NGBoxStrut;
-class NGFragment;
 
 enum class LengthResolveType {
   kMinSize,
@@ -26,8 +25,6 @@ enum class LengthResolveType {
   kContentSize,
   kMarginBorderPaddingSize
 };
-
-#define NGSizeIndefinite LayoutUnit(-1)
 
 // Whether the caller needs to compute min-content and max-content sizes to
 // pass them to ResolveInlineLength / ComputeInlineSizeForFragment.
@@ -107,19 +104,24 @@ CORE_EXPORT NGBoxStrut ComputeMargins(const NGConstraintSpace&,
                                       const NGWritingMode writing_mode,
                                       const TextDirection direction);
 
-CORE_EXPORT NGBoxStrut ComputeBorders(const ComputedStyle&);
+CORE_EXPORT NGBoxStrut ComputeBorders(const NGConstraintSpace& constraint_space,
+                                      const ComputedStyle&);
 
 CORE_EXPORT NGBoxStrut ComputePadding(const NGConstraintSpace&,
                                       const ComputedStyle&);
 
-// Resolves margin: auto in the inline direction after a box has been laid out.
-// This uses the available size from the constraint space and the box size from
-// the fragment to compute the margins that are auto, if any, and adjusts
+// Resolves margin: auto in the inline direction.
+// This uses the available size from the constraint space and inline size to
+// compute the margins that are auto, if any, and adjusts
 // the given NGBoxStrut accordingly.
 CORE_EXPORT void ApplyAutoMargins(const NGConstraintSpace&,
                                   const ComputedStyle&,
-                                  const NGFragment&,
+                                  const LayoutUnit& inline_size,
                                   NGBoxStrut* margins);
+
+CORE_EXPORT LayoutUnit ConstrainByMinMax(LayoutUnit length,
+                                         Optional<LayoutUnit> min,
+                                         Optional<LayoutUnit> max);
 
 }  // namespace blink
 

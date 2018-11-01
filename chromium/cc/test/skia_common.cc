@@ -6,8 +6,9 @@
 
 #include <stddef.h>
 
+#include "base/memory/ptr_util.h"
+#include "cc/paint/paint_canvas.h"
 #include "cc/playback/display_item_list.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/gfx/geometry/rect.h"
@@ -68,7 +69,7 @@ bool AreDisplayListDrawingResultsSame(const gfx::Rect& layer_rect,
 }
 
 sk_sp<SkImage> CreateDiscardableImage(const gfx::Size& size) {
-  return SkImage::MakeFromGenerator(new TestImageGenerator(
+  return SkImage::MakeFromGenerator(base::MakeUnique<TestImageGenerator>(
       SkImageInfo::MakeN32Premul(size.width(), size.height())));
 }
 

@@ -75,9 +75,9 @@ public abstract class AwBrowserProcess {
      */
     public static void configureChildProcessLauncher(String packageName,
             boolean isExternalService) {
-        ChildProcessCreationParams.set(
-                new ChildProcessCreationParams(packageName, isExternalService,
-                        LibraryProcessType.PROCESS_WEBVIEW_CHILD));
+        final boolean bindToCaller = true;
+        ChildProcessCreationParams.registerDefault(new ChildProcessCreationParams(packageName,
+                isExternalService, LibraryProcessType.PROCESS_WEBVIEW_CHILD, bindToCaller));
     }
 
     /**
@@ -115,7 +115,7 @@ public abstract class AwBrowserProcess {
                 AwSafeBrowsingConfigHelper.maybeInitSafeBrowsingFromSettings(appContext);
 
                 try {
-                    BrowserStartupController.get(appContext, LibraryProcessType.PROCESS_WEBVIEW)
+                    BrowserStartupController.get(LibraryProcessType.PROCESS_WEBVIEW)
                             .startBrowserProcessesSync(!multiProcess);
                 } catch (ProcessInitException e) {
                     throw new RuntimeException("Cannot initialize WebView", e);
@@ -160,8 +160,11 @@ public abstract class AwBrowserProcess {
      * Pass Minidumps to a separate Service declared in the WebView provider package.
      * That Service will copy the Minidumps to its own data directory - at which point we can delete
      * our copies in the app directory.
+     * @param userApproved whether we have user consent to upload crash data - if we do, copy the
+     * minidumps, if we don't, delete them.
      */
-    public static void handleMinidumps(final String webViewPackageName) {
+    public static void handleMinidumps(
+            final String webViewPackageName, final boolean userApproved) {
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... params) {
@@ -172,6 +175,16 @@ public abstract class AwBrowserProcess {
                 final File[] minidumpFiles =
                         crashFileManager.getAllMinidumpFiles(MAX_MINIDUMP_UPLOAD_TRIES);
                 if (minidumpFiles.length == 0) return null;
+
+                // Delete the minidumps if the user doesn't allow crash data uploading.
+                if (!userApproved) {
+                    for (File minidump : minidumpFiles) {
+                        if (!minidump.delete()) {
+                            Log.w(TAG, "Couldn't delete file " + minidump.getAbsolutePath());
+                        }
+                    }
+                    return null;
+                }
 
                 final Intent intent = new Intent();
                 intent.setClassName(webViewPackageName, CrashReceiverService.class.getName());

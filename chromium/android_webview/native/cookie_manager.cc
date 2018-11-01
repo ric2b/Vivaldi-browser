@@ -36,6 +36,7 @@
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
+#include "net/cookies/parsed_cookie.h"
 #include "net/extras/sqlite/cookie_crypto_delegate.h"
 #include "net/url_request/url_request_context.h"
 #include "url/url_constants.h"
@@ -384,6 +385,24 @@ void CookieManager::SetCookieHelper(
     const BoolCallback callback) {
   net::CookieOptions options;
   options.set_include_httponly();
+
+  // Log message for catching strict secure cookies related bugs.
+  // TODO(sgurun) temporary. Add UMA stats to monitor, and remove afterwards.
+  if (host.is_valid() &&
+      (!host.has_scheme() || host.SchemeIs(url::kHttpScheme))) {
+    net::ParsedCookie parsed_cookie(value);
+    if (parsed_cookie.IsValid() && parsed_cookie.IsSecure()) {
+      LOG(WARNING) << "Strict Secure Cookie policy does not allow setting a "
+                      "secure cookie for "
+                   << host.spec();
+      GURL::Replacements replace_host;
+      replace_host.SetSchemeStr("https");
+      GURL new_host = host.ReplaceComponents(replace_host);
+      GetCookieStore()->SetCookieWithOptionsAsync(new_host, value, options,
+                                                  callback);
+      return;
+    }
+  }
 
   GetCookieStore()->SetCookieWithOptionsAsync(host, value, options, callback);
 }

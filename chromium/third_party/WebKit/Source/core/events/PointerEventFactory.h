@@ -30,13 +30,13 @@ class CORE_EXPORT PointerEventFactory {
   ~PointerEventFactory();
 
   PointerEvent* create(const AtomicString& mouseEventName,
-                       const PlatformMouseEvent&,
-                       const Vector<PlatformMouseEvent>&,
+                       const WebMouseEvent&,
+                       const Vector<WebMouseEvent>&,
                        LocalDOMWindow*);
 
-  PointerEvent* create(const PlatformTouchPoint&,
-                       const Vector<PlatformTouchPoint>&,
-                       PlatformEvent::Modifiers,
+  PointerEvent* create(const WebTouchPoint&,
+                       const Vector<WebTouchPoint>&,
+                       WebInputEvent::Modifiers,
                        LocalFrame*,
                        DOMWindow*);
 

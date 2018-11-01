@@ -236,11 +236,11 @@ void Column::UnifySameSizedColumnSizes() {
 
   // Accumulate the size first.
   int size = 0;
-  for (auto column : same_size_columns_)
+  for (auto* column : same_size_columns_)
     size = std::max(size, column->Size());
 
   // Then apply it.
-  for (auto column : same_size_columns_)
+  for (auto* column : same_size_columns_)
     column->SetSize(size);
 }
 
@@ -496,7 +496,7 @@ void ColumnSet::AccumulateMasterColumns() {
 }
 
 void ColumnSet::UnifySameSizedColumnSizes() {
-  for (auto column : master_columns_)
+  for (auto* column : master_columns_)
     column->UnifySameSizedColumnSizes();
 }
 
@@ -583,7 +583,7 @@ void ColumnSet::ResetColumnXCoordinates() {
 void ColumnSet::CalculateSize() {
   gfx::Size pref;
   // Reset the preferred and remaining sizes.
-  for (const auto& view_state : view_states_) {
+  for (auto* view_state : view_states_) {
     if (!view_state->pref_width_fixed || !view_state->pref_height_fixed) {
       pref = view_state->view->GetPreferredSize();
       if (!view_state->pref_width_fixed)
@@ -684,10 +684,13 @@ void GridLayout::StartRowWithPadding(float vertical_resize, int column_set_id,
   StartRow(vertical_resize, column_set_id);
 }
 
-void GridLayout::StartRow(float vertical_resize, int column_set_id) {
+void GridLayout::StartRow(float vertical_resize,
+                          int column_set_id,
+                          int height) {
+  DCHECK_GE(height, 0);
   ColumnSet* column_set = GetColumnSet(column_set_id);
   DCHECK(column_set);
-  AddRow(base::MakeUnique<Row>(0, vertical_resize, column_set));
+  AddRow(base::MakeUnique<Row>(height, vertical_resize, column_set));
 }
 
 void GridLayout::AddPaddingRow(float vertical_resize, int pixel_count) {

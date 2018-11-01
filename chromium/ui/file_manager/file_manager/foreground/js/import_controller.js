@@ -1094,7 +1094,7 @@ importer.ControllerEnvironment.prototype.addSelectionChangedListener;
 
 /**
  * Reveals the import root directory (the parent of all import destinations)
- * in a new Files.app window.
+ * in a new Files app window.
  * E.g. "Chrome OS Cloud backup". Creates it if it doesn't exist.
  *
  * @return {!Promise} Resolves when the folder has been shown.
@@ -1103,7 +1103,7 @@ importer.ControllerEnvironment.prototype.showImportRoot;
 
 /**
  * Returns the date-stamped import destination directory in a new
- * Files.app window. E.g. "2015-12-04".
+ * Files app window. E.g. "2015-12-04".
  * Creates it if it doesn't exist.
  *
  * @param {!Date} date The import date
@@ -1114,7 +1114,7 @@ importer.ControllerEnvironment.prototype.getImportDestination;
 
 /**
  * Reveals the date-stamped import destination directory in a new
- * Files.app window. E.g. "2015-12-04".
+ * Files app window. E.g. "2015-12-04".
  * Creates it if it doesn't exist.
  *
  * @param {!Date} date The import date
@@ -1245,7 +1245,7 @@ importer.RuntimeControllerEnvironment.prototype.addSelectionChangedListener =
  */
 importer.RuntimeControllerEnvironment.prototype.revealDirectory_ =
     function(directory) {
-  this.fileManager_.backgroundPage.launchFileManager(
+  this.fileManager_.backgroundPage.launcher.launchFileManager(
       {currentDirectoryURL: directory.toURL()},
       /* App ID */ undefined);
 };

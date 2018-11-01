@@ -50,15 +50,11 @@ class RasterBufferImpl : public RasterBuffer {
     DCHECK(!playback_rect.IsEmpty())
         << "Why are we rastering a tile that's not dirty?";
 
-    sk_sp<SkColorSpace> raster_color_space =
-        raster_source->HasImpliedColorSpace() ? nullptr
-                                              : lock_.sk_color_space();
-
     size_t stride = 0u;
     RasterBufferProvider::PlaybackToMemory(
         lock_.sk_bitmap().getPixels(), resource_->format(), resource_->size(),
         stride, raster_source, raster_full_rect, playback_rect, scale,
-        raster_color_space, playback_settings);
+        lock_.sk_color_space(), playback_settings);
   }
 
  private:
@@ -114,6 +110,20 @@ bool BitmapRasterBufferProvider::IsResourceSwizzleRequired(
 
 bool BitmapRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
   return true;
+}
+
+bool BitmapRasterBufferProvider::IsResourceReadyToDraw(
+    ResourceId resource_id) const {
+  // Bitmap resources are immediately ready to draw.
+  return true;
+}
+
+uint64_t BitmapRasterBufferProvider::SetReadyToDrawCallback(
+    const ResourceProvider::ResourceIdArray& resource_ids,
+    const base::Closure& callback,
+    uint64_t pending_callback_id) const {
+  // Bitmap resources are immediately ready to draw.
+  return 0;
 }
 
 void BitmapRasterBufferProvider::Shutdown() {}

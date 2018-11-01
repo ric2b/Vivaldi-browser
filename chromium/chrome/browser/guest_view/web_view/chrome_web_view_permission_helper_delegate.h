@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "chrome/common/features.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "ppapi/features/features.h"
@@ -86,14 +87,14 @@ class ChromeWebViewPermissionHelperDelegate :
   void OnGeolocationPermissionResponse(
       int bridge_id,
       bool user_gesture,
-      const base::Callback<void(blink::mojom::PermissionStatus)>& callback,
+      const base::Callback<void(ContentSetting)>& callback,
       bool allow,
       const std::string& user_input);
 
   void OnNotificationPermissionResponse(
       int bridge_id,
       bool user_gesture,
-      const base::Callback<void(blink::mojom::PermissionStatus)>& callback,
+      const base::Callback<void(ContentSetting)>& callback,
       bool allow,
       const std::string& user_input);
 

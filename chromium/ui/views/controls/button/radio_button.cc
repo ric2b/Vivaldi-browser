@@ -12,7 +12,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/resources/grit/views_resources.h"
-#include "ui/views/resources/vector_icons/vector_icons.h"
+#include "ui/views/vector_icons.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -147,9 +147,10 @@ void RadioButton::SetChecked(bool checked) {
   Checkbox::SetChecked(checked);
 }
 
-void RadioButton::PaintFocusRing(gfx::Canvas* canvas, const SkPaint& paint) {
+void RadioButton::PaintFocusRing(gfx::Canvas* canvas,
+                                 const cc::PaintFlags& flags) {
   canvas->DrawCircle(gfx::RectF(image()->bounds()).CenterPoint(),
-                     image()->width() / 2, paint);
+                     image()->width() / 2, flags);
 }
 
 const gfx::VectorIcon& RadioButton::GetVectorIcon() const {

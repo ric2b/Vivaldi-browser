@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -89,6 +88,15 @@ class TestModelTypeConfigurer : public ModelTypeConfigurer {
   ~TestModelTypeConfigurer() override {}
 
   void ConfigureDataTypes(ConfigureParams params) override {
+    NOTREACHED() << "Not implemented.";
+  }
+
+  void RegisterDirectoryDataType(ModelType type,
+                                 ModelSafeGroup group) override {
+    NOTREACHED() << "Not implemented.";
+  }
+
+  void UnregisterDirectoryDataType(ModelType type) override {
     NOTREACHED() << "Not implemented.";
   }
 

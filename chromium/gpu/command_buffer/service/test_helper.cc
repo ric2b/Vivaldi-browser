@@ -365,10 +365,12 @@ void TestHelper::SetupContextGroupInitExpectations(
         .RetiresOnSaturation();
   }
 
-  if (strstr(extensions, "GL_EXT_draw_buffers") ||
-      strstr(extensions, "GL_ARB_draw_buffers") ||
-      (gl_info.is_es3 && strstr(extensions, "GL_NV_draw_buffers")) ||
-      gl_info.is_desktop_core_profile) {
+  if (enable_es3 ||
+      (!enable_es3 &&
+       (gl_info.is_desktop_core_profile ||
+        strstr(extensions, "GL_EXT_draw_buffers") ||
+        strstr(extensions, "GL_ARB_draw_buffers") ||
+        (gl_info.is_es3 && strstr(extensions, "GL_NV_draw_buffers"))))) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, _))
         .WillOnce(SetArgumentPointee<1>(8))
         .RetiresOnSaturation();
@@ -636,6 +638,32 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
           .RetiresOnSaturation();
     }
 
+    if (!enable_es3 && !strstr(extensions, "GL_EXT_color_buffer_half_float")) {
+      EXPECT_CALL(
+          *gl,
+          TexImage2D(GL_TEXTURE_2D, 0, GL_R16F, width, width, 0, GL_RED, _, _))
+          .Times(1)
+          .RetiresOnSaturation();
+      EXPECT_CALL(*gl, CheckFramebufferStatusEXT(GL_FRAMEBUFFER))
+          .Times(1)
+          .RetiresOnSaturation();
+      EXPECT_CALL(
+          *gl,
+          TexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, width, 0, GL_RG, _, _))
+          .Times(1)
+          .RetiresOnSaturation();
+      EXPECT_CALL(*gl, CheckFramebufferStatusEXT(GL_FRAMEBUFFER))
+          .Times(1)
+          .RetiresOnSaturation();
+      EXPECT_CALL(*gl,
+                  TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, width, 0,
+                             GL_RGBA, _, _))
+          .Times(1)
+          .RetiresOnSaturation();
+      EXPECT_CALL(*gl, CheckFramebufferStatusEXT(GL_FRAMEBUFFER))
+          .Times(1)
+          .RetiresOnSaturation();
+    }
 
     EXPECT_CALL(*gl, DeleteFramebuffersEXT(1, _))
         .Times(1)
@@ -656,10 +684,12 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
 #endif
   }
 
-  if (strstr(extensions, "GL_EXT_draw_buffers") ||
-      strstr(extensions, "GL_ARB_draw_buffers") ||
-      (gl_info.is_es3 && strstr(extensions, "GL_NV_draw_buffers")) ||
-      gl_info.is_desktop_core_profile) {
+  if (enable_es3 ||
+      (!enable_es3 &&
+       (gl_info.is_desktop_core_profile ||
+        strstr(extensions, "GL_EXT_draw_buffers") ||
+        strstr(extensions, "GL_ARB_draw_buffers") ||
+        (gl_info.is_es3 && strstr(extensions, "GL_NV_draw_buffers"))))) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, _))
         .WillOnce(SetArgumentPointee<1>(8))
         .RetiresOnSaturation();

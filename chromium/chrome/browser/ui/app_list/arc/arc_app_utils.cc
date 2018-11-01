@@ -12,6 +12,8 @@
 #include "base/json/json_writer.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
@@ -74,7 +76,7 @@ void SetArcCpuRestrictionCallback(bool success) {
 // WindowPositioner functionality since we do not have an Aura::Window yet.
 gfx::Rect GetTargetRect(const gfx::Size& size) {
   // Make sure that the window will fit into our workspace.
-  // Note that Arc++ will always be on the primary screen (for now).
+  // Note that ARC will always be on the primary screen (for now).
   // Note that Android's coordinate system is only valid inside the working
   // area. We can therefore ignore the provided left / top offsets.
   aura::Window* root = ash::Shell::GetPrimaryRootWindow();
@@ -265,28 +267,41 @@ bool LaunchApp(content::BrowserContext* context,
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(context);
   std::unique_ptr<ArcAppListPrefs::AppInfo> app_info = prefs->GetApp(app_id);
   if (app_info && !app_info->ready) {
-    ArcSessionManager* arc_session_manager = ArcSessionManager::Get();
-    DCHECK(arc_session_manager);
-
-    bool arc_activated = false;
-    if (!arc_session_manager->IsArcEnabled()) {
+    Profile* profile = Profile::FromBrowserContext(context);
+    bool play_store_activated = false;
+    if (!IsArcPlayStoreEnabledForProfile(profile)) {
       if (!prefs->IsDefault(app_id)) {
         NOTREACHED();
         return false;
       }
 
-      arc_session_manager->EnableArc();
-      if (!arc_session_manager->IsArcEnabled()) {
+      SetArcPlayStoreEnabledForProfile(profile, true);
+      if (!IsArcPlayStoreEnabledForProfile(profile)) {
         NOTREACHED();
         return false;
       }
-      arc_activated = true;
+      play_store_activated = true;
+    } else {
+      // Handle the case when default app tries to re-activate OptIn flow.
+      if (IsArcPlayStoreEnabledPreferenceManagedForProfile(profile) &&
+          !ArcSessionManager::Get()->enable_requested() &&
+          prefs->IsDefault(app_id)) {
+        SetArcPlayStoreEnabledForProfile(profile, true);
+        // PlayStore item has special handling for shelf controllers. In order
+        // to avoid unwanted initial animation for PlayStore item do not create
+        // deferred launch request when PlayStore item enables Google Play
+        // Store.
+        if (app_id == kPlayStoreAppId) {
+          prefs->SetLastLaunchTime(app_id, base::Time::Now());
+          return true;
+        }
+      }
     }
 
     // PlayStore item has special handling for shelf controllers. In order to
     // avoid unwanted initial animation for PlayStore item do not create
-    // deferred launch request when PlayStore item enables Arc.
-    if (!arc_activated || app_id != kPlayStoreAppId) {
+    // deferred launch request when PlayStore item enables Google Play Store.
+    if (!play_store_activated || app_id != kPlayStoreAppId) {
       ChromeLauncherController* chrome_controller =
           ChromeLauncherController::instance();
       DCHECK(chrome_controller || !ash::Shell::HasInstance());

@@ -4,7 +4,7 @@
 
 #include "platform/feature_policy/FeaturePolicy.h"
 
-#include "bindings/core/v8/ConditionalFeatures.h"
+#include "bindings/core/v8/ConditionalFeaturesForCore.h"
 #include "core/frame/LocalFrame.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -54,7 +54,8 @@ class FeaturePolicyInFrameTest : public ::testing::Test {
   std::unique_ptr<FeaturePolicy> createFromParentPolicy(
       const FeaturePolicy* parent,
       RefPtr<SecurityOrigin> origin) {
-    return FeaturePolicy::createFromParentPolicy(parent, origin, m_featureList);
+    return FeaturePolicy::createFromParentPolicy(parent, nullptr, origin,
+                                                 m_featureList);
   }
 
   Document& document() { return m_dummyPageHolder->document(); }

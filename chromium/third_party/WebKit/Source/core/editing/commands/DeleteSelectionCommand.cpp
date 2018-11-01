@@ -517,9 +517,11 @@ void DeleteSelectionCommand::removeNode(
   }
 
   // FIXME: Update the endpoints of the range being deleted.
-  updatePositionForNodeRemoval(m_endingPosition, *node);
-  updatePositionForNodeRemoval(m_leadingWhitespace, *node);
-  updatePositionForNodeRemoval(m_trailingWhitespace, *node);
+  m_endingPosition = computePositionForNodeRemoval(m_endingPosition, *node);
+  m_leadingWhitespace =
+      computePositionForNodeRemoval(m_leadingWhitespace, *node);
+  m_trailingWhitespace =
+      computePositionForNodeRemoval(m_trailingWhitespace, *node);
 
   CompositeEditCommand::removeNode(node, editingState,
                                    shouldAssumeContentIsAlwaysEditable);
@@ -671,7 +673,7 @@ void DeleteSelectionCommand::handleGeneralDelete(EditingState* editingState) {
         Node* nextNode = NodeTraversal::nextSkippingChildren(*node);
         // if we just removed a node from the end container, update end position
         // so the check above will work
-        updatePositionForNodeRemoval(m_downstreamEnd, *node);
+        m_downstreamEnd = computePositionForNodeRemoval(m_downstreamEnd, *node);
         removeNode(node, editingState);
         if (editingState->isAborted())
           return;
@@ -974,7 +976,7 @@ void DeleteSelectionCommand::removePreviouslySelectedEmptyTableRows(
 void DeleteSelectionCommand::calculateTypingStyleAfterDelete() {
   // Clearing any previously set typing style and doing an early return.
   if (!m_typingStyle) {
-    document().frame()->selection().clearTypingStyle();
+    document().frame()->editor().clearTypingStyle();
     return;
   }
 
@@ -1000,7 +1002,7 @@ void DeleteSelectionCommand::calculateTypingStyleAfterDelete() {
   // should have the same style as the just deleted ones, but, if we change the
   // selection, come back and start typing that style should be lost.  Also see
   // preserveTypingStyle() below.
-  document().frame()->selection().setTypingStyle(m_typingStyle);
+  document().frame()->editor().setTypingStyle(m_typingStyle);
 }
 
 void DeleteSelectionCommand::clearTransientState() {

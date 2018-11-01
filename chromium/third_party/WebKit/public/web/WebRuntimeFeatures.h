@@ -87,6 +87,7 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableHeapCompaction(bool);
   BLINK_EXPORT static void enableInputMultipleFieldsUI(bool);
   BLINK_EXPORT static void enableLazyParseCSS(bool);
+  BLINK_EXPORT static void enableLoadingWithMojo(bool);
   BLINK_EXPORT static void enableMediaCapture(bool);
   BLINK_EXPORT static void enableMediaDocumentDownloadButton(bool);
   BLINK_EXPORT static void enableMediaSession(bool);
@@ -100,12 +101,12 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableOrientationEvent(bool);
   BLINK_EXPORT static void enableOverlayScrollbars(bool);
   BLINK_EXPORT static void enablePagePopup(bool);
-  BLINK_EXPORT static void enableParseHTMLOnMainThread(bool);
   BLINK_EXPORT static void enablePassiveDocumentEventListeners(bool);
   BLINK_EXPORT static void enablePaymentRequest(bool);
   BLINK_EXPORT static void enablePermissionsAPI(bool);
   BLINK_EXPORT static void enablePointerEvent(bool);
   BLINK_EXPORT static void enablePreciseMemoryInfo(bool);
+  BLINK_EXPORT static void enablePrintBrowser(bool);
   BLINK_EXPORT static void enablePresentationAPI(bool);
   BLINK_EXPORT static void enablePushMessaging(bool);
   BLINK_EXPORT static void enableReducedReferrerGranularity(bool);
@@ -121,6 +122,7 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableSlimmingPaintInvalidation(bool);
   BLINK_EXPORT static void enableSpeculativeLaunchServiceWorker(bool);
   BLINK_EXPORT static void enableTouchEventFeatureDetection(bool);
+  BLINK_EXPORT static void enableTouchpadAndWheelScrollLatching(bool);
   BLINK_EXPORT static void enableV8IdleTasks(bool);
   BLINK_EXPORT static void enableWebAssemblySerialization(bool);
   BLINK_EXPORT static void enableWebBluetooth(bool);
@@ -132,6 +134,7 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableWebGLImageChromium(bool);
   BLINK_EXPORT static void enableWebUsb(bool);
   BLINK_EXPORT static void enableWebVR(bool);
+  BLINK_EXPORT static void enableWebVRExperimentalRendering(bool);
   BLINK_EXPORT static void enableXSLT(bool);
   BLINK_EXPORT static void forceOverlayFullscreenVideo(bool);
   BLINK_EXPORT static void enableAutoplayMutedVideos(bool);
@@ -143,6 +146,7 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableSendBeaconThrowForBlobWithNonSimpleType(bool);
   BLINK_EXPORT static void enableBackgroundVideoTrackOptimization(bool);
   BLINK_EXPORT static void enableVideoFullscreenOrientationLock(bool);
+  BLINK_EXPORT static void enableVideoFullscreenDetection(bool);
 
  private:
   WebRuntimeFeatures();

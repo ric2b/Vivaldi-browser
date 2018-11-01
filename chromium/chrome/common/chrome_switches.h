@@ -9,6 +9,7 @@
 #define CHROME_COMMON_CHROME_SWITCHES_H_
 
 #include "build/build_config.h"
+#include "chrome/common/features.h"
 #include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
@@ -32,7 +33,6 @@ namespace switches {
 // All switches in alphabetical order. The switches should be documented
 // alongside the definition of their values in the .cc file.
 extern const char kAllowCrossOriginAuthPrompt[];
-extern const char kAllowFileAccess[];
 extern const char kAllowHttpScreenCapture[];
 extern const char kAllowOutdatedPlugins[];
 extern const char kAllowRunningInsecureContent[];
@@ -66,7 +66,6 @@ extern const char kDevToolsFlags[];
 extern const char kDiagnostics[];
 extern const char kDiagnosticsFormat[];
 extern const char kDiagnosticsRecovery[];
-extern const char kDisableAboutInSettings[];
 extern const char kDisableAddToShelf[];
 extern const char kDisableBackgroundNetworking[];
 extern const char kDisableBundledPpapiFlash[];
@@ -93,6 +92,7 @@ extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
 extern const char kDisableQuic[];
+extern const char kDisableSearchGeolocationDisclosure[];
 extern const char kDisableSettingsWindow[];
 extern const char kDisableWebNotificationCustomLayouts[];
 extern const char kDisableZeroBrowsersOpenForTests[];
@@ -150,6 +150,7 @@ extern const char kExtensionsUpdateFrequency[];
 extern const char kFastStart[];
 extern const char kForceAndroidAppMode[];
 extern const char kForceAppMode[];
+extern const char kForceDesktopIOSPromotion[];
 extern const char kForceFirstRun[];
 extern const char kForceLocalNtp[];
 extern const char kForceVariationIds[];
@@ -186,6 +187,7 @@ extern const char kOpenInNewWindow[];
 extern const char kOriginToForceQuicOn[];
 extern const char kOriginalProcessStartTime[];
 extern const char kOriginTrialDisabledFeatures[];
+extern const char kOriginTrialDisabledTokens[];
 extern const char kOriginTrialPublicKey[];
 extern const char kPackExtension[];
 extern const char kPackExtensionKey[];
@@ -223,11 +225,6 @@ extern const char kSimulateElevatedRecovery[];
 extern const char kSimulateOutdated[];
 extern const char kSimulateOutdatedNoAU[];
 extern const char kSimulateUpgrade[];
-extern const char kSpeculativeResourcePrefetching[];
-extern const char kSpeculativeResourcePrefetchingDisabled[];
-extern const char kSpeculativeResourcePrefetchingEnabled[];
-extern const char kSpeculativeResourcePrefetchingEnabledExternal[];
-extern const char kSpeculativeResourcePrefetchingLearning[];
 extern const char kSSLKeyLogFile[];
 extern const char kStartMaximized[];
 extern const char kStartStackProfiler[];
@@ -260,12 +257,9 @@ extern const char kLocalNtpReload[];
 
 #if defined(OS_ANDROID)
 extern const char kAuthAndroidNegotiateAccountType[];
-extern const char kDisableAppLink[];
 extern const char kDisableContextualSearch[];
 extern const char kEnableAccessibilityTabSwitcher[];
-extern const char kEnableAppLink[];
 extern const char kEnableContextualSearch[];
-extern const char kEnableContextualSearchContextualCardsBarIntegration[];
 extern const char kEnableHostedMode[];
 extern const char kEnableHungRendererInfoBar[];
 extern const char kForceShowUpdateMenuBadge[];
@@ -323,10 +317,8 @@ extern const char kMakeChromeDefault[];
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
-extern const char kDisableGDITextPrinting[];
 extern const char kDisablePerMonitorDpi[];
 extern const char kEnableCloudPrintXps[];
-extern const char kEnableGDITextPrinting[];
 extern const char kEnablePerMonitorDpi[];
 extern const char kEnableProfileShortcutManager[];
 extern const char kHideIcons[];
@@ -340,6 +332,10 @@ extern const char kWatcherProcess[];
 extern const char kWindows10CustomTitlebar[];
 extern const char kWindows8Search[];
 #endif  // defined(OS_WIN)
+
+#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+extern const char kMash[];
+#endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 extern const char kDebugPrint[];
@@ -360,7 +356,6 @@ extern const char kDisableInputImeAPI[];
 extern const char kEnableInputImeAPI[];
 #endif
 
-bool AboutInSettingsEnabled();
 bool ExtensionsDisabled(const base::CommandLine& command_line);
 bool MdFeedbackEnabled();
 bool MdPolicyPageEnabled();

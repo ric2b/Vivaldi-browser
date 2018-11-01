@@ -59,6 +59,7 @@ class AutofillClientIOS : public AutofillClient {
   syncer::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporServiceImpl* GetRapporServiceImpl() override;
+  ukm::UkmService* GetUkmService() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -102,7 +103,7 @@ class AutofillClientIOS : public AutofillClient {
   ios::ChromeBrowserState* browser_state_;
   web::WebState* web_state_;
   infobars::InfoBarManager* infobar_manager_;
-  id<AutofillClientIOSBridge> bridge_;  // Weak
+  __weak id<AutofillClientIOSBridge> bridge_;
   password_manager::PasswordGenerationManager* password_generation_manager_;
   std::unique_ptr<IdentityProvider> identity_provider_;
   CardUnmaskPromptControllerImpl unmask_controller_;

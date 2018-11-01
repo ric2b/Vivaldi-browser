@@ -33,12 +33,13 @@ const int kFirstSessionId = AudioInputDeviceManager::kFakeOpenSessionId + 1;
 
 AudioInputDeviceManager::AudioInputDeviceManager(
     media::AudioManager* audio_manager)
-    : listener_(NULL),
+    : listener_(nullptr),
       next_capture_session_id_(kFirstSessionId),
 #if defined(OS_CHROMEOS)
       keyboard_mic_streams_count_(0),
 #endif
-      audio_manager_(audio_manager) {
+      audio_manager_(audio_manager),
+      device_task_runner_(audio_manager_->GetTaskRunner()) {
 }
 
 AudioInputDeviceManager::~AudioInputDeviceManager() {
@@ -49,24 +50,23 @@ const StreamDeviceInfo* AudioInputDeviceManager::GetOpenedDeviceInfoById(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   StreamDeviceList::iterator device = GetDevice(session_id);
   if (device == devices_.end())
-    return NULL;
+    return nullptr;
 
   return &(*device);
 }
 
-void AudioInputDeviceManager::Register(
-    MediaStreamProviderListener* listener,
-    const scoped_refptr<base::SingleThreadTaskRunner>& device_task_runner) {
+void AudioInputDeviceManager::RegisterListener(
+    MediaStreamProviderListener* listener) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!listener_);
-  DCHECK(!device_task_runner_.get());
+  DCHECK(device_task_runner_);
   listener_ = listener;
-  device_task_runner_ = device_task_runner;
 }
 
-void AudioInputDeviceManager::Unregister() {
+void AudioInputDeviceManager::UnregisterListener() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(listener_);
-  listener_ = NULL;
+  listener_ = nullptr;
 }
 
 int AudioInputDeviceManager::Open(const StreamDeviceInfo& device) {
@@ -163,6 +163,17 @@ void AudioInputDeviceManager::OpenOnDeviceThread(
       out.device.matched_output.channel_layout = media::CHANNEL_LAYOUT_STEREO;
     }
   } else {
+    // TODO(tommi): As is, we hit this code path when device.type is
+    // MEDIA_TAB_AUDIO_CAPTURE and the device id is not a device that
+    // the AudioManager can know about. This currently does not fail because
+    // the implementation of GetInputStreamParameters returns valid parameters
+    // by default for invalid devices. That behavior is problematic because it
+    // causes other parts of the code to attempt to open truly invalid or
+    // missing devices and falling back on alternate devices (and likely fail
+    // twice in a row). Tab audio capture should not pass through here and
+    // GetInputStreamParameters should return invalid parameters for invalid
+    // devices.
+
     // Get the preferred sample rate and channel configuration for the
     // audio device.
     media::AudioParameters params =

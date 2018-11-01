@@ -71,6 +71,21 @@ void TestURLLoaderClient::OnTransferSizeUpdated(int32_t transfer_size_diff) {
   body_transfer_size_ += transfer_size_diff;
 }
 
+void TestURLLoaderClient::OnUploadProgress(int64_t current_position,
+                                           int64_t total_size,
+                                           const base::Closure& ack_callback) {
+  EXPECT_TRUE(ack_callback);
+  EXPECT_FALSE(has_received_response_);
+  EXPECT_FALSE(has_received_completion_);
+  EXPECT_LT(0, current_position);
+  EXPECT_LE(current_position, total_size);
+
+  has_received_upload_progress_ = true;
+  current_upload_position_ = current_position;
+  total_upload_size_ = total_size;
+  ack_callback.Run();
+}
+
 void TestURLLoaderClient::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {
   EXPECT_TRUE(has_received_response_);
@@ -93,12 +108,10 @@ void TestURLLoaderClient::ClearHasReceivedRedirect() {
   has_received_redirect_ = false;
 }
 
-mojom::URLLoaderClientAssociatedPtrInfo
-TestURLLoaderClient::CreateRemoteAssociatedPtrInfo(
-    mojo::AssociatedGroup* associated_group) {
-  mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info;
-  binding_.Bind(&client_ptr_info, associated_group);
-  return client_ptr_info;
+mojom::URLLoaderClientPtr TestURLLoaderClient::CreateInterfacePtr() {
+  mojom::URLLoaderClientPtr client_ptr;
+  binding_.Bind(&client_ptr);
+  return client_ptr;
 }
 
 void TestURLLoaderClient::Unbind() {

@@ -37,9 +37,6 @@ from webkitpy.layout_tests.views import buildbot_results
 
 class BuildBotPrinterTests(unittest.TestCase):
 
-    def assertEmpty(self, stream):
-        self.assertFalse(stream.getvalue())
-
     def assertNotEmpty(self, stream):
         self.assertTrue(stream.getvalue())
 
@@ -91,8 +88,7 @@ class BuildBotPrinterTests(unittest.TestCase):
     def test_print_unexpected_results_fail_on_retry_also(self):
         port = MockHost().port_factory.get('test')
         printer, out = self.get_printer()
-        summary = test_run_results_unittest.summarized_results(
-            port, expected=False, passing=False, flaky=False, fail_on_retry=True)
+        summary = test_run_results_unittest.summarized_results(port, expected=False, passing=False, flaky=False)
         printer.print_unexpected_results(summary)
         output = out.getvalue()
         self.assertIn(

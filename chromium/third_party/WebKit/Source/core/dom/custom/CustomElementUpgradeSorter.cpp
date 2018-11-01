@@ -26,21 +26,21 @@ static HTMLLinkElement* getLinkElementForImport(const Document& import) {
 
 CustomElementUpgradeSorter::AddResult
 CustomElementUpgradeSorter::addToParentChildMap(Node* parent, Node* child) {
-  ParentChildMap::AddResult result = m_parentChildMap->add(parent, nullptr);
+  ParentChildMap::AddResult result = m_parentChildMap->insert(parent, nullptr);
   if (!result.isNewEntry) {
-    result.storedValue->value->add(child);
+    result.storedValue->value->insert(child);
     // The entry for the parent exists; so must its parents.
     return kParentAlreadyExistsInMap;
   }
 
   ChildSet* childSet = new ChildSet();
-  childSet->add(child);
+  childSet->insert(child);
   result.storedValue->value = childSet;
   return kParentAddedToMap;
 }
 
 void CustomElementUpgradeSorter::add(Element* element) {
-  m_elements->add(element);
+  m_elements->insert(element);
 
   for (Node *n = element, *parent = n->parentOrShadowHostNode(); parent;
        n = parent, parent = parent->parentOrShadowHostNode()) {
@@ -68,7 +68,7 @@ void CustomElementUpgradeSorter::visit(HeapVector<Member<Element>>* result,
   if (it->get()->isElementNode() && m_elements->contains(toElement(*it)))
     result->push_back(toElement(*it));
   sorted(result, *it);
-  children.remove(it);
+  children.erase(it);
 }
 
 void CustomElementUpgradeSorter::sorted(HeapVector<Member<Element>>* result,

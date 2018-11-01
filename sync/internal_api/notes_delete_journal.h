@@ -3,9 +3,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_INTERNAL_API_DELETE_JOURNAL_H_
-#define VIVALDI_SYNC_INTERNAL_API_DELETE_JOURNAL_H_
+#ifndef SYNC_INTERNAL_API_NOTES_DELETE_JOURNAL_H_
+#define SYNC_INTERNAL_API_NOTES_DELETE_JOURNAL_H_
 
+#include <set>
 #include <vector>
 
 #include "components/sync/base/model_type.h"
@@ -44,6 +45,6 @@ class DeleteJournal {
                                   const std::set<int64_t>& ids);
 };
 
-}  // namespace syncer
+}  // namespace notessyncer
 
-#endif  // VIVALDI_SYNC_INTERNAL_API_DELETE_JOURNAL_H_
+#endif  // SYNC_INTERNAL_API_NOTES_DELETE_JOURNAL_H_

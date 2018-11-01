@@ -27,7 +27,6 @@ Polymer({
     searchTerm: {
       type: String,
       observer: 'searchTermChanged_',
-      notify: true,
     },
 
     // True if the backend is processing and a spinner should be shown in the
@@ -42,39 +41,49 @@ Polymer({
       reflectToAttribute: true,
     },
 
-    // Whether domain-grouped history is enabled.
-    isGroupedMode: {
+    // Show an (i) button on the right of the toolbar to display a notice about
+    // synced history.
+    showSyncNotice: {
       type: Boolean,
-      reflectToAttribute: true,
+      observer: 'showSyncNoticeChanged_',
     },
 
-    // The period to search over. Matches BrowsingHistoryHandler::Range.
-    groupedRange: {
-      type: Number,
-      reflectToAttribute: true,
-      notify: true,
+    // Sync notice is currently visible.
+    syncNoticeVisible_: {
+      type: Boolean,
+      value: false,
     },
-
-    groupedOffset: {
-      type: Number,
-      notify: true,
-    },
-
-    querying: Boolean,
 
     hasMoreResults: Boolean,
 
-    // The start time of the query range.
-    queryStartTime: String,
+    querying: Boolean,
 
-    // The end time of the query range.
-    queryEndTime: String,
+    queryInfo: Object,
 
     // Whether to show the menu promo (a tooltip that points at the menu button
     // in narrow mode).
     showMenuPromo: Boolean,
+  },
 
-    showSyncNotice: Boolean,
+  /**
+   * True if the document currently has listeners to dismiss the sync notice,
+   * which are added when the notice is first opened.
+   * @private{boolean}
+   */
+  hasDismissListeners_: false,
+
+  /** @private{?function(!Event)} */
+  boundOnDocumentClick_: null,
+
+  /** @private{?function(!Event)} */
+  boundOnDocumentKeydown_: null,
+
+  /** @override */
+  detached: function() {
+    if (this.hasDismissListeners_) {
+      document.removeEventListener('click', this.boundOnDocumentClick_);
+      document.removeEventListener('keydown', this.boundOnDocumentKeydown_);
+    }
   },
 
   /** @return {CrToolbarSearchFieldElement} */
@@ -108,22 +117,55 @@ Polymer({
     }
   },
 
+  /** @private */
+  showSyncNoticeChanged_: function() {
+    if (!this.showSyncNotice)
+      this.syncNoticeVisible_ = false;
+  },
+
   /**
    * @param {!CustomEvent} event
    * @private
    */
   onSearchChanged_: function(event) {
-    this.searchTerm = /** @type {string} */ (event.detail);
+    this.fire('change-query', {search: event.detail});
   },
 
-  /** @private */
-  onInfoButtonTap_: function() {
-    var dropdown = this.$.syncNotice.get();
-    dropdown.positionTarget = this.$$('#info-button-icon');
-    // It is possible for this listener to trigger while the dialog is
-    // closing. Ensure the dialog is fully closed before reopening it.
-    if (dropdown.style.display == 'none')
-      dropdown.open();
+  /**
+   * @param {!MouseEvent} e
+   * @private
+   */
+  onInfoButtonTap_: function(e) {
+    this.syncNoticeVisible_ = !this.syncNoticeVisible_;
+    e.stopPropagation();
+
+    if (this.hasDismissListeners_)
+      return;
+
+    this.boundOnDocumentClick_ = this.onDocumentClick_.bind(this);
+    this.boundOnDocumentKeydown_ = this.onDocumentKeydown_.bind(this);
+    document.addEventListener('click', this.boundOnDocumentClick_);
+    document.addEventListener('keydown', this.boundOnDocumentKeydown_);
+
+    this.hasDismissListeners_ = true;
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onDocumentClick_: function(e) {
+    if (e.path.indexOf(this.$['sync-notice']) == -1)
+      this.syncNoticeVisible_ = false;
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onDocumentKeydown_: function(e) {
+    if (e.key == 'Escape')
+      this.syncNoticeVisible_ = false;
   },
 
   /** @private */
@@ -136,49 +178,8 @@ Polymer({
     this.fire('delete-selected');
   },
 
-  /**
-   * If the user is a supervised user the delete button is not shown.
-   * @private
-   */
-  deletingAllowed_: function() {
-    return loadTimeData.getBoolean('allowDeletingHistory');
-  },
-
   /** @private */
   numberOfItemsSelected_: function(count) {
     return count > 0 ? loadTimeData.getStringF('itemsSelected', count) : '';
-  },
-
-  /** @private */
-  getHistoryInterval_: function(queryStartTime, queryEndTime) {
-    // TODO(calamity): Fix the format of these dates.
-    return loadTimeData.getStringF(
-        'historyInterval', queryStartTime, queryEndTime);
-  },
-
-  /** @private */
-  onTodayTap_: function() {
-    if (!this.querying)
-      this.groupedOffset = 0;
-  },
-
-  /** @private */
-  onPrevTap_: function() {
-    if (!this.querying)
-      this.groupedOffset = this.groupedOffset + 1;
-  },
-
-  /** @private */
-  onNextTap_: function() {
-    if (!this.querying)
-      this.groupedOffset = this.groupedOffset - 1;
-  },
-
-  /**
-   * @private
-   * @return {boolean}
-   */
-  isToday_: function() {
-    return this.groupedOffset == 0;
   },
 });

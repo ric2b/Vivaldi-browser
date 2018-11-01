@@ -179,6 +179,8 @@ def main():
   print " Is Subdomain: %s" % args.is_subdomain
   print " Feature: %s" % args.trial_name
   print " Expiry: %d (%s UTC)" % (expiry, datetime.utcfromtimestamp(expiry))
+  print " Signature: %s" % ", ".join('0x%02x' % ord(x) for x in signature)
+  print " Signature (Base64): %s" % base64.b64encode(signature)
   print
 
   # Output the properly-formatted token.

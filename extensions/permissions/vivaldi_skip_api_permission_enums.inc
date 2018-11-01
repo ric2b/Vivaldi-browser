@@ -5,7 +5,7 @@
 
 namespace extensions {
 
-void SkipVivaldiAPIPermissions(extensions::APIPermissionSet &skip) {
+void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   // Skip vivaldi permissions in
 
   skip.insert(APIPermission::kAutoUpdate);
@@ -28,6 +28,6 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet &skip) {
   skip.insert(APIPermission::kWebViewPrivate);
 }
 
-} // namespace extensions
+}  // namespace extensions
 
-#endif // EXTENSIONS_PERMISSIONS_VIVALDI_SKIP_API_PERMISSION_ENUMS_INC_
+#endif  // EXTENSIONS_PERMISSIONS_VIVALDI_SKIP_API_PERMISSION_ENUMS_INC_

@@ -15,6 +15,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -85,7 +86,6 @@
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_elider.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
 
@@ -1597,6 +1597,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       [otherProfiles addObject:[self createOtherProfileView:i]];
     }
   }
+  firstProfileView_ = [otherProfiles lastObject];
   if (!currentProfileView)  // Guest windows don't have an active profile.
     currentProfileView = [self createGuestProfileView];
 
@@ -1959,9 +1960,9 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   base::scoped_nsobject<NSImageView> syncProblemIcon([[NSImageView alloc]
       initWithFrame:NSMakeRect(kHorizontalSpacing, yOffset - iconSize, iconSize,
                                iconSize)]);
-  [syncProblemIcon setImage:NSImageFromImageSkia(gfx::CreateVectorIcon(
-                                gfx::VectorIconId::SYNC_PROBLEM, iconSize,
-                                gfx::kGoogleRed700))];
+  [syncProblemIcon
+      setImage:NSImageFromImageSkia(gfx::CreateVectorIcon(
+                   kSyncProblemIcon, iconSize, gfx::kGoogleRed700))];
   [container addSubview:syncProblemIcon];
 
   [container
@@ -2123,10 +2124,9 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     base::scoped_nsobject<NSImageView> badgeIconView([[NSImageView alloc]
         initWithFrame:NSMakeRect(borderWidth, borderWidth,
                                  badgeIconSize, badgeIconSize)]);
-    gfx::VectorIconId badgeIcon =
-        browser_->profile()->IsChild()
-            ? gfx::VectorIconId::ACCOUNT_CHILD_CIRCLE
-            : gfx::VectorIconId::SUPERVISOR_ACCOUNT_CIRCLE;
+    const gfx::VectorIcon& badgeIcon = browser_->profile()->IsChild()
+                                           ? kAccountChildCircleIcon
+                                           : kSupervisorAccountCircleIcon;
     [badgeIconView
         setImage:NSImageFromImageSkia(gfx::CreateVectorIcon(
                      badgeIcon, badgeIconSize, gfx::kChromeIconGrey))];
@@ -2138,14 +2138,20 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   // Profile name, left-aligned to the right of profile icon.
   xOffset += kMdImageSide + kHorizontalSpacing;
   CGFloat fontSize = kTextFontSize + 1.0;
-  NSTextField* profileName =
-      BuildLabel(base::SysUTF16ToNSString(profileNameString), NSZeroPoint, nil);
+  NSString* profileNameNSString = base::SysUTF16ToNSString(profileNameString);
+  NSTextField* profileName = BuildLabel(profileNameNSString, NSZeroPoint, nil);
   [[profileName cell] setLineBreakMode:NSLineBreakByTruncatingTail];
   [profileName setFont:[NSFont labelFontOfSize:fontSize]];
   [profileName sizeToFit];
   const int profileNameYOffset =
       cardYOffset +
       std::floor((kMdImageSide - NSHeight([profileName frame])) / 2);
+  if (profileName.frame.size.width > availableTextWidth) {
+    // Add the tooltip only if the profile name is truncated. This method to
+    // test if text field is truncated is not ideal (spaces between characters
+    // may be reduced to avoid truncation).
+    profileName.toolTip = profileNameNSString;
+  }
   [profileName
       setFrame:NSMakeRect(xOffset, profileNameYOffset, availableTextWidth,
                           NSHeight([profileName frame]))];
@@ -2158,10 +2164,16 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     cardYOffset += kMdImageSide / 2 - [profileName frame].size.height;
     [profileName setFrameOrigin:NSMakePoint(xOffset, cardYOffset)];
 
+    NSString* elidedEmail =
+        ElideEmail(base::UTF16ToUTF8(item.username), availableTextWidth);
     NSTextField* username = BuildLabel(
-        ElideEmail(base::UTF16ToUTF8(item.username), availableTextWidth),
-        NSZeroPoint, skia::SkColorToSRGBNSColor(SK_ColorGRAY));
+        elidedEmail, NSZeroPoint, skia::SkColorToSRGBNSColor(SK_ColorGRAY));
     [username setFrameOrigin:NSMakePoint(xOffset, NSMaxY([profileName frame]))];
+    NSString* usernameNSString = base::SysUTF16ToNSString(item.username);
+    if (![elidedEmail isEqualToString:usernameNSString]) {
+      // Add the tooltip only if the user name is truncated.
+      username.toolTip = usernameNSString;
+    }
     [profileCard addSubview:username];
   }
 
@@ -2494,8 +2506,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
                              text:l10n_util::GetNSString(
                                       IDS_PROFILES_PROFILE_SIGNOUT_BUTTON)
                             image:NSImageFromImageSkia(gfx::CreateVectorIcon(
-                                      gfx::VectorIconId::LOCK,
-                                      material_icon_size, gfx::kChromeIconGrey))
+                                      kLockIcon, material_icon_size,
+                                      gfx::kChromeIconGrey))
                            action:@selector(lockProfile:)];
     [container addSubview:lockButton];
     viewRect.origin.y = NSMaxY([lockButton frame]);
@@ -2507,14 +2519,14 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
         num_browsers++;
     }
     if (num_browsers > 1) {
-      NSButton* closeAllWindowsButton = [self
-          hoverButtonWithRect:viewRect
-                         text:l10n_util::GetNSString(
-                                  IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON)
-                        image:NSImageFromImageSkia(gfx::CreateVectorIcon(
-                                  gfx::VectorIconId::CLOSE_ALL,
-                                  material_icon_size, gfx::kChromeIconGrey))
-                       action:@selector(closeAllWindows:)];
+      NSButton* closeAllWindowsButton =
+          [self hoverButtonWithRect:viewRect
+                               text:l10n_util::GetNSString(
+                                        IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON)
+                              image:NSImageFromImageSkia(gfx::CreateVectorIcon(
+                                        kCloseAllIcon, material_icon_size,
+                                        gfx::kChromeIconGrey))
+                             action:@selector(closeAllWindows:)];
       [container addSubview:closeAllWindowsButton];
       viewRect.origin.y = NSMaxY([closeAllWindowsButton frame]);
     }
@@ -2526,8 +2538,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
           ? l10n_util::GetNSString(IDS_PROFILES_EXIT_GUEST)
           : l10n_util::GetNSString(IDS_PROFILES_MANAGE_USERS_BUTTON);
   NSImage* icon = NSImageFromImageSkia(
-      gfx::CreateVectorIcon(isGuestSession_ ? gfx::VectorIconId::CLOSE_ALL
-                                            : gfx::VectorIconId::SETTINGS,
+      gfx::CreateVectorIcon(isGuestSession_ ? kCloseAllIcon : kSettingsIcon,
                             material_icon_size, gfx::kChromeIconGrey));
   SEL action =
       isGuestSession_ ? @selector(exitGuest:) : @selector(showUserManager:);
@@ -2541,14 +2552,14 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     PrefService* service = g_browser_process->local_state();
     DCHECK(service);
     if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
-      NSButton* guestProfileButton = [self
-          hoverButtonWithRect:viewRect
-                         text:l10n_util::GetNSString(
-                                  IDS_PROFILES_GUEST_PROFILE_NAME)
-                        image:NSImageFromImageSkia(gfx::CreateVectorIcon(
-                                  gfx::VectorIconId::ACCOUNT_CIRCLE,
-                                  material_icon_size, gfx::kChromeIconGrey))
-                       action:@selector(switchToGuest:)];
+      NSButton* guestProfileButton =
+          [self hoverButtonWithRect:viewRect
+                               text:l10n_util::GetNSString(
+                                        IDS_PROFILES_GUEST_PROFILE_NAME)
+                              image:NSImageFromImageSkia(gfx::CreateVectorIcon(
+                                        kAccountCircleIcon, material_icon_size,
+                                        gfx::kChromeIconGrey))
+                             action:@selector(switchToGuest:)];
       viewRect.origin.y = NSMaxY([guestProfileButton frame]);
       [container addSubview:guestProfileButton];
     }
@@ -2943,6 +2954,14 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       IncognitoModePrefs::GetAvailability(browser_->profile()->GetPrefs()) !=
           IncognitoModePrefs::DISABLED;
   return incognitoAvailable && !browser_->profile()->IsGuestSession();
+}
+
+- (void)showWindow:(id)sender {
+  [super showWindow:sender];
+  NSEvent *event = [[NSApplication sharedApplication] currentEvent];
+  if (firstProfileView_ && [event type] == NSKeyDown) {
+    [[self window] makeFirstResponder:firstProfileView_];
+  }
 }
 
 @end

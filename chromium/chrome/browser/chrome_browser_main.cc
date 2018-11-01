@@ -53,6 +53,7 @@
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/pepper_flash_component_installer.h"
 #include "chrome/browser/component_updater/recovery_component_installer.h"
+#include "chrome/browser/component_updater/recovery_improved_component_installer.h"
 #include "chrome/browser/component_updater/sth_set_component_installer.h"
 #include "chrome/browser/component_updater/subresource_filter_component_installer.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
@@ -156,7 +157,7 @@
 #include "device/geolocation/geolocation_delegate.h"
 #include "device/geolocation/geolocation_provider.h"
 #include "extensions/features/features.h"
-#include "media/base/media_resources.h"
+#include "media/base/localized_strings.h"
 #include "media/media_features.h"
 #include "net/base/net_module.h"
 #include "net/cookies/cookie_monster.h"
@@ -185,7 +186,6 @@
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
-#include "ash/common/material_design/material_design_controller.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -236,6 +236,10 @@
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif  // BUILDFLAG(ENABLE_BACKGROUND)
+
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+#include "chrome/browser/component_updater/ssl_error_assistant_component_installer.h"
+#endif  // BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/startup_helper.h"
@@ -468,16 +472,14 @@ OSStatus KeychainCallback(SecKeychainEvent keychain_event,
 #endif  // defined(OS_MACOSX)
 
 void RegisterComponentsForUpdate() {
-  component_updater::ComponentUpdateService* cus =
-      g_browser_process->component_updater();
+  auto* const cus = g_browser_process->component_updater();
 
-  // Registration can be before or after cus->Start() so it is ok to post
-  // a task to the UI thread to do registration once you done the necessary
-  // file IO to know you existing component version.
+  if (base::FeatureList::IsEnabled(features::kImprovedRecoveryComponent))
+    RegisterRecoveryImprovedComponent(cus, g_browser_process->local_state());
+  else
+    RegisterRecoveryComponent(cus, g_browser_process->local_state());
+
 #if !defined(OS_ANDROID)
-#if !defined(OS_CHROMEOS)
-  RegisterRecoveryComponent(cus, g_browser_process->local_state());
-#endif  // !defined(OS_CHROMEOS)
   RegisterPepperFlashComponent(cus);
 #if !defined(OS_CHROMEOS)
   RegisterSwiftShaderComponent(cus);
@@ -525,6 +527,10 @@ void RegisterComponentsForUpdate() {
     RegisterOriginTrialsComponent(cus, path);
 
     RegisterFileTypePoliciesComponent(cus, path);
+
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+    RegisterSSLErrorAssistantComponent(cus, path);
+#endif
   }
 
 #if defined(OS_WIN)
@@ -868,6 +874,25 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine() {
       }
     }
   }
+  if (!command_line->HasSwitch(switches::kOriginTrialDisabledTokens)) {
+    const base::ListValue* disabled_token_list =
+        local_state_->GetList(prefs::kOriginTrialDisabledTokens);
+    if (disabled_token_list) {
+      std::vector<std::string> disabled_tokens;
+      std::string disabled_token;
+      for (const auto& item : *disabled_token_list) {
+        if (item->GetAsString(&disabled_token)) {
+          disabled_tokens.push_back(disabled_token);
+        }
+      }
+      if (!disabled_tokens.empty()) {
+        const std::string disabled_token_switch =
+            base::JoinString(disabled_tokens, "|");
+        command_line->AppendSwitchASCII(switches::kOriginTrialDisabledTokens,
+                                        disabled_token_switch);
+      }
+    }
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -1044,9 +1069,6 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   // are not available until this point. Now that they are, proceed with
   // initializing the MaterialDesignController.
   ui::MaterialDesignController::Initialize();
-#if defined(OS_CHROMEOS)
-  ash::MaterialDesignController::Initialize();
-#endif  // !defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
   // This is needed to enable ETW exporting when requested in about:flags.
@@ -1367,6 +1389,16 @@ void ChromeBrowserMainParts::PreBrowserStart() {
   SetupSyzyASAN();
 #endif
 
+#if defined(OS_WIN)
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial("ChromeWinClang",
+#if defined(__clang__)
+                                                            "Enabled"
+#else
+                                                            "Disabled"
+#endif
+                                                            );
+#endif
+
 // Start the tab manager here so that we give the most amount of time for the
 // other services to start up before we start adjusting the oom priority.
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
@@ -1615,7 +1647,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // Profile creation ----------------------------------------------------------
 
   metrics::MetricsService::SetExecutionPhase(
-      metrics::MetricsService::CREATE_PROFILE,
+      metrics::ExecutionPhase::CREATE_PROFILE,
       g_browser_process->local_state());
 
   UMA_HISTOGRAM_TIMES("Startup.PreMainMessageLoopRunImplStep1Time",
@@ -1650,12 +1682,11 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   content::WebUIControllerFactory::RegisterFactory(
       ChromeWebUIControllerFactory::GetInstance());
 
+#if !defined(DISABLE_NACL)
   // NaClBrowserDelegateImpl is accessed inside PostProfileInit().
   // So make sure to create it before that.
-#if !defined(DISABLE_NACL)
-  NaClBrowserDelegateImpl* delegate =
-      new NaClBrowserDelegateImpl(browser_process_->profile_manager());
-  nacl::NaClBrowser::SetDelegate(delegate);
+  nacl::NaClBrowser::SetDelegate(base::MakeUnique<NaClBrowserDelegateImpl>(
+      browser_process_->profile_manager()));
 #endif  // !defined(DISABLE_NACL)
 
   // TODO(stevenjb): Move WIN and MACOSX specific code to appropriate Parts.
@@ -1679,7 +1710,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     // Auto Import might be disabled via a field trial.  However, this field
     // trial is not intended to affect enterprise users.
     auto_import =
-        base::win::IsEnrolledToDomain() ||
+        base::win::IsEnterpriseManaged() ||
         !base::FeatureList::IsEnabled(features::kDisableFirstRunAutoImportWin);
 #endif  // defined(OS_WIN)
 
@@ -1734,16 +1765,15 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // Init the RLZ library. This just binds the dll and schedules a task on the
   // file thread to be run sometime later. If this is the first run we record
   // the installation event.
-  PrefService* pref_service = profile_->GetPrefs();
-  int ping_delay = first_run::IsChromeFirstRun() ? master_prefs_->ping_delay :
-      pref_service->GetInteger(first_run::GetPingDelayPrefName().c_str());
+  int ping_delay =
+      profile_->GetPrefs()->GetInteger(prefs::kRlzPingDelaySeconds);
   // Negative ping delay means to send ping immediately after a first search is
   // recorded.
   rlz::RLZTracker::SetRlzDelegate(
       base::WrapUnique(new ChromeRLZTrackerDelegate));
   rlz::RLZTracker::InitRlzDelayed(
       first_run::IsChromeFirstRun(), ping_delay < 0,
-      base::TimeDelta::FromMilliseconds(abs(ping_delay)),
+      base::TimeDelta::FromSeconds(abs(ping_delay)),
       ChromeRLZTrackerDelegate::IsGoogleDefaultSearch(profile_),
       ChromeRLZTrackerDelegate::IsGoogleHomepage(profile_),
       ChromeRLZTrackerDelegate::IsGoogleInStartpages(profile_));
@@ -1788,7 +1818,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // ThreadWatcher takes over or when browser is shutdown or when
   // startup_watcher_ is deleted.
   metrics::MetricsService::SetExecutionPhase(
-      metrics::MetricsService::STARTUP_TIMEBOMB_ARM,
+      metrics::ExecutionPhase::STARTUP_TIMEBOMB_ARM,
       g_browser_process->local_state());
   startup_watcher_->Arm(base::TimeDelta::FromSeconds(600));
 
@@ -1812,7 +1842,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   // Start watching all browser threads for responsiveness.
   metrics::MetricsService::SetExecutionPhase(
-      metrics::MetricsService::THREAD_WATCHER_START,
+      metrics::ExecutionPhase::THREAD_WATCHER_START,
       g_browser_process->local_state());
   ThreadWatcherList::StartWatchingAll(parsed_command_line());
 
@@ -1990,7 +2020,7 @@ bool ChromeBrowserMainParts::MainMessageLoopRun(int* result_code) {
   performance_monitor::PerformanceMonitor::GetInstance()->StartGatherCycle();
 
   metrics::MetricsService::SetExecutionPhase(
-      metrics::MetricsService::MAIN_MESSAGE_LOOP_RUN,
+      metrics::ExecutionPhase::MAIN_MESSAGE_LOOP_RUN,
       g_browser_process->local_state());
   run_loop.Run();
 
@@ -2014,7 +2044,7 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
   // Start watching for jank during shutdown. It gets disarmed when
   // |shutdown_watcher_| object is destructed.
   metrics::MetricsService::SetExecutionPhase(
-      metrics::MetricsService::SHUTDOWN_TIMEBOMB_ARM,
+      metrics::ExecutionPhase::SHUTDOWN_TIMEBOMB_ARM,
       g_browser_process->local_state());
   shutdown_watcher_->Arm(base::TimeDelta::FromSeconds(300));
 

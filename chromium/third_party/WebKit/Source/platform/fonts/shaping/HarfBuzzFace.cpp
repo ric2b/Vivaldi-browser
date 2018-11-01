@@ -146,7 +146,7 @@ static PassRefPtr<HbFontCacheEntry> createHbFontCacheEntry(hb_face_t*);
 HarfBuzzFace::HarfBuzzFace(FontPlatformData* platformData, uint64_t uniqueID)
     : m_platformData(platformData), m_uniqueID(uniqueID) {
   HarfBuzzFontCache::AddResult result =
-      harfBuzzFontCache()->add(m_uniqueID, nullptr);
+      harfBuzzFontCache()->insert(m_uniqueID, nullptr);
   if (result.isNewEntry) {
     HbFaceUniquePtr face(createFace());
     result.storedValue->value = createHbFontCacheEntry(face.get());
@@ -162,7 +162,7 @@ HarfBuzzFace::~HarfBuzzFace() {
   ASSERT(result.get()->value->refCount() > 1);
   result.get()->value->deref();
   if (result.get()->value->refCount() == 1)
-    harfBuzzFontCache()->remove(m_uniqueID);
+    harfBuzzFontCache()->erase(m_uniqueID);
 }
 
 static hb_position_t SkiaScalarToHarfBuzzPosition(SkScalar value) {
@@ -258,8 +258,8 @@ static hb_position_t harfBuzzGetGlyphHorizontalKerning(
   if (typeface->getKerningPairAdjustments(glyphs, 2, kerningAdjustments)) {
     SkScalar upm = SkIntToScalar(typeface->getUnitsPerEm());
     SkScalar size = hbFontData->m_paint.getTextSize();
-    return SkiaScalarToHarfBuzzPosition(
-        SkScalarMulDiv(SkIntToScalar(kerningAdjustments[0]), size, upm));
+    return SkiaScalarToHarfBuzzPosition(SkIntToScalar(kerningAdjustments[0]) *
+                                        size / upm);
   }
 
   return 0;
@@ -380,6 +380,21 @@ PassRefPtr<HbFontCacheEntry> createHbFontCacheEntry(hb_face_t* face) {
   return cacheEntry;
 }
 
+// TODO: crbug.com/696570 Remove this conditional
+// once HarfBuzz on CrOS is updated.
+#if HB_VERSION_ATLEAST(1, 4, 2)
+static_assert(
+    std::is_same<decltype(SkFontArguments::VariationPosition::Coordinate::axis),
+                 decltype(hb_variation_t::tag)>::value &&
+        std::is_same<
+            decltype(SkFontArguments::VariationPosition::Coordinate::value),
+            decltype(hb_variation_t::value)>::value &&
+        sizeof(SkFontArguments::VariationPosition::Coordinate) ==
+            sizeof(hb_variation_t),
+    "Skia and HarfBuzz Variation parameter types must match in structure and "
+    "size.");
+#endif
+
 hb_font_t* HarfBuzzFace::getScaledFont(
     PassRefPtr<UnicodeRangeSet> rangeSet) const {
   m_platformData->setupPaint(&m_harfBuzzFontData->m_paint);
@@ -387,11 +402,27 @@ hb_font_t* HarfBuzzFace::getScaledFont(
   m_harfBuzzFontData->m_rangeSet = rangeSet;
   m_harfBuzzFontData->updateSimpleFontData(m_platformData);
 
-  // TODO crbug.com/674879 - Connect variation axis parameters to future
-  // HarfBuzz API here.
   ASSERT(m_harfBuzzFontData->m_simpleFontData);
   int scale = SkiaScalarToHarfBuzzPosition(m_platformData->size());
   hb_font_set_scale(m_unscaledFont, scale, scale);
+
+// TODO: crbug.com/696570 Remove this conditional
+// once HarfBuzz on CrOS is updated.
+#if HB_VERSION_ATLEAST(1, 4, 2)
+  SkTypeface* typeface = m_harfBuzzFontData->m_paint.getTypeface();
+  int axisCount = typeface->getVariationDesignPosition(nullptr, 0);
+  if (axisCount > 0) {
+    Vector<SkFontArguments::VariationPosition::Coordinate> axisValues;
+    axisValues.resize(axisCount);
+    if (typeface->getVariationDesignPosition(axisValues.data(),
+                                             axisValues.size()) > 0) {
+      hb_font_set_variations(
+          m_unscaledFont, reinterpret_cast<hb_variation_t*>(axisValues.data()),
+          axisValues.size());
+    }
+  }
+#endif
+
   return m_unscaledFont;
 }
 

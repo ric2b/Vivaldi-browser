@@ -162,22 +162,21 @@ class FileNetLogObserverTest : public ::testing::TestWithParam<bool> {
     file_thread_->StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_DEFAULT, 0));
     ASSERT_TRUE(file_thread_->WaitUntilThreadStarted());
-    logger_.reset(new FileNetLogObserver(file_thread_->task_runner()));
   }
 
-  void StartObserving(std::unique_ptr<base::Value> constants,
-                      URLRequestContext* url_request_context) {
+  void CreateAndStartObserving(std::unique_ptr<base::Value> constants) {
     bool bounded = GetParam();
     if (bounded) {
-      logger_->StartObservingBounded(&net_log_, NetLogCaptureMode::Default(),
-                                     bounded_log_dir_, std::move(constants),
-                                     url_request_context, kLargeFileSize,
-                                     kTotalNumFiles);
+      logger_ = FileNetLogObserver::CreateBounded(
+          file_thread_->task_runner(), bounded_log_dir_, kLargeFileSize,
+          kTotalNumFiles, std::move(constants));
     } else {
-      logger_->StartObservingUnbounded(
-          &net_log_, NetLogCaptureMode::Default(), unbounded_log_path_,
-          std::move(constants), url_request_context);
+      logger_ = FileNetLogObserver::CreateUnbounded(file_thread_->task_runner(),
+                                                    unbounded_log_path_,
+                                                    std::move(constants));
     }
+
+    logger_->StartObserving(&net_log_, NetLogCaptureMode::Default());
   }
 
   ::testing::AssertionResult ReadNetLogFromDisk(
@@ -231,16 +230,15 @@ class FileNetLogObserverBoundedTest : public ::testing::Test {
     file_thread_->StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_DEFAULT, 0));
     ASSERT_TRUE(file_thread_->WaitUntilThreadStarted());
-    logger_.reset(new FileNetLogObserver(file_thread_->task_runner()));
   }
 
-  void StartObserving(std::unique_ptr<base::Value> constants,
-                      URLRequestContext* url_request_context,
-                      int total_file_size,
-                      int num_files) {
-    logger_->StartObservingBounded(
-        &net_log_, NetLogCaptureMode::Default(), bounded_log_dir_,
-        std::move(constants), url_request_context, total_file_size, num_files);
+  void CreateAndStartObserving(std::unique_ptr<base::Value> constants,
+                               int total_file_size,
+                               int num_files) {
+    logger_ = FileNetLogObserver::CreateBounded(
+        file_thread_->task_runner(), bounded_log_dir_, total_file_size,
+        num_files, std::move(constants));
+    logger_->StartObserving(&net_log_, NetLogCaptureMode::Default());
   }
 
   ::testing::AssertionResult ReadNetLogFromDisk(
@@ -278,7 +276,7 @@ INSTANTIATE_TEST_CASE_P(,
                         ::testing::Values(true, false));
 
 TEST_P(FileNetLogObserverTest, ObserverDestroyedWithoutStopObserving) {
-  StartObserving(nullptr, nullptr);
+  CreateAndStartObserving(nullptr);
 
   // Send dummy event
   AddEntries(logger_.get(), 1, kDummyEventSize);
@@ -292,7 +290,7 @@ TEST_P(FileNetLogObserverTest, ObserverDestroyedWithoutStopObserving) {
 TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithNoEvents) {
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr);
+  CreateAndStartObserving(nullptr);
 
   logger_->StopObserving(nullptr, closure.closure());
 
@@ -315,7 +313,7 @@ TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithNoEvents) {
 TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithOneEvent) {
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr);
+  CreateAndStartObserving(nullptr);
 
   // Send dummy event.
   AddEntries(logger_.get(), 1, kDummyEventSize);
@@ -339,7 +337,7 @@ TEST_P(FileNetLogObserverTest, CustomConstants) {
   std::unique_ptr<base::Value> constants(
       new base::StringValue(kConstantString));
 
-  StartObserving(std::move(constants), nullptr);
+  CreateAndStartObserving(std::move(constants));
 
   logger_->StopObserving(nullptr, closure.closure());
 
@@ -357,22 +355,19 @@ TEST_P(FileNetLogObserverTest, CustomConstants) {
   ASSERT_EQ(kConstantString, constants_string);
 }
 
-TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithContext) {
+TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithPolledData) {
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr);
+  CreateAndStartObserving(nullptr);
 
-  // Create unique context.
-  TestURLRequestContext context(true);
-  context.set_net_log(&net_log_);
-  const int kDummyParam = 75;
-  std::unique_ptr<HttpNetworkSession::Params> params(
-      new HttpNetworkSession::Params);
-  params->quic_idle_connection_timeout_seconds = kDummyParam;
-  context.set_http_network_session_params(std::move(params));
-  context.Init();
+  // Create dummy polled data
+  const char kDummyPolledDataPath[] = "dummy_path";
+  const char kDummyPolledDataString[] = "dummy_info";
+  std::unique_ptr<base::DictionaryValue> dummy_polled_data =
+      base::MakeUnique<base::DictionaryValue>();
+  dummy_polled_data->SetString(kDummyPolledDataPath, kDummyPolledDataString);
 
-  logger_->StopObserving(&context, closure.closure());
+  logger_->StopObserving(std::move(dummy_polled_data), closure.closure());
 
   closure.WaitForResult();
 
@@ -386,51 +381,11 @@ TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithContext) {
   // Make sure additional information is present and validate it.
   base::DictionaryValue* dict;
   ASSERT_TRUE(root->GetAsDictionary(&dict));
-  base::DictionaryValue* tab_info;
-  base::DictionaryValue* quic_info;
-  ASSERT_TRUE(dict->GetDictionary("tabInfo", &tab_info));
-  ASSERT_TRUE(tab_info->GetDictionary("quicInfo", &quic_info));
-  base::Value* timeout_value = nullptr;
-  int timeout;
-  ASSERT_TRUE(
-      quic_info->Get("idle_connection_timeout_seconds", &timeout_value));
-  ASSERT_TRUE(timeout_value->GetAsInteger(&timeout));
-  ASSERT_EQ(timeout, kDummyParam);
-}
-
-TEST_P(FileNetLogObserverTest, GeneratesValidJSONWithContextWithActiveRequest) {
-  TestClosure closure;
-
-  // Create context, start a request.
-  TestURLRequestContext context(true);
-  context.set_net_log(&net_log_);
-  context.Init();
-  TestDelegate delegate;
-  delegate.set_quit_on_complete(false);
-
-  // URL doesn't matter.  Requests can't fail synchronously.
-  std::unique_ptr<URLRequest> request(
-      context.CreateRequest(GURL("blah:blah"), IDLE, &delegate));
-  request->Start();
-
-  StartObserving(nullptr, &context);
-
-  logger_->StopObserving(&context, closure.closure());
-
-  closure.WaitForResult();
-
-  std::unique_ptr<base::Value> root;
-  base::ListValue* events;
-  ASSERT_TRUE(ReadNetLogFromDisk(&root, &events));
-
-  // Check that 1 event was written
-  ASSERT_EQ(1u, events->GetSize());
-
-  // Make sure additional information is present, but don't validate it.
-  base::DictionaryValue* dict;
-  ASSERT_TRUE(root->GetAsDictionary(&dict));
-  base::DictionaryValue* tab_info;
-  ASSERT_TRUE(dict->GetDictionary("tabInfo", &tab_info));
+  base::DictionaryValue* polled_data;
+  std::string dummy_string;
+  ASSERT_TRUE(dict->GetDictionary("polledData", &polled_data));
+  ASSERT_TRUE(polled_data->GetString(kDummyPolledDataPath, &dummy_string));
+  ASSERT_EQ(dummy_string, kDummyPolledDataString);
 }
 
 // Adds events concurrently from several different threads. The exact order of
@@ -447,7 +402,7 @@ TEST_P(FileNetLogObserverTest, AddEventsFromMultipleThreads) {
     threads[i]->WaitUntilThreadStarted();
   }
 
-  StartObserving(nullptr, nullptr);
+  CreateAndStartObserving(nullptr);
 
   const size_t kNumEventsAddedPerThread = 200;
 
@@ -483,7 +438,7 @@ TEST_F(FileNetLogObserverBoundedTest, EqualToOneFile) {
   const int kEventSize = 250;
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
   logger_->StopObserving(nullptr, closure.closure());
@@ -530,7 +485,7 @@ TEST_F(FileNetLogObserverBoundedTest, OneEventOverOneFile) {
   const int kEventSize = 200;
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
 
@@ -571,7 +526,7 @@ TEST_F(FileNetLogObserverBoundedTest, EqualToTwoFiles) {
   const int kEventSize = 200;
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
 
@@ -623,7 +578,7 @@ TEST_F(FileNetLogObserverBoundedTest, FillAllFilesNoOverwriting) {
   const int kNumEvents = kTotalNumFiles * ((kFileSize - 1) / kEventSize + 1);
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
 
@@ -669,7 +624,7 @@ TEST_F(FileNetLogObserverBoundedTest, DropOldEventsFromWriteQueue) {
   const int kFileSize = kTotalFileSize / kTotalNumFiles;
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
 
@@ -720,7 +675,7 @@ TEST_F(FileNetLogObserverBoundedTest, OverwriteAllFiles) {
   const int kFileSize = kTotalFileSize / kTotalNumFiles;
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
 
@@ -792,7 +747,7 @@ TEST_F(FileNetLogObserverBoundedTest, PartiallyOverwriteFiles) {
   const int kFileSize = kTotalFileSize / kTotalNumFiles;
   TestClosure closure;
 
-  StartObserving(nullptr, nullptr, kTotalFileSize, kTotalNumFiles);
+  CreateAndStartObserving(nullptr, kTotalFileSize, kTotalNumFiles);
 
   AddEntries(logger_.get(), kNumEvents, kEventSize);
 

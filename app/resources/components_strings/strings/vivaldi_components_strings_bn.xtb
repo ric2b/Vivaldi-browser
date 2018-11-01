@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">এই পৃষ্ঠার একটি সংরক্ষিত প্রতিলিপি (অর্থাৎ,তারিখ সীমার বাইরে হিসাবে পরিচিত) প্রদর্শন করুন৷</translation>
 <translation id="1559528461873125649">এমন কোন ফাইল বা ডিরেক্টরি নেই</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">আপনি একটি ওয়েব পৃষ্ঠার উৎস কোড দেখছেন।</translation>
 <translation id="194030505837763158"><ph name="LINK" /> এ যান</translation>
 <translation id="2030481566774242610">আপনি কি <ph name="LINK" /> বোঝাতে চেয়েছিলেন?</translation>
-<translation id="2089090684895656482">কম</translation>
 <translation id="2166378884831602661">এই সাইটটি একটি সুরক্ষিত সংযোগ দিতে পারছে না</translation>
 <translation id="2292556288342944218">আপনার ইন্টারনেট অ্যাক্সেস অবরুদ্ধ করা হয়েছে</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> একটি অবৈধ প্রতিক্রিয়া পাঠিয়েছে।</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">ফাইলে অ্যাক্সেস অস্বীকৃত হয়েছে</translation>
 <translation id="2705137772291741111">এই সাইটের সংরক্ষিত (সঞ্চিত) অনুলিপি পড়া সম্ভব হয়নি।</translation>
 <translation id="2784949926578158345">সংযোগ পুনঃসেট করা হয়েছে৷</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" /> এর সার্ভার শংসাপত্রটি জাল বলে মনে হচ্ছে।</translation>
 <translation id="2909946352844186028">একটি নেটওয়ার্ক পরিবর্তন সনাক্ত হয়েছে৷</translation>
 <translation id="3005723025932146533">সংরক্ষিত প্রতিলিপি দেখান</translation>
 <translation id="3109728660330352905">আপনার এই পৃষ্ঠাটি দেখার জন্য অনুমোদন নেই।</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS সেই নেটওয়ার্ক পরিষেবা যা কোনো ওয়েবসাইটের নামকে ইন্টারনেট ঠিকানায় রুপান্তরিত করে।</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> আপনার লগইন শংসাপত্রটি স্বীকার করেনি, অথবা কোনো শংসাপত্র দেওয়া হয়নি।</translation>
 <translation id="4522570452068850558">বিশদ বিবরণ</translation>
-<translation id="4670097147947922288">আপনি একটি এক্সটেনশান পৃষ্ঠা দেখছেন।</translation>
 <translation id="4708268264240856090">আপনার সংযোগ বাধাপ্রাপ্ত হয়েছে</translation>
 <translation id="4744603770635761495">সম্পাদনযোগ্য পথ</translation>
 <translation id="4764776831041365478"><ph name="URL" />-এ ওয়েবপৃষ্ঠাটি হতে পারে অস্থায়ীভাবে ডাউন আছে অথবা হতে পারে এটি স্থায়ীভাবে কোনো নতুন ওয়েব ঠিকানাতে সরানো হয়েছে৷</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">এই পৃষ্ঠাটি কাজ করছে না</translation>
 <translation id="5869405914158311789">এই সাইটটিতে পৌছানো যাচ্ছে না</translation>
 <translation id="5990559369517809815">সার্ভারে অনুরোধগুলি একটি এক্সটেনশান দিয়ে অবরুদ্ধ করা আছে৷</translation>
-<translation id="6042308850641462728">আরো</translation>
 <translation id="6146055958333702838">সব কেবল পরীক্ষা করুন এবং আপনি ব্যবহার করছেন এমন যেকোনো রাউটার, মডেম বা অন্যান্য নেটওয়ার্ক ডিভাইসগুলি আবার চালু করুন।</translation>
 <translation id="6165508094623778733">আরো জানুন</translation>
 <translation id="6203231073485539293">আপনার ইন্টারনেট সংযোগ পরীক্ষা করুন</translation>
@@ -64,10 +59,8 @@
 <translation id="6328639280570009161">নেটওয়ার্ক পূর্বানুমান নিষ্ক্রিয় করার চেষ্টা করুন</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> সংযোগ করতে প্রত্যাখ্যান করেছে।</translation>
 <translation id="6711464428925977395">প্রক্সী সার্ভারের কোনো সমস্যা হয়েছে, অথবা ঠিকানাটি ভুল।</translation>
-<translation id="6830600606572693159"> <ph name="URL" />তে থাকা ওয়েবপৃষ্ঠাটি বর্তমানে অনুপলব্ধ৷  রক্ষণাবেক্ষণের জন্য এটি ওভারলোড বা ডাউন হয়ে থাকতে পারে৷</translation>
 <translation id="6897140037006041989">ব্যবহারকারী এজেন্ট</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> নিরাপত্তা মান মেনে চলে না।</translation>
-<translation id="7269802741830436641">এই ওয়েবপৃষ্ঠাটির একটি পুনঃচালনা লুপ আছে</translation>
 <translation id="7353601530677266744">কম্যান্ড লাইন</translation>
 <translation id="7419106976560586862">প্রোফাইল পথ</translation>
 <translation id="7518003948725431193">এই ওয়েব ঠিকানার কোনও ওয়েবপৃষ্ঠা পাওয়া যায় নি: <ph name="URL" /></translation>
@@ -75,7 +68,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> বর্তমানে এই অনুরোধটি পরিচালনা করতে অক্ষম।</translation>
 <translation id="7716424297397655342">এই সাইটটি ক্যাশে থেকে লোড করা যাবে না</translation>
 <translation id="7758069387465995638">ফায়ারওয়াল বা অ্যান্টিভাইরাস সফটওয়্যার সংযোগকে অবরুদ্ধ করে থাকতে পারে।</translation>
-<translation id="778579833039460630">কোন ডেটা গ্রহণ করা হয়নি</translation>
 <translation id="7951415247503192394">(৩২-বিট)</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" /> এর সার্ভার <ph name="BEGIN_ABBR" />DNS ঠিকানা<ph name="END_ABBR" />খুঁজে পাওয়া যায়নি।</translation>
 <translation id="8142868475871995937">নিবারিত URLগুলির তালিকা এবং আপনার সিস্টেম প্রশাসকের দ্বারা জারি করা অন্যান্য নীতিগুলি দেখার জন্য &lt;strong&gt;vivaldi://policy&lt;/strong&gt; এ যান৷</translation>

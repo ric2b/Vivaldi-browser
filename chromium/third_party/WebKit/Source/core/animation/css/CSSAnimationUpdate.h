@@ -144,7 +144,7 @@ class CSSAnimationUpdate final {
   }
   void cancelAnimation(size_t index, const Animation& animation) {
     m_cancelledAnimationIndices.push_back(index);
-    m_suppressedAnimations.add(&animation);
+    m_suppressedAnimations.insert(&animation);
   }
   void toggleAnimationIndexPaused(size_t index) {
     m_animationIndicesWithPauseToggled.push_back(index);
@@ -156,32 +156,33 @@ class CSSAnimationUpdate final {
                        StyleRuleKeyframes* styleRule) {
     m_animationsWithUpdates.push_back(UpdatedCSSAnimation(
         index, animation, effect, specifiedTiming, styleRule));
-    m_suppressedAnimations.add(animation);
+    m_suppressedAnimations.insert(animation);
   }
   void updateCompositorKeyframes(Animation* animation) {
     m_updatedCompositorKeyframes.push_back(animation);
   }
 
   void startTransition(CSSPropertyID id,
-                       const AnimatableValue* from,
-                       const AnimatableValue* to,
+                       RefPtr<AnimatableValue> from,
+                       RefPtr<AnimatableValue> to,
                        PassRefPtr<AnimatableValue> reversingAdjustedStartValue,
                        double reversingShorteningFactor,
                        const InertEffect& effect) {
     NewTransition newTransition;
     newTransition.id = id;
-    newTransition.from = from;
-    newTransition.to = to;
+    newTransition.from = std::move(from);
+    newTransition.to = std::move(to);
     newTransition.reversingAdjustedStartValue = reversingAdjustedStartValue;
     newTransition.reversingShorteningFactor = reversingShorteningFactor;
     newTransition.effect = &effect;
     m_newTransitions.set(id, newTransition);
   }
+  void unstartTransition(CSSPropertyID id) { m_newTransitions.remove(id); }
   bool isCancelledTransition(CSSPropertyID id) const {
     return m_cancelledTransitions.contains(id);
   }
-  void cancelTransition(CSSPropertyID id) { m_cancelledTransitions.add(id); }
-  void finishTransition(CSSPropertyID id) { m_finishedTransitions.add(id); }
+  void cancelTransition(CSSPropertyID id) { m_cancelledTransitions.insert(id); }
+  void finishTransition(CSSPropertyID id) { m_finishedTransitions.insert(id); }
 
   const HeapVector<NewCSSAnimation>& newAnimations() const {
     return m_newAnimations;
@@ -209,8 +210,8 @@ class CSSAnimationUpdate final {
     DEFINE_INLINE_TRACE() { visitor->trace(effect); }
 
     CSSPropertyID id;
-    const AnimatableValue* from;
-    const AnimatableValue* to;
+    RefPtr<AnimatableValue> from;
+    RefPtr<AnimatableValue> to;
     RefPtr<AnimatableValue> reversingAdjustedStartValue;
     double reversingShorteningFactor;
     Member<const InertEffect> effect;

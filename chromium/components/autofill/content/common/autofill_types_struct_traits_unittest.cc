@@ -92,6 +92,7 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->new_password_value = base::ASCIIToUTF16("new_password_value");
   form->new_password_value_is_default = false;
   form->new_password_marked_by_site = false;
+  form->new_password_element = base::ASCIIToUTF16("confirmation_password");
   form->preferred = false;
   form->date_created = base::Time::Now();
   form->date_synced = base::Time::Now();
@@ -327,6 +328,7 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormFieldData) {
   test::CreateTestSelectField("TestLabel", "TestName", "TestValue", kOptions,
                               kOptions, 4, &input);
   // Set other attributes to check if they are passed correctly.
+  input.id = base::ASCIIToUTF16("id");
   input.autocomplete_attribute = "on";
   input.placeholder = base::ASCIIToUTF16("placeholder");
   input.css_classes = base::ASCIIToUTF16("class1");

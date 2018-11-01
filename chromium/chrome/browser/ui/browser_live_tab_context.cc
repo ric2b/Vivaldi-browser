@@ -117,13 +117,13 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
     const std::string& app_name) {
   Browser* browser;
   if (app_name.empty()) {
-    Browser::CreateParams params(profile);
+    Browser::CreateParams params(profile, true);
     params.is_vivaldi = vivaldi::IsVivaldiRunning();
     browser = new Browser(params);
   } else {
     // Only trusted app popup windows should ever be restored.
     browser = new Browser(Browser::CreateParams::CreateForApp(
-        app_name, true /* trusted_source */, gfx::Rect(), profile));
+        app_name, true /* trusted_source */, gfx::Rect(), profile, true));
   }
   if (browser)
     return browser->live_tab_context();

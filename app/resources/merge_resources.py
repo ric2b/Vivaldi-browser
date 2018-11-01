@@ -922,6 +922,7 @@ def DoMain(argv):
 
   argparser.add_argument("-D", action="append", dest="defines")
   argparser.add_argument("-E", action="append", dest="build_env")
+  argparser.add_argument("-p", action="append", dest="profile_name")
   argparser.add_argument("-t", default=None, dest="target_platform")
   argparser.add_argument("-f",  default="GRIT_DIR/../gritsettings/resource_ids",
                          dest="idsfile")

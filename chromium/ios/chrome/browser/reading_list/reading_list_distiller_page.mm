@@ -25,6 +25,9 @@ namespace {
 // The delay given to the web page to render after the PageLoaded callback.
 const int64_t kPageLoadDelayInSeconds = 2;
 
+// This script retrieve the href parameter of the <link rel="amphtml"> element
+// of the page if it exists. If it does not exist, it returns the src of the
+// first iframe of the page.
 const char* kGetIframeURLJavaScript =
     "(() => {"
     "  var link = document.evaluate('//link[@rel=\"amphtml\"]',"
@@ -73,22 +76,43 @@ void ReadingListDistillerPage::DistillPageImpl(const GURL& url,
   }
   std::unique_ptr<web::WebState> new_web_state =
       web_state_dispatcher_->RequestWebState();
-  if (new_web_state) {
-    favicon::WebFaviconDriver* favicon_driver =
-        favicon::WebFaviconDriver::FromWebState(new_web_state.get());
-    favicon_driver->FetchFavicon(url);
-  }
   AttachWebState(std::move(new_web_state));
   original_url_ = url;
   delayed_task_id_++;
+  FetchFavicon(url);
 
   DistillerPageIOS::DistillPageImpl(url, script);
+
+  // WKWebView sets the document.hidden property to true and the
+  // document.visibilityState to prerender if the page is not added to a view
+  // hierarchy. Some pages may not render their content in these conditions.
+  // Add the view and move it out of the screen far in the top left corner of
+  // the coordinate space.
+  CGRect frame = [[[UIApplication sharedApplication] keyWindow] frame];
+  frame.origin.x = -5 * std::max(frame.size.width, frame.size.height);
+  frame.origin.y = frame.origin.x;
+  DCHECK(![CurrentWebState()->GetView() superview]);
+  [CurrentWebState()->GetView() setFrame:frame];
+  [[[UIApplication sharedApplication] keyWindow]
+      insertSubview:CurrentWebState()->GetView()
+            atIndex:0];
+}
+
+void ReadingListDistillerPage::FetchFavicon(const GURL& page_url) {
+  if (!CurrentWebState() || !page_url.is_valid()) {
+    return;
+  }
+  favicon::WebFaviconDriver* favicon_driver =
+      favicon::WebFaviconDriver::FromWebState(CurrentWebState());
+  DCHECK(favicon_driver);
+  favicon_driver->FetchFavicon(page_url);
 }
 
 void ReadingListDistillerPage::OnDistillationDone(const GURL& page_url,
                                                   const base::Value* value) {
   std::unique_ptr<web::WebState> old_web_state = DetachWebState();
   if (old_web_state) {
+    [old_web_state->GetView() removeFromSuperview];
     web_state_dispatcher_->ReturnWebState(std::move(old_web_state));
   }
   delayed_task_id_++;
@@ -138,6 +162,8 @@ void ReadingListDistillerPage::OnLoadURLDone(
     DistillerPageIOS::OnLoadURLDone(load_completion_status);
     return;
   }
+  FetchFavicon(CurrentWebState()->GetVisibleURL());
+
   // Page is loaded but rendering may not be done yet. Give a delay to the page.
   base::WeakPtr<ReadingListDistillerPage> weak_this =
       weak_ptr_factory_.GetWeakPtr();
@@ -170,6 +196,11 @@ void ReadingListDistillerPage::DelayedOnLoadURLDone(int delayed_task_id) {
 }
 
 void ReadingListDistillerPage::ContinuePageDistillation() {
+  if (!CurrentWebState()) {
+    // Something interrupted the distillation.
+    // Abort here.
+    return;
+  }
   // The page is ready to be distilled.
   // If the visible URL is not the original URL, notify the caller that URL
   // changed.
@@ -235,18 +266,12 @@ bool ReadingListDistillerPage::HandleGoogleCachedAMPPageJavaScriptResult(
   if (!new_url) {
     return false;
   }
-  bool is_cdn_ampproject =
-      [[new_url host] isEqualToString:@"cdn.ampproject.org"];
-  bool is_cdn_ampproject_subdomain =
-      [[new_url host] hasSuffix:@".cdn.ampproject.org"];
 
-  if (!is_cdn_ampproject && !is_cdn_ampproject_subdomain) {
-    return false;
-  }
   GURL new_gurl = net::GURLWithNSURL(new_url);
   if (!new_gurl.is_valid()) {
     return false;
   }
+  FetchFavicon(new_gurl);
   web::NavigationManager::WebLoadParams params(new_gurl);
   CurrentWebState()->GetNavigationManager()->LoadURLWithParams(params);
   return true;

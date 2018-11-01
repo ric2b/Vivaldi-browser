@@ -30,5 +30,4 @@ const char kGenUrl[] = "url";
 const char kLoadedBytes[] = "loadedBytes";
 const char kLoadedElements[] = "loadedElements";
 const char kTotalElements[] = "totalElements";
-
-}
+}  // namespace webview

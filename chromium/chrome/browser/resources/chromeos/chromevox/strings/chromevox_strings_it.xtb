@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Gruppo pulsanti di opzione</translation>
 <translation id="2471138580042810658">Intestazione 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{asterisco}other{# asterischi}}</translation>
+<translation id="2523609930580546572">Tutorial di ChromeVox</translation>
 <translation id="2525706221823668172">Scorciatoie da tastiera di Chromebook</translation>
 <translation id="2549392850788122959">Il tasto <ph name="KEY" /> è stato reimpostato.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
@@ -222,7 +223,6 @@ Se hai finito di seguire il tutorial, utilizza ChromeVox per arrivare al pulsant
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">Link visitato</translation>
 <translation id="3232388865800379423">Un pulsante popup</translation>
-<translation id="323731244387692321">Apri la guida della tastiera di ChromeVox</translation>
 <translation id="3241052487511142956">Link visitato precedente</translation>
 <translation id="3286390186030710347">Dispositivo di scorrimento</translation>
 <translation id="3299925995433437805">Nessun link visitato successivo.</translation>
@@ -377,6 +377,7 @@ Se hai finito di seguire il tutorial, utilizza ChromeVox per arrivare al pulsant
 <translation id="4372435075475052704">minimo: <ph name="X" /></translation>
 <translation id="4372705107434148843">Interrompi i comandi vocali</translation>
 <translation id="4373197658375206385">Nessun elemento precedente che non sia un link.</translation>
+<translation id="4376316291247992553">Visualizza immagini in formato braille</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">reset</translation>
 <translation id="4471074325120394300">Nessun link.</translation>
@@ -719,6 +720,7 @@ Per aprire il menu del browser Chrome premi ALT + F.</translation>
 <translation id="7693840228159394336">Pulsante di opzione precedente</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, casella di testo della password</translation>
+<translation id="7776293189010177726">Apri menu di ChromeVox</translation>
 <translation id="7805247615045262757">navigazione predefinita</translation>
 <translation id="7805768142964895445">Stato</translation>
 <translation id="7810781339813764006">Gruppo successivo</translation>

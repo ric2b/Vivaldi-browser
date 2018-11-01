@@ -9,8 +9,9 @@
 #include "core/dom/SandboxFlags.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
+#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebVector.h"
-#include "public/platform/modules/permissions/WebPermissionType.h"
+#include "public/platform/modules/permissions/permission.mojom-blink.h"
 
 namespace blink {
 
@@ -49,7 +50,9 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
   virtual bool allowFullscreen() const = 0;
   virtual bool allowPaymentRequest() const = 0;
   virtual AtomicString csp() const = 0;
-  virtual const WebVector<WebPermissionType>& delegatedPermissions() const = 0;
+  virtual const WebVector<mojom::blink::PermissionName>& delegatedPermissions()
+      const = 0;
+  virtual const WebVector<WebFeaturePolicyFeature>& allowedFeatures() const = 0;
 };
 
 // TODO(dcheng): This class is an internal implementation detail of provisional
@@ -82,9 +85,15 @@ class CORE_EXPORT DummyFrameOwner
   bool allowFullscreen() const override { return false; }
   bool allowPaymentRequest() const override { return false; }
   AtomicString csp() const override { return nullAtom; }
-  const WebVector<WebPermissionType>& delegatedPermissions() const override {
-    DEFINE_STATIC_LOCAL(WebVector<WebPermissionType>, permissions, ());
+  const WebVector<mojom::blink::PermissionName>& delegatedPermissions()
+      const override {
+    DEFINE_STATIC_LOCAL(WebVector<mojom::blink::PermissionName>, permissions,
+                        ());
     return permissions;
+  }
+  const WebVector<WebFeaturePolicyFeature>& allowedFeatures() const override {
+    DEFINE_STATIC_LOCAL(WebVector<WebFeaturePolicyFeature>, features, ());
+    return features;
   }
 
  private:

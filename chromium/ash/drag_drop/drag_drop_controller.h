@@ -56,8 +56,7 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
                        aura::Window* source_window,
                        const gfx::Point& screen_location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source,
-                       bool& cancelled) override;
+                       ui::DragDropTypes::DragEventSource source) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 

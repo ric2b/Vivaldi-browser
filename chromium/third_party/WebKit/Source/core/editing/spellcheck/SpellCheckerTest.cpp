@@ -4,17 +4,16 @@
 
 #include "core/editing/spellcheck/SpellChecker.h"
 
-#include "core/editing/EditingTestBase.h"
 #include "core/editing/Editor.h"
+#include "core/editing/spellcheck/SpellCheckTestBase.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLInputElement.h"
-#include "core/testing/DummyPageHolder.h"
 
 namespace blink {
 
-class SpellCheckerTest : public EditingTestBase {
+class SpellCheckerTest : public SpellCheckTestBase {
  protected:
   int layoutCount() const { return page().frameView().layoutCount(); }
   DummyPageHolder& page() const { return dummyPageHolder(); }
@@ -41,6 +40,22 @@ TEST_F(SpellCheckerTest, AdvanceToNextMisspellingWithEmptyInputNoCrash) {
       document().frame()->editor().executeCommand("AdvanceToNextMisspelling"));
 }
 
+// Regression test for crbug.com/701309
+TEST_F(SpellCheckerTest, AdvanceToNextMisspellingWithImageInTableNoCrash) {
+  setBodyContent(
+      "<div contenteditable>"
+      "<table><tr><td>"
+      "<img src=foo.jpg>"
+      "</td></tr></table>"
+      "zz zz zz"
+      "</div>");
+  document().querySelector("div")->focus();
+  updateAllLifecyclePhases();
+
+  // Do not crash in advanceToNextMisspelling.
+  document().frame()->spellChecker().advanceToNextMisspelling(false);
+}
+
 TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   setBodyContent("<input>");
   HTMLInputElement* input =
@@ -48,19 +63,21 @@ TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
   input->focus();
   input->setValue("Hello, input field");
   document().updateStyleAndLayout();
-  VisibleSelection oldSelection = document().frame()->selection().selection();
+  VisibleSelection oldSelection =
+      document()
+          .frame()
+          ->selection()
+          .computeVisibleSelectionInDOMTreeDeprecated();
 
   Position newPosition(input->innerEditorElement()->firstChild(), 3);
   document().frame()->selection().setSelection(
-      SelectionInDOMTree::Builder().collapse(newPosition).build(),
-      FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle |
-          FrameSelection::DoNotUpdateAppearance);
-  ASSERT_EQ(3, input->selectionStart());
+      SelectionInDOMTree::Builder().collapse(newPosition).build());
+  ASSERT_EQ(3u, input->selectionStart());
 
-  Persistent<SpellChecker> spellChecker(SpellChecker::create(page().frame()));
+  EXPECT_TRUE(frame().spellChecker().isSpellCheckingEnabled());
   forceLayout();
   int startCount = layoutCount();
-  spellChecker->respondToChangedSelection(
+  frame().spellChecker().respondToChangedSelection(
       oldSelection.start(),
       FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
   EXPECT_EQ(startCount, layoutCount());

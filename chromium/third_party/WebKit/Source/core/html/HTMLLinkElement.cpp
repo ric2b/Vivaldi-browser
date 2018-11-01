@@ -31,12 +31,12 @@
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/LinkManifest.h"
 #include "core/html/imports/LinkImport.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -83,7 +83,8 @@ void HTMLLinkElement::parseAttribute(
   } else if (name == referrerpolicyAttr) {
     m_referrerPolicy = ReferrerPolicyDefault;
     if (!value.isNull()) {
-      SecurityPolicy::referrerPolicyFromString(value, &m_referrerPolicy);
+      SecurityPolicy::referrerPolicyFromString(
+          value, DoNotSupportReferrerPolicyLegacyKeywords, &m_referrerPolicy);
       UseCounter::count(document(),
                         UseCounter::HTMLLinkElementReferrerPolicyAttribute);
     }
@@ -258,6 +259,10 @@ void HTMLLinkElement::didSendDOMContentLoadedForLinkPrerender() {
   dispatchEvent(Event::create(EventTypeNames::webkitprerenderdomcontentloaded));
 }
 
+RefPtr<WebTaskRunner> HTMLLinkElement::getLoadingTaskRunner() {
+  return TaskRunnerHelper::get(TaskType::Networking, &document());
+}
+
 void HTMLLinkElement::valueWasSet() {
   setSynchronizedLazyAttribute(HTMLNames::sizesAttr, m_sizes->value());
   WebVector<WebSize> webIconSizes =
@@ -280,12 +285,16 @@ void HTMLLinkElement::notifyLoadedSheetAndAllCriticalSubresources(
 }
 
 void HTMLLinkElement::dispatchPendingEvent(
-    std::unique_ptr<IncrementLoadEventDelayCount>) {
+    std::unique_ptr<IncrementLoadEventDelayCount> count) {
   DCHECK(m_link);
   if (m_link->hasLoaded())
     linkLoaded();
   else
     linkLoadingErrored();
+
+  // Checks Document's load event synchronously here for performance.
+  // This is safe because dispatchPendingEvent() is called asynchronously.
+  count->clearAndCheckLoadEvent();
 }
 
 void HTMLLinkElement::scheduleEvent() {

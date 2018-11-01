@@ -4,41 +4,45 @@
 
 #include "components/favicon/core/favicon_driver_impl.h"
 
-#include "base/command_line.h"
 #include "base/logging.h"
-#include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/favicon/core/favicon_handler.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/favicon/core/favicon_url.h"
 #include "components/history/core/browser/history_service.h"
-#include "ui/base/ui_base_switches.h"
 
 namespace favicon {
 namespace {
-
-// Returns whether icon NTP is enabled by experiment.
-// TODO(huangs): Remove all 3 copies of this routine once Icon NTP launches.
-bool IsIconNTPEnabled() {
-  // Note: It's important to query the field trial state first, to ensure that
-  // UMA reports the correct group.
-  const std::string group_name = base::FieldTrialList::FindFullName("IconNTP");
-  using base::CommandLine;
-  if (CommandLine::ForCurrentProcess()->HasSwitch(switches::kDisableIconNtp))
-    return false;
-  if (CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableIconNtp))
-    return true;
-
-  return base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
-}
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 const bool kEnableTouchIcon = true;
 #else
 const bool kEnableTouchIcon = false;
 #endif
+
+void RecordCandidateMetrics(const std::vector<FaviconURL>& candidates) {
+  size_t with_defined_touch_icons = 0;
+  size_t with_defined_sizes = 0;
+  for (const auto& candidate : candidates) {
+    if (!candidate.icon_sizes.empty()) {
+      with_defined_sizes++;
+    }
+    if (candidate.icon_type &
+        (favicon_base::IconType::TOUCH_ICON |
+         favicon_base::IconType::TOUCH_PRECOMPOSED_ICON)) {
+      with_defined_touch_icons++;
+    }
+  }
+  UMA_HISTOGRAM_COUNTS_100("Favicons.CandidatesCount", candidates.size());
+  UMA_HISTOGRAM_COUNTS_100("Favicons.CandidatesWithDefinedSizesCount",
+                           with_defined_sizes);
+  UMA_HISTOGRAM_COUNTS_100("Favicons.CandidatesWithTouchIconsCount",
+                           with_defined_touch_icons);
+}
 
 }  // namespace
 
@@ -52,7 +56,7 @@ FaviconDriverImpl::FaviconDriverImpl(FaviconService* favicon_service,
       favicon_service_, this, kEnableTouchIcon
                                   ? FaviconDriverObserver::NON_TOUCH_LARGEST
                                   : FaviconDriverObserver::NON_TOUCH_16_DIP));
-  if (kEnableTouchIcon || IsIconNTPEnabled()) {
+  if (kEnableTouchIcon) {
     touch_icon_handler_.reset(new FaviconHandler(
         favicon_service_, this, FaviconDriverObserver::TOUCH_LARGEST));
   }
@@ -65,26 +69,6 @@ void FaviconDriverImpl::FetchFavicon(const GURL& url) {
   favicon_handler_->FetchFavicon(url);
   if (touch_icon_handler_.get())
     touch_icon_handler_->FetchFavicon(url);
-}
-
-void FaviconDriverImpl::DidDownloadFavicon(
-    int id,
-    int http_status_code,
-    const GURL& image_url,
-    const std::vector<SkBitmap>& bitmaps,
-    const std::vector<gfx::Size>& original_bitmap_sizes) {
-  if (bitmaps.empty() && http_status_code == 404) {
-    DVLOG(1) << "Failed to Download Favicon:" << image_url;
-    if (favicon_service_)
-      favicon_service_->UnableToDownloadFavicon(image_url);
-  }
-
-  favicon_handler_->OnDidDownloadFavicon(id, image_url, bitmaps,
-                                         original_bitmap_sizes);
-  if (touch_icon_handler_.get()) {
-    touch_icon_handler_->OnDidDownloadFavicon(id, image_url, bitmaps,
-                                              original_bitmap_sizes);
-  }
 }
 
 bool FaviconDriverImpl::IsBookmarked(const GURL& url) {
@@ -116,6 +100,7 @@ void FaviconDriverImpl::OnUpdateFaviconURL(
     const GURL& page_url,
     const std::vector<FaviconURL>& candidates) {
   DCHECK(!candidates.empty());
+  RecordCandidateMetrics(candidates);
   favicon_handler_->OnUpdateFaviconURL(page_url, candidates);
   if (touch_icon_handler_.get())
     touch_icon_handler_->OnUpdateFaviconURL(page_url, candidates);

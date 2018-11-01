@@ -34,14 +34,13 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
                            int windowY,
                            int movementX,
                            int movementY,
-                           PlatformEvent::Modifiers,
+                           WebInputEvent::Modifiers,
                            short button,
                            unsigned short buttons,
                            EventTarget* relatedTarget,
                            TimeTicks platformTimeStamp,
                            DataTransfer*,
-                           PlatformMouseEvent::SyntheticEventType =
-                               PlatformMouseEvent::RealOrIndistinguishable);
+                           SyntheticEventType = RealOrIndistinguishable);
 
   static DragEvent* create(const AtomicString& type,
                            const DragEventInit& initializer) {
@@ -73,13 +72,13 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
             int windowY,
             int movementX,
             int movementY,
-            PlatformEvent::Modifiers,
+            WebInputEvent::Modifiers,
             short button,
             unsigned short buttons,
             EventTarget* relatedTarget,
             TimeTicks platformTimeStamp,
             DataTransfer*,
-            PlatformMouseEvent::SyntheticEventType);
+            SyntheticEventType);
 
   DragEvent(const AtomicString& type, const DragEventInit&);
 

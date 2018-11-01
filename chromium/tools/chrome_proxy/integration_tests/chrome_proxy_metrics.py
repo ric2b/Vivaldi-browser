@@ -431,13 +431,13 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
   def AddResultsForHTML5Test(self, tab, results):
     # Wait for the number of "points" of HTML5 compatibility to appear to verify
     # the HTML5 elements have loaded successfully.
-    tab.WaitForJavaScriptExpression(
-        'document.getElementsByClassName("pointsPanel")', 15)
+    tab.WaitForJavaScriptCondition(
+        'document.getElementsByClassName("pointsPanel")', timeout=15)
 
   def AddResultsForYouTube(self, tab, results):
     # Wait for the video to begin playing.
-    tab.WaitForJavaScriptExpression(
-        'window.playerState == YT.PlayerState.PLAYING', 30)
+    tab.WaitForJavaScriptCondition(
+        'window.playerState == YT.PlayerState.PLAYING', timeout=30)
 
   def AddResultsForBypass(self, tab, results, url_pattern=""):
     bypass_count = 0
@@ -671,7 +671,8 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     before_metrics = ChromeProxyMetric()
     before_metrics.Start(results.current_page, tab)
     tab.Navigate('http://chromeproxy-test.appspot.com/default')
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 10)
+    tab.WaitForJavaScriptCondition(
+        'performance.timing.loadEventStart', timeout=10)
     before_metrics.Stop(results.current_page, tab)
 
     for resp in before_metrics.IterResponses(tab):
@@ -696,7 +697,8 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     after_metrics = ChromeProxyMetric()
     after_metrics.Start(results.current_page, tab)
     tab.Navigate('http://chromeproxy-test.appspot.com/default')
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 10)
+    tab.WaitForJavaScriptCondition(
+        'performance.timing.loadEventStart', timeout=10)
     after_metrics.Stop(results.current_page, tab)
 
     for resp in after_metrics.IterResponses(tab):
@@ -746,7 +748,8 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     before_metrics = ChromeProxyMetric()
     before_metrics.Start(results.current_page, tab)
     tab.Navigate('http://chromeproxy-test.appspot.com/default')
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 10)
+    tab.WaitForJavaScriptCondition(
+        'performance.timing.loadEventStart', timeout=10)
     before_metrics.Stop(results.current_page, tab)
 
     for resp in before_metrics.IterResponses(tab):
@@ -773,7 +776,8 @@ class ChromeProxyMetric(network_metrics.NetworkMetric):
     after_metrics = ChromeProxyMetric()
     after_metrics.Start(results.current_page, tab)
     tab.Navigate('http://chromeproxy-test.appspot.com/default')
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 10)
+    tab.WaitForJavaScriptCondition(
+        'performance.timing.loadEventStart', timeout=10)
     after_metrics.Stop(results.current_page, tab)
 
     for resp in after_metrics.IterResponses(tab):
@@ -984,13 +988,15 @@ class ChromeProxyVideoMetric(network_metrics.NetworkMetric):
     super(ChromeProxyVideoMetric, self).Start(page, tab)
 
   def Stop(self, page, tab):
-    tab.WaitForJavaScriptExpression('window.__chromeProxyVideoLoaded', 30)
+    tab.WaitForJavaScriptCondition(
+        'window.__chromeProxyVideoLoaded', timeout=30)
     m = tab.EvaluateJavaScript('window.__chromeProxyVideoMetrics')
 
     # Now wait for the video to stop playing.
     # Give it 2x the total duration to account for buffering.
     waitTime = 2 * m['video_duration']
-    tab.WaitForJavaScriptExpression('window.__chromeProxyVideoEnded', waitTime)
+    tab.WaitForJavaScriptCondition(
+        'window.__chromeProxyVideoEnded', timeout=waitTime)
 
     # Load the final metrics.
     m = tab.EvaluateJavaScript('window.__chromeProxyVideoMetrics')
@@ -1068,7 +1074,7 @@ class ChromeProxyInstrumentedVideoMetric(Metric):
 
   def Stop(self, page, tab):
     waitTime = tab.EvaluateJavaScript('test.waitTime')
-    tab.WaitForJavaScriptExpression('test.metrics.complete', waitTime)
+    tab.WaitForJavaScriptCondition('test.metrics.complete', timeout=waitTime)
     super(ChromeProxyInstrumentedVideoMetric, self).Stop(page, tab)
 
   def AddResults(self, tab, results):

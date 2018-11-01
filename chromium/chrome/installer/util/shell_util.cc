@@ -375,8 +375,9 @@ void GetChromeProgIdEntries(BrowserDistribution* dist,
   } else {
   // For user-level installs: entries for the app id will be in HKCU; thus we
   // do not need a suffix on those entries.
-  app_info.app_id = ShellUtil::GetBrowserModelId(
-      dist, InstallUtil::IsPerUserInstall(chrome_exe));
+  app_info.app_id =
+      ShellUtil::GetBrowserModelId(dist, InstallUtil::IsPerUserInstall());
+
   }
   // TODO(grt): http://crbug.com/75152 Write a reference to a localized
   // resource for name, description, and company.
@@ -690,22 +691,26 @@ bool IsChromeRegisteredForProtocol(BrowserDistribution* dist,
   return AreEntriesAsDesired(entries, look_for_in);
 }
 
-// This method registers Chrome on Vista by launching an elevated setup.exe.
-// That will show the user the standard Vista elevation prompt. If the user
-// accepts it the new process will make the necessary changes and return SUCCESS
-// that we capture and return.
-// If protocol is non-empty we will also register Chrome as being capable of
-// handling the protocol.
+// This method registers Chrome by launching an elevated setup.exe. That will
+// show the user the standard elevation prompt. If the user accepts it the new
+// process will make the necessary changes and return SUCCESS that we capture
+// and return. If protocol is non-empty we will also register Chrome as being
+// capable of handling the protocol. This is most commonly used on per-user
+// installs on Windows 7 where setup.exe did not have permission to register
+// Chrome during install. It may also be used on all OSs for system-level
+// installs in case Chrome's registration is somehow broken or missing.
 bool ElevateAndRegisterChrome(BrowserDistribution* dist,
                               const base::FilePath& chrome_exe,
                               const base::string16& suffix,
                               const base::string16& protocol) {
-  // Only user-level installs prior to Windows 8 should need to elevate to
-  // register.
-  DCHECK(InstallUtil::IsPerUserInstall(chrome_exe));
-  DCHECK_LT(base::win::GetVersion(), base::win::VERSION_WIN8);
-
+  // Check for setup.exe in the same directory as chrome.exe, as is the case
+  // when running out of a build output directory.
   base::FilePath exe_path;
+
+  // Failing that, read the path to setup.exe from Chrome's ClientState key,
+  // which is the canonical location of the installer for all types of installs
+  // (see AddUninstallShortcutWorkItems).
+  const bool is_per_user = InstallUtil::IsPerUserInstall();
   if (base::CommandLine::ForCurrentProcess()->
       HasSwitch(installer::switches::kVivaldiStandalone)) {
     std::unique_ptr<FileVersionInfo> version_info(
@@ -718,21 +723,20 @@ bool ElevateAndRegisterChrome(BrowserDistribution* dist,
   } else {
   exe_path = chrome_exe.DirName().Append(installer::kSetupExe);
   if (!base::PathExists(exe_path)) {
-    HKEY reg_root = InstallUtil::IsPerUserInstall(chrome_exe) ?
-        HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
-    RegKey key(reg_root,
-               dist->GetUninstallRegPath().c_str(),
-               KEY_READ | KEY_WOW64_32KEY);
+    RegKey key(is_per_user ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE,
+               dist->GetStateKey().c_str(), KEY_QUERY_VALUE | KEY_WOW64_32KEY);
     base::string16 uninstall_string;
-    key.ReadValue(installer::kUninstallStringField, &uninstall_string);
-    base::CommandLine command_line =
-        base::CommandLine::FromString(uninstall_string);
-    exe_path = command_line.GetProgram();
+    if (key.ReadValue(installer::kUninstallStringField, &uninstall_string) ==
+        ERROR_SUCCESS) {
+      exe_path = base::FilePath(uninstall_string);
+    }
   }
   }
 
   if (base::PathExists(exe_path)) {
     base::CommandLine cmd(exe_path);
+    if (!is_per_user)
+      cmd.AppendSwitch(installer::switches::kSystemLevel);
     cmd.AppendSwitchPath(installer::switches::kRegisterChromeBrowser,
                          chrome_exe);
     if (!suffix.empty()) {
@@ -892,7 +896,7 @@ bool QuickIsChromeRegistered(BrowserDistribution* dist,
 bool GetInstallationSpecificSuffix(BrowserDistribution* dist,
                                    const base::FilePath& chrome_exe,
                                    base::string16* suffix) {
-  if (!InstallUtil::IsPerUserInstall(chrome_exe) ||
+  if (!InstallUtil::IsPerUserInstall() ||
       QuickIsChromeRegistered(dist, chrome_exe, base::string16(),
                               CONFIRM_SHELL_REGISTRATION)) {
     // No suffix on system-level installs and user-level installs already
@@ -1043,10 +1047,9 @@ base::win::ShortcutProperties TranslateShortcutProperties(
 
 // Cleans up an old verb (run) we used to register in
 // <root>\Software\Classes\Chrome<.suffix>\.exe\shell\run on Windows 8.
-void RemoveRunVerbOnWindows8(BrowserDistribution* dist,
-                             const base::FilePath& chrome_exe) {
+void RemoveRunVerbOnWindows8(BrowserDistribution* dist) {
   if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-    bool is_per_user_install = InstallUtil::IsPerUserInstall(chrome_exe);
+    bool is_per_user_install = InstallUtil::IsPerUserInstall();
     HKEY root_key = DetermineRegistrationRoot(is_per_user_install);
     // There's no need to rollback, so forgo the usual work item lists and just
     // remove the key from the registry.
@@ -1727,12 +1730,11 @@ base::string16 ShellUtil::GetCurrentInstallationSuffix(
   //   1) Base 32 encoding of the md5 hash of the user's sid (new-style).
   //   2) Username (old-style).
   //   3) Unsuffixed (even worse).
-  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   base::string16 tested_suffix;
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(installer::switches::kVivaldiStandalone)) {
     vivaldi::GetPathSpecificSuffix(chrome_exe, &tested_suffix);
-  } else
-  if (InstallUtil::IsPerUserInstall(chrome_exe) &&
+  } else if (InstallUtil::IsPerUserInstall() &&
       (!GetUserSpecificRegistrySuffix(&tested_suffix) ||
        !QuickIsChromeRegistered(dist, chrome_exe, tested_suffix,
                                 CONFIRM_PROGID_REGISTRATION)) &&
@@ -1851,7 +1853,7 @@ ShellUtil::DefaultState ShellUtil::GetChromeDefaultStateFromPath(
   static const wchar_t* const kChromeProtocols[] = { L"http", L"https" };
   DefaultState default_state = ProbeProtocolHandlers(
       chrome_exe, kChromeProtocols, arraysize(kChromeProtocols));
-  UpdateDefaultBrowserBeaconWithState(chrome_exe, distribution, default_state);
+  UpdateDefaultBrowserBeaconWithState(distribution, default_state);
   return default_state;
 }
 
@@ -2122,11 +2124,11 @@ bool ShellUtil::RegisterChromeBrowser(BrowserDistribution* dist,
     return false;
   }
 
-  RemoveRunVerbOnWindows8(dist, chrome_exe);
+  RemoveRunVerbOnWindows8(dist);
 
   vivaldi::RemoveDelegateExecuteForVivaldi(dist, chrome_exe, suffix);
 
-  bool user_level = InstallUtil::IsPerUserInstall(chrome_exe);
+  bool user_level = InstallUtil::IsPerUserInstall();
   HKEY root = DetermineRegistrationRoot(user_level);
 
   // Look only in HKLM for system-level installs (otherwise, if a user-level
@@ -2208,7 +2210,7 @@ bool ShellUtil::RegisterChromeForProtocol(BrowserDistribution* dist,
     return false;
   }
 
-  bool user_level = InstallUtil::IsPerUserInstall(chrome_exe);
+  bool user_level = InstallUtil::IsPerUserInstall();
   HKEY root = DetermineRegistrationRoot(user_level);
 
   // Look only in HKLM for system-level installs (otherwise, if a user-level

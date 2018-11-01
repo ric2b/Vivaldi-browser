@@ -4,7 +4,7 @@
 
 #include "core/css/PropertyRegistration.h"
 
-#include "core/animation/CSSValueInterpolationType.h"
+#include "core/animation/CSSInterpolationTypesMap.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/CSSSyntaxDescriptor.h"
 #include "core/css/CSSValueList.h"
@@ -21,6 +21,31 @@
 #include "core/dom/StyleChangeReason.h"
 
 namespace blink {
+
+static InterpolationTypes setRegistrationOnCSSInterpolationTypes(
+    CSSInterpolationTypes cssInterpolationTypes,
+    const PropertyRegistration& registration) {
+  InterpolationTypes result;
+  for (auto& cssInterpolationType : cssInterpolationTypes) {
+    cssInterpolationType->setCustomPropertyRegistration(registration);
+    result.push_back(std::move(cssInterpolationType));
+  }
+  return result;
+}
+
+PropertyRegistration::PropertyRegistration(
+    const CSSSyntaxDescriptor& syntax,
+    bool inherits,
+    const CSSValue* initial,
+    PassRefPtr<CSSVariableData> initialVariableData,
+    CSSInterpolationTypes cssInterpolationTypes)
+    : m_syntax(syntax),
+      m_inherits(inherits),
+      m_initial(initial),
+      m_initialVariableData(initialVariableData),
+      m_interpolationTypes(setRegistrationOnCSSInterpolationTypes(
+          std::move(cssInterpolationTypes),
+          *this)) {}
 
 static bool computationallyIndependent(const CSSValue& value) {
   DCHECK(!value.isCSSWideKeyword());
@@ -61,19 +86,8 @@ static bool computationallyIndependent(const CSSValue& value) {
   return true;
 }
 
-InterpolationTypes interpolationTypesForSyntax(const AtomicString& propertyName,
-                                               const CSSSyntaxDescriptor&) {
-  PropertyHandle property(propertyName);
-  InterpolationTypes interpolationTypes;
-  // TODO(alancutter): Read the syntax descriptor and add the appropriate
-  // CSSInterpolationType subclasses.
-  interpolationTypes.push_back(
-      WTF::makeUnique<CSSValueInterpolationType>(property));
-  return interpolationTypes;
-}
-
 void PropertyRegistration::registerProperty(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     const PropertyDescriptor& descriptor,
     ExceptionState& exceptionState) {
   // Bindings code ensures these are set.
@@ -88,7 +102,7 @@ void PropertyRegistration::registerProperty(
     return;
   }
   AtomicString atomicName(name);
-  Document* document = toDocument(executionContext);
+  Document* document = toDocument(scriptState->getExecutionContext());
   PropertyRegistry& registry = *document->propertyRegistry();
   if (registry.registration(atomicName)) {
     exceptionState.throwDOMException(
@@ -105,8 +119,9 @@ void PropertyRegistration::registerProperty(
     return;
   }
 
-  InterpolationTypes interpolationTypes =
-      interpolationTypesForSyntax(atomicName, syntaxDescriptor);
+  CSSInterpolationTypes cssInterpolationTypes =
+      CSSInterpolationTypesMap::createCSSInterpolationTypesForSyntax(
+          atomicName, syntaxDescriptor);
 
   if (descriptor.hasInitialValue()) {
     CSSTokenizer tokenizer(descriptor.initialValue());
@@ -133,7 +148,7 @@ void PropertyRegistration::registerProperty(
         tokenizer.tokenRange(), isAnimationTainted, false);
     registry.registerProperty(
         atomicName, syntaxDescriptor, descriptor.inherits(), initial,
-        std::move(initialVariableData), std::move(interpolationTypes));
+        std::move(initialVariableData), std::move(cssInterpolationTypes));
   } else {
     if (!syntaxDescriptor.isTokenStream()) {
       exceptionState.throwDOMException(
@@ -143,7 +158,7 @@ void PropertyRegistration::registerProperty(
     }
     registry.registerProperty(atomicName, syntaxDescriptor,
                               descriptor.inherits(), nullptr, nullptr,
-                              std::move(interpolationTypes));
+                              std::move(cssInterpolationTypes));
   }
 
   // TODO(timloh): Invalidate only elements with this custom property set

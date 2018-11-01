@@ -6,11 +6,11 @@
 
 #include "core/css/StyleSheetContents.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/SubresourceIntegrity.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/HTMLLinkElement.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
 #include "platform/network/mime/ContentType.h"
@@ -313,9 +313,9 @@ LinkStyle::LoadReturnValue LinkStyle::loadStylesheetIfNeeded(
   bool mediaQueryMatches = true;
   LocalFrame* frame = loadingFrame();
   if (!m_owner->media().isEmpty() && frame) {
-    MediaQuerySet* media = MediaQuerySet::create(m_owner->media());
+    RefPtr<MediaQuerySet> media = MediaQuerySet::create(m_owner->media());
     MediaQueryEvaluator evaluator(frame);
-    mediaQueryMatches = evaluator.eval(media);
+    mediaQueryMatches = evaluator.eval(*media);
   }
 
   // Don't hold up layout tree construction and script execution on

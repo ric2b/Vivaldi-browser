@@ -229,19 +229,6 @@ hooks = [
       '--copy-dia-binaries',
     ],
   },
-  # TODO(pmonette): Move include files out of binaries folder.
-  {
-    'name': 'kasko',
-    'pattern': '.',
-    'action': ['python',
-      'vivaldi/chromium/build/get_syzygy_binaries.py',
-      '--output-dir', 'vivaldi/chromium/third_party/kasko/binaries',
-      '--revision=266a18d9209be5ca5c5dcd0620942b82a2d238f3',
-      '--resource=kasko.zip',
-      '--resource=kasko_symbols.zip',
-      '--overwrite'
-    ],
-  },
   {
     # Pull sanitizer-instrumented third-party libraries if requested via
     # GYP_DEFINES.

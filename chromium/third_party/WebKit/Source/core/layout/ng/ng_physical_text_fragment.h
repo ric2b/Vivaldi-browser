@@ -8,6 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_inline_node.h"
+#include "core/layout/ng/ng_floating_object.h"
 #include "core/layout/ng/ng_physical_fragment.h"
 #include "platform/heap/Handle.h"
 
@@ -15,42 +16,33 @@ namespace blink {
 
 class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
  public:
-  NGPhysicalTextFragment(
-      const NGInlineNode* node,
-      unsigned start_index,
-      unsigned end_index,
-      NGPhysicalSize size,
-      NGPhysicalSize overflow,
-      HeapLinkedHashSet<WeakMember<NGBlockNode>>& out_of_flow_descendants,
-      Vector<NGStaticPosition> out_of_flow_positions)
-      : NGPhysicalFragment(size,
-                           overflow,
-                           kFragmentText,
-                           out_of_flow_descendants,
-                           out_of_flow_positions),
+  NGPhysicalTextFragment(LayoutObject* layout_object,
+                         const NGInlineNode* node,
+                         unsigned item_index,
+                         unsigned start_offset,
+                         unsigned end_offset,
+                         NGPhysicalSize size,
+                         NGPhysicalSize overflow)
+      : NGPhysicalFragment(layout_object, size, overflow, kFragmentText),
         node_(node),
-        start_index_(start_index),
-        end_index_(end_index) {}
-
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
-    visitor->trace(node_);
-    NGPhysicalFragment::traceAfterDispatch(visitor);
-  }
+        item_index_(item_index),
+        start_offset_(start_offset),
+        end_offset_(end_offset) {}
 
   const NGInlineNode* Node() const { return node_; }
 
   // The range of NGLayoutInlineItem.
-  // |StartIndex| shows the lower logical index, so the visual order iteration
-  // for RTL should be done from |EndIndex - 1| to |StartIndex|.
-  unsigned StartIndex() const { return start_index_; }
-  unsigned EndIndex() const { return end_index_; }
+  unsigned ItemIndex() const { return item_index_; }
+  unsigned StartOffset() const { return start_offset_; }
+  unsigned EndOffset() const { return end_offset_; }
 
  private:
   // TODO(kojii): NGInlineNode is to access text content and NGLayoutInlineItem.
   // Review if it's better to point them.
-  Member<const NGInlineNode> node_;
-  unsigned start_index_;
-  unsigned end_index_;
+  Persistent<const NGInlineNode> node_;
+  unsigned item_index_;
+  unsigned start_offset_;
+  unsigned end_offset_;
 };
 
 DEFINE_TYPE_CASTS(NGPhysicalTextFragment,

@@ -3,10 +3,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_GLUE_NOTES_MODEL_ASSOCIATOR_H_
-#define VIVALDI_SYNC_GLUE_NOTES_MODEL_ASSOCIATOR_H_
+#ifndef SYNC_GLUE_NOTES_MODEL_ASSOCIATOR_H_
+#define SYNC_GLUE_NOTES_MODEL_ASSOCIATOR_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <stack>
 #include <string>
@@ -17,10 +18,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
-#include "components/sync/model/data_type_error_handler.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/model_associator.h"
+#include "components/sync/model/data_type_error_handler.h"
 
 class Profile;
 class GURL;
@@ -246,9 +247,9 @@ class NotesModelAssociator
   syncer::SyncError AssociatePermanentFolders(syncer::BaseTransaction* trans,
                                               Context* context);
   bool AssociatePermanentFolders(syncer::BaseTransaction* trans,
-                                              Context* context,
-                                              Notes_Node* node,
-                                              const char* tag);
+                                 Context* context,
+                                 Notes_Node* node,
+                                 const char* tag);
 
   // Associate a top-level node of the notes model with a permanent node in
   // the sync domain.  Such permanent nodes are identified by a tag that is
@@ -310,4 +311,4 @@ class NotesModelAssociator
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_GLUE_NOTES_MODEL_ASSOCIATOR_H_
+#endif  // SYNC_GLUE_NOTES_MODEL_ASSOCIATOR_H_

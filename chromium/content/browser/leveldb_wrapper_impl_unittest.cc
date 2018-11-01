@@ -27,13 +27,10 @@ const size_t kTestSizeLimit = 512;
 class GetAllCallback : public mojom::LevelDBWrapperGetAllCallback {
  public:
   static mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo CreateAndBind(
-      mojo::AssociatedGroup* associated_group,
       bool* result,
       const base::Closure& callback) {
     mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo ptr_info;
-    mojom::LevelDBWrapperGetAllCallbackAssociatedRequest request;
-    associated_group->CreateAssociatedInterface(
-        mojo::AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
+    auto request = mojo::MakeRequest(&ptr_info);
     mojo::MakeStrongAssociatedBinding(
         base::WrapUnique(new GetAllCallback(result, callback)),
         std::move(request));
@@ -59,6 +56,14 @@ class MockDelegate : public LevelDBWrapperImpl::Delegate {
     return std::vector<leveldb::mojom::BatchedOperationPtr>();
   }
   void DidCommit(leveldb::mojom::DatabaseError error) override {}
+  void OnMapLoaded(leveldb::mojom::DatabaseError error) override {
+    map_load_count_++;
+  }
+
+  int map_load_count() const { return map_load_count_; }
+
+ private:
+  int map_load_count_ = 0;
 };
 
 void GetCallback(const base::Closure& callback,
@@ -109,7 +114,7 @@ class LevelDBWrapperImplTest : public testing::Test,
 
     level_db_wrapper_.Bind(mojo::MakeRequest(&level_db_wrapper_ptr_));
     mojom::LevelDBObserverAssociatedPtrInfo ptr_info;
-    observer_binding_.Bind(&ptr_info, associated_group());
+    observer_binding_.Bind(&ptr_info);
     level_db_wrapper_ptr_->AddObserver(std::move(ptr_info));
   }
 
@@ -132,10 +137,10 @@ class LevelDBWrapperImplTest : public testing::Test,
                : "";
   }
 
+  void clear_mock_data() { mock_data_.clear(); }
+
   mojom::LevelDBWrapper* wrapper() { return level_db_wrapper_ptr_.get(); }
-  mojo::AssociatedGroup* associated_group() {
-    return level_db_wrapper_ptr_.associated_group();
-  }
+  LevelDBWrapperImpl* wrapper_impl() { return &level_db_wrapper_; }
 
   bool GetSync(const std::vector<uint8_t>& key, std::vector<uint8_t>* result) {
     base::RunLoop run_loop;
@@ -181,6 +186,8 @@ class LevelDBWrapperImplTest : public testing::Test,
   void CommitChanges() { level_db_wrapper_.ScheduleImmediateCommit(); }
 
   const std::vector<Observation>& observations() { return observations_; }
+
+  MockDelegate* delegate() { return &delegate_; }
 
  private:
   // LevelDBObserver:
@@ -254,9 +261,8 @@ TEST_F(LevelDBWrapperImplTest, GetAll) {
   base::RunLoop run_loop;
   bool result = false;
   EXPECT_TRUE(wrapper()->GetAll(
-      GetAllCallback::CreateAndBind(associated_group(), &result,
-                                    run_loop.QuitClosure()),
-      &status, &data));
+      GetAllCallback::CreateAndBind(&result, run_loop.QuitClosure()), &status,
+      &data));
   EXPECT_EQ(leveldb::mojom::DatabaseError::OK, status);
   EXPECT_EQ(2u, data.size());
   EXPECT_FALSE(result);
@@ -309,6 +315,11 @@ TEST_F(LevelDBWrapperImplTest, PutObservations) {
   EXPECT_EQ(value1, observations()[1].old_value);
   EXPECT_EQ(value2, observations()[1].new_value);
   EXPECT_EQ(source2, observations()[1].source);
+
+  // Same put should not cause another observation.
+  EXPECT_TRUE(PutSync(StdStringToUint8Vector(key),
+                      StdStringToUint8Vector(value2), source2));
+  ASSERT_EQ(2u, observations().size());
 }
 
 TEST_F(LevelDBWrapperImplTest, DeleteNonExistingKey) {
@@ -353,11 +364,9 @@ TEST_F(LevelDBWrapperImplTest, DeleteAllWithoutLoadedMap) {
   EXPECT_FALSE(has_mock_data(kTestPrefix + key));
   EXPECT_TRUE(has_mock_data(dummy_key));
 
-  // Deleting all again should still work, an cause an observation.
+  // Deleting all again should still work, but not cause an observation.
   EXPECT_TRUE(DeleteAllSync());
-  ASSERT_EQ(2u, observations().size());
-  EXPECT_EQ(Observation::kDeleteAll, observations()[1].type);
-  EXPECT_EQ(kTestSource, observations()[1].source);
+  ASSERT_EQ(1u, observations().size());
 
   // And now we've deleted all, writing something the quota size should work.
   EXPECT_TRUE(PutSync(std::vector<uint8_t>(kTestSizeLimit, 'b'),
@@ -404,6 +413,13 @@ TEST_F(LevelDBWrapperImplTest, DeleteAllWithPendingMapLoad) {
   CommitChanges();
   EXPECT_FALSE(has_mock_data(kTestPrefix + key));
   EXPECT_TRUE(has_mock_data(dummy_key));
+}
+
+TEST_F(LevelDBWrapperImplTest, DeleteAllWithoutLoadedEmptyMap) {
+  clear_mock_data();
+
+  EXPECT_TRUE(DeleteAllSync());
+  ASSERT_EQ(0u, observations().size());
 }
 
 TEST_F(LevelDBWrapperImplTest, PutOverQuotaLargeValue) {
@@ -473,6 +489,41 @@ TEST_F(LevelDBWrapperImplTest, PutWhenAlreadyOverQuotaBecauseOfLargeKey) {
   // Increasing size should fail.
   value.resize(1, 'a');
   EXPECT_FALSE(PutSync(key, value));
+}
+
+TEST_F(LevelDBWrapperImplTest, GetAfterPurgeMemory) {
+  std::vector<uint8_t> result;
+  EXPECT_TRUE(GetSync(StdStringToUint8Vector("123"), &result));
+  EXPECT_EQ(StdStringToUint8Vector("123data"), result);
+  EXPECT_EQ(delegate()->map_load_count(), 1);
+
+  // Reading again doesn't load map again.
+  EXPECT_TRUE(GetSync(StdStringToUint8Vector("123"), &result));
+  EXPECT_EQ(delegate()->map_load_count(), 1);
+
+  wrapper_impl()->PurgeMemory();
+
+  // Now reading should still work, and load map again.
+  result.clear();
+  EXPECT_TRUE(GetSync(StdStringToUint8Vector("123"), &result));
+  EXPECT_EQ(StdStringToUint8Vector("123data"), result);
+  EXPECT_EQ(delegate()->map_load_count(), 2);
+}
+
+TEST_F(LevelDBWrapperImplTest, PurgeMemoryWithPendingChanges) {
+  std::vector<uint8_t> key = StdStringToUint8Vector("123");
+  std::vector<uint8_t> value = StdStringToUint8Vector("foo");
+  EXPECT_TRUE(PutSync(key, value));
+  EXPECT_EQ(delegate()->map_load_count(), 1);
+
+  // Purge memory, and read. Should not actually have purged, so should not have
+  // triggered a load.
+  wrapper_impl()->PurgeMemory();
+
+  std::vector<uint8_t> result;
+  EXPECT_TRUE(GetSync(key, &result));
+  EXPECT_EQ(value, result);
+  EXPECT_EQ(delegate()->map_load_count(), 1);
 }
 
 }  // namespace content

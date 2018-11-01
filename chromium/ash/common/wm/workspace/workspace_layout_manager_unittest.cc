@@ -22,8 +22,10 @@
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "ui/aura/env.h"
@@ -107,9 +109,6 @@ TEST_F(WorkspaceLayoutManagerTest, RestoreFromMinimizeKeepsRestore) {
   EXPECT_EQ("0,0 100x100", window_state->GetRestoreBoundsInScreen().ToString());
   EXPECT_EQ("10,15 25x35", window->GetBounds().ToString());
 
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("400x300,500x400");
   window->SetBoundsInScreen(gfx::Rect(600, 0, 100, 100), GetSecondaryDisplay());
   EXPECT_EQ(WmShell::Get()->GetAllRootWindows()[1], window->GetRootWindow());
@@ -130,9 +129,6 @@ TEST_F(WorkspaceLayoutManagerTest, RestoreFromMinimizeKeepsRestore) {
 }
 
 TEST_F(WorkspaceLayoutManagerTest, KeepMinimumVisibilityInDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("300x400,400x500");
   WmWindow::Windows root_windows = WmShell::Get()->GetAllRootWindows();
 
@@ -205,8 +201,6 @@ TEST_F(WorkspaceLayoutManagerTest, KeepRestoredWindowInDisplay) {
 }
 
 TEST_F(WorkspaceLayoutManagerTest, MaximizeInDisplayToBeRestored) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("300x400,400x500");
 
   WmWindow::Windows root_windows = WmShell::Get()->GetAllRootWindows();
@@ -267,8 +261,6 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeInDisplayToBeRestored) {
 }
 
 TEST_F(WorkspaceLayoutManagerTest, FullscreenInDisplayToBeRestored) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("300x400,400x500");
 
   WmWindow::Windows root_windows = WmShell::Get()->GetAllRootWindows();
@@ -302,24 +294,25 @@ TEST_F(WorkspaceLayoutManagerTest, FullscreenInDisplayToBeRestored) {
   EXPECT_EQ("295,0 30x40", window->GetBoundsInScreen().ToString());
 }
 
-// WmWindowObserver implementation used by
+// aura::WindowObserver implementation used by
 // DontClobberRestoreBoundsWindowObserver. This code mirrors what
 // BrowserFrameAsh does. In particular when this code sees the window was
 // maximized it changes the bounds of a secondary window. The secondary window
 // mirrors the status window.
-class DontClobberRestoreBoundsWindowObserver : public WmWindowObserver {
+class DontClobberRestoreBoundsWindowObserver : public aura::WindowObserver {
  public:
   DontClobberRestoreBoundsWindowObserver() : window_(nullptr) {}
 
   void set_window(WmWindow* window) { window_ = window; }
 
-  // WmWindowObserver:
-  void OnWindowPropertyChanged(WmWindow* window,
-                               WmWindowProperty property) override {
+  // aura::WindowObserver:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override {
     if (!window_)
       return;
 
-    if (window->GetWindowState()->IsMaximized()) {
+    if (wm::GetWindowState(window)->IsMaximized()) {
       WmWindow* w = window_;
       window_ = nullptr;
 
@@ -347,7 +340,7 @@ TEST_F(WorkspaceLayoutManagerTest, DontClobberRestoreBounds) {
   window->SetBounds(gfx::Rect(10, 20, 30, 40));
   // NOTE: for this test to exercise the failure the observer needs to be added
   // before the parent set. This mimics what BrowserFrameAsh does.
-  window->AddObserver(&window_observer);
+  window->aura_window()->AddObserver(&window_observer);
   ParentWindowInPrimaryRootWindow(window);
   window->Show();
 
@@ -363,7 +356,7 @@ TEST_F(WorkspaceLayoutManagerTest, DontClobberRestoreBounds) {
   window_observer.set_window(window2);
   window_state->Maximize();
   EXPECT_EQ("10,20 30x40", window_state->GetRestoreBoundsInScreen().ToString());
-  window->RemoveObserver(&window_observer);
+  window->aura_window()->RemoveObserver(&window_observer);
 }
 
 // Verifies when a window is maximized all descendant windows have a size.
@@ -621,15 +614,17 @@ TEST_F(WorkspaceLayoutManagerSoloTest, Minimize) {
   std::unique_ptr<WindowOwner> window_owner(CreateTestWindow(bounds));
   WmWindow* window = window_owner->window();
   window->SetShowState(ui::SHOW_STATE_MINIMIZED);
-  // Note: Currently minimize doesn't do anything except set the state.
-  // See crbug.com/104571.
-  EXPECT_EQ(bounds.ToString(), window->GetBounds().ToString());
+  EXPECT_FALSE(window->IsVisible());
+  EXPECT_TRUE(window->GetWindowState()->IsMinimized());
+  EXPECT_EQ(bounds, window->GetBounds());
   window->SetShowState(ui::SHOW_STATE_NORMAL);
-  EXPECT_EQ(bounds.ToString(), window->GetBounds().ToString());
+  EXPECT_TRUE(window->IsVisible());
+  EXPECT_FALSE(window->GetWindowState()->IsMinimized());
+  EXPECT_EQ(bounds, window->GetBounds());
 }
 
-// A WmWindowObserver which sets the focus when the window becomes visible.
-class FocusDuringUnminimizeWindowObserver : public WmWindowObserver {
+// A aura::WindowObserver which sets the focus when the window becomes visible.
+class FocusDuringUnminimizeWindowObserver : public aura::WindowObserver {
  public:
   FocusDuringUnminimizeWindowObserver()
       : window_(nullptr), show_state_(ui::SHOW_STATE_END) {}
@@ -637,14 +632,14 @@ class FocusDuringUnminimizeWindowObserver : public WmWindowObserver {
 
   void SetWindow(WmWindow* window) {
     if (window_)
-      window_->RemoveObserver(this);
+      window_->aura_window()->RemoveObserver(this);
     window_ = window;
     if (window_)
-      window_->AddObserver(this);
+      window_->aura_window()->AddObserver(this);
   }
 
-  // WmWindowObserver:
-  void OnWindowVisibilityChanged(WmWindow* window, bool visible) override {
+  // aura::WindowObserver:
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
     if (window_) {
       if (visible)
         window_->SetFocused();
@@ -1089,31 +1084,33 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, VerifyBackdropAndItsStacking) {
   EXPECT_EQ("b", GetWindowOrderAsString(nullptr, window1, window2, window3));
 }
 
-// Tests that when hidding the shelf, that the backdrop resizes to fill the
-// entire workspace area.
-TEST_F(WorkspaceLayoutManagerBackdropTest, ShelfVisibilityChangesBounds) {
+// Tests that when hidding the shelf, that the backdrop stays fullscreen.
+TEST_F(WorkspaceLayoutManagerBackdropTest,
+       ShelfVisibilityDoesNotChangesBounds) {
   WmShelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
   ShowTopWindowBackdrop(true);
   RunAllPendingInMessageLoop();
+  const gfx::Size fullscreen_size =
+      display::Screen::GetScreen()->GetPrimaryDisplay().size();
 
   ASSERT_EQ(SHELF_VISIBLE, shelf_layout_manager->visibility_state());
-  gfx::Rect initial_bounds = default_container()->GetChildren()[0]->GetBounds();
+  EXPECT_EQ(fullscreen_size,
+            default_container()->GetChildren()[0]->GetBounds().size());
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
   shelf_layout_manager->UpdateVisibilityState();
 
-  // When the shelf is re-shown WorkspaceLayoutManager shrinks all children
-  // including the backdrop.
+  // When the shelf is re-shown WorkspaceLayoutManager shrinks all children but
+  // the backdrop.
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
   shelf_layout_manager->UpdateVisibilityState();
-  gfx::Rect reduced_bounds = default_container()->GetChildren()[0]->GetBounds();
-  EXPECT_LT(reduced_bounds.height(), initial_bounds.height());
+  EXPECT_EQ(fullscreen_size,
+            default_container()->GetChildren()[0]->GetBounds().size());
 
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
   shelf_layout_manager->UpdateVisibilityState();
-
-  EXPECT_GT(default_container()->GetChildren()[0]->GetBounds().height(),
-            reduced_bounds.height());
+  EXPECT_EQ(fullscreen_size,
+            default_container()->GetChildren()[0]->GetBounds().size());
 }
 
 class WorkspaceLayoutManagerKeyboardTest : public AshTest {

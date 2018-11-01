@@ -1,80 +1,18 @@
 // Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
 
+#include "importer/viv_importer.h"
 
-#include <stack>
-#include <string>
-#include <vector>
-
-#include "chrome/browser/importer/importer_list.h"
-
-#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
-#include "base/time/time.h"
-#include "base/values.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_tokenizer.h"
-#include "base/path_service.h"
-#include "chrome/common/ini_parser.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/importer/importer_data_types.h"
-#include "chrome/browser/shell_integration.h"
-#include "ui/base/l10n/l10n_util.h"
-
-#include "app/vivaldi_resources.h"
+#include "chrome/common/ini_parser.h"
 #include "importer/imported_speeddial_entry.h"
-#include "importer/viv_importer_utils.h"
-#include "importer/viv_importer.h"
-#include "base/strings/utf_string_conversions.h"
 
 static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
 static const char OPERA_SPEEDDIAL_NAME[] = "speeddial.ini";
 
-bool ReadOperaIniFile(const base::FilePath &file,
-                      DictionaryValueINIParser& target);
-
-namespace viv_importer {
-
-void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
-  importer::SourceProfile opera;
-  opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA);
-  opera.importer_type = importer::TYPE_OPERA;
-  opera.source_path = GetProfileDir();
-#if defined(OS_WIN)
-  opera.app_path = GetOperaInstallPathFromRegistry();
-#endif
-  opera.services_supported = importer::SPEED_DIAL |
-      importer::FAVORITES | importer::NOTES | importer::PASSWORDS /*|
-          importer::HISTORY |
-          importer::COOKIES |
-          importer::SEARCH_ENGINES*/;
-
-#if 0
-  // Check if this profile need the master password
-  DictionaryValueINIParser inifile_parser;
-  base::FilePath ini_file(opera.source_path);
-  ini_file = ini_file.AppendASCII(OPERA_PREFS_NAME);
-  if (ReadOperaIniFile(ini_file, inifile_parser)) {
-    const base::DictionaryValue& inifile = inifile_parser.root();
-    int val;
-    inifile.GetInteger("Security Prefs.Use Paranoid Mailpassword", &val);
-    if (val) {
-      opera.services_supported |= importer::MASTER_PASSWORD;
-    }
-  }
-#else
-  // NOTE(pettern):
-  // If we import from a different profile, we can't check the default
-  // profile prefs file. Disable it for now until we have a better solution.
-  opera.services_supported |= importer::MASTER_PASSWORD;
-#endif
-  profiles->push_back(opera);
-}
-}  // namespace viv_importer
-
 bool ReadOperaIniFile(const base::FilePath &profile_dir,
-                      DictionaryValueINIParser &target) {
+                      DictionaryValueINIParser* target) {
   // profile_dir is likely not a directory but the prefs file, so check before
   // appending and breaking import.
   base::FilePath file;
@@ -87,22 +25,22 @@ bool ReadOperaIniFile(const base::FilePath &profile_dir,
   if (!base::ReadFileToString(file, &inifile_data))
     return false;
 
-  target.Parse(inifile_data);
+  target->Parse(inifile_data);
   return true;
 }
 
-OperaImporter::OperaImporter(const importer::ImportConfig &import_config)
+OperaImporter::OperaImporter(const importer::ImportConfig& import_config)
     : wand_version_(0), master_password_required_(false) {
   if (import_config.arguments.size() >= 1) {
     master_password_ = import_config.arguments[0];
   }
 }
 
-OperaImporter::~OperaImporter() {
-}
+OperaImporter::~OperaImporter() {}
 
-void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
-                                uint16_t items, ImporterBridge *bridge) {
+void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
+                                uint16_t items,
+                                ImporterBridge* bridge) {
   bridge_ = bridge;
   profile_dir_ = source_profile.source_path;
 
@@ -112,22 +50,22 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
     bookmarkfilename_ = file.value();
   } else {
     if (base::LowerCaseEqualsASCII(file.BaseName().MaybeAsASCII(),
-            OPERA_PREFS_NAME)) {
+                                   OPERA_PREFS_NAME)) {
       profile_dir_ = profile_dir_.DirName();
       file = profile_dir_;
     }
     // Read Inifile
     DictionaryValueINIParser inifile_parser;
-    if (ReadOperaIniFile(profile_dir_, inifile_parser)) {
-      const base::DictionaryValue &inifile = inifile_parser.root();
+    if (ReadOperaIniFile(profile_dir_, &inifile_parser)) {
+      const base::DictionaryValue& inifile = inifile_parser.root();
 
       inifile.GetString("User Prefs.Hot List File Ver2", &bookmarkfilename_);
       inifile.GetString("MailBox.NotesFile", &notesfilename_);
       std::string temp_val;
       master_password_required_ =
-        (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
-                           &temp_val) &&
-         !temp_val.empty() && atoi(temp_val.c_str()) != 0);
+          (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
+                             &temp_val) &&
+           !temp_val.empty() && atoi(temp_val.c_str()) != 0);
 
       inifile.GetString("User Prefs.WandStorageFile", &wandfilename_);
       masterpassword_filename_ =
@@ -152,7 +90,7 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
   bool success;
   if ((items & importer::FAVORITES) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::FAVORITES);
-    success = ImportBookMarks(error);
+    success = ImportBookMarks(&error);
     if (!success) {
       bridge_->NotifyItemFailed(importer::FAVORITES, error);
     }
@@ -160,7 +98,7 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
   }
   if ((items & importer::NOTES) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::NOTES);
-    success = ImportNotes(error);
+    success = ImportNotes(&error);
     if (!success) {
       bridge_->NotifyItemFailed(importer::NOTES, error);
     }
@@ -168,7 +106,7 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
   }
   if ((items & importer::PASSWORDS) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::PASSWORDS);
-    success = ImportWand(error);
+    success = ImportWand(&error);
     if (!success) {
       bridge_->NotifyItemFailed(importer::PASSWORDS, error);
     }
@@ -176,7 +114,7 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
   }
   if ((items & importer::SPEED_DIAL) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::SPEED_DIAL);
-    success = ImportSpeedDial(error);
+    success = ImportSpeedDial(&error);
     if (!success) {
       bridge_->NotifyItemFailed(importer::SPEED_DIAL, error);
     }
@@ -185,13 +123,13 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
   bridge_->NotifyEnded();
 }
 
-bool OperaImporter::ImportSpeedDial(std::string& error) {
+bool OperaImporter::ImportSpeedDial(std::string* error) {
   std::vector<ImportedSpeedDialEntry> entries;
   DictionaryValueINIParser inifile_parser;
   base::FilePath ini_file(profile_dir_);
   ini_file = ini_file.AppendASCII(OPERA_SPEEDDIAL_NAME);
 
-  if (ReadOperaIniFile(ini_file, inifile_parser)) {
+  if (ReadOperaIniFile(ini_file, &inifile_parser)) {
     for (base::DictionaryValue::Iterator itr(inifile_parser.root());
          !itr.IsAtEnd(); itr.Advance()) {
       const std::string& key = itr.key();
@@ -218,7 +156,7 @@ bool OperaImporter::ImportSpeedDial(std::string& error) {
       }
     }
   } else {
-    error = "Could not read speeddial.ini.";
+    *error = "Could not read speeddial.ini.";
     return false;
   }
   if (!entries.empty() && !cancelled()) {

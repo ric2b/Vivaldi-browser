@@ -137,7 +137,7 @@ struct HashAndUTF8CharactersTranslator {
     if (isAllASCII)
       newString = StringImpl::create(buffer.characters, buffer.length);
 
-    location = newString.release().leakRef();
+    location = newString.leakRef();
     location->setHash(hash);
     location->setIsAtomic(true);
   }
@@ -148,7 +148,7 @@ PassRefPtr<StringImpl> AtomicStringTable::add(const UChar* s, unsigned length) {
     return nullptr;
 
   if (!length)
-    return StringImpl::empty();
+    return StringImpl::empty;
 
   UCharBuffer buffer = {s, length};
   return addToStringTable<UCharBuffer, UCharBufferTranslator>(buffer);
@@ -178,7 +178,7 @@ PassRefPtr<StringImpl> AtomicStringTable::add(const LChar* s, unsigned length) {
     return nullptr;
 
   if (!length)
-    return StringImpl::empty();
+    return StringImpl::empty;
 
   LCharBuffer buffer = {s, length};
   return addToStringTable<LCharBuffer, LCharBufferTranslator>(buffer);
@@ -186,9 +186,9 @@ PassRefPtr<StringImpl> AtomicStringTable::add(const LChar* s, unsigned length) {
 
 StringImpl* AtomicStringTable::add(StringImpl* string) {
   if (!string->length())
-    return StringImpl::empty();
+    return StringImpl::empty;
 
-  StringImpl* result = *m_table.add(string).storedValue;
+  StringImpl* result = *m_table.insert(string).storedValue;
 
   if (!result->isAtomic())
     result->setIsAtomic(true);
@@ -215,7 +215,7 @@ void AtomicStringTable::remove(StringImpl* string) {
   DCHECK(string->isAtomic());
   auto iterator = m_table.find(string);
   RELEASE_ASSERT(iterator != m_table.end());
-  m_table.remove(iterator);
+  m_table.erase(iterator);
 }
 
 }  // namespace WTF

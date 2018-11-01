@@ -43,6 +43,7 @@
 #include "third_party/WebKit/public/platform/WebRTCDTMFSenderHandler.h"
 #include "third_party/WebKit/public/platform/WebRTCDataChannelHandler.h"
 #include "third_party/WebKit/public/platform/WebRTCDataChannelInit.h"
+#include "third_party/WebKit/public/platform/WebRTCError.h"
 #include "third_party/WebKit/public/platform/WebRTCICECandidate.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandlerClient.h"
 #include "third_party/WebKit/public/platform/WebRTCSessionDescription.h"
@@ -335,8 +336,8 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
         MediaStreamVideoSource::ConstraintsCallback(), true);
 
     blink::WebMediaStream local_stream;
-    local_stream.initialize(base::UTF8ToUTF16(stream_label), audio_tracks,
-                            video_tracks);
+    local_stream.initialize(blink::WebString::fromUTF8(stream_label),
+                            audio_tracks, video_tracks);
     local_stream.setExtraData(new MediaStream());
     return local_stream;
   }
@@ -584,7 +585,21 @@ TEST_F(RTCPeerConnectionHandlerTest, setConfiguration) {
   // TODO(perkj): Test that the parameters in |config| can be translated when a
   // WebRTCConfiguration can be constructed. It's WebKit class and can't be
   // initialized from a test.
-  EXPECT_TRUE(pc_handler_->setConfiguration(config));
+  EXPECT_EQ(blink::WebRTCErrorType::kNone,
+            pc_handler_->setConfiguration(config));
+}
+
+// Test that when an error occurs in SetConfiguration, it's converted to a
+// blink error and false is returned.
+TEST_F(RTCPeerConnectionHandlerTest, setConfigurationError) {
+  blink::WebRTCConfiguration config;
+
+  mock_peer_connection_->set_setconfiguration_error_type(
+      webrtc::RTCErrorType::INVALID_MODIFICATION);
+  EXPECT_CALL(*mock_tracker_.get(),
+              TrackSetConfiguration(pc_handler_.get(), _));
+  EXPECT_EQ(blink::WebRTCErrorType::kInvalidModification,
+            pc_handler_->setConfiguration(config));
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, addICECandidate) {
@@ -1010,23 +1025,29 @@ TEST_F(RTCPeerConnectionHandlerTest, OnAddAndOnRemoveStream) {
       AddRemoteMockMediaStream(remote_stream_label, "video", "audio"));
 
   testing::InSequence sequence;
-  EXPECT_CALL(*mock_tracker_.get(), TrackAddStream(
-      pc_handler_.get(),
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label)),
-      PeerConnectionTracker::SOURCE_REMOTE));
-  EXPECT_CALL(*mock_client_.get(), didAddRemoteStream(
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label))));
+  EXPECT_CALL(
+      *mock_tracker_.get(),
+      TrackAddStream(
+          pc_handler_.get(),
+          testing::Property(&blink::WebMediaStream::id,
+                            blink::WebString::fromASCII(remote_stream_label)),
+          PeerConnectionTracker::SOURCE_REMOTE));
+  EXPECT_CALL(*mock_client_.get(),
+              didAddRemoteStream(testing::Property(
+                  &blink::WebMediaStream::id,
+                  blink::WebString::fromASCII(remote_stream_label))));
 
-  EXPECT_CALL(*mock_tracker_.get(), TrackRemoveStream(
-      pc_handler_.get(),
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label)),
-      PeerConnectionTracker::SOURCE_REMOTE));
-  EXPECT_CALL(*mock_client_.get(), didRemoveRemoteStream(
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label))));
+  EXPECT_CALL(
+      *mock_tracker_.get(),
+      TrackRemoveStream(
+          pc_handler_.get(),
+          testing::Property(&blink::WebMediaStream::id,
+                            blink::WebString::fromASCII(remote_stream_label)),
+          PeerConnectionTracker::SOURCE_REMOTE));
+  EXPECT_CALL(*mock_client_.get(),
+              didRemoveRemoteStream(testing::Property(
+                  &blink::WebMediaStream::id,
+                  blink::WebString::fromASCII(remote_stream_label))));
 
   pc_handler_->observer()->OnAddStream(remote_stream);
   base::RunLoop().RunUntilIdle();
@@ -1041,9 +1062,10 @@ TEST_F(RTCPeerConnectionHandlerTest, RemoteTrackState) {
       AddRemoteMockMediaStream(remote_stream_label, "video", "audio"));
 
   testing::InSequence sequence;
-  EXPECT_CALL(*mock_client_.get(), didAddRemoteStream(
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label))));
+  EXPECT_CALL(*mock_client_.get(),
+              didAddRemoteStream(testing::Property(
+                  &blink::WebMediaStream::id,
+                  blink::WebString::fromASCII(remote_stream_label))));
   pc_handler_->observer()->OnAddStream(remote_stream);
   base::RunLoop().RunUntilIdle();
   const blink::WebMediaStream& webkit_stream = mock_client_->remote_stream();
@@ -1077,12 +1099,12 @@ TEST_F(RTCPeerConnectionHandlerTest, RemoveAndAddAudioTrackFromRemoteStream) {
 
   // Grab the added media stream when it's been successfully added to the PC.
   blink::WebMediaStream webkit_stream;
-  EXPECT_CALL(*mock_client_.get(), didAddRemoteStream(
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label))))
-      .WillOnce(
-          DoAll(SaveArg<0>(&webkit_stream),
-                ExitMessageLoop(&message_loop_, run_loop.QuitClosure())));
+  EXPECT_CALL(*mock_client_.get(),
+              didAddRemoteStream(testing::Property(
+                  &blink::WebMediaStream::id,
+                  blink::WebString::fromASCII(remote_stream_label))))
+      .WillOnce(DoAll(SaveArg<0>(&webkit_stream),
+                      ExitMessageLoop(&message_loop_, run_loop.QuitClosure())));
 
   rtc::scoped_refptr<webrtc::MediaStreamInterface> remote_stream(
       AddRemoteMockMediaStream(remote_stream_label, "video", "audio"));
@@ -1125,12 +1147,12 @@ TEST_F(RTCPeerConnectionHandlerTest, RemoveAndAddVideoTrackFromRemoteStream) {
 
   // Grab the added media stream when it's been successfully added to the PC.
   blink::WebMediaStream webkit_stream;
-  EXPECT_CALL(*mock_client_.get(), didAddRemoteStream(
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label))))
-      .WillOnce(
-          DoAll(SaveArg<0>(&webkit_stream),
-                ExitMessageLoop(&message_loop_, run_loop.QuitClosure())));
+  EXPECT_CALL(*mock_client_.get(),
+              didAddRemoteStream(testing::Property(
+                  &blink::WebMediaStream::id,
+                  blink::WebString::fromASCII(remote_stream_label))))
+      .WillOnce(DoAll(SaveArg<0>(&webkit_stream),
+                      ExitMessageLoop(&message_loop_, run_loop.QuitClosure())));
 
   rtc::scoped_refptr<webrtc::MediaStreamInterface> remote_stream(
       AddRemoteMockMediaStream(remote_stream_label, "video", "audio"));
@@ -1172,12 +1194,12 @@ TEST_F(RTCPeerConnectionHandlerTest, RemoveAndAddTracksFromRemoteStream) {
 
   // Grab the added media stream when it's been successfully added to the PC.
   blink::WebMediaStream webkit_stream;
-  EXPECT_CALL(*mock_client_.get(), didAddRemoteStream(
-      testing::Property(&blink::WebMediaStream::id,
-                        base::UTF8ToUTF16(remote_stream_label))))
-      .WillOnce(
-          DoAll(SaveArg<0>(&webkit_stream),
-                ExitMessageLoop(&message_loop_, run_loop.QuitClosure())));
+  EXPECT_CALL(*mock_client_.get(),
+              didAddRemoteStream(testing::Property(
+                  &blink::WebMediaStream::id,
+                  blink::WebString::fromASCII(remote_stream_label))))
+      .WillOnce(DoAll(SaveArg<0>(&webkit_stream),
+                      ExitMessageLoop(&message_loop_, run_loop.QuitClosure())));
 
   rtc::scoped_refptr<webrtc::MediaStreamInterface> remote_stream(
       AddRemoteMockMediaStream(remote_stream_label, "video", "audio"));

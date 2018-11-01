@@ -31,8 +31,7 @@ GpuSurfacelessBrowserCompositorOutputSurface::
         gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
     : GpuBrowserCompositorOutputSurface(std::move(context),
                                         update_vsync_parameters_callback,
-                                        std::move(overlay_candidate_validator),
-                                        true  /* support_stencil */),
+                                        std::move(overlay_candidate_validator)),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager) {
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.flipped_output_surface = true;
@@ -64,7 +63,7 @@ bool GpuSurfacelessBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane()
 
 unsigned GpuSurfacelessBrowserCompositorOutputSurface::GetOverlayTextureId()
     const {
-  return buffer_queue_->current_texture_id();
+  return buffer_queue_->GetCurrentTextureId();
 }
 
 void GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(
@@ -74,7 +73,15 @@ void GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(
   // TODO(ccameron): What if a swap comes again before OnGpuSwapBuffersCompleted
   // happens, we'd see the wrong swap size there?
   swap_size_ = reshape_size_;
-  buffer_queue_->SwapBuffers(frame.sub_buffer_rect);
+
+  gfx::Rect damage_rect =
+      frame.sub_buffer_rect ? *frame.sub_buffer_rect : gfx::Rect(swap_size_);
+  // Use previous buffer when damage rect is empty. This avoids unnecessary
+  // partial swap work and makes it possible to support empty swaps on devices
+  // where partial swaps are disabled.
+  if (!damage_rect.IsEmpty())
+    buffer_queue_->SwapBuffers(damage_rect);
+
   GpuBrowserCompositorOutputSurface::SwapBuffers(std::move(frame));
 }
 

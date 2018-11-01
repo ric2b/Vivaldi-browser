@@ -280,6 +280,16 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Some ForTesting APIs directly access to DOM. Because this script is loaded
+   * in header, DOM tree may not be available at beginning.
+   * In DOMContentLoaded, after Oobe.initialize() is done, this is marked to
+   * true, indicating ForTesting methods can be called.
+   * External script using ForTesting APIs should wait for this condition.
+   * @type {boolean}
+   */
+  Oobe.readyForTesting = false;
+
+  /**
    * Skip to login screen for telemetry.
    */
   Oobe.skipToLoginForTesting = function() {
@@ -439,7 +449,21 @@ disableTextSelectAndDrag(function(e) {
   'use strict';
 
   document.addEventListener('DOMContentLoaded', function() {
-    Oobe.initialize();
+    try {
+      Oobe.initialize();
+    } finally {
+      // TODO(crbug.com/712078): Do not set readyForTesting in case of that
+      // initialize() is failed. Currently, in some situation, initialize()
+      // raises an exception unexpectedly. It means testing APIs should not
+      // be called then. However, checking it here now causes bots failures
+      // unfortunately. So, as a short term workaround, here set
+      // readyForTesting even on failures, just to make test bots happy.
+      Oobe.readyForTesting = true;
+    }
   });
-})();
 
+  // Install a global error handler so stack traces are included in logs.
+  window.onerror = function(message, file, line, column, error) {
+    console.error(error.stack);
+  }
+})();

@@ -86,11 +86,9 @@ class InstallUtil {
   // Returns true if this installation path is per user, otherwise returns false
   // (per machine install, meaning: the exe_path contains the path to Program
   // Files).
-  static bool IsPerUserInstall(const base::FilePath& exe_path);
-
-  // Resets internal state for IsPerUserInstall so that the next call recomputes
-  // with fresh data.
-  static void ResetIsPerUserInstallForTest();
+  // TODO(grt): consider replacing all callers with direct use of
+  // InstallDetails.
+  static bool IsPerUserInstall();
 
   // Returns true if this is running setup process for Chrome SxS (as
   // indicated by the presence of --chrome-sxs on the command line) or if this
@@ -175,6 +173,10 @@ class InstallUtil {
   static void ComposeCommandLine(const base::string16& program,
                                  const base::string16& arguments,
                                  base::CommandLine* command_line);
+
+  // Appends the installer switch that selects the current install mode (see
+  // install_static::InstallDetails).
+  static void AppendModeSwitch(base::CommandLine* command_line);
 
   // Returns a string in the form YYYYMMDD of the current date.
   static base::string16 GetCurrentDate();

@@ -58,16 +58,6 @@ class WizardController : public BaseScreenDelegate,
                          public NetworkScreen::Delegate,
                          public HIDDetectionScreen::Delegate {
  public:
-  // Observes screen changes.
-  class Observer {
-   public:
-    // Called before a screen change happens.
-    virtual void OnScreenChanged(BaseScreen* next_screen) = 0;
-
-    // Called after the browser session has started.
-    virtual void OnSessionStart() = 0;
-  };
-
   WizardController(LoginDisplayHost* host, OobeUI* oobe_ui);
   ~WizardController() override;
 
@@ -108,13 +98,6 @@ class WizardController : public BaseScreenDelegate,
   // Should be used for testing only.
   pairing_chromeos::SharkConnectionListener*
   GetSharkConnectionListenerForTesting();
-
-  // Adds and removes an observer.
-  void AddObserver(Observer* observer);
-  void RemoveObserver(Observer* observer);
-
-  // Called right after the browser session has started.
-  void OnSessionStart();
 
   // Skip update, go straight to enrollment after EULA is accepted.
   void SkipUpdateEnrollAfterEula();
@@ -170,7 +153,7 @@ class WizardController : public BaseScreenDelegate,
   void OnUpdateCompleted();
   void OnEulaAccepted();
   void OnUpdateErrorCheckingForUpdate();
-  void OnUpdateErrorUpdating();
+  void OnUpdateErrorUpdating(bool is_critical_update);
   void OnUserImageSelected();
   void OnUserImageSkipped();
   void OnEnrollmentDone();
@@ -201,6 +184,7 @@ class WizardController : public BaseScreenDelegate,
 
   // Shows update screen and starts update process.
   void InitiateOOBEUpdate();
+  void StartOOBEUpdate();
 
   // Actions that should be done right after EULA is accepted,
   // before update check.
@@ -211,7 +195,7 @@ class WizardController : public BaseScreenDelegate,
 
   // Overridden from BaseScreenDelegate:
   void OnExit(BaseScreen& screen,
-              ExitCodes exit_code,
+              ScreenExitCode exit_code,
               const ::login::ScreenContext* context) override;
   void ShowCurrentScreen() override;
   ErrorScreen* GetErrorScreen() override;
@@ -373,8 +357,6 @@ class WizardController : public BaseScreenDelegate,
   // Time when OOBE was started. Used to measure the total time from boot to
   // user Sign-In completed.
   base::Time time_oobe_started_;
-
-  base::ObserverList<Observer> observer_list_;
 
   // Whether OOBE has yet been marked as completed.
   bool oobe_marked_completed_ = false;

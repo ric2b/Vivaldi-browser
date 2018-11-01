@@ -5,6 +5,7 @@
 #include "content/browser/web_contents/aura/shadow_layer_delegate.h"
 
 #include "base/macros.h"
+#include "cc/paint/paint_shader.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
@@ -43,12 +44,12 @@ void ShadowLayerDelegate::OnPaintLayer(const ui::PaintContext& context) {
 
   gfx::Rect paint_rect = gfx::Rect(0, 0, kShadowThick,
                                    layer_->bounds().height());
-  SkPaint paint;
-  paint.setShader(SkGradientShader::MakeLinear(points, kShadowColors, NULL,
-                                               arraysize(points),
-                                               SkShader::kRepeat_TileMode));
+  cc::PaintFlags flags;
+  flags.setShader(cc::WrapSkShader(SkGradientShader::MakeLinear(
+      points, kShadowColors, NULL, arraysize(points),
+      SkShader::kRepeat_TileMode)));
   ui::PaintRecorder recorder(context, layer_->size());
-  recorder.canvas()->DrawRect(paint_rect, paint);
+  recorder.canvas()->DrawRect(paint_rect, flags);
 }
 
 void ShadowLayerDelegate::OnDelegatedFrameDamage(

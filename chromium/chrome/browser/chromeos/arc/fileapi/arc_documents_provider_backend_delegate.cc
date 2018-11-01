@@ -19,7 +19,7 @@ using content::BrowserThread;
 namespace arc {
 
 ArcDocumentsProviderBackendDelegate::ArcDocumentsProviderBackendDelegate()
-    : async_file_util_(&roots_) {}
+    : async_file_util_(&roots_), watcher_manager_(&roots_) {}
 
 ArcDocumentsProviderBackendDelegate::~ArcDocumentsProviderBackendDelegate() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -56,9 +56,8 @@ ArcDocumentsProviderBackendDelegate::CreateFileStreamWriter(
 
 storage::WatcherManager* ArcDocumentsProviderBackendDelegate::GetWatcherManager(
     storage::FileSystemType type) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  NOTREACHED();  // Non-watchable file system.
-  return nullptr;
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return &watcher_manager_;
 }
 
 void ArcDocumentsProviderBackendDelegate::GetRedirectURLForContents(

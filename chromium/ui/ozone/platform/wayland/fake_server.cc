@@ -29,7 +29,7 @@ void DestroyResource(wl_client* client, wl_resource* resource) {
 // wl_compositor
 
 void CreateSurface(wl_client* client, wl_resource* resource, uint32_t id) {
-  auto compositor =
+  auto* compositor =
       static_cast<MockCompositor*>(wl_resource_get_user_data(resource));
   wl_resource* surface_resource = wl_resource_create(
       client, &wl_surface_interface, wl_resource_get_version(resource), id);
@@ -96,7 +96,7 @@ void GetXdgSurface(wl_client* client,
                    wl_resource* resource,
                    uint32_t id,
                    wl_resource* surface_resource) {
-  auto surface =
+  auto* surface =
       static_cast<MockSurface*>(wl_resource_get_user_data(surface_resource));
   if (surface->xdg_surface) {
     wl_resource_post_error(resource, XDG_SHELL_ERROR_ROLE,
@@ -127,7 +127,7 @@ const struct xdg_shell_interface xdg_shell_impl = {
 // wl_seat
 
 void GetPointer(wl_client* client, wl_resource* resource, uint32_t id) {
-  auto seat = static_cast<MockSeat*>(wl_resource_get_user_data(resource));
+  auto* seat = static_cast<MockSeat*>(wl_resource_get_user_data(resource));
   wl_resource* pointer_resource = wl_resource_create(
       client, &wl_pointer_interface, wl_resource_get_version(resource), id);
   if (!pointer_resource) {
@@ -137,10 +137,27 @@ void GetPointer(wl_client* client, wl_resource* resource, uint32_t id) {
   seat->pointer.reset(new MockPointer(pointer_resource));
 }
 
+void GetKeyboard(wl_client* client, wl_resource* resource, uint32_t id) {
+  auto* seat = static_cast<MockSeat*>(wl_resource_get_user_data(resource));
+  wl_resource* keyboard_resource = wl_resource_create(
+      client, &wl_keyboard_interface, wl_resource_get_version(resource), id);
+  if (!keyboard_resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+  seat->keyboard.reset(new MockKeyboard(keyboard_resource));
+}
+
 const struct wl_seat_interface seat_impl = {
     &GetPointer,       // get_pointer
-    nullptr,           // get_keyboard
+    &GetKeyboard,      // get_keyboard
     nullptr,           // get_touch,
+    &DestroyResource,  // release
+};
+
+// wl_keyboard
+
+const struct wl_keyboard_interface keyboard_impl = {
     &DestroyResource,  // release
 };
 
@@ -211,7 +228,7 @@ ServerObject::~ServerObject() {
 
 // static
 void ServerObject::OnResourceDestroyed(wl_resource* resource) {
-  auto obj = static_cast<ServerObject*>(wl_resource_get_user_data(resource));
+  auto* obj = static_cast<ServerObject*>(wl_resource_get_user_data(resource));
   obj->resource_ = nullptr;
 }
 
@@ -245,6 +262,13 @@ MockPointer::MockPointer(wl_resource* resource) : ServerObject(resource) {
 
 MockPointer::~MockPointer() {}
 
+MockKeyboard::MockKeyboard(wl_resource* resource) : ServerObject(resource) {
+  wl_resource_set_implementation(resource, &keyboard_impl, this,
+                                 &ServerObject::OnResourceDestroyed);
+}
+
+MockKeyboard::~MockKeyboard() {}
+
 void GlobalDeleter::operator()(wl_global* global) {
   wl_global_destroy(global);
 }
@@ -268,7 +292,7 @@ void Global::Bind(wl_client* client,
                   void* data,
                   uint32_t version,
                   uint32_t id) {
-  auto global = static_cast<Global*>(data);
+  auto* global = static_cast<Global*>(data);
   wl_resource* resource = wl_resource_create(
       client, global->interface_, std::min(version, global->version_), id);
   if (!resource) {
@@ -284,7 +308,7 @@ void Global::Bind(wl_client* client,
 
 // static
 void Global::OnResourceDestroyed(wl_resource* resource) {
-  auto global = static_cast<Global*>(wl_resource_get_user_data(resource));
+  auto* global = static_cast<Global*>(wl_resource_get_user_data(resource));
   if (global->resource_ == resource)
     global->resource_ = nullptr;
 }
@@ -331,7 +355,8 @@ FakeServer::FakeServer()
       pause_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                    base::WaitableEvent::InitialState::NOT_SIGNALED),
       resume_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                    base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+                    base::WaitableEvent::InitialState::NOT_SIGNALED),
+      controller_(FROM_HERE) {}
 
 FakeServer::~FakeServer() {
   Resume();

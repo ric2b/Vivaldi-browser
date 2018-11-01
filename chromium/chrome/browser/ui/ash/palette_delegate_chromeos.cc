@@ -6,7 +6,6 @@
 
 #include "ash/accelerators/accelerator_controller_delegate_aura.h"
 #include "ash/common/system/chromeos/palette/palette_utils.h"
-#include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/screenshot_delegate.h"
 #include "ash/shell.h"
 #include "ash/utility/screenshot_controller.h"
@@ -57,11 +56,9 @@ bool PaletteDelegateChromeOS::HasNoteApp() {
   return chromeos::NoteTakingHelper::Get()->IsAppAvailable(profile_);
 }
 
-void PaletteDelegateChromeOS::ActiveUserChanged(const AccountId& account_id) {
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(account_id);
-  Profile* profile = ProfileHelper::Get()->GetProfileByUser(user);
-  SetProfile(profile);
+void PaletteDelegateChromeOS::ActiveUserChanged(
+    const user_manager::User* active_user) {
+  SetProfile(ProfileHelper::Get()->GetProfileByUser(active_user));
 }
 
 void PaletteDelegateChromeOS::Observe(
@@ -74,9 +71,9 @@ void PaletteDelegateChromeOS::Observe(
       SetProfile(ProfileManager::GetActiveUserProfile());
 
       // Add a session state observer to be able to monitor session changes.
-      if (!session_state_observer_.get() && ash::Shell::HasInstance()) {
+      if (!session_state_observer_.get()) {
         session_state_observer_.reset(
-            new ash::ScopedSessionStateObserver(this));
+            new user_manager::ScopedUserSessionStateObserver(this));
       }
       break;
     case chrome::NOTIFICATION_PROFILE_DESTROYED: {
@@ -118,12 +115,6 @@ void PaletteDelegateChromeOS::OnPartialScreenshotDone(
     const base::Closure& then) {
   if (then)
     then.Run();
-}
-
-void PaletteDelegateChromeOS::SetPartialMagnifierState(bool enabled) {
-  ash::PartialMagnificationController* controller =
-      ash::Shell::GetInstance()->partial_magnification_controller();
-  controller->SetEnabled(enabled);
 }
 
 bool PaletteDelegateChromeOS::ShouldAutoOpenPalette() {

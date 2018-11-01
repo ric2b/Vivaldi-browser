@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Rodyti išsaugotą šio puslapio kopiją (kuri yra pasenusi).</translation>
 <translation id="1559528461873125649">Nėra tokio failo ar katalogo</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">Peržiūrite tinklalapio šaltinį.</translation>
 <translation id="194030505837763158">Apsilankykite <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Ar turėjote omenyje <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Mažiau</translation>
 <translation id="2166378884831602661">Ši svetainė negali užtikrinti saugaus ryšio</translation>
 <translation id="2292556288342944218">Interneto prieiga užblokuota</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> išsiuntė netinkamą atsaką.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">Prieiga prie failo atmesta</translation>
 <translation id="2705137772291741111">Išsaugotos (talpykloje esančios) šios svetainės kopijos negalima skaityti.</translation>
 <translation id="2784949926578158345">Ryšys atkurtas.</translation>
-<translation id="284702764277384724">Panašu, kad <ph name="HOST_NAME" /> serverio sertifikatas yra suklastotas.</translation>
 <translation id="2909946352844186028">Aptiktas tinklo pasikeitimas.</translation>
 <translation id="3005723025932146533">Rodyti išsaugotą kopiją</translation>
 <translation id="3109728660330352905">Neturite prieigos teisės žiūrėti šį puslapį.</translation>
@@ -39,7 +36,6 @@
 <translation id="4021036232240155012">DNS – tai tinklo paslauga, verčianti svetainės pavadinimą į interneto adresą.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> nepriėmė jūsų prisijungimo sertifikato arba prisijungimo sertifikatas nebuvo pateiktas.</translation>
 <translation id="4522570452068850558">Išsami informacija</translation>
-<translation id="4670097147947922288">Peržiūrite plėtinio puslapį.</translation>
 <translation id="4708268264240856090">Ryšys nutrauktas</translation>
 <translation id="4744603770635761495">Vykdomasis kelias</translation>
 <translation id="4764776831041365478">Tinklalapis šiuo adresu <ph name="URL" /> gali laikinai neveikti arba visam laikui būti perkeltas kitu žiniatinklio adresu.</translation>
@@ -56,7 +52,6 @@
 <translation id="5675650730144413517">Šis puslapis neveikia</translation>
 <translation id="5869405914158311789">Nepavyksta pasiekti šios svetainės</translation>
 <translation id="5990559369517809815">Plėtinys užblokavo serveriui teikiamas užklausas.</translation>
-<translation id="6042308850641462728">Daugiau</translation>
 <translation id="6146055958333702838">Patikrinkite laidus ir iš naujo paleiskite maršruto parinktuvus, modemus ar kitus
         naudojamus tinklo įrenginius.</translation>
 <translation id="6165508094623778733">Sužinokite daugiau</translation>
@@ -66,10 +61,8 @@
 <translation id="6328639280570009161">Bandykite neleisti tinklo numatymo</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> atsisakė prisijungti.</translation>
 <translation id="6711464428925977395">Kažkas negerai su tarpiniu serveriu arba adresas netinkamas.</translation>
-<translation id="6830600606572693159">Šiuo metu <ph name="URL" /> tinklalapis negalimas. Jis gali būti per daug apkrautas arba neveikiantis dėl techninės priežiūros.</translation>
 <translation id="6897140037006041989">Naudotojo atstovas</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nesilaikoma saugos standartų.</translation>
-<translation id="7269802741830436641">Šiam tinklalapiui taikomas peradresavimo ciklas</translation>
 <translation id="7353601530677266744">Komandos eilutė</translation>
 <translation id="7419106976560586862">Profilio kelias</translation>
 <translation id="7518003948725431193">Nerasta nė vieno tinklalapio šiuo žiniatinklio adresu: <ph name="URL" /></translation>
@@ -77,7 +70,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> šiuo metu negalima apdoroti šios užklausos.</translation>
 <translation id="7716424297397655342">Nepavyksta įkelti šios svetainės iš talpyklos</translation>
 <translation id="7758069387465995638">Gali būti, kad užkarda arba antivirusinė programinė įranga užblokavo ryšį.</translation>
-<translation id="778579833039460630">Negauta jokių duomenų</translation>
 <translation id="7951415247503192394">(32 bitų)</translation>
 <translation id="8134994873729925007">Nepavyko rasti <ph name="HOST_NAME" /> serverio <ph name="BEGIN_ABBR" />DNS adreso<ph name="END_ABBR" />.</translation>
 <translation id="8142868475871995937">Apsilankykite &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, kad peržiūrėtumėte į juodąjį sąrašą įtrauktų URL sąrašą ir kitą politiką, kurią priverstinai paleido sistemos administratorius.</translation>

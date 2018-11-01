@@ -183,6 +183,10 @@ def main():
                     dest='cloud_policy_proto_path',
                     help='generate cloud policy protobuf file',
                     metavar='FILE')
+  parser.add_option('--cpfrp', '--cloud-policy-full-runtime-protobuf',
+                    dest='cloud_policy_full_runtime_proto_path',
+                    help='generate cloud policy full runtime protobuf',
+                    metavar='FILE')
   parser.add_option('--csp', '--chrome-settings-protobuf',
                     dest='chrome_settings_proto_path',
                     help='generate chrome settings protobuf file',
@@ -229,14 +233,23 @@ def main():
         writer(sorted and sorted_policy_details or policy_details,
                os, f, riskTags)
 
-  GenerateFile(opts.header_path, _WritePolicyConstantHeader, sorted=True)
-  GenerateFile(opts.source_path, _WritePolicyConstantSource, sorted=True)
-  GenerateFile(opts.risk_header_path, _WritePolicyRiskTagHeader)
-  GenerateFile(opts.cloud_policy_proto_path, _WriteCloudPolicyProtobuf)
-  GenerateFile(opts.chrome_settings_proto_path, _WriteChromeSettingsProtobuf)
-  GenerateFile(opts.cloud_policy_decoder_path, _WriteCloudPolicyDecoder)
+  if opts.header_path:
+    GenerateFile(opts.header_path, _WritePolicyConstantHeader, sorted=True)
+  if opts.source_path:
+    GenerateFile(opts.source_path, _WritePolicyConstantSource, sorted=True)
+  if opts.risk_header_path:
+    GenerateFile(opts.risk_header_path, _WritePolicyRiskTagHeader)
+  if opts.cloud_policy_proto_path:
+    GenerateFile(opts.cloud_policy_proto_path, _WriteCloudPolicyProtobuf)
+  if opts.cloud_policy_full_runtime_proto_path:
+    GenerateFile(opts.cloud_policy_full_runtime_proto_path,
+        _WriteCloudPolicyFullRuntimeProtobuf)
+  if opts.chrome_settings_proto_path:
+    GenerateFile(opts.chrome_settings_proto_path, _WriteChromeSettingsProtobuf)
+  if opts.cloud_policy_decoder_path:
+    GenerateFile(opts.cloud_policy_decoder_path, _WriteCloudPolicyDecoder)
 
-  if os == 'android':
+  if os == 'android' and opts.app_restrictions_path:
     GenerateFile(opts.app_restrictions_path, _WriteAppRestrictions, xml=True)
 
   return 0
@@ -672,7 +685,7 @@ def _GenerateDefaultValue(value):
 
   |value|: The deserialized value to convert to base::Value."""
   if type(value) == bool or type(value) == int:
-    return [], 'base::MakeUnique<base::FundamentalValue>(%s)' %\
+    return [], 'base::MakeUnique<base::Value>(%s)' %\
                     json.dumps(value)
   elif type(value) == str:
     return [], 'base::MakeUnique<base::StringValue>("%s")' % value
@@ -977,6 +990,50 @@ message StringListPolicyProto {
 '''
 
 
+CLOUD_POLICY_FULL_RUNTIME_PROTO_HEAD = '''
+syntax = "proto2";
+
+package enterprise_management;
+
+message StringList {
+  repeated string entries = 1;
+}
+
+message PolicyOptions {
+  enum PolicyMode {
+    // The given settings are applied regardless of user choice.
+    MANDATORY = 0;
+    // The user may choose to override the given settings.
+    RECOMMENDED = 1;
+    // No policy value is present and the policy should be ignored.
+    UNSET = 2;
+  }
+  optional PolicyMode mode = 1 [default = MANDATORY];
+}
+
+message BooleanPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional bool value = 2;
+}
+
+message IntegerPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional int64 value = 2;
+}
+
+message StringPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional string value = 2;
+}
+
+message StringListPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional StringList value = 2;
+}
+
+'''
+
+
 # Field IDs [1..RESERVED_IDS] will not be used in the wrapping protobuf.
 RESERVED_IDS = 2
 
@@ -1032,6 +1089,17 @@ def _WriteCloudPolicyProtobuf(policies, os, f, riskTags):
   f.write('}\n\n')
 
 
+def _WriteCloudPolicyFullRuntimeProtobuf(policies, os, f, riskTags):
+  f.write(CLOUD_POLICY_FULL_RUNTIME_PROTO_HEAD)
+  f.write('message CloudPolicySettings {\n')
+  for policy in policies:
+    if policy.is_supported and not policy.is_device_only:
+      f.write('  optional %sPolicyProto %s = %s;\n' %
+              (policy.policy_protobuf_type, policy.name,
+               policy.id + RESERVED_IDS))
+  f.write('}\n\n')
+
+
 #------------------ protobuf decoder -------------------------------#
 
 CPP_HEAD = '''
@@ -1069,7 +1137,7 @@ std::unique_ptr<base::Value> DecodeIntegerValue(
   }
 
   return base::WrapUnique(
-      new base::FundamentalValue(static_cast<int>(value)));
+      new base::Value(static_cast<int>(value)));
 }
 
 std::unique_ptr<base::ListValue> DecodeStringList(
@@ -1106,7 +1174,7 @@ CPP_FOOT = '''}
 
 def _CreateValue(type, arg):
   if type == 'Type::BOOLEAN':
-    return 'new base::FundamentalValue(%s)' % arg
+    return 'new base::Value(%s)' % arg
   elif type == 'Type::INTEGER':
     return 'DecodeIntegerValue(%s)' % arg
   elif type == 'Type::STRING':

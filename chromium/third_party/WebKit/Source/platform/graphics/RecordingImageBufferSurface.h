@@ -13,10 +13,6 @@
 #include "wtf/Noncopyable.h"
 #include <memory>
 
-class SkCanvas;
-class SkPicture;
-class SkPictureRecorder;
-
 namespace blink {
 
 class ImageBuffer;
@@ -45,7 +41,7 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   // If the fallbackFactory is null the buffer surface should only be used
   // for one frame and should not be used for any operations which need a
   // raster surface, (i.e. writePixels).
-  // Only #getPicture should be used to access the resulting frame.
+  // Only #getRecord should be used to access the resulting frame.
   RecordingImageBufferSurface(
       const IntSize&,
       std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory>
@@ -56,9 +52,9 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   ~RecordingImageBufferSurface() override;
 
   // Implementation of ImageBufferSurface interfaces
-  SkCanvas* canvas() override;
+  PaintCanvas* canvas() override;
   void disableDeferral(DisableDeferralReason) override;
-  sk_sp<SkPicture> getPicture() override;
+  sk_sp<PaintRecord> getRecord() override;
   void flush(FlushReason) override;
   void didDraw(const FloatRect&) override;
   bool isValid() const override { return true; }
@@ -69,7 +65,8 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
                    int x,
                    int y) override;
   void willOverwriteCanvas() override;
-  virtual void finalizeFrame(const FloatRect&);
+  void finalizeFrame() override;
+  void doPaintInvalidation(const FloatRect&) override;
   void setImageBuffer(ImageBuffer*) override;
   sk_sp<SkImage> newImageSnapshot(AccelerationHint, SnapshotReason) override;
   void draw(GraphicsContext&,
@@ -128,8 +125,8 @@ class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
   bool finalizeFrameInternal(FallbackReason*);
   int approximateOpCount();
 
-  std::unique_ptr<SkPictureRecorder> m_currentFrame;
-  sk_sp<SkPicture> m_previousFrame;
+  std::unique_ptr<PaintRecorder> m_currentFrame;
+  sk_sp<PaintRecord> m_previousFrame;
   std::unique_ptr<ImageBufferSurface> m_fallbackSurface;
   ImageBuffer* m_imageBuffer;
   int m_initialSaveCount;

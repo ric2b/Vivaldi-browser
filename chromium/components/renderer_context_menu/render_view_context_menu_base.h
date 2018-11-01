@@ -11,9 +11,9 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "components/renderer_context_menu/context_menu_content_type.h"
@@ -142,8 +142,6 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
 
   // Subclasses should send notification.
   virtual void NotifyMenuShown() = 0;
-  virtual void NotifyURLOpened(const GURL& url,
-                               content::WebContents* new_contents) = 0;
 
   // TODO(oshima): Remove this.
   virtual void AppendPlatformEditableItems() {}
@@ -194,7 +192,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
 
   std::unique_ptr<ToolkitDelegate> toolkit_delegate_;
 
-  ScopedVector<ui::SimpleMenuModel> custom_submenus_;
+  std::vector<std::unique_ptr<ui::SimpleMenuModel>> custom_submenus_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenuBase);
 };

@@ -32,13 +32,10 @@
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/pipeline_stats.h"
+#include "platform_media/common/pipeline_stats.h"
 #endif
 
 namespace {
-
-static base::LazyInstance<content::MediaInternals>::Leaky g_media_internals =
-    LAZY_INSTANCE_INITIALIZER;
 
 base::string16 SerializeUpdate(const std::string& function,
                                const base::Value* value) {
@@ -620,7 +617,8 @@ void MediaInternals::MediaInternalsUMAHandler::OnProcessTerminated(
 }
 
 MediaInternals* MediaInternals::GetInstance() {
-  return g_media_internals.Pointer();
+  static content::MediaInternals* internals = new content::MediaInternals();
+  return internals;
 }
 
 MediaInternals::MediaInternals()

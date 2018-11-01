@@ -76,7 +76,7 @@ class AnimationEffectStackTest : public ::testing::Test {
       const ActiveInterpolationsMap& activeInterpolations,
       CSSPropertyID id) {
     Interpolation& interpolation =
-        *activeInterpolations.get(PropertyHandle(id)).at(0);
+        *activeInterpolations.at(PropertyHandle(id)).at(0);
     return toLegacyStyleInterpolation(interpolation).currentValue().get();
   }
 
@@ -134,7 +134,7 @@ TEST_F(AnimationEffectStackTest, CancelledAnimations) {
       play(makeKeyframeEffect(makeEffectModel(CSSPropertyFontSize,
                                               AnimatableDouble::create(1))),
            0);
-  cancelledAnimations.add(animation);
+  cancelledAnimations.insert(animation);
   play(makeKeyframeEffect(
            makeEffectModel(CSSPropertyZIndex, AnimatableDouble::create(2))),
        0);

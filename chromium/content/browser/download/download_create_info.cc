@@ -24,6 +24,7 @@ DownloadCreateInfo::DownloadCreateInfo(
       result(DOWNLOAD_INTERRUPT_REASON_NONE),
       save_info(std::move(save_info)),
       request_net_log(net_log),
+      accept_range(false),
       open_when_finished(open_when_done) {}
 
 DownloadCreateInfo::DownloadCreateInfo()

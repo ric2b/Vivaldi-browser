@@ -1,7 +1,9 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
 // Defines all the command-line switches used by Vivaldi.
 
-#ifndef VIVALDI_BASE_VIVALDI_SWITCHES_H_
-#define VIVALDI_BASE_VIVALDI_SWITCHES_H_
+#ifndef BASE_VIVALDI_SWITCHES_H_
+#define BASE_VIVALDI_SWITCHES_H_
 
 namespace switches {
 
@@ -16,4 +18,4 @@ extern const char kVivaldiUpdateURL[];
 
 }  // namespace switches
 
-#endif  // VIVALDI_BASE_VIVALDI_SWITCHES_H_
+#endif  // BASE_VIVALDI_SWITCHES_H_

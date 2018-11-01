@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -101,6 +102,7 @@ void CdmSessionAdapter::LoadSession(
     CdmSessionType session_type,
     const std::string& session_id,
     std::unique_ptr<NewSessionCdmPromise> promise) {
+  DVLOG(2) << __func__ << ": session_id = " << session_id;
   cdm_->LoadSession(session_type, session_id, std::move(promise));
 }
 
@@ -108,18 +110,21 @@ void CdmSessionAdapter::UpdateSession(
     const std::string& session_id,
     const std::vector<uint8_t>& response,
     std::unique_ptr<SimpleCdmPromise> promise) {
+  DVLOG(3) << __func__ << ": session_id = " << session_id;
   cdm_->UpdateSession(session_id, response, std::move(promise));
 }
 
 void CdmSessionAdapter::CloseSession(
     const std::string& session_id,
     std::unique_ptr<SimpleCdmPromise> promise) {
+  DVLOG(2) << __func__ << ": session_id = " << session_id;
   cdm_->CloseSession(session_id, std::move(promise));
 }
 
 void CdmSessionAdapter::RemoveSession(
     const std::string& session_id,
     std::unique_ptr<SimpleCdmPromise> promise) {
+  DVLOG(2) << __func__ << ": session_id = " << session_id;
   cdm_->RemoveSession(session_id, std::move(promise));
 }
 
@@ -141,7 +146,7 @@ void CdmSessionAdapter::OnCdmCreated(
     base::TimeTicks start_time,
     const scoped_refptr<ContentDecryptionModule>& cdm,
     const std::string& error_message) {
-  DVLOG(2) << __func__ << ": "
+  DVLOG(1) << __func__ << ": "
            << (cdm ? "success" : "failure (" + error_message + ")");
   DCHECK(!cdm_);
 
@@ -162,7 +167,8 @@ void CdmSessionAdapter::OnCdmCreated(
       kMediaEME + GetKeySystemNameForUMA(key_system) + kDot;
 
   // Only report time for successful CDM creation.
-  ReportTimeToCreateCdmUMA(base::TimeTicks::Now() - start_time);
+  base::UmaHistogramTimes(key_system_uma_prefix_ + kTimeToCreateCdmUMAName,
+                          base::TimeTicks::Now() - start_time);
 
   cdm_ = cdm;
 
@@ -178,8 +184,10 @@ void CdmSessionAdapter::OnSessionMessage(
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
   DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
-  if (session)
+  if (session) {
+    DVLOG(3) << __func__ << ": session_id = " << session_id;
     session->OnSessionMessage(message_type, message);
+  }
 }
 
 void CdmSessionAdapter::OnSessionKeysChange(const std::string& session_id,
@@ -188,9 +196,15 @@ void CdmSessionAdapter::OnSessionKeysChange(const std::string& session_id,
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
   DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
-  if (session)
+  if (session) {
+    DVLOG(2) << __func__ << ": session_id = " << session_id;
+    DVLOG(2) << "  - has_additional_usable_key = " << has_additional_usable_key;
+    for (const CdmKeyInformation* info : keys_info)
+      DVLOG(2) << "  - " << *info;
+
     session->OnSessionKeysChange(has_additional_usable_key,
                                  std::move(keys_info));
+  }
 }
 
 void CdmSessionAdapter::OnSessionExpirationUpdate(const std::string& session_id,
@@ -198,16 +212,25 @@ void CdmSessionAdapter::OnSessionExpirationUpdate(const std::string& session_id,
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
   DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
-  if (session)
+  if (session) {
+    DVLOG(2) << __func__ << ": session_id = " << session_id;
+    if (new_expiry_time.is_null())
+      DVLOG(2) << "  - new_expiry_time = NaN";
+    else
+      DVLOG(2) << "  - new_expiry_time = " << new_expiry_time;
+
     session->OnSessionExpirationUpdate(new_expiry_time);
+  }
 }
 
 void CdmSessionAdapter::OnSessionClosed(const std::string& session_id) {
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
   DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
-  if (session)
+  if (session) {
+    DVLOG(2) << __func__ << ": session_id = " << session_id;
     session->OnSessionClosed();
+  }
 }
 
 WebContentDecryptionModuleSessionImpl* CdmSessionAdapter::GetSession(
@@ -217,16 +240,6 @@ WebContentDecryptionModuleSessionImpl* CdmSessionAdapter::GetSession(
   // We can not tell if the CDM is firing events at sessions that never existed.
   SessionMap::iterator session = sessions_.find(session_id);
   return (session != sessions_.end()) ? session->second.get() : NULL;
-}
-
-void CdmSessionAdapter::ReportTimeToCreateCdmUMA(base::TimeDelta time) const {
-  // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram = base::Histogram::FactoryTimeGet(
-      GetKeySystemUMAPrefix() + kTimeToCreateCdmUMAName,
-      base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromSeconds(10),
-      50, base::HistogramBase::kUmaTargetedHistogramFlag);
-
-  histogram->AddTime(time);
 }
 
 }  // namespace media

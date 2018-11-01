@@ -4,7 +4,7 @@
 
 #include "cc/test/fake_scrollbar.h"
 
-#include "third_party/skia/include/core/SkCanvas.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
@@ -71,24 +71,36 @@ bool FakeScrollbar::NeedsPaintPart(ScrollbarPart part) const {
   return needs_paint_track_;
 }
 
-void FakeScrollbar::PaintPart(SkCanvas* canvas,
-                             ScrollbarPart part,
-                             const gfx::Rect& content_rect) {
+void FakeScrollbar::PaintPart(PaintCanvas* canvas,
+                              ScrollbarPart part,
+                              const gfx::Rect& content_rect) {
   if (!paint_)
     return;
 
   // Fill the scrollbar with a different color each time.
   fill_color_++;
-  SkPaint paint;
-  paint.setAntiAlias(false);
-  paint.setColor(paint_fill_color());
-  paint.setStyle(SkPaint::kFill_Style);
+  PaintFlags flags;
+  flags.setAntiAlias(false);
+  flags.setColor(paint_fill_color());
+  flags.setStyle(PaintFlags::kFill_Style);
 
   // Emulate the how the real scrollbar works by using scrollbar's rect for
   // TRACK and the given content_rect for the THUMB
   SkRect rect = part == TRACK ? RectToSkRect(TrackRect())
                               : RectToSkRect(content_rect);
-  canvas->drawRect(rect, paint);
+  canvas->drawRect(rect, flags);
+}
+
+bool FakeScrollbar::UsesNinePatchThumbResource() const {
+  return false;
+}
+
+gfx::Size FakeScrollbar::NinePatchThumbCanvasSize() const {
+  return gfx::Size();
+}
+
+gfx::Rect FakeScrollbar::NinePatchThumbAperture() const {
+  return gfx::Rect();
 }
 
 }  // namespace cc

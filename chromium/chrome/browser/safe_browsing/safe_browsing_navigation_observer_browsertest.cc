@@ -213,7 +213,7 @@ class SBNavigationObserverBrowserTest : public InProcessBrowserTest {
     content::DownloadManager* manager =
         content::BrowserContext::GetDownloadManager(browser()->profile());
     manager->GetAllDownloads(&download_items);
-    for (auto item : download_items) {
+    for (auto* item : download_items) {
       if (!item->IsDone())
         item->Cancel(true);
     }
@@ -240,8 +240,8 @@ class SBNavigationObserverBrowserTest : public InProcessBrowserTest {
         tab_strip->GetActiveWebContents();
     ASSERT_TRUE(content::WaitForLoadStop(current_web_contents));
     content::TestNavigationObserver navigation_observer(
-      current_web_contents,
-      number_of_navigations);
+        current_web_contents, number_of_navigations,
+        content::MessageLoopRunner::QuitMode::DEFERRED);
     navigation_observer.StartWatchingNewWebContents();
     // Execute test.
     std::string script = base::StringPrintf("clickLink('%s');", element_id);
@@ -427,7 +427,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, TypeInURLDownload) {
   GURL initial_url = embedded_test_server()->GetURL(kSingleFrameTestURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(2U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -467,7 +467,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, DirectDownload) {
   ClickTestLink("direct_download", 1, initial_url);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(2U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -519,7 +519,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   ClickTestLink("direct_download_noreferrer", 1, initial_url);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(2U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -571,7 +571,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   ClickTestLink("direct_download_noreferrer_target_blank", 1, initial_url);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(3U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -638,7 +638,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   GURL redirect_url = embedded_test_server()->GetURL(kRedirectURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   // Since unlike server redirects client redirects commit and then generate a
   // second navigation, our observer records two NavigationEvents for this test.
@@ -710,7 +710,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   GURL redirect_url = embedded_test_server()->GetURL(kRedirectURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(4U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -794,7 +794,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   GURL second_redirect_url = embedded_test_server()->GetURL(kRedirectURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(4U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -880,7 +880,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   ClickTestLink("window_location_redirection", 1, initial_url);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(2U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -932,7 +932,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, MixRedirects) {
   GURL redirect_url = embedded_test_server()->GetURL(kRedirectURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(3U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1000,7 +1000,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, NewTabDownload) {
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   GURL blank_url = GURL(url::kAboutBlankURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(4U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1081,7 +1081,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   GURL download_url = GURL(kDownloadDataURL);
   GURL blank_url = GURL(url::kAboutBlankURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(4U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1172,7 +1172,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
       embedded_test_server()->GetURL(kIframeRetargetingURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(5U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1274,7 +1274,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   GURL blank_url = GURL(url::kAboutBlankURL);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(7U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1395,7 +1395,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, CompleteReferrerChain) {
   ClickTestLink("download_on_landing_page", 1, landing_url);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(4U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1490,7 +1490,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   ClickTestLink("download_on_landing_page", 1, landing_url);
   GURL download_url = embedded_test_server()->GetURL(kDownloadItemURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(5U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1580,7 +1580,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
 
   // Simulate a user gesture on landing page.
   SimulateUserGesture();
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(3U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1655,7 +1655,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   GURL hosting_url = embedded_test_server()->GetURL(kLandingURL);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
 
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(3U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1727,7 +1727,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, ServerRedirect) {
       embedded_test_server()->GetURL("/server-redirect?" + download_url.spec());
   ui_test_utils::NavigateToURL(browser(), request_url);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(2U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1771,7 +1771,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, TwoServerRedirects) {
       embedded_test_server()->GetURL("/server-redirect?" + redirect_url.spec());
   ui_test_utils::NavigateToURL(browser(), request_url);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(2U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1818,7 +1818,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
       embedded_test_server()->GetURL("/server-redirect?" + download_url.spec());
   ClickTestLink("new_tab_download_with_server_redirect", 1, initial_url);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(3U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1872,7 +1872,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
 // host_to_ip_map_ size should increase by one after a new navigation.
 IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, AddIPMapping) {
   GURL initial_url = embedded_test_server()->GetURL(kSingleFrameTestURL);
-  auto ip_map = host_to_ip_map();
+  auto* ip_map = host_to_ip_map();
   std::string test_server_host(embedded_test_server()->base_url().host());
   ip_map->clear();
   ip_map->insert(
@@ -1887,7 +1887,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, AddIPMapping) {
 // If we have already seen an IP associated with a host, update its timestamp.
 IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest, IPListDedup) {
   GURL initial_url = embedded_test_server()->GetURL(kSingleFrameTestURL);
-  auto ip_map = host_to_ip_map();
+  auto* ip_map = host_to_ip_map();
   ip_map->clear();
   std::string test_server_host(embedded_test_server()->base_url().host());
   ip_map->insert(
@@ -1911,7 +1911,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   // Trigger download by user gesture.
   TriggerDownloadViaHtml5FileApi(true /* has_user_gesture */);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(1U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url
@@ -1945,7 +1945,7 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
   // Trigger download without user gesture.
   TriggerDownloadViaHtml5FileApi(false /* has_user_gesture */);
   std::string test_server_ip(embedded_test_server()->host_port_pair().host());
-  auto nav_list = navigation_event_list();
+  auto* nav_list = navigation_event_list();
   ASSERT_TRUE(nav_list);
   ASSERT_EQ(1U, nav_list->Size());
   VerifyNavigationEvent(GURL(),       // source_url

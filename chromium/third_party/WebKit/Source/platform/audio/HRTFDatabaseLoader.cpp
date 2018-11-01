@@ -50,14 +50,14 @@ PassRefPtr<HRTFDatabaseLoader>
 HRTFDatabaseLoader::createAndLoadAsynchronouslyIfNecessary(float sampleRate) {
   ASSERT(isMainThread());
 
-  RefPtr<HRTFDatabaseLoader> loader = getLoaderMap().get(sampleRate);
+  RefPtr<HRTFDatabaseLoader> loader = getLoaderMap().at(sampleRate);
   if (loader) {
     ASSERT(sampleRate == loader->databaseSampleRate());
     return loader.release();
   }
 
   loader = adoptRef(new HRTFDatabaseLoader(sampleRate));
-  getLoaderMap().add(sampleRate, loader.get());
+  getLoaderMap().insert(sampleRate, loader.get());
   loader->loadAsynchronously();
   return loader.release();
 }
@@ -70,7 +70,7 @@ HRTFDatabaseLoader::HRTFDatabaseLoader(float sampleRate)
 HRTFDatabaseLoader::~HRTFDatabaseLoader() {
   ASSERT(isMainThread());
   ASSERT(!m_thread);
-  getLoaderMap().remove(m_databaseSampleRate);
+  getLoaderMap().erase(m_databaseSampleRate);
 }
 
 void HRTFDatabaseLoader::loadTask() {

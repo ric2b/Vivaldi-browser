@@ -14,7 +14,6 @@
 #include "base/i18n/rtl.h"
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -58,7 +57,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/chrome_application.h"
 #else
-#include "chrome/browser/ui/webui/md_history_ui.h"
+#include "chrome/common/chrome_features.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -500,7 +499,7 @@ void BrowsingHistoryHandler::OnQueryComplete(
 
   bool is_md = false;
 #if !defined(OS_ANDROID)
-  is_md = MdHistoryUI::IsEnabled(profile);
+  is_md = base::FeatureList::IsEnabled(::features::kMaterialDesignHistory);
 #endif
 
   // Convert the result vector into a ListValue.
@@ -531,6 +530,17 @@ void BrowsingHistoryHandler::OnQueryComplete(
       "queryEndTime",
       GetRelativeDateLocalized(clock_.get(), query_results_info->end_time));
 
+  // TODO(calamity): Clean up grouped-specific fields once grouped history is
+  // removed.
+  results_info.SetString(
+      "queryStartMonth",
+      base::TimeFormatMonthAndYear(query_results_info->start_time));
+  results_info.SetString(
+      "queryInterval",
+      base::DateIntervalFormat(query_results_info->start_time,
+                               query_results_info->end_time,
+                               base::DATE_FORMAT_MONTH_WEEKDAY_DAY));
+
   web_ui()->CallJavascriptFunctionUnsafe("historyResult", results_info,
                                          results_value);
 }
@@ -550,7 +560,7 @@ void BrowsingHistoryHandler::HistoryDeleted() {
 void BrowsingHistoryHandler::HasOtherFormsOfBrowsingHistory(
     bool has_other_forms,
     bool has_synced_results) {
-    web_ui()->CallJavascriptFunctionUnsafe(
-        "showNotification", base::FundamentalValue(has_synced_results),
-        base::FundamentalValue(has_other_forms));
+  web_ui()->CallJavascriptFunctionUnsafe("showNotification",
+                                         base::Value(has_synced_results),
+                                         base::Value(has_other_forms));
 }

@@ -1,11 +1,11 @@
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="/android_apps_page/android_apps_browser_proxy.html">
-<link rel="import" href="/controls/settings_toggle_button.html">
-<link rel="import" href="/i18n_setup.html">
-<link rel="import" href="/prefs/prefs_behavior.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="android_apps_browser_proxy.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../prefs/prefs_behavior.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-android-apps-page">
   <template>
@@ -26,10 +26,11 @@
           label="$i18n{androidAppsEnabled}"
           on-change="onArcEnabledChange_"
           no-set-pref>
+        <a href="$i18nRaw{androidAppsLearnMoreUrl}" target="_blank"
+            class="more-actions" on-tap="stopPropagation_">
+          $i18n{androidAppsLearnMore}
+        </a>
       </settings-toggle-button>
-      <a href="$i18nRaw{androidAppsLearnMoreUrl}" target="_blank">
-        $i18n{androidAppsLearnMore}
-      </a>
     </div>
 
     <div id="manageApps" class="settings-box continuation indented"
@@ -44,7 +45,7 @@
     </div>
 
     <!-- Confirm disable android apps dialog -->
-    <dialog is="cr-dialog" id="confirmDisableDialog"
+    <dialog is="cr-dialog" id="confirmDisableDialog" close-text="$i18n{close}"
         on-cancel="onConfirmDisableDialogCancel_">
       <div class="title">$i18n{androidAppsDisableDialogTitle}</div>
       <div class="body" inner-h-t-m-l="[[getDialogBody_()]]"></div>

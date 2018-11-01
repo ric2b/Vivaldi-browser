@@ -29,7 +29,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/editing/DragCaretController.h"
+#include "core/editing/DragCaret.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/frame/FrameView.h"
@@ -111,8 +111,8 @@ void LayoutBlock::removeFromGlobalMaps() {
         gPositionedDescendantsMap->take(this);
     ASSERT(!descendants->isEmpty());
     for (LayoutBox* descendant : *descendants) {
-      ASSERT(gPositionedContainerMap->get(descendant) == this);
-      gPositionedContainerMap->remove(descendant);
+      ASSERT(gPositionedContainerMap->at(descendant) == this);
+      gPositionedContainerMap->erase(descendant);
     }
   }
   if (hasPercentHeightDescendants()) {
@@ -133,6 +133,11 @@ LayoutBlock::~LayoutBlock() {
 void LayoutBlock::willBeDestroyed() {
   if (!documentBeingDestroyed() && parent())
     parent()->dirtyLinesFromChangedChild(this);
+
+  if (LocalFrame* frame = this->frame()) {
+    frame->selection().layoutBlockWillBeDestroyed(*this);
+    frame->page()->dragCaret().layoutBlockWillBeDestroyed(*this);
+  }
 
   if (TextAutosizer* textAutosizer = document().textAutosizer())
     textAutosizer->destroy(this);
@@ -211,7 +216,7 @@ void LayoutBlock::styleDidChange(StyleDifference diff,
 
   if (oldStyle && parent()) {
     if (oldStyle->position() != newStyle.position() &&
-        newStyle.position() != StaticPosition) {
+        newStyle.position() != EPosition::kStatic) {
       // In LayoutObject::styleWillChange() we already removed ourself from our
       // old containing block's positioned descendant list, and we will be
       // inserted to the new containing block's list during layout. However the
@@ -234,13 +239,16 @@ void LayoutBlock::styleDidChange(StyleDifference diff,
     textAutosizer->record(this);
 
   propagateStyleToAnonymousChildren();
+  setCanContainFixedPositionObjects(isLayoutView() || isSVGForeignObject() ||
+                                    newStyle.canContainFixedPositionObjects());
 
   // It's possible for our border/padding to change, but for the overall logical
   // width or height of the block to end up being the same. We keep track of
   // this change so in layoutBlock, we can know to set relayoutChildren=true.
   m_widthAvailableToChildrenChanged |=
-      oldStyle && diff.needsFullLayout() && needsLayout() &&
-      borderOrPaddingLogicalDimensionChanged(*oldStyle, newStyle, LogicalWidth);
+      oldStyle && needsLayout() &&
+      (diff.needsFullLayout() || borderOrPaddingLogicalDimensionChanged(
+                                     *oldStyle, newStyle, LogicalWidth));
   m_heightAvailableToChildrenChanged |= oldStyle && diff.needsFullLayout() &&
                                         needsLayout() &&
                                         borderOrPaddingLogicalDimensionChanged(
@@ -512,7 +520,7 @@ void LayoutBlock::addOverflowFromPositionedObjects() {
   for (auto* positionedObject : *positionedDescendants) {
     // Fixed positioned elements don't contribute to layout overflow, since they
     // don't scroll with the content.
-    if (positionedObject->style()->position() != FixedPosition)
+    if (positionedObject->style()->position() != EPosition::kFixed)
       addOverflowFromChild(positionedObject,
                            toLayoutSize(positionedObject->location()));
   }
@@ -535,7 +543,7 @@ bool LayoutBlock::createsNewFormattingContext() const {
          isTableCaption() || isFieldset() || isWritingModeRoot() ||
          isDocumentElement() || isColumnSpanAll() || isGridItem() ||
          style()->containsPaint() || style()->containsLayout() ||
-         isSVGForeignObject();
+         isSVGForeignObject() || style()->display() == EDisplay::FlowRoot;
 }
 
 static inline bool changeInAvailableLogicalHeightAffectsChild(
@@ -671,7 +679,7 @@ bool LayoutBlock::simplifiedLayout() {
 void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(
     LayoutObject* child,
     SubtreeLayoutScope& layoutScope) {
-  if (child->style()->position() != FixedPosition)
+  if (child->style()->position() != EPosition::kFixed)
     return;
 
   bool hasStaticBlockPosition =
@@ -682,7 +690,8 @@ void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(
     return;
 
   LayoutObject* o = child->parent();
-  while (o && !o->isLayoutView() && o->style()->position() != AbsolutePosition)
+  while (o && !o->isLayoutView() &&
+         o->style()->position() != EPosition::kAbsolute)
     o = o->parent();
   // The LayoutView is absolute-positioned, but does not move.
   if (o->isLayoutView())
@@ -698,7 +707,8 @@ void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(
     LayoutUnit newLeft = computedValues.m_position;
     if (newLeft != box->logicalLeft())
       layoutScope.setChildNeedsLayout(child);
-  } else if (hasStaticBlockPosition) {
+  }
+  if (hasStaticBlockPosition) {
     LogicalExtentComputedValues computedValues;
     box->computeLogicalHeight(computedValues);
     LayoutUnit newTop = computedValues.m_position;
@@ -964,7 +974,7 @@ void LayoutBlock::setSelectionState(SelectionState state) {
 }
 
 TrackedLayoutBoxListHashSet* LayoutBlock::positionedObjectsInternal() const {
-  return gPositionedDescendantsMap ? gPositionedDescendantsMap->get(this)
+  return gPositionedDescendantsMap ? gPositionedDescendantsMap->at(this)
                                    : nullptr;
 }
 
@@ -989,12 +999,12 @@ void LayoutBlock::insertPositionedObject(LayoutBox* o) {
   if (!gPositionedDescendantsMap)
     gPositionedDescendantsMap = new TrackedDescendantsMap;
   TrackedLayoutBoxListHashSet* descendantSet =
-      gPositionedDescendantsMap->get(this);
+      gPositionedDescendantsMap->at(this);
   if (!descendantSet) {
     descendantSet = new TrackedLayoutBoxListHashSet;
     gPositionedDescendantsMap->set(this, WTF::wrapUnique(descendantSet));
   }
-  descendantSet->add(o);
+  descendantSet->insert(o);
 
   m_hasPositionedObjects = true;
 }
@@ -1008,11 +1018,11 @@ void LayoutBlock::removePositionedObject(LayoutBox* o) {
     return;
 
   TrackedLayoutBoxListHashSet* positionedDescendants =
-      gPositionedDescendantsMap->get(container);
+      gPositionedDescendantsMap->at(container);
   ASSERT(positionedDescendants && positionedDescendants->contains(o));
   positionedDescendants->remove(o);
   if (positionedDescendants->isEmpty()) {
-    gPositionedDescendantsMap->remove(container);
+    gPositionedDescendantsMap->erase(container);
     container->m_hasPositionedObjects = false;
   }
 }
@@ -1024,7 +1034,12 @@ PaintInvalidationReason LayoutBlock::invalidatePaintIfNeeded(
 
 PaintInvalidationReason LayoutBlock::invalidatePaintIfNeeded(
     const PaintInvalidatorContext& context) const {
-  return BlockPaintInvalidator(*this, context).invalidatePaintIfNeeded();
+  return BlockPaintInvalidator(*this).invalidatePaintIfNeeded(context);
+}
+
+void LayoutBlock::clearPreviousVisualRects() {
+  LayoutBox::clearPreviousVisualRects();
+  BlockPaintInvalidator(*this).clearPreviousVisualRects();
 }
 
 void LayoutBlock::removePositionedObjects(
@@ -1070,12 +1085,12 @@ void LayoutBlock::removePositionedObjects(
   }
 
   for (auto object : deadObjects) {
-    ASSERT(gPositionedContainerMap->get(object) == this);
+    ASSERT(gPositionedContainerMap->at(object) == this);
     positionedDescendants->remove(object);
-    gPositionedContainerMap->remove(object);
+    gPositionedContainerMap->erase(object);
   }
   if (positionedDescendants->isEmpty()) {
-    gPositionedDescendantsMap->remove(this);
+    gPositionedDescendantsMap->erase(this);
     m_hasPositionedObjects = false;
   }
 }
@@ -1093,12 +1108,12 @@ void LayoutBlock::addPercentHeightDescendant(LayoutBox* descendant) {
   if (!gPercentHeightDescendantsMap)
     gPercentHeightDescendantsMap = new TrackedDescendantsMap;
   TrackedLayoutBoxListHashSet* descendantSet =
-      gPercentHeightDescendantsMap->get(this);
+      gPercentHeightDescendantsMap->at(this);
   if (!descendantSet) {
     descendantSet = new TrackedLayoutBoxListHashSet;
     gPercentHeightDescendantsMap->set(this, WTF::wrapUnique(descendantSet));
   }
-  descendantSet->add(descendant);
+  descendantSet->insert(descendant);
 
   m_hasPercentHeightDescendants = true;
 }
@@ -1108,7 +1123,7 @@ void LayoutBlock::removePercentHeightDescendant(LayoutBox* descendant) {
     descendants->remove(descendant);
     descendant->setPercentHeightContainer(nullptr);
     if (descendants->isEmpty()) {
-      gPercentHeightDescendantsMap->remove(this);
+      gPercentHeightDescendantsMap->erase(this);
       m_hasPercentHeightDescendants = false;
     }
   }
@@ -1116,7 +1131,7 @@ void LayoutBlock::removePercentHeightDescendant(LayoutBox* descendant) {
 
 TrackedLayoutBoxListHashSet* LayoutBlock::percentHeightDescendantsInternal()
     const {
-  return gPercentHeightDescendantsMap ? gPercentHeightDescendantsMap->get(this)
+  return gPercentHeightDescendantsMap ? gPercentHeightDescendantsMap->at(this)
                                       : nullptr;
 }
 
@@ -1495,11 +1510,13 @@ void LayoutBlock::computeBlockPreferredLogicalWidths(
     if (child->isFloating() ||
         (child->isBox() && toLayoutBox(child)->avoidsFloats())) {
       LayoutUnit floatTotalWidth = floatLeftWidth + floatRightWidth;
-      if (childStyle->clear() & ClearLeft) {
+      if (childStyle->clear() == EClear::kBoth ||
+          childStyle->clear() == EClear::kLeft) {
         maxLogicalWidth = std::max(floatTotalWidth, maxLogicalWidth);
         floatLeftWidth = LayoutUnit();
       }
-      if (childStyle->clear() & ClearRight) {
+      if (childStyle->clear() == EClear::kBoth ||
+          childStyle->clear() == EClear::kRight) {
         maxLogicalWidth = std::max(floatTotalWidth, maxLogicalWidth);
         floatRightWidth = LayoutUnit();
       }
@@ -1840,17 +1857,12 @@ inline bool LayoutBlock::isInlineBoxWrapperActuallyChild() const {
          editingIgnoresContent(*node());
 }
 
-bool LayoutBlock::hasCursorCaret() const {
-  LocalFrame* frame = this->frame();
-  return frame->selection().caretLayoutObject() == this &&
-         frame->selection().hasEditableStyle();
+bool LayoutBlock::shouldPaintCursorCaret() const {
+  return frame()->selection().shouldPaintCaret(*this);
 }
 
-bool LayoutBlock::hasDragCaret() const {
-  LocalFrame* frame = this->frame();
-  DragCaretController& dragCaretController =
-      frame->page()->dragCaretController();
-  return dragCaretController.hasCaretIn(*this);
+bool LayoutBlock::shouldPaintDragCaret() const {
+  return frame()->page()->dragCaret().shouldPaintCaret(*this);
 }
 
 LayoutRect LayoutBlock::localCaretRect(InlineBox* inlineBox,
@@ -2050,7 +2062,7 @@ bool LayoutBlock::recalcPositionedDescendantsOverflowAfterStyleChange() {
       continue;
     LayoutBlock* block = toLayoutBlock(box);
     if (!block->recalcOverflowAfterStyleChange() ||
-        box->style()->position() == FixedPosition)
+        box->style()->position() == EPosition::kFixed)
       continue;
 
     childrenOverflowChanged = true;

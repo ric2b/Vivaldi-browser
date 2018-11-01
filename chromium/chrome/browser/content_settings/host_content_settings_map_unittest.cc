@@ -89,8 +89,7 @@ class TesterForType {
   }
 
   void SetPolicyDefault(ContentSetting setting) {
-    prefs_->SetManagedPref(policy_default_setting_,
-                           new base::FundamentalValue(setting));
+    prefs_->SetManagedPref(policy_default_setting_, new base::Value(setting));
   }
 
   void AddUserException(std::string exception,
@@ -476,18 +475,18 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
 
   GURL host_ending_with_dot("http://example.com./");
 
-  EXPECT_TRUE(cookie_settings->IsSettingCookieAllowed(
-      host_ending_with_dot, host_ending_with_dot));
+  EXPECT_TRUE(cookie_settings->IsCookieAccessAllowed(host_ending_with_dot,
+                                                     host_ending_with_dot));
   host_content_settings_map->SetContentSettingDefaultScope(
       host_ending_with_dot, GURL(), CONTENT_SETTINGS_TYPE_COOKIES,
       std::string(), CONTENT_SETTING_DEFAULT);
-  EXPECT_TRUE(cookie_settings->IsSettingCookieAllowed(
-      host_ending_with_dot, host_ending_with_dot));
+  EXPECT_TRUE(cookie_settings->IsCookieAccessAllowed(host_ending_with_dot,
+                                                     host_ending_with_dot));
   host_content_settings_map->SetContentSettingDefaultScope(
       host_ending_with_dot, GURL(), CONTENT_SETTINGS_TYPE_COOKIES,
       std::string(), CONTENT_SETTING_BLOCK);
-  EXPECT_FALSE(cookie_settings->IsSettingCookieAllowed(
-      host_ending_with_dot, host_ending_with_dot));
+  EXPECT_FALSE(cookie_settings->IsCookieAccessAllowed(host_ending_with_dot,
+                                                      host_ending_with_dot));
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
@@ -1044,7 +1043,7 @@ TEST_F(HostContentSettingsMapTest, ManagedDefaultContentSetting) {
 
   // Set managed-default-content-setting through the coresponding preferences.
   prefs->SetManagedPref(prefs::kManagedDefaultJavaScriptSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_BLOCK));
+                        new base::Value(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_JAVASCRIPT, NULL));
@@ -1058,7 +1057,7 @@ TEST_F(HostContentSettingsMapTest, ManagedDefaultContentSetting) {
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Set preference to manage the default-content-setting for Plugins.
   prefs->SetManagedPref(prefs::kManagedDefaultPluginsSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_BLOCK));
+                        new base::Value(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_PLUGINS, NULL));
@@ -1095,7 +1094,7 @@ TEST_F(HostContentSettingsMapTest,
 
   // Set managed-default-content-setting for content-settings-type JavaScript.
   prefs->SetManagedPref(prefs::kManagedDefaultJavaScriptSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_ALLOW));
+                        new base::Value(CONTENT_SETTING_ALLOW));
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
@@ -1132,7 +1131,7 @@ TEST_F(HostContentSettingsMapTest,
 
   // Set managed-default-content-settings-preferences.
   prefs->SetManagedPref(prefs::kManagedDefaultJavaScriptSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_BLOCK));
+                        new base::Value(CONTENT_SETTING_BLOCK));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
@@ -1162,7 +1161,7 @@ TEST_F(HostContentSettingsMapTest, OverwrittenDefaultContentSetting) {
 
   // Set preference to manage the default-content-setting for Cookies.
   prefs->SetManagedPref(prefs::kManagedDefaultCookiesSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_ALLOW));
+                        new base::Value(CONTENT_SETTING_ALLOW));
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_COOKIES, NULL));
@@ -1185,7 +1184,7 @@ TEST_F(HostContentSettingsMapTest, SettingDefaultContentSettingsWhenManaged) {
       profile.GetTestingPrefService();
 
   prefs->SetManagedPref(prefs::kManagedDefaultCookiesSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_ALLOW));
+                        new base::Value(CONTENT_SETTING_ALLOW));
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_COOKIES, NULL));

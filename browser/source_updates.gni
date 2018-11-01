@@ -4,6 +4,10 @@ post_process_template("//chrome/browser:browser") {
     "//vivaldi/browser/menus/vivaldi_menu_enums.h",
     "//vivaldi/browser/menus/vivaldi_menus.cpp",
     "//vivaldi/browser/menus/vivaldi_menus.h",
+    "//vivaldi/browser/shell_integration/vivaldi_shell_integration.h",
+    "//vivaldi/browser/shell_integration/vivaldi_shell_integration_linux.cc",
+    "//vivaldi/browser/shell_integration/vivaldi_shell_integration_mac.mm",
+    "//vivaldi/browser/shell_integration/vivaldi_shell_integration_win.cc",
   ]
   if (is_mac) {
     sources += [

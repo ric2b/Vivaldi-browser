@@ -7,23 +7,40 @@
 
 #import <UIKit/UIKit.h>
 
+#include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 #include "ios/web/public/payments/payment_request.h"
 
-namespace autofill {
-class AutofillProfile;
-class CreditCard;
-}
+extern NSString* const kPaymentRequestCollectionViewID;
 
-extern NSString* const kPaymentRequestCollectionViewId;
+@class PaymentRequestViewController;
 
+// Delegate protocol for PaymentRequestViewController.
 @protocol PaymentRequestViewControllerDelegate<NSObject>
-- (void)paymentRequestViewControllerDidCancel;
-- (void)paymentRequestViewControllerDidConfirm;
-- (void)paymentRequestViewControllerDisplayPaymentItems;
-- (void)paymentRequestViewControllerSelectShippingAddress;
-- (void)paymentRequestViewControllerSelectShippingOption;
-- (void)paymentRequestViewControllerSelectPaymentMethod;
+
+// Notifies the delegate that the user has canceled the payment request.
+- (void)paymentRequestViewControllerDidCancel:
+    (PaymentRequestViewController*)controller;
+
+// Notifies the delegate that the user has confirmed the payment request.
+- (void)paymentRequestViewControllerDidConfirm:
+    (PaymentRequestViewController*)controller;
+
+// Notifies the delegate that the user has selected the payment summary item.
+- (void)paymentRequestViewControllerDidSelectPaymentSummaryItem:
+    (PaymentRequestViewController*)controller;
+
+// Notifies the delegate that the user has selected the shipping address item.
+- (void)paymentRequestViewControllerDidSelectShippingAddressItem:
+    (PaymentRequestViewController*)controller;
+
+// Notifies the delegate that the user has selected the shipping option item.
+- (void)paymentRequestViewControllerDidSelectShippingOptionItem:
+    (PaymentRequestViewController*)controller;
+
+// Notifies the delegate that the user has selected the payment method item.
+- (void)paymentRequestViewControllerDidSelectPaymentMethodItem:
+    (PaymentRequestViewController*)controller;
 
 @end
 
@@ -31,12 +48,8 @@ extern NSString* const kPaymentRequestCollectionViewId;
 // the user and communicating their choices to the supplied delegate.
 @interface PaymentRequestViewController : CollectionViewController
 
-// The PaymentRequest object as provided by the page invoking the Payment
-// Request API.
-@property(nonatomic, assign) web::PaymentRequest paymentRequest;
-
 // The favicon of the page invoking the Payment Request API.
-@property(nonatomic, retain) UIImage* pageFavicon;
+@property(nonatomic, strong) UIImage* pageFavicon;
 
 // The title of the page invoking the Payment Request API.
 @property(nonatomic, copy) NSString* pageTitle;
@@ -44,27 +57,33 @@ extern NSString* const kPaymentRequestCollectionViewId;
 // The host of the page invoking the Payment Request API.
 @property(nonatomic, copy) NSString* pageHost;
 
-// The currently selected and displayed shipping address, if any.
-@property(nonatomic, assign) autofill::AutofillProfile* selectedShippingAddress;
-
-// The currently selected and displayed shipping option, if any.
-@property(nonatomic, assign) web::PaymentShippingOption* selectedShippingOption;
-
-// The currently selected and displayed payment method, if any.
-@property(nonatomic, assign) autofill::CreditCard* selectedPaymentMethod;
+// Whether or not the view is in a pending state.
+@property(nonatomic, assign, getter=isPending) BOOL pending;
 
 // The delegate to be notified when the user confirms or cancels the request.
 @property(nonatomic, weak) id<PaymentRequestViewControllerDelegate> delegate;
 
-// Sets the selected shipping address and updates the UI.
-- (void)updateSelectedShippingAddress:
-    (autofill::AutofillProfile*)shippingAddress;
+// Updates the payment summary section UI. If |totalValueChanged| is YES,
+// adds a label to the total amount item indicating that the total amount was
+// updated.
+- (void)updatePaymentSummaryWithTotalValueChanged:(BOOL)totalValueChanged;
 
-// Sets the selected shipping option and updates the UI.
-- (void)updateSelectedShippingOption:
-    (web::PaymentShippingOption*)shippingOption;
+// Updates the selected shipping address.
+- (void)updateSelectedShippingAddressUI;
 
-- (instancetype)init NS_DESIGNATED_INITIALIZER;
+// Updates the selected shipping option.
+- (void)updateSelectedShippingOptionUI;
+
+// Updates the selected payment method.
+- (void)updateSelectedPaymentMethodUI;
+
+// Initializes this object with an instance of PaymentRequest which owns an
+// instance of web::PaymentRequest as provided by the page invoking the Payment
+// Request API. This object will not take ownership of |paymentRequest|.
+- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;

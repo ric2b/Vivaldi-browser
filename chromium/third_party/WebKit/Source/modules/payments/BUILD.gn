@@ -12,8 +12,8 @@ blink_modules_sources("payments") {
     "PaymentAddress.h",
     "PaymentAppManager.cpp",
     "PaymentAppManager.h",
-    "PaymentAppRequestDataConversion.cpp",
-    "PaymentAppRequestDataConversion.h",
+    "PaymentAppRequestConversion.cpp",
+    "PaymentAppRequestConversion.h",
     "PaymentAppServiceWorkerGlobalScope.h",
     "PaymentAppServiceWorkerRegistration.cpp",
     "PaymentAppServiceWorkerRegistration.h",
@@ -31,7 +31,7 @@ blink_modules_sources("payments") {
     "PaymentsValidators.h",
   ]
   deps = [
-    "//components/payments:payment_app_blink",
-    "//components/payments:payment_request_blink",
+    "//components/payments/content:payment_app_blink",
+    "//components/payments/content:payment_request_blink",
   ]
 }

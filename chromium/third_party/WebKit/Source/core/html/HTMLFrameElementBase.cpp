@@ -31,12 +31,12 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 
@@ -57,7 +57,7 @@ bool HTMLFrameElementBase::isURLAllowed() const {
 
   const KURL& completeURL = document().completeURL(m_URL);
 
-  if (contentFrame() && protocolIsJavaScript(completeURL)) {
+  if (contentFrame() && completeURL.protocolIsJavaScript()) {
     // Check if the caller can execute script in the context of the content
     // frame. NB: This check can be invoked without any JS on the stack for some
     // parser operations. In such case, we use the origin of the frame element's
@@ -71,11 +71,6 @@ bool HTMLFrameElementBase::isURLAllowed() const {
             BindingSecurity::ErrorReportOption::Report))
       return false;
   }
-
-  LocalFrame* parentFrame = document().frame();
-  if (parentFrame)
-    return parentFrame->isURLAllowed(completeURL);
-
   return true;
 }
 
@@ -93,7 +88,7 @@ void HTMLFrameElementBase::openURL(bool replaceCurrentItem) {
   // Support for <frame src="javascript:string">
   KURL scriptURL;
   KURL url = document().completeURL(m_URL);
-  if (protocolIsJavaScript(m_URL)) {
+  if (url.protocolIsJavaScript()) {
     // We'll set/execute |scriptURL| iff CSP allows us to execute inline
     // JavaScript. If CSP blocks inline JavaScript, then exit early if
     // we're trying to execute script in an existing document. If we're
@@ -102,7 +97,7 @@ void HTMLFrameElementBase::openURL(bool replaceCurrentItem) {
     // so that the frame is populated with something reasonable.
     if (ContentSecurityPolicy::shouldBypassMainWorld(&document()) ||
         document().contentSecurityPolicy()->allowJavaScriptURLs(
-            this, document().url(), OrdinalNumber::first())) {
+            this, url.getString(), document().url(), OrdinalNumber::first())) {
       scriptURL = url;
     } else {
       if (contentFrame())

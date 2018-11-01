@@ -265,6 +265,7 @@ class HashTableConstIterator final {
                                  Allocator>
       const_iterator;
   typedef Value ValueType;
+  using value_type = ValueType;
   typedef typename Traits::IteratorConstGetType GetType;
   typedef const ValueType* PointerType;
 
@@ -799,12 +800,12 @@ class HashTable final
     DCHECK_EQ(mods, m_modifications);
   }
 #else
-  void enterAccessForbiddenScope() {}
-  void leaveAccessForbiddenScope() {}
-  bool accessForbidden() const { return false; }
-  int64_t modifications() const { return 0; }
-  void registerModification() {}
-  void checkModifications(int64_t mods) const {}
+  ALWAYS_INLINE void enterAccessForbiddenScope() {}
+  ALWAYS_INLINE void leaveAccessForbiddenScope() {}
+  ALWAYS_INLINE bool accessForbidden() const { return false; }
+  ALWAYS_INLINE int64_t modifications() const { return 0; }
+  ALWAYS_INLINE void registerModification() {}
+  ALWAYS_INLINE void checkModifications(int64_t mods) const {}
 #endif
 
  private:
@@ -1826,12 +1827,13 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
       m_stats(HashTableStatsPtr<Allocator>::copy(other.m_stats))
 #endif
 {
+  if (other.size())
+    reserveCapacityForSize(other.size());
   // Copy the hash table the dumb way, by adding each element to the new
   // table.  It might be more efficient to copy the table slots, but it's not
   // clear that efficiency is needed.
-  const_iterator end = other.end();
-  for (const_iterator it = other.begin(); it != end; ++it)
-    add(*it);
+  for (const auto& element : other)
+    add(element);
 }
 
 template <typename Key,
@@ -2089,7 +2091,7 @@ void HashTable<Key,
     // registerWeakMembers is called multiple times (in rare
     // cases). However, it shouldn't cause any issue.
     Allocator::registerWeakMembers(
-        visitor, this, m_table,
+        visitor, this,
         WeakProcessingHashTableHelper<Traits::weakHandlingFlag, Key, Value,
                                       Extractor, HashFunctions, Traits,
                                       KeyTraits, Allocator>::process);
@@ -2268,7 +2270,7 @@ inline void removeAll(Collection1& collection, const Collection2& toBeRemoved) {
   typedef typename Collection2::const_iterator CollectionIterator;
   CollectionIterator end(toBeRemoved.end());
   for (CollectionIterator it(toBeRemoved.begin()); it != end; ++it)
-    collection.remove(*it);
+    collection.erase(*it);
 }
 
 }  // namespace WTF

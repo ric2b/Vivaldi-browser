@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Afișează o copie salvată (adică despre care se știe că este învechită) a acestei pagini.</translation>
 <translation id="1559528461873125649">Nu există un astfel de fișier sau director</translation>
 <translation id="1710259589646384581">Sistem de operare</translation>
-<translation id="1838667051080421715">Se afișează sursa unei pagini web.</translation>
 <translation id="194030505837763158">Accesați <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Ați dorit să scrieți <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Mai puține</translation>
 <translation id="2166378884831602661">Acest site nu poate oferi o conexiune sigură</translation>
 <translation id="2292556288342944218">Accesul la internet este blocat</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a trimis un răspuns nevalid.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">Accesul la fișier a fost refuzat</translation>
 <translation id="2705137772291741111">Copia salvată (în memoria cache) a acestui site nu a putut fi citită.</translation>
 <translation id="2784949926578158345">Conexiunea a fost resetată.</translation>
-<translation id="284702764277384724">Se pare că certificatul de server pentru <ph name="HOST_NAME" /> este un fals.</translation>
 <translation id="2909946352844186028">A fost detectată o schimbare a rețelei.</translation>
 <translation id="3005723025932146533">Afișați o copie salvată</translation>
 <translation id="3109728660330352905">Nu ești autorizat(ă) să vezi această pagină.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS este serviciul de rețea care translatează numele unui site în adresa sa de internet.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> nu a acceptat certificatul de conectare sau un astfel de certificat nu a fost oferit.</translation>
 <translation id="4522570452068850558">Detalii</translation>
-<translation id="4670097147947922288">Se afișează pagina extensiei.</translation>
 <translation id="4708268264240856090">Conexiunea a fost întreruptă</translation>
 <translation id="4744603770635761495">Cale executabilă</translation>
 <translation id="4764776831041365478">Pagina web de la <ph name="URL" /> poate fi temporar nefuncțională sau a fost mutată definitiv la o nouă adresă web.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">Pagina nu funcționează</translation>
 <translation id="5869405914158311789">Acest site nu poate fi accesat</translation>
 <translation id="5990559369517809815">Solicitările trimise la server au fost blocate de o extensie.</translation>
-<translation id="6042308850641462728">Mai multe</translation>
 <translation id="6146055958333702838">Verifică toate cablurile și repornește routerele, modemurile sau alte
     dispozitive de rețea pe care le folosești.</translation>
 <translation id="6165508094623778733">Află mai multe</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">Încercați să dezactivați anticiparea rețelei</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> a refuzat conexiunea.</translation>
 <translation id="6711464428925977395">A apărut o problemă la serverul proxy sau adresa nu este corectă.</translation>
-<translation id="6830600606572693159">Pagina web de la <ph name="URL" /> nu este disponibilă momentan. Poate fi supraîncărcată sau dezactivată pentru lucrări de întreținere.</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nu respectă standardele de securitate.</translation>
-<translation id="7269802741830436641">Această pagină web are o buclă de redirecționare</translation>
 <translation id="7353601530677266744">Linie de comandă</translation>
 <translation id="7419106976560586862">Calea profilului</translation>
 <translation id="7518003948725431193">Nu a fost găsită nicio pagină web pentru adresa: <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187">Momentan, <ph name="HOST_NAME" /> nu poate procesa această solicitare.</translation>
 <translation id="7716424297397655342">Acest site nu poate fi încărcat din memoria cache</translation>
 <translation id="7758069387465995638">Este posibil ca firewallul sau software-ul antivirus să fi blocat conexiunea.</translation>
-<translation id="778579833039460630">Nu s-au primit date</translation>
 <translation id="7951415247503192394">(32 de biți)</translation>
 <translation id="8134994873729925007"><ph name="BEGIN_ABBR" />Adresa DNS<ph name="END_ABBR" /> pentru serverul <ph name="HOST_NAME" /> nu a putut fi găsită.</translation>
 <translation id="8142868475871995937">Accesați &lt;strong&gt;vivaldi://policy&lt;/strong&gt; pentru a vedea adresele URL introduse pe lista neagră și alte politici impuse de către administratorul de sistem.</translation>

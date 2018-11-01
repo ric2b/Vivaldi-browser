@@ -79,8 +79,8 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/startup_metric_utils/common/startup_metric.mojom.h"
-#include "components/subresource_filter/content/renderer/ruleset_dealer.h"
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
+#include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
 #include "components/task_scheduler_util/renderer/initialization.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
@@ -104,13 +104,13 @@
 #include "printing/features/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebCache.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -240,8 +240,8 @@ void AppendParams(const std::vector<base::string16>& additional_names,
   }
 
   for (size_t i = 0; i < additional_names.size(); ++i) {
-    names[existing_size + i] = additional_names[i];
-    values[existing_size + i] = additional_values[i];
+    names[existing_size + i] = WebString::fromUTF16(additional_names[i]);
+    values[existing_size + i] = WebString::fromUTF16(additional_values[i]);
   }
 
   existing_names->swap(names);
@@ -368,6 +368,10 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   if (base::FeatureList::IsEnabled(features::kModuleDatabase)) {
     thread->GetRemoteInterfaces()->GetInterface(&module_event_sink_);
 
+    // Rebind the ModuleEventSink so that it can be accessed on the IO thread.
+    module_event_sink_.Bind(module_event_sink_.PassInterface(),
+                            thread->GetIOTaskRunner());
+
     // It is safe to pass an unretained pointer to |module_event_sink_|, as it
     // is owned by the process singleton ChromeContentRendererClient, which is
     // leaked.
@@ -399,7 +403,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #endif
   prerender_dispatcher_.reset(new prerender::PrerenderDispatcher());
   subresource_filter_ruleset_dealer_.reset(
-      new subresource_filter::RulesetDealer());
+      new subresource_filter::UnverifiedRulesetDealer());
 #if BUILDFLAG(ENABLE_WEBRTC)
   webrtc_logging_message_filter_ =
       new WebRtcLoggingMessageFilter(thread->GetIOTaskRunner());
@@ -430,7 +434,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   // chrome-search: and chrome-distiller: pages  should not be accessible by
   // normal content, and should also be unable to script anything but themselves
   // (to help limit the damage that a corrupt page could cause).
-  WebString chrome_search_scheme(ASCIIToUTF16(chrome::kChromeSearchScheme));
+  WebString chrome_search_scheme(
+      WebString::fromASCII(chrome::kChromeSearchScheme));
 
   // The Instant process can only display the content but not read it.  Other
   // processes can't display it or read it.
@@ -438,7 +443,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(chrome_search_scheme);
 
   WebString dom_distiller_scheme(
-      ASCIIToUTF16(dom_distiller::kDomDistillerScheme));
+      WebString::fromASCII(dom_distiller::kDomDistillerScheme));
   // TODO(nyquist): Add test to ensure this happens when the flag is set.
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(dom_distiller_scheme);
 
@@ -464,7 +469,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 
   for (auto& scheme : GetSchemesBypassingSecureContextCheckWhitelist()) {
     WebSecurityPolicy::addSchemeToBypassSecureContextWhitelist(
-        WebString::fromUTF8(scheme));
+        WebString::fromASCII(scheme));
   }
 
 #if defined(OS_CHROMEOS)
@@ -516,17 +521,14 @@ void ChromeContentRendererClient::RenderFrameCreated(
 
   new NetErrorHelper(render_frame);
 
-  if (render_frame->IsMainFrame()) {
-    // Only attach MetricsRenderFrameObserver to the main frame, since
-    // we only want to log page load metrics for the main frame.
-    new page_load_metrics::MetricsRenderFrameObserver(render_frame);
-  } else {
+  new page_load_metrics::MetricsRenderFrameObserver(render_frame);
+
+  if (!render_frame->IsMainFrame() &&
+      prerender::PrerenderHelper::IsPrerendering(
+          render_frame->GetRenderView()->GetMainRenderFrame())) {
     // Avoid any race conditions from having the browser tell subframes that
     // they're prerendering.
-    if (prerender::PrerenderHelper::IsPrerendering(
-            render_frame->GetRenderView()->GetMainRenderFrame())) {
-      new prerender::PrerenderHelper(render_frame);
-    }
+    new prerender::PrerenderHelper(render_frame);
   }
 
   // Set up a mojo service to test if this page is a distiller page.
@@ -550,7 +552,8 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new AutofillAgent(render_frame, password_autofill_agent,
                     password_generation_agent);
 
-  // There is no render thread, thus no RulesetDealer in ChromeRenderViewTests.
+  // There is no render thread, thus no UnverifiedRulesetDealer in
+  // ChromeRenderViewTests.
   if (subresource_filter_ruleset_dealer_) {
     new subresource_filter::SubresourceFilterAgent(
         render_frame, subresource_filter_ruleset_dealer_.get());
@@ -988,14 +991,14 @@ bool ChromeContentRendererClient::IsNaClAllowed(
     // and component extensions.  Also allow dev interfaces when --enable-nacl
     // is set, but do not allow --enable-nacl to provide dev interfaces to
     // webstore installed and other normally allowed URLs.
-    WebString dev_attribute = WebString::fromUTF8("@dev");
+    std::string dev_attribute("@dev");
     if (is_extension_unrestricted ||
         (is_nacl_unrestricted && !is_nacl_allowed_by_location)) {
       // Add the special '@dev' attribute.
       std::vector<base::string16> param_names;
       std::vector<base::string16> param_values;
-      param_names.push_back(dev_attribute);
-      param_values.push_back(WebString());
+      param_names.push_back(base::ASCIIToUTF16(dev_attribute));
+      param_values.push_back(base::string16());
       AppendParams(
           param_names,
           param_values,
@@ -1005,8 +1008,10 @@ bool ChromeContentRendererClient::IsNaClAllowed(
       // If the params somehow contain '@dev', remove it.
       size_t attribute_count = params->attributeNames.size();
       for (size_t i = 0; i < attribute_count; ++i) {
-        if (params->attributeNames[i].equals(dev_attribute))
+        if (params->attributeNames[i].equals(dev_attribute.data(),
+                                             dev_attribute.length())) {
           params->attributeNames[i] = WebString();
+        }
       }
     }
   }
@@ -1048,8 +1053,7 @@ void ChromeContentRendererClient::GetNavigationErrorStrings(
     base::string16* error_description) {
   const GURL failed_url = error.unreachableURL;
 
-  bool is_post = base::EqualsASCII(
-      base::StringPiece16(failed_request.httpMethod()), "POST");
+  bool is_post = failed_request.httpMethod().ascii() == "POST";
   bool is_ignoring_cache =
       failed_request.getCachePolicy() == WebCachePolicy::BypassingCache;
   if (error_html) {
@@ -1378,7 +1382,7 @@ void ChromeContentRendererClient::AddImageContextMenuProperties(
     const WebURLResponse& response,
     std::map<std::string, std::string>* properties) {
   DCHECK(properties);
-  WebString header_key(ASCIIToUTF16(
+  WebString header_key(WebString::fromASCII(
       data_reduction_proxy::chrome_proxy_content_transform_header()));
   if (!response.httpHeaderField(header_key).isNull() &&
       data_reduction_proxy::IsEmptyImagePreview(
@@ -1443,9 +1447,6 @@ bool ChromeContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
 }
 
 GURL ChromeContentRendererClient::OverrideFlashEmbedWithHTML(const GURL& url) {
-  if (!base::FeatureList::IsEnabled(features::kOverrideYouTubeFlashEmbed))
-    return GURL();
-
   if (!url.is_valid())
     return GURL();
 

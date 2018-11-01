@@ -28,7 +28,6 @@
 
 #include "bindings/core/v8/V8DOMConfiguration.h"
 
-#include "bindings/core/v8/GeneratedCodeHelper.h"  // just for DCHECK
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8PerContextData.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -56,18 +55,20 @@ void installAttributeInternal(
       v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data));
 
   DCHECK(attribute.propertyLocationConfiguration);
-  if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInstance)
+  if (attribute.propertyLocationConfiguration &
+      V8DOMConfiguration::OnInstance) {
     instanceTemplate->SetNativeDataProperty(
         name, getter, setter, data,
         static_cast<v8::PropertyAttribute>(attribute.attribute),
-        v8::Local<v8::AccessorSignature>(),
-        static_cast<v8::AccessControl>(attribute.settings));
-  if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnPrototype)
+        v8::Local<v8::AccessorSignature>(), v8::DEFAULT);
+  }
+  if (attribute.propertyLocationConfiguration &
+      V8DOMConfiguration::OnPrototype) {
     prototypeTemplate->SetNativeDataProperty(
         name, getter, setter, data,
         static_cast<v8::PropertyAttribute>(attribute.attribute),
-        v8::Local<v8::AccessorSignature>(),
-        static_cast<v8::AccessControl>(attribute.settings));
+        v8::Local<v8::AccessorSignature>(), v8::DEFAULT);
+  }
   if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInterface)
     NOTREACHED();
 }
@@ -122,7 +123,6 @@ void installLazyDataAttributeInternal(
   DCHECK(!attribute.setterForMainWorld);
   v8::Local<v8::Value> data =
       v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data));
-  DCHECK(static_cast<v8::AccessControl>(attribute.settings) == v8::DEFAULT);
 
   DCHECK(attribute.propertyLocationConfiguration);
   if (attribute.propertyLocationConfiguration &
@@ -241,17 +241,18 @@ void installAccessorInternal(
     v8::Local<FunctionOrTemplate> setter =
         createAccessorFunctionOrTemplate<FunctionOrTemplate>(
             isolate, setterCallback, nullptr, data, signature, 1);
-    if (accessor.propertyLocationConfiguration & V8DOMConfiguration::OnInstance)
+    if (accessor.propertyLocationConfiguration &
+        V8DOMConfiguration::OnInstance) {
       instanceOrTemplate->SetAccessorProperty(
           name, getter, setter,
-          static_cast<v8::PropertyAttribute>(accessor.attribute),
-          static_cast<v8::AccessControl>(accessor.settings));
+          static_cast<v8::PropertyAttribute>(accessor.attribute), v8::DEFAULT);
+    }
     if (accessor.propertyLocationConfiguration &
-        V8DOMConfiguration::OnPrototype)
+        V8DOMConfiguration::OnPrototype) {
       prototypeOrTemplate->SetAccessorProperty(
           name, getter, setter,
-          static_cast<v8::PropertyAttribute>(accessor.attribute),
-          static_cast<v8::AccessControl>(accessor.settings));
+          static_cast<v8::PropertyAttribute>(accessor.attribute), v8::DEFAULT);
+    }
   }
   if (accessor.propertyLocationConfiguration &
       V8DOMConfiguration::OnInterface) {
@@ -268,8 +269,7 @@ void installAccessorInternal(
             1);
     interfaceOrTemplate->SetAccessorProperty(
         name, getter, setter,
-        static_cast<v8::PropertyAttribute>(accessor.attribute),
-        static_cast<v8::AccessControl>(accessor.settings));
+        static_cast<v8::PropertyAttribute>(accessor.attribute), v8::DEFAULT);
   }
 }
 
@@ -348,6 +348,8 @@ void installMethodInternal(v8::Isolate* isolate,
         v8::FunctionTemplate::New(isolate, callback, v8::Local<v8::Value>(),
                                   signature, method.length);
     functionTemplate->RemovePrototype();
+    if (method.accessCheckConfiguration == V8DOMConfiguration::CheckAccess)
+      functionTemplate->SetAcceptAnyReceiver(false);
     if (method.propertyLocationConfiguration & V8DOMConfiguration::OnInstance)
       instanceTemplate->Set(
           name, functionTemplate,
@@ -358,13 +360,15 @@ void installMethodInternal(v8::Isolate* isolate,
           static_cast<v8::PropertyAttribute>(method.attribute));
   }
   if (method.propertyLocationConfiguration & V8DOMConfiguration::OnInterface) {
-    // Operations installed on the interface object must be static
-    // operations, so no need to specify a signature, i.e. no need to do
-    // type check against a holder.
+    // Operations installed on the interface object must be static methods, so
+    // no need to specify a signature, i.e. no need to do type check against a
+    // holder.
     v8::Local<v8::FunctionTemplate> functionTemplate =
         v8::FunctionTemplate::New(isolate, callback, v8::Local<v8::Value>(),
                                   v8::Local<v8::Signature>(), method.length);
     functionTemplate->RemovePrototype();
+    // Similarly, there is no need to do an access check for static methods, as
+    // there is no holder to check against.
     interfaceTemplate->Set(
         name, functionTemplate,
         static_cast<v8::PropertyAttribute>(method.attribute));
@@ -615,12 +619,24 @@ void V8DOMConfiguration::initializeDOMInterfaceTemplate(
   v8::Local<v8::ObjectTemplate> prototypeTemplate =
       interfaceTemplate->PrototypeTemplate();
   instanceTemplate->SetInternalFieldCount(v8InternalFieldCount);
-  // TODO(yukishiino): We should set the class string to the platform object
-  // (|instanceTemplate|), too.  The reason that we don't set it is that
-  // it prevents minor GC to collect unreachable DOM objects (a layout test
-  // fast/dom/minor-dom-gc.html fails if we set the class string).
-  // See also http://heycam.github.io/webidl/#es-platform-objects
+
+  // We intentionally don't set the class string to the platform object
+  // (|instanceTemplate|), and set the class string "InterfaceName", without
+  // "Prototype", to the prototype object (|prototypeTemplate|) despite a fact
+  // that the current WebIDL spec (as of Feb 2017) requires to set the class
+  // string "InterfaceName" for the platform objects and
+  // "InterfaceNamePrototype" for the interface prototype object, because we
+  // think it's more consistent with ECMAScript 2016.
+  // See also https://crbug.com/643712
+  // https://heycam.github.io/webidl/#es-platform-objects
+  // https://heycam.github.io/webidl/#interface-prototype-object
+  //
+  // Note that V8 minor GC does not collect an object which has an own property.
+  // So, if we set the class string to the platform object as an own property,
+  // it prevents V8 minor GC to collect the object (V8 minor GC only collects
+  // an empty object).  If set, a layout test fast/dom/minor-dom-gc.html fails.
   setClassString(isolate, prototypeTemplate, interfaceName);
+
   if (!parentInterfaceTemplate.IsEmpty()) {
     interfaceTemplate->Inherit(parentInterfaceTemplate);
     // Marks the prototype object as one of native-backed objects.

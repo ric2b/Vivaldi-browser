@@ -45,6 +45,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
+#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/input_messages.h"
@@ -55,11 +56,11 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/overscroll_configuration.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "media/base/video_frame.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -111,6 +112,10 @@
 #include "ui/base/win/osk_display_observer.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/gdi_util.h"
+#endif
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
+#include "content/browser/accessibility/browser_accessibility_auralinux.h"
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -366,8 +371,8 @@ class RenderWidgetHostViewAura::WindowAncestorObserver
 
 bool IsMus() {
   return aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS &&
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kUseMusInRenderer);
+         !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kNoUseMusInRenderer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -640,6 +645,11 @@ gfx::NativeViewAccessible RenderWidgetHostViewAura::GetNativeViewAccessible() {
       host_->GetOrCreateRootBrowserAccessibilityManager();
   if (manager)
     return ToBrowserAccessibilityWin(manager->GetRoot());
+#elif defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
+  BrowserAccessibilityManager* manager =
+      host_->GetOrCreateRootBrowserAccessibilityManager();
+  if (manager)
+    return ToBrowserAccessibilityAuraLinux(manager->GetRoot())->GetAtkObject();
 #endif
 
   NOTIMPLEMENTED();
@@ -743,8 +753,9 @@ bool RenderWidgetHostViewAura::HasFocus() const {
 }
 
 bool RenderWidgetHostViewAura::IsSurfaceAvailableForCopy() const {
-  return delegated_frame_host_ ? delegated_frame_host_->CanCopyToBitmap()
-                               : false;
+  if (!delegated_frame_host_)
+    return false;
+  return delegated_frame_host_->CanCopyFromCompositingSurface();
 }
 
 bool RenderWidgetHostViewAura::IsShowing() {
@@ -856,30 +867,29 @@ gfx::Size RenderWidgetHostViewAura::GetRequestedRendererSize() const {
              : RenderWidgetHostViewBase::GetRequestedRendererSize();
 }
 
-void RenderWidgetHostViewAura::CopyFromCompositingSurface(
+void RenderWidgetHostViewAura::CopyFromSurface(
     const gfx::Rect& src_subrect,
     const gfx::Size& dst_size,
     const ReadbackRequestCallback& callback,
     const SkColorType preferred_color_type) {
-  if (!delegated_frame_host_)
+  if (!IsSurfaceAvailableForCopy()) {
+    callback.Run(SkBitmap(), READBACK_SURFACE_UNAVAILABLE);
     return;
+  }
   delegated_frame_host_->CopyFromCompositingSurface(
       src_subrect, dst_size, callback, preferred_color_type);
 }
 
-void RenderWidgetHostViewAura::CopyFromCompositingSurfaceToVideoFrame(
+void RenderWidgetHostViewAura::CopyFromSurfaceToVideoFrame(
     const gfx::Rect& src_subrect,
-    const scoped_refptr<media::VideoFrame>& target,
+    scoped_refptr<media::VideoFrame> target,
     const base::Callback<void(const gfx::Rect&, bool)>& callback) {
-  if (!delegated_frame_host_)
+  if (!IsSurfaceAvailableForCopy()) {
+    callback.Run(gfx::Rect(), false);
     return;
+  }
   delegated_frame_host_->CopyFromCompositingSurfaceToVideoFrame(
-      src_subrect, target, callback);
-}
-
-bool RenderWidgetHostViewAura::CanCopyToVideoFrame() const {
-  return delegated_frame_host_ ? delegated_frame_host_->CanCopyToVideoFrame()
-                               : false;
+      src_subrect, std::move(target), callback);
 }
 
 void RenderWidgetHostViewAura::BeginFrameSubscription(
@@ -948,8 +958,8 @@ void RenderWidgetHostViewAura::OnSwapCompositorFrame(
     delegated_frame_host_->SwapDelegatedFrame(compositor_frame_sink_id,
                                               std::move(frame));
   }
-  SelectionUpdated(selection.is_editable, selection.is_empty_text_form_control,
-                   selection.start, selection.end);
+  selection_controller_->OnSelectionBoundsChanged(selection.start,
+                                                  selection.end);
 }
 
 void RenderWidgetHostViewAura::ClearCompositorFrame() {
@@ -1356,8 +1366,8 @@ bool RenderWidgetHostViewAura::GetTextRange(gfx::Range* range) const {
   if (!selection)
     return false;
 
-  range->set_start(selection->offset);
-  range->set_end(selection->offset + selection->text.length());
+  range->set_start(selection->offset());
+  range->set_end(selection->offset() + selection->text().length());
   return true;
 }
 
@@ -1377,8 +1387,8 @@ bool RenderWidgetHostViewAura::GetSelectionRange(gfx::Range* range) const {
   if (!selection)
     return false;
 
-  range->set_start(selection->range.start());
-  range->set_end(selection->range.end());
+  range->set_start(selection->range().start());
+  range->set_end(selection->range().end());
   return true;
 }
 
@@ -1405,8 +1415,8 @@ bool RenderWidgetHostViewAura::GetTextFromRange(
   if (!selection)
     return false;
 
-  gfx::Range selection_text_range(selection->offset,
-                                  selection->offset + selection->text.length());
+  gfx::Range selection_text_range(
+      selection->offset(), selection->offset() + selection->text().length());
 
   if (!selection_text_range.Contains(range)) {
     text->clear();
@@ -1414,10 +1424,10 @@ bool RenderWidgetHostViewAura::GetTextFromRange(
   }
   if (selection_text_range.EqualsIgnoringDirection(range)) {
     // Avoid calling substr whose performance is low.
-    *text = selection->text;
+    *text = selection->text();
   } else {
-    *text = selection->text.substr(range.GetMin() - selection->offset,
-                                   range.length());
+    *text = selection->text().substr(range.GetMin() - selection->offset(),
+                                     range.length());
   }
   return true;
 }
@@ -1427,7 +1437,7 @@ void RenderWidgetHostViewAura::OnInputMethodChanged() {
   if (!host_)
     return;
 
-  // TODO(suzhe): implement the newly added “locale” property of HTML DOM
+  // TODO(suzhe): implement the newly added locale property of HTML DOM
   // TextEvent.
 }
 
@@ -1615,6 +1625,15 @@ void RenderWidgetHostViewAura::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
+#if defined(OS_WIN)
+  if (event->type() == ui::ET_MOUSE_MOVED) {
+    if (event->location() == last_mouse_move_location_) {
+      event->SetHandled();
+      return;
+    }
+    last_mouse_move_location_ = event->location();
+  }
+#endif
   event_handler_->OnMouseEvent(event);
 }
 
@@ -1932,15 +1951,9 @@ void RenderWidgetHostViewAura::CreateDelegatedFrameHostClient() {
   if (IsMus())
     return;
 
-  // GuestViews have two RenderWidgetHostViews and so we need to make sure
-  // we don't have FrameSinkId collisions.
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   cc::FrameSinkId frame_sink_id =
-      is_guest_view_hack_
-          ? factory->GetContextFactoryPrivate()->AllocateFrameSinkId()
-          : cc::FrameSinkId(
-                base::checked_cast<uint32_t>(host_->GetProcess()->GetID()),
-                base::checked_cast<uint32_t>(host_->GetRoutingID()));
+      host_->AllocateFrameSinkId(is_guest_view_hack_);
+
   // Tests may set |delegated_frame_host_client_|.
   if (!delegated_frame_host_client_) {
     delegated_frame_host_client_ =
@@ -2265,16 +2278,6 @@ void RenderWidgetHostViewAura::ForwardKeyboardEvent(
   target_host->ForwardKeyboardEvent(event);
 }
 
-void RenderWidgetHostViewAura::SelectionUpdated(
-    bool is_editable,
-    bool is_empty_text_form_control,
-    const gfx::SelectionBound& start,
-    const gfx::SelectionBound& end) {
-  selection_controller_->OnSelectionEditable(is_editable);
-  selection_controller_->OnSelectionEmpty(is_empty_text_form_control);
-  selection_controller_->OnSelectionBoundsChanged(start, end);
-}
-
 void RenderWidgetHostViewAura::CreateSelectionController() {
   ui::TouchSelectionController::Config tsc_config;
   tsc_config.max_tap_duration = base::TimeDelta::FromMilliseconds(
@@ -2288,14 +2291,6 @@ void RenderWidgetHostViewAura::CreateSelectionController() {
 
 void RenderWidgetHostViewAura::OnDidNavigateMainFrameToNewPage() {
   ui::GestureRecognizer::Get()->CancelActiveTouches(window_);
-}
-
-void RenderWidgetHostViewAura::LockCompositingSurface() {
-  NOTIMPLEMENTED();
-}
-
-void RenderWidgetHostViewAura::UnlockCompositingSurface() {
-  NOTIMPLEMENTED();
 }
 
 cc::FrameSinkId RenderWidgetHostViewAura::GetFrameSinkId() {
@@ -2408,14 +2403,12 @@ void RenderWidgetHostViewAura::OnTextSelectionChanged(
     }
   }
 
-  base::string16 selected_text;
-  if (GetTextInputManager()
-          ->GetTextSelection(focused_view)
-          ->GetSelectedText(&selected_text) &&
-      selected_text.length()) {
+  const TextInputManager::TextSelection* selection =
+      GetTextInputManager()->GetTextSelection(focused_view);
+  if (selection->selected_text().length()) {
     // Set the CLIPBOARD_TYPE_SELECTION to the ui::Clipboard.
     ui::ScopedClipboardWriter clipboard_writer(ui::CLIPBOARD_TYPE_SELECTION);
-    clipboard_writer.WriteText(selected_text);
+    clipboard_writer.WriteText(selection->selected_text());
   }
 #endif  // defined(USE_X11) && !defined(OS_CHROMEOS)
 }

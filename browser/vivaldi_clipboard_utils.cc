@@ -2,6 +2,7 @@
 
 #include "browser/vivaldi_clipboard_utils.h"
 
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -22,19 +23,18 @@ void OnInputEvent(const blink::WebInputEvent& input_event) {
     suppress_selection_write = event.clickCount < 2;
   } else if (input_event.type() == blink::WebInputEvent::RawKeyDown &&
              (input_event.modifiers() & blink::WebInputEvent::ShiftKey)) {
-    blink::WebKeyboardEvent& event =*((blink::WebKeyboardEvent*)&input_event);
-    suppress_selection_write =
-        !(event.windowsKeyCode == ui::VKEY_LEFT ||
-          event.windowsKeyCode == ui::VKEY_RIGHT ||
-          event.windowsKeyCode == ui::VKEY_UP ||
-          event.windowsKeyCode == ui::VKEY_DOWN ||
-          event.windowsKeyCode == ui::VKEY_HOME ||
-          event.windowsKeyCode == ui::VKEY_END ||
-          event.windowsKeyCode == ui::VKEY_PRIOR ||
-          event.windowsKeyCode == ui::VKEY_NEXT);
+    blink::WebKeyboardEvent& event = *((blink::WebKeyboardEvent*)&input_event);
+    suppress_selection_write = !(event.windowsKeyCode == ui::VKEY_LEFT ||
+                                 event.windowsKeyCode == ui::VKEY_RIGHT ||
+                                 event.windowsKeyCode == ui::VKEY_UP ||
+                                 event.windowsKeyCode == ui::VKEY_DOWN ||
+                                 event.windowsKeyCode == ui::VKEY_HOME ||
+                                 event.windowsKeyCode == ui::VKEY_END ||
+                                 event.windowsKeyCode == ui::VKEY_PRIOR ||
+                                 event.windowsKeyCode == ui::VKEY_NEXT);
   } else if (input_event.type() == blink::WebInputEvent::RawKeyDown &&
              (input_event.modifiers() & blink::WebInputEvent::ControlKey)) {
-    blink::WebKeyboardEvent& event =*((blink::WebKeyboardEvent*)&input_event);
+    blink::WebKeyboardEvent& event = *((blink::WebKeyboardEvent*)&input_event);
     // NOTE(espen). We probably want to make this configurable
     // Ctrl+A: Select All.
     suppress_selection_write = event.windowsKeyCode != ui::VKEY_A;
@@ -52,6 +52,6 @@ bool SuppressWrite(ui::ClipboardType clipboardType) {
   return false;
 }
 
-}  // Clipboard
+}  // namespace clipboard
 
-}  // vivaldi
+}  // namespace vivaldi

@@ -4,8 +4,9 @@
 
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
 
+#include <memory>
+#include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/Document.h"
-#include "core/fetch/MemoryCache.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/html/HTMLCanvasElement.h"
@@ -23,17 +24,26 @@
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/test/FakeGLES2Interface.h"
 #include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
+#include "platform/loader/fetch/MemoryCache.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColorSpaceXform.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 using ::testing::Mock;
 
 namespace blink {
+
+namespace {
+
+gfx::ColorSpace AdobeRGBColorSpace() {
+  return gfx::ColorSpace(gfx::ColorSpace::PrimaryID::ADOBE_RGB,
+                         gfx::ColorSpace::TransferID::GAMMA22);
+}
+
+}  // namespace
 
 enum BitmapOpacity { OpaqueBitmap, TransparentBitmap };
 
@@ -87,6 +97,8 @@ PassRefPtr<Image> FakeImageSource::getSourceImageForCanvas(
 
 //============================================================================
 
+enum LinearPixelMathState { LinearPixelMathDisabled, LinearPixelMathEnabled };
+
 class CanvasRenderingContext2DTest : public ::testing::Test {
  protected:
   CanvasRenderingContext2DTest();
@@ -109,7 +121,13 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
     return canvasElement().buffer()->getGPUMemoryUsage();
   }
 
-  void createContext(OpacityMode, String colorSpace = String());
+  void createContext(OpacityMode,
+                     String colorSpace = String(),
+                     LinearPixelMathState = LinearPixelMathDisabled);
+  ScriptState* getScriptState() {
+    return ScriptState::forMainWorld(m_canvasElement->frame());
+  }
+
   void TearDown();
   void unrefCanvas();
   PassRefPtr<Canvas2DLayerBridge> makeBridge(
@@ -160,13 +178,20 @@ CanvasRenderingContext2DTest::CanvasRenderingContext2DTest()
       m_opaqueBitmap(IntSize(10, 10), OpaqueBitmap),
       m_alphaBitmap(IntSize(10, 10), TransparentBitmap) {}
 
-void CanvasRenderingContext2DTest::createContext(OpacityMode opacityMode,
-                                                 String colorSpace) {
+void CanvasRenderingContext2DTest::createContext(
+    OpacityMode opacityMode,
+    String colorSpace,
+    LinearPixelMathState linearPixelMathState) {
   String canvasType("2d");
   CanvasContextCreationAttributes attributes;
   attributes.setAlpha(opacityMode == NonOpaque);
-  if (!colorSpace.isEmpty())
+  if (!colorSpace.isEmpty()) {
     attributes.setColorSpace(colorSpace);
+    if (linearPixelMathState == LinearPixelMathEnabled) {
+      attributes.setPixelFormat("float16");
+      attributes.setLinearPixelMath(true);
+    }
+  }
   m_canvasElement->getCanvasRenderingContext(canvasType, attributes);
 }
 
@@ -215,9 +240,9 @@ PassRefPtr<Canvas2DLayerBridge> CanvasRenderingContext2DTest::makeBridge(
     std::unique_ptr<FakeWebGraphicsContext3DProvider> provider,
     const IntSize& size,
     Canvas2DLayerBridge::AccelerationMode accelerationMode) {
-  return adoptRef(new Canvas2DLayerBridge(std::move(provider), size, 0,
-                                          NonOpaque, accelerationMode, nullptr,
-                                          kN32_SkColorType));
+  return adoptRef(new Canvas2DLayerBridge(
+      std::move(provider), size, 0, NonOpaque, accelerationMode,
+      gfx::ColorSpace::CreateSRGB(), false, kN32_SkColorType));
 }
 
 //============================================================================
@@ -387,69 +412,57 @@ TEST_F(CanvasRenderingContext2DTest, detectOverdrawWithDrawImage) {
   createContext(NonOpaque);
   NonThrowableExceptionState exceptionState;
 
-  TEST_OVERDRAW_1(
-      1, drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                   10, 10, 0, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_1(1, drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10,
+                               0, 0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_1(
-      1, drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                   1, 1, 0, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_1(1, drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 1, 1, 0,
+                               0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_2(
-      0, setGlobalAlpha(0.5f),
-      drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                10, 10, 0, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_2(0, setGlobalAlpha(0.5f),
+                  drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10, 0,
+                            0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_1(
-      0, drawImage(canvasElement().getExecutionContext(), &m_alphaBitmap, 0, 0,
-                   10, 10, 0, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_1(0, drawImage(getScriptState(), &m_alphaBitmap, 0, 0, 10, 10,
+                               0, 0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_2(
-      0, setGlobalAlpha(0.5f),
-      drawImage(canvasElement().getExecutionContext(), &m_alphaBitmap, 0, 0, 10,
-                10, 0, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_2(0, setGlobalAlpha(0.5f),
+                  drawImage(getScriptState(), &m_alphaBitmap, 0, 0, 10, 10, 0,
+                            0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_1(
-      0, drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                   10, 10, 1, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_1(0, drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10,
+                               1, 0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_1(
-      0, drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                   10, 10, 0, 0, 9, 9, exceptionState));
+  TEST_OVERDRAW_1(0, drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10,
+                               0, 0, 9, 9, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_1(
-      1, drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                   10, 10, 0, 0, 11, 11, exceptionState));
+  TEST_OVERDRAW_1(1, drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10,
+                               0, 0, 11, 11, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_2(
-      1, translate(-1, 0),
-      drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                10, 10, 1, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_2(1, translate(-1, 0),
+                  drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10, 1,
+                            0, 10, 10, exceptionState));
+  EXPECT_FALSE(exceptionState.hadException());
+  TEST_OVERDRAW_2(0, translate(-1, 0),
+                  drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10, 0,
+                            0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
   TEST_OVERDRAW_2(
-      0, translate(-1, 0),
-      drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                10, 10, 0, 0, 10, 10, exceptionState));
-  EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_2(0, setFillStyle(opaqueGradient()),
-                  drawImage(canvasElement().getExecutionContext(),
-                            &m_alphaBitmap, 0, 0, 10, 10, 0, 0, 10, 10,
-                            exceptionState));  // fillStyle ignored by drawImage
-  EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_2(1, setFillStyle(alphaGradient()),
-                  drawImage(canvasElement().getExecutionContext(),
-                            &m_opaqueBitmap, 0, 0, 10, 10, 0, 0, 10, 10,
-                            exceptionState));  // fillStyle ignored by drawImage
+      0, setFillStyle(opaqueGradient()),
+      drawImage(getScriptState(), &m_alphaBitmap, 0, 0, 10, 10, 0, 0, 10, 10,
+                exceptionState));  // fillStyle ignored by drawImage
   EXPECT_FALSE(exceptionState.hadException());
   TEST_OVERDRAW_2(
-      1, setGlobalCompositeOperation(String("copy")),
-      drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                10, 10, 1, 0, 10, 10, exceptionState));
+      1, setFillStyle(alphaGradient()),
+      drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10, 0, 0, 10, 10,
+                exceptionState));  // fillStyle ignored by drawImage
   EXPECT_FALSE(exceptionState.hadException());
-  TEST_OVERDRAW_3(
-      0, rect(0, 0, 5, 5), clip(),
-      drawImage(canvasElement().getExecutionContext(), &m_opaqueBitmap, 0, 0,
-                10, 10, 0, 0, 10, 10, exceptionState));
+  TEST_OVERDRAW_2(1, setGlobalCompositeOperation(String("copy")),
+                  drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10, 1,
+                            0, 10, 10, exceptionState));
+  EXPECT_FALSE(exceptionState.hadException());
+  TEST_OVERDRAW_3(0, rect(0, 0, 5, 5), clip(),
+                  drawImage(getScriptState(), &m_opaqueBitmap, 0, 0, 10, 10, 0,
+                            0, 10, 10, exceptionState));
   EXPECT_FALSE(exceptionState.hadException());
 }
 
@@ -603,9 +616,8 @@ TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionUnderImageSizeRatioLimit) {
   ImageBitmap* sourceImageBitmap =
       ImageBitmap::create(sourceCanvas, cropRect, defaultOptions);
 
-  context2d()->drawImage(canvasElement().getExecutionContext(),
-                         sourceImageBitmap, 0, 0, 1, 1, 0, 0, 1, 1,
-                         exceptionState);
+  context2d()->drawImage(getScriptState(), sourceImageBitmap, 0, 0, 1, 1, 0, 0,
+                         1, 1, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
 
   EXPECT_FALSE(canvasElement().shouldBeDirectComposited());
@@ -639,9 +651,8 @@ TEST_F(CanvasRenderingContext2DTest, LayerPromotionOverImageSizeRatioLimit) {
   ImageBitmap* sourceImageBitmap =
       ImageBitmap::create(sourceCanvas, cropRect, defaultOptions);
 
-  context2d()->drawImage(canvasElement().getExecutionContext(),
-                         sourceImageBitmap, 0, 0, 1, 1, 0, 0, 1, 1,
-                         exceptionState);
+  context2d()->drawImage(getScriptState(), sourceImageBitmap, 0, 0, 1, 1, 0, 0,
+                         1, 1, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
 
   EXPECT_TRUE(canvasElement().shouldBeDirectComposited());
@@ -813,7 +824,7 @@ TEST_F(CanvasRenderingContext2DTest, NoFallbackWithSmallState) {
     context2d()->save();
     context2d()->translate(1.0f, 0.0f);
   }
-  canvasElement().doDeferredPaintInvalidation();  // To close the current frame
+  canvasElement().finalizeFrame();  // To close the current frame
 }
 
 TEST_F(CanvasRenderingContext2DTest, FallbackWithLargeState) {
@@ -832,7 +843,7 @@ TEST_F(CanvasRenderingContext2DTest, FallbackWithLargeState) {
     context2d()->save();
     context2d()->translate(1.0f, 0.0f);
   }
-  canvasElement().doDeferredPaintInvalidation();  // To close the current frame
+  canvasElement().finalizeFrame();  // To close the current frame
 }
 
 TEST_F(CanvasRenderingContext2DTest, OpaqueDisplayListFallsBackForText) {
@@ -889,8 +900,7 @@ TEST_F(CanvasRenderingContext2DTest, ImageResourceLifetime) {
   DummyExceptionStateForTesting exceptionState;
   CanvasImageSourceUnion imageSource;
   imageSource.setImageBitmap(imageBitmapDerived);
-  context->drawImage(canvas->getExecutionContext(), imageSource, 0, 0,
-                     exceptionState);
+  context->drawImage(getScriptState(), imageSource, 0, 0, exceptionState);
 }
 
 TEST_F(CanvasRenderingContext2DTest, GPUMemoryUpdateForAcceleratedCanvas) {
@@ -1053,8 +1063,9 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
         StaticBitmapImage::create(skSurface->makeImageSnapshot());
     ImageBitmap* bigImage = ImageBitmap::create(std::move(bigBitmap));
     NonThrowableExceptionState exceptionState;
-    context2d()->drawImage(nullptr, bigImage, 0, 0, srcSize, srcSize, 0, 0,
-                           dstSize, dstSize, exceptionState);
+    V8TestingScope scope;
+    context2d()->drawImage(scope.getScriptState(), bigImage, 0, 0, srcSize,
+                           srcSize, 0, 0, dstSize, dstSize, exceptionState);
     EXPECT_FALSE(exceptionState.hadException());
 
     if (testVariant == LargeTextureDisablesAcceleration) {
@@ -1142,10 +1153,9 @@ TEST_F(CanvasRenderingContext2DTest,
        LegacyColorSpaceUsesGlobalTargetColorBehavior) {
   // Set the global target color space to something distinctly recognizable (not
   // srgb)
-  sk_sp<SkColorSpace> savedGlobalTargetColorSpace =
+  gfx::ColorSpace savedGlobalTargetColorSpace =
       ColorBehavior::globalTargetColorSpace();
-  ColorBehavior::setGlobalTargetColorSpaceForTesting(
-      SkColorSpace::MakeNamed(SkColorSpace::kAdobeRGB_Named));
+  ColorBehavior::setGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
   bool savedColorCorrectRenderingEnabled =
       RuntimeEnabledFeatures::colorCorrectRenderingEnabled();
 
@@ -1153,9 +1163,8 @@ TEST_F(CanvasRenderingContext2DTest,
   createContext(NonOpaque, "legacy-srgb");
   ColorBehavior behavior = context2d()->drawImageColorBehavior();
   EXPECT_TRUE(behavior.isTransformToTargetColorSpace());
-  EXPECT_TRUE(
-      SkColorSpace::Equals(ColorBehavior::globalTargetColorSpace().get(),
-                           behavior.targetColorSpace().get()));
+  EXPECT_TRUE(ColorBehavior::globalTargetColorSpace() ==
+              behavior.targetColorSpace());
 
   // Restore global state to avoid interfering with other tests
   ColorBehavior::setGlobalTargetColorSpaceForTesting(
@@ -1168,21 +1177,17 @@ TEST_F(CanvasRenderingContext2DTest,
        LegacyColorSpaceUsesSRGBWhenColorCorrectRenderingEnabled) {
   // Set the global target color space to something distinctly recognizable (not
   // srgb)
-  sk_sp<SkColorSpace> savedGlobalTargetColorSpace =
+  gfx::ColorSpace savedGlobalTargetColorSpace =
       ColorBehavior::globalTargetColorSpace();
-  ColorBehavior::setGlobalTargetColorSpaceForTesting(
-      SkColorSpace::MakeNamed(SkColorSpace::kAdobeRGB_Named));
+  ColorBehavior::setGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
   bool savedColorCorrectRenderingEnabled =
       RuntimeEnabledFeatures::colorCorrectRenderingEnabled();
 
   RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(true);
   createContext(NonOpaque, "legacy-srgb");
   ColorBehavior behavior = context2d()->drawImageColorBehavior();
-  sk_sp<SkColorSpace> srgbColorSpace =
-      SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
   EXPECT_TRUE(behavior.isTransformToTargetColorSpace());
-  EXPECT_TRUE(SkColorSpace::Equals(srgbColorSpace.get(),
-                                   behavior.targetColorSpace().get()));
+  EXPECT_TRUE(gfx::ColorSpace::CreateSRGB() == behavior.targetColorSpace());
 
   // Restore global state to avoid interfering with other tests
   ColorBehavior::setGlobalTargetColorSpaceForTesting(
@@ -1195,18 +1200,14 @@ TEST_F(CanvasRenderingContext2DTest,
        SRGBColorSpaceUsesTransformToSRGBColorBehavior) {
   // Set the global target color space to something distinctly recognizable (not
   // srgb)
-  sk_sp<SkColorSpace> savedGlobalTargetColorSpace =
+  gfx::ColorSpace savedGlobalTargetColorSpace =
       ColorBehavior::globalTargetColorSpace();
-  ColorBehavior::setGlobalTargetColorSpaceForTesting(
-      SkColorSpace::MakeNamed(SkColorSpace::kAdobeRGB_Named));
+  ColorBehavior::setGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
 
   createContext(NonOpaque, "srgb");
   ColorBehavior behavior = context2d()->drawImageColorBehavior();
-  sk_sp<SkColorSpace> srgbColorSpace =
-      SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
   EXPECT_TRUE(behavior.isTransformToTargetColorSpace());
-  EXPECT_TRUE(SkColorSpace::Equals(srgbColorSpace.get(),
-                                   behavior.targetColorSpace().get()));
+  EXPECT_TRUE(gfx::ColorSpace::CreateSRGB() == behavior.targetColorSpace());
 
   // Restore global state to avoid interfering with other tests
   ColorBehavior::setGlobalTargetColorSpaceForTesting(
@@ -1217,18 +1218,15 @@ TEST_F(CanvasRenderingContext2DTest,
        LinearRGBColorSpaceUsesTransformToLinearSRGBColorBehavior) {
   // Set the global target color space to something distinctly recognizable (not
   // srgb)
-  sk_sp<SkColorSpace> savedGlobalTargetColorSpace =
+  gfx::ColorSpace savedGlobalTargetColorSpace =
       ColorBehavior::globalTargetColorSpace();
-  ColorBehavior::setGlobalTargetColorSpaceForTesting(
-      SkColorSpace::MakeNamed(SkColorSpace::kAdobeRGB_Named));
+  ColorBehavior::setGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
 
-  createContext(NonOpaque, "linear-rgb");
+  createContext(NonOpaque, "srgb", LinearPixelMathEnabled);
   ColorBehavior behavior = context2d()->drawImageColorBehavior();
-  sk_sp<SkColorSpace> linearSrgbColorSpace =
-      SkColorSpace::MakeNamed(SkColorSpace::kSRGBLinear_Named);
   EXPECT_TRUE(behavior.isTransformToTargetColorSpace());
-  EXPECT_TRUE(SkColorSpace::Equals(linearSrgbColorSpace.get(),
-                                   behavior.targetColorSpace().get()));
+  EXPECT_TRUE(gfx::ColorSpace::CreateSCRGBLinear() ==
+              behavior.targetColorSpace());
 
   // Restore global state to avoid interfering with other tests
   ColorBehavior::setGlobalTargetColorSpaceForTesting(
@@ -1299,8 +1297,7 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
           ? SkColorSpaceXform::ColorFormat::kBGRA_8888_ColorFormat
           : SkColorSpaceXform::ColorFormat::kRGBA_8888_ColorFormat;
   SkColorSpaceXform::ColorFormat colorFormat = colorFormat32;
-  sk_sp<SkColorSpace> srcRGBColorSpace =
-      SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
+  sk_sp<SkColorSpace> srcRGBColorSpace = SkColorSpace::MakeSRGB();
 
   for (uint8_t i = static_cast<uint8_t>(
            ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED);
@@ -1324,16 +1321,16 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
         NOTREACHED();
         break;
       case ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED:
-        colorSpace = ColorBehavior::globalTargetColorSpace();
+        colorSpace = ColorBehavior::globalTargetColorSpace().ToSkColorSpace();
         colorFormat = colorFormat32;
         break;
       case ColorSpaceConversion::DEFAULT_COLOR_CORRECTED:
       case ColorSpaceConversion::SRGB:
-        colorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
+        colorSpace = SkColorSpace::MakeSRGB();
         colorFormat = colorFormat32;
         break;
       case ColorSpaceConversion::LINEAR_RGB:
-        colorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGBLinear_Named);
+        colorSpace = SkColorSpace::MakeSRGBLinear();
         colorType = SkColorType::kRGBA_F16_SkColorType;
         colorFormat = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
         break;

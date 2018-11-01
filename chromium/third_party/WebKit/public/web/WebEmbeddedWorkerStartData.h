@@ -31,8 +31,8 @@
 #ifndef WebEmbeddedWorkerStartData_h
 #define WebEmbeddedWorkerStartData_h
 
-#include "WebContentSecurityPolicy.h"
 #include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebContentSecurityPolicy.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebSettings.h"

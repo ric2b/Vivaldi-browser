@@ -12,13 +12,13 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "components/test_runner/test_preferences.h"
-#include "components/test_runner/web_test_delegate.h"
 #include "content/public/common/page_state.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "content/public/renderer/render_view_observer_tracker.h"
+#include "content/shell/common/layout_test.mojom.h"
 #include "content/shell/common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom.h"
-#include "content/shell/common/shell_test_configuration.h"
+#include "content/shell/test_runner/test_preferences.h"
+#include "content/shell/test_runner/web_test_delegate.h"
 #include "v8/include/v8.h"
 
 class SkBitmap;
@@ -31,6 +31,7 @@ namespace blink {
 class WebDeviceMotionData;
 class WebDeviceOrientationData;
 class WebFrame;
+class WebURLRequest;
 class WebView;
 }
 
@@ -162,6 +163,8 @@ class BlinkTestRunner : public RenderViewObserver,
   float GetDeviceScaleFactor() const override;
   void RunIdleTasks(const base::Closure& callback) override;
   void ForceTextInputStateUpdate(blink::WebFrame* frame) override;
+  bool IsNavigationInitiatedByRenderer(
+      const blink::WebURLRequest& request) override;
 
   // Resets a RenderView to a known state for layout tests. It is used both when
   // a RenderView is created and when reusing an existing RenderView for the
@@ -173,8 +176,8 @@ class BlinkTestRunner : public RenderViewObserver,
   void ReportLeakDetectionResult(const LeakDetectionResult& result);
 
   // Message handlers forwarded by LayoutTestRenderFrameObserver.
-  void OnSetTestConfiguration(const ShellTestConfiguration& params);
-  void OnReplicateTestConfiguration(const ShellTestConfiguration& params);
+  void OnSetTestConfiguration(mojom::ShellTestConfigurationPtr params);
+  void OnReplicateTestConfiguration(mojom::ShellTestConfigurationPtr params);
   void OnSetupSecondaryRenderer();
 
  private:
@@ -207,7 +210,7 @@ class BlinkTestRunner : public RenderViewObserver,
 
   test_runner::TestPreferences prefs_;
 
-  ShellTestConfiguration test_config_;
+  mojom::ShellTestConfigurationPtr test_config_;
 
   std::vector<int> routing_ids_;
   std::vector<std::vector<PageState> > session_histories_;

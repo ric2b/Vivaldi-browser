@@ -122,8 +122,7 @@ class CORE_EXPORT ScrollingCoordinator final
   void updateClipParentForGraphicsLayer(GraphicsLayer* child,
                                         const PaintLayer* parent);
   Region computeShouldHandleScrollGestureOnMainThreadRegion(
-      const LocalFrame*,
-      const IntPoint& frameLocation) const;
+      const LocalFrame*) const;
 
   void updateTouchEventTargetRectsIfNeeded();
 
@@ -155,7 +154,7 @@ class CORE_EXPORT ScrollingCoordinator final
  private:
   bool shouldUpdateAfterCompositingChange() const {
     return m_scrollGestureRegionIsDirty || m_touchEventTargetRectsAreDirty ||
-           m_shouldScrollOnMainThreadDirty || frameViewIsDirty();
+           m_shouldScrollOnMainThreadDirty || frameScrollerIsDirty();
   }
 
   void setShouldUpdateScrollLayerPositionOnMainThread(
@@ -172,7 +171,7 @@ class CORE_EXPORT ScrollingCoordinator final
                                           ScrollbarOrientation);
   void removeWebScrollbarLayer(ScrollableArea*, ScrollbarOrientation);
 
-  bool frameViewIsDirty() const;
+  bool frameScrollerIsDirty() const;
 
   std::unique_ptr<CompositorAnimationHost> m_animationHost;
   std::unique_ptr<CompositorAnimationTimeline>

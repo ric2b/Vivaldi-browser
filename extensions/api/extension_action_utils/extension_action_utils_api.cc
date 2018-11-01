@@ -4,6 +4,11 @@
 // browserAction and pageAction badges.
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 
+#include <memory>
+#include <set>
+#include <utility>
+#include <vector>
+
 #include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,6 +27,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/common/extensions/api/commands/commands_handler.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
@@ -101,22 +107,14 @@ ExtensionActionUtil::ExtensionActionUtil(Profile* profile)
     : profile_(profile),
       extension_registry_observer_(this),
       extension_action_api_observer_(this),
-      component_migration_helper_(
-          new extensions::ComponentMigrationHelper(profile_, this)),
       weak_ptr_factory_(this) {
   extension_registry_observer_.Add(
       extensions::ExtensionRegistry::Get(profile_));
   extension_action_api_observer_.Add(ExtensionActionAPI::Get(profile));
-
-  ComponentToolbarActionsFactory::GetInstance()->RegisterComponentMigrations(
-      component_migration_helper_.get());
-
-  BrowserList::AddObserver(this);
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {
   extension_registry_observer_.RemoveAll();
-  BrowserList::RemoveObserver(this);
 }
 
 void ExtensionActionUtil::OnExtensionActionUpdated(
@@ -137,14 +135,14 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     windowId = browser->session_id().id();
   }
 
-  FillInfoForTabId(info, extension_action, tab_id, profile_);
+  FillInfoForTabId(&info, extension_action, tab_id, profile_);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
           extension_action->extension_id(),
           extensions::ExtensionRegistry::ENABLED);
 
-  FillInfoFromManifest(info, extension);
+  FillInfoFromManifest(&info, extension);
 
   // We need to fill in windowid to use for differentiating between the
   // different browser windows. Since the event is originating from the
@@ -161,32 +159,32 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
 /* static */
 
 void ExtensionActionUtil::FillInfoFromManifest(
-    vivaldi::extension_action_utils::ExtensionInfo& info,
+    vivaldi::extension_action_utils::ExtensionInfo* info,
     const Extension* extension) {
   if (extension) {
-    info.name.reset(new std::string(extension->name()));
+    info->name.reset(new std::string(extension->name()));
 
     std::string manifest_string;
     if (extension->manifest()->GetString(manifest_keys::kHomepageURL,
                                          &manifest_string)) {
-      info.homepage.reset(new std::string(manifest_string));
+      info->homepage.reset(new std::string(manifest_string));
     }
     if (extension->manifest()->GetString(manifest_keys::kOptionsPage,
                                          &manifest_string)) {
-      info.optionspage.reset(new std::string(manifest_string));
+      info->optionspage.reset(new std::string(manifest_string));
     }
   }
 }
 
 /* static */
 bool ExtensionActionUtil::GetWindowIdFromExtData(const std::string& extdata,
-                                                 std::string& windowId) {
+                                                 std::string* windowId) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   std::unique_ptr<base::Value> json = base::JSONReader::Read(extdata, options);
   base::DictionaryValue* dict = NULL;
   if (json && json->GetAsDictionary(&dict)) {
-    dict->GetString("ext_id", &windowId);
-    windowId = WINDOWID_PRESTRING + windowId;
+    dict->GetString("ext_id", windowId);
+    *windowId += WINDOWID_PRESTRING;
     return true;
   }
   return false;
@@ -207,7 +205,7 @@ void ExtensionActionUtil::OnExtensionActionVisibilityChanged(
   ExtensionAction* action =
       extension ? action_manager->GetExtensionAction(*extension) : nullptr;
 
-  FillInfoForTabId(info, action, ExtensionAction::kDefaultTabId, profile_);
+  FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId, profile_);
 
   int windowId = extension_misc::kCurrentWindowId;
 
@@ -250,7 +248,7 @@ void ExtensionActionUtil::OnImageLoaded(const std::string& extension_id,
 
 /* static */
 bool ExtensionActionUtil::FillInfoForTabId(
-    vivaldi::extension_action_utils::ExtensionInfo& info,
+    vivaldi::extension_action_utils::ExtensionInfo* info,
     ExtensionAction* action,
     int tab_id,
     Profile* profile) {
@@ -258,28 +256,28 @@ bool ExtensionActionUtil::FillInfoForTabId(
     return false;
   }
 
-  info.id = action->extension_id();
+  info->id = action->extension_id();
 
-  info.badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
+  info->badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
 
-  info.badge_text.reset(new std::string(action->GetBadgeText(tab_id)));
+  info->badge_text.reset(new std::string(action->GetBadgeText(tab_id)));
 
-  info.badge_background_color.reset(new std::string(
+  info->badge_background_color.reset(new std::string(
       SkColorToRGBAString(action->GetBadgeBackgroundColor(tab_id))));
 
-  info.badge_text_color.reset(
+  info->badge_text_color.reset(
       new std::string(SkColorToRGBAString(action->GetBadgeTextColor(tab_id))));
 
-  info.action_type = action->action_type() == ActionInfo::TYPE_BROWSER
-                         ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
-                         : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
+  info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
+                          ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
+                          : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
 
-  info.visible.reset(new bool(action->GetIsVisible(tab_id)));
+  info->visible.reset(new bool(action->GetIsVisible(tab_id)));
 
-  info.allow_in_incognito.reset(new bool(util::IsIncognitoEnabled(
+  info->allow_in_incognito.reset(new bool(util::IsIncognitoEnabled(
       action->extension_id(), static_cast<content::BrowserContext*>(profile))));
 
-  info.action_is_hidden.reset(
+  info->action_is_hidden.reset(
       new bool(!ExtensionActionAPI::Get(profile)->GetBrowserActionVisibility(
           action->extension_id())));
 
@@ -307,9 +305,9 @@ bool ExtensionActionUtil::FillInfoForTabId(
   }
 
   if (bitmap) {
-    info.badge_icon.reset(EncodeBitmapToPng(bitmap));
+    info->badge_icon.reset(EncodeBitmapToPng(bitmap));
   } else {
-    info.badge_icon.reset(new std::string(""));
+    info->badge_icon.reset(new std::string(""));
   }
   return true;
 }
@@ -347,7 +345,7 @@ void ExtensionActionUtil::OnExtensionUninstalled(
       extensions::ExtensionActionManager::Get(profile_);
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
 
-  FillInfoForTabId(info, action, ExtensionAction::kDefaultTabId, profile_);
+  FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId, profile_);
 
   std::unique_ptr<base::ListValue> args =
       vivaldi::extension_action_utils::OnRemoved::Create(info);
@@ -370,9 +368,9 @@ void ExtensionActionUtil::OnExtensionLoaded(
     return;
   }
 
-  FillInfoForTabId(info, action, tab_id, profile_);
+  FillInfoForTabId(&info, action, tab_id, profile_);
 
-  FillInfoFromManifest(info, extension);
+  FillInfoFromManifest(&info, extension);
 
   std::unique_ptr<base::ListValue> args =
       vivaldi::extension_action_utils::OnAdded::Create(info);
@@ -467,100 +465,6 @@ void ExtensionActionUtil::ActiveTabChanged(content::WebContents* old_contents,
   }
 }
 
-bool ExtensionActionUtil::HasComponentAction(
-    const std::string& action_id) const {
-  auto action = component_extension_actions_.find(action_id);
-  return (action != component_extension_actions_.end());
-}
-
-void ExtensionActionUtil::AddComponentAction(const std::string& action_id) {
-  component_extension_actions_.insert(action_id);
-
-  std::unique_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
-      new vivaldi::extension_action_utils::ExtensionInfo());
-
-  FillInfoFromComponentExtension(&action_id, *info.get(), profile_);
-
-  std::unique_ptr<base::ListValue> args =
-      vivaldi::extension_action_utils::OnAdded::Create(*info.get());
-
-  content::BrowserContext* browser_context =
-      static_cast<content::BrowserContext*>(profile_);
-
-  BroadcastEvent(vivaldi::extension_action_utils::OnAdded::kEventName,
-                  std::move(args), browser_context);
-}
-
-void ExtensionActionUtil::RemoveComponentAction(const std::string& action_id) {
-  component_extension_actions_.erase(action_id);
-}
-
-// chrome::BrowserListObserver overrides;
-void ExtensionActionUtil::OnBrowserAdded(Browser* browser) {
-  ComponentToolbarActionsFactory::GetInstance()->HandleComponentMigrations(
-      component_migration_helper_.get(), profile_);
-}
-
-/*static*/
-bool ExtensionActionUtil::FillInfoFromComponentExtension(
-    const std::string* action_id,
-    vivaldi::extension_action_utils::ExtensionInfo& info,
-    Profile* profile) {
-  Browser* browser = nullptr;
-  for (auto* browser_it : *BrowserList::GetInstance()) {
-    if (browser_it->profile()->GetOriginalProfile() == profile) {
-      browser = browser_it;
-      break;
-    }
-  }
-
-  if (!browser) {
-    NOTREACHED()
-        << "Querying info about component-extensions need a browser object!";
-    return false;
-  }
-
-  std::unique_ptr<ToolbarActionViewController> component_action =
-      ComponentToolbarActionsFactory::GetInstance()
-          ->GetComponentToolbarActionForId(*action_id, browser, nullptr);
-
-  info.extension_type =
-      vivaldi::extension_action_utils::EXTENSION_TYPE_COMPONENTACTION;
-
-  info.id = *action_id;
-
-  info.badge_tooltip.reset(new std::string(
-      base::UTF16ToUTF8(component_action->GetTooltip(nullptr))));
-
-  info.name.reset(
-      new std::string(base::UTF16ToUTF8(component_action->GetActionName())));
-
-  // Just return an empty badge_text since the action name does not make sense.
-  info.badge_text.reset(new std::string(""));
-
-  info.action_type = vivaldi::extension_action_utils::ACTION_TYPE_BROWSER;
-
-  int icon_size = extension_misc::EXTENSION_ICON_LARGE;
-
-  gfx::Image icon_image = component_action->GetIcon(
-      nullptr /*web_contents*/, gfx::Size(icon_size, icon_size));
-
-  const SkBitmap* bitmap = nullptr;
-
-  bitmap = icon_image.CopySkBitmap();
-
-  if (bitmap)
-    info.badge_icon.reset(EncodeBitmapToPng(bitmap));
-
-  // See MediaRouterContextualMenu::ExecuteCommand()
-  const char googlecasthomepage[] =
-      "https://www.google.com/chrome/devices/chromecast/";
-
-  info.homepage.reset(new std::string(googlecasthomepage));
-
-  return true;
-}
-
 content::WebContents* ExtensionActionUtil::GetCurrentWebContents() const {
   return current_webcontents_;
 }
@@ -600,11 +504,11 @@ bool ExtensionActionUtilsGetToolbarExtensionsFunction::RunAsync() {
 
     ExtensionAction* action = action_manager->GetExtensionAction(*extension);
 
-    if (!extension->ShouldNotBeVisible()) {
+    if (!extensions::Manifest::IsComponentLocation(extension->location())) {
       std::unique_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
           new vivaldi::extension_action_utils::ExtensionInfo());
 
-      if (ExtensionActionUtil::FillInfoForTabId(*info.get(), action,
+      if (ExtensionActionUtil::FillInfoForTabId(info.get(), action,
                                                 ExtensionAction::kDefaultTabId,
                                                 GetProfile())) {
         info->name.reset(new std::string(extension->name()));
@@ -621,26 +525,6 @@ bool ExtensionActionUtilsGetToolbarExtensionsFunction::RunAsync() {
 
         toolbar_extensionactions.push_back(std::move(*info));
       }
-    }
-  }
-
-  // then add the component extensions
-
-  extensions::ExtensionActionUtil* extensionactionutils =
-      extensions::ExtensionActionUtilFactory::GetForProfile(GetProfile());
-  std::set<std::string> component_extensions =
-      extensionactionutils->component_extension_actions();
-
-  for (std::set<std::string>::const_iterator it = component_extensions.begin();
-       it != component_extensions.end(); ++it) {
-    const std::string action_id = *it;
-
-    std::unique_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
-        new vivaldi::extension_action_utils::ExtensionInfo());
-
-    if (ExtensionActionUtil::FillInfoFromComponentExtension(
-            &action_id, *info.get(), GetProfile())) {
-      toolbar_extensionactions.push_back(std::move(*info));
     }
   }
 
@@ -672,6 +556,8 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
       extensions::ExtensionRegistry::Get(GetProfile())
           ->GetExtensionById(params->extension_id,
                              extensions::ExtensionRegistry::ENABLED);
+  if (!extension)
+    return false;
 
   // Note; we cannot use GetAssociatedWebContents since the extension is not
   // running in a tab.
@@ -691,27 +577,6 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
 
-  // Check if there is a component extension and run it's action.
-  if (!extension) {
-    std::unique_ptr<ToolbarActionViewController> component_action =
-        ComponentToolbarActionsFactory::GetInstance()
-            ->GetComponentToolbarActionForId(params->extension_id, browser,
-                                             nullptr);
-
-    extensions::ExtensionActionUtil* extensionactionutils =
-        extensions::ExtensionActionUtilFactory::GetForProfile(GetProfile());
-
-    if (component_action) {
-      component_action->SetDelegate(extensionactionutils);
-      component_action->ExecuteAction(true);
-      vivaldi::extension_action_utils::ExtensionInfo info;
-      results_ = vivaldi::extension_action_utils::ExecuteExtensionAction::
-          Results::Create(info);
-      SendResponse(true);
-      return true;
-    }
-  }
-
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
   if (!action)
     return false;
@@ -721,9 +586,8 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
 
   ExtensionActionRunner* action_runner =
       ExtensionActionRunner::GetForWebContents(web_contents);
-  if (action_runner &&
-      action_runner->RunAction(extension, true) ==
-          ExtensionAction::ACTION_SHOW_POPUP) {
+  if (action_runner && action_runner->RunAction(extension, true) ==
+                           ExtensionAction::ACTION_SHOW_POPUP) {
     GURL popup_url = action->GetPopupUrl(SessionTabHelper::IdForTab(
         browser->tab_strip_model()->GetActiveWebContents()));
     info.popup_url.reset(new std::string(popup_url.spec()));
@@ -774,16 +638,6 @@ bool ExtensionActionUtilsToggleBrowserActionVisibilityFunction::RunAsync() {
       params->extension_id == kBetaChromecastExtensionId ||
       params->extension_id == kStableChromecastExtensionId) {
 
-    extensions::ExtensionActionUtil* extensionactionutils =
-        extensions::ExtensionActionUtilFactory::GetForProfile(GetProfile());
-
-    // To be able to show the action again in the same session.
-    extensionactionutils->RemoveComponentAction(params->extension_id);
-
-    ToolbarActionsModel::Get(GetProfile())
-        ->component_migration_helper()
-        ->SetComponentActionPref(
-            ComponentToolbarActionsFactory::kMediaRouterActionId, false);
     // Synthesize an event to remove the button right away.
     vivaldi::extension_action_utils::ExtensionInfo info;
     info.id = params->extension_id;

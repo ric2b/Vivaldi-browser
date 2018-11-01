@@ -14,6 +14,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/shadow_value.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
@@ -104,14 +105,15 @@ class PartialMagnificationController::ContentMask : public ui::LayerDelegate {
   void OnPaintLayer(const ui::PaintContext& context) override {
     ui::PaintRecorder recorder(context, layer()->size());
 
-    SkPaint paint;
-    paint.setAlpha(255);
-    paint.setAntiAlias(true);
+    cc::PaintFlags flags;
+    flags.setAlpha(255);
+    flags.setAntiAlias(true);
     // Stroke is used for clipping the border which consists of the rendered
     // border |kBorderSize| and the magnifier shadow |kShadowThickness| and
     // |kShadowOffset|.
-    paint.setStrokeWidth(kBorderSize + kShadowThickness + kShadowOffset);
-    paint.setStyle(is_border_ ? SkPaint::kStroke_Style : SkPaint::kFill_Style);
+    flags.setStrokeWidth(kBorderSize + kShadowThickness + kShadowOffset);
+    flags.setStyle(is_border_ ? cc::PaintFlags::kStroke_Style
+                              : cc::PaintFlags::kFill_Style);
 
     // If we want to clip the magnifier zone use the magnifiers radius.
     // Otherwise we want to clip the border, shadow and shadow offset so we
@@ -121,7 +123,7 @@ class PartialMagnificationController::ContentMask : public ui::LayerDelegate {
     int clipping_radius = kMagnifierRadius;
     if (is_border_)
       clipping_radius += (kShadowThickness + kShadowOffset + kBorderSize) / 2;
-    recorder.canvas()->DrawCircle(rect.CenterPoint(), clipping_radius, paint);
+    recorder.canvas()->DrawCircle(rect.CenterPoint(), clipping_radius, flags);
   }
 
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
@@ -157,41 +159,41 @@ class PartialMagnificationController::BorderRenderer
     ui::PaintRecorder recorder(context, magnifier_window_bounds_.size());
 
     // Draw the shadow.
-    SkPaint shadow_paint;
-    shadow_paint.setAntiAlias(true);
-    shadow_paint.setColor(SK_ColorTRANSPARENT);
-    shadow_paint.setLooper(
+    cc::PaintFlags shadow_flags;
+    shadow_flags.setAntiAlias(true);
+    shadow_flags.setColor(SK_ColorTRANSPARENT);
+    shadow_flags.setLooper(
         gfx::CreateShadowDrawLooperCorrectBlur(magnifier_shadows_));
     gfx::Rect shadow_bounds(magnifier_window_bounds_.size());
     recorder.canvas()->DrawCircle(
         shadow_bounds.CenterPoint(),
         shadow_bounds.width() / 2 - kShadowThickness - kShadowOffset,
-        shadow_paint);
+        shadow_flags);
 
-    SkPaint border_paint;
-    border_paint.setAntiAlias(true);
-    border_paint.setStyle(SkPaint::kStroke_Style);
+    cc::PaintFlags border_flags;
+    border_flags.setAntiAlias(true);
+    border_flags.setStyle(cc::PaintFlags::kStroke_Style);
 
     // The radius of the magnifier and its border.
     const int magnifier_radius = kMagnifierRadius + kBorderSize;
 
     // Draw the inner border.
-    border_paint.setStrokeWidth(kBorderSize);
-    border_paint.setColor(kBorderColor);
+    border_flags.setStrokeWidth(kBorderSize);
+    border_flags.setColor(kBorderColor);
     recorder.canvas()->DrawCircle(magnifier_window_bounds_.CenterPoint(),
                                   magnifier_radius - kBorderSize / 2,
-                                  border_paint);
+                                  border_flags);
 
     // Draw border outer outline and then draw the border inner outline.
-    border_paint.setStrokeWidth(kBorderOutlineThickness);
-    border_paint.setColor(kBorderOutlineColor);
+    border_flags.setStrokeWidth(kBorderOutlineThickness);
+    border_flags.setColor(kBorderOutlineColor);
     recorder.canvas()->DrawCircle(
         magnifier_window_bounds_.CenterPoint(),
-        magnifier_radius - kBorderOutlineThickness / 2, border_paint);
+        magnifier_radius - kBorderOutlineThickness / 2, border_flags);
     recorder.canvas()->DrawCircle(
         magnifier_window_bounds_.CenterPoint(),
         magnifier_radius - kBorderSize + kBorderOutlineThickness / 2,
-        border_paint);
+        border_flags);
   }
 
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}

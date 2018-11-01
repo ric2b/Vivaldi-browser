@@ -4,13 +4,15 @@
 
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
 
+#include <memory>
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
+#include "core/dom/CompositorWorkerProxyClient.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/EventTargetModules.h"
 #include "modules/compositorworker/CompositorWorkerThread.h"
 #include "wtf/AutoReset.h"
-#include <memory>
 
 namespace blink {
 
@@ -47,14 +49,14 @@ CompositorWorkerGlobalScope::CompositorWorkerGlobalScope(
                         workerClients),
       m_executingAnimationFrameCallbacks(false),
       m_callbackCollection(this) {
-  CompositorProxyClient::from(clients())->setGlobalScope(this);
+  CompositorWorkerProxyClient::from(clients())->setGlobalScope(this);
 }
 
 CompositorWorkerGlobalScope::~CompositorWorkerGlobalScope() {}
 
 void CompositorWorkerGlobalScope::dispose() {
   WorkerGlobalScope::dispose();
-  CompositorProxyClient::from(clients())->dispose();
+  CompositorWorkerProxyClient::from(clients())->dispose();
 }
 
 DEFINE_TRACE(CompositorWorkerGlobalScope) {
@@ -67,13 +69,14 @@ const AtomicString& CompositorWorkerGlobalScope::interfaceName() const {
 }
 
 void CompositorWorkerGlobalScope::postMessage(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     PassRefPtr<SerializedScriptValue> message,
     const MessagePortArray& ports,
     ExceptionState& exceptionState) {
   // Disentangle the port in preparation for sending it to the remote context.
-  std::unique_ptr<MessagePortChannelArray> channels =
-      MessagePort::disentanglePorts(executionContext, ports, exceptionState);
+  MessagePortChannelArray channels =
+      MessagePort::disentanglePorts(scriptState->getExecutionContext(), ports,
+                                    exceptionState);
   if (exceptionState.hadException())
     return;
   workerObjectProxy().postMessageToWorkerObject(std::move(message),
@@ -85,7 +88,7 @@ int CompositorWorkerGlobalScope::requestAnimationFrame(
   const bool shouldSignal =
       !m_executingAnimationFrameCallbacks && m_callbackCollection.isEmpty();
   if (shouldSignal)
-    CompositorProxyClient::from(clients())->requestAnimationFrame();
+    CompositorWorkerProxyClient::from(clients())->requestAnimationFrame();
   return m_callbackCollection.registerCallback(callback);
 }
 

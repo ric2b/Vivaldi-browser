@@ -8,18 +8,21 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
+#include "chrome/browser/chromeos/arc/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
-#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_session_runner.h"
+#include "components/arc/arc_util.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,8 +63,8 @@ void ArcAppTest::SetUp(Profile* profile) {
     chromeos::DBusThreadManager::Initialize();
     dbus_thread_manager_initialized_ = true;
   }
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      chromeos::switches::kEnableArc);
+  arc::SetArcAvailableCommandLineForTesting(
+      base::CommandLine::ForCurrentProcess());
   DCHECK(!profile_);
   profile_ = profile;
   const user_manager::User* user = CreateUserAndLogin();
@@ -72,8 +75,8 @@ void ArcAppTest::SetUp(Profile* profile) {
   chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(user,
                                                                     profile_);
 
-  // A valid |arc_app_list_prefs_| is needed for the Arc bridge service and the
-  // Arc auth service.
+  // A valid |arc_app_list_prefs_| is needed for the ARC bridge service and the
+  // ARC auth service.
   arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
   if (!arc_app_list_pref_) {
     ArcAppListPrefsFactory::GetInstance()->RecreateServiceInstanceForTesting(
@@ -85,7 +88,12 @@ void ArcAppTest::SetUp(Profile* profile) {
           base::Bind(arc::FakeArcSession::Create)));
   DCHECK(arc::ArcSessionManager::Get());
   arc::ArcSessionManager::DisableUIForTesting();
-  arc_session_manager_->OnPrimaryUserProfilePrepared(profile_);
+  arc::ArcAuthNotification::DisableForTesting();
+  arc_session_manager_->SetProfile(profile_);
+  arc_play_store_enabled_preference_handler_ =
+      base::MakeUnique<arc::ArcPlayStoreEnabledPreferenceHandler>(
+          profile_, arc_session_manager_.get());
+  arc_play_store_enabled_preference_handler_->Start();
 
   arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
   DCHECK(arc_app_list_pref_);
@@ -93,7 +101,7 @@ void ArcAppTest::SetUp(Profile* profile) {
   arc_app_list_pref_->SetDefaltAppsReadyCallback(run_loop.QuitClosure());
   run_loop.Run();
 
-  arc_session_manager_->EnableArc();
+  arc::SetArcPlayStoreEnabledForProfile(profile_, true);
   // Check initial conditions.
   EXPECT_FALSE(arc_session_manager_->IsSessionRunning());
 
@@ -164,6 +172,7 @@ void ArcAppTest::CreateFakeAppsAndPackages() {
 
 void ArcAppTest::TearDown() {
   app_instance_.reset();
+  arc_play_store_enabled_preference_handler_.reset();
   arc_session_manager_.reset();
   arc_service_manager_.reset();
   if (dbus_thread_manager_initialized_) {

@@ -11,7 +11,11 @@
   },
   "app": {
     "background": {
-      "scripts": ["background-bundle.js"]
+      "scripts": [
+        "localeSettings-bundle.js",
+        "background-common-bundle.js",
+        "background-bundle.js"
+      ]
     },
     "content_security_policy": "script-src 'self' http://localhost:35729/; object-src 'self'"
   },

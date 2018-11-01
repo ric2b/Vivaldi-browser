@@ -42,8 +42,33 @@ class AURA_EXPORT WindowTreeHostMusDelegate {
       WindowTreeHostMus* window_tree_host,
       const base::Optional<gfx::Rect>& mask_rect) = 0;
 
+  // Called when the opacity is changed client side.
+  virtual void OnWindowTreeHostSetOpacity(WindowTreeHostMus* window_tree_host,
+                                          float opacity) = 0;
+
   // Called to clear the focus of the current window.
   virtual void OnWindowTreeHostDeactivateWindow(
+      WindowTreeHostMus* window_tree_host) = 0;
+
+  // Called to stack the native window above the native window of |window|.
+  virtual void OnWindowTreeHostStackAbove(
+      WindowTreeHostMus* window_tree_host,
+      Window* window) = 0;
+
+  // Called to stack the native window above other native windows.
+  virtual void OnWindowTreeHostStackAtTop(
+      WindowTreeHostMus* window_tree_host) = 0;
+
+  // Called to start a move loop, where the window manager will take over
+  // moving a window during a drag.
+  virtual void OnWindowTreeHostPerformWindowMove(
+      WindowTreeHostMus* window_tree_host,
+      ui::mojom::MoveLoopSource mus_source,
+      const gfx::Point& cursor_location,
+      const base::Callback<void(bool)>& callback) = 0;
+
+  // Called to cancel a move loop.
+  virtual void OnWindowTreeHostCancelWindowMove(
       WindowTreeHostMus* window_tree_host) = 0;
 
   // Called when a WindowTreeHostMus is created without a WindowPort.

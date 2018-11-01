@@ -5,7 +5,6 @@
 #include "net/quic/core/quic_crypto_client_stream.h"
 
 #include <memory>
-#include <vector>
 
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -101,6 +100,7 @@ QuicCryptoClientStream::QuicCryptoClientStream(
       verify_context_(verify_context),
       proof_verify_callback_(nullptr),
       proof_handler_(proof_handler),
+      verify_ok_(false),
       stateless_reject_received_(false),
       num_scup_messages_received_(0) {
   DCHECK_EQ(Perspective::IS_CLIENT, session->connection()->perspective());
@@ -234,7 +234,7 @@ void QuicCryptoClientStream::DoHandshakeLoop(const CryptoHandshakeMessage* in) {
         DoInitializeServerConfigUpdate(cached);
         break;
       case STATE_NONE:
-        NOTREACHED();
+        QUIC_NOTREACHED();
         return;  // We are done.
     }
   } while (rv != QUIC_PENDING && next_state_ != STATE_NONE);
@@ -318,7 +318,7 @@ void QuicCryptoClientStream::DoSendCHLO(
       return;
     }
     // TODO(rch): Remove this when we remove:
-    // FLAGS_quic_use_chlo_packet_size
+    // FLAGS_quic_reloadable_flag_quic_use_chlo_packet_size
     out.set_minimum_size(
         static_cast<size_t>(max_packet_size - kFramingOverhead));
     next_state_ = STATE_RECV_REJ;

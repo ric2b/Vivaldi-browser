@@ -14,6 +14,10 @@
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 // Tests for the tab strip shown on iPad.
 @interface TabStripTestCase : ChromeTestCase
 @end
@@ -53,52 +57,6 @@
     GREYAssertTrue(newCurrentTab == nextTab,
                    @"The selected tab did not change to the next tab.");
   }
-}
-
-// Tests switching the mode using the mode toggle.
-- (void)testTabStripSwitchModes {
-  // The toggle button only exists on iPad, and when the Tablet Tab Switcher
-  // isn't enabled.
-  if (IsCompact() || experimental_flags::IsTabSwitcherEnabled()) {
-    return;
-  }
-
-  // Open two normal tabs.
-  [ChromeEarlGreyUI openNewTab];
-  [ChromeEarlGreyUI openNewTab];
-
-  // Open two incognito tabs.
-  [ChromeEarlGreyUI openNewIncognitoTab];
-  [ChromeEarlGreyUI openNewIncognitoTab];
-
-  // Switch back to normal mode.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityLabel(l10n_util::GetNSString(
-                     IDS_IOS_SWITCH_BROWSER_MODE_LEAVE_INCOGNITO))]
-      performAction:grey_tap()];
-  GREYAssertFalse(chrome_test_util::IsIncognitoMode(),
-                  @"Current tab is incognito.");
-
-  // Switch back to incognito mode.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityLabel(l10n_util::GetNSString(
-                     IDS_IOS_SWITCH_BROWSER_MODE_ENTER_INCOGNITO))]
-      performAction:grey_tap()];
-  GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
-                 @"Current tab is not incognito.");
-
-  // Close both incognito tabs.
-  chrome_test_util::CloseAllTabsInCurrentMode();
-
-  // We should be in normal mode.
-  GREYAssertFalse(chrome_test_util::IsIncognitoMode(),
-                  @"Current tab is incognito.");
-
-  // There should be no incognito switch.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(l10n_util::GetNSString(
-                     IDS_IOS_SWITCH_BROWSER_MODE_ENTER_INCOGNITO))]
-      assertWithMatcher:grey_notVisible()];
 }
 
 @end

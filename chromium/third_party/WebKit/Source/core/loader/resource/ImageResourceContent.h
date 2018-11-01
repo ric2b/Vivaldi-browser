@@ -6,13 +6,13 @@
 #define ImageResourceContent_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourceStatus.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSizeHash.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
+#include "platform/loader/fetch/ResourceStatus.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/HashCountedSet.h"
@@ -132,9 +132,16 @@ class CORE_EXPORT ImageResourceContent final
     // Clears the image and always notifies observers (without updating).
     ClearImageAndNotifyObservers,
   };
-  void updateImage(PassRefPtr<SharedBuffer>,
-                   UpdateImageOption,
-                   bool allDataReceived);
+  enum class UpdateImageResult {
+    NoDecodeError,
+
+    // Decode error occurred. Observers are not notified.
+    // Only occurs when UpdateImage or ClearAndUpdateImage is specified.
+    ShouldDecodeError,
+  };
+  WARN_UNUSED_RESULT UpdateImageResult updateImage(PassRefPtr<SharedBuffer>,
+                                                   UpdateImageOption,
+                                                   bool allDataReceived);
 
   void destroyDecodedData();
   void doResetAnimation();
@@ -181,6 +188,10 @@ class CORE_EXPORT ImageResourceContent final
   // Indicates if this resource's encoded image data can be purged and refetched
   // from disk cache to save memory usage. See crbug/664437.
   bool m_isRefetchableDataFromDiskCache;
+
+#if DCHECK_IS_ON()
+  bool m_isUpdateImageBeingCalled = false;
+#endif
 };
 
 }  // namespace blink

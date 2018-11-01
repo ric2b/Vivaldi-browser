@@ -2,9 +2,16 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//ios/build/config.gni")
+import("//ios/features.gni")
 import("//testing/test.gni")
 import("//url/features.gni")
+
+buildflag_header("ios_net_features") {
+  header = "ios_net_features.h"
+  flags = [ "CRONET_BUILD=$is_cronet_build" ]
+}
 
 group("all_tests") {
   testonly = true
@@ -15,6 +22,7 @@ group("all_tests") {
 
 source_set("net") {
   deps = [
+    ":ios_net_features",
     "//base",
     "//net",
     "//url:url_features",
@@ -32,6 +40,8 @@ source_set("net") {
     "cookies/cookie_store_ios.mm",
     "cookies/cookie_store_ios_client.h",
     "cookies/cookie_store_ios_client.mm",
+    "cookies/cookie_store_ios_persistent.h",
+    "cookies/cookie_store_ios_persistent.mm",
     "cookies/system_cookie_util.h",
     "cookies/system_cookie_util.mm",
     "crn_http_protocol_handler.h",
@@ -77,6 +87,9 @@ test("ios_net_unittests") {
   sources = [
     "cookies/cookie_cache_unittest.cc",
     "cookies/cookie_creation_time_manager_unittest.mm",
+    "cookies/cookie_store_ios_persistent_unittest.mm",
+    "cookies/cookie_store_ios_test_util.h",
+    "cookies/cookie_store_ios_test_util.mm",
     "cookies/cookie_store_ios_unittest.mm",
     "cookies/system_cookie_util_unittest.mm",
     "http_response_headers_util_unittest.mm",

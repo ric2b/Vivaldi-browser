@@ -62,7 +62,7 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertStyleImageList(
   return ListInterpolationFunctions::createList(
       imageList.size(), [&imageList](size_t index) {
         return CSSImageInterpolationType::maybeConvertStyleImage(
-            *imageList[index], false);
+            imageList[index].get(), false);
       });
 }
 
@@ -110,7 +110,7 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSImageListInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   if (value.isIdentifierValue() &&
       toCSSIdentifierValue(value).getValueID() == CSSValueNone)
@@ -151,9 +151,9 @@ PairwiseInterpolationValue CSSImageListInterpolationType::maybeMergeSingles(
 
 InterpolationValue
 CSSImageListInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
+    const ComputedStyle& style) const {
   StyleImageList underlyingImageList;
-  ImageListPropertyFunctions::getImageList(cssProperty(), *state.style(),
+  ImageListPropertyFunctions::getImageList(cssProperty(), style,
                                            underlyingImageList);
   return maybeConvertStyleImageList(underlyingImageList);
 }

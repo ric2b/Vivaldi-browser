@@ -17,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -274,13 +275,23 @@ void ResourceBundle::AddDataPackFromFile(base::File file,
                             scale_factor);
 }
 
+void ResourceBundle::AddDataPackFromBuffer(base::StringPiece buffer,
+                                           ScaleFactor scale_factor) {
+  std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
+  if (data_pack->LoadFromBuffer(buffer)) {
+    AddDataPack(std::move(data_pack));
+  } else {
+    LOG(ERROR) << "Failed to load data pack from buffer";
+  }
+}
+
 void ResourceBundle::AddDataPackFromFileRegion(
     base::File file,
     const base::MemoryMappedFile::Region& region,
     ScaleFactor scale_factor) {
   std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
   if (data_pack->LoadFromFileRegion(std::move(file), region)) {
-    AddDataPack(data_pack.release());
+    AddDataPack(std::move(data_pack));
   } else {
     LOG(ERROR) << "Failed to load data pack from file."
                << "\nSome features may not be available.";
@@ -360,7 +371,7 @@ void ResourceBundle::LoadTestResources(const base::FilePath& path,
   // Use the given resource pak for both common and localized resources.
   std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
   if (!path.empty() && data_pack->LoadFromPath(path))
-    AddDataPack(data_pack.release());
+    AddDataPack(std::move(data_pack));
 
   data_pack.reset(new DataPack(ui::SCALE_FACTOR_NONE));
   if (!locale_path.empty() && data_pack->LoadFromPath(locale_path)) {
@@ -403,17 +414,19 @@ std::string ResourceBundle::ReloadLocaleResources(
 }
 
 gfx::ImageSkia* ResourceBundle::GetImageSkiaNamed(int resource_id) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+
   const gfx::ImageSkia* image = GetImageNamed(resource_id).ToImageSkia();
   return const_cast<gfx::ImageSkia*>(image);
 }
 
 gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+
   // Check to see if the image is already in the cache.
-  {
-    base::AutoLock lock_scope(*images_and_fonts_lock_);
-    if (images_.count(resource_id))
-      return images_[resource_id];
-  }
+  auto found = images_.find(resource_id);
+  if (found != images_.end())
+    return found->second;
 
   gfx::Image image;
   if (delegate_)
@@ -451,14 +464,9 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
   }
 
   // The load was successful, so cache the image.
-  base::AutoLock lock_scope(*images_and_fonts_lock_);
-
-  // Another thread raced the load and has already cached the image.
-  if (images_.count(resource_id))
-    return images_[resource_id];
-
-  images_[resource_id] = image;
-  return images_[resource_id];
+  auto inserted = images_.insert(std::make_pair(resource_id, image));
+  DCHECK(inserted.second);
+  return inserted.first->second;
 }
 
 base::RefCountedMemory* ResourceBundle::LoadDataResourceBytes(
@@ -587,7 +595,7 @@ const gfx::FontList& ResourceBundle::GetFontListWithDelta(
     int size_delta,
     gfx::Font::FontStyle style,
     gfx::Font::Weight weight) {
-  base::AutoLock lock_scope(*images_and_fonts_lock_);
+  DCHECK(sequence_checker_.CalledOnValidSequence());
 
   const FontKey styled_key(size_delta, style, weight);
 
@@ -623,10 +631,12 @@ const gfx::FontList& ResourceBundle::GetFontListWithDelta(
 const gfx::Font& ResourceBundle::GetFontWithDelta(int size_delta,
                                                   gfx::Font::FontStyle style,
                                                   gfx::Font::Weight weight) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   return GetFontListWithDelta(size_delta, style, weight).GetPrimaryFont();
 }
 
 const gfx::FontList& ResourceBundle::GetFontList(FontStyle legacy_style) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   gfx::Font::Weight font_weight = gfx::Font::Weight::NORMAL;
   if (legacy_style == BoldFont || legacy_style == MediumBoldFont)
     font_weight = gfx::Font::Weight::BOLD;
@@ -652,11 +662,12 @@ const gfx::FontList& ResourceBundle::GetFontList(FontStyle legacy_style) {
 }
 
 const gfx::Font& ResourceBundle::GetFont(FontStyle style) {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   return GetFontList(style).GetPrimaryFont();
 }
 
 void ResourceBundle::ReloadFonts() {
-  base::AutoLock lock_scope(*images_and_fonts_lock_);
+  DCHECK(sequence_checker_.CalledOnValidSequence());
   InitDefaultFontList();
   font_cache_.clear();
 }
@@ -679,7 +690,6 @@ bool ResourceBundle::IsScaleFactorSupported(ScaleFactor scale_factor) {
 
 ResourceBundle::ResourceBundle(Delegate* delegate)
     : delegate_(delegate),
-      images_and_fonts_lock_(new base::Lock),
       locale_resources_data_lock_(new base::Lock),
       max_scale_factor_(SCALE_FACTOR_100P) {
 }
@@ -764,22 +774,23 @@ void ResourceBundle::AddDataPackFromPathInternal(
 
   std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
   if (data_pack->LoadFromPath(pack_path)) {
-    AddDataPack(data_pack.release());
+    AddDataPack(std::move(data_pack));
   } else if (false) {
     LOG(ERROR) << "Failed to load " << pack_path.value()
                << "\nSome features may not be available.";
   }
 }
 
-void ResourceBundle::AddDataPack(DataPack* data_pack) {
+void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
 #if DCHECK_IS_ON()
   data_pack->CheckForDuplicateResources(data_packs_);
 #endif
-  data_packs_.push_back(data_pack);
 
   if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
       GetScaleForScaleFactor(max_scale_factor_))
     max_scale_factor_ = data_pack->GetScaleFactor();
+
+  data_packs_.push_back(std::move(data_pack));
 }
 
 void ResourceBundle::InitDefaultFontList() {
@@ -862,7 +873,7 @@ bool ResourceBundle::LoadBitmap(int resource_id,
 }
 
 gfx::Image& ResourceBundle::GetEmptyImage() {
-  base::AutoLock lock(*images_and_fonts_lock_);
+  DCHECK(sequence_checker_.CalledOnValidSequence());
 
   if (empty_image_.IsEmpty()) {
     // The placeholder bitmap is bright red so people notice the problem.

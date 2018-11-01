@@ -4,8 +4,9 @@
 
 #include "ui/views/animation/ink_drop_painted_layer_delegates.h"
 
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/canvas.h"
@@ -15,6 +16,7 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/skia_util.h"
 
 namespace views {
@@ -56,15 +58,15 @@ gfx::Rect CircleLayerDelegate::GetPaintedBounds() const {
 }
 
 void CircleLayerDelegate::OnPaintLayer(const ui::PaintContext& context) {
-  SkPaint paint;
-  paint.setColor(color());
-  paint.setFlags(SkPaint::kAntiAlias_Flag);
-  paint.setStyle(SkPaint::kFill_Style);
+  cc::PaintFlags flags;
+  flags.setColor(color());
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
 
   ui::PaintRecorder recorder(context, GetPaintedBounds().size());
   gfx::Canvas* canvas = recorder.canvas();
 
-  canvas->DrawCircle(GetPaintedBounds().CenterPoint(), radius_, paint);
+  canvas->DrawCircle(GetPaintedBounds().CenterPoint(), radius_, flags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,14 +84,14 @@ gfx::Rect RectangleLayerDelegate::GetPaintedBounds() const {
 }
 
 void RectangleLayerDelegate::OnPaintLayer(const ui::PaintContext& context) {
-  SkPaint paint;
-  paint.setColor(color());
-  paint.setFlags(SkPaint::kAntiAlias_Flag);
-  paint.setStyle(SkPaint::kFill_Style);
+  cc::PaintFlags flags;
+  flags.setColor(color());
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
 
   ui::PaintRecorder recorder(context, size_);
   gfx::Canvas* canvas = recorder.canvas();
-  canvas->DrawRect(GetPaintedBounds(), paint);
+  canvas->DrawRect(GetPaintedBounds(), flags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,13 +115,13 @@ gfx::Rect RoundedRectangleLayerDelegate::GetPaintedBounds() const {
 
 void RoundedRectangleLayerDelegate::OnPaintLayer(
     const ui::PaintContext& context) {
-  SkPaint paint;
-  paint.setColor(color());
-  paint.setFlags(SkPaint::kAntiAlias_Flag);
-  paint.setStyle(SkPaint::kFill_Style);
+  cc::PaintFlags flags;
+  flags.setColor(color());
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
 
   ui::PaintRecorder recorder(context, size_);
-  recorder.canvas()->DrawRoundRect(GetPaintedBounds(), corner_radius_, paint);
+  recorder.canvas()->DrawRoundRect(GetPaintedBounds(), corner_radius_, flags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -151,10 +153,10 @@ gfx::Vector2dF BorderShadowLayerDelegate::GetCenteringOffset() const {
 }
 
 void BorderShadowLayerDelegate::OnPaintLayer(const ui::PaintContext& context) {
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setAntiAlias(true);
-  paint.setColor(fill_color_);
+  cc::PaintFlags flags;
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setAntiAlias(true);
+  flags.setColor(fill_color_);
 
   gfx::RectF rrect_bounds =
       gfx::RectF(bounds_ - GetPaintedBounds().OffsetFromOrigin());
@@ -163,13 +165,13 @@ void BorderShadowLayerDelegate::OnPaintLayer(const ui::PaintContext& context) {
 
   // First the fill color.
   ui::PaintRecorder recorder(context, GetPaintedBounds().size());
-  recorder.canvas()->sk_canvas()->drawRRect(r_rect, paint);
+  recorder.canvas()->sk_canvas()->drawRRect(r_rect, flags);
 
   // Now the shadow.
-  paint.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadows_));
+  flags.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadows_));
   recorder.canvas()->sk_canvas()->clipRRect(r_rect, SkClipOp::kDifference,
                                             true);
-  recorder.canvas()->sk_canvas()->drawRRect(r_rect, paint);
+  recorder.canvas()->sk_canvas()->drawRRect(r_rect, flags);
 }
 
 }  // namespace views

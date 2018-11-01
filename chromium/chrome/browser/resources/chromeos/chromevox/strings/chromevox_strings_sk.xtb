@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Skupina prepínačov</translation>
 <translation id="2471138580042810658">Nadpis 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{hviezdička}few{# hviezdičky}many{# asterisks}other{# hviezdičiek}}</translation>
+<translation id="2523609930580546572">Príručka rozšírenia ChromeVox</translation>
 <translation id="2525706221823668172">Klávesové stkratky Chromebooku</translation>
 <translation id="2549392850788122959">Kláves <ph name="KEY" /> bol obnovený</translation>
 <translation id="2553108862507765288">gramatická chyba</translation>
@@ -222,7 +223,6 @@ Ak ste už s návodom skončili, prejdite pomocou čítačky ChromeVox na tlač
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">Navštívený odkaz</translation>
 <translation id="3232388865800379423">Kontextové tlačidlo</translation>
-<translation id="323731244387692321">Otvoriť pomocníka pre klávesnicu rozšírenia ChromeVox</translation>
 <translation id="3241052487511142956">Predchádzajúci navštívený odkaz</translation>
 <translation id="3286390186030710347">Posuvník</translation>
 <translation id="3299925995433437805">Žiadny ďalší navštívený odkaz</translation>
@@ -377,6 +377,7 @@ Ak ste už s návodom skončili, prejdite pomocou čítačky ChromeVox na tlač
 <translation id="4372435075475052704">min:<ph name="X" /></translation>
 <translation id="4372705107434148843">Zastaviť reč</translation>
 <translation id="4373197658375206385">Žiadna predchádzajúca položka, ktorá nie je odkazom</translation>
+<translation id="4376316291247992553">Zobraziť obrázok na braillovej obrazovke</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">obnovenie</translation>
 <translation id="4471074325120394300">Žiadne odkazy</translation>
@@ -719,6 +720,7 @@ Ak chcete otvoriť ponuku prehliadača Chrome, stlačte kombináciu klávesov Al
 <translation id="7693840228159394336">Predchádzajúci prepínač</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, textové pole pre heslo</translation>
+<translation id="7776293189010177726">Otvoriť ponuky rozšírenia ChromeVox</translation>
 <translation id="7805247615045262757">predvolená navigácia</translation>
 <translation id="7805768142964895445">Stav</translation>
 <translation id="7810781339813764006">Ďalšia skupina</translation>

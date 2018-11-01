@@ -4,6 +4,7 @@
 
 #include <chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_service.h>
 
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -16,7 +17,11 @@
 
 namespace chromeos {
 
-// Blocks all notifications for ARC++ Kiosk
+// Timeout maintenance session after 30 minutes.
+constexpr base::TimeDelta kArcKioskMaintenanceSessionTimeout =
+    base::TimeDelta::FromMinutes(30);
+
+// Blocks all notifications for ARC Kiosk
 class ArcKioskNotificationBlocker : public message_center::NotificationBlocker {
  public:
   ArcKioskNotificationBlocker()
@@ -109,9 +114,17 @@ void ArcKioskAppService::OnTaskDestroyed(int32_t task_id) {
 void ArcKioskAppService::OnMaintenanceSessionCreated() {
   maintenance_session_running_ = true;
   PreconditionsChanged();
+  // Safe to bind |this| as timer is auto-cancelled on destruction.
+  maintenance_timeout_timer_.Start(
+      FROM_HERE, kArcKioskMaintenanceSessionTimeout,
+      base::Bind(&ArcKioskAppService::OnMaintenanceSessionFinished,
+                 base::Unretained(this)));
 }
 
 void ArcKioskAppService::OnMaintenanceSessionFinished() {
+  if (!maintenance_timeout_timer_.IsRunning())
+    VLOG(1) << "Maintenance session timeout";
+  maintenance_timeout_timer_.Stop();
   maintenance_session_running_ = false;
   PreconditionsChanged();
 }
@@ -128,25 +141,20 @@ ArcKioskAppService::ArcKioskAppService(Profile* profile) : profile_(profile) {
   app_manager_->AddObserver(this);
   pref_change_registrar_.reset(new PrefChangeRegistrar());
   pref_change_registrar_->Init(profile_->GetPrefs());
-  // Try to start/stop kiosk app on policy compliance state change.
-  pref_change_registrar_->Add(
-      prefs::kArcPolicyCompliant,
-      base::Bind(&ArcKioskAppService::PreconditionsChanged,
-                 base::Unretained(this)));
   notification_blocker_.reset(new ArcKioskNotificationBlocker());
   PreconditionsChanged();
 }
 
-ArcKioskAppService::~ArcKioskAppService() = default;
+ArcKioskAppService::~ArcKioskAppService() {
+  maintenance_timeout_timer_.Stop();
+}
 
 void ArcKioskAppService::PreconditionsChanged() {
   app_id_ = GetAppId();
   if (app_id_.empty())
     return;
   app_info_ = ArcAppListPrefs::Get(profile_)->GetApp(app_id_);
-  if (app_info_ && app_info_->ready &&
-      profile_->GetPrefs()->GetBoolean(prefs::kArcPolicyCompliant) &&
-      !maintenance_session_running_) {
+  if (app_info_ && app_info_->ready && !maintenance_session_running_) {
     if (!app_launcher_)
       app_launcher_ = base::MakeUnique<ArcKioskAppLauncher>(
           profile_, ArcAppListPrefs::Get(profile_), app_id_, this);

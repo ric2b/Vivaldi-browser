@@ -16,9 +16,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -33,6 +35,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/api/app_runtime.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest_handlers/action_handlers_handler.h"
 #include "url/gurl.h"
 
 namespace app_runtime = extensions::api::app_runtime;
@@ -119,10 +122,10 @@ NoteTakingAppInfos NoteTakingHelper::GetAvailableApps(Profile* profile) {
 
   const std::vector<const extensions::Extension*> chrome_apps =
       GetChromeApps(profile);
-  for (const auto& app : chrome_apps)
+  for (const auto* app : chrome_apps)
     infos.push_back(NoteTakingAppInfo{app->name(), app->id(), false});
 
-  if (arc::ArcSessionManager::Get()->IsAllowedForProfile(profile))
+  if (arc::IsArcAllowedForProfile(profile))
     infos.insert(infos.end(), android_apps_.begin(), android_apps_.end());
 
   // Determine which app, if any, is preferred.
@@ -187,7 +190,7 @@ void NoteTakingHelper::OnIntentFiltersUpdated() {
     UpdateAndroidApps();
 }
 
-void NoteTakingHelper::OnArcOptInChanged(bool enabled) {
+void NoteTakingHelper::OnArcPlayStoreEnabledChanged(bool enabled) {
   android_enabled_ = enabled;
   if (!enabled) {
     android_apps_.clear();
@@ -218,20 +221,24 @@ NoteTakingHelper::NoteTakingHelper()
   // Track profiles so we can observe their extension registries.
   registrar_.Add(this, chrome::NOTIFICATION_PROFILE_ADDED,
                  content::NotificationService::AllBrowserContextsAndSources());
+  android_enabled_ = false;
   for (Profile* profile :
        g_browser_process->profile_manager()->GetLoadedProfiles()) {
     extension_registry_observer_.Add(
         extensions::ExtensionRegistry::Get(profile));
+    // Check if the profile has already enabled Google Play Store.
+    // IsArcPlayStoreEnabledForProfile() can return true only for the primary
+    // profile.
+    android_enabled_ |= arc::IsArcPlayStoreEnabledForProfile(profile);
   }
 
-  // Check if the primary profile has already enabled ARC and watch for changes.
-  auto session_manager = arc::ArcSessionManager::Get();
+  // Watch for changes of Google Play Store enabled state.
+  auto* session_manager = arc::ArcSessionManager::Get();
   session_manager->AddObserver(this);
-  android_enabled_ = session_manager->IsArcEnabled();
 
   // ArcIntentHelperBridge will notify us about changes to the list of available
   // Android apps.
-  auto intent_helper_bridge =
+  auto* intent_helper_bridge =
       arc::ArcServiceManager::GetGlobalService<arc::ArcIntentHelperBridge>();
   if (intent_helper_bridge)
     intent_helper_bridge->AddObserver(this);
@@ -251,7 +258,7 @@ NoteTakingHelper::~NoteTakingHelper() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // ArcSessionManagerTest shuts down ARC before NoteTakingHelper.
-  auto intent_helper_bridge =
+  auto* intent_helper_bridge =
       arc::ArcServiceManager::GetGlobalService<arc::ArcIntentHelperBridge>();
   if (intent_helper_bridge)
     intent_helper_bridge->RemoveObserver(this);
@@ -262,9 +269,7 @@ NoteTakingHelper::~NoteTakingHelper() {
 bool NoteTakingHelper::IsWhitelistedChromeApp(
     const extensions::Extension* extension) const {
   DCHECK(extension);
-  return std::find(whitelisted_chrome_app_ids_.begin(),
-                   whitelisted_chrome_app_ids_.end(),
-                   extension->id()) != whitelisted_chrome_app_ids_.end();
+  return base::ContainsValue(whitelisted_chrome_app_ids_, extension->id());
 }
 
 std::vector<const extensions::Extension*> NoteTakingHelper::GetChromeApps(
@@ -275,8 +280,6 @@ std::vector<const extensions::Extension*> NoteTakingHelper::GetChromeApps(
   const extensions::ExtensionSet& enabled_extensions =
       extension_registry->enabled_extensions();
 
-  // TODO(derat): Query for additional Chrome apps once http://crbug.com/657139
-  // is resolved.
   std::vector<const extensions::Extension*> extensions;
   for (const auto& id : whitelisted_chrome_app_ids_) {
     if (enabled_extensions.Contains(id)) {
@@ -284,6 +287,19 @@ std::vector<const extensions::Extension*> NoteTakingHelper::GetChromeApps(
           id, extensions::ExtensionRegistry::ENABLED));
     }
   }
+
+  // Add any extensions which have a "note" action in their manifest
+  // "action_handler" entry.
+  for (const auto& extension : enabled_extensions) {
+    if (base::ContainsValue(extensions, extension.get()))
+      continue;
+
+    if (extensions::ActionHandlersInfo::HasActionHandler(
+            extension.get(), app_runtime::ACTION_TYPE_NEW_NOTE)) {
+      extensions.push_back(extension.get());
+    }
+  }
+
   return extensions;
 }
 
@@ -325,7 +341,7 @@ NoteTakingHelper::LaunchResult NoteTakingHelper::LaunchAppInternal(
 
   if (LooksLikeAndroidPackageName(app_id)) {
     // Android app.
-    if (!arc::ArcSessionManager::Get()->IsAllowedForProfile(profile)) {
+    if (!arc::IsArcAllowedForProfile(profile)) {
       LOG(WARNING) << "Can't launch Android app " << app_id << " for profile";
       return LaunchResult::ANDROID_NOT_SUPPORTED_BY_PROFILE;
     }
@@ -375,16 +391,28 @@ void NoteTakingHelper::Observe(int type,
                                const content::NotificationSource& source,
                                const content::NotificationDetails& details) {
   DCHECK_EQ(type, chrome::NOTIFICATION_PROFILE_ADDED);
-  auto registry = extensions::ExtensionRegistry::Get(
-      content::Source<Profile>(source).ptr());
+  Profile* profile = content::Source<Profile>(source).ptr();
+  DCHECK(profile);
+
+  auto* registry = extensions::ExtensionRegistry::Get(profile);
   DCHECK(!extension_registry_observer_.IsObserving(registry));
   extension_registry_observer_.Add(registry);
+
+  // TODO(derat): Remove this once OnArcPlayStoreEnabledChanged() is always
+  // called after an ARC-enabled user logs in: http://b/36655474
+  if (!android_enabled_ && arc::IsArcPlayStoreEnabledForProfile(profile)) {
+    android_enabled_ = true;
+    for (auto& observer : observers_)
+      observer.OnAvailableNoteTakingAppsUpdated();
+  }
 }
 
 void NoteTakingHelper::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension) {
-  if (IsWhitelistedChromeApp(extension)) {
+  if (IsWhitelistedChromeApp(extension) ||
+      extensions::ActionHandlersInfo::HasActionHandler(
+          extension, app_runtime::ACTION_TYPE_NEW_NOTE)) {
     for (auto& observer : observers_)
       observer.OnAvailableNoteTakingAppsUpdated();
   }
@@ -394,7 +422,9 @@ void NoteTakingHelper::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
     extensions::UnloadedExtensionInfo::Reason reason) {
-  if (IsWhitelistedChromeApp(extension)) {
+  if (IsWhitelistedChromeApp(extension) ||
+      extensions::ActionHandlersInfo::HasActionHandler(
+          extension, app_runtime::ACTION_TYPE_NEW_NOTE)) {
     for (auto& observer : observers_)
       observer.OnAvailableNoteTakingAppsUpdated();
   }

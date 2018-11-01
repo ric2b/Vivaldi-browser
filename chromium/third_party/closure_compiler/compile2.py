@@ -42,7 +42,7 @@ class Checker(object):
     Args:
       verbose: Whether this class should output diagnostic messages.
     """
-    self._runner_jar = os.path.join(_CURRENT_DIR, "runner", "runner.jar")
+    self._compiler_jar = os.path.join(_CURRENT_DIR, "compiler", "compiler.jar")
     self._target = None
     self._temp_files = []
     self._verbose = verbose
@@ -188,7 +188,7 @@ class Checker(object):
       tmp_file.write(contents)
     return tmp_file.name
 
-  def check(self, sources, out_file=None, runner_args=None, closure_args=None,
+  def check(self, sources, out_file, closure_args=None,
             custom_sources=True):
     """Closure compile |sources| while checking for errors.
 
@@ -197,7 +197,6 @@ class Checker(object):
           sources[1:] are externs and dependencies in topological order. Order
           is not guaranteed if custom_sources is True.
       out_file: A file where the compiled output is written to.
-      runner_args: Arguments passed to runner.jar.
       closure_args: Arguments passed directly to the Closure compiler.
       custom_sources: Whether |sources| was customized by the target (e.g. not
           in GYP dependency order).
@@ -245,28 +244,27 @@ class Checker(object):
       js_args = [self._expanded_file]
 
     closure_args = closure_args or []
-    closure_args += ["summary_detail_level=3"]
+    closure_args += ["summary_detail_level=3", "continue_after_errors"]
 
     args = ["--externs=%s" % e for e in externs] + \
            ["--js=%s" % s for s in js_args] + \
            ["--%s" % arg for arg in closure_args]
 
-    if out_file:
-      out_dir = os.path.dirname(out_file)
-      if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+    assert out_file
+
+    out_dir = os.path.dirname(out_file)
+    if not os.path.exists(out_dir):
+      os.makedirs(out_dir)
+
+    checks_only = 'checks_only' in closure_args
+
+    if not checks_only:
       args += ["--js_output_file=%s" % out_file]
       args += ["--create_source_map=%s" % (self._MAP_FILE_FORMAT % out_file)]
 
-    args_file_content = " %s" % " ".join(args)
-    self._log_debug("Args: %s" % args_file_content.strip())
+    self._log_debug("Args: %s" % " ".join(args))
 
-    args_file = self._create_temp_file(args_file_content)
-    self._log_debug("Args file: %s" % args_file)
-
-    processed_runner_args = ["--%s" % arg for arg in runner_args or []]
-    processed_runner_args += ["--compiler-args-file=%s" % args_file]
-    _, stderr = self._run_jar(self._runner_jar, processed_runner_args)
+    _, stderr = self._run_jar(self._compiler_jar, args)
 
     errors = stderr.strip().split("\n\n")
     maybe_summary = errors.pop()
@@ -280,11 +278,17 @@ class Checker(object):
       self._nuke_temp_files()
       sys.exit(1)
 
-    if summary.group('error_count') != "0" and out_file:
+    if summary.group('error_count') != "0":
       if os.path.exists(out_file):
         os.remove(out_file)
       if os.path.exists(self._MAP_FILE_FORMAT % out_file):
         os.remove(self._MAP_FILE_FORMAT % out_file)
+    elif checks_only:
+      # Compile succeeded but --checks_only disables --js_output_file from
+      # actually writing a file. Write a file ourselves so incremental builds
+      # still work.
+      with open(out_file, 'w') as f:
+        f.write('')
 
     if not custom_sources:
       filtered_errors = self._filter_errors(errors)
@@ -308,10 +312,8 @@ if __name__ == "__main__":
                       help="Path to a source file to typecheck")
   parser.add_argument("--custom_sources", action="store_true",
                       help="Whether this rules has custom sources.")
-  parser.add_argument("-o", "--out_file",
+  parser.add_argument("-o", "--out_file", required=True,
                       help="A file where the compiled output is written to")
-  parser.add_argument("-r", "--runner_args", nargs=argparse.ZERO_OR_MORE,
-                      help="Arguments passed to runner.jar")
   parser.add_argument("-c", "--closure_args", nargs=argparse.ZERO_OR_MORE,
                       help="Arguments passed directly to the Closure compiler")
   parser.add_argument("-v", "--verbose", action="store_true",
@@ -322,7 +324,6 @@ if __name__ == "__main__":
 
   found_errors, stderr = checker.check(opts.sources, out_file=opts.out_file,
                                        closure_args=opts.closure_args,
-                                       runner_args=opts.runner_args,
                                        custom_sources=opts.custom_sources)
 
   if found_errors:

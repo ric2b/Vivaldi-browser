@@ -49,13 +49,15 @@ LayoutTreeBuilderForElement::LayoutTreeBuilderForElement(Element& element,
                                                          ComputedStyle* style)
     : LayoutTreeBuilder(element, nullptr), m_style(style) {
   DCHECK(!element.isActiveSlotOrActiveInsertionPoint());
+  // TODO(ecobos): Move the first-letter logic inside parentLayoutObject too?
+  // It's an extra (unnecessary) check for text nodes, though.
   if (element.isFirstLetterPseudoElement()) {
     if (LayoutObject* nextLayoutObject =
             FirstLetterPseudoElement::firstLetterTextLayoutObject(element))
       m_layoutObjectParent = nextLayoutObject->parent();
-  } else if (ContainerNode* containerNode =
-                 LayoutTreeBuilderTraversal::parent(element)) {
-    m_layoutObjectParent = containerNode->layoutObject();
+  } else {
+    m_layoutObjectParent =
+        LayoutTreeBuilderTraversal::parentLayoutObject(element);
   }
 }
 
@@ -89,24 +91,11 @@ bool LayoutTreeBuilderForElement::shouldCreateLayoutObject() const {
   if (!m_layoutObjectParent)
     return false;
 
-  // FIXME: Should the following be in SVGElement::layoutObjectIsNeeded()?
-  if (m_node->isSVGElement()) {
-    // SVG elements only render when inside <svg>, or if the element is an <svg>
-    // itself.
-    if (!isSVGSVGElement(*m_node) &&
-        (!m_layoutObjectParent->node() ||
-         !m_layoutObjectParent->node()->isSVGElement()))
-      return false;
-    if (!toSVGElement(m_node)->isValid())
-      return false;
-  }
-
   LayoutObject* parentLayoutObject = this->parentLayoutObject();
   if (!parentLayoutObject)
     return false;
   if (!parentLayoutObject->canHaveChildren())
     return false;
-
   return m_node->layoutObjectIsNeeded(style());
 }
 
@@ -156,7 +145,11 @@ void LayoutTreeBuilderForElement::createLayoutObject() {
 }
 
 void LayoutTreeBuilderForText::createLayoutObject() {
-  ComputedStyle& style = m_layoutObjectParent->mutableStyleRef();
+  ComputedStyle& style = *m_style;
+
+  DCHECK(m_style == m_layoutObjectParent->style() ||
+         toElement(LayoutTreeBuilderTraversal::parent(*m_node))
+             ->hasDisplayContentsStyle());
 
   DCHECK(m_node->textLayoutObjectIsNeeded(style, *m_layoutObjectParent));
 

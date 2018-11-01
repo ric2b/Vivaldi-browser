@@ -116,44 +116,6 @@ MostVisitedURL MakeMostVisitedURL(const PageUsageData& page_data,
   return mv;
 }
 
-// This task is run on a timer so that commits happen at regular intervals
-// so they are batched together. The important thing about this class is that
-// it supports canceling of the task so the reference to the backend will be
-// freed. The problem is that when history is shutting down, there is likely
-// to be one of these commits still pending and holding a reference.
-//
-// The backend can call Cancel to have this task release the reference. The
-// task will still run (if we ever get to processing the event before
-// shutdown), but it will not do anything.
-//
-// Note that this is a refcounted object and is not a task in itself. It should
-// be assigned to a RunnableMethod.
-//
-// TODO(brettw): bug 1165182: This should be replaced with a
-// base::WeakPtrFactory which will handle everything automatically (like we do
-// in ExpireHistoryBackend).
-class CommitLaterTask : public base::RefCounted<CommitLaterTask> {
- public:
-  explicit CommitLaterTask(HistoryBackend* history_backend)
-      : history_backend_(history_backend) {}
-
-  // The backend will call this function if it is being destroyed so that we
-  // release our reference.
-  void Cancel() { history_backend_ = nullptr; }
-
-  void RunCommit() {
-    if (history_backend_)
-      history_backend_->Commit();
-  }
-
- private:
-  friend class base::RefCounted<CommitLaterTask>;
-
-  ~CommitLaterTask() {}
-
-  scoped_refptr<HistoryBackend> history_backend_;
-};
-
 QueuedHistoryDBTask::QueuedHistoryDBTask(
     std::unique_ptr<HistoryDBTask> task,
     scoped_refptr<base::SingleThreadTaskRunner> origin_loop,
@@ -219,7 +181,7 @@ HistoryBackend::HistoryBackend(
       task_runner_(task_runner) {}
 
 HistoryBackend::~HistoryBackend() {
-  DCHECK(!scheduled_commit_) << "Deleting without cleanup";
+  DCHECK(scheduled_commit_.IsCancelled()) << "Deleting without cleanup";
   queued_history_db_tasks_.clear();
 
   // Release stashed embedder object before cleaning up the databases.
@@ -1221,7 +1183,6 @@ void HistoryBackend::RemoveDownloads(const std::set<uint32_t>& ids) {
   if (!db_)
     return;
   size_t downloads_count_before = db_->CountDownloads();
-  base::TimeTicks started_removing = base::TimeTicks::Now();
   // HistoryBackend uses a long-running Transaction that is committed
   // periodically, so this loop doesn't actually hit the disk too hard.
   for (std::set<uint32_t>::const_iterator it = ids.begin(); it != ids.end();
@@ -1229,7 +1190,6 @@ void HistoryBackend::RemoveDownloads(const std::set<uint32_t>& ids) {
     db_->RemoveDownload(*it);
   }
   ScheduleCommit();
-  base::TimeTicks finished_removing = base::TimeTicks::Now();
   size_t downloads_count_after = db_->CountDownloads();
 
   DCHECK_LE(downloads_count_after, downloads_count_before);
@@ -1238,12 +1198,6 @@ void HistoryBackend::RemoveDownloads(const std::set<uint32_t>& ids) {
   size_t num_downloads_deleted = downloads_count_before - downloads_count_after;
   UMA_HISTOGRAM_COUNTS("Download.DatabaseRemoveDownloadsCount",
                        num_downloads_deleted);
-  base::TimeDelta micros = (1000 * (finished_removing - started_removing));
-  UMA_HISTOGRAM_TIMES("Download.DatabaseRemoveDownloadsTime", micros);
-  if (num_downloads_deleted > 0) {
-    UMA_HISTOGRAM_TIMES("Download.DatabaseRemoveDownloadsTimePerRecord",
-                        (1000 * micros) / num_downloads_deleted);
-  }
   DCHECK_GE(ids.size(), num_downloads_deleted);
 }
 
@@ -2282,20 +2236,21 @@ void HistoryBackend::Commit() {
 }
 
 void HistoryBackend::ScheduleCommit() {
-  if (scheduled_commit_)
+  // Non-cancelled means there's an already scheduled commit. Note that
+  // CancelableClosure starts cancelled with the default constructor.
+  if (!scheduled_commit_.IsCancelled())
     return;
-  scheduled_commit_ = new CommitLaterTask(this);
+
+  scheduled_commit_.Reset(
+      base::Bind(&HistoryBackend::Commit, base::Unretained(this)));
+
   task_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&CommitLaterTask::RunCommit, scheduled_commit_),
+      FROM_HERE, scheduled_commit_.callback(),
       base::TimeDelta::FromSeconds(kCommitIntervalSeconds));
 }
 
 void HistoryBackend::CancelScheduledCommit() {
-  if (scheduled_commit_) {
-    scheduled_commit_->Cancel();
-    scheduled_commit_ = nullptr;
-  }
+  scheduled_commit_.Cancel();
 }
 
 void HistoryBackend::ProcessDBTaskImpl() {

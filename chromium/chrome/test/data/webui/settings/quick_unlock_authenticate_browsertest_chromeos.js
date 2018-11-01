@@ -187,14 +187,6 @@ cr.define('settings_people_page_quick_unlock', function() {
         fakeSettings.setPref(ENABLE_LOCK_SCREEN_PREF, value, '', assertTrue);
       }
 
-      suiteSetup(function() {
-        var urls = [
-          'chrome://md-settings/i18n_setup.html',
-          'chrome://md-settings/prefs/prefs.html',
-        ];
-        return Promise.all(urls.map(PolymerTest.importHtml));
-      });
-
       setup(function(done) {
         PolymerTest.clearBody();
 
@@ -237,7 +229,7 @@ cr.define('settings_people_page_quick_unlock', function() {
               getFromElement('paper-radio-button[name="password"]');
           pinPasswordRadioButton =
               getFromElement('paper-radio-button[name="pin+password"]');
-          configureButton = getFromElement('paper-button');
+          configureButton = getFromElement('a[is="action-link"]');
 
           done();
         });
@@ -323,11 +315,6 @@ cr.define('settings_people_page_quick_unlock', function() {
       var pinKeyboard = null;
       var backButton = null;
       var continueButton = null;
-
-      suiteSetup(function() {
-        var urls = ['chrome://md-settings/i18n_setup.html'];
-        return Promise.all(urls.map(PolymerTest.importHtml));
-      });
 
       setup(function() {
         PolymerTest.clearBody();

@@ -109,6 +109,7 @@ if (current_toolchain != default_toolchain) {
   is_ubsan_vptr = false
   msan_track_origins = 0
   sanitizer_coverage_flags = ""
+  use_afl = false
   use_cfi_diag = false
   use_custom_libcxx = false
   use_drfuzz = false
@@ -139,8 +140,8 @@ declare_args() {
   asan_globals = !is_mac
 }
 
-if (use_afl && sanitizer_coverage_flags == "") {
-  sanitizer_coverage_flags = "trace-pc"
+if ((use_afl || use_libfuzzer) && sanitizer_coverage_flags == "") {
+  sanitizer_coverage_flags = "trace-pc-guard"
 } else if (use_sanitizer_coverage && sanitizer_coverage_flags == "") {
   sanitizer_coverage_flags = "edge,indirect-calls,8bit-counters"
 }
@@ -184,3 +185,8 @@ assert(!is_debug || !(is_msan || is_ubsan || is_ubsan_null || is_ubsan_vptr),
 
 assert(!is_msan || (is_linux && current_cpu == "x64"),
        "MSan currently only works on 64-bit Linux and ChromeOS builds.")
+
+# ASAN build on Windows is not working in debug mode. Intercepting memory
+# allocation functions is hard on Windows and not yet implemented in LLVM.
+assert(!is_win || !is_debug || !is_asan,
+       "ASan on Windows doesn't work in debug (set is_debug=false).")

@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_EXTENSIONS_H_
-#define VIVALDI_NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_EXTENSIONS_H_
+#ifndef NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_EXTENSIONS_H_
+#define NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_EXTENSIONS_H_
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -28,13 +28,13 @@ class NotificationPermissionContextExtensions {
   // |permission_set| will be set to true if the permission changed, and the
   // permission has been set to |new_permission|.
   bool DecidePermission(content::WebContents* web_contents,
-                         const PermissionRequestID& request_id,
-                         int bridge_id,
-                         const GURL& requesting_frame,
-                         bool user_gesture,
-                         const base::Callback<void(ContentSetting)>& callback,
-                         bool* permission_set,
-                         bool* new_permission);
+                        const PermissionRequestID& request_id,
+                        int bridge_id,
+                        const GURL& requesting_frame,
+                        bool user_gesture,
+                        const base::Callback<void(ContentSetting)>& callback,
+                        bool* permission_set,
+                        bool* new_permission);
 
   // Returns true if the cancellation request was handled.
   bool CancelPermissionRequest(content::WebContents* web_contents,
@@ -46,4 +46,4 @@ class NotificationPermissionContextExtensions {
   DISALLOW_COPY_AND_ASSIGN(NotificationPermissionContextExtensions);
 };
 
-#endif  // VIVALDI_NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_EXTENSIONS_H_
+#endif  // NOTIFICATIONS_NOTIFICATION_PERMISSION_CONTEXT_EXTENSIONS_H_

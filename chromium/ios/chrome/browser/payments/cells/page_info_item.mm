@@ -11,7 +11,7 @@
 #error "This file requires ARC support."
 #endif
 
-NSString* const kPageInfoFaviconImageViewId = @"kPageInfoFaviconImageViewId";
+NSString* const kPageInfoFaviconImageViewID = @"kPageInfoFaviconImageViewID";
 
 namespace {
 // Padding used on the top and bottom edges of the cell.
@@ -28,6 +28,8 @@ const CGFloat kHorizontalPadding = 16;
 @synthesize pageTitle = _pageTitle;
 @synthesize pageHost = _pageHost;
 
+#pragma mark CollectionViewItem
+
 - (instancetype)initWithType:(NSInteger)type {
   self = [super initWithType:type];
   if (self) {
@@ -35,8 +37,6 @@ const CGFloat kHorizontalPadding = 16;
   }
   return self;
 }
-
-#pragma mark CollectionViewItem
 
 - (void)configureCell:(PageInfoCell*)cell {
   [super configureCell:cell];
@@ -67,7 +67,7 @@ const CGFloat kHorizontalPadding = 16;
     // Favicon
     _pageFaviconView = [[UIImageView alloc] initWithFrame:CGRectZero];
     _pageFaviconView.translatesAutoresizingMaskIntoConstraints = NO;
-    _pageFaviconView.accessibilityIdentifier = kPageInfoFaviconImageViewId;
+    _pageFaviconView.accessibilityIdentifier = kPageInfoFaviconImageViewID;
     [self.contentView addSubview:_pageFaviconView];
 
     // Page title

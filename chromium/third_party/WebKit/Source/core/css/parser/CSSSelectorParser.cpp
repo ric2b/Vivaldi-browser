@@ -375,6 +375,8 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeAttribute(
   AtomicString attributeName;
   if (!consumeName(block, attributeName, namespacePrefix))
     return nullptr;
+  if (attributeName == starAtom)
+    return nullptr;
   block.consumeWhitespace();
 
   if (m_context->isHTMLDocument())
@@ -806,7 +808,7 @@ CSSSelectorParser::splitCompoundAtImplicitShadowCrossingCombinator(
 
 void CSSSelectorParser::recordUsageAndDeprecations(
     const CSSSelectorList& selectorList) {
-  if (!m_context->useCounter())
+  if (!m_context->isUseCounterRecordingEnabled())
     return;
 
   for (const CSSSelector* selector = selectorList.first(); selector;
@@ -902,11 +904,11 @@ void CSSSelectorParser::recordUsageAndDeprecations(
           Deprecation::countDeprecation(*m_styleSheet->anyOwnerDocument(),
                                         feature);
         } else {
-          m_context->useCounter()->count(feature);
+          m_context->count(feature);
         }
       }
       if (current->relation() == CSSSelector::IndirectAdjacent)
-        m_context->useCounter()->count(UseCounter::CSSSelectorIndirectAdjacent);
+        m_context->count(UseCounter::CSSSelectorIndirectAdjacent);
       if (current->selectorList())
         recordUsageAndDeprecations(*current->selectorList());
     }

@@ -4,10 +4,13 @@
 
 #include "base/files/file_util.h"
 
-#include <copyfile.h>
 #import <Foundation/Foundation.h>
+#include <copyfile.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
@@ -23,6 +26,19 @@ bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
 }
 
 bool GetTempDir(base::FilePath* path) {
+  // In order to facilitate hermetic runs on macOS, first check
+  // $MAC_CHROMIUM_TMPDIR. We check this instead of $TMPDIR because external
+  // programs currently set $TMPDIR with no effect, but when we respect it
+  // directly it can cause crashes (like crbug.com/698759).
+  const char* env_tmpdir = getenv("MAC_CHROMIUM_TMPDIR");
+  if (env_tmpdir) {
+    DCHECK_LT(strlen(env_tmpdir), 50u)
+        << "too-long TMPDIR causes socket name length issues.";
+    *path = base::FilePath(env_tmpdir);
+    return true;
+  }
+
+  // If we didn't find it, fall back to the native function.
   NSString* tmp = NSTemporaryDirectory();
   if (tmp == nil)
     return false;

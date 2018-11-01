@@ -13,7 +13,7 @@ namespace blink {
 class VisualRectMappingTest : public RenderingTest {
  public:
   VisualRectMappingTest()
-      : RenderingTest(SingleChildFrameLoaderClient::create()) {}
+      : RenderingTest(SingleChildLocalFrameClient::create()) {}
 
  protected:
   LayoutView& layoutView() const { return *document().layoutView(); }
@@ -127,8 +127,8 @@ TEST_F(VisualRectMappingTest, LayoutView) {
 
   // This case involves clipping: frame height is 50, y-coordinate of result
   // rect is 13, so height should be clipped to (50 - 13) == 37.
-  childDocument().view()->setScrollOffset(ScrollOffset(0, 47),
-                                          ProgrammaticScroll);
+  childDocument().view()->layoutViewportScrollableArea()->setScrollOffset(
+      ScrollOffset(0, 47), ProgrammaticScroll);
   document().view()->updateAllLifecyclePhases();
 
   LayoutRect originalRect(4, 60, 20, 80);
@@ -197,8 +197,8 @@ TEST_F(VisualRectMappingTest, LayoutViewDisplayNone) {
 
   // This part is copied from the LayoutView test, just to ensure that the
   // mapped rect is valid before display:none is set on the iframe.
-  childDocument().view()->setScrollOffset(ScrollOffset(0, 47),
-                                          ProgrammaticScroll);
+  childDocument().view()->layoutViewportScrollableArea()->setScrollOffset(
+      ScrollOffset(0, 47), ProgrammaticScroll);
   document().view()->updateAllLifecyclePhases();
 
   LayoutRect originalRect(4, 60, 20, 80);
@@ -698,6 +698,71 @@ TEST_F(VisualRectMappingTest, FloatUnderInline) {
   rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(span, rect));
   EXPECT_EQ(LayoutRect(-200, -100, 33, 44), rect);
+}
+
+TEST_F(VisualRectMappingTest, ShouldAccountForPreserve3d) {
+  enableCompositing();
+  setBodyInnerHTML(
+      "<style>"
+      "* { margin: 0; }"
+      "#container {"
+      "  transform: rotateX(-45deg);"
+      "  width: 100px; height: 100px;"
+      "}"
+      "#target {"
+      "  transform-style: preserve-3d; transform: rotateX(45deg);"
+      "  background: lightblue;"
+      "  width: 100px; height: 100px;"
+      "}"
+      "</style>"
+      "<div id='container'><div id='target'></div></div>");
+  LayoutBlock* container =
+      toLayoutBlock(getLayoutObjectByElementId("container"));
+  LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
+  LayoutRect originalRect(0, 0, 100, 100);
+  // Multiply both matrices together before flattening.
+  TransformationMatrix matrix = container->layer()->currentTransform();
+  matrix *= target->layer()->currentTransform();
+  matrix.flattenTo2d();
+  FloatRect output = matrix.mapRect(FloatRect(originalRect));
+
+  EXPECT_TRUE(
+      target->mapToVisualRectInAncestorSpace(target->view(), originalRect));
+  EXPECT_EQ(LayoutRect(enclosingIntRect(output)), originalRect);
+}
+
+TEST_F(VisualRectMappingTest, ShouldAccountForPerspective) {
+  enableCompositing();
+  setBodyInnerHTML(
+      "<style>"
+      "* { margin: 0; }"
+      "#container {"
+      "  transform: rotateX(-45deg); perspective: 100px;"
+      "  width: 100px; height: 100px;"
+      "}"
+      "#target {"
+      "  transform-style: preserve-3d; transform: rotateX(45deg);"
+      "  background: lightblue;"
+      "  width: 100px; height: 100px;"
+      "}"
+      "</style>"
+      "<div id='container'><div id='target'></div></div>");
+  LayoutBlock* container =
+      toLayoutBlock(getLayoutObjectByElementId("container"));
+  LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
+  LayoutRect originalRect(0, 0, 100, 100);
+  TransformationMatrix matrix = container->layer()->currentTransform();
+  TransformationMatrix targetMatrix;
+  // getTransformfromContainter includes transform and perspective matrix
+  // of the container.
+  target->getTransformFromContainer(container, LayoutSize(), targetMatrix);
+  matrix *= targetMatrix;
+  matrix.flattenTo2d();
+  FloatRect output = matrix.mapRect(FloatRect(originalRect));
+
+  EXPECT_TRUE(
+      target->mapToVisualRectInAncestorSpace(target->view(), originalRect));
+  EXPECT_EQ(LayoutRect(enclosingIntRect(output)), originalRect);
 }
 
 }  // namespace blink

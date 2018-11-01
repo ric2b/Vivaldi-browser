@@ -46,17 +46,17 @@ namespace blink {
 std::unique_ptr<DummyPageHolder> DummyPageHolder::create(
     const IntSize& initialViewSize,
     Page::PageClients* pageClients,
-    FrameLoaderClient* frameLoaderClient,
+    LocalFrameClient* localFrameClient,
     FrameSettingOverrideFunction settingOverrider,
     InterfaceProvider* interfaceProvider) {
-  return WTF::wrapUnique(
-      new DummyPageHolder(initialViewSize, pageClients, frameLoaderClient,
-                          settingOverrider, interfaceProvider));
+  return WTF::wrapUnique(new DummyPageHolder(initialViewSize, pageClients,
+                                             localFrameClient, settingOverrider,
+                                             interfaceProvider));
 }
 
 DummyPageHolder::DummyPageHolder(const IntSize& initialViewSize,
                                  Page::PageClients* pageClientsArgument,
-                                 FrameLoaderClient* frameLoaderClient,
+                                 LocalFrameClient* localFrameClient,
                                  FrameSettingOverrideFunction settingOverrider,
                                  InterfaceProvider* interfaceProvider) {
   Page::PageClients pageClients;
@@ -76,11 +76,11 @@ DummyPageHolder::DummyPageHolder(const IntSize& initialViewSize,
   if (settingOverrider)
     (*settingOverrider)(settings);
 
-  m_frameLoaderClient = frameLoaderClient;
-  if (!m_frameLoaderClient)
-    m_frameLoaderClient = EmptyFrameLoaderClient::create();
+  m_localFrameClient = localFrameClient;
+  if (!m_localFrameClient)
+    m_localFrameClient = EmptyLocalFrameClient::create();
 
-  m_frame = LocalFrame::create(m_frameLoaderClient.get(), &m_page->frameHost(),
+  m_frame = LocalFrame::create(m_localFrameClient.get(), &m_page->frameHost(),
                                nullptr, interfaceProvider);
   m_frame->setView(FrameView::create(*m_frame, initialViewSize));
   m_frame->view()->page()->frameHost().visualViewport().setSize(
@@ -99,7 +99,7 @@ Page& DummyPageHolder::page() const {
 }
 
 LocalFrame& DummyPageHolder::frame() const {
-  ASSERT(m_frame);
+  DCHECK(m_frame);
   return *m_frame;
 }
 

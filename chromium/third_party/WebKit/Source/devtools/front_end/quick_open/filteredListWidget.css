@@ -8,8 +8,6 @@
     display: flex;
     flex-direction: column;
     flex: auto;
-    width: 504px;
-    max-height: 340px;
 }
 
 .filtered-list-widget-prompt-element {
@@ -26,6 +24,7 @@
     height: 18px;
     margin-top: 12px;
     overflow: hidden;
+    flex: auto;
 }
 
 .filtered-list-widget-progress {

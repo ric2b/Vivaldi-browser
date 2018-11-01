@@ -5,9 +5,13 @@
 #ifndef PRINTING_PDF_RENDER_SETTINGS_H_
 #define PRINTING_PDF_RENDER_SETTINGS_H_
 
+#include <stdint.h>
+
+#include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_param_traits.h"
 #include "printing/printing_export.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
@@ -16,45 +20,38 @@ namespace printing {
 
 // Defining PDF rendering settings.
 struct PdfRenderSettings {
-  PdfRenderSettings() : dpi(0), autorotate(false) {}
-  PdfRenderSettings(gfx::Rect area, int dpi, bool autorotate)
-      : area(area), dpi(dpi), autorotate(autorotate) {}
+  enum Mode {
+    NORMAL = 0,
+#if defined(OS_WIN)
+    GDI_TEXT,
+    POSTSCRIPT_LEVEL2,
+    POSTSCRIPT_LEVEL3,
+    LAST = POSTSCRIPT_LEVEL3,
+#else
+    LAST = NORMAL,
+#endif
+  };
+
+  PdfRenderSettings() : dpi(0), autorotate(false), mode(Mode::NORMAL) {}
+  PdfRenderSettings(gfx::Rect area,
+                    gfx::Point offsets,
+                    int dpi,
+                    bool autorotate,
+                    Mode mode)
+      : area(area),
+        offsets(offsets),
+        dpi(dpi),
+        autorotate(autorotate),
+        mode(mode) {}
   ~PdfRenderSettings() {}
 
   gfx::Rect area;
+  gfx::Point offsets;
   int dpi;
   bool autorotate;
+  Mode mode;
 };
 
 }  // namespace printing
-
-namespace IPC {
-template <>
-struct ParamTraits<printing::PdfRenderSettings> {
-  typedef printing::PdfRenderSettings param_type;
-  static void Write(base::Pickle* m, const param_type& p) {
-    WriteParam(m, p.area);
-    WriteParam(m, p.dpi);
-    WriteParam(m, p.autorotate);
-  }
-
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r) {
-    return ReadParam(m, iter, &r->area) &&
-        ReadParam(m, iter, &r->dpi) &&
-        ReadParam(m, iter, &r->autorotate);
-  }
-
-  static void Log(const param_type& p, std::string* l) {
-    LogParam(p.area, l);
-    l->append(", ");
-    LogParam(p.dpi, l);
-    l->append(", ");
-    LogParam(p.autorotate, l);
-  }
-};
-
-}  // namespace IPC
 
 #endif  // PRINTING_PDF_RENDER_SETTINGS_H_

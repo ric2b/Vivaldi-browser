@@ -28,8 +28,8 @@ ExoTestWindow::ExoTestWindow(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_buffer,
   int container = is_modal ? ash::kShellWindowId_SystemModalContainer
                            : ash::kShellWindowId_DefaultContainer;
   shell_surface_.reset(new ShellSurface(surface_.get(), nullptr,
-                                        gfx::Rect(gpu_buffer->GetSize()), true,
-                                        false, container));
+                                        ShellSurface::BoundsMode::SHELL,
+                                        gfx::Point(), true, false, container));
 
   buffer_.reset(new Buffer(std::move(gpu_buffer)));
   surface_->Attach(buffer_.get());
@@ -61,12 +61,12 @@ ExoTestHelper::ExoTestHelper() {
 ExoTestHelper::~ExoTestHelper() {}
 
 std::unique_ptr<gfx::GpuMemoryBuffer> ExoTestHelper::CreateGpuMemoryBuffer(
-    const gfx::Size& size) {
+    const gfx::Size& size,
+    gfx::BufferFormat format) {
   return aura::Env::GetInstance()
       ->context_factory()
       ->GetGpuMemoryBufferManager()
-      ->CreateGpuMemoryBuffer(size, gfx::BufferFormat::RGBA_8888,
-                              gfx::BufferUsage::GPU_READ,
+      ->CreateGpuMemoryBuffer(size, format, gfx::BufferUsage::GPU_READ,
                               gpu::kNullSurfaceHandle);
 }
 

@@ -33,6 +33,7 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -57,6 +58,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
+#include "chrome/browser/ui/startup/startup_features.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/common/chrome_constants.h"
@@ -66,7 +68,6 @@
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -104,6 +105,7 @@
 #endif
 
 #if defined(OS_WIN)
+#include "base/win/windows_version.h"
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
 #endif
 
@@ -494,6 +496,15 @@ void StartupBrowserCreator::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 }
 
 // static
+bool StartupBrowserCreator::UseConsolidatedFlow() {
+#if defined(OS_WIN)
+  if (base::win::GetVersion() >= base::win::VERSION_WIN10)
+    return base::FeatureList::IsEnabled(features::kEnableWelcomeWin10);
+#endif  // defined(OS_WIN)
+  return base::FeatureList::IsEnabled(features::kUseConsolidatedStartupFlow);
+}
+
+// static
 std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
     const base::CommandLine& command_line,
     const base::FilePath& cur_dir,
@@ -673,8 +684,12 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
     base::FilePath output_file(
         command_line.GetSwitchValuePath(switches::kDumpBrowserHistograms));
     if (!output_file.empty()) {
-      BrowserThread::PostBlockingPoolTask(
+      base::PostTaskWithTraits(
           FROM_HERE,
+          base::TaskTraits()
+              .MayBlock()
+              .WithPriority(base::TaskPriority::BACKGROUND)
+              .WithShutdownBehavior(base::TaskShutdownBehavior::BLOCK_SHUTDOWN),
           base::Bind(&DumpBrowserHistograms, output_file));
     }
     silent_launch = true;
@@ -897,6 +912,22 @@ void StartupBrowserCreator::ProcessCommandLineAlreadyRunning(
   StartupBrowserCreator startup_browser_creator;
   startup_browser_creator.ProcessCmdLineImpl(command_line, cur_dir, false,
                                              profile, Profiles());
+}
+
+// static
+void StartupBrowserCreator::OpenStartupPages(Browser* browser,
+                                             bool process_startup) {
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  chrome::startup::IsFirstRun is_first_run =
+      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
+                                    : chrome::startup::IS_NOT_FIRST_RUN;
+  StartupBrowserCreatorImpl startup_browser_creator_impl(
+      base::FilePath(), command_line, is_first_run);
+  SessionStartupPref session_startup_pref =
+      StartupBrowserCreator::GetSessionStartupPref(command_line,
+                                                   browser->profile());
+  startup_browser_creator_impl.OpenURLsInBrowser(browser, process_startup,
+                                                 session_startup_pref.urls);
 }
 
 // static

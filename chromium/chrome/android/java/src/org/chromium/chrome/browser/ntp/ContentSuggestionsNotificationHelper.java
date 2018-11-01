@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.ntp;
 
 import android.app.AlarmManager;
+import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -14,16 +15,19 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.provider.Browser;
-import android.support.v4.app.NotificationCompat;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.notifications.ChromeNotificationBuilder;
+import org.chromium.chrome.browser.notifications.NotificationConstants;
+import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsNotificationAction;
 
 import java.util.Collection;
@@ -70,6 +74,7 @@ public class ContentSuggestionsNotificationHelper {
      * Opens the content suggestion when notification is tapped.
      */
     public static final class OpenUrlReceiver extends BroadcastReceiver {
+        @Override
         public void onReceive(Context context, Intent intent) {
             int category = intent.getIntExtra(NOTIFICATION_CATEGORY_EXTRA, -1);
             String idWithinCategory = intent.getStringExtra(NOTIFICATION_ID_WITHIN_CATEGORY_EXTRA);
@@ -83,6 +88,7 @@ public class ContentSuggestionsNotificationHelper {
      * Records dismissal when notification is swiped away.
      */
     public static final class DeleteReceiver extends BroadcastReceiver {
+        @Override
         public void onReceive(Context context, Intent intent) {
             int category = intent.getIntExtra(NOTIFICATION_CATEGORY_EXTRA, -1);
             String idWithinCategory = intent.getStringExtra(NOTIFICATION_ID_WITHIN_CATEGORY_EXTRA);
@@ -96,6 +102,7 @@ public class ContentSuggestionsNotificationHelper {
      * Removes the notification after a timeout period.
      */
     public static final class TimeoutReceiver extends BroadcastReceiver {
+        @Override
         public void onReceive(Context context, Intent intent) {
             int category = intent.getIntExtra(NOTIFICATION_CATEGORY_EXTRA, -1);
             String idWithinCategory = intent.getStringExtra(NOTIFICATION_ID_WITHIN_CATEGORY_EXTRA);
@@ -123,7 +130,7 @@ public class ContentSuggestionsNotificationHelper {
 
     @CalledByNative
     private static boolean showNotification(int category, String idWithinCategory, String url,
-            String title, String text, Bitmap image, long timeoutAtMillis) {
+            String title, String text, Bitmap image, long timeoutAtMillis, int priority) {
         if (findActiveNotification(category, idWithinCategory) != null) return false;
 
         // Post notification.
@@ -143,18 +150,28 @@ public class ContentSuggestionsNotificationHelper {
                         .setData(uri)
                         .putExtra(NOTIFICATION_CATEGORY_EXTRA, category)
                         .putExtra(NOTIFICATION_ID_WITHIN_CATEGORY_EXTRA, idWithinCategory);
-        NotificationCompat.Builder builder =
-                new NotificationCompat.Builder(context)
+        ChromeNotificationBuilder builder =
+                AppHooks.get()
+                        .createChromeNotificationBuilder(true /* preferCompat */,
+                                NotificationConstants.CATEGORY_ID_BROWSER,
+                                context.getString(R.string.notification_category_browser),
+                                NotificationConstants.CATEGORY_GROUP_ID_GENERAL,
+                                context.getString(R.string.notification_category_group_general))
                         .setAutoCancel(true)
                         .setContentIntent(PendingIntent.getBroadcast(context, 0, contentIntent, 0))
                         .setDeleteIntent(PendingIntent.getBroadcast(context, 0, deleteIntent, 0))
                         .setContentTitle(title)
                         .setContentText(text)
                         .setGroup(NOTIFICATION_TAG)
-                        .setPriority(-1)
+                        .setPriority(priority)
                         .setLargeIcon(image)
                         .setSmallIcon(R.drawable.ic_chrome);
+        if (priority >= 0) {
+            builder.setDefaults(Notification.DEFAULT_ALL);
+        }
         manager.notify(NOTIFICATION_TAG, nextId, builder.build());
+        NotificationUmaTracker.getInstance().onNotificationShown(
+                NotificationUmaTracker.CONTENT_SUGGESTION);
         addActiveNotification(new ActiveNotification(nextId, category, idWithinCategory, uri));
 
         // Set timeout.
@@ -360,10 +377,23 @@ public class ContentSuggestionsNotificationHelper {
 
         SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         int currentValue = prefs.getInt(prefName, 0);
-        int consecutiveIgnored = 0;
-        if (action != ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_TAP) {
-            consecutiveIgnored = 1 + prefs.getInt(PREF_CACHED_CONSECUTIVE_IGNORED, 0);
+
+        int consecutiveIgnored = prefs.getInt(PREF_CACHED_CONSECUTIVE_IGNORED, 0);
+        switch (action) {
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_TAP:
+                consecutiveIgnored = 0;
+                break;
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_DISMISSAL:
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_HIDE_DEADLINE:
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_HIDE_EXPIRY:
+                ++consecutiveIgnored;
+                break;
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_HIDE_FRONTMOST:
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_HIDE_DISABLED:
+            case ContentSuggestionsNotificationAction.CONTENT_SUGGESTIONS_HIDE_SHUTDOWN:
+                break; // no change
         }
+
         prefs.edit()
                 .putInt(prefName, currentValue + 1)
                 .putInt(PREF_CACHED_CONSECUTIVE_IGNORED, consecutiveIgnored)

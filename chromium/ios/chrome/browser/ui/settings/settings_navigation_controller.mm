@@ -542,6 +542,9 @@ initWithRootViewController:(UIViewController*)rootViewController
 #pragma mark - UIResponder
 
 - (NSArray*)keyCommands {
+  if ([self presentedViewController]) {
+    return nil;
+  }
   base::WeakNSObject<SettingsNavigationController> weakSelf(self);
   return @[
     [UIKeyCommand cr_keyCommandWithInput:UIKeyInputEscape
@@ -654,6 +657,12 @@ initWithRootViewController:(UIViewController*)rootViewController
 // Returns the dictionary key to use when dealing with |controller|.
 - (NSValue*)keyForController:(UIViewController*)controller {
   return [NSValue valueWithPointer:controller];
+}
+
+#pragma mark - UIResponder
+
+- (BOOL)canBecomeFirstResponder {
+  return YES;
 }
 
 @end

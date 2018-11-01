@@ -99,8 +99,8 @@ V0CustomElementDefinition* V0CustomElementRegistry::registerElement(
                                              exceptionState))
     return 0;
 
-  m_definitions.add(descriptor, definition);
-  m_registeredTypeNames.add(descriptor.type());
+  m_definitions.insert(descriptor, definition);
+  m_registeredTypeNames.insert(descriptor.type());
 
   if (!constructorBuilder->didRegisterDefinition()) {
     V0CustomElementException::throwException(
@@ -114,7 +114,7 @@ V0CustomElementDefinition* V0CustomElementRegistry::registerElement(
 
 V0CustomElementDefinition* V0CustomElementRegistry::find(
     const V0CustomElementDescriptor& descriptor) const {
-  return m_definitions.get(descriptor);
+  return m_definitions.at(descriptor);
 }
 
 bool V0CustomElementRegistry::nameIsDefined(const AtomicString& name) const {

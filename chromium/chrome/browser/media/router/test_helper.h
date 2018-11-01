@@ -62,7 +62,7 @@ class MockMediaSinksObserver : public MediaSinksObserver {
  public:
   MockMediaSinksObserver(MediaRouter* router,
                          const MediaSource& source,
-                         const GURL& origin);
+                         const url::Origin& origin);
   ~MockMediaSinksObserver() override;
 
   MOCK_METHOD1(OnSinksReceived, void(const std::vector<MediaSink>& sinks));
@@ -76,14 +76,6 @@ class MockMediaRoutesObserver : public MediaRoutesObserver {
 
   MOCK_METHOD2(OnRoutesUpdated, void(const std::vector<MediaRoute>& routes,
       const std::vector<MediaRoute::Id>& joinable_route_ids));
-};
-
-class MockPresentationConnectionStateChangedCallback {
- public:
-  MockPresentationConnectionStateChangedCallback();
-  ~MockPresentationConnectionStateChangedCallback();
-  MOCK_METHOD1(Run,
-               void(const content::PresentationConnectionStateChangeInfo&));
 };
 
 }  // namespace media_router

@@ -1,0 +1,6 @@
+include_rules = [
+  "+components/metrics",
+  "+components/prefs",
+  "+components/variations",
+  "+third_party/zlib/google",
+]

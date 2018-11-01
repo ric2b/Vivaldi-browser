@@ -7,9 +7,9 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/FrameConsole.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/page/Page.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 
 namespace {
@@ -101,14 +101,14 @@ bool Deprecation::isSuppressed(CSSPropertyID unresolvedProperty) {
 
 void Deprecation::warnOnDeprecatedProperties(const LocalFrame* frame,
                                              CSSPropertyID unresolvedProperty) {
-  FrameHost* host = frame ? frame->host() : nullptr;
-  if (!host || host->deprecation().m_muteCount ||
-      host->deprecation().isSuppressed(unresolvedProperty))
+  Page* page = frame ? frame->page() : nullptr;
+  if (!page || page->deprecation().m_muteCount ||
+      page->deprecation().isSuppressed(unresolvedProperty))
     return;
 
   String message = deprecationMessage(unresolvedProperty);
   if (!message.isEmpty()) {
-    host->deprecation().suppress(unresolvedProperty);
+    page->deprecation().suppress(unresolvedProperty);
     ConsoleMessage* consoleMessage = ConsoleMessage::create(
         DeprecationMessageSource, WarningMessageLevel, message);
     frame->console().addMessage(consoleMessage);
@@ -133,7 +133,7 @@ String Deprecation::deprecationMessage(CSSPropertyID unresolvedProperty) {
                                    "6390764217040896");
 
     default:
-      return emptyString();
+      return emptyString;
   }
 }
 
@@ -141,12 +141,12 @@ void Deprecation::countDeprecation(const LocalFrame* frame,
                                    UseCounter::Feature feature) {
   if (!frame)
     return;
-  FrameHost* host = frame->host();
-  if (!host || host->deprecation().m_muteCount)
+  Page* page = frame->page();
+  if (!page || page->deprecation().m_muteCount)
     return;
 
-  if (!host->useCounter().hasRecordedMeasurement(feature)) {
-    host->useCounter().recordMeasurement(feature);
+  if (!page->useCounter().hasRecordedMeasurement(feature)) {
+    page->useCounter().recordMeasurement(feature);
     ASSERT(!deprecationMessage(feature).isEmpty());
     ConsoleMessage* consoleMessage =
         ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel,
@@ -208,11 +208,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
       return "Calling CSSStyleSheet.insertRule() with one argument is "
              "deprecated. Please pass the index argument as well: "
              "insertRule(x, 0).";
-
-    case UseCounter::MapNameMatchingASCIICaseless:
-    case UseCounter::MapNameMatchingUnicodeLower:
-      return willBeRemoved("Case-insensitive matching for usemap attribute",
-                           M58, "5760965337415680");
 
     case UseCounter::PrefixedVideoSupportsFullscreen:
       return replacedBy("'HTMLVideoElement.webkitSupportsFullscreen'",
@@ -329,14 +324,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "secure origin, such as HTTPS. See https://goo.gl/rStTGz for more "
              "details.";
 
-    case UseCounter::EncryptedMediaInsecureOrigin:
-      return String::format(
-          "Using requestMediaKeySystemAccess() on insecure origins is "
-          "deprecated and will be removed in %s. You should consider "
-          "switching your application to a secure origin, such as HTTPS. See "
-          "https://goo.gl/rStTGz for more details.",
-          milestoneString(M58));
-
     case UseCounter::MediaSourceAbortRemove:
       return "Using SourceBuffer.abort() to abort remove()'s asynchronous "
              "range removal is deprecated due to specification change. Support "
@@ -362,6 +349,16 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "switching your application to a secure origin, such as HTTPS. "
              "See https://goo.gl/rStTGz for more details.";
 
+    case UseCounter::NotificationInsecureOrigin:
+    case UseCounter::NotificationAPIInsecureOriginIframe:
+    case UseCounter::NotificationPermissionRequestedInsecureOrigin:
+      return String::format(
+          "Using the Notification API on insecure origins is "
+          "deprecated and will be removed in %s. You should consider "
+          "switching your application to a secure origin, such as HTTPS. See "
+          "https://goo.gl/rStTGz for more details.",
+          milestoneString(M60));
+
     case UseCounter::ElementCreateShadowRootMultiple:
       return "Calling Element.createShadowRoot() for an element which already "
              "hosts a shadow root is deprecated. See "
@@ -378,22 +375,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "https://www.chromestatus.com/features/6750456638341120 for more "
              "details.";
 
-    case UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs:
-      return String::format(
-          "EME requires that contentType strings accepted by "
-          "requestMediaKeySystemAccess() include codecs. Non-standard support "
-          "for contentType strings without codecs will be removed in %s. "
-          "Please specify the desired codec(s) as part of the contentType.",
-          milestoneString(M58));
-
-    case UseCounter::EncryptedMediaCapabilityNotProvided:
-      return String::format(
-          "EME requires that one of 'audioCapabilities' and "
-          "'videoCapabilities' must be non-empty. Non-standard support for "
-          "this will be removed in %s. Please specify at least one valid "
-          "capability for 'audioCapabilities' or 'videoCapabilities'.",
-          milestoneString(M58));
-
     case UseCounter::VRDeprecatedFieldOfView:
       return replacedBy("VREyeParameters.fieldOfView",
                         "projection matrices provided by VRFrameData");
@@ -401,13 +382,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
     case UseCounter::VRDeprecatedGetPose:
       return replacedBy("VRDisplay.getPose()", "VRDisplay.getFrameData()");
 
-    case UseCounter::HTMLEmbedElementLegacyCall:
-      return willBeRemoved("HTMLEmbedElement legacy caller", M58,
-                           "5715026367217664");
-
-    case UseCounter::HTMLObjectElementLegacyCall:
-      return willBeRemoved("HTMLObjectElement legacy caller", M58,
-                           "5715026367217664");
     case UseCounter::
         ServiceWorkerRespondToNavigationRequestWithRedirectedResponse:
       return String::format(
@@ -437,11 +411,24 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
       return willBeRemoved("FileReaderSync in service workers", M59,
                            "5739144722513920");
 
+    case UseCounter::CSSZoomReset:
+      return willBeRemoved("\"zoom: reset\"", M59, "4997605029314560");
+
+    case UseCounter::CSSZoomDocument:
+      return willBeRemoved("\"zoom: document\"", M59, "4997605029314560");
+
     case UseCounter::SelectionAddRangeIntersect:
-      return willBeRemoved(
-          "The behavior that Selection.addRange() merges existing Range and "
-          "the specified Range",
-          M58, "6680566019653632");
+      return "The behavior that Selection.addRange() merges existing Range and "
+             "the specified Range was removed. See "
+             "https://www.chromestatus.com/features/6680566019653632 for more "
+             "details.";
+
+    case UseCounter::SubtleCryptoOnlyStrictSecureContextCheckFailed:
+      return String::format(
+          "Web Crypto API usage inside secure frames with non-secure ancestors "
+          "is deprecated. The API will no longer be exposed in these contexts "
+          "as of %s. See https://www.chromestatus.com/features/5030265697075200"
+          " for more details.", milestoneString(M59));
 
     case UseCounter::RtcpMuxPolicyNegotiate:
       return String::format(
@@ -450,6 +437,10 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
           "please see https://www.chromestatus.com/features/5654810086866944 "
           "for more details.",
           milestoneString(M60));
+
+    case UseCounter::V8IDBFactory_WebkitGetDatabaseNames_Method:
+      return willBeRemoved("indexedDB.webkitGetDatabaseNames()", M60,
+                           "5725741740195840");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

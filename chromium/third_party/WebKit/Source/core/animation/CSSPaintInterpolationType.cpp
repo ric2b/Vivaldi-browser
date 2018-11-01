@@ -79,7 +79,7 @@ InterpolationValue CSSPaintInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSPaintInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   std::unique_ptr<InterpolableValue> interpolableColor =
       CSSColorInterpolationType::maybeCreateInterpolableColor(value);
@@ -90,12 +90,11 @@ InterpolationValue CSSPaintInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSPaintInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
+    const ComputedStyle& style) const {
   // TODO(alancutter): Support capturing and animating with the visited paint
   // color.
   StyleColor underlyingColor;
-  if (!PaintPropertyFunctions::getColor(cssProperty(), *state.style(),
-                                        underlyingColor))
+  if (!PaintPropertyFunctions::getColor(cssProperty(), style, underlyingColor))
     return nullptr;
   return InterpolationValue(
       CSSColorInterpolationType::createInterpolableColor(underlyingColor));

@@ -6,12 +6,10 @@
 
 #include <utility>
 
-#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/data_type_histogram.h"
-#include "components/sync/engine/net/http_bridge.h"
 #include "components/sync/engine_impl/commit_processor.h"
 #include "components/sync/engine_impl/commit_util.h"
 #include "components/sync/engine_impl/cycle/sync_cycle.h"
@@ -27,7 +25,18 @@ namespace {
 // because it is not too large (to hurt performance and compression ratio), but
 // it is not too small to easily be canceled out using statistical analysis.
 const size_t kPaddingSize = 256;
+
+std::string RandASCIIString(size_t length) {
+  std::string result;
+  const int kMin = static_cast<int>(' ');
+  const int kMax = static_cast<int>('~');
+  result.reserve(length);
+  for (size_t i = 0; i < length; ++i)
+    result.push_back(static_cast<char>(base::RandInt(kMin, kMax)));
+  return result;
 }
+
+}  // namespace
 
 Commit::Commit(ContributionMap contributions,
                const sync_pb::ClientToServerMessage& message,
@@ -68,9 +77,7 @@ Commit* Commit::Init(ModelTypeSet requested_types,
   commit_message->set_cache_guid(cache_guid);
 
   // Set padding to mitigate CRIME attack.
-  if (base::FeatureList::IsEnabled(syncer::kSyncClientToServerCompression)) {
-    commit_message->set_padding(base::RandBytesAsString(kPaddingSize));
-  }
+  commit_message->set_padding(RandASCIIString(kPaddingSize));
 
   // Set extensions activity if bookmark commits are present.
   ExtensionsActivity::Records extensions_activity_buffer;

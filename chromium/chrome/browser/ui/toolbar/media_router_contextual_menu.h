@@ -11,14 +11,13 @@
 
 class Browser;
 
-namespace extensions {
-class ComponentMigrationHelper;
-}  // namespace extensions
-
 // The class for the contextual menu for the Media Router action.
 class MediaRouterContextualMenu : public ui::SimpleMenuModel::Delegate {
  public:
   explicit MediaRouterContextualMenu(Browser* browser);
+
+  // Constructor for injecting values in tests.
+  MediaRouterContextualMenu(Browser* browser, bool shown_by_policy);
   ~MediaRouterContextualMenu() override;
 
   ui::MenuModel* menu_model() { return &menu_model_; }
@@ -28,6 +27,8 @@ class MediaRouterContextualMenu : public ui::SimpleMenuModel::Delegate {
                            ToggleCloudServicesItem);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterContextualMenuUnitTest,
                            ToggleAlwaysShowIconItem);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterContextualMenuUnitTest,
+                           ActionShownByPolicy);
 
   // Gets or sets the "Always show icon" option.
   bool GetAlwaysShowActionPref() const;
@@ -43,7 +44,6 @@ class MediaRouterContextualMenu : public ui::SimpleMenuModel::Delegate {
 
   Browser* const browser_;
   ui::SimpleMenuModel menu_model_;
-  extensions::ComponentMigrationHelper* const component_migration_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouterContextualMenu);
 };

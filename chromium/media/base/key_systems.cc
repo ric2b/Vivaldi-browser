@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/containers/hash_tables.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
@@ -22,6 +21,7 @@
 #include "media/base/media_switches.h"
 #include "ppapi/features/features.h"
 #include "media/base/media_client.h"
+#include "media/media_features.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 namespace media {
@@ -43,10 +43,10 @@ struct NamedCodec {
 static const NamedCodec kMimeTypeToCodecMasks[] = {
     {"audio/webm", EME_CODEC_WEBM_AUDIO_ALL},
     {"video/webm", EME_CODEC_WEBM_VIDEO_ALL},
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {"audio/mp4", EME_CODEC_MP4_AUDIO_ALL},
     {"video/mp4", EME_CODEC_MP4_VIDEO_ALL}
-#endif  // defined(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };
 
 // Mapping between codec names and enum values.
@@ -57,7 +57,7 @@ static const NamedCodec kCodecStrings[] = {
     {"vp8.0", EME_CODEC_WEBM_VP8},      // VP8.
     {"vp9", EME_CODEC_WEBM_VP9},        // VP9.
     {"vp9.0", EME_CODEC_WEBM_VP9},      // VP9.
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {"vp09", EME_CODEC_MP4_VP9},   // VP9 in MP4.
     {"mp4a", EME_CODEC_MP4_AAC},   // AAC.
     {"avc1", EME_CODEC_MP4_AVC1},  // AVC1.
@@ -66,7 +66,7 @@ static const NamedCodec kCodecStrings[] = {
     {"hev1", EME_CODEC_MP4_HEVC},  // HEV1.
     {"hvc1", EME_CODEC_MP4_HEVC},  // HVC1.
 #endif
-#endif  // defined(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };
 
 class ClearKeyProperties : public KeySystemProperties {
@@ -74,7 +74,7 @@ class ClearKeyProperties : public KeySystemProperties {
   std::string GetKeySystemName() const override { return kClearKeyKeySystem; }
 
   bool IsSupportedInitDataType(EmeInitDataType init_data_type) const override {
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     if (init_data_type == EmeInitDataType::CENC)
       return true;
 #endif
@@ -88,9 +88,9 @@ class ClearKeyProperties : public KeySystemProperties {
     // VP9 support is device dependent.
     SupportedCodecs codecs = EME_CODEC_WEBM_ALL;
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     codecs |= EME_CODEC_MP4_ALL;
-#endif  // defined(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
     return codecs;
   }
@@ -229,8 +229,6 @@ class KeySystemsImpl : public KeySystems {
   bool IsValidMimeTypeCodecsCombination(const std::string& mime_type,
                                         SupportedCodecs codecs_mask) const;
 
-  friend struct base::DefaultLazyInstanceTraits<KeySystemsImpl>;
-
   typedef base::hash_map<std::string, std::unique_ptr<KeySystemProperties>>
       KeySystemPropertiesMap;
   typedef base::hash_map<std::string, SupportedCodecs> MimeTypeCodecsMap;
@@ -262,20 +260,17 @@ class KeySystemsImpl : public KeySystems {
   DISALLOW_COPY_AND_ASSIGN(KeySystemsImpl);
 };
 
-static base::LazyInstance<KeySystemsImpl>::Leaky g_key_systems =
-    LAZY_INSTANCE_INITIALIZER;
-
 KeySystemsImpl* KeySystemsImpl::GetInstance() {
-  KeySystemsImpl* key_systems = g_key_systems.Pointer();
+  static KeySystemsImpl* key_systems = new KeySystemsImpl();
   key_systems->UpdateIfNeeded();
   return key_systems;
 }
 
-// Because we use a LazyInstance, the key systems info must be populated when
-// the instance is lazily initiated.
-KeySystemsImpl::KeySystemsImpl() :
-    audio_codec_mask_(EME_CODEC_AUDIO_ALL),
-    video_codec_mask_(EME_CODEC_VIDEO_ALL) {
+// Because we use a thread-safe static, the key systems info must be populated
+// when the instance is constructed.
+KeySystemsImpl::KeySystemsImpl()
+    : audio_codec_mask_(EME_CODEC_AUDIO_ALL),
+      video_codec_mask_(EME_CODEC_VIDEO_ALL) {
   for (size_t i = 0; i < arraysize(kCodecStrings); ++i) {
     const std::string& name = kCodecStrings[i].name;
     DCHECK(!codec_string_map_.count(name));
@@ -442,7 +437,7 @@ void KeySystemsImpl::AddSupportedKeySystems(
 #if defined(OS_ANDROID)
     // Ensure that the renderer can access the decoders necessary to use the
     // key system.
-    if (!properties->UseAesDecryptor() && !ArePlatformDecodersAvailable()) {
+    if (!properties->UseAesDecryptor() && !HasPlatformDecoderSupport()) {
       DLOG(WARNING) << properties->GetKeySystemName() << " not registered";
       continue;
     }

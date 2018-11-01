@@ -30,7 +30,7 @@ class ImageDecoding(legacy_page_test.LegacyPageTest):
             chrome.gpuBenchmarking.clearImageCache) {
           chrome.gpuBenchmarking.clearImageCache();
         }
-    """)
+        """)
     self._power_metric.Start(page, tab)
 
     config = tracing_config.TracingConfig()
@@ -53,7 +53,7 @@ class ImageDecoding(legacy_page_test.LegacyPageTest):
         window.chrome &&
             chrome.gpuBenchmarking &&
             chrome.gpuBenchmarking.clearImageCache;
-    """)
+        """)
 
   def ValidateAndMeasurePage(self, page, tab, results):
     timeline_data = tab.browser.platform.tracing_controller.StopTracing()
@@ -72,8 +72,7 @@ class ImageDecoding(legacy_page_test.LegacyPageTest):
 
     # If it is a real image page, then store only the last-minIterations
     # decode tasks.
-    if (
-        hasattr(
+    if (hasattr(
             page,
             'image_decoding_measurement_limit_results_to_min_iterations') and
         page.image_decoding_measurement_limit_results_to_min_iterations):

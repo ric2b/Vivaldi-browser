@@ -5,12 +5,7 @@
 import base64
 import json
 import logging
-import os
-import sys
 import urllib2
-
-from webkitpy.common.system.filesystem import FileSystem
-from webkitpy.common.webkit_finder import WebKitFinder
 
 
 _log = logging.getLogger(__name__)
@@ -20,15 +15,14 @@ EXPORT_LABEL = 'chromium-export'
 
 class WPTGitHub(object):
 
-    def __init__(self, host):
+    def __init__(self, host, user, token):
         self.host = host
-        self.user = self.host.environ.get('GH_USER')
-        self.token = self.host.environ.get('GH_TOKEN')
-
-        assert self.user and self.token, 'must have GH_USER and GH_TOKEN env vars'
+        self.user = user
+        self.token = token
+        assert self.user and self.token
 
     def auth_token(self):
-        return base64.encodestring('{}:{}'.format(self.user, self.token)).strip()
+        return base64.b64encode('{}:{}'.format(self.user, self.token))
 
     def request(self, path, method, body=None):
         assert path.startswith('/')
@@ -87,20 +81,25 @@ class WPTGitHub(object):
 
     def merge_pull_request(self, pull_request_number):
         path = '/repos/w3c/web-platform-tests/pulls/%d/merge' % pull_request_number
-        body = {}
+        body = {
+            'merge_method': 'rebase',
+        }
         data, status_code = self.request(path, method='PUT', body=body)
 
-        if status_code == 200:
+        if status_code == 405:
+            raise Exception('PR did not passed necessary checks to merge: %d' % pull_request_number)
+        elif status_code == 200:
             return data
         else:
             raise Exception('PR could not be merged: %d' % pull_request_number)
 
     def delete_remote_branch(self, remote_branch_name):
+        # TODO(jeffcarp): Unit test this method
         path = '/repos/w3c/web-platform-tests/git/refs/heads/%s' % remote_branch_name
         data, status_code = self.request(path, method='DELETE')
 
-        if status_code != 200:
+        if status_code != 204:
             # TODO(jeffcarp): Raise more specific exception (create MergeError class?)
-            raise Exception('PR could not be merged')
+            raise Exception('Received non-204 status code attempting to delete remote branch: {}'.format(status_code))
 
         return data

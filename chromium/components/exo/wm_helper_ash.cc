@@ -53,7 +53,7 @@ const display::ManagedDisplayInfo WMHelperAsh::GetDisplayInfo(
 }
 
 aura::Window* WMHelperAsh::GetContainer(int container_id) {
-  return ash::Shell::GetContainer(ash::Shell::GetTargetRootWindow(),
+  return ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                   container_id);
 }
 
@@ -134,6 +134,10 @@ void WMHelperAsh::OnAccessibilityModeChanged(
 
 void WMHelperAsh::OnMaximizeModeStarted() {
   NotifyMaximizeModeStarted();
+}
+
+void WMHelperAsh::OnMaximizeModeEnding() {
+  NotifyMaximizeModeEnding();
 }
 
 void WMHelperAsh::OnMaximizeModeEnded() {

@@ -5,10 +5,7 @@
 package org.chromium.chrome.browser;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ResolveInfo;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Looper;
 import android.os.MessageQueue;
@@ -22,6 +19,7 @@ import android.view.inputmethod.InputMethodSubtype;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FieldTrialList;
+import org.chromium.base.Log;
 import org.chromium.base.PowerMonitor;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
@@ -29,6 +27,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
+import org.chromium.chrome.browser.crash.LogcatExtractionRunnable;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
 import org.chromium.chrome.browser.locale.LocaleManager;
@@ -51,7 +50,10 @@ import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.content.browser.ChildProcessLauncher;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -62,7 +64,7 @@ import java.util.concurrent.TimeUnit;
  * Handler for application level tasks to be completed on deferred startup.
  */
 public class DeferredStartupHandler {
-    private static final String TAG = "DeferredStartupHandler";
+    private static final String TAG = "DeferredStartup";
     /** Prevents race conditions when deleting snapshot database. */
     private static final Object SNAPSHOT_DATABASE_LOCK = new Object();
     private static final String SNAPSHOT_DATABASE_REMOVED = "snapshot_database_removed";
@@ -106,7 +108,7 @@ public class DeferredStartupHandler {
             public boolean queueIdle() {
                 Runnable currentTask = mDeferredTasks.poll();
                 if (currentTask == null) {
-                    if (mDeferredStartupInitializedForApp) {
+                    if (mDeferredStartupInitializedForApp && !mDeferredStartupCompletedForApp) {
                         mDeferredStartupCompletedForApp = true;
                         recordDeferredStartupStats();
                     }
@@ -126,18 +128,15 @@ public class DeferredStartupHandler {
 
     private void recordDeferredStartupStats() {
         RecordHistogram.recordLongTimesHistogram(
-                "UMA.Debug.EnableCrashUpload.DeferredStartUpDuration",
-                mDeferredStartupDuration,
+                "UMA.Debug.EnableCrashUpload.DeferredStartUpDuration", mDeferredStartupDuration,
                 TimeUnit.MILLISECONDS);
         RecordHistogram.recordLongTimesHistogram(
-                "UMA.Debug.EnableCrashUpload.DeferredStartUpMaxTaskDuration",
-                mMaxTaskDuration,
+                "UMA.Debug.EnableCrashUpload.DeferredStartUpMaxTaskDuration", mMaxTaskDuration,
                 TimeUnit.MILLISECONDS);
         RecordHistogram.recordLongTimesHistogram(
                 "UMA.Debug.EnableCrashUpload.DeferredStartUpCompleteTime",
                 SystemClock.uptimeMillis() - UmaUtils.getForegroundStartTime(),
                 TimeUnit.MILLISECONDS);
-        LocaleManager.getInstance().recordStartupMetrics();
     }
 
     /**
@@ -166,8 +165,7 @@ public class DeferredStartupHandler {
         mDeferredStartupInitializedForApp = true;
         ThreadUtils.assertOnUiThread();
 
-        RecordHistogram.recordLongTimesHistogram(
-                "UMA.Debug.EnableCrashUpload.DeferredStartUptime2",
+        RecordHistogram.recordLongTimesHistogram("UMA.Debug.EnableCrashUpload.DeferredStartUptime2",
                 SystemClock.uptimeMillis() - UmaUtils.getForegroundStartTime(),
                 TimeUnit.MILLISECONDS);
 
@@ -176,6 +174,8 @@ public class DeferredStartupHandler {
             public void run() {
                 // Punt all tasks that may block on disk off onto a background thread.
                 initAsyncDiskTask();
+
+                DefaultBrowserInfo.initBrowserFetcher();
 
                 AfterStartupTaskUtils.setStartupComplete();
 
@@ -191,7 +191,7 @@ public class DeferredStartupHandler {
 
                 PartnerBookmarksShim.kickOffReading(mAppContext);
 
-                PowerMonitor.create(mAppContext);
+                PowerMonitor.create();
 
                 ShareHelper.clearSharedImages();
 
@@ -219,13 +219,26 @@ public class DeferredStartupHandler {
             }
         });
 
-        final ChromeApplication application = (ChromeApplication) mAppContext;
+        mDeferredTasks.add(new Runnable() {
+            @Override
+            public void run() {
+                LocaleManager.getInstance().recordStartupMetrics();
+            }
+        });
 
         mDeferredTasks.add(new Runnable() {
             @Override
             public void run() {
                 // Starts syncing with GSA.
-                application.createGsaHelper().startSync();
+                AppHooks.get().createGsaHelper().startSync();
+            }
+        });
+
+        mDeferredTasks.add(new Runnable() {
+            @Override
+            public void run() {
+                // Record the saved restore state in a histogram
+                ChromeBackupAgent.recordRestoreHistogram();
             }
         });
 
@@ -234,32 +247,34 @@ public class DeferredStartupHandler {
 
     private void initAsyncDiskTask() {
         new AsyncTask<Void, Void, Void>() {
+            /**
+             * The threshold after which it's no longer appropriate to try to attach logcat output
+             * to a minidump file.
+             * Note: This threshold of 12 hours was chosen fairly imprecisely, based on the
+             * following intuition: On the one hand, Chrome can only access its own logcat output,
+             * so the most recent lines should be relevant when available. On a typical device,
+             * multiple hours of logcat output are available. On the other hand, it's important to
+             * provide an escape hatch in case the logcat extraction code itself crashes, as
+             * described in the doesCrashMinidumpNeedLogcat() documentation. Since this is a fairly
+             * small and relatively frequently-executed piece of code, crashes are expected to be
+             * unlikely; so it's okay for the escape hatch to be hard to use -- it's intended as an
+             * extreme last resort.
+             */
+            private static final long LOGCAT_RELEVANCE_THRESHOLD_IN_HOURS = 12;
+
+            private long mAsyncTaskStartTime;
+
             @Override
             protected Void doInBackground(Void... params) {
                 try {
                     TraceEvent.begin("ChromeBrowserInitializer.onDeferredStartup.doInBackground");
-                    long asyncTaskStartTime = SystemClock.uptimeMillis();
+                    mAsyncTaskStartTime = SystemClock.uptimeMillis();
+
+                    initCrashReporting();
 
                     // Initialize the WebappRegistry if it's not already initialized. Must be in
                     // async task due to shared preferences disk access on N.
                     WebappRegistry.getInstance();
-
-                    boolean crashDumpDisabled = CommandLine.getInstance().hasSwitch(
-                            ChromeSwitches.DISABLE_CRASH_DUMP_UPLOAD);
-                    if (!crashDumpDisabled) {
-                        RecordHistogram.recordLongTimesHistogram(
-                                "UMA.Debug.EnableCrashUpload.Uptime3",
-                                asyncTaskStartTime - UmaUtils.getForegroundStartTime(),
-                                TimeUnit.MILLISECONDS);
-                        PrivacyPreferencesManager.getInstance().enablePotentialCrashUploading();
-                        MinidumpUploadService.tryUploadAllCrashDumps(mAppContext);
-                    }
-                    CrashFileManager crashFileManager =
-                            new CrashFileManager(mAppContext.getCacheDir());
-                    crashFileManager.cleanOutAllNonFreshMinidumpFiles();
-
-                    MinidumpUploadService.storeBreakpadUploadStatsInUma(
-                            ChromePreferenceManager.getInstance(mAppContext));
 
                     // Force a widget refresh in order to wake up any possible zombie widgets.
                     // This is needed to ensure the right behavior when the process is suddenly
@@ -275,13 +290,6 @@ public class DeferredStartupHandler {
 
                     removeSnapshotDatabase();
 
-                    cacheIsChromeDefaultBrowser();
-
-                    RecordHistogram.recordLongTimesHistogram(
-                            "UMA.Debug.EnableCrashUpload.DeferredStartUpDurationAsync",
-                            SystemClock.uptimeMillis() - asyncTaskStartTime,
-                            TimeUnit.MILLISECONDS);
-
                     // Warm up all web app shared prefs. This must be run after the WebappRegistry
                     // instance is initialized.
                     WebappRegistry.warmUpSharedPrefs();
@@ -296,8 +304,107 @@ public class DeferredStartupHandler {
             protected void onPostExecute(Void params) {
                 // Must be run on the UI thread after the WebappRegistry has been completely warmed.
                 WebappRegistry.getInstance().unregisterOldWebapps(System.currentTimeMillis());
+
+                RecordHistogram.recordLongTimesHistogram(
+                        "UMA.Debug.EnableCrashUpload.DeferredStartUpAsyncTaskDuration",
+                        SystemClock.uptimeMillis() - mAsyncTaskStartTime, TimeUnit.MILLISECONDS);
             }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+
+            /**
+             * Initializes the crash reporting system. More specifically, enables the crash
+             * reporting system if it is user-permitted, and initiates uploading of any pending
+             * crash reports. Also updates some UMA metrics and performs cleanup in the local crash
+             * minidump storage directory.
+             */
+            private void initCrashReporting() {
+                // Perform cleanup prior to checking whether crash reporting is enabled, so that
+                // users who disable crash reporting are still able to eventually recover disk space
+                // dedicated to storing pending crash reports.
+                CrashFileManager crashFileManager = new CrashFileManager(mAppContext.getCacheDir());
+                crashFileManager.cleanOutAllNonFreshMinidumpFiles();
+
+                // Likewise, there might be pending metrics from previous runs when crash reporting
+                // was enabled.
+                MinidumpUploadService.storeBreakpadUploadStatsInUma(
+                        ChromePreferenceManager.getInstance());
+
+                // Now check whether crash reporting is enabled. If it is, broadcast the appropriate
+                // permission.
+                boolean crashReportingDisabled = CommandLine.getInstance().hasSwitch(
+                        ChromeSwitches.DISABLE_CRASH_DUMP_UPLOAD);
+                if (crashReportingDisabled) return;
+                PrivacyPreferencesManager.getInstance().enablePotentialCrashUploading();
+
+                RecordHistogram.recordLongTimesHistogram("UMA.Debug.EnableCrashUpload.Uptime3",
+                        mAsyncTaskStartTime - UmaUtils.getForegroundStartTime(),
+                        TimeUnit.MILLISECONDS);
+
+                // Finally, uploading any pending crash reports.
+                File[] minidumps = crashFileManager.getAllMinidumpFiles(
+                        MinidumpUploadService.MAX_TRIES_ALLOWED);
+                int numMinidumpsSansLogcat = 0;
+                for (File minidump : minidumps) {
+                    if (CrashFileManager.isMinidumpMIMEFirstTry(minidump.getName())) {
+                        ++numMinidumpsSansLogcat;
+                    }
+                }
+                // TODO(isherman): These two histograms are intended to be temporary, and can
+                // probably be removed around the M60 timeframe: http://crbug.com/699785
+                RecordHistogram.recordSparseSlowlyHistogram(
+                        "Stability.Android.PendingMinidumpsOnStartup", minidumps.length);
+                RecordHistogram.recordSparseSlowlyHistogram(
+                        "Stability.Android.PendingMinidumpsOnStartup.SansLogcat",
+                        numMinidumpsSansLogcat);
+                if (minidumps.length == 0) return;
+
+                Log.i(TAG, "Attempting to upload %d accumulated crash dumps.", minidumps.length);
+                File mostRecentMinidump = minidumps[0];
+                if (doesCrashMinidumpNeedLogcat(mostRecentMinidump)) {
+                    AsyncTask.THREAD_POOL_EXECUTOR.execute(
+                            new LogcatExtractionRunnable(mAppContext, mostRecentMinidump));
+
+                    // The JobScheduler will schedule uploads for all of the available minidumps
+                    // once the logcat is attached. But if the JobScheduler API is not being used,
+                    // then the logcat extraction process will only initiate an upload for the first
+                    // minidump; it's required to manually initiate uploads for all of the remaining
+                    // minidumps.
+                    if (!MinidumpUploadService.shouldUseJobSchedulerForUploads()) {
+                        List<File> remainingMinidumps =
+                                Arrays.asList(minidumps).subList(1, minidumps.length);
+                        for (File minidump : remainingMinidumps) {
+                            MinidumpUploadService.tryUploadCrashDump(mAppContext, minidump);
+                        }
+                    }
+                } else if (MinidumpUploadService.shouldUseJobSchedulerForUploads()) {
+                    MinidumpUploadService.scheduleUploadJob(mAppContext);
+                } else {
+                    MinidumpUploadService.tryUploadAllCrashDumps(mAppContext);
+                }
+            }
+
+            /**
+             * Returns whether or not it's appropriate to try to extract recent logcat output and
+             * include that logcat output alongside the given {@param minidump} in a crash report.
+             * Logcat output should only be extracted if (a) it hasn't already been extracted for
+             * this minidump file, and (b) the minidump is fairly fresh. The freshness check is
+             * important for two reasons: (1) First of all, it helps avoid including irrelevant
+             * logcat output for a crash report. (2) Secondly, it provides an escape hatch that can
+             * help circumvent a possible infinite crash loop, if the code responsible for
+             * extracting and appending the logcat content is itself crashing. That is, the user can
+             * wait 12 hours prior to relaunching Chrome, at which point this potential crash loop
+             * would be circumvented.
+             * @return Whether to try to include logcat output in the crash report corresponding to
+             *     the given minidump.
+             */
+            private boolean doesCrashMinidumpNeedLogcat(File minidump) {
+                if (!CrashFileManager.isMinidumpMIMEFirstTry(minidump.getName())) return false;
+
+                long ageInMillis = new Date().getTime() - minidump.lastModified();
+                long ageInHours = TimeUnit.HOURS.convert(ageInMillis, TimeUnit.MILLISECONDS);
+                return ageInHours < LOGCAT_RELEVANCE_THRESHOLD_IN_HOURS;
+            }
+        }
+                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     private void startModerateBindingManagementIfNeeded() {
@@ -312,28 +419,13 @@ public class DeferredStartupHandler {
     }
 
     /**
-     * Caches whether Chrome is set as a default browser on the device.
-     */
-    @WorkerThread
-    private void cacheIsChromeDefaultBrowser() {
-        // Retrieve whether Chrome is default in background to avoid strict mode checks.
-        Intent intent = new Intent(Intent.ACTION_VIEW,
-                Uri.parse("http://www.madeupdomainforcheck123.com/"));
-        ResolveInfo info = mAppContext.getPackageManager().resolveActivity(intent, 0);
-        boolean isDefault = (info != null && info.match != 0
-                && mAppContext.getPackageName().equals(info.activityInfo.packageName));
-        ChromePreferenceManager.getInstance(mAppContext).setCachedChromeDefaultBrowser(isDefault);
-    }
-
-    /**
      * Deletes the snapshot database which is no longer used because the feature has been removed
      * in Chrome M41.
      */
     @WorkerThread
     private void removeSnapshotDatabase() {
         synchronized (SNAPSHOT_DATABASE_LOCK) {
-            SharedPreferences prefs =
-                    ContextUtils.getAppSharedPreferences();
+            SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
             if (!prefs.getBoolean(SNAPSHOT_DATABASE_REMOVED, false)) {
                 mAppContext.deleteDatabase(SNAPSHOT_DATABASE_NAME);
                 prefs.edit().putBoolean(SNAPSHOT_DATABASE_REMOVED, true).apply();
@@ -371,8 +463,8 @@ public class DeferredStartupHandler {
     }
 
     /**
-    * @return Whether deferred startup has been completed.
-    */
+     * @return Whether deferred startup has been completed.
+     */
     @VisibleForTesting
     public boolean isDeferredStartupCompleteForApp() {
         return mDeferredStartupCompletedForApp;

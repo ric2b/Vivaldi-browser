@@ -43,7 +43,6 @@ source_set("common") {
     "android/sync_compositor_messages.h",
     "android/sync_compositor_statics.cc",
     "android/sync_compositor_statics.h",
-    "app_web_message_port_messages.h",
     "appcache_interfaces.cc",
     "appcache_interfaces.h",
     "appcache_messages.h",
@@ -64,11 +63,9 @@ source_set("common") {
     "child_process_host_impl.cc",
     "child_process_host_impl.h",
     "child_process_messages.h",
-    "child_process_sandbox_support_impl_linux.cc",
-    "child_process_sandbox_support_impl_linux.h",
-    "child_process_sandbox_support_impl_shm_linux.cc",
     "clipboard_format.h",
     "clipboard_messages.h",
+    "common_sandbox_support_linux.cc",
     "content_constants_internal.cc",
     "content_constants_internal.h",
     "content_export.h",
@@ -79,6 +76,16 @@ source_set("common") {
     "content_param_traits.h",
     "content_param_traits_macros.h",
     "content_paths.cc",
+    "content_security_policy/content_security_policy.cc",
+    "content_security_policy/content_security_policy.h",
+    "content_security_policy/csp_context.cc",
+    "content_security_policy/csp_context.h",
+    "content_security_policy/csp_directive.cc",
+    "content_security_policy/csp_directive.h",
+    "content_security_policy/csp_source.cc",
+    "content_security_policy/csp_source.h",
+    "content_security_policy/csp_source_list.cc",
+    "content_security_policy/csp_source_list.h",
     "content_security_policy_header.h",
     "content_switches_internal.cc",
     "content_switches_internal.h",
@@ -107,6 +114,8 @@ source_set("common") {
     "edit_command.h",
     "establish_channel_params.cc",
     "establish_channel_params.h",
+    "feature_policy/feature_policy.cc",
+    "feature_policy/feature_policy.h",
     "file_utilities_messages.h",
     "fileapi/file_system_messages.h",
     "font_cache_dispatcher_win.cc",
@@ -134,8 +143,6 @@ source_set("common") {
     "in_process_child_thread_params.cc",
     "in_process_child_thread_params.h",
     "indexed_db/indexed_db_constants.h",
-    "indexed_db/indexed_db_enum_traits.cc",
-    "indexed_db/indexed_db_enum_traits.h",
     "indexed_db/indexed_db_key.cc",
     "indexed_db/indexed_db_key.h",
     "indexed_db/indexed_db_key_path.cc",
@@ -146,7 +153,6 @@ source_set("common") {
     "indexed_db/indexed_db_metadata.h",
     "indexed_db/indexed_db_struct_traits.cc",
     "indexed_db/indexed_db_struct_traits.h",
-    "input/event_with_latency_info.cc",
     "input/event_with_latency_info.h",
     "input/gesture_event_stream_validator.cc",
     "input/gesture_event_stream_validator.h",
@@ -213,7 +219,8 @@ source_set("common") {
     "media/surface_view_manager_messages_android.h",
     "media/video_capture.h",
     "memory_messages.h",
-    "message_port_messages.h",
+    "message_port.cc",
+    "message_port.h",
     "navigation_gesture.h",
     "navigation_params.cc",
     "navigation_params.h",
@@ -241,7 +248,6 @@ source_set("common") {
     "plugin_list.cc",
     "plugin_list.h",
     "process_type.cc",
-    "push_messaging_messages.h",
     "quarantine/quarantine.cc",
     "quarantine/quarantine_constants_linux.h",
     "quarantine/quarantine_linux.cc",
@@ -301,10 +307,10 @@ source_set("common") {
     "service_worker/service_worker_client_info.cc",
     "service_worker/service_worker_client_info.h",
     "service_worker/service_worker_messages.h",
+    "service_worker/service_worker_provider_host_info.cc",
+    "service_worker/service_worker_provider_host_info.h",
     "service_worker/service_worker_status_code.cc",
     "service_worker/service_worker_status_code.h",
-    "service_worker/service_worker_type_converters.cc",
-    "service_worker/service_worker_type_converters.h",
     "service_worker/service_worker_types.cc",
     "service_worker/service_worker_types.h",
     "service_worker/service_worker_utils.cc",
@@ -321,6 +327,8 @@ source_set("common") {
     "text_input_client_messages.h",
     "text_input_state.cc",
     "text_input_state.h",
+    "url_request_struct_traits.cc",
+    "url_request_struct_traits.h",
     "url_schemes.cc",
     "url_schemes.h",
     "user_agent.cc",
@@ -352,7 +360,6 @@ source_set("common") {
     "//cc/ipc",
     "//cc/surfaces",
     "//components/discardable_memory/common",
-    "//components/payments:payment_app",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//content:resources",
@@ -370,7 +377,6 @@ source_set("common") {
     "//gpu/ipc/common",
     "//gpu/skia_bindings",
     "//ipc",
-    "//ipc:mojom",
     "//media",
     "//media:shared_memory_support",
     "//media/base/ipc",
@@ -394,11 +400,10 @@ source_set("common") {
     "//services/video_capture/public/interfaces",
     "//skia",
     "//storage/common",
-    "//third_party/WebKit/public:blink_minimal",
     "//third_party/boringssl",
     "//third_party/icu",
-    "//third_party/libjingle",
     "//third_party/webrtc/base:rtc_base",
+    "//third_party/webrtc_overrides",
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/ime",
@@ -477,7 +482,7 @@ source_set("common") {
 
   if (enable_plugins) {
     deps += [
-      "//ppapi/proxy",
+      "//ppapi/proxy:ipc",
       "//ppapi/shared_impl",
     ]
   } else {
@@ -533,6 +538,23 @@ source_set("common") {
       "external_ipc_dumper.h",
     ]
   }
+
+  if (enable_pepper_cdms) {
+    sources += [
+      "media/cdm_host_file.cc",
+      "media/cdm_host_file.h",
+      "media/cdm_host_files.cc",
+      "media/cdm_host_files.h",
+    ]
+    deps += [
+      "//media:cdm_paths",
+
+      # Needed for finding CDM path from CDM adapter path.
+      # TODO(xhwang): Remove this dependency when CDM adapter is deprecated.
+      # See http://crbug.com/403462
+      "//third_party/widevine/cdm:headers",
+    ]
+  }
 }
 
 # See comment at the top of //content/BUILD.gn for how this works.
@@ -563,6 +585,7 @@ mojom("mojo_bindings") {
     "media/media_devices.mojom",
     "memory_coordinator.mojom",
     "native_types.mojom",
+    "push_messaging.mojom",
     "render_frame_message_filter.mojom",
     "render_message_filter.mojom",
     "render_widget_window_tree_client_factory.mojom",
@@ -570,6 +593,7 @@ mojom("mojo_bindings") {
     "service_worker/embedded_worker.mojom",
     "service_worker/service_worker.mojom",
     "service_worker/service_worker_event_dispatcher.mojom",
+    "service_worker/service_worker_provider.mojom",
     "service_worker/service_worker_types.mojom",
     "storage_partition_service.mojom",
     "url_loader.mojom",
@@ -581,9 +605,8 @@ mojom("mojo_bindings") {
 
   public_deps = [
     "//components/leveldb/public/interfaces",
+    "//components/payments/content:payment_app",
     "//content/public/common:interfaces",
-    "//device/power_monitor/public/interfaces",
-    "//device/sensors/public/interfaces",
 
     # TODO(mcasas): remove the following dep after https://crbug.com/653994
     "//gpu/ipc/common:interfaces",
@@ -602,6 +625,9 @@ mojom("mojo_bindings") {
     "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]
+
+  overridden_deps = [ "//ipc:mojom" ]
+  component_deps = [ "//ipc" ]
 
   export_class_attribute = "CONTENT_EXPORT"
   export_define = "CONTENT_IMPLEMENTATION=1"

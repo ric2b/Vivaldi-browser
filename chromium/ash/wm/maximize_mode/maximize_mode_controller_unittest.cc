@@ -445,16 +445,6 @@ TEST_F(MaximizeModeControllerTest, VerticalHingeTest) {
   }
 }
 
-// Tests that CanEnterMaximizeMode returns false until a valid accelerometer
-// event has been received, and that it returns true afterwards.
-TEST_F(MaximizeModeControllerTest,
-       CanEnterMaximizeModeRequiresValidAccelerometerUpdate) {
-  // Should be false until an accelerometer event is sent.
-  ASSERT_FALSE(maximize_mode_controller()->CanEnterMaximizeMode());
-  OpenLidToAngle(90.0f);
-  EXPECT_TRUE(maximize_mode_controller()->CanEnterMaximizeMode());
-}
-
 // Tests that when an accelerometer event is received which has no keyboard that
 // we enter maximize mode.
 TEST_F(MaximizeModeControllerTest,
@@ -466,9 +456,6 @@ TEST_F(MaximizeModeControllerTest,
 
 // Test if this case does not crash. See http://crbug.com/462806
 TEST_F(MaximizeModeControllerTest, DisplayDisconnectionDuringOverview) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("800x600,800x600");
   std::unique_ptr<aura::Window> w1(
       CreateTestWindowInShellWithBounds(gfx::Rect(0, 0, 100, 100)));
@@ -509,6 +496,45 @@ TEST_F(MaximizeModeControllerTest, NoMaximizeModeWithDisabledInternalDisplay) {
   OpenLidToAngle(270.0f);
   EXPECT_FALSE(IsMaximizeModeStarted());
   EXPECT_FALSE(AreEventsBlocked());
+
+  // Tablet mode signal should also be ignored.
+  SetTabletMode(true);
+  EXPECT_FALSE(IsMaximizeModeStarted());
+  EXPECT_FALSE(AreEventsBlocked());
+}
+
+// Tests that is a tablet mode signal is received while docked, that maximize
+// mode is enabled upon exiting docked mode.
+TEST_F(MaximizeModeControllerTest, MaximizeModeAfterExitingDockedMode) {
+  UpdateDisplay("200x200, 200x200");
+  const int64_t internal_display_id =
+      display::test::DisplayManagerTestApi(display_manager())
+          .SetFirstDisplayAsInternalDisplay();
+  ASSERT_FALSE(IsMaximizeModeStarted());
+
+  // Deactivate internal display to simulate Docked Mode.
+  std::vector<display::ManagedDisplayInfo> all_displays;
+  all_displays.push_back(display_manager()->GetDisplayInfo(
+      display_manager()->GetDisplayAt(0).id()));
+  std::vector<display::ManagedDisplayInfo> secondary_only;
+  display::ManagedDisplayInfo secondary_display =
+      display_manager()->GetDisplayInfo(
+          display_manager()->GetDisplayAt(1).id());
+  all_displays.push_back(secondary_display);
+  secondary_only.push_back(secondary_display);
+  display_manager()->OnNativeDisplaysChanged(secondary_only);
+  ASSERT_FALSE(display_manager()->IsActiveDisplayId(internal_display_id));
+
+  // Tablet mode signal should also be ignored.
+  SetTabletMode(true);
+  EXPECT_FALSE(IsMaximizeModeStarted());
+  EXPECT_FALSE(AreEventsBlocked());
+
+  // Exiting docked state
+  display_manager()->OnNativeDisplaysChanged(all_displays);
+  display::test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
+  EXPECT_TRUE(IsMaximizeModeStarted());
 }
 
 // Verify that the device won't exit touchview / maximize mode for unstable
@@ -539,31 +565,6 @@ TEST_F(MaximizeModeControllerTest, VerticalHingeUnstableAnglesTest) {
     // one failure rather than potentially hundreds.
     ASSERT_TRUE(IsMaximizeModeStarted());
   }
-}
-
-class MaximizeModeControllerSwitchesTest : public MaximizeModeControllerTest {
- public:
-  MaximizeModeControllerSwitchesTest() {}
-  ~MaximizeModeControllerSwitchesTest() override {}
-
-  void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kAshEnableTouchViewTesting);
-    MaximizeModeControllerTest::SetUp();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MaximizeModeControllerSwitchesTest);
-};
-
-// Tests that when the command line switch for testing maximize mode is on, that
-// accelerometer updates which would normally cause it to exit do not.
-TEST_F(MaximizeModeControllerSwitchesTest, IgnoreHingeAngles) {
-  maximize_mode_controller()->EnableMaximizeModeWindowManager(true);
-
-  // Would normally trigger an exit from maximize mode.
-  OpenLidToAngle(90.0f);
-  EXPECT_TRUE(IsMaximizeModeStarted());
 }
 
 }  // namespace ash

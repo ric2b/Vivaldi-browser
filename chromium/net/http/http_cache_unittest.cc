@@ -18,9 +18,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_clock.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/memory_dump_request_args.h"
+#include "base/trace_event/process_memory_dump.h"
+#include "base/trace_event/trace_event_argument.h"
 #include "net/base/cache_type.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/host_port_pair.h"
@@ -69,6 +74,34 @@ namespace net {
 using CacheEntryStatus = HttpResponseInfo::CacheEntryStatus;
 
 namespace {
+
+// Returns a simple text serialization of the given
+// |HttpResponseHeaders|. This is used by tests to verify that an
+// |HttpResponseHeaders| matches an expectation string.
+//
+//  * One line per header, written as:
+//        HEADER_NAME: HEADER_VALUE\n
+//  * The original case of header names is preserved.
+//  * Whitespace around head names/values is stripped.
+//  * Repeated headers are not aggregated.
+//  * Headers are listed in their original order.
+// TODO(tfarina): this is a duplicate function from
+// http_response_headers_unittest.cc:ToSimpleString(). Figure out how to merge
+// them. crbug.com/488593
+std::string ToSimpleString(const scoped_refptr<HttpResponseHeaders>& parsed) {
+  std::string result = parsed->GetStatusLine() + "\n";
+
+  size_t iter = 0;
+  std::string name;
+  std::string value;
+  while (parsed->EnumerateHeaderLines(&iter, &name, &value)) {
+    std::string new_line = name + ": " + value + "\n";
+
+    result += new_line;
+  }
+
+  return result;
+}
 
 // Tests the load timing values of a request that goes through a
 // MockNetworkTransaction.
@@ -262,7 +295,7 @@ void RunTransactionTestWithResponse(HttpCache* cache,
                                     std::string* response_headers) {
   HttpResponseInfo response;
   RunTransactionTestWithResponseInfo(cache, trans_info, &response);
-  response.headers->GetNormalizedHeaders(response_headers);
+  *response_headers = ToSimpleString(response.headers);
 }
 
 void RunTransactionTestWithResponseAndGetTiming(
@@ -275,7 +308,7 @@ void RunTransactionTestWithResponseAndGetTiming(
   RunTransactionTestBase(cache, trans_info, MockHttpRequest(trans_info),
                          &response, log, load_timing_info, nullptr, nullptr,
                          nullptr);
-  response.headers->GetNormalizedHeaders(response_headers);
+  *response_headers = ToSimpleString(response.headers);
 }
 
 // This class provides a handler for kFastNoStoreGET_Transaction so that the
@@ -1748,7 +1781,7 @@ TEST(HttpCache, SimpleGET_ManyWriters_BypassCache) {
 // lock to continue.
 TEST(HttpCache, SimpleGET_WriterTimeout) {
   MockHttpCache cache;
-  cache.BypassCacheLock();
+  cache.SimulateCacheLockTimeout();
 
   MockHttpRequest request(kSimpleGET_Transaction);
   Context c1, c2;
@@ -1763,6 +1796,34 @@ TEST(HttpCache, SimpleGET_WriterTimeout) {
 
   c2.callback.WaitForResult();
   ReadAndVerifyTransaction(c2.trans.get(), kSimpleGET_Transaction);
+
+  // Complete the first transaction.
+  c1.callback.WaitForResult();
+  ReadAndVerifyTransaction(c1.trans.get(), kSimpleGET_Transaction);
+}
+
+// Tests that a (simulated) timeout allows transactions waiting on the cache
+// lock to continue but read only transactions to error out.
+TEST(HttpCache, SimpleGET_WriterTimeoutReadOnlyError) {
+  MockHttpCache cache;
+
+  // Simulate timeout.
+  cache.SimulateCacheLockTimeout();
+
+  MockHttpRequest request(kSimpleGET_Transaction);
+  Context c1, c2;
+  ASSERT_THAT(cache.CreateTransaction(&c1.trans), IsOk());
+  ASSERT_EQ(ERR_IO_PENDING, c1.trans->Start(&request, c1.callback.callback(),
+                                            NetLogWithSource()));
+
+  request.load_flags = LOAD_ONLY_FROM_CACHE;
+  ASSERT_THAT(cache.CreateTransaction(&c2.trans), IsOk());
+  ASSERT_EQ(ERR_IO_PENDING, c2.trans->Start(&request, c2.callback.callback(),
+                                            NetLogWithSource()));
+
+  // The second request is queued after the first one.
+  int res = c2.callback.WaitForResult();
+  ASSERT_EQ(ERR_CACHE_MISS, res);
 
   // Complete the first transaction.
   c1.callback.WaitForResult();
@@ -6706,13 +6767,10 @@ TEST(HttpCache, UpdatesRequestResponseTimeOn304) {
   EXPECT_EQ(response_time.ToInternalValue(),
             response.response_time.ToInternalValue());
 
-  std::string headers;
-  response.headers->GetNormalizedHeaders(&headers);
-
   EXPECT_EQ("HTTP/1.1 200 OK\n"
             "Date: Wed, 22 Jul 2009 03:15:26 GMT\n"
             "Last-Modified: Wed, 06 Feb 2008 22:38:21 GMT\n",
-            headers);
+            ToSimpleString(response.headers));
 
   RemoveMockTransaction(&mock_network_response);
 }
@@ -6786,6 +6844,46 @@ TEST(HttpCache, WriteMetadata_Fail) {
   EXPECT_EQ(1, cache.network_layer()->transaction_count());
   EXPECT_EQ(2, cache.disk_cache()->open_count());
   EXPECT_EQ(1, cache.disk_cache()->create_count());
+}
+
+// Tests that if a metadata writer transaction hits cache lock timeout, it will
+// error out.
+TEST(HttpCache, WriteMetadata_CacheLockTimeout) {
+  MockHttpCache cache;
+
+  // Write to the cache
+  HttpResponseInfo response;
+  RunTransactionTestWithResponseInfo(cache.http_cache(), kSimpleGET_Transaction,
+                                     &response);
+  EXPECT_FALSE(response.metadata.get());
+
+  MockHttpRequest request(kSimpleGET_Transaction);
+  Context c1;
+  ASSERT_THAT(cache.CreateTransaction(&c1.trans), IsOk());
+  ASSERT_EQ(ERR_IO_PENDING, c1.trans->Start(&request, c1.callback.callback(),
+                                            NetLogWithSource()));
+
+  cache.SimulateCacheLockTimeout();
+
+  // Write meta data to the same entry.
+  scoped_refptr<IOBufferWithSize> buf(new IOBufferWithSize(50));
+  memset(buf->data(), 0, buf->size());
+  base::strlcpy(buf->data(), "Hi there", buf->size());
+  cache.http_cache()->WriteMetadata(GURL(kSimpleGET_Transaction.url),
+                                    DEFAULT_PRIORITY, response.response_time,
+                                    buf.get(), buf->size());
+
+  // Release the buffer before the operation takes place.
+  buf = NULL;
+
+  // Makes sure we finish pending operations.
+  base::RunLoop().RunUntilIdle();
+
+  RunTransactionTestWithResponseInfo(cache.http_cache(), kSimpleGET_Transaction,
+                                     &response);
+
+  // The writer transaction should fail due to cache lock timeout.
+  ASSERT_FALSE(response.metadata.get());
 }
 
 // Tests that we ignore VARY checks when writing metadata since the request
@@ -8258,6 +8356,57 @@ TEST(HttpCache, CacheEntryStatusCantConditionalize) {
   EXPECT_TRUE(response_info.network_accessed);
   EXPECT_EQ(CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE,
             response_info.cache_entry_status);
+}
+
+class HttpCacheMemoryDumpTest
+    : public testing::TestWithParam<
+          base::trace_event::MemoryDumpLevelOfDetail> {};
+
+INSTANTIATE_TEST_CASE_P(
+    /* no prefix */,
+    HttpCacheMemoryDumpTest,
+    ::testing::Values(base::trace_event::MemoryDumpLevelOfDetail::DETAILED,
+                      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND));
+
+// Basic test to make sure HttpCache::DumpMemoryStats doesn't crash.
+TEST_P(HttpCacheMemoryDumpTest, DumpMemoryStats) {
+  MockHttpCache cache;
+  cache.FailConditionalizations();
+  RunTransactionTest(cache.http_cache(), kTypicalGET_Transaction);
+
+  HttpResponseInfo response_info;
+  RunTransactionTestWithResponseInfo(cache.http_cache(),
+                                     kTypicalGET_Transaction, &response_info);
+
+  EXPECT_FALSE(response_info.was_cached);
+  EXPECT_TRUE(response_info.network_accessed);
+  EXPECT_EQ(CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE,
+            response_info.cache_entry_status);
+
+  base::trace_event::MemoryDumpArgs dump_args = {GetParam()};
+  std::unique_ptr<base::trace_event::ProcessMemoryDump> process_memory_dump(
+      new base::trace_event::ProcessMemoryDump(nullptr, dump_args));
+  base::trace_event::MemoryAllocatorDump* parent_dump =
+      process_memory_dump->CreateAllocatorDump("net/url_request_context_0x123");
+  cache.http_cache()->DumpMemoryStats(process_memory_dump.get(),
+                                      parent_dump->absolute_name());
+
+  const base::trace_event::MemoryAllocatorDump* dump =
+      process_memory_dump->GetAllocatorDump(
+          "net/url_request_context_0x123/http_cache");
+  ASSERT_NE(nullptr, dump);
+  std::unique_ptr<base::Value> raw_attrs =
+      dump->attributes_for_testing()->ToBaseValue();
+  base::DictionaryValue* attrs;
+  ASSERT_TRUE(raw_attrs->GetAsDictionary(&attrs));
+  base::DictionaryValue* size_attrs;
+  ASSERT_TRUE(attrs->GetDictionary(
+      base::trace_event::MemoryAllocatorDump::kNameSize, &size_attrs));
+  std::string size;
+  ASSERT_TRUE(size_attrs->GetString("value", &size));
+  int actual_size = 0;
+  ASSERT_TRUE(base::HexStringToInt(size, &actual_size));
+  ASSERT_LT(0, actual_size);
 }
 
 }  // namespace net

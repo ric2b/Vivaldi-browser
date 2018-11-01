@@ -17,4 +17,6 @@ extern const gfx::VectorIcon icon_name;
 
 TEMPLATE_PLACEHOLDER
 
+#undef VECTOR_ICON_TEMPLATE_H
+
 #endif  // CHROME_APP_VECTOR_ICONS_VECTOR_ICONS_H_

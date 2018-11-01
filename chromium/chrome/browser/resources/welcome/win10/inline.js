@@ -2,71 +2,58 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('inline', function() {
-  'use strict';
+Polymer({
+  is: 'welcome-win10-inline',
 
-  function computeClasses(isCombined) {
-    if (isCombined)
-      return 'section expandable expanded';
-    return 'section';
-  }
-
-  function onContinue() {
-    chrome.send('handleContinue');
-  }
-
-  function onOpenSettings() {
-    chrome.send('handleSetDefaultBrowser');
-  }
-
-  function onToggle(app) {
-    if (app.isCombined) {
-      var sections = document.querySelectorAll('.section.expandable');
-      sections.forEach(function(section) {
-        section.classList.toggle('expanded');
-      });
-    }
-  }
-
-  function initialize() {
-    var app = $('inline-app');
-
-    // Set variables.
+  properties: {
     // Determines if the combined variant should be displayed. The combined
     // variant includes instructions on how to pin Chrome to the taskbar.
-    app.isCombined = false;
+    isCombined: Boolean
+  },
 
-    // Set handlers.
-    app.computeClasses = computeClasses;
-    app.onContinue = onContinue;
-    app.onOpenSettings = onOpenSettings;
-    app.onToggle = onToggle.bind(this, app);
+  receivePinnedState_: function(isPinnedToTaskbar) {
+    // Allow overriding of the result via a query parameter.
+    // TODO(pmonette): Remove these checks when they are no longer needed.
+    /** @const */
+    var VARIANT_KEY = 'variant';
+    var VariantTypeMap = { 'defaultonly': false, 'combined': true };
+    var params = new URLSearchParams(location.search.slice(1));
+    if (params.has(VARIANT_KEY) && params.get(VARIANT_KEY) in VariantTypeMap)
+      this.isCombined = VariantTypeMap[params.get(VARIANT_KEY)];
+    else
+      this.isCombined = !isPinnedToTaskbar;
 
+    // Show the module.
+    this.style.opacity = 1;
+  },
+
+  ready: function() {
+    this.isCombined = false;
     // Asynchronously check if Chrome is pinned to the taskbar.
     cr.sendWithPromise('getPinnedToTaskbarState').then(
-      function(isPinnedToTaskbar) {
-        // Allow overriding of the result via a query parameter.
-        // TODO(pmonette): Remove these checks when they are no longer needed.
-        /** @const */ var VARIANT_KEY = 'variant';
-        var VariantType = {
-          DEFAULT_ONLY: 'defaultonly',
-          COMBINED: 'combined'
-        };
-        var params = new URLSearchParams(location.search.slice(1));
-        if (params.has(VARIANT_KEY)) {
-          if (params.get(VARIANT_KEY) === VariantType.DEFAULT_ONLY)
-            app.isCombined = false;
-          else if (params.get(VARIANT_KEY) === VariantType.COMBINED)
-            app.isCombined = true;
-        } else {
-          app.isCombined = !isPinnedToTaskbar;
-        }
-      });
+      this.receivePinnedState_.bind(this));
+  },
+
+  computeClasses: function(isCombined) {
+    return isCombined ? 'section expandable expanded' : 'section';
+  },
+
+  onContinue: function() {
+    chrome.send('handleContinue');
+  },
+
+  onOpenSettings: function() {
+    chrome.send('handleSetDefaultBrowser');
+  },
+
+  onToggle: function() {
+    if (!this.isCombined)
+      return;
+    var sections = this.shadowRoot.querySelectorAll('.section.expandable');
+    sections.forEach(function(section) {
+      var isExpanded = section.classList.toggle('expanded');
+      section.querySelector('[role~="button"]').setAttribute(
+          'aria-expanded', isExpanded);
+    });
   }
-
-  return {
-    initialize: initialize
-  };
 });
-
-document.addEventListener('DOMContentLoaded', inline.initialize);

@@ -3,8 +3,10 @@
 #ifndef EXTENSIONS_API_BOOKMARKS_BOOKMARKS_PRIVATE_API_H_
 #define EXTENSIONS_API_BOOKMARKS_BOOKMARKS_PRIVATE_API_H_
 
-#include "chrome/browser/extensions/chrome_extension_function.h"
+#include <set>
+
 #include "chrome/browser/extensions/api/bookmarks/bookmarks_api.h"
+#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 
@@ -26,17 +28,22 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
-    GetFactoryInstance();
+  GetFactoryInstance();
 
   // bookmarks::BookmarkModelObserver
-  void BookmarkNodeMoved(BookmarkModel* model, const BookmarkNode* old_parent,
-                         int old_index, const BookmarkNode* new_parent,
+  void BookmarkNodeMoved(BookmarkModel* model,
+                         const BookmarkNode* old_parent,
+                         int old_index,
+                         const BookmarkNode* new_parent,
                          int new_index) override;
-  void BookmarkNodeRemoved(BookmarkModel* model, const BookmarkNode* parent,
-                           int old_index, const BookmarkNode* node,
+  void BookmarkNodeRemoved(BookmarkModel* model,
+                           const BookmarkNode* parent,
+                           int old_index,
+                           const BookmarkNode* node,
                            const std::set<GURL>& no_longer_bookmarked) override;
 
-  void BookmarkNodeAdded(BookmarkModel* model, const BookmarkNode* parent,
+  void BookmarkNodeAdded(BookmarkModel* model,
+                         const BookmarkNode* parent,
                          int index) override {}
 
   void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override {
@@ -49,7 +56,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   void BookmarkNodeChildrenReordered(BookmarkModel* model,
                                      const BookmarkNode* node) override {}
   void BookmarkAllUserNodesRemoved(
-      BookmarkModel* model, const std::set<GURL>& removed_urls) override {}
+      BookmarkModel* model,
+      const std::set<GURL>& removed_urls) override {}
 
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>;
@@ -59,9 +67,7 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   bookmarks::BookmarkModel* bookmark_model_;
 
   // BrowserContextKeyedAPI implementation.
-  static const char* service_name() {
-    return "VivaldiBookmarksAPI";
-  }
+  static const char* service_name() { return "VivaldiBookmarksAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
 };
 
@@ -104,4 +110,4 @@ class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
 
 }  // namespace extensions
 
-#endif  // EXTENSIONS_API_BOOKMARKS_VIVALDI_BOOKMARKS_API_H_
+#endif  // EXTENSIONS_API_BOOKMARKS_BOOKMARKS_PRIVATE_API_H_

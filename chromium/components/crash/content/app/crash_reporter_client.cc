@@ -75,11 +75,11 @@ bool CrashReporterClient::GetDeferredUploadsSupported(
   return false;
 }
 
-bool CrashReporterClient::GetIsPerUserInstall(const base::string16& exe_path) {
+bool CrashReporterClient::GetIsPerUserInstall() {
   return true;
 }
 
-bool CrashReporterClient::GetShouldDumpLargerDumps(bool is_per_user_install) {
+bool CrashReporterClient::GetShouldDumpLargerDumps() {
   return false;
 }
 
@@ -120,6 +120,14 @@ bool CrashReporterClient::GetCrashMetricsLocation(base::FilePath* crash_dir) {
 
 size_t CrashReporterClient::RegisterCrashKeys() {
   return 0;
+}
+
+bool CrashReporterClient::UseCrashKeysWhiteList() {
+  return false;
+}
+
+const char* const* CrashReporterClient::GetCrashKeyWhiteList() {
+  return nullptr;
 }
 
 bool CrashReporterClient::IsRunningUnattended() {

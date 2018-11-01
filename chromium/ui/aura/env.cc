@@ -8,9 +8,11 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_local.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/input_state_lookup.h"
+#include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
@@ -105,9 +107,12 @@ std::unique_ptr<WindowPort> Env::CreateWindowPort(Window* window) {
     return base::MakeUnique<WindowPortLocal>(window);
 
   DCHECK(window_tree_client_);
+  WindowMusType window_mus_type =
+      window->GetProperty(aura::client::kTopLevelWindowInWM)
+          ? WindowMusType::TOP_LEVEL_IN_WM
+          : WindowMusType::LOCAL;
   // Use LOCAL as all other cases are created by WindowTreeClient explicitly.
-  return base::MakeUnique<WindowPortMus>(window_tree_client_,
-                                         WindowMusType::LOCAL);
+  return base::MakeUnique<WindowPortMus>(window_tree_client_, window_mus_type);
 }
 
 void Env::AddObserver(EnvObserver* observer) {
@@ -121,6 +126,19 @@ void Env::RemoveObserver(EnvObserver* observer) {
 bool Env::IsMouseButtonDown() const {
   return input_state_lookup_.get() ? input_state_lookup_->IsMouseButtonDown() :
       mouse_button_flags_ != 0;
+}
+
+const gfx::Point& Env::last_mouse_location() const {
+  if (mode_ == Mode::LOCAL || always_use_last_mouse_location_ ||
+      !get_last_mouse_location_from_mus_) {
+    return last_mouse_location_;
+  }
+
+  // Some tests may not install a WindowTreeClient, and we allow multiple
+  // WindowTreeClients for the case of multiple connections.
+  if (window_tree_client_)
+    last_mouse_location_ = window_tree_client_->GetCursorScreenPoint();
+  return last_mouse_location_;
 }
 
 void Env::SetWindowTreeClient(WindowTreeClient* window_tree_client) {
@@ -155,6 +173,7 @@ Env::Env(Mode mode)
     : mode_(mode),
       mouse_button_flags_(0),
       is_touch_down_(false),
+      get_last_mouse_location_from_mus_(mode_ == Mode::MUS),
       input_state_lookup_(InputStateLookup::Create()),
       context_factory_(nullptr),
       context_factory_private_(nullptr) {

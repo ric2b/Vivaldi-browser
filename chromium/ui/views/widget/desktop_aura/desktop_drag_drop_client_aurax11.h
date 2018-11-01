@@ -89,6 +89,8 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
                        int operation,
                        ui::DragDropTypes::DragEventSource source,
                        bool& cancelled) override;
+  using aura::client::DragDropClient::StartDragAndDrop;
+
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 

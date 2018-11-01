@@ -282,7 +282,7 @@ void compileSubtargetList(const HeapVector<Member<Node>>& intersectedNodes,
          visitedNode = visitedNode->parentOrShadowHostNode()) {
       // Check if we already have a result for a common ancestor from another
       // candidate.
-      respondingNode = responderMap.get(visitedNode);
+      respondingNode = responderMap.at(visitedNode);
       if (respondingNode)
         break;
       visitedNodes.push_back(visitedNode);
@@ -295,7 +295,7 @@ void compileSubtargetList(const HeapVector<Member<Node>>& intersectedNodes,
         for (visitedNode = parentShadowHostOrOwner(visitedNode); visitedNode;
              visitedNode = parentShadowHostOrOwner(visitedNode)) {
           HeapHashSet<Member<Node>>::AddResult addResult =
-              ancestorsToRespondersSet.add(visitedNode);
+              ancestorsToRespondersSet.insert(visitedNode);
           if (!addResult.isNewEntry)
             break;
         }
@@ -304,7 +304,7 @@ void compileSubtargetList(const HeapVector<Member<Node>>& intersectedNodes,
     }
     // Insert the detected responder for all the visited nodes.
     for (unsigned j = 0; j < visitedNodes.size(); j++)
-      responderMap.add(visitedNodes[j], respondingNode);
+      responderMap.insert(visitedNodes[j], respondingNode);
 
     if (respondingNode)
       candidates.push_back(node);
@@ -319,7 +319,7 @@ void compileSubtargetList(const HeapVector<Member<Node>>& intersectedNodes,
     // preference to the inner-most event-handlers. So that a link is always
     // preferred even when contained in an element that monitors all
     // click-events.
-    Node* respondingNode = responderMap.get(candidate);
+    Node* respondingNode = responderMap.at(candidate);
     ASSERT(respondingNode);
     if (ancestorsToRespondersSet.contains(respondingNode))
       continue;
@@ -336,7 +336,7 @@ void compileSubtargetList(const HeapVector<Member<Node>>& intersectedNodes,
           replacement = nullptr;
           break;
         }
-        editableAncestors.add(replacement);
+        editableAncestors.insert(replacement);
         parent = parent->parentOrShadowHostNode();
       }
       candidate = replacement;

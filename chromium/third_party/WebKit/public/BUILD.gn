@@ -16,22 +16,10 @@ if (is_android) {
 group("blink") {
   public_deps = [
     ":blink_headers",
-    ":blink_minimal",
   ]
   deps = [
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/web",
-  ]
-}
-
-# This target provides a minimal set of Blink APIs such as WebString to use in
-# places that cannot link against the full Blink library.  FIXME: We really
-# shouldn't have this at all and should instead remove all uses of Blink's API
-# types from places that can't link against Blink. crbug.com/248653
-group("blink_minimal") {
-  public_deps = [
-    ":blink_headers",
-    "//third_party/WebKit/Source/platform:blink_common",
   ]
 }
 
@@ -120,6 +108,7 @@ source_set("blink_headers") {
     "platform/WebBlobInfo.h",
     "platform/WebBlobRegistry.h",
     "platform/WebCString.h",
+    "platform/WebCache.h",
     "platform/WebCallbacks.h",
     "platform/WebCanvas.h",
     "platform/WebCanvasCaptureHandler.h",
@@ -207,6 +196,7 @@ source_set("blink_headers") {
     "platform/WebInputEvent.h",
     "platform/WebInputEventResult.h",
     "platform/WebInsecureRequestPolicy.h",
+    "platform/WebKeyboardEvent.h",
     "platform/WebLayer.h",
     "platform/WebLayerPositionConstraint.h",
     "platform/WebLayerScrollClient.h",
@@ -238,6 +228,7 @@ source_set("blink_headers") {
     "platform/WebMixedContent.h",
     "platform/WebMixedContentContextType.h",
     "platform/WebMockClipboard.h",
+    "platform/WebMouseWheelEvent.h",
     "platform/WebNativeScrollBehavior.h",
     "platform/WebNavigationHintType.h",
     "platform/WebNonCopyable.h",
@@ -262,6 +253,7 @@ source_set("blink_headers") {
     "platform/WebRTCDataChannelHandler.h",
     "platform/WebRTCDataChannelHandlerClient.h",
     "platform/WebRTCDataChannelInit.h",
+    "platform/WebRTCError.h",
     "platform/WebRTCICECandidate.h",
     "platform/WebRTCKeyParams.h",
     "platform/WebRTCLegacyStats.h",
@@ -346,20 +338,22 @@ source_set("blink_headers") {
     "platform/modules/indexeddb/WebIDBObservation.h",
     "platform/modules/indexeddb/WebIDBTypes.h",
     "platform/modules/indexeddb/WebIDBValue.h",
-    "platform/modules/installedapp/WebInstalledAppClient.h",
+    "platform/modules/installedapp/WebRelatedAppsFetcher.h",
     "platform/modules/notifications/WebNotificationAction.h",
     "platform/modules/notifications/WebNotificationData.h",
     "platform/modules/notifications/WebNotificationDelegate.h",
     "platform/modules/notifications/WebNotificationManager.h",
     "platform/modules/notifications/WebNotificationResources.h",
-    "platform/modules/payments/WebPaymentAppRequestData.h",
+    "platform/modules/payments/WebPaymentAppRequest.h",
     "platform/modules/payments/WebPaymentCurrencyAmount.h",
     "platform/modules/payments/WebPaymentDetailsModifier.h",
     "platform/modules/payments/WebPaymentItem.h",
     "platform/modules/payments/WebPaymentMethodData.h",
-    "platform/modules/permissions/WebPermissionType.h",
     "platform/modules/presentation/WebPresentationAvailabilityObserver.h",
     "platform/modules/presentation/WebPresentationClient.h",
+    "platform/modules/presentation/WebPresentationConnection.h",
+    "platform/modules/presentation/WebPresentationConnectionCallbacks.h",
+    "platform/modules/presentation/WebPresentationConnectionProxy.h",
     "platform/modules/presentation/WebPresentationController.h",
     "platform/modules/presentation/WebPresentationError.h",
     "platform/modules/presentation/WebPresentationReceiver.h",
@@ -429,7 +423,6 @@ source_set("blink_headers") {
     "web/WebAutofillClient.h",
     "web/WebBlob.h",
     "web/WebCSSParser.h",
-    "web/WebCache.h",
     "web/WebColorChooser.h",
     "web/WebColorChooserClient.h",
     "web/WebColorSuggestion.h",
@@ -590,6 +583,11 @@ source_set("blink_headers") {
     "//third_party/icu:icu_config",
   ]
 
+  public_deps = [
+    "//skia",
+    "//url",
+  ]
+
   deps = [
     ":generate_mojo_bindings",
   ]
@@ -598,6 +596,12 @@ source_set("blink_headers") {
 group("blink_devtools_frontend_resources") {
   public_deps = [
     "//third_party/WebKit/Source/devtools:devtools_frontend_resources",
+  ]
+}
+
+group("blink_devtools_frontend_resources_files") {
+  data_deps = [
+    "//third_party/WebKit/Source/devtools:devtools_all_files",
   ]
 }
 
@@ -701,7 +705,7 @@ mojom("android_mojo_bindings") {
     "platform/modules/webshare/webshare.mojom",
   ]
   public_deps = [
-    "//components/payments:payment_request",
+    "//components/payments/content:payment_request",
     "//url/mojo:url_mojom_gurl",
   ]
 
@@ -751,7 +755,6 @@ source_set("shared_typemap_traits") {
   visibility = [ ":*" ]
   sources = [
     "web/ConsoleMessageStructTraits.cpp",
-    "web/WindowFeaturesStructTraits.cpp",
   ]
   deps = [
     ":mojo_bindings_shared__generator",

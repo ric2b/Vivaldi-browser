@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/strings/string_number_conversions.h"
 #include "net/quic/core/crypto/quic_crypto_server_config.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/proto/cached_network_parameters.pb.h"
@@ -29,12 +28,11 @@
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/test/gtest_util.h"
 #include "net/tools/quic/quic_simple_server_stream.h"
-#include "net/tools/quic/test_tools/mock_quic_server_session_visitor.h"
+#include "net/tools/quic/test_tools/mock_quic_session_visitor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using std::string;
-using testing::StrictMock;
 using testing::_;
 using testing::AtLeast;
 using testing::InSequence;
@@ -181,7 +179,7 @@ class QuicSimpleServerSessionTest
   QuicSimpleServerSessionTest()
       : crypto_config_(QuicCryptoServerConfig::TESTING,
                        QuicRandom::GetInstance(),
-                       CryptoTestUtils::ProofSourceForTesting()),
+                       crypto_test_utils::ProofSourceForTesting()),
         compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize) {
     config_.SetMaxStreamsPerConnection(kMaxStreamsForTest, kMaxStreamsForTest);
@@ -473,7 +471,7 @@ class QuicSimpleServerSessionServerPushTest
       string path =
           partial_push_resource_path + QuicTextUtils::Uint64ToString(i);
       string url = scheme + "://" + resource_host + path;
-      GURL resource_url = GURL(url);
+      QuicUrl resource_url = QuicUrl(url);
       string body(body_size, 'a');
       response_cache_.AddSimpleResponse(resource_host, path, 200, body);
       push_resources.push_back(QuicHttpResponseCache::ServerPushInfo(

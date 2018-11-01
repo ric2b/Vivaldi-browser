@@ -43,7 +43,7 @@ NavigatorShare::ShareClientImpl::ShareClientImpl(
 
 void NavigatorShare::ShareClientImpl::callback(const String& error) {
   if (m_navigator)
-    m_navigator->m_clients.remove(this);
+    m_navigator->m_clients.erase(this);
 
   if (error.isNull()) {
     m_resolver->resolve();
@@ -108,11 +108,11 @@ ScriptPromise NavigatorShare::share(ScriptState* scriptState,
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ShareClientImpl* client = new ShareClientImpl(this, resolver);
-  m_clients.add(client);
+  m_clients.insert(client);
   ScriptPromise promise = resolver->promise();
 
-  m_service->Share(shareData.hasTitle() ? shareData.title() : emptyString(),
-                   shareData.hasText() ? shareData.text() : emptyString(),
+  m_service->Share(shareData.hasTitle() ? shareData.title() : emptyString,
+                   shareData.hasText() ? shareData.text() : emptyString,
                    doc->completeURL(shareData.url()),
                    convertToBaseCallback(WTF::bind(&ShareClientImpl::callback,
                                                    wrapPersistent(client))));
@@ -127,11 +127,6 @@ ScriptPromise NavigatorShare::share(ScriptState* scriptState,
 }
 
 void NavigatorShare::onConnectionError() {
-  if (!Platform::current()) {
-    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
-    return;
-  }
-
   for (auto& client : m_clients) {
     client->onConnectionError();
   }

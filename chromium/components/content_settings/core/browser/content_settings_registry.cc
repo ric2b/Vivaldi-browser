@@ -273,6 +273,15 @@ void ContentSettingsRegistry::Init() {
                WebsiteSettingsRegistry::PLATFORM_ANDROID,
            ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE);
 
+  Register(CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER, "subresource-filter",
+           CONTENT_SETTING_ALLOW,
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE);
+
   // Content settings that aren't used to store any data. TODO(raymes): use a
   // different mechanism rather than content settings to represent these.
   // Since nothing is stored in them, there is no real point in them being a
@@ -314,7 +323,7 @@ void ContentSettingsRegistry::Register(
   // Ensure that nothing has been registered yet for the given type.
   DCHECK(!website_settings_registry_->Get(type));
   std::unique_ptr<base::Value> default_value(
-      new base::FundamentalValue(static_cast<int>(initial_default_value)));
+      new base::Value(static_cast<int>(initial_default_value)));
   const WebsiteSettingsInfo* website_settings_info =
       website_settings_registry_->Register(
           type, name, std::move(default_value), sync_status,

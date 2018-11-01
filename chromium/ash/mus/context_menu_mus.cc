@@ -9,7 +9,7 @@
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "grit/ash_strings.h"
+#include "ash/strings/grit/ash_strings.h"
 
 namespace ash {
 

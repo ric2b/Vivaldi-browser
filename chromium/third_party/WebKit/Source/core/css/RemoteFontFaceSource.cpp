@@ -8,15 +8,15 @@
 #include "core/css/CSSFontFace.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/dom/Document.h"
-#include "core/fetch/ResourceFetcher.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/page/NetworkStateNotifier.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "public/platform/WebEffectiveConnectionType.h"
 #include "wtf/CurrentTime.h"
@@ -47,6 +47,12 @@ bool isEffectiveConnectionTypeSlowFor(Document* document) {
 
 bool isConnectionTypeSlow() {
   return networkStateNotifier().connectionType() == WebConnectionTypeCellular2G;
+}
+
+bool isInterventionV2Enabled() {
+  return RuntimeEnabledFeatures::webFontsInterventionV2With2GEnabled() ||
+         RuntimeEnabledFeatures::webFontsInterventionV2With3GEnabled() ||
+         RuntimeEnabledFeatures::webFontsInterventionV2WithSlow2GEnabled();
 }
 
 }  // namespace
@@ -114,13 +120,13 @@ void RemoteFontFaceSource::notifyFinished(Resource*) {
                                     : FontLoadHistograms::FromNetwork);
   m_histograms.recordRemoteFont(m_font.get(), m_isInterventionTriggered);
   m_histograms.fontLoaded(m_font->isCORSFailed(),
-                          m_font->getStatus() == Resource::LoadError,
+                          m_font->getStatus() == ResourceStatus::LoadError,
                           m_isInterventionTriggered);
 
   m_font->ensureCustomFontData();
   // FIXME: Provide more useful message such as OTS rejection reason.
   // See crbug.com/97467
-  if (m_font->getStatus() == Resource::DecodeError &&
+  if (m_font->getStatus() == ResourceStatus::DecodeError &&
       m_fontSelector->document()) {
     m_fontSelector->document()->addConsoleMessage(ConsoleMessage::create(
         OtherMessageSource, WarningMessageLevel,
@@ -188,20 +194,16 @@ bool RemoteFontFaceSource::shouldTriggerWebFontsIntervention() {
       m_histograms.dataSource() == FontLoadHistograms::FromDataURL)
     return false;
 
-  bool isV2Enabled =
-      RuntimeEnabledFeatures::webFontsInterventionV2With2GEnabled() ||
-      RuntimeEnabledFeatures::webFontsInterventionV2With3GEnabled() ||
-      RuntimeEnabledFeatures::webFontsInterventionV2WithSlow2GEnabled();
-
   bool networkIsSlow =
-      isV2Enabled ? isEffectiveConnectionTypeSlowFor(m_fontSelector->document())
-                  : isConnectionTypeSlow();
+      isInterventionV2Enabled()
+          ? isEffectiveConnectionTypeSlowFor(m_fontSelector->document())
+          : isConnectionTypeSlow();
 
   return networkIsSlow && m_display == FontDisplayAuto;
 }
 
 bool RemoteFontFaceSource::isLowPriorityLoadingAllowedForRemoteFont() const {
-  return m_isInterventionTriggered;
+  return m_isInterventionTriggered && isInterventionV2Enabled();
 }
 
 PassRefPtr<SimpleFontData> RemoteFontFaceSource::createFontData(

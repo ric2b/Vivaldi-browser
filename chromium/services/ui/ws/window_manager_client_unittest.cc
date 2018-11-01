@@ -54,6 +54,7 @@ class TestWindowManagerDelegate : public aura::WindowManagerDelegate {
       std::unique_ptr<std::vector<uint8_t>>* new_data) override {
     return false;
   }
+  void OnWmSetCanFocus(aura::Window* window, bool can_focus) override {}
   aura::Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override {
@@ -350,6 +351,12 @@ class WindowServerTest : public WindowServerTestBase {
     if (embed_details_->waiting &&
         (!result || embed_details_->result->window_tree_client))
       EXPECT_TRUE(WindowServerTestBase::QuitRunLoop());
+  }
+
+  // mojo::test::ServiceTest::
+  std::unique_ptr<base::MessageLoop> CreateMessageLoop() override {
+    // The window server is expected to run with a TYPE_UI message loop.
+    return base::MakeUnique<base::MessageLoop>(base::MessageLoop::TYPE_UI);
   }
 
   std::unique_ptr<EmbedDetails> embed_details_;

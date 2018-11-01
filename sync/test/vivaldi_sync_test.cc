@@ -22,5 +22,6 @@ void VivaldiSyncTest::TearDown() {
 }
 
 VivaldiProfileSyncServiceHarness* VivaldiSyncTest::GetClient(int index) {
-  return (VivaldiProfileSyncServiceHarness*)SyncTest::GetClient(index);
+  return reinterpret_cast<VivaldiProfileSyncServiceHarness*>(
+      SyncTest::GetClient(index));
 }

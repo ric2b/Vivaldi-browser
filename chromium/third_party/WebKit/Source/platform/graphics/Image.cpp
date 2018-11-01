@@ -36,13 +36,13 @@
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/paint/PaintRecorder.h"
+#include "platform/graphics/paint/PaintShader.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "wtf/StdLibExtras.h"
 
 #include <math.h>
@@ -222,26 +222,26 @@ void Image::drawTiledBorder(GraphicsContext& ctxt,
 
 namespace {
 
-sk_sp<SkShader> createPatternShader(const SkImage* image,
-                                    const SkMatrix& shaderMatrix,
-                                    const SkPaint& paint,
-                                    const FloatSize& spacing,
-                                    SkShader::TileMode tmx,
-                                    SkShader::TileMode tmy) {
+sk_sp<PaintShader> createPatternShader(const SkImage* image,
+                                       const SkMatrix& shaderMatrix,
+                                       const PaintFlags& paint,
+                                       const FloatSize& spacing,
+                                       SkShader::TileMode tmx,
+                                       SkShader::TileMode tmy) {
   if (spacing.isZero())
-    return image->makeShader(tmx, tmy, &shaderMatrix);
+    return MakePaintShaderImage(image, tmx, tmy, &shaderMatrix);
 
   // Arbitrary tiling is currently only supported for SkPictureShader, so we use
   // that instead of a plain bitmap shader to implement spacing.
   const SkRect tileRect = SkRect::MakeWH(image->width() + spacing.width(),
                                          image->height() + spacing.height());
 
-  SkPictureRecorder recorder;
-  SkCanvas* canvas = recorder.beginRecording(tileRect);
+  PaintRecorder recorder;
+  PaintCanvas* canvas = recorder.beginRecording(tileRect);
   canvas->drawImage(image, 0, 0, &paint);
 
-  return SkShader::MakePictureShader(recorder.finishRecordingAsPicture(), tmx,
-                                     tmy, &shaderMatrix, nullptr);
+  return MakePaintShaderRecord(recorder.finishRecordingAsPicture(), tmx, tmy,
+                               &shaderMatrix, nullptr);
 }
 
 SkShader::TileMode computeTileMode(float left,
@@ -264,7 +264,8 @@ void Image::drawPattern(GraphicsContext& context,
                         const FloatSize& repeatSpacing) {
   TRACE_EVENT0("skia", "Image::drawPattern");
 
-  sk_sp<SkImage> image = imageForCurrentFrame(context.getColorBehavior());
+  sk_sp<SkImage> image =
+      imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   if (!image)
     return;
 
@@ -303,20 +304,24 @@ void Image::drawPattern(GraphicsContext& context,
   const auto tmy = computeTileMode(destRect.y(), destRect.maxY(), adjustedY,
                                    adjustedY + tileSize.height());
 
-  {
-    SkPaint paint = context.fillPaint();
-    paint.setColor(SK_ColorBLACK);
-    paint.setBlendMode(compositeOp);
-    paint.setFilterQuality(
-        context.computeFilterQuality(this, destRect, normSrcRect));
-    paint.setAntiAlias(context.shouldAntialias());
-    paint.setShader(
-        createPatternShader(image.get(), localMatrix, paint,
-                            FloatSize(repeatSpacing.width() / scale.width(),
-                                      repeatSpacing.height() / scale.height()),
-                            tmx, tmy));
-    context.drawRect(destRect, paint);
-  }
+  PaintFlags flags = context.fillFlags();
+  flags.setColor(SK_ColorBLACK);
+  flags.setBlendMode(compositeOp);
+  flags.setFilterQuality(
+      context.computeFilterQuality(this, destRect, normSrcRect));
+  flags.setAntiAlias(context.shouldAntialias());
+  flags.setShader(
+      createPatternShader(image.get(), localMatrix, flags,
+                          FloatSize(repeatSpacing.width() / scale.width(),
+                                    repeatSpacing.height() / scale.height()),
+                          tmx, tmy));
+  // If the shader could not be instantiated (e.g. non-invertible matrix),
+  // draw transparent.
+  // Note: we can't simply bail, because of arbitrary blend mode.
+  if (!flags.getShader())
+    flags.setColor(SK_ColorTRANSPARENT);
+
+  context.drawRect(destRect, flags);
 
   if (currentFrameIsLazyDecoded())
     PlatformInstrumentation::didDrawLazyPixelRef(imageID);
@@ -328,17 +333,18 @@ PassRefPtr<Image> Image::imageForDefaultFrame() {
   return image.release();
 }
 
-bool Image::applyShader(SkPaint& paint,
-                        const SkMatrix& localMatrix,
-                        const ColorBehavior& colorBehavior) {
+bool Image::applyShader(PaintFlags& flags, const SkMatrix& localMatrix) {
   // Default shader impl: attempt to build a shader based on the current frame
   // SkImage.
-  sk_sp<SkImage> image = imageForCurrentFrame(colorBehavior);
+  sk_sp<SkImage> image =
+      imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   if (!image)
     return false;
 
-  paint.setShader(image->makeShader(SkShader::kRepeat_TileMode,
+  flags.setShader(image->makeShader(SkShader::kRepeat_TileMode,
                                     SkShader::kRepeat_TileMode, &localMatrix));
+  if (!flags.getShader())
+    return false;
 
   // Animation is normally refreshed in draw() impls, which we don't call when
   // painting via shaders.

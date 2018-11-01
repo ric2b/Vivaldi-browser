@@ -108,8 +108,9 @@ bool AudioDecoderAlsa::Start(int64_t start_pts) {
   TRACE_FUNCTION_ENTRY0();
   current_pts_ = start_pts;
   DCHECK(IsValidConfig(config_));
-  mixer_input_.reset(new StreamMixerAlsaInput(
-      this, config_.samples_per_second, backend_->Primary()));
+  mixer_input_.reset(new StreamMixerAlsaInput(this, config_.samples_per_second,
+                                              backend_->Primary(),
+                                              backend_->DeviceId()));
   mixer_input_->SetVolumeMultiplier(volume_multiplier_);
   // Create decoder_ if necessary. This can happen if Stop() was called, and
   // SetConfig() was not called since then.
@@ -153,10 +154,18 @@ bool AudioDecoderAlsa::SetPlaybackRate(float rate) {
   }
   LOG(INFO) << "SetPlaybackRate to " << rate;
 
-  while (!rate_shifter_info_.empty() &&
-         rate_shifter_info_.back().input_frames == 0) {
-    rate_shifter_info_.pop_back();
+  // Remove info for rates that have no pending output left.
+  while (!rate_shifter_info_.empty()) {
+    RateShifterInfo* rate_info = &rate_shifter_info_.back();
+    int64_t possible_output_frames = rate_info->input_frames / rate_info->rate;
+    DCHECK_GE(possible_output_frames, rate_info->output_frames);
+    if (rate_info->output_frames == possible_output_frames) {
+      rate_shifter_info_.pop_back();
+    } else {
+      break;
+    }
   }
+
   rate_shifter_info_.push_back(RateShifterInfo(rate));
   return true;
 }
@@ -229,8 +238,9 @@ bool AudioDecoderAlsa::SetConfig(const AudioConfig& config) {
     // Destroy the old input first to ensure that the mixer output sample rate
     // is updated.
     mixer_input_.reset();
-    mixer_input_.reset(new StreamMixerAlsaInput(
-        this, config.samples_per_second, backend_->Primary()));
+    mixer_input_.reset(new StreamMixerAlsaInput(this, config.samples_per_second,
+                                                backend_->Primary(),
+                                                backend_->DeviceId()));
     mixer_input_->SetVolumeMultiplier(volume_multiplier_);
     pending_output_frames_ = kNoPendingOutput;
   }
@@ -351,7 +361,8 @@ void AudioDecoderAlsa::OnBufferDecoded(
     // Bypass rate shifter if the rate is 1.0, and there are no frames queued
     // in the rate shifter.
     if (rate_info->rate == 1.0 && rate_shifter_->frames_buffered() == 0 &&
-        pending_output_frames_ == kNoPendingOutput) {
+        pending_output_frames_ == kNoPendingOutput &&
+        rate_shifter_info_.size() == 1) {
       DCHECK_EQ(rate_info->output_frames, rate_info->input_frames);
       pending_output_frames_ = input_frames;
       if (got_eos_) {
@@ -463,7 +474,7 @@ void AudioDecoderAlsa::PushRateShifted() {
   mixer_input_->WritePcm(output_buffer);
 
   if (rate_shifter_info_.size() > 1 &&
-      possible_output_frames == rate_info->output_frames) {
+      rate_info->output_frames == possible_output_frames) {
     double remaining_input_frames =
         rate_info->input_frames - (rate_info->output_frames * rate_info->rate);
     rate_shifter_info_.pop_front();

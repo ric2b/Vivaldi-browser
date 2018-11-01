@@ -1124,7 +1124,7 @@ void ProfileIOData::Init(
   main_request_context_->set_cert_transparency_verifier(ct_verifier.get());
 
   ct_tree_tracker_.reset(new certificate_transparency::TreeStateTracker(
-      io_thread_globals->ct_logs));
+      io_thread_globals->ct_logs, io_thread->net_log()));
   ct_verifier->SetObserver(ct_tree_tracker_.get());
 
   cert_transparency_verifier_ = std::move(ct_verifier);
@@ -1307,16 +1307,18 @@ std::unique_ptr<net::HttpCache> ProfileIOData::CreateMainHttpFactory(
   return base::MakeUnique<net::HttpCache>(
       base::WrapUnique(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), session)),
-      std::move(main_backend), true /* set_up_quic_server_info */);
+      std::move(main_backend), true /* is_main_cache */);
 }
 
 std::unique_ptr<net::HttpCache> ProfileIOData::CreateHttpFactory(
-    net::HttpNetworkSession* shared_session,
+    net::HttpTransactionFactory* main_http_factory,
     std::unique_ptr<net::HttpCache::BackendFactory> backend) const {
+  DCHECK(main_http_factory);
+  net::HttpNetworkSession* shared_session = main_http_factory->GetSession();
   return base::MakeUnique<net::HttpCache>(
       base::WrapUnique(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), shared_session)),
-      std::move(backend), true /* set_up_quic_server_info */);
+      std::move(backend), false /* is_main_cache */);
 }
 
 void ProfileIOData::SetCookieSettingsForTesting(

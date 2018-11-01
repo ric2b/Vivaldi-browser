@@ -25,7 +25,9 @@ constexpr char kNotifierId[] = "ARC_NOTIFICATION";
 class ArcNotificationDelegate : public message_center::NotificationDelegate {
  public:
   explicit ArcNotificationDelegate(ArcCustomNotificationItem* item)
-      : item_(item) {}
+      : item_(item) {
+    DCHECK(item_);
+  }
 
   std::unique_ptr<message_center::CustomContent> CreateCustomContent()
       override {
@@ -34,6 +36,10 @@ class ArcNotificationDelegate : public message_center::NotificationDelegate {
     return base::MakeUnique<message_center::CustomContent>(
         std::move(view), std::move(content_view_delegate));
   }
+
+  void Close(bool by_user) override { item_->Close(by_user); }
+
+  void Click() override { item_->Click(); }
 
  private:
   // The destructor is private since this class is ref-counted.
@@ -84,15 +90,19 @@ void ArcCustomNotificationItem::UpdateWithArcNotificationData(
       message_center::NotifierId::SYSTEM_COMPONENT, kNotifierId);
   notifier_id.profile_id = profile_id().GetUserEmail();
 
-  SetNotification(base::MakeUnique<message_center::Notification>(
+  auto notification = base::MakeUnique<message_center::Notification>(
       message_center::NOTIFICATION_TYPE_CUSTOM, notification_id(),
       base::UTF8ToUTF16(data->title), base::UTF8ToUTF16(data->message),
       gfx::Image(),
       base::UTF8ToUTF16("arc"),  // display source
       GURL(),                    // empty origin url, for system component
-      notifier_id, rich_data, new ArcNotificationDelegate(this)));
+      notifier_id, rich_data, new ArcNotificationDelegate(this));
+  notification->set_timestamp(base::Time::FromJavaTime(data->time));
+  SetNotification(std::move(notification));
 
   pinned_ = rich_data.pinned;
+  expand_state_ = data->expand_state;
+  shown_contents_ = data->shown_contents;
 
   if (!data->snapshot_image || data->snapshot_image->isNull()) {
     snapshot_ = gfx::ImageSkia();
@@ -105,13 +115,6 @@ void ArcCustomNotificationItem::UpdateWithArcNotificationData(
     observer.OnItemUpdated();
 
   AddToMessageCenter();
-}
-
-void ArcCustomNotificationItem::CloseFromCloseButton() {
-  // Needs to manually remove notification from MessageCenter because
-  // the floating close button is not part of MessageCenter.
-  message_center()->RemoveNotification(notification_id(), true);
-  Close(true);
 }
 
 void ArcCustomNotificationItem::AddObserver(Observer* observer) {

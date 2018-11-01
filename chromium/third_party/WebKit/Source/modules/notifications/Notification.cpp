@@ -33,15 +33,18 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/modules/v8/V8NotificationAction.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/ScopedWindowFocusAllowedIndicator.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
+#include "core/frame/Deprecation.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/UseCounter.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "modules/notifications/NotificationAction.h"
 #include "modules/notifications/NotificationData.h"
 #include "modules/notifications/NotificationManager.h"
@@ -98,9 +101,10 @@ Notification* Notification::create(ExecutionContext* context,
       UseCounter::countCrossOriginIframe(
           *toDocument(context), UseCounter::NotificationAPISecureOriginIframe);
   } else {
-    UseCounter::count(context, UseCounter::NotificationInsecureOrigin);
+    Deprecation::countDeprecation(context,
+                                  UseCounter::NotificationInsecureOrigin);
     if (context->isDocument())
-      UseCounter::countCrossOriginIframe(
+      Deprecation::countDeprecationCrossOriginIframe(
           *toDocument(context),
           UseCounter::NotificationAPIInsecureOriginIframe);
   }
@@ -182,10 +186,9 @@ void Notification::close() {
   // Schedule the "close" event to be fired for non-persistent notifications.
   // Persistent notifications won't get such events for programmatic closes.
   if (m_type == Type::NonPersistent) {
-    getExecutionContext()->postTask(
-        TaskType::UserInteraction, BLINK_FROM_HERE,
-        createSameThreadTask(&Notification::dispatchCloseEvent,
-                             wrapPersistent(this)));
+    TaskRunnerHelper::get(TaskType::UserInteraction, getExecutionContext())
+        ->postTask(BLINK_FROM_HERE, WTF::bind(&Notification::dispatchCloseEvent,
+                                              wrapPersistent(this)));
     m_state = State::Closing;
 
     notificationManager()->close(this);
@@ -358,8 +361,29 @@ String Notification::permission(ExecutionContext* context) {
 ScriptPromise Notification::requestPermission(
     ScriptState* scriptState,
     NotificationPermissionCallback* deprecatedCallback) {
-  return NotificationManager::from(scriptState->getExecutionContext())
-      ->requestPermission(scriptState, deprecatedCallback);
+  ExecutionContext* context = scriptState->getExecutionContext();
+  if (!context->isSecureContext()) {
+    Deprecation::countDeprecation(
+        context, UseCounter::NotificationPermissionRequestedInsecureOrigin);
+  }
+  if (context->isDocument()) {
+    LocalFrame* frame = toDocument(context)->frame();
+    if (frame && !frame->isMainFrame()) {
+      UseCounter::count(context,
+                        UseCounter::NotificationPermissionRequestedIframe);
+    }
+  }
+
+  if (!UserGestureIndicator::processingUserGesture()) {
+    PerformanceMonitor::reportGenericViolation(
+        context, PerformanceMonitor::kDiscouragedAPIUse,
+        "Only request notification permission in response to a user gesture.",
+        0, nullptr);
+  }
+  probe::breakIfNeeded(context, "Notification.requestPermission");
+
+  return NotificationManager::from(context)->requestPermission(
+      scriptState, deprecatedCallback);
 }
 
 size_t Notification::maxActions() {

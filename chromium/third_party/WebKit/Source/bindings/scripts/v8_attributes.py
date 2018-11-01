@@ -119,7 +119,6 @@ def attribute_context(interface, attribute, interfaces):
         includes.add('bindings/core/v8/V8PrivateProperty.h')
 
     context = {
-        'access_control_list': access_control_list(interface, attribute),
         'activity_logging_world_list_for_getter': v8_utilities.activity_logging_world_list(attribute, 'Getter'),  # [ActivityLogging]
         'activity_logging_world_list_for_setter': v8_utilities.activity_logging_world_list(attribute, 'Setter'),  # [ActivityLogging]
         'activity_logging_world_check': v8_utilities.activity_logging_world_check(attribute),  # [ActivityLogging]
@@ -199,8 +198,6 @@ def attribute_context(interface, attribute, interfaces):
     # [CrossOrigin] is incompatible with a number of other attributes, so check
     # for them here.
     if is_cross_origin:
-        if context['has_cross_origin_getter'] and context['has_custom_getter']:
-            raise Exception('[CrossOrigin] and [Custom] are incompatible on the same getter: %s.%s', interface.name, attribute.name)
         if context['has_cross_origin_setter'] and context['has_custom_setter']:
             raise Exception('[CrossOrigin] and [Custom] are incompatible on the same setter: %s.%s', interface.name, attribute.name)
         if context['is_per_world_bindings']:
@@ -229,7 +226,10 @@ def is_data_attribute(attribute):
 
 
 def is_lazy_data_attribute(attribute):
-    return attribute['constructor_type'] and not attribute['needs_constructor_getter_callback']
+    return ((attribute['constructor_type'] and not attribute['needs_constructor_getter_callback']) or
+            (attribute['idl_type'] == 'Window' and attribute['name'] == 'frames') or
+            (attribute['idl_type'] == 'Window' and attribute['name'] == 'self') or
+            (attribute['idl_type'] == 'Window' and attribute['name'] == 'window'))
 
 
 def filter_data_attributes(attributes):
@@ -517,15 +517,6 @@ def has_setter(interface, attribute):
         return False
 
     return is_writable(attribute)
-
-
-# [Unforgeable]
-def access_control_list(interface, attribute):
-    extended_attributes = attribute.extended_attributes
-    access_control = []
-    if is_unforgeable(interface, attribute):
-        access_control.append('v8::PROHIBITS_OVERWRITING')
-    return access_control or ['v8::DEFAULT']
 
 
 # [NotEnumerable], [Unforgeable]

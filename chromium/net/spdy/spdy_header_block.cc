@@ -15,6 +15,7 @@
 #include "net/base/arena.h"
 #include "net/http/http_log_util.h"
 #include "net/log/net_log_capture_mode.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 
 using base::StringPiece;
 using std::dec;
@@ -26,6 +27,14 @@ using std::string;
 
 namespace net {
 namespace {
+
+// By default, linked_hash_map's internal map allocates space for 100 map
+// buckets on construction, which is larger than necessary.  Standard library
+// unordered map implementations use a list of prime numbers to set the bucket
+// count for a particular capacity.  |kInitialMapBuckets| is chosen to reduce
+// memory usage for small header blocks, at the cost of having to rehash for
+// large header blocks.
+const size_t kInitialMapBuckets = 11;
 
 // SpdyHeaderBlock::Storage allocates blocks of this size by default.
 const size_t kDefaultStorageBlockSize = 2048;
@@ -89,8 +98,15 @@ class SpdyHeaderBlock::Storage {
 
   size_t bytes_allocated() const { return arena_.status().bytes_allocated(); }
 
+  // TODO(xunjieli): https://crbug.com/669108. Merge this with bytes_allocated()
+  size_t EstimateMemoryUsage() const {
+    return arena_.status().bytes_allocated();
+  }
+
  private:
   UnsafeArena arena_;
+
+  DISALLOW_COPY_AND_ASSIGN(Storage);
 };
 
 SpdyHeaderBlock::HeaderValue::HeaderValue(Storage* storage,
@@ -206,12 +222,9 @@ string SpdyHeaderBlock::ValueProxy::as_string() const {
   }
 }
 
-SpdyHeaderBlock::SpdyHeaderBlock() {}
+SpdyHeaderBlock::SpdyHeaderBlock() : block_(kInitialMapBuckets) {}
 
-SpdyHeaderBlock::SpdyHeaderBlock(SpdyHeaderBlock&& other) {
-  block_.swap(other.block_);
-  storage_.swap(other.storage_);
-}
+SpdyHeaderBlock::SpdyHeaderBlock(SpdyHeaderBlock&& other) = default;
 
 SpdyHeaderBlock::~SpdyHeaderBlock() {}
 
@@ -241,6 +254,7 @@ string SpdyHeaderBlock::DebugString() const {
   if (empty()) {
     return "{}";
   }
+
   string output = "\n{\n";
   for (auto it = begin(); it != end(); ++it) {
     output +=
@@ -264,7 +278,7 @@ void SpdyHeaderBlock::insert(const SpdyHeaderBlock::value_type& value) {
   } else {
     DVLOG(1) << "Updating key: " << iter->first
              << " with value: " << value.second;
-    auto storage = GetStorage();
+    auto* storage = GetStorage();
     iter->second =
         HeaderValue(storage, iter->first, storage->Write(value.second));
   }
@@ -299,9 +313,15 @@ void SpdyHeaderBlock::AppendValueOrAddHeader(const StringPiece key,
   iter->second.Append(GetStorage()->Write(value));
 }
 
+size_t SpdyHeaderBlock::EstimateMemoryUsage() const {
+  // TODO(xunjieli): https://crbug.com/669108. Also include |block_| when EMU()
+  // supports linked_hash_map.
+  return SpdyEstimateMemoryUsage(storage_);
+}
+
 void SpdyHeaderBlock::AppendHeader(const StringPiece key,
                                    const StringPiece value) {
-  auto storage = GetStorage();
+  auto* storage = GetStorage();
   auto backed_key = storage->Write(key);
   block_.emplace(make_pair(
       backed_key, HeaderValue(storage, backed_key, storage->Write(value))));
@@ -370,7 +390,7 @@ size_t Join(char* dst,
   if (fragments.empty()) {
     return 0;
   }
-  auto original_dst = dst;
+  auto* original_dst = dst;
   auto it = fragments.begin();
   memcpy(dst, it->data(), it->size());
   dst += it->size();

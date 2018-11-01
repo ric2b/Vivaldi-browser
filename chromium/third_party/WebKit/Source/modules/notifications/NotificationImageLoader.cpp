@@ -5,10 +5,10 @@
 #include "modules/notifications/NotificationImageLoader.h"
 
 #include "core/dom/ExecutionContext.h"
-#include "core/fetch/ResourceLoaderOptions.h"
 #include "platform/Histogram.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/image-decoders/ImageFrame.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceRequest.h"
@@ -120,11 +120,8 @@ void NotificationImageLoader::start(
   resourceRequest.setPriority(ResourceLoadPriorityMedium);
   resourceRequest.setRequestorOrigin(executionContext->getSecurityOrigin());
 
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_threadableLoader);
   m_threadableLoader = ThreadableLoader::create(
-      *executionContext, this, threadableLoaderOptions, resourceLoaderOptions,
-      ThreadableLoader::ClientSpec::kNotificationImageLoader);
+      *executionContext, this, threadableLoaderOptions, resourceLoaderOptions);
   m_threadableLoader->start(resourceRequest);
 }
 

@@ -71,12 +71,15 @@ class ReadingListModelImpl : public ReadingListModel,
       ReadingListEntry::DistillationState state) override;
   void SetEntryDistilledInfo(const GURL& url,
                              const base::FilePath& distilled_path,
-                             const GURL& distilled_url) override;
+                             const GURL& distilled_url,
+                             int64_t distillation_size,
+                             int64_t distillation_date) override;
 
   void SyncAddEntry(std::unique_ptr<ReadingListEntry> entry) override;
   ReadingListEntry* SyncMergeEntry(
       std::unique_ptr<ReadingListEntry> entry) override;
   void SyncRemoveEntry(const GURL& url) override;
+  bool DeleteAllEntries() override;
 
   std::unique_ptr<ReadingListModel::ScopedReadingListBatchUpdate>
   CreateBatchToken() override;

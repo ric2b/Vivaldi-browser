@@ -62,6 +62,8 @@ target(link_target_type, "renderer_sources") {
     "resource_fetcher.h",
     "video_encode_accelerator.cc",
     "video_encode_accelerator.h",
+    "window_features_converter.cc",
+    "window_features_converter.h",
   ]
 
   configs += [ "//content:content_implementation" ]
@@ -79,7 +81,7 @@ target(link_target_type, "renderer_sources") {
     "//ppapi/features",
     "//skia",
     "//third_party/WebKit/public:blink_headers",
-    "//third_party/libjingle",
+    "//third_party/webrtc_overrides",
     "//third_party/widevine/cdm:headers",
     "//ui/base",
     "//ui/base/ime",

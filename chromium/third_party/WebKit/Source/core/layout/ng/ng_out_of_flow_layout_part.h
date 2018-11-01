@@ -18,30 +18,39 @@ namespace blink {
 
 class ComputedStyle;
 class NGBlockNode;
-class NGFragment;
+class NGFragmentBuilder;
 class NGConstraintSpace;
+class NGLayoutResult;
 
 // Helper class for positioning of out-of-flow blocks.
 // It should be used together with NGFragmentBuilder.
 // See NGFragmentBuilder::AddOutOfFlowChildCandidate documentation
 // for example of using these classes together.
-class CORE_EXPORT NGOutOfFlowLayoutPart
-    : public GarbageCollectedFinalized<NGOutOfFlowLayoutPart> {
+class CORE_EXPORT NGOutOfFlowLayoutPart {
+  STACK_ALLOCATED();
+
  public:
-  NGOutOfFlowLayoutPart(PassRefPtr<const ComputedStyle>, NGLogicalSize);
-
-  void Layout(NGBlockNode&, NGStaticPosition, NGFragment**, NGLogicalOffset*);
-
-  DECLARE_TRACE();
+  NGOutOfFlowLayoutPart(const NGConstraintSpace& contianer_space,
+                        const ComputedStyle& container_style,
+                        NGFragmentBuilder* container_builder);
+  void Run();
 
  private:
-  NGFragment* GenerateFragment(NGBlockNode& node,
-                               const Optional<LayoutUnit>& block_estimate,
-                               const NGAbsolutePhysicalPosition node_position);
+  RefPtr<NGLayoutResult> LayoutDescendant(NGBlockNode& descendant,
+                                          NGStaticPosition static_position,
+                                          NGLogicalOffset* offset);
 
-  NGLogicalOffset parent_border_offset_;
-  NGPhysicalOffset parent_border_physical_offset_;
-  Member<NGConstraintSpace> parent_space_;
+  RefPtr<NGLayoutResult> GenerateFragment(
+      NGBlockNode& node,
+      const Optional<LayoutUnit>& block_estimate,
+      const NGAbsolutePhysicalPosition node_position);
+
+  const ComputedStyle& container_style_;
+  NGFragmentBuilder* container_builder_;
+
+  NGLogicalOffset container_border_offset_;
+  NGPhysicalOffset container_border_physical_offset_;
+  RefPtr<NGConstraintSpace> container_space_;
 };
 
 }  // namespace blink

@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Groep met keuzerondjes</translation>
 <translation id="2471138580042810658">Kop 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{sterretje}other{# sterretjes}}</translation>
+<translation id="2523609930580546572">ChromeVox-handleiding</translation>
 <translation id="2525706221823668172">Sneltoetsen op de Chromebook</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> is opnieuw ingesteld.</translation>
 <translation id="2553108862507765288">grammaticafout</translation>
@@ -222,7 +223,6 @@ Als je klaar bent met de handleiding, gebruik je ChromeVox om naar de knop Sluit
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">Bezochte link</translation>
 <translation id="3232388865800379423">Een pop-upknop</translation>
-<translation id="323731244387692321">Help voor ChromeVox-toetsenbord openen</translation>
 <translation id="3241052487511142956">Vorige bezochte link</translation>
 <translation id="3286390186030710347">Schuifregelaar</translation>
 <translation id="3299925995433437805">Geen volgende bezochte link.</translation>
@@ -377,6 +377,7 @@ Als je klaar bent met de handleiding, gebruik je ChromeVox om naar de knop Sluit
 <translation id="4372435075475052704">min:<ph name="X" /></translation>
 <translation id="4372705107434148843">Spraak stoppen</translation>
 <translation id="4373197658375206385">Geen vorig item dat geen link is.</translation>
+<translation id="4376316291247992553">Afbeelding als braille weergeven</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">resetten</translation>
 <translation id="4471074325120394300">Geen links.</translation>
@@ -719,6 +720,7 @@ Druk op Alt + F om het menu van de Chrome-browser te openen.</translation>
 <translation id="7693840228159394336">Vorig keuzerondje</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, tekstvak voor wachtwoord</translation>
+<translation id="7776293189010177726">ChromeVox-menu's openen</translation>
 <translation id="7805247615045262757">standaardnavigatie</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7810781339813764006">Volgende groep</translation>

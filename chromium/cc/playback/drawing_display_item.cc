@@ -12,15 +12,8 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
-#include "cc/blimp/client_picture_cache.h"
-#include "cc/blimp/image_serialization_processor.h"
 #include "cc/debug/picture_debug_util.h"
-#include "cc/proto/display_item.pb.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkData.h"
-#include "third_party/skia/include/core/SkMatrix.h"
-#include "third_party/skia/include/core/SkPicture.h"
-#include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/utils/SkPictureUtils.h"
 #include "ui/gfx/skia_util.h"
 
@@ -28,30 +21,9 @@ namespace cc {
 
 DrawingDisplayItem::DrawingDisplayItem() : DisplayItem(DRAWING) {}
 
-DrawingDisplayItem::DrawingDisplayItem(sk_sp<const SkPicture> picture)
+DrawingDisplayItem::DrawingDisplayItem(sk_sp<const PaintRecord> record)
     : DisplayItem(DRAWING) {
-  SetNew(std::move(picture));
-}
-
-DrawingDisplayItem::DrawingDisplayItem(
-    const proto::DisplayItem& proto,
-    ClientPictureCache* client_picture_cache,
-    std::vector<uint32_t>* used_engine_picture_ids)
-    : DisplayItem(DRAWING) {
-  DCHECK_EQ(proto::DisplayItem::Type_Drawing, proto.type());
-  DCHECK(client_picture_cache);
-
-  const proto::DrawingDisplayItem& details = proto.drawing_item();
-  DCHECK(details.has_id());
-  const proto::SkPictureID& sk_picture_id = details.id();
-  DCHECK(sk_picture_id.has_unique_id());
-
-  uint32_t unique_id = sk_picture_id.unique_id();
-  sk_sp<const SkPicture> picture = client_picture_cache->GetPicture(unique_id);
-  DCHECK(picture);
-
-  used_engine_picture_ids->push_back(unique_id);
-  SetNew(std::move(picture));
+  SetNew(std::move(record));
 }
 
 DrawingDisplayItem::DrawingDisplayItem(const DrawingDisplayItem& item)
@@ -62,23 +34,8 @@ DrawingDisplayItem::DrawingDisplayItem(const DrawingDisplayItem& item)
 DrawingDisplayItem::~DrawingDisplayItem() {
 }
 
-void DrawingDisplayItem::SetNew(sk_sp<const SkPicture> picture) {
-  picture_ = std::move(picture);
-}
-
-void DrawingDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
-  TRACE_EVENT0("cc.remote", "DrawingDisplayItem::ToProtobuf");
-  proto->set_type(proto::DisplayItem::Type_Drawing);
-
-  if (!picture_)
-    return;
-
-  proto->mutable_drawing_item()->mutable_id()->set_unique_id(
-      picture_->uniqueID());
-}
-
-sk_sp<const SkPicture> DrawingDisplayItem::GetPicture() const {
-  return picture_;
+void DrawingDisplayItem::SetNew(sk_sp<const PaintRecord> record) {
+  picture_ = std::move(record);
 }
 
 DISABLE_CFI_PERF
@@ -89,10 +46,12 @@ void DrawingDisplayItem::Raster(SkCanvas* canvas,
 
   // SkPicture always does a wrapping save/restore on the canvas, so it is not
   // necessary here.
-  if (callback)
+  if (callback) {
     picture_->playback(canvas, callback);
-  else
-    canvas->drawPicture(picture_.get());
+  } else {
+    // TODO(enne): switch this to playback once PaintRecord is real.
+    canvas->drawPicture(ToSkPicture(picture_.get()));
+  }
 }
 
 void DrawingDisplayItem::AsValueInto(
@@ -116,7 +75,8 @@ void DrawingDisplayItem::AsValueInto(
   array->EndArray();
 
   std::string b64_picture;
-  PictureDebugUtil::SerializeAsBase64(picture_.get(), &b64_picture);
+  PictureDebugUtil::SerializeAsBase64(ToSkPicture(picture_.get()),
+                                      &b64_picture);
   array->SetString("skp64", b64_picture);
   array->EndDictionary();
 }
@@ -126,7 +86,7 @@ void DrawingDisplayItem::CloneTo(DrawingDisplayItem* item) const {
 }
 
 size_t DrawingDisplayItem::ExternalMemoryUsage() const {
-  return SkPictureUtils::ApproximateBytesUsed(picture_.get());
+  return picture_->approximateBytesUsed();
 }
 
 DISABLE_CFI_PERF

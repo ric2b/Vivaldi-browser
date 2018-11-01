@@ -283,8 +283,8 @@ void ThemePainterDefault::setupMenuListArrow(
     const LayoutBox& box,
     const IntRect& rect,
     WebThemeEngine::ExtraParams& extraParams) {
-  const int left = rect.x() + box.borderLeft();
-  const int right = rect.x() + rect.width() - box.borderRight();
+  const int left = rect.x() + box.borderLeft().toInt();
+  const int right = rect.x() + rect.width() - box.borderRight().toInt();
   const int middle = rect.y() + rect.height() / 2;
 
   extraParams.menuList.arrowY = middle;
@@ -347,7 +347,6 @@ bool ThemePainterDefault::paintSliderTrack(const LayoutObject& o,
   Platform::current()->themeEngine()->paint(
       canvas, WebThemeEngine::PartSliderTrack, getWebThemeState(o),
       WebRect(unzoomedRect), &extraParams);
-
   return false;
 }
 

@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/extensions/media_gallery_checkbox_view.h"
+#include "chrome/browser/ui/views/harmony/layout_delegate.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -138,15 +139,16 @@ void MediaGalleriesDialogViews::InitChildViews() {
 
     // Header and separator line.
     if (!section_headers[i].empty() && !entries.empty()) {
-      views::Separator* separator = new views::Separator(
-          views::Separator::HORIZONTAL);
+      views::Separator* separator = new views::Separator();
       scroll_container->AddChildView(separator);
 
       views::Label* header = new views::Label(section_headers[i]);
       header->SetMultiLine(true);
       header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       header->SetBorder(views::CreateEmptyBorder(
-          views::kRelatedControlVerticalSpacing, views::kPanelHorizMargin,
+          views::kRelatedControlVerticalSpacing,
+          LayoutDelegate::Get()->GetMetric(
+              LayoutDelegate::Metric::PANEL_CONTENT_MARGIN),
           views::kRelatedControlVerticalSpacing, 0));
       scroll_container->AddChildView(header);
     }

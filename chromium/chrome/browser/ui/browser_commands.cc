@@ -22,7 +22,6 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -47,7 +46,6 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
-#include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
@@ -239,7 +237,7 @@ WebContents* GetTabAndRevertIfNecessary(Browser* browser,
     case WindowOpenDisposition::NEW_WINDOW: {
       WebContents* new_tab = current_tab->Clone();
       Browser* new_browser =
-          new Browser(Browser::CreateParams(browser->profile()));
+          new Browser(Browser::CreateParams(browser->profile(), true));
       new_browser->tab_strip_model()->AddWebContents(
           new_tab, -1, ui::PAGE_TRANSITION_LINK,
           TabStripModel::ADD_ACTIVE);
@@ -399,7 +397,7 @@ void NewEmptyWindow(Profile* profile) {
 
 Browser* OpenEmptyWindow(Profile* profile) {
   Browser* browser =
-      new Browser(Browser::CreateParams(Browser::TYPE_TABBED, profile));
+      new Browser(Browser::CreateParams(Browser::TYPE_TABBED, profile, true));
 
   // To open a vivaldi window on mac when no browser window is present
   // we define the startup page url here.
@@ -718,10 +716,10 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
     if (browser->is_app() && !browser->is_type_popup()) {
       new_browser = new Browser(Browser::CreateParams::CreateForApp(
           browser->app_name(), browser->is_trusted_source(), gfx::Rect(),
-          browser->profile()));
+          browser->profile(), true));
     } else {
       new_browser = new Browser(
-          Browser::CreateParams(browser->type(), browser->profile()));
+          Browser::CreateParams(browser->type(), browser->profile(), true));
     }
     // Preserve the size of the original window. The new window has already
     // been given an offset by the OS, so we shouldn't copy the old bounds.
@@ -766,7 +764,7 @@ void ConvertPopupToTabbedBrowser(Browser* browser) {
   TabStripModel* tab_strip = browser->tab_strip_model();
   WebContents* contents =
       tab_strip->DetachWebContentsAt(tab_strip->active_index());
-  Browser* b = new Browser(Browser::CreateParams(browser->profile()));
+  Browser* b = new Browser(Browser::CreateParams(browser->profile(), true));
   b->tab_strip_model()->AppendWebContents(contents, true);
   b->window()->Show();
 }
@@ -1143,14 +1141,14 @@ void ShowAppMenu(Browser* browser) {
 void ShowAvatarMenu(Browser* browser) {
   browser->window()->ShowAvatarBubbleFromAvatarButton(
       BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT, signin::ManageAccountsParams(),
-      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
+      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, true);
 }
 
 void ShowFastUserSwitcher(Browser* browser) {
   browser->window()->ShowAvatarBubbleFromAvatarButton(
       BrowserWindow::AVATAR_BUBBLE_MODE_FAST_USER_SWITCH,
       signin::ManageAccountsParams(),
-      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
+      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, false);
 }
 
 void OpenUpdateChromeDialog(Browser* browser) {
@@ -1283,7 +1281,7 @@ void ViewSource(Browser* browser,
         add_types);
   } else {
     Browser* b = new Browser(
-        Browser::CreateParams(Browser::TYPE_TABBED, browser->profile()));
+        Browser::CreateParams(Browser::TYPE_TABBED, browser->profile(), true));
 
     // Preserve the size of the original window. The new window has already
     // been given an offset by the OS, so we shouldn't copy the old bounds.
@@ -1354,7 +1352,8 @@ void ConvertTabToAppWindow(Browser* browser,
     browser->tab_strip_model()->DetachWebContentsAt(index);
 
   Browser* app_browser = new Browser(Browser::CreateParams::CreateForApp(
-      app_name, true /* trusted_source */, gfx::Rect(), browser->profile()));
+      app_name, true /* trusted_source */, gfx::Rect(), browser->profile(),
+      true));
   app_browser->tab_strip_model()->AppendWebContents(contents, true);
 
   contents->GetMutableRendererPrefs()->can_accept_load_drops = false;

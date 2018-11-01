@@ -97,6 +97,10 @@ class TabAndroid : public CoreTabHelperDelegate,
   // Return the tab url.
   GURL GetURL() const;
 
+  // Return whether the tab is currently visible and the user can interact with
+  // it.
+  bool IsUserInteractable() const;
+
   // Load the tab if it was unloaded from memory.
   bool LoadIfNeeded();
 
@@ -227,6 +231,22 @@ class TabAndroid : public CoreTabHelperDelegate,
                          const base::android::JavaParamRef<jobject>& obj,
                          const base::android::JavaParamRef<jstring>& url);
 
+  void SetWebappManifestScope(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& scope);
+
+  const std::string& GetWebappManifestScope() const {
+    return webapp_manifest_scope_;
+  }
+
+  void EnableEmbeddedMediaExperience(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean enabled);
+
+  bool ShouldEnableEmbeddedMediaExperience() const;
+
   // Register the Tab's native methods through JNI.
   static bool RegisterTabAndroid(JNIEnv* env);
 
@@ -251,6 +271,9 @@ class TabAndroid : public CoreTabHelperDelegate,
       web_contents_delegate_;
 
   std::unique_ptr<browser_sync::SyncedTabDelegateAndroid> synced_tab_delegate_;
+
+  std::string webapp_manifest_scope_;
+  bool embedded_media_experience_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(TabAndroid);
 };

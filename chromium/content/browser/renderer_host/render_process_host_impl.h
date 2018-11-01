@@ -33,6 +33,7 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_platform_file.h"
 #include "media/media_features.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
@@ -59,13 +60,13 @@ class ChildConnection;
 class GpuClient;
 class IndexedDBDispatcherHost;
 class InProcessChildThreadParams;
-class MessagePortMessageFilter;
 class NotificationMessageFilter;
 #if BUILDFLAG(ENABLE_WEBRTC)
 class P2PSocketDispatcherHost;
 #endif
 class PermissionServiceContext;
 class PeerConnectionTrackerHost;
+class PushMessagingManager;
 class RenderFrameMessageFilter;
 class RenderWidgetHelper;
 class RenderWidgetHost;
@@ -123,7 +124,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void WidgetRestored() override;
   void WidgetHidden() override;
   int VisibleWidgetCount() const override;
-  void AudioStateChanged() override;
   bool IsForGuestsOnly() const override;
   StoragePartition* GetStoragePartition() const override;
   bool Shutdown(int exit_code, bool wait) override;
@@ -259,10 +259,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
     return render_frame_message_filter_.get();
   }
 
-  MessagePortMessageFilter* message_port_message_filter() const {
-    return message_port_message_filter_.get();
-  }
-
   NotificationMessageFilter* notification_message_filter() const {
     return notification_message_filter_.get();
   }
@@ -286,6 +282,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
   void RecomputeAndUpdateWebKitPreferences();
+
+  // Called when an audio stream is added or removed and used to determine if
+  // the process should be backgrounded or not.
+  void OnAudioStreamAdded() override;
+  void OnAudioStreamRemoved() override;
+  int get_audio_stream_count_for_testing() const { return audio_stream_count_; }
 
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
@@ -423,7 +425,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
         BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
   }
 
-  std::string child_token_;
+  std::unique_ptr<mojo::edk::PendingProcessConnection> pending_connection_;
 
   std::unique_ptr<ChildConnection> child_connection_;
   int connection_filter_id_ =
@@ -451,7 +453,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   IDMap<IPC::Listener*> listeners_;
 
   mojo::AssociatedBinding<mojom::RouteProvider> route_provider_binding_;
-  mojo::AssociatedBindingSet<mojom::AssociatedInterfaceProvider>
+  mojo::AssociatedBindingSet<mojom::AssociatedInterfaceProvider, int32_t>
       associated_interface_provider_bindings_;
 
   // The count of currently visible widgets.  Since the host can be a container
@@ -468,9 +470,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   scoped_refptr<RenderWidgetHelper> widget_helper_;
 
   scoped_refptr<RenderFrameMessageFilter> render_frame_message_filter_;
-
-  // The filter for MessagePort messages coming from the renderer.
-  scoped_refptr<MessagePortMessageFilter> message_port_message_filter_;
 
   // The filter for Web Notification messages coming from the renderer. Holds a
   // closure per notification that must be freed when the notification closes.
@@ -592,12 +591,18 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   scoped_refptr<ResourceMessageFilter> resource_message_filter_;
   std::unique_ptr<GpuClient, BrowserThread::DeleteOnIOThread> gpu_client_;
+  std::unique_ptr<PushMessagingManager, BrowserThread::DeleteOnIOThread>
+      push_messaging_manager_;
 
   std::unique_ptr<OffscreenCanvasCompositorFrameSinkProviderImpl>
       offscreen_canvas_provider_;
 
   mojom::RouteProviderAssociatedPtr remote_route_provider_;
   mojom::RendererAssociatedPtr renderer_interface_;
+
+  // Tracks active audio streams within the render process; used to determine if
+  // if a process should be backgrounded.
+  int audio_stream_count_ = 0;
 
   // A WeakPtrFactory which is reset every time Cleanup() runs. Used to vend
   // WeakPtrs which are invalidated any time the RPHI is recycled.

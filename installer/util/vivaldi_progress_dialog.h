@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
 
-#ifndef VIVALDI_PROGRESS_DIALOG_H_
-#define VIVALDI_PROGRESS_DIALOG_H_
+#ifndef INSTALLER_UTIL_VIVALDI_PROGRESS_DIALOG_H_
+#define INSTALLER_UTIL_VIVALDI_PROGRESS_DIALOG_H_
 
 #include <windows.h>
 #include "base/macros.h"
@@ -10,7 +10,7 @@ namespace installer {
 
 class VivaldiProgressDialog {
  public:
-  VivaldiProgressDialog(HINSTANCE instance);
+  explicit VivaldiProgressDialog(HINSTANCE instance);
   virtual ~VivaldiProgressDialog();
 
   bool ShowModeless();
@@ -41,6 +41,6 @@ class VivaldiProgressDialog {
   DISALLOW_COPY_AND_ASSIGN(VivaldiProgressDialog);
 };
 
-} // namespace installer
+}  // namespace installer
 
-#endif VIVALDI_PROGRESS_DIALOG_H_
+#endif  // INSTALLER_UTIL_VIVALDI_PROGRESS_DIALOG_H_

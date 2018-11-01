@@ -577,6 +577,11 @@ void HttpCache::Transaction::GetConnectionAttempts(
               old_connection_attempts_.end());
 }
 
+size_t HttpCache::Transaction::EstimateMemoryUsage() const {
+  // TODO(xunjieli): Consider improving the coverage. crbug.com/669108.
+  return 0;
+}
+
 //-----------------------------------------------------------------------------
 
 // A few common patterns: (Foo* means Foo -> FooComplete)
@@ -1160,6 +1165,9 @@ int HttpCache::Transaction::DoAddToEntryComplete(int result) {
   }
 
   if (result == ERR_CACHE_LOCK_TIMEOUT) {
+    if (mode_ == READ)
+      return ERR_CACHE_MISS;
+
     // The cache is busy, bypass it for this transaction.
     mode_ = NONE;
     next_state_ = STATE_SEND_REQUEST;

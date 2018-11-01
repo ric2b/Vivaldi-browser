@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies
 
-#ifndef VIVALDI_NATIVE_SETTINGS_OBSERVER_WIN_H_
-#define VIVALDI_NATIVE_SETTINGS_OBSERVER_WIN_H_
+#ifndef PREFS_NATIVE_SETTINGS_OBSERVER_WIN_H_
+#define PREFS_NATIVE_SETTINGS_OBSERVER_WIN_H_
 
 #include "prefs/native_settings_observer.h"
 #include "prefs/native_settings_observer_delegate.h"
@@ -19,4 +19,4 @@ class NativeSettingsObserverWin : public NativeSettingsObserver {
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_NATIVE_SETTINGS_OBSERVER_WIN_H_
+#endif  // PREFS_NATIVE_SETTINGS_OBSERVER_WIN_H_

@@ -39,6 +39,7 @@
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/x509_certificate_net_log_param.h"
+#include "net/cert/x509_util.h"
 #include "net/cert/x509_util_openssl.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
@@ -82,7 +83,7 @@ const unsigned int kTbExtNum = 24;
 
 // Token Binding ProtocolVersions supported.
 const uint8_t kTbProtocolVersionMajor = 0;
-const uint8_t kTbProtocolVersionMinor = 10;
+const uint8_t kTbProtocolVersionMinor = 13;
 const uint8_t kTbMinProtocolVersionMajor = 0;
 const uint8_t kTbMinProtocolVersionMinor = 10;
 
@@ -292,6 +293,9 @@ class SSLClientSocketImpl::SSLContext {
 
     SSL_CTX_set_grease_enabled(ssl_ctx_.get(), 1);
 
+    // Deduplicate all certificates minted from the SSL_CTX in memory.
+    SSL_CTX_set0_buffer_pool(ssl_ctx_.get(), x509_util::GetBufferPool());
+
     if (base::FeatureList::IsEnabled(kShortRecordHeaderFeature)) {
       SSL_CTX_set_short_header_enabled(ssl_ctx_.get(), 1);
     }
@@ -477,33 +481,33 @@ void SSLClientSocketImpl::PeerCertificateChain::Reset(STACK_OF(X509) * chain) {
 
 scoped_refptr<X509Certificate>
 SSLClientSocketImpl::PeerCertificateChain::AsOSChain() const {
-  // DER-encode the chain and convert to a platform certificate handle.
-  std::vector<std::string> chain;
-  chain.reserve(sk_X509_num(openssl_chain_.get()));
-  for (size_t i = 0; i < sk_X509_num(openssl_chain_.get()); ++i) {
-    X509* x = sk_X509_value(openssl_chain_.get(), i);
-    // Note: This intentionally avoids using x509_util::GetDER(), which may
-    // cache the encoded DER on |x|, as |x| is shared with the underlying
-    // socket (SSL*) this chain belongs to. As the DER will only be used
-    // once in //net, within this code, this avoids needlessly caching
-    // additional data. See https://crbug.com/642082
-    int len = i2d_X509(x, nullptr);
-    if (len < 0)
-      return nullptr;
-    std::string cert;
-    uint8_t* ptr = reinterpret_cast<uint8_t*>(base::WriteInto(&cert, len + 1));
-    len = i2d_X509(x, &ptr);
-    if (len < 0) {
-      NOTREACHED();
-      return nullptr;
-    }
-    chain.push_back(std::move(cert));
+#if defined(USE_OPENSSL_CERTS)
+  // When OSCertHandle is typedef'ed to X509, this implementation does a short
+  // cut to avoid converting back and forth between DER and the X509 struct.
+  X509Certificate::OSCertHandles intermediates;
+  for (size_t i = 1; i < sk_X509_num(openssl_chain_.get()); ++i) {
+    X509* cert = sk_X509_value(openssl_chain_.get(), i);
+    DCHECK(cert->buf);
+    intermediates.push_back(cert);
   }
-  std::vector<base::StringPiece> stringpiece_chain;
-  for (const auto& cert : chain)
-    stringpiece_chain.push_back(cert);
 
-  return X509Certificate::CreateFromDERCertChain(stringpiece_chain);
+  X509* leaf = sk_X509_value(openssl_chain_.get(), 0);
+  DCHECK(leaf->buf);
+  return X509Certificate::CreateFromHandle(leaf, intermediates);
+#else
+  // Convert the certificate chains to a platform certificate handle.
+  std::vector<base::StringPiece> der_chain;
+  der_chain.reserve(sk_X509_num(openssl_chain_.get()));
+  for (size_t i = 0; i < sk_X509_num(openssl_chain_.get()); ++i) {
+    X509* cert = sk_X509_value(openssl_chain_.get(), i);
+    DCHECK(cert->buf);
+    base::StringPiece der;
+    if (!x509_util::GetDER(cert, &der))
+      return nullptr;
+    der_chain.push_back(der);
+  }
+  return X509Certificate::CreateFromDERCertChain(der_chain);
+#endif
 }
 
 // static
@@ -841,14 +845,15 @@ void SSLClientSocketImpl::DumpMemoryStats(SocketMemoryStats* stats) const {
   if (server_cert_chain_) {
     for (size_t i = 0; i < server_cert_chain_->size(); ++i) {
       X509* cert = server_cert_chain_->Get(i);
-      // This measures the lower bound of the serialized certificate. It doesn't
-      // measure the actual memory used, which is 4x this amount (see
-      // crbug.com/671420 for more details).
-      stats->serialized_cert_size += i2d_X509(cert, nullptr);
+      // Estimate the size of the certificate before deduplication.
+      // The multiplier (4) is added to account for the difference between the
+      // serialized cert size and the actual cert allocation.
+      // TODO(xunjieli): Update this after crbug.com/671420 is done.
+      stats->cert_size += 4 * i2d_X509(cert, nullptr);
     }
     stats->cert_count = server_cert_chain_->size();
   }
-  stats->total_size = stats->buffer_size + stats->serialized_cert_size;
+  stats->total_size = stats->buffer_size + stats->cert_size;
 }
 
 // static
@@ -993,23 +998,11 @@ int SSLClientSocketImpl::Init() {
   SSL_clear_mode(ssl_.get(), mode.clear_mask);
 
   // Use BoringSSL defaults, but disable HMAC-SHA256 and HMAC-SHA384 ciphers
-  // (note that SHA256 and SHA384 only select legacy CBC ciphers). Also disable
-  // DHE_RSA_WITH_AES_256_GCM_SHA384. Historically, AES_256_GCM was not
-  // supported. As DHE is being deprecated, don't add a cipher only to remove
-  // it immediately.
-  //
-  // TODO(davidben): Remove the DHE_RSA_WITH_AES_256_GCM_SHA384 exclusion when
-  // the DHEEnabled administrative policy expires.
-  std::string command(
-      "ALL:!SHA256:!SHA384:!DHE-RSA-AES256-GCM-SHA384:!aPSK:!RC4");
+  // (note that SHA256 and SHA384 only select legacy CBC ciphers).
+  std::string command("ALL:!SHA256:!SHA384:!kDHE:!aPSK:!RC4");
 
   if (ssl_config_.require_ecdhe)
     command.append(":!kRSA:!kDHE");
-
-  if (!ssl_config_.deprecated_cipher_suites_enabled) {
-    // Only offer DHE on the second handshake. https://crbug.com/538690
-    command.append(":!kDHE");
-  }
 
   // Additionally disable HMAC-SHA1 ciphers in ECDSA. These are the remaining
   // CBC-mode ECDSA ciphers.
@@ -1053,6 +1046,12 @@ int SSLClientSocketImpl::Init() {
 
   if (cert_verifier_->SupportsOCSPStapling())
     SSL_enable_ocsp_stapling(ssl_.get());
+
+  // Configure BoringSSL to allow renegotiations. Once the initial handshake
+  // completes, if renegotiations are not allowed, the default reject value will
+  // be restored. This is done in this order to permit a BoringSSL
+  // optimization. See https://crbug.com/boringssl/123.
+  SSL_set_renegotiate_mode(ssl_.get(), ssl_renegotiate_freely);
 
   return OK;
 }
@@ -1150,27 +1149,6 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
 
   SSLContext::GetInstance()->session_cache()->ResetLookupCount(
       GetSessionCacheKey());
-  // If we got a session from the session cache, log how many concurrent
-  // handshakes that session was used in before we finished our handshake. This
-  // is only recorded if the session from the cache was actually used, and only
-  // if the ALPN protocol is h2 (under the assumption that TLS 1.3 servers will
-  // be speaking h2). See https://crbug.com/631988.
-  if (ssl_session_cache_lookup_count_ && negotiated_protocol_ == kProtoHTTP2 &&
-      SSL_session_reused(ssl_.get())) {
-    UMA_HISTOGRAM_EXACT_LINEAR("Net.SSLSessionConcurrentLookupCount",
-                               ssl_session_cache_lookup_count_, 20);
-  }
-
-  // DHE is offered on the deprecated cipher fallback and then rejected
-  // afterwards. This is to aid in diagnosing connection failures because a
-  // server requires DHE ciphers.
-  //
-  // TODO(davidben): A few releases after DHE's removal, remove this logic.
-  if (!ssl_config_.dhe_enabled &&
-      SSL_CIPHER_is_DHE(SSL_get_current_cipher(ssl_.get()))) {
-    return ERR_SSL_OBSOLETE_CIPHER;
-  }
-
   // Check that if token binding was negotiated, then extended master secret
   // and renegotiation indication must also be negotiated.
   if (tb_was_negotiated_ &&
@@ -1188,6 +1166,17 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
     negotiated_protocol_ = NextProtoFromString(proto);
   }
 
+  // If we got a session from the session cache, log how many concurrent
+  // handshakes that session was used in before we finished our handshake. This
+  // is only recorded if the session from the cache was actually used, and only
+  // if the ALPN protocol is h2 (under the assumption that TLS 1.3 servers will
+  // be speaking h2). See https://crbug.com/631988.
+  if (ssl_session_cache_lookup_count_ && negotiated_protocol_ == kProtoHTTP2 &&
+      SSL_session_reused(ssl_.get())) {
+    UMA_HISTOGRAM_EXACT_LINEAR("Net.SSLSessionConcurrentLookupCount",
+                               ssl_session_cache_lookup_count_, 20);
+  }
+
   RecordNegotiatedProtocol();
   RecordChannelIDSupport();
 
@@ -1202,8 +1191,8 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
   SSL_get0_signed_cert_timestamp_list(ssl_.get(), &sct_list, &sct_list_len);
   set_signed_cert_timestamps_received(sct_list_len != 0);
 
-  if (IsRenegotiationAllowed())
-    SSL_set_renegotiate_mode(ssl_.get(), ssl_renegotiate_freely);
+  if (!IsRenegotiationAllowed())
+    SSL_set_renegotiate_mode(ssl_.get(), ssl_renegotiate_never);
 
   uint16_t signature_algorithm = SSL_get_peer_signature_algorithm(ssl_.get());
   if (signature_algorithm != 0) {

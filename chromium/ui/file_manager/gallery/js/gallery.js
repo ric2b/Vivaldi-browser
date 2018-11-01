@@ -108,7 +108,7 @@ function Gallery(volumeManager) {
 
   var buttonSpacer = queryRequiredElement('.button-spacer', this.topToolbar_);
 
-  this.prompt_ = new ImageEditor.Prompt(this.container_, strf);
+  this.prompt_ = new ImageEditorPrompt(this.container_, strf);
 
   this.errorBanner_ = new ErrorBanner(this.container_);
 
@@ -228,54 +228,19 @@ function Gallery(volumeManager) {
 }
 
 /**
- * Tools fade-out timeout in milliseconds.
- * @const
- * @type {number}
- */
-Gallery.FADE_TIMEOUT = 2000;
-
-/**
  * First time tools fade-out timeout in milliseconds.
- * @const
- * @type {number}
+ * @const {number}
+ * @private
  */
-Gallery.FIRST_FADE_TIMEOUT = 1000;
+Gallery.FIRST_FADE_TIMEOUT_ = 1000;
 
 /**
  * Time until mosaic is initialized in the background. Used to make gallery
  * in the slide mode load faster. In milliseconds.
- * @const
- * @type {number}
+ * @const {number}
+ * @private
  */
-Gallery.MOSAIC_BACKGROUND_INIT_DELAY = 1000;
-
-/**
- * Types of metadata Gallery uses (to query the metadata cache).
- * @const
- * @type {!Array<string>}
- */
-Gallery.PREFETCH_PROPERTY_NAMES =
-    ['imageWidth', 'imageHeight', 'imageRotation', 'size', 'present'];
-
-/**
- * Modes in Gallery.
- * @enum {string}
- */
-Gallery.Mode = {
-  SLIDE: 'slide',
-  THUMBNAIL: 'thumbnail'
-};
-
-/**
- * Sub modes in Gallery.
- * @enum {string}
- * TODO(yawano): Remove sub modes by extracting them as modes.
- */
-Gallery.SubMode = {
-  BROWSE: 'browse',
-  EDIT: 'edit',
-  SLIDESHOW: 'slideshow'
-};
+Gallery.MOSAIC_BACKGROUND_INIT_DELAY_ = 1000;
 
 /**
  * Updates attributes of container element when accessibility configuration has
@@ -395,7 +360,7 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
     var item = items[index];
     var entry = item.getEntry();
     var metadataPromise = self.metadataModel_.get([entry],
-        Gallery.PREFETCH_PROPERTY_NAMES);
+        GalleryItem.PREFETCH_PROPERTY_NAMES);
     var thumbnailPromise = thumbnailModel.get([entry]);
     return Promise.all([metadataPromise, thumbnailPromise]).then(
         function(metadataLists) {
@@ -431,7 +396,7 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
           null,
           function() {
             // Flash the toolbar briefly to show it is there.
-            self.dimmableUIController_.kick(Gallery.FIRST_FADE_TIMEOUT);
+            self.dimmableUIController_.kick(Gallery.FIRST_FADE_TIMEOUT_);
           },
           function() {});
     }
@@ -461,14 +426,14 @@ Gallery.prototype.onUserAction_ = function() {
 
 /**
  * Returns the current mode.
- * @return {Gallery.Mode}
+ * @return {GalleryMode}
  */
 Gallery.prototype.getCurrentMode = function() {
   switch (/** @type {(SlideMode|ThumbnailMode)} */ (this.currentMode_)) {
     case this.slideMode_:
-      return Gallery.Mode.SLIDE;
+      return GalleryMode.SLIDE;
     case this.thumbnailMode_:
-      return Gallery.Mode.THUMBNAIL;
+      return GalleryMode.THUMBNAIL;
     default:
       assertNotReached();
   }
@@ -477,7 +442,7 @@ Gallery.prototype.getCurrentMode = function() {
 /**
  * Returns sub mode of current mode. If current mode is not set yet, null is
  * returned.
- * @return {Gallery.SubMode}
+ * @return {GallerySubMode}
  */
 Gallery.prototype.getCurrentSubMode = function() {
   assert(this.currentMode_);
@@ -950,14 +915,16 @@ Gallery.prototype.onFilenameEditBlur_ = function(event) {
 /**
  * Minimum width of rename field.
  * @const {number}
+ * @private
  */
-Gallery.MIN_WIDTH_RENAME_FIELD = 160; // px
+Gallery.MIN_WIDTH_RENAME_FIELD_ = 160;  // px
 
 /**
  * End padding for rename field.
  * @const {number}
+ * @private
  */
-Gallery.END_PADDING_RENAME_FIELD = 20; // px
+Gallery.END_PADDING_RENAME_FIELD_ = 20;  // px
 
 /**
  * Resize rename field depending on its content.
@@ -966,9 +933,11 @@ Gallery.END_PADDING_RENAME_FIELD = 20; // px
 Gallery.prototype.resizeRenameField_ = function() {
   var size = this.filenameCanvasContext_.measureText(this.filenameEdit_.value);
 
-  var width = Math.min(Math.max(
-      size.width + Gallery.END_PADDING_RENAME_FIELD,
-      Gallery.MIN_WIDTH_RENAME_FIELD), window.innerWidth / 2);
+  var width = Math.min(
+      Math.max(
+          size.width + Gallery.END_PADDING_RENAME_FIELD_,
+          Gallery.MIN_WIDTH_RENAME_FIELD_),
+      window.innerWidth / 2);
 
   this.filenameEdit_.style.width = width + 'px';
 };

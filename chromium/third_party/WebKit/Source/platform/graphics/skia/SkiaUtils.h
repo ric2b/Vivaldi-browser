@@ -131,16 +131,16 @@ inline SkScalar skBlurRadiusToSigma(SkScalar radius) {
 
 template <typename PrimitiveType>
 void drawPlatformFocusRing(const PrimitiveType&,
-                           SkCanvas*,
+                           PaintCanvas*,
                            SkColor,
                            float width);
 
 // TODO(fmalita): remove in favor of direct SrcRectConstraint use.
-inline SkCanvas::SrcRectConstraint WebCoreClampingModeToSkiaRectConstraint(
+inline PaintCanvas::SrcRectConstraint WebCoreClampingModeToSkiaRectConstraint(
     Image::ImageClampingMode clampMode) {
   return clampMode == Image::ClampImageToSourceRect
-             ? SkCanvas::kStrict_SrcRectConstraint
-             : SkCanvas::kFast_SrcRectConstraint;
+             ? PaintCanvas::kStrict_SrcRectConstraint
+             : PaintCanvas::kFast_SrcRectConstraint;
 }
 
 // Skia's smart pointer APIs are preferable over their legacy raw pointer

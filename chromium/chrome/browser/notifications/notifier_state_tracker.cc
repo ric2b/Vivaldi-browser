@@ -12,11 +12,12 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "content/public/browser/permission_type.h"
 #include "extensions/features/features.h"
 #include "ui/message_center/notifier_settings.h"
 
@@ -86,9 +87,10 @@ bool NotifierStateTracker::IsNotifierEnabled(
       return disabled_extension_ids_.find(notifier_id.id) ==
           disabled_extension_ids_.end();
     case NotifierId::WEB_PAGE:
-      return PermissionManager::Get(profile_)->GetPermissionStatus(
-                 content::PermissionType::NOTIFICATIONS, notifier_id.url,
-                 notifier_id.url) == blink::mojom::PermissionStatus::GRANTED;
+      return PermissionManager::Get(profile_)
+                 ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                                       notifier_id.url, notifier_id.url)
+                 .content_setting == CONTENT_SETTING_ALLOW;
     case NotifierId::SYSTEM_COMPONENT:
 #if defined(OS_CHROMEOS)
       return disabled_system_component_ids_.find(notifier_id.id) ==

@@ -17,7 +17,7 @@ source_set("tab_grid") {
     "//ios/clean/chrome/browser",
     "//ios/clean/chrome/browser/ui/commands",
     "//ios/clean/chrome/browser/ui/settings",
-    "//ios/clean/chrome/browser/ui/tab_strip",
+    "//ios/clean/chrome/browser/ui/tab",
     "//ios/shared/chrome/browser/coordinator_context",
     "//ios/web",
     "//net",
@@ -27,18 +27,32 @@ source_set("tab_grid") {
 
 source_set("tab_grid_ui") {
   sources = [
+    "mdc_floating_button+cr_tab_grid.h",
+    "mdc_floating_button+cr_tab_grid.mm",
+    "tab_grid_collection_view_layout.h",
+    "tab_grid_collection_view_layout.mm",
     "tab_grid_tab_cell.h",
     "tab_grid_tab_cell.mm",
     "tab_grid_view_controller.h",
     "tab_grid_view_controller.mm",
+    "ui_button+cr_tab_grid.h",
+    "ui_button+cr_tab_grid.mm",
+    "ui_stack_view+cr_tab_grid.h",
+    "ui_stack_view+cr_tab_grid.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
     "//base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/colors",
+    "//ios/chrome/browser/ui/tab_switcher",
     "//ios/clean/chrome/browser/ui/actions",
     "//ios/clean/chrome/browser/ui/animators",
     "//ios/clean/chrome/browser/ui/commands",
+    "//ios/third_party/material_components_ios:material_components_ios",
+    "//ui/base",
   ]
 }

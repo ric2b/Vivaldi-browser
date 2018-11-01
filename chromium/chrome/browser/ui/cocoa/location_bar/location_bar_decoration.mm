@@ -333,8 +333,8 @@ NSPoint LocationBarDecoration::GetBubblePointInFrame(NSRect frame) {
 NSImage* LocationBarDecoration::GetMaterialIcon(
     bool location_bar_is_dark) const {
   const int kIconSize = 16;
-  gfx::VectorIconId vector_icon_id = GetMaterialVectorIconId();
-  if (vector_icon_id == gfx::VectorIconId::VECTOR_ICON_NONE) {
+  const gfx::VectorIcon* vector_icon = GetMaterialVectorIcon();
+  if (!vector_icon) {
     // Return an empty image when the decoration specifies no vector icon, so
     // that its bubble is positioned correctly (the position is based on the
     // width of the image; returning nil will mess up the positioning).
@@ -344,7 +344,7 @@ NSImage* LocationBarDecoration::GetMaterialIcon(
 
   SkColor vector_icon_color = GetMaterialIconColor(location_bar_is_dark);
   return NSImageFromImageSkia(
-      gfx::CreateVectorIcon(vector_icon_id, kIconSize, vector_icon_color));
+      gfx::CreateVectorIcon(*vector_icon, kIconSize, vector_icon_color));
 }
 
 // static
@@ -384,7 +384,7 @@ NSColor* LocationBarDecoration::GetDividerColor(
       [NSColor colorWithCalibratedWhite:gray_scale alpha:kDividerAlpha / 255.0];
 }
 
-gfx::VectorIconId LocationBarDecoration::GetMaterialVectorIconId() const {
+const gfx::VectorIcon* LocationBarDecoration::GetMaterialVectorIcon() const {
   NOTREACHED();
-  return gfx::VectorIconId::VECTOR_ICON_NONE;
+  return nullptr;
 }

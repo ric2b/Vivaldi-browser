@@ -35,13 +35,13 @@
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/shaping/CachingWordShaper.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/Character.h"
 #include "platform/text/TextRun.h"
 #include "platform/text/TextRunIterator.h"
 #include "platform/transforms/AffineTransform.h"
-#include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/CharacterNames.h"
@@ -109,49 +109,41 @@ float Font::buildGlyphBuffer(const TextRunPaintInfo& runInfo,
                              GlyphBuffer& glyphBuffer,
                              const GlyphData* emphasisData) const {
   float width;
-  CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
+  CachingWordShaper shaper(*this);
   if (emphasisData) {
-    width = shaper.fillGlyphBufferForTextEmphasis(this, runInfo.run,
+    width = shaper.fillGlyphBufferForTextEmphasis(runInfo.run,
                                                   emphasisData, &glyphBuffer,
                                                   runInfo.from, runInfo.to);
   } else {
-    width = shaper.fillGlyphBuffer(this, runInfo.run, nullptr, &glyphBuffer,
+    width = shaper.fillGlyphBuffer(runInfo.run, &glyphBuffer,
                                    runInfo.from, runInfo.to);
   }
   return width;
 }
 
-bool Font::drawText(SkCanvas* canvas,
+bool Font::drawText(PaintCanvas* canvas,
                     const TextRunPaintInfo& runInfo,
                     const FloatPoint& point,
                     float deviceScaleFactor,
-                    const SkPaint& paint) const {
+                    const PaintFlags& flags) const {
   // Don't draw anything while we are using custom fonts that are in the process
   // of loading.
   if (shouldSkipDrawing())
     return false;
 
-  if (runInfo.cachedTextBlob && runInfo.cachedTextBlob->get()) {
-    // we have a pre-cached blob -- happy joy!
-    canvas->drawTextBlob(runInfo.cachedTextBlob->get(), point.x(), point.y(),
-                         paint);
-    return true;
-  }
-
   GlyphBuffer glyphBuffer;
   buildGlyphBuffer(runInfo, glyphBuffer);
 
-  drawGlyphBuffer(canvas, paint, runInfo, glyphBuffer, point,
-                  deviceScaleFactor);
+  drawGlyphBuffer(canvas, flags, glyphBuffer, point, deviceScaleFactor);
   return true;
 }
 
-bool Font::drawBidiText(SkCanvas* canvas,
+bool Font::drawBidiText(PaintCanvas* canvas,
                         const TextRunPaintInfo& runInfo,
                         const FloatPoint& point,
                         CustomFontNotReadyAction customFontNotReadyAction,
                         float deviceScaleFactor,
-                        const SkPaint& paint) const {
+                        const PaintFlags& flags) const {
   // Don't draw anything while we are using custom fonts that are in the process
   // of loading, except if the 'force' argument is set to true (in which case it
   // will use a fallback font).
@@ -190,8 +182,7 @@ bool Font::drawBidiText(SkCanvas* canvas,
     //       all subruns could be part of the same blob).
     GlyphBuffer glyphBuffer;
     float runWidth = buildGlyphBuffer(subrunInfo, glyphBuffer);
-    drawGlyphBuffer(canvas, paint, subrunInfo, glyphBuffer, currPoint,
-                    deviceScaleFactor);
+    drawGlyphBuffer(canvas, flags, glyphBuffer, currPoint, deviceScaleFactor);
 
     bidiRun = bidiRun->next();
     currPoint.move(runWidth, 0);
@@ -201,12 +192,12 @@ bool Font::drawBidiText(SkCanvas* canvas,
   return true;
 }
 
-void Font::drawEmphasisMarks(SkCanvas* canvas,
+void Font::drawEmphasisMarks(PaintCanvas* canvas,
                              const TextRunPaintInfo& runInfo,
                              const AtomicString& mark,
                              const FloatPoint& point,
                              float deviceScaleFactor,
-                             const SkPaint& paint) const {
+                             const PaintFlags& flags) const {
   if (shouldSkipDrawing())
     return;
 
@@ -226,17 +217,15 @@ void Font::drawEmphasisMarks(SkCanvas* canvas,
   if (glyphBuffer.isEmpty())
     return;
 
-  drawGlyphBuffer(canvas, paint, runInfo, glyphBuffer, point,
-                  deviceScaleFactor);
+  drawGlyphBuffer(canvas, flags, glyphBuffer, point, deviceScaleFactor);
 }
 
 float Font::width(const TextRun& run,
                   HashSet<const SimpleFontData*>* fallbackFonts,
                   FloatRect* glyphBounds) const {
   FontCachePurgePreventer purgePreventer;
-  CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-  float width = shaper.width(this, run, fallbackFonts, glyphBounds);
-  return width;
+  CachingWordShaper shaper(*this);
+  return shaper.width(run, fallbackFonts, glyphBounds);
 }
 
 namespace {
@@ -258,28 +247,16 @@ class GlyphBufferBloberizer {
         m_hasVerticalOffsets(buffer.hasVerticalOffsets()),
         m_index(0),
         m_endIndex(m_buffer.size()),
-        m_blobCount(0),
         m_rotation(buffer.isEmpty() ? NoRotation : computeBlobRotation(
-                                                       buffer.fontDataAt(0))) {
-    if (m_buffer.hasSkipInkExceptions()) {
-      while (m_endIndex > 0 && m_buffer.isSkipInkException(m_endIndex - 1))
-        m_endIndex--;
-    }
-  }
+                                                       buffer.fontDataAt(0))) {}
 
   bool done() const { return m_index >= m_endIndex; }
-  unsigned blobCount() const { return m_blobCount; }
 
   std::pair<sk_sp<SkTextBlob>, BlobRotation> next() {
     ASSERT(!done());
     const BlobRotation currentRotation = m_rotation;
 
     while (m_index < m_endIndex) {
-      if (m_buffer.hasSkipInkExceptions()) {
-        while (m_index < m_endIndex && m_buffer.isSkipInkException(m_index))
-          m_index++;
-      }
-
       const SimpleFontData* fontData = m_buffer.fontDataAt(m_index);
       ASSERT(fontData);
 
@@ -293,14 +270,12 @@ class GlyphBufferBloberizer {
       }
 
       const unsigned start = m_index++;
-      while (m_index < m_endIndex && m_buffer.fontDataAt(m_index) == fontData &&
-             !m_buffer.isSkipInkException(m_index))
+      while (m_index < m_endIndex && m_buffer.fontDataAt(m_index) == fontData)
         m_index++;
 
       appendRun(start, m_index - start, fontData);
     }
 
-    m_blobCount++;
     return std::make_pair(m_builder.make(), currentRotation);
   }
 
@@ -355,26 +330,23 @@ class GlyphBufferBloberizer {
   SkTextBlobBuilder m_builder;
   unsigned m_index;
   unsigned m_endIndex;
-  unsigned m_blobCount;
   BlobRotation m_rotation;
 };
 
 }  // anonymous namespace
 
-void Font::drawGlyphBuffer(SkCanvas* canvas,
-                           const SkPaint& paint,
-                           const TextRunPaintInfo& runInfo,
+void Font::drawGlyphBuffer(PaintCanvas* canvas,
+                           const PaintFlags& flags,
                            const GlyphBuffer& glyphBuffer,
                            const FloatPoint& point,
                            float deviceScaleFactor) const {
   GlyphBufferBloberizer bloberizer(glyphBuffer, this, deviceScaleFactor);
-  std::pair<sk_sp<SkTextBlob>, BlobRotation> blob;
 
   while (!bloberizer.done()) {
-    blob = bloberizer.next();
+    auto blob = bloberizer.next();
     ASSERT(blob.first);
 
-    SkAutoCanvasRestore autoRestore(canvas, false);
+    PaintCanvasAutoRestore autoRestore(canvas, false);
     if (blob.second == CCWRotation) {
       canvas->save();
 
@@ -383,18 +355,7 @@ void Font::drawGlyphBuffer(SkCanvas* canvas,
       canvas->concat(m);
     }
 
-    canvas->drawTextBlob(blob.first, point.x(), point.y(), paint);
-  }
-
-  // Cache results when
-  //   1) requested by clients, and
-  //   2) the glyph buffer is encoded as a single blob, and
-  //   3) the blob is not upright/rotated
-  if (runInfo.cachedTextBlob && bloberizer.blobCount() == 1 &&
-      blob.second == NoRotation) {
-    ASSERT(!*runInfo.cachedTextBlob);
-    *runInfo.cachedTextBlob = std::move(blob.first);
-    ASSERT(*runInfo.cachedTextBlob);
+    canvas->drawTextBlob(blob.first, point.x(), point.y(), flags);
   }
 }
 
@@ -406,11 +367,10 @@ static int getInterceptsFromBloberizer(const GlyphBuffer& glyphBuffer,
                                        SkScalar* interceptsBuffer) {
   SkScalar boundsArray[2] = {std::get<0>(bounds), std::get<1>(bounds)};
   GlyphBufferBloberizer bloberizer(glyphBuffer, font, deviceScaleFactor);
-  std::pair<sk_sp<SkTextBlob>, BlobRotation> blob;
 
   int numIntervals = 0;
   while (!bloberizer.done()) {
-    blob = bloberizer.next();
+    auto blob = bloberizer.next();
     DCHECK(blob.first);
 
     // GlyphBufferBloberizer splits for a new blob rotation, but does not split
@@ -431,35 +391,19 @@ static int getInterceptsFromBloberizer(const GlyphBuffer& glyphBuffer,
 
 void Font::getTextIntercepts(const TextRunPaintInfo& runInfo,
                              float deviceScaleFactor,
-                             const SkPaint& paint,
+                             const PaintFlags& flags,
                              const std::tuple<float, float>& bounds,
                              Vector<TextIntercept>& intercepts) const {
   if (shouldSkipDrawing())
     return;
 
-  if (runInfo.cachedTextBlob && runInfo.cachedTextBlob->get()) {
-    SkScalar boundsArray[2] = {std::get<0>(bounds), std::get<1>(bounds)};
-    int numIntervals = paint.getTextBlobIntercepts(
-        runInfo.cachedTextBlob->get(), boundsArray, nullptr);
-    if (!numIntervals)
-      return;
-    DCHECK_EQ(numIntervals % 2, 0);
-    intercepts.resize(numIntervals / 2);
-    paint.getTextBlobIntercepts(runInfo.cachedTextBlob->get(), boundsArray,
-                                reinterpret_cast<SkScalar*>(intercepts.data()));
-    return;
-  }
-
-  GlyphBuffer glyphBuffer;
-  // Compute skip-ink exceptions in the GlyphBuffer.
-  // Skip the computation if 8Bit(), no such characters in Latin-1.
-  if (!runInfo.run.is8Bit())
-    glyphBuffer.saveSkipInkExceptions();
+  GlyphBuffer glyphBuffer(GlyphBuffer::Type::TextIntercepts);
   buildGlyphBuffer(runInfo, glyphBuffer);
 
   // Get the number of intervals, without copying the actual values by
   // specifying nullptr for the buffer, following the Skia allocation model for
   // retrieving text intercepts.
+  SkPaint paint(ToSkPaint(flags));
   int numIntervals = getInterceptsFromBloberizer(
       glyphBuffer, this, paint, deviceScaleFactor, bounds, nullptr);
   if (!numIntervals)
@@ -494,8 +438,8 @@ FloatRect Font::selectionRectForText(const TextRun& run,
 
   FontCachePurgePreventer purgePreventer;
 
-  CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-  CharacterRange range = shaper.getCharacterRange(this, run, from, to);
+  CachingWordShaper shaper(*this);
+  CharacterRange range = shaper.getCharacterRange(run, from, to);
 
   return pixelSnappedSelectionRect(
       FloatRect(point.x() + range.start, point.y(), range.width(), height));
@@ -505,8 +449,8 @@ int Font::offsetForPosition(const TextRun& run,
                             float xFloat,
                             bool includePartialGlyphs) const {
   FontCachePurgePreventer purgePreventer;
-  CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-  return shaper.offsetForPosition(this, run, xFloat, includePartialGlyphs);
+  CachingWordShaper shaper(*this);
+  return shaper.offsetForPosition(run, xFloat, includePartialGlyphs);
 }
 
 ShapeCache* Font::shapeCache() const {
@@ -617,15 +561,15 @@ CharacterRange Font::getCharacterRange(const TextRun& run,
                                        unsigned from,
                                        unsigned to) const {
   FontCachePurgePreventer purgePreventer;
-  CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-  return shaper.getCharacterRange(this, run, from, to);
+  CachingWordShaper shaper(*this);
+  return shaper.getCharacterRange(run, from, to);
 }
 
 Vector<CharacterRange> Font::individualCharacterRanges(
     const TextRun& run) const {
   FontCachePurgePreventer purgePreventer;
-  CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-  auto ranges = shaper.individualCharacterRanges(this, run);
+  CachingWordShaper shaper(*this);
+  auto ranges = shaper.individualCharacterRanges(run);
   // The shaper should return ranges.size == run.length but on some platforms
   // (OSX10.9.5) we are seeing cases in the upper end of the unicode range
   // where this is not true (see: crbug.com/620952). To catch these cases on

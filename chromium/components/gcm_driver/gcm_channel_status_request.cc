@@ -8,11 +8,13 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/gcm_driver/gcm_backoff_policy.h"
 #include "components/sync/protocol/experiment_status.pb.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
@@ -66,8 +68,44 @@ void GCMChannelStatusRequest::Start() {
      NOTREACHED();
   }
 
-  url_fetcher_ =
-      net::URLFetcher::Create(request_url, net::URLFetcher::POST, this);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("gcm_channel_status_request", R"(
+        semantics {
+          sender: "GCM Driver"
+          description:
+            "Google Chrome interacts with Google Cloud Messaging to receive "
+            "push messages for various browser features, as well as on behalf "
+            "of websites and extensions. The channel status request "
+            "periodically confirms with Google servers whether the feature "
+            "should be enabled."
+          trigger:
+            "Periodically when Chrome has established an active Google Cloud "
+            "Messaging subscription. The first request will be issued a minute "
+            "after the first subscription activates. Subsequent requests will "
+            "be issued each hour with a jitter of 15 minutes. Google can "
+            "adjust this interval when it deems necessary."
+          data:
+            "A user agent string containing the Chrome version, channel and "
+            "platform will be sent to the server. No user identifier is sent "
+            "along with the request."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "Support for interacting with Google Cloud Messaging is enabled by "
+            "default, and there is no configuration option to completely "
+            "disable it. Websites wishing to receive push messages must "
+            "acquire express permission from the user for the 'Notification' "
+            "permission."
+          policy_exception_justification:
+            "Not implemented, considered not useful."
+        })");
+
+  url_fetcher_ = net::URLFetcher::Create(request_url, net::URLFetcher::POST,
+                                         this, traffic_annotation);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      url_fetcher_.get(), data_use_measurement::DataUseUserData::GCM_DRIVER);
   url_fetcher_->SetRequestContext(request_context_getter_.get());
   url_fetcher_->AddExtraRequestHeader("User-Agent: " + user_agent_);
   url_fetcher_->SetUploadData(kRequestContentType, upload_data);

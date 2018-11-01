@@ -34,9 +34,9 @@ class _RobohornetProMeasurement(legacy_page_test.LegacyPageTest):
 
   def ValidateAndMeasurePage(self, page, tab, results):
     tab.ExecuteJavaScript('ToggleRoboHornet()')
-    tab.WaitForJavaScriptExpression(
+    tab.WaitForJavaScriptCondition(
         'document.getElementById("results").innerHTML.indexOf("Total") != -1',
-        600)
+        timeout=600)
 
     self._power_metric.Stop(page, tab)
     self._power_metric.AddResults(tab, results)

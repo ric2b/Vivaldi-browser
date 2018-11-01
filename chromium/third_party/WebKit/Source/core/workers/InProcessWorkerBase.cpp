@@ -4,14 +4,15 @@
 
 #include "core/workers/InProcessWorkerBase.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/events/MessageEvent.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/workers/InProcessWorkerMessagingProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
-#include <memory>
+#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
@@ -26,14 +27,15 @@ InProcessWorkerBase::~InProcessWorkerBase() {
   m_contextProxy->parentObjectDestroyed();
 }
 
-void InProcessWorkerBase::postMessage(ExecutionContext* context,
+void InProcessWorkerBase::postMessage(ScriptState* scriptState,
                                       PassRefPtr<SerializedScriptValue> message,
                                       const MessagePortArray& ports,
                                       ExceptionState& exceptionState) {
   DCHECK(m_contextProxy);
   // Disentangle the port in preparation for sending it to the remote context.
-  std::unique_ptr<MessagePortChannelArray> channels =
-      MessagePort::disentanglePorts(context, ports, exceptionState);
+  MessagePortChannelArray channels =
+      MessagePort::disentanglePorts(scriptState->getExecutionContext(), ports,
+                                    exceptionState);
   if (exceptionState.hadException())
     return;
   m_contextProxy->postMessageToWorkerGlobalScope(std::move(message),
@@ -50,9 +52,13 @@ bool InProcessWorkerBase::initialize(ExecutionContext* context,
   if (scriptURL.isEmpty())
     return false;
 
+  CrossOriginRequestPolicy crossOriginRequestPolicy =
+      scriptURL.protocolIsData() ? AllowCrossOriginRequests
+                                 : DenyCrossOriginRequests;
+
   m_scriptLoader = WorkerScriptLoader::create();
   m_scriptLoader->loadAsynchronously(
-      *context, scriptURL, DenyCrossOriginRequests,
+      *context, scriptURL, crossOriginRequestPolicy,
       context->securityContext().addressSpace(),
       WTF::bind(&InProcessWorkerBase::onResponse, wrapPersistent(this)),
       WTF::bind(&InProcessWorkerBase::onFinished, wrapPersistent(this)));
@@ -81,8 +87,8 @@ bool InProcessWorkerBase::hasPendingActivity() const {
 }
 
 void InProcessWorkerBase::onResponse() {
-  InspectorInstrumentation::didReceiveScriptResponse(
-      getExecutionContext(), m_scriptLoader->identifier());
+  probe::didReceiveScriptResponse(getExecutionContext(),
+                                  m_scriptLoader->identifier());
 }
 
 void InProcessWorkerBase::onFinished() {
@@ -96,9 +102,8 @@ void InProcessWorkerBase::onFinished() {
         m_scriptLoader->script(),
         m_scriptLoader->releaseContentSecurityPolicy(),
         m_scriptLoader->getReferrerPolicy());
-    InspectorInstrumentation::scriptImported(getExecutionContext(),
-                                             m_scriptLoader->identifier(),
-                                             m_scriptLoader->script());
+    probe::scriptImported(getExecutionContext(), m_scriptLoader->identifier(),
+                          m_scriptLoader->script());
   }
   m_scriptLoader = nullptr;
 }

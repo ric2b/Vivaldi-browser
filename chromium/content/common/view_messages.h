@@ -20,6 +20,7 @@
 #include "content/common/content_param_traits.h"
 #include "content/common/date_time_suggestion.h"
 #include "content/common/frame_replication_state.h"
+#include "content/common/message_port.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/resize_params.h"
 #include "content/common/text_input_state.h"
@@ -33,7 +34,6 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/screen_info.h"
 #include "content/public/common/three_d_api_types.h"
-#include "content/public/common/window_container_type.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
 #include "media/base/audio_parameters.h"
@@ -242,7 +242,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_max_port)
   IPC_STRUCT_TRAITS_MEMBER(user_agent_override)
   IPC_STRUCT_TRAITS_MEMBER(accept_languages)
-  IPC_STRUCT_TRAITS_MEMBER(report_frame_name_changes)
   IPC_STRUCT_TRAITS_MEMBER(tap_multiple_targets_strategy)
   IPC_STRUCT_TRAITS_MEMBER(disable_client_blocked_error_page)
   IPC_STRUCT_TRAITS_MEMBER(plugin_fullscreen_allowed)
@@ -548,7 +547,19 @@ IPC_MESSAGE_ROUTED0(ViewMsg_WorkerScriptLoadFailed)
 
 // Sent when the worker has connected.
 // This message is sent only if the worker successfully loaded the script.
-IPC_MESSAGE_ROUTED0(ViewMsg_WorkerConnected)
+// |used_features| is the set of features that the worker has used. The values
+// must be from blink::UseCounter::Feature enum.
+IPC_MESSAGE_ROUTED1(ViewMsg_WorkerConnected,
+                    std::set<uint32_t> /* used_features */)
+
+// Sent when the worker is destroyed.
+IPC_MESSAGE_ROUTED0(ViewMsg_WorkerDestroyed)
+
+// Sent when the worker calls API that should be recored in UseCounter.
+// |feature| must be one of the values from blink::UseCounter::Feature
+// enum.
+IPC_MESSAGE_ROUTED1(ViewMsg_CountFeatureOnSharedWorker,
+                    uint32_t /* feature */)
 
 // Sent by the browser to synchronize with the next compositor frame. Used only
 // for tests.
@@ -584,10 +595,6 @@ IPC_MESSAGE_ROUTED3(ViewMsg_UpdateBrowserControlsState,
                     bool /* enable_showing */,
                     bool /* animate */)
 
-// Extracts the data at the given rect, returning it through the
-// ViewHostMsg_SmartClipDataExtracted IPC.
-IPC_MESSAGE_ROUTED1(ViewMsg_ExtractSmartClipData,
-                    gfx::Rect /* rect */)
 #endif
 
 // Sent by browser to tell renderer compositor that some resources that were
@@ -667,10 +674,6 @@ IPC_MESSAGE_CONTROL1(ViewHostMsg_Close_ACK,
 // message.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_ClosePage_ACK)
 
-// Notifies the browser that we have session history information.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateState,
-                    content::PageState /* state */)
-
 // Notifies the browser that we want to show a destination url for a potential
 // action (e.g. when the user is hovering over a link).
 IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateTargetURL,
@@ -715,8 +718,8 @@ IPC_MESSAGE_CONTROL1(ViewHostMsg_DocumentDetached, uint64_t /* document_id */)
 // A renderer sends this to the browser process when it wants to connect to a
 // worker.
 IPC_MESSAGE_CONTROL2(ViewHostMsg_ConnectToWorker,
-                     int /* route_id */,
-                     int /* sent_message_port_id */)
+                     int32_t /* worker_route_id */,
+                     content::MessagePort /* port */)
 
 // Tells the browser that a specific Appcache manifest in the current page
 // was accessed.
@@ -776,8 +779,9 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_EnumerateDirectory,
                     int /* request_id */,
                     base::FilePath /* file_path */)
 
-// Tells the browser to move the focus to the next (previous if reverse is
-// true) focusable element.
+// When the renderer needs the browser to transfer focus cross-process on its
+// behalf in the focus hierarchy. This may focus an element in the browser ui or
+// a cross-process frame, as appropriate.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_TakeFocus,
                     bool /* reverse */)
 
@@ -837,11 +841,6 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowDisambiguationPopup,
                     gfx::Size, /* Size of zoomed image */
                     cc::SharedBitmapId /* id */)
 
-// Notifies the browser that document has parsed the body. This is used by the
-// ResourceScheduler as an indication that bandwidth contention won't block
-// first paint.
-IPC_MESSAGE_ROUTED0(ViewHostMsg_WillInsertBody)
-
 // Notification that the urls for the favicon of a site has been determined.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateFaviconURL,
                     std::vector<content::FaviconURL> /* candidates */)
@@ -886,12 +885,6 @@ IPC_MESSAGE_ROUTED0(ViewHostMsg_WaitForNextFrameForTests_ACK)
 IPC_MESSAGE_ROUTED2(ViewHostMsg_StartContentIntent,
                     GURL /* content_url */,
                     bool /* is_main_frame */)
-
-// Reply to the ViewMsg_ExtractSmartClipData message.
-IPC_MESSAGE_ROUTED3(ViewHostMsg_SmartClipDataExtracted,
-                    base::string16 /* text */,
-                    base::string16 /* html */,
-                    gfx::Rect /* rect */)
 
 // Notifies that an unhandled tap has occurred at the specified x,y position
 // and that the UI may need to be triggered.

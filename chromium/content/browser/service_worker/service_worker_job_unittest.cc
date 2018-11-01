@@ -106,6 +106,18 @@ ServiceWorkerUnregisterJob::UnregistrationCallback SaveUnregistration(
   return base::Bind(&SaveUnregistrationCallback, expected_status, called);
 }
 
+ServiceWorkerStatusCode EventResultToStatus(
+    blink::WebServiceWorkerEventResult result) {
+  switch (result) {
+    case blink::WebServiceWorkerEventResultCompleted:
+      return SERVICE_WORKER_OK;
+    case blink::WebServiceWorkerEventResultRejected:
+      return SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED;
+  }
+  NOTREACHED() << "Got invalid result: " << result;
+  return SERVICE_WORKER_ERROR_FAILED;
+}
+
 }  // namespace
 
 class ServiceWorkerJobTest : public testing::Test {
@@ -187,13 +199,10 @@ ServiceWorkerJobTest::FindRegistrationForPattern(
 
 std::unique_ptr<ServiceWorkerProviderHost>
 ServiceWorkerJobTest::CreateControllee() {
-  return std::unique_ptr<ServiceWorkerProviderHost>(
-      new ServiceWorkerProviderHost(
-          33 /* dummy render_process id */,
-          MSG_ROUTING_NONE /* render_frame_id */, 1 /* dummy provider_id */,
-          SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-          ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
-          helper_->context()->AsWeakPtr(), NULL));
+  std::unique_ptr<ServiceWorkerProviderHost> host = CreateProviderHostForWindow(
+      33 /* dummy render process id */, 1 /* dummy provider_id */,
+      true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr());
+  return host;
 }
 
 TEST_F(ServiceWorkerJobTest, SameDocumentSameRegistration) {
@@ -1460,10 +1469,12 @@ class EventCallbackHelper : public EmbeddedWorkerTestHelper {
         embedded_worker_id, request_id, install_event_result_,
         has_fetch_handler_, base::Time::Now()));
   }
-  void OnActivateEvent(int embedded_worker_id, int request_id) override {
-    SimulateSend(new ServiceWorkerHostMsg_ActivateEventFinished(
-        embedded_worker_id, request_id, activate_event_result_,
-        base::Time::Now()));
+
+  void OnActivateEvent(
+      const mojom::ServiceWorkerEventDispatcher::DispatchActivateEventCallback&
+          callback) override {
+    callback.Run(EventResultToStatus(activate_event_result_),
+                 base::Time::Now());
   }
 
   void set_install_callback(const base::Closure& callback) {

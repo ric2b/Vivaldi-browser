@@ -4,7 +4,9 @@
 
 #include "web/WebFrameWidgetBase.h"
 
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/frame/FrameHost.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/input/EventHandler.h"
 #include "core/page/DragActions.h"
@@ -12,9 +14,12 @@
 #include "core/page/DragData.h"
 #include "core/page/DragSession.h"
 #include "core/page/Page.h"
+#include "core/page/PointerLockController.h"
+#include "platform/UserGestureIndicator.h"
 #include "public/web/WebAutofillClient.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebWidgetClient.h"
+#include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 
@@ -72,14 +77,17 @@ WebDragOperation WebFrameWidgetBase::dragTargetDragOver(
                                    modifiers);
 }
 
-void WebFrameWidgetBase::dragTargetDragLeave() {
+void WebFrameWidgetBase::dragTargetDragLeave(const WebPoint& pointInViewport,
+                                             const WebPoint& screenPoint) {
   DCHECK(m_currentDragData);
 
   if (ignoreInputEvents()) {
     cancelDrag();
     return;
   }
-  DragData dragData(m_currentDragData.get(), IntPoint(), IntPoint(),
+
+  WebPoint pointInRootFrame(viewportToRootFrame(pointInViewport));
+  DragData dragData(m_currentDragData.get(), pointInRootFrame, screenPoint,
                     static_cast<DragOperation>(m_operationsAllowed));
 
   page()->dragController().dragExited(&dragData, *toCoreFrame(localRoot()));
@@ -109,7 +117,7 @@ void WebFrameWidgetBase::dragTargetDrop(const WebDragData& webDragData,
 
   if (m_dragOperation == WebDragOperationNone) {
     // IPC RACE CONDITION: do not allow this drop.
-    dragTargetDragLeave();
+    dragTargetDragLeave(pointInViewport, screenPoint);
     return;
   }
 
@@ -131,16 +139,19 @@ void WebFrameWidgetBase::dragSourceEndedAt(const WebPoint& pointInViewport,
     cancelDrag();
     return;
   }
-  WebPoint pointInRootFrame(
+  WebFloatPoint pointInRootFrame(
       page()->frameHost().visualViewport().viewportToRootFrame(
           pointInViewport));
-  PlatformMouseEvent pme(
-      pointInRootFrame, screenPoint, WebPointerProperties::Button::Left,
-      PlatformEvent::MouseMoved, 0, PlatformEvent::NoModifiers,
-      PlatformMouseEvent::RealOrIndistinguishable, TimeTicks::Now());
+
+  WebMouseEvent fakeMouseMove(WebInputEvent::MouseMove, pointInRootFrame,
+                              WebFloatPoint(screenPoint.x, screenPoint.y),
+                              WebPointerProperties::Button::Left, 0,
+                              WebInputEvent::NoModifiers,
+                              TimeTicks::Now().InSeconds());
+  fakeMouseMove.setFrameScale(1);
   toCoreFrame(localRoot())
       ->eventHandler()
-      .dragSourceEndedAt(pme, static_cast<DragOperation>(operation));
+      .dragSourceEndedAt(fakeMouseMove, static_cast<DragOperation>(operation));
 }
 
 void WebFrameWidgetBase::dragSourceSystemDragEnded() {
@@ -215,6 +226,55 @@ WebViewImpl* WebFrameWidgetBase::view() const {
 
 Page* WebFrameWidgetBase::page() const {
   return view()->page();
+}
+
+void WebFrameWidgetBase::didAcquirePointerLock() {
+  page()->pointerLockController().didAcquirePointerLock();
+}
+
+void WebFrameWidgetBase::didNotAcquirePointerLock() {
+  page()->pointerLockController().didNotAcquirePointerLock();
+}
+
+void WebFrameWidgetBase::didLosePointerLock() {
+  m_pointerLockGestureToken.clear();
+  page()->pointerLockController().didLosePointerLock();
+}
+
+void WebFrameWidgetBase::pointerLockMouseEvent(const WebInputEvent& event) {
+  std::unique_ptr<UserGestureIndicator> gestureIndicator;
+  AtomicString eventType;
+  switch (event.type()) {
+    case WebInputEvent::MouseDown:
+      eventType = EventTypeNames::mousedown;
+      if (!page() || !page()->pointerLockController().element())
+        break;
+      gestureIndicator = WTF::wrapUnique(
+          new UserGestureIndicator(DocumentUserGestureToken::create(
+              &page()->pointerLockController().element()->document(),
+              UserGestureToken::NewGesture)));
+      m_pointerLockGestureToken = gestureIndicator->currentToken();
+      break;
+    case WebInputEvent::MouseUp:
+      eventType = EventTypeNames::mouseup;
+      gestureIndicator = WTF::wrapUnique(
+          new UserGestureIndicator(m_pointerLockGestureToken.release()));
+      break;
+    case WebInputEvent::MouseMove:
+      eventType = EventTypeNames::mousemove;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  const WebMouseEvent& mouseEvent = static_cast<const WebMouseEvent&>(event);
+
+  if (page()) {
+    WebMouseEvent transformedEvent = TransformWebMouseEvent(
+        toWebLocalFrameImpl(localRoot())->frameView(), mouseEvent);
+    page()->pointerLockController().dispatchLockedMouseEvent(transformedEvent,
+                                                             eventType);
+  }
 }
 
 }  // namespace blink

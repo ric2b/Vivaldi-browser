@@ -35,7 +35,7 @@
 #include "core/svg/SVGResourceClient.h"
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/BaseRenderingContext2D.h"
-#include "modules/canvas2d/Canvas2DContextAttributes.h"
+#include "modules/canvas2d/CanvasRenderingContext2DSettings.h"
 #include "modules/canvas2d/CanvasRenderingContext2DState.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/heap/GarbageCollected.h"
@@ -67,11 +67,9 @@ typedef CSSImageValueOrHTMLImageElementOrHTMLVideoElementOrHTMLCanvasElementOrIm
 class MODULES_EXPORT CanvasRenderingContext2D final
     : public CanvasRenderingContext,
       public BaseRenderingContext2D,
-      public WebThread::TaskObserver,
       public SVGResourceClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(CanvasRenderingContext2D);
-  USING_PRE_FINALIZER(CanvasRenderingContext2D, dispose);
 
  public:
   class Factory : public CanvasRenderingContextFactory {
@@ -125,7 +123,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void strokeText(const String& text, double x, double y, double maxWidth);
   TextMetrics* measureText(const String& text);
 
-  void getContextAttributes(Canvas2DContextAttributes&) const;
+  void getContextAttributes(CanvasRenderingContext2DSettings&) const;
 
   void drawFocusIfNeeded(Element*);
   void drawFocusIfNeeded(Path2D*, Element*);
@@ -139,11 +137,10 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void loseContext(LostContextMode) override;
   void didSetSurfaceSize() override;
 
-  void restoreCanvasMatrixClipStack(SkCanvas*) const override;
+  void restoreCanvasMatrixClipStack(PaintCanvas*) const override;
 
   // TaskObserver implementation
-  void didProcessTask() override;
-  void willProcessTask() override {}
+  void didProcessTask() final;
 
   void styleDidChange(const ComputedStyle* oldStyle,
                       const ComputedStyle& newStyle) override;
@@ -174,12 +171,14 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   bool parseColorOrCurrentColor(Color&, const String& colorString) const final;
 
-  SkCanvas* drawingCanvas() const final;
-  SkCanvas* existingDrawingCanvas() const final;
+  PaintCanvas* drawingCanvas() const final;
+  PaintCanvas* existingDrawingCanvas() const final;
   void disableDeferral(DisableDeferralReason) final;
 
   AffineTransform baseTransform() const final;
-  void didDraw(const SkIRect& dirtyRect) final;
+  void didDraw(const SkIRect& dirtyRect) final;  // overrides
+                                                 // BaseRenderingContext2D and
+                                                 // CanvasRenderingContext
 
   bool stateHasFilter() final;
   sk_sp<SkImageFilter> stateGetFilter() final;
@@ -193,7 +192,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   void resetUsageTracking();
 
-  void incrementFrameCount() { m_usageCounters.numFramesSinceReset++; }
+  void finalizeFrame() override { m_usageCounters.numFramesSinceReset++; }
 
   bool isPaintable() const final { return hasImageBuffer(); }
 
@@ -208,14 +207,11 @@ class MODULES_EXPORT CanvasRenderingContext2D final
                            const CanvasContextCreationAttributes& attrs,
                            Document&);
 
-  void dispose();
-
   void dispatchContextLostEvent(TimerBase*);
   void dispatchContextRestoredEvent(TimerBase*);
   void tryRestoreContextEvent(TimerBase*);
 
   void pruneLocalFontCache(size_t targetSize);
-  void schedulePruneLocalFontCacheIfNeeded();
 
   void scrollPathIntoViewInternal(const Path&);
 
@@ -251,13 +247,13 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   LostContextMode m_contextLostMode;
   bool m_contextRestorable;
   unsigned m_tryRestoreContextAttemptCount;
-  Timer<CanvasRenderingContext2D> m_dispatchContextLostEventTimer;
-  Timer<CanvasRenderingContext2D> m_dispatchContextRestoredEventTimer;
-  Timer<CanvasRenderingContext2D> m_tryRestoreContextEventTimer;
+  TaskRunnerTimer<CanvasRenderingContext2D> m_dispatchContextLostEventTimer;
+  TaskRunnerTimer<CanvasRenderingContext2D> m_dispatchContextRestoredEventTimer;
+  TaskRunnerTimer<CanvasRenderingContext2D> m_tryRestoreContextEventTimer;
 
   FilterOperations m_filterOperations;
   HashMap<String, Font> m_fontsResolvedUsingCurrentStyle;
-  bool m_pruneLocalFontCacheScheduled;
+  bool m_shouldPruneLocalFontCache;
   ListHashSet<String> m_fontLRUList;
 };
 

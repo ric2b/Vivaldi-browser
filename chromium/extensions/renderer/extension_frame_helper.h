@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/common/console_message_level.h"
@@ -90,7 +91,7 @@ class ExtensionFrameHelper
       const blink::WebVector<blink::WebString>& newly_matching_selectors,
       const blink::WebVector<blink::WebString>& stopped_matching_selectors)
           override;
-  void DidStartProvisionalLoad() override;
+  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
   void DidCreateScriptContext(v8::Local<v8::Context>,
                               int world_id) override;
   void WillReleaseScriptContext(v8::Local<v8::Context>, int world_id) override;

@@ -28,9 +28,9 @@ void CompositingInputsUpdater::update() {
 
 static const PaintLayer* findParentLayerOnClippingContainerChain(
     const PaintLayer* layer) {
-  LayoutObject* current = layer->layoutObject();
+  LayoutObject* current = &layer->layoutObject();
   while (current) {
-    if (current->style()->position() == FixedPosition) {
+    if (current->style()->position() == EPosition::kFixed) {
       for (current = current->parent();
            current && !current->canContainFixedPositionObjects();
            current = current->parent()) {
@@ -75,19 +75,19 @@ static bool hasClippedStackingAncestor(const PaintLayer* layer,
   if (layer == clippingLayer)
     return false;
   bool foundInterveningClip = false;
-  const LayoutObject* clippingLayoutObject = clippingLayer->layoutObject();
+  const LayoutObject& clippingLayoutObject = clippingLayer->layoutObject();
   for (const PaintLayer* current = layer->compositingContainer(); current;
        current = current->compositingContainer()) {
     if (current == clippingLayer)
       return foundInterveningClip;
 
-    if (current->layoutObject()->hasClipRelatedProperty() &&
-        !clippingLayoutObject->isDescendantOf(current->layoutObject()))
+    if (current->layoutObject().hasClipRelatedProperty() &&
+        !clippingLayoutObject.isDescendantOf(&current->layoutObject()))
       foundInterveningClip = true;
 
     if (const LayoutObject* container = current->clippingContainer()) {
-      if (clippingLayoutObject != container &&
-          !clippingLayoutObject->isDescendantOf(container))
+      if (&clippingLayoutObject != container &&
+          !clippingLayoutObject.isDescendantOf(container))
         foundInterveningClip = true;
     }
   }
@@ -103,27 +103,31 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
   const PaintLayer* previousOverflowLayer = layer->ancestorOverflowLayer();
   layer->updateAncestorOverflowLayer(info.lastOverflowClipLayer);
   if (info.lastOverflowClipLayer && layer->needsCompositingInputsUpdate() &&
-      layer->layoutObject()->style()->position() == StickyPosition) {
-    if (info.lastOverflowClipLayer != previousOverflowLayer &&
-        !RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-      // Old ancestor scroller should no longer have these constraints.
-      ASSERT(!previousOverflowLayer ||
-             !previousOverflowLayer->getScrollableArea()
-                  ->stickyConstraintsMap()
-                  .contains(layer));
+      layer->layoutObject().style()->position() == EPosition::kSticky) {
+    if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+      if (info.lastOverflowClipLayer != previousOverflowLayer) {
+        // Old ancestor scroller should no longer have these constraints.
+        DCHECK(!previousOverflowLayer ||
+               !previousOverflowLayer->getScrollableArea()
+                    ->stickyConstraintsMap()
+                    .contains(layer));
 
-      if (info.lastOverflowClipLayer->isRootLayer())
-        layer->layoutObject()
-            ->view()
-            ->frameView()
-            ->addViewportConstrainedObject(layer->layoutObject());
-      else if (previousOverflowLayer && previousOverflowLayer->isRootLayer())
-        layer->layoutObject()
-            ->view()
-            ->frameView()
-            ->removeViewportConstrainedObject(layer->layoutObject());
+        // If our ancestor scroller has changed and the previous one was the
+        // root layer, we are no longer viewport constrained.
+        if (previousOverflowLayer && previousOverflowLayer->isRootLayer()) {
+          layer->layoutObject()
+              .view()
+              ->frameView()
+              ->removeViewportConstrainedObject(layer->layoutObject());
+        }
+      }
+
+      if (info.lastOverflowClipLayer->isRootLayer()) {
+        layer->layoutObject().view()->frameView()->addViewportConstrainedObject(
+            layer->layoutObject());
+      }
     }
-    layer->layoutObject()->updateStickyPositionConstraints();
+    layer->layoutObject().updateStickyPositionConstraints();
 
     // Sticky position constraints and ancestor overflow scroller affect
     // the sticky layer position, so we need to update it again here.
@@ -159,11 +163,11 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
         if (properties.unclippedAbsoluteBoundingBox.isEmpty())
           properties.unclippedAbsoluteBoundingBox.setSize(IntSize(1, 1));
 
-        IntRect clipRect =
-            pixelSnappedIntRect(layer->clipper()
-                                    .backgroundClipRect(ClipRectsContext(
-                                        m_rootLayer, AbsoluteClipRects))
-                                    .rect());
+        IntRect clipRect = pixelSnappedIntRect(
+            layer->clipper(PaintLayer::DoNotUseGeometryMapper)
+                .backgroundClipRect(
+                    ClipRectsContext(m_rootLayer, AbsoluteClipRects))
+                .rect());
         properties.clippedAbsoluteBoundingBox =
             properties.unclippedAbsoluteBoundingBox;
         properties.clippedAbsoluteBoundingBox.intersect(clipRect);
@@ -178,7 +182,7 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
                                       ? parent
                                       : parent->filterAncestor();
       bool layerIsFixedPosition =
-          layer->layoutObject()->style()->position() == FixedPosition;
+          layer->layoutObject().style()->position() == EPosition::kFixed;
       properties.nearestFixedPositionLayer =
           layerIsFixedPosition ? layer : parent->nearestFixedPositionLayer();
 
@@ -187,13 +191,13 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
             findParentLayerOnClippingContainerChain(layer);
         const bool parentHasClipRelatedProperty =
             parentLayerOnClippingContainerChain->layoutObject()
-                ->hasClipRelatedProperty();
+                .hasClipRelatedProperty();
         properties.clippingContainer =
             parentHasClipRelatedProperty
-                ? parentLayerOnClippingContainerChain->layoutObject()
+                ? &parentLayerOnClippingContainerChain->layoutObject()
                 : parentLayerOnClippingContainerChain->clippingContainer();
 
-        if (layer->layoutObject()->isOutOfFlowPositioned() &&
+        if (layer->layoutObject().isOutOfFlowPositioned() &&
             !layer->subtreeIsInvisible()) {
           const PaintLayer* clippingLayer =
               properties.clippingContainer
@@ -206,7 +210,7 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
 
       if (info.lastScrollingAncestor) {
         const LayoutObject* containingBlock =
-            layer->layoutObject()->containingBlock();
+            layer->layoutObject().containingBlock();
         const PaintLayer* parentLayerOnContainingBlockChain =
             findParentLayerOnContainingBlockChain(containingBlock);
 
@@ -217,8 +221,8 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
 
         if (layer->stackingNode()->isStacked() &&
             properties.ancestorScrollingLayer &&
-            !info.ancestorStackingContext->layoutObject()->isDescendantOf(
-                properties.ancestorScrollingLayer->layoutObject()))
+            !info.ancestorStackingContext->layoutObject().isDescendantOf(
+                &properties.ancestorScrollingLayer->layoutObject()))
           properties.scrollParent = properties.ancestorScrollingLayer;
       }
     }
@@ -230,16 +234,16 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
   if (layer->stackingNode()->isStackingContext())
     info.ancestorStackingContext = layer;
 
-  if (layer->isRootLayer() || layer->layoutObject()->hasOverflowClip())
+  if (layer->isRootLayer() || layer->layoutObject().hasOverflowClip())
     info.lastOverflowClipLayer = layer;
 
   if (layer->scrollsOverflow())
     info.lastScrollingAncestor = layer;
 
-  if (layer->layoutObject()->hasClipRelatedProperty())
+  if (layer->layoutObject().hasClipRelatedProperty())
     info.hasAncestorWithClipRelatedProperty = true;
 
-  if (layer->layoutObject()->hasClipPath())
+  if (layer->layoutObject().hasClipPath())
     info.hasAncestorWithClipPath = true;
 
   for (PaintLayer* child = layer->firstChild(); child;
@@ -255,7 +259,7 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
     // If the floating object becomes non-self-painting, so some ancestor should
     // paint it; if it becomes self-painting, it should paint itself and no
     // ancestor should paint it.
-    if (layer->layoutObject()->isFloating()) {
+    if (layer->layoutObject().isFloating()) {
       LayoutBlockFlow::updateAncestorShouldPaintFloatingObject(
           *layer->layoutBox());
     }

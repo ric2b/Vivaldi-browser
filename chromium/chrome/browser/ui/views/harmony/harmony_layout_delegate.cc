@@ -15,28 +15,43 @@ HarmonyLayoutDelegate* HarmonyLayoutDelegate::Get() {
   return harmony_layout_delegate_.Pointer();
 }
 
-int HarmonyLayoutDelegate::GetLayoutDistance(LayoutDistanceType type) const {
-  switch (type) {
-    case LayoutDistanceType::PANEL_HORIZ_MARGIN:
+int HarmonyLayoutDelegate::GetMetric(Metric metric) const {
+  switch (metric) {
+    case Metric::BUTTON_HORIZONTAL_PADDING:
       return kHarmonyLayoutUnit;
-    case LayoutDistanceType::PANEL_VERT_MARGIN:
+    case Metric::DIALOG_BUTTON_MARGIN:
       return kHarmonyLayoutUnit;
-    case LayoutDistanceType::RELATED_BUTTON_HORIZONTAL_SPACING:
+    case Metric::BUTTON_MINIMUM_WIDTH:
+    case Metric::DIALOG_BUTTON_MINIMUM_WIDTH:
+      // Minimum label size plus padding.
+      return 2 * kHarmonyLayoutUnit +
+             2 * GetMetric(Metric::BUTTON_HORIZONTAL_PADDING);
+    case Metric::DIALOG_BUTTON_TOP_SPACING:
+      return kHarmonyLayoutUnit;
+    case Metric::DIALOG_CLOSE_BUTTON_MARGIN:
+      // TODO(pkasting): The "- 4" here is a hack that matches the extra padding
+      // in vector_icon_button.cc and should be removed when that padding is.
+      return (kHarmonyLayoutUnit / 2) - 4;
+    case Metric::PANEL_CONTENT_MARGIN:
+      return kHarmonyLayoutUnit;
+    case Metric::RELATED_BUTTON_HORIZONTAL_SPACING:
       return kHarmonyLayoutUnit / 2;
-    case LayoutDistanceType::RELATED_CONTROL_HORIZONTAL_SPACING:
+    case Metric::RELATED_CONTROL_HORIZONTAL_SPACING:
       return kHarmonyLayoutUnit;
-    case LayoutDistanceType::RELATED_CONTROL_VERTICAL_SPACING:
+    case Metric::RELATED_CONTROL_VERTICAL_SPACING:
       return kHarmonyLayoutUnit / 2;
-    case LayoutDistanceType::UNRELATED_CONTROL_VERTICAL_SPACING:
+    case Metric::RELATED_LABEL_HORIZONTAL_SPACING:
       return kHarmonyLayoutUnit;
-    case LayoutDistanceType::UNRELATED_CONTROL_LARGE_VERTICAL_SPACING:
-      return kHarmonyLayoutUnit;
-    case LayoutDistanceType::BUTTON_VEDGE_MARGIN_NEW:
-      return kHarmonyLayoutUnit;
-    case LayoutDistanceType::BUTTON_HEDGE_MARGIN_NEW:
-      return kHarmonyLayoutUnit;
-    case LayoutDistanceType::CHECKBOX_INDENT:
+    case Metric::SUBSECTION_HORIZONTAL_INDENT:
       return 0;
+    case Metric::UNRELATED_CONTROL_HORIZONTAL_SPACING:
+      return kHarmonyLayoutUnit;
+    case Metric::UNRELATED_CONTROL_HORIZONTAL_SPACING_LARGE:
+      return kHarmonyLayoutUnit;
+    case Metric::UNRELATED_CONTROL_VERTICAL_SPACING:
+      return kHarmonyLayoutUnit;
+    case Metric::UNRELATED_CONTROL_VERTICAL_SPACING_LARGE:
+      return kHarmonyLayoutUnit;
   }
   NOTREACHED();
   return 0;
@@ -55,13 +70,13 @@ bool HarmonyLayoutDelegate::IsHarmonyMode() const {
   return true;
 }
 
-int HarmonyLayoutDelegate::GetDialogPreferredWidth(DialogWidthType type) const {
-  switch (type) {
-    case DialogWidthType::SMALL:
+int HarmonyLayoutDelegate::GetDialogPreferredWidth(DialogWidth width) const {
+  switch (width) {
+    case DialogWidth::SMALL:
       return 320;
-    case DialogWidthType::MEDIUM:
+    case DialogWidth::MEDIUM:
       return 448;
-    case DialogWidthType::LARGE:
+    case DialogWidth::LARGE:
       return 512;
   }
   NOTREACHED();

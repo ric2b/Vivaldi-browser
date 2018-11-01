@@ -46,11 +46,6 @@ using OriginAccessWhiteList = Vector<OriginAccessEntry>;
 using OriginAccessMap = HashMap<String, std::unique_ptr<OriginAccessWhiteList>>;
 using OriginSet = HashSet<String>;
 
-enum ReferrerPolicyLegacyKeywordsSupport {
-  SupportReferrerPolicyLegacyKeywords,
-  DoNotSupportReferrerPolicyLegacyKeywords,
-};
-
 static OriginAccessMap& originAccessMap() {
   DEFINE_STATIC_LOCAL(OriginAccessMap, originAccessMap, ());
   return originAccessMap;
@@ -59,42 +54,6 @@ static OriginAccessMap& originAccessMap() {
 static OriginSet& trustworthyOriginSet() {
   DEFINE_STATIC_LOCAL(OriginSet, trustworthyOriginSet, ());
   return trustworthyOriginSet;
-}
-
-static bool referrerPolicyFromStringImpl(
-    const String& policy,
-    ReferrerPolicyLegacyKeywordsSupport legacyKeywordsSupport,
-    ReferrerPolicy* result) {
-  DCHECK(!policy.isNull());
-  bool supportLegacyKeywords =
-      (legacyKeywordsSupport == SupportReferrerPolicyLegacyKeywords);
-
-  if (equalIgnoringASCIICase(policy, "no-referrer") ||
-      (supportLegacyKeywords && equalIgnoringASCIICase(policy, "never"))) {
-    *result = ReferrerPolicyNever;
-    return true;
-  }
-  if (equalIgnoringASCIICase(policy, "unsafe-url") ||
-      (supportLegacyKeywords && equalIgnoringASCIICase(policy, "always"))) {
-    *result = ReferrerPolicyAlways;
-    return true;
-  }
-  if (equalIgnoringASCIICase(policy, "origin")) {
-    *result = ReferrerPolicyOrigin;
-    return true;
-  }
-  if (equalIgnoringASCIICase(policy, "origin-when-cross-origin") ||
-      (supportLegacyKeywords &&
-       equalIgnoringASCIICase(policy, "origin-when-crossorigin"))) {
-    *result = ReferrerPolicyOriginWhenCrossOrigin;
-    return true;
-  }
-  if (equalIgnoringASCIICase(policy, "no-referrer-when-downgrade") ||
-      (supportLegacyKeywords && equalIgnoringASCIICase(policy, "default"))) {
-    *result = ReferrerPolicyNoReferrerWhenDowngrade;
-    return true;
-  }
-  return false;
 }
 
 void SecurityPolicy::init() {
@@ -199,7 +158,7 @@ void SecurityPolicy::addOriginTrustworthyWhiteList(
 #endif
   if (origin->isUnique())
     return;
-  trustworthyOriginSet().add(origin->toRawString());
+  trustworthyOriginSet().insert(origin->toRawString());
 }
 
 bool SecurityPolicy::isOriginWhiteListedTrustworthy(
@@ -221,7 +180,7 @@ bool SecurityPolicy::isUrlWhiteListedTrustworthy(const KURL& url) {
 bool SecurityPolicy::isAccessWhiteListed(const SecurityOrigin* activeOrigin,
                                          const SecurityOrigin* targetOrigin) {
   if (OriginAccessWhiteList* list =
-          originAccessMap().get(activeOrigin->toString())) {
+          originAccessMap().at(activeOrigin->toString())) {
     for (size_t i = 0; i < list->size(); ++i) {
       if (list->at(i).matchesOrigin(*targetOrigin) !=
           OriginAccessEntry::DoesNotMatchOrigin)
@@ -250,7 +209,7 @@ void SecurityPolicy::addOriginAccessWhitelistEntry(
 
   String sourceString = sourceOrigin.toString();
   OriginAccessMap::AddResult result =
-      originAccessMap().add(sourceString, nullptr);
+      originAccessMap().insert(sourceString, nullptr);
   if (result.isNewEntry)
     result.storedValue->value = WTF::wrapUnique(new OriginAccessWhiteList);
 
@@ -297,17 +256,63 @@ void SecurityPolicy::resetOriginAccessWhitelists() {
   originAccessMap().clear();
 }
 
-bool SecurityPolicy::referrerPolicyFromString(const String& policy,
-                                              ReferrerPolicy* result) {
-  return referrerPolicyFromStringImpl(
-      policy, DoNotSupportReferrerPolicyLegacyKeywords, result);
+bool SecurityPolicy::referrerPolicyFromString(
+    const String& policy,
+    ReferrerPolicyLegacyKeywordsSupport legacyKeywordsSupport,
+    ReferrerPolicy* result) {
+  DCHECK(!policy.isNull());
+  bool supportLegacyKeywords =
+      (legacyKeywordsSupport == SupportReferrerPolicyLegacyKeywords);
+
+  if (equalIgnoringASCIICase(policy, "no-referrer") ||
+      (supportLegacyKeywords && equalIgnoringASCIICase(policy, "never"))) {
+    *result = ReferrerPolicyNever;
+    return true;
+  }
+  if (equalIgnoringASCIICase(policy, "unsafe-url") ||
+      (supportLegacyKeywords && equalIgnoringASCIICase(policy, "always"))) {
+    *result = ReferrerPolicyAlways;
+    return true;
+  }
+  if (equalIgnoringASCIICase(policy, "origin")) {
+    *result = ReferrerPolicyOrigin;
+    return true;
+  }
+  if (equalIgnoringASCIICase(policy, "origin-when-cross-origin") ||
+      (supportLegacyKeywords &&
+       equalIgnoringASCIICase(policy, "origin-when-crossorigin"))) {
+    *result = ReferrerPolicyOriginWhenCrossOrigin;
+    return true;
+  }
+  if (equalIgnoringASCIICase(policy, "no-referrer-when-downgrade") ||
+      (supportLegacyKeywords && equalIgnoringASCIICase(policy, "default"))) {
+    *result = ReferrerPolicyNoReferrerWhenDowngrade;
+    return true;
+  }
+  return false;
 }
 
-bool SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-    const String& policy,
+bool SecurityPolicy::referrerPolicyFromHeaderValue(
+    const String& headerValue,
+    ReferrerPolicyLegacyKeywordsSupport legacyKeywordsSupport,
     ReferrerPolicy* result) {
-  return referrerPolicyFromStringImpl(
-      policy, SupportReferrerPolicyLegacyKeywords, result);
+  ReferrerPolicy referrerPolicy = ReferrerPolicyDefault;
+
+  Vector<String> tokens;
+  headerValue.split(',', true, tokens);
+  for (const auto& token : tokens) {
+    ReferrerPolicy currentResult;
+    if (SecurityPolicy::referrerPolicyFromString(token, legacyKeywordsSupport,
+                                                 &currentResult)) {
+      referrerPolicy = currentResult;
+    }
+  }
+
+  if (referrerPolicy == ReferrerPolicyDefault)
+    return false;
+
+  *result = referrerPolicy;
+  return true;
 }
 
 }  // namespace blink

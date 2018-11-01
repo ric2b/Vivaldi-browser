@@ -8,6 +8,7 @@
 
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/common/accessibility_types.h"
+#include "ash/common/ash_constants.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
@@ -57,7 +58,20 @@
 
 namespace chromeos {
 
+namespace {
+
 static const char kFallbackInputMethodLocale[] = "en-US";
+
+// The keyboard preferences that determine how we remap modifier keys. These
+// preferences will be saved in global user preferences dictionary so that they
+// can be used on signin screen.
+const char* const kLanguageRemapPrefs[] = {
+    prefs::kLanguageRemapSearchKeyTo, prefs::kLanguageRemapControlKeyTo,
+    prefs::kLanguageRemapAltKeyTo,    prefs::kLanguageRemapCapsLockKeyTo,
+    prefs::kLanguageRemapEscapeKeyTo, prefs::kLanguageRemapBackspaceKeyTo,
+    prefs::kLanguageRemapDiamondKeyTo};
+
+}  // namespace
 
 Preferences::Preferences()
     : prefs_(NULL),
@@ -154,6 +168,8 @@ void Preferences::RegisterProfilePrefs(
       prefs::kAccessibilityLargeCursorEnabled,
       false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterIntegerPref(prefs::kAccessibilityLargeCursorDipSize,
+                                ash::kDefaultLargeCursorSize);
   registry->RegisterBooleanPref(prefs::kAccessibilitySpokenFeedbackEnabled,
                                 false);
   registry->RegisterBooleanPref(
@@ -270,7 +286,7 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kLanguageSendFunctionKeys, false);
   registry->RegisterBooleanPref(
       prefs::kLanguageXkbAutoRepeatEnabled,
-      true,
+      language_prefs::kXkbAutoRepeatEnabled,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageXkbAutoRepeatDelay,
@@ -397,6 +413,8 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   pref_change_registrar_.Init(prefs);
   pref_change_registrar_.Add(prefs::kResolveTimezoneByGeolocation, callback);
   pref_change_registrar_.Add(prefs::kUse24HourClock, callback);
+  for (auto* remap_pref : kLanguageRemapPrefs)
+    pref_change_registrar_.Add(remap_pref, callback);
 }
 
 void Preferences::Init(Profile* profile, const user_manager::User* user) {
@@ -622,6 +640,9 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       input_method::InputMethodManager::Get()
           ->GetImeKeyboard()
           ->SetAutoRepeatEnabled(enabled);
+
+      user_manager::known_user::SetBooleanPref(
+          user_->GetAccountId(), prefs::kLanguageXkbAutoRepeatEnabled, enabled);
     }
   }
   if (reason != REASON_PREF_CHANGED ||
@@ -709,6 +730,14 @@ void Preferences::ApplyPreferences(ApplyReason reason,
                                              prefs::kUse24HourClock, value);
   }
 
+  for (auto* remap_pref : kLanguageRemapPrefs) {
+    if (pref_name == remap_pref || reason != REASON_ACTIVE_USER_CHANGED) {
+      const int value = prefs_->GetInteger(remap_pref);
+      user_manager::known_user::SetIntegerPref(user_->GetAccountId(),
+                                               remap_pref, value);
+    }
+  }
+
   system::InputDeviceSettings::Get()->UpdateTouchDevicesStatusFromPrefs();
 }
 
@@ -786,6 +815,13 @@ void Preferences::UpdateAutoRepeatRate() {
   input_method::InputMethodManager::Get()
       ->GetImeKeyboard()
       ->SetAutoRepeatRate(rate);
+
+  user_manager::known_user::SetIntegerPref(user_->GetAccountId(),
+                                           prefs::kLanguageXkbAutoRepeatDelay,
+                                           rate.initial_delay_in_ms);
+  user_manager::known_user::SetIntegerPref(
+      user_->GetAccountId(), prefs::kLanguageXkbAutoRepeatInterval,
+      rate.repeat_interval_in_ms);
 }
 
 void Preferences::OnTouchHudProjectionToggled(bool enabled) {

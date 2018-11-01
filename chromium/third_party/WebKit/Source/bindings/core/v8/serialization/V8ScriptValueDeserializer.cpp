@@ -23,6 +23,60 @@
 
 namespace blink {
 
+namespace {
+
+// The "Blink-side" serialization version, which defines how Blink will behave
+// during the serialization process. The serialization format has two
+// "envelopes": an outer one controlled by Blink and an inner one by V8.
+//
+// They are formatted as follows:
+// [version tag] [Blink version] [version tag] [v8 version] ...
+//
+// Before version 16, there was only a single envelope and the version number
+// for both parts was always equal.
+//
+// See also V8ScriptValueDeserializer.cpp.
+const uint32_t kMinVersionForSeparateEnvelope = 16;
+
+// Returns the number of bytes consumed reading the Blink version envelope, and
+// sets |*version| to the version. If no Blink envelope was detected, zero is
+// returned.
+size_t readVersionEnvelope(SerializedScriptValue* serializedScriptValue,
+                           uint32_t* outVersion) {
+  const uint8_t* rawData = serializedScriptValue->data();
+  const size_t length = serializedScriptValue->dataLengthInBytes();
+  if (!length || rawData[0] != VersionTag)
+    return 0;
+
+  // Read a 32-bit unsigned integer from varint encoding.
+  uint32_t version = 0;
+  size_t i = 1;
+  unsigned shift = 0;
+  bool hasAnotherByte;
+  do {
+    if (i >= length)
+      return 0;
+    uint8_t byte = rawData[i];
+    if (LIKELY(shift < 32)) {
+      version |= static_cast<uint32_t>(byte & 0x7f) << shift;
+      shift += 7;
+    }
+    hasAnotherByte = byte & 0x80;
+    i++;
+  } while (hasAnotherByte);
+
+  // If the version in the envelope is too low, this was not a Blink version
+  // envelope.
+  if (version < kMinVersionForSeparateEnvelope)
+    return 0;
+
+  // Otherwise, we did read the envelope. Hurray!
+  *outVersion = version;
+  return i;
+}
+
+}  // namespace
+
 V8ScriptValueDeserializer::V8ScriptValueDeserializer(
     RefPtr<ScriptState> scriptState,
     RefPtr<SerializedScriptValue> serializedScriptValue)
@@ -32,7 +86,6 @@ V8ScriptValueDeserializer::V8ScriptValueDeserializer(
                      m_serializedScriptValue->data(),
                      m_serializedScriptValue->dataLengthInBytes(),
                      this) {
-  DCHECK(RuntimeEnabledFeatures::v8BasedStructuredCloneEnabled());
   m_deserializer.SetSupportsLegacyWireFormat(true);
 }
 
@@ -47,11 +100,26 @@ v8::Local<v8::Value> V8ScriptValueDeserializer::deserialize() {
   v8::TryCatch tryCatch(isolate);
   v8::Local<v8::Context> context = m_scriptState->context();
 
+  size_t versionEnvelopeSize =
+      readVersionEnvelope(m_serializedScriptValue.get(), &m_version);
+  if (versionEnvelopeSize) {
+    const void* blinkEnvelope;
+    bool readEnvelope = readRawBytes(versionEnvelopeSize, &blinkEnvelope);
+    DCHECK(readEnvelope);
+    DCHECK_GE(m_version, kMinVersionForSeparateEnvelope);
+  } else {
+    DCHECK_EQ(m_version, 0u);
+  }
+
   bool readHeader;
   if (!m_deserializer.ReadHeader(context).To(&readHeader))
     return v8::Null(isolate);
   DCHECK(readHeader);
-  m_version = m_deserializer.GetWireFormatVersion();
+
+  // If there was no Blink envelope earlier, Blink shares the wire format
+  // version from the V8 header.
+  if (!m_version)
+    m_version = m_deserializer.GetWireFormatVersion();
 
   // Prepare to transfer the provided transferables.
   transfer();
@@ -320,7 +388,7 @@ v8::MaybeLocal<v8::Object> V8ScriptValueDeserializer::ReadHostObject(
   ExceptionState exceptionState(isolate, ExceptionState::UnknownContext,
                                 nullptr, nullptr);
   ScriptWrappable* wrappable = nullptr;
-  SerializationTag tag = PaddingTag;
+  SerializationTag tag = VersionTag;
   if (readTag(&tag))
     wrappable = readDOMObject(tag);
   if (!wrappable) {

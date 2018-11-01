@@ -103,19 +103,6 @@ VideoRotation FakeDemuxerStream::video_rotation() {
   return VIDEO_ROTATION_0;
 }
 
-bool FakeDemuxerStream::enabled() const {
-  return true;
-}
-
-void FakeDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
-  NOTIMPLEMENTED();
-}
-
-void FakeDemuxerStream::SetStreamStatusChangeCB(
-    const StreamStatusChangeCB& cb) {
-  NOTIMPLEMENTED();
-}
-
 void FakeDemuxerStream::HoldNextRead() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   read_to_hold_ = next_read_num_;
@@ -215,22 +202,24 @@ void FakeDemuxerStream::DoRead() {
   base::ResetAndReturn(&read_cb_).Run(kOk, buffer);
 }
 
-FakeDemuxerStreamProvider::FakeDemuxerStreamProvider(
-    int num_video_configs,
-    int num_video_buffers_in_one_config,
-    bool is_video_encrypted)
+FakeMediaResource::FakeMediaResource(int num_video_configs,
+                                     int num_video_buffers_in_one_config,
+                                     bool is_video_encrypted)
     : fake_video_stream_(num_video_configs,
                          num_video_buffers_in_one_config,
-                         is_video_encrypted) {
+                         is_video_encrypted) {}
+
+FakeMediaResource::~FakeMediaResource() {}
+
+std::vector<DemuxerStream*> FakeMediaResource::GetAllStreams() {
+  std::vector<DemuxerStream*> result;
+  result.push_back(&fake_video_stream_);
+  return result;
 }
 
-FakeDemuxerStreamProvider::~FakeDemuxerStreamProvider() {
+void FakeMediaResource::SetStreamStatusChangeCB(
+    const StreamStatusChangeCB& cb) {
+  NOTIMPLEMENTED();
 }
-
-DemuxerStream* FakeDemuxerStreamProvider::GetStream(DemuxerStream::Type type) {
-  if (type == DemuxerStream::Type::AUDIO)
-    return nullptr;
-  return &fake_video_stream_;
-};
 
 }  // namespace media

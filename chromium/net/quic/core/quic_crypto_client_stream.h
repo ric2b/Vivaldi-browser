@@ -21,7 +21,6 @@
 namespace net {
 
 namespace test {
-class CryptoTestUtils;
 class QuicChromiumClientSessionPeer;
 }  // namespace test
 
@@ -142,7 +141,6 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientStream
     QuicCryptoClientStream* stream_;
   };
 
-  friend class test::CryptoTestUtils;
   friend class test::QuicChromiumClientSessionPeer;
 
   enum State {
@@ -267,6 +265,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientStream
   // STATE_VERIFY_PROOF*, and subsequent STATE_SEND_CHLO state.
   bool stateless_reject_received_;
 
+  // Only used in chromium, not internally.
   base::TimeTicks proof_verify_start_time_;
 
   int num_scup_messages_received_;

@@ -6,59 +6,58 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "chrome/browser/extensions/component_migration_helper.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "extensions/common/feature_switch.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
+#include "extensions/browser/extension_registry.h"
 
 #if defined(ENABLE_MEDIA_ROUTER)
 #include "chrome/browser/ui/toolbar/media_router_action.h"
+#include "chrome/browser/ui/toolbar/media_router_action_controller.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-
-namespace {
-
-ComponentToolbarActionsFactory* testing_factory_ = nullptr;
-
-base::LazyInstance<ComponentToolbarActionsFactory> lazy_factory =
-    LAZY_INSTANCE_INITIALIZER;
-
-const char kCastExtensionId[] = "boadgeojelhgndaghljhdicfkmllpafd";
-const char kCastBetaExtensionId[] = "dliochdbjfkdbacpmhlcpmleaejidimm";
-
-}  // namespace
-
 // static
+const char ComponentToolbarActionsFactory::kCastBetaExtensionId[] =
+    "dliochdbjfkdbacpmhlcpmleaejidimm";
+const char ComponentToolbarActionsFactory::kCastExtensionId[] =
+    "boadgeojelhgndaghljhdicfkmllpafd";
 const char ComponentToolbarActionsFactory::kMediaRouterActionId[] =
     "media_router_action";
 
-ComponentToolbarActionsFactory::ComponentToolbarActionsFactory() {}
-ComponentToolbarActionsFactory::~ComponentToolbarActionsFactory() {}
-
-// static
-ComponentToolbarActionsFactory* ComponentToolbarActionsFactory::GetInstance() {
-  return testing_factory_ ? testing_factory_ : &lazy_factory.Get();
+ComponentToolbarActionsFactory::ComponentToolbarActionsFactory(Profile* profile)
+    : profile_(profile) {
+#if defined(ENABLE_MEDIA_ROUTER)
+  if (media_router::MediaRouterEnabled(profile_) &&
+      MediaRouterActionController::IsActionShownByPolicy(profile_)) {
+    initial_ids_.insert(kMediaRouterActionId);
+  }
+#endif
 }
 
-std::set<std::string> ComponentToolbarActionsFactory::GetInitialComponentIds(
-    Profile* profile) {
-  std::set<std::string> component_ids;
-  return component_ids;
+ComponentToolbarActionsFactory::~ComponentToolbarActionsFactory() {}
+
+std::set<std::string> ComponentToolbarActionsFactory::GetInitialComponentIds() {
+  return initial_ids_;
+}
+
+void ComponentToolbarActionsFactory::OnAddComponentActionBeforeInit(
+    const std::string& action_id) {
+  initial_ids_.insert(action_id);
+}
+
+void ComponentToolbarActionsFactory::OnRemoveComponentActionBeforeInit(
+    const std::string& action_id) {
+  initial_ids_.erase(action_id);
 }
 
 std::unique_ptr<ToolbarActionViewController>
 ComponentToolbarActionsFactory::GetComponentToolbarActionForId(
-    const std::string& id,
+    const std::string& action_id,
     Browser* browser,
     ToolbarActionsBar* bar) {
-  if (!vivaldi::IsVivaldiRunning()) {// See note in ToolbarActionsModel.
-  // This is currently behind the extension-action-redesign flag, as it is
-  // designed for the new toolbar.
-  DCHECK(extensions::FeatureSwitch::extension_action_redesign()->IsEnabled());
-  }
   // Add component toolbar actions here.
   // This current design means that the ComponentToolbarActionsFactory is aware
   // of all actions. Since we should *not* have an excessive amount of these
@@ -66,7 +65,7 @@ ComponentToolbarActionsFactory::GetComponentToolbarActionForId(
   // should be okay. If this changes, we should rethink this design to have,
   // e.g., RegisterChromeAction().
 #if defined(ENABLE_MEDIA_ROUTER)
-  if (id == kMediaRouterActionId)
+  if (action_id == kMediaRouterActionId)
     return std::unique_ptr<ToolbarActionViewController>(
         new MediaRouterAction(browser, bar));
 #endif  // defined(ENABLE_MEDIA_ROUTER)
@@ -75,25 +74,22 @@ ComponentToolbarActionsFactory::GetComponentToolbarActionForId(
   return std::unique_ptr<ToolbarActionViewController>();
 }
 
-// static
-void ComponentToolbarActionsFactory::SetTestingFactory(
-    ComponentToolbarActionsFactory* factory) {
-  testing_factory_ = factory;
+void ComponentToolbarActionsFactory::UnloadMigratedExtensions(
+    ExtensionService* service,
+    extensions::ExtensionRegistry* registry) {
+  // TODO(takumif): Replace the unloading of Cast and Cast Beta extensions with
+  // uninstallation.
+  UnloadExtension(service, registry, kCastExtensionId);
+  UnloadExtension(service, registry, kCastBetaExtensionId);
 }
 
-void ComponentToolbarActionsFactory::RegisterComponentMigrations(
-    extensions::ComponentMigrationHelper* helper) const {
-  helper->Register(kMediaRouterActionId, kCastExtensionId);
-  helper->Register(kMediaRouterActionId, kCastBetaExtensionId);
-}
-
-void ComponentToolbarActionsFactory::HandleComponentMigrations(
-    extensions::ComponentMigrationHelper* helper,
-    Profile* profile) const {
-  if (media_router::MediaRouterEnabled(profile)) {
-    helper->OnFeatureEnabled(kMediaRouterActionId);
-  } else {
-    helper->OnFeatureDisabled(kMediaRouterActionId);
+void ComponentToolbarActionsFactory::UnloadExtension(
+    ExtensionService* service,
+    extensions::ExtensionRegistry* registry,
+    const std::string& extension_id) {
+  if (registry->enabled_extensions().Contains(extension_id)) {
+    service->UnloadExtension(
+        extension_id,
+        extensions::UnloadedExtensionInfo::REASON_MIGRATED_TO_COMPONENT);
   }
 }
-

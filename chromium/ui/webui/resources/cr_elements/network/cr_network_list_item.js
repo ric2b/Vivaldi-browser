@@ -55,6 +55,13 @@ Polymer({
       value: -1,
       reflectToAttribute: true,
     },
+
+    /** Expose the itemName so it can be used as a label for a11y.  */
+    itemName: {
+      type: String,
+      notify: true,
+      computed: 'getItemName_(item, isListItem)',
+    }
   },
 
   behaviors: [CrPolicyNetworkBehavior],
@@ -84,13 +91,13 @@ Polymer({
    */
   getItemName_: function() {
     if (this.item.hasOwnProperty('customItemName')) {
-      let item = /** @type {!CrNetworkList.CustomItemState} */ (this.item);
-      let name = item.customItemName || '';
+      var item = /** @type {!CrNetworkList.CustomItemState} */ (this.item);
+      var name = item.customItemName || '';
       if (CrOncStrings.hasOwnProperty(item.customItemName))
         name = CrOncStrings[item.customItemName];
       return name;
     }
-    let network = /** @type {!CrOnc.NetworkStateProperties} */ (this.item);
+    var network = /** @type {!CrOnc.NetworkStateProperties} */ (this.item);
     if (this.isListItem)
       return CrOnc.getNetworkName(network);
     return CrOncStrings['OncType' + network.Type];

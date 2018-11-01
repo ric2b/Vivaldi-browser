@@ -468,7 +468,7 @@ void UsbTransferFunction::OnCompleted(UsbTransferStatus status,
     transfer_info->Set(kDataKey, base::BinaryValue::CreateWithCopiedBuffer(
                                      data->data(), length));
   } else {
-    transfer_info->Set(kDataKey, new base::BinaryValue());
+    transfer_info->Set(kDataKey, new base::Value(base::Value::Type::BINARY));
   }
 
   if (status == device::USB_TRANSFER_COMPLETED) {
@@ -731,8 +731,7 @@ ExtensionFunction::ResponseAction UsbRequestAccessFunction::Run() {
   std::unique_ptr<extensions::api::usb::RequestAccess::Params> parameters =
       RequestAccess::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
-  return RespondNow(
-      OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
+  return RespondNow(OneArgument(base::MakeUnique<base::Value>(true)));
 }
 
 UsbOpenDeviceFunction::UsbOpenDeviceFunction() {
@@ -1241,8 +1240,8 @@ void UsbIsochronousTransferFunction::OnCompleted(
   std::unique_ptr<base::DictionaryValue> transfer_info(
       new base::DictionaryValue());
   transfer_info->SetInteger(kResultCodeKey, status);
-  transfer_info->Set(kDataKey,
-                     new base::BinaryValue(std::move(buffer), length));
+  transfer_info->Set(kDataKey, new base::BinaryValue(std::vector<char>(
+                                   buffer.get(), buffer.get() + length)));
   if (status == device::USB_TRANSFER_COMPLETED) {
     Respond(OneArgument(std::move(transfer_info)));
   } else {
@@ -1278,7 +1277,7 @@ ExtensionFunction::ResponseAction UsbResetDeviceFunction::Run() {
 
 void UsbResetDeviceFunction::OnComplete(bool success) {
   if (success) {
-    Respond(OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
+    Respond(OneArgument(base::MakeUnique<base::Value>(true)));
   } else {
     scoped_refptr<UsbDeviceHandle> device_handle =
         GetDeviceHandle(parameters_->handle);

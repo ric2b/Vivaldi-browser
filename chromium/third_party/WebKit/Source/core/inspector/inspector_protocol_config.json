@@ -42,7 +42,7 @@
             },
             {
                 "domain": "IndexedDB",
-                "async": ["requestDatabaseNames", "requestDatabase", "requestData", "clearObjectStore"]
+                "async": ["requestDatabaseNames", "requestDatabase", "requestData", "clearObjectStore", "deleteDatabase"]
             },
             {
                 "domain": "LayerTree"
@@ -77,14 +77,14 @@
             {
                 "domain": "Page",
                 "exclude": ["getNavigationHistory", "navigateToHistoryEntry", "captureScreenshot", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled",
-                            "getAppManifest", "requestAppBanner", "setControlNavigations", "processNavigation"],
+                            "getAppManifest", "requestAppBanner", "setControlNavigations", "processNavigation", "printToPDF"],
                 "async": ["getResourceContent", "searchInResource"],
                 "exclude_events": ["screencastFrame", "screencastVisibilityChanged", "colorPicked", "interstitialShown", "interstitialHidden", "navigationRequested"]
             },
             {
                 "domain": "Emulation",
                 "include": ["forceViewport", "resetViewport", "resetPageScaleFactor", "setPageScaleFactor", "setScriptExecutionDisabled", "setTouchEmulationEnabled",
-                            "setEmulatedMedia", "setCPUThrottlingRate", "setVirtualTimePolicy"],
+                            "setEmulatedMedia", "setCPUThrottlingRate", "setVirtualTimePolicy", "setDefaultBackgroundColorOverride"],
                 "include_events": ["virtualTimeBudgetExpired"]
             },
             {

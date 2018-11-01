@@ -10,13 +10,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
@@ -146,6 +147,7 @@ class UI_BASE_EXPORT ResourceBundle {
   // Returns true after the global resource loader instance has been created.
   static bool HasSharedInstance();
 
+  // Initialize the ResourceBundle using data pack from given buffer.
   // Return the global resource loader instance.
   static ResourceBundle& GetSharedInstance();
 
@@ -169,6 +171,10 @@ class UI_BASE_EXPORT ResourceBundle {
   void AddDataPackFromFileRegion(base::File file,
                                  const base::MemoryMappedFile::Region& region,
                                  ScaleFactor scale_factor);
+
+  // Same as above but using contents of the given buffer.
+  void AddDataPackFromBuffer(base::StringPiece buffer,
+                             ScaleFactor scale_factor);
 
   // Same as AddDataPackFromPath but does not log an error if the pack fails to
   // load.
@@ -324,7 +330,7 @@ class UI_BASE_EXPORT ResourceBundle {
 
   // Inserts |data_pack| to |data_pack_| and updates |max_scale_factor_|
   // accordingly.
-  void AddDataPack(DataPack* data_pack);
+  void AddDataPack(std::unique_ptr<DataPack> data_pack);
 
   // Try to load the locale specific strings from an external data module.
   // Returns the locale that is loaded.
@@ -388,15 +394,12 @@ class UI_BASE_EXPORT ResourceBundle {
   // be NULL.
   Delegate* delegate_;
 
-  // Protects |images_| and font-related members.
-  std::unique_ptr<base::Lock> images_and_fonts_lock_;
-
   // Protects |locale_resources_data_|.
   std::unique_ptr<base::Lock> locale_resources_data_lock_;
 
   // Handles for data sources.
   std::unique_ptr<ResourceHandle> locale_resources_data_;
-  ScopedVector<ResourceHandle> data_packs_;
+  std::vector<std::unique_ptr<ResourceHandle>> data_packs_;
 
   // The maximum scale factor currently loaded.
   ScaleFactor max_scale_factor_;
@@ -411,7 +414,7 @@ class UI_BASE_EXPORT ResourceBundle {
   // The various font lists used, as a map from a signed size delta from the
   // platform base font size, plus style, to the FontList. Cached to avoid
   // repeated GDI creation/destruction and font derivation.
-  // Must be accessed only while holding |images_and_fonts_lock_|.
+  // Must be accessed only from UI thread.
   std::map<FontKey, gfx::FontList> font_cache_;
 
   base::FilePath overridden_pak_path_;
@@ -419,6 +422,8 @@ class UI_BASE_EXPORT ResourceBundle {
   IdToStringMap overridden_locale_strings_;
 
   bool is_test_resources_ = false;
+
+  base::SequenceChecker sequence_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceBundle);
 };

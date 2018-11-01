@@ -61,7 +61,7 @@ UI.SoftContextMenu = class {
     this.element.style.left = (this._parentMenu ? x - subMenuOverlap : x) + 'px';
 
     this._contextMenuElement.tabIndex = 0;
-    this._contextMenuElement.addEventListener('mouseup', (e) => e.consume(), false);
+    this._contextMenuElement.addEventListener('mouseup', e => e.consume(), false);
     this._contextMenuElement.addEventListener('keydown', this._menuKeyDown.bind(this), false);
 
     for (var i = 0; i < this._items.length; ++i)
@@ -82,24 +82,23 @@ UI.SoftContextMenu = class {
     }
 
     // Re-position menu in case it does not fit.
-    if (document.body.offsetWidth < this.element.offsetLeft + this.element.offsetWidth) {
-      this.element.style.left =
-          Math.max(
-              UI.Dialog.modalHostView().element.totalOffsetLeft(), this._parentMenu ?
-                  this._parentMenu.element.offsetLeft - this.element.offsetWidth + subMenuOverlap :
-                  document.body.offsetWidth - this.element.offsetWidth) +
-          'px';
+    var containerElement = UI.GlassPane.container(document);
+    var hostLeft = containerElement.totalOffsetLeft();
+    var hostRight = hostLeft + containerElement.offsetWidth;
+    if (hostRight < this.element.offsetLeft + this.element.offsetWidth) {
+      var left = this._parentMenu ? this._parentMenu.element.offsetLeft - this.element.offsetWidth + subMenuOverlap :
+                                    hostRight - this.element.offsetWidth;
+      this.element.style.left = Math.max(hostLeft, left) + 'px';
     }
 
     // Move submenus upwards if it does not fit.
     if (this._parentMenu && document.body.offsetHeight < this.element.offsetTop + this.element.offsetHeight) {
-      y = Math.max(
-          UI.Dialog.modalHostView().element.totalOffsetTop(), document.body.offsetHeight - this.element.offsetHeight);
+      y = Math.max(containerElement.totalOffsetTop(), document.body.offsetHeight - this.element.offsetHeight);
       this.element.style.top = y + 'px';
     }
 
-    var maxHeight = UI.Dialog.modalHostView().element.offsetHeight;
-    maxHeight -= y - UI.Dialog.modalHostView().element.totalOffsetTop();
+    var maxHeight = containerElement.offsetHeight;
+    maxHeight -= y - containerElement.totalOffsetTop();
     this.element.style.maxHeight = maxHeight + 'px';
 
     this._focus();
@@ -125,7 +124,8 @@ UI.SoftContextMenu = class {
       return this._createSubMenu(item);
 
     var menuItemElement = createElementWithClass('div', 'soft-context-menu-item');
-    var checkMarkElement = menuItemElement.createChild('div', 'checkmark');
+    var checkMarkElement = UI.Icon.create('smallicon-checkmark', 'checkmark');
+    menuItemElement.appendChild(checkMarkElement);
     if (!item.checked)
       checkMarkElement.style.opacity = '0';
 
@@ -157,8 +157,9 @@ UI.SoftContextMenu = class {
     menuItemElement._subItems = item.subItems;
 
     // Occupy the same space on the left in all items.
-    var checkMarkElement = menuItemElement.createChild('span', 'soft-context-menu-item-checkmark checkmark');
-    checkMarkElement.textContent = '\u2713 ';  // Checkmark Unicode symbol
+    var checkMarkElement = UI.Icon.create('smallicon-checkmark', 'soft-context-menu-item-checkmark');
+    checkMarkElement.classList.add('checkmark');
+    menuItemElement.appendChild(checkMarkElement);
     checkMarkElement.style.opacity = '0';
 
     menuItemElement.createTextChild(item.label);
@@ -258,6 +259,7 @@ UI.SoftContextMenu = class {
 
     this._hideSubMenu();
     if (this._highlightedMenuItemElement) {
+      this._highlightedMenuItemElement.classList.remove('force-white-icons');
       this._highlightedMenuItemElement.classList.remove('soft-context-menu-item-mouse-over');
       if (this._highlightedMenuItemElement._subItems && this._highlightedMenuItemElement._subMenuTimer) {
         clearTimeout(this._highlightedMenuItemElement._subMenuTimer);
@@ -266,6 +268,7 @@ UI.SoftContextMenu = class {
     }
     this._highlightedMenuItemElement = menuItemElement;
     if (this._highlightedMenuItemElement) {
+      this._highlightedMenuItemElement.classList.add('force-white-icons');
       this._highlightedMenuItemElement.classList.add('soft-context-menu-item-mouse-over');
       this._contextMenuElement.focus();
       if (scheduleSubMenu && this._highlightedMenuItemElement._subItems &&

@@ -92,6 +92,12 @@ void ExtensionAppWindowLauncherController::OnAppWindowIconChanged(
   AppControllerMap::iterator iter = app_controller_map_.find(app_shelf_id);
   if (iter == app_controller_map_.end())
     return;
+
+  // Check if the window actually overrides its default icon. Otherwise use app
+  // icon loader provided by owner.
+  if (!app_window->HasCustomIcon() || app_window->app_icon().IsEmpty())
+    return;
+
   ExtensionAppWindowLauncherItemController* controller = iter->second;
   controller->set_image_set_by_controller(true);
   owner()->SetLauncherItemImage(controller->shelf_id(),
@@ -179,9 +185,9 @@ void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
     if (shelf_id == 0) {
       shelf_id = owner()->CreateAppLauncherItem(controller, app_id, status);
       // Restore any existing app icon and flag as set.
-      const gfx::Image& app_icon = app_window->app_icon();
-      if (!app_icon.IsEmpty()) {
-        owner()->SetLauncherItemImage(shelf_id, app_icon.AsImageSkia());
+      if (app_window->HasCustomIcon() && !app_window->app_icon().IsEmpty()) {
+        owner()->SetLauncherItemImage(shelf_id,
+                                      app_window->app_icon().AsImageSkia());
         controller->set_image_set_by_controller(true);
       }
     } else {

@@ -38,7 +38,7 @@ struct DownloadSuggestionExtra {
 // Contains additional data which is only available for recent tab suggestions.
 struct RecentTabSuggestionExtra {
   // Corresponding tab identifier.
-  std::string tab_id;
+  int tab_id;
   // Underlying offline page identifier.
   int64_t offline_page_id = 0;
 };
@@ -151,6 +151,11 @@ class ContentSuggestion {
   void set_notification_extra(
       std::unique_ptr<NotificationExtra> notification_extra);
 
+  const base::Time& fetch_date() const { return fetch_date_; }
+  void set_fetch_date(const base::Time& fetch_date) {
+    fetch_date_ = fetch_date;
+  }
+
  private:
   ID id_;
   GURL url_;
@@ -162,6 +167,11 @@ class ContentSuggestion {
   std::unique_ptr<DownloadSuggestionExtra> download_suggestion_extra_;
   std::unique_ptr<RecentTabSuggestionExtra> recent_tab_suggestion_extra_;
   std::unique_ptr<NotificationExtra> notification_extra_;
+
+  // The time when the remote suggestion was fetched from the server. This field
+  // is only populated when the ContentSuggestion is created from a
+  // RemoteSuggestion.
+  base::Time fetch_date_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSuggestion);
 };

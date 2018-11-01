@@ -17,15 +17,13 @@ const char kJsScreenPath[] = "login.DeviceDisabledScreen";
 
 namespace chromeos {
 
-DeviceDisabledScreenHandler::DeviceDisabledScreenHandler()
-    : BaseScreenHandler(kJsScreenPath),
-      delegate_(NULL),
-      show_on_init_(false) {
+DeviceDisabledScreenHandler::DeviceDisabledScreenHandler() {
+  set_call_js_prefix(kJsScreenPath);
 }
 
 DeviceDisabledScreenHandler::~DeviceDisabledScreenHandler() {
   if (delegate_)
-    delegate_->OnActorDestroyed(this);
+    delegate_->OnViewDestroyed(this);
 }
 
 void DeviceDisabledScreenHandler::Show() {

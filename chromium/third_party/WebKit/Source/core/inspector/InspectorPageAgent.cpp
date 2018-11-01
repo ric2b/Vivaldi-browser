@@ -36,9 +36,6 @@
 #include "core/HTMLNames.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/Document.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/Resource.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -62,6 +59,9 @@
 #include "core/loader/resource/ScriptResource.h"
 #include "platform/PlatformResourceLoader.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/Resource.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/CurrentTime.h"
@@ -452,7 +452,9 @@ Response InspectorPageAgent::reload(
   return Response::OK();
 }
 
-Response InspectorPageAgent::navigate(const String& url, String* outFrameId) {
+Response InspectorPageAgent::navigate(const String& url,
+                                      Maybe<String> referrer,
+                                      String* outFrameId) {
   *outFrameId = frameId(m_inspectedFrames->root());
   return Response::OK();
 }
@@ -678,7 +680,7 @@ bool InspectorPageAgent::screencastEnabled() {
          m_state->booleanProperty(PageAgentState::screencastEnabled, false);
 }
 
-void InspectorPageAgent::frameStartedLoading(LocalFrame* frame) {
+void InspectorPageAgent::frameStartedLoading(LocalFrame* frame, FrameLoadType) {
   frontend()->frameStartedLoading(frameId(frame));
 }
 
@@ -723,7 +725,9 @@ void InspectorPageAgent::didResizeMainFrame() {
   frontend()->frameResized();
 }
 
-void InspectorPageAgent::didRecalculateStyle() {
+void InspectorPageAgent::will(const probe::RecalculateStyle&) {}
+
+void InspectorPageAgent::did(const probe::RecalculateStyle&) {
   if (m_enabled && m_client)
     m_client->pageLayoutInvalidated(false);
 }
@@ -780,7 +784,7 @@ InspectorPageAgent::buildObjectForFrameTree(LocalFrame* frame) {
             .build();
     if (cachedResource->wasCanceled())
       resourceObject->setCanceled(true);
-    else if (cachedResource->getStatus() == Resource::LoadError)
+    else if (cachedResource->getStatus() == ResourceStatus::LoadError)
       resourceObject->setFailed(true);
     subresources->addItem(std::move(resourceObject));
   }
@@ -846,7 +850,8 @@ Response InspectorPageAgent::configureOverlay(Maybe<bool> suspended,
 
 Response InspectorPageAgent::getLayoutMetrics(
     std::unique_ptr<protocol::Page::LayoutViewport>* outLayoutViewport,
-    std::unique_ptr<protocol::Page::VisualViewport>* outVisualViewport) {
+    std::unique_ptr<protocol::Page::VisualViewport>* outVisualViewport,
+    std::unique_ptr<protocol::DOM::Rect>* outContentSize) {
   LocalFrame* mainFrame = m_inspectedFrames->root();
   VisualViewport& visualViewport = mainFrame->host()->visualViewport();
 
@@ -867,6 +872,14 @@ Response InspectorPageAgent::getLayoutMetrics(
   float scale = visualViewport.scale();
   float scrollbarWidth = frameView->verticalScrollbarWidth() / scale;
   float scrollbarHeight = frameView->horizontalScrollbarHeight() / scale;
+
+  IntSize contentSize = frameView->getScrollableArea()->contentsSize();
+  *outContentSize = protocol::DOM::Rect::create()
+                        .setX(0)
+                        .setY(0)
+                        .setWidth(contentSize.width())
+                        .setHeight(contentSize.height())
+                        .build();
 
   *outVisualViewport =
       protocol::Page::VisualViewport::create()

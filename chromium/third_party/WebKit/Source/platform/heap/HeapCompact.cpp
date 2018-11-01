@@ -37,7 +37,7 @@ class HeapCompact::MovableObjectFixups final {
   // can move (independently from the reference the slot points to.)
   void addCompactingPage(BasePage* page) {
     DCHECK(!page->isLargeObjectPage());
-    m_relocatablePages.add(page);
+    m_relocatablePages.insert(page);
   }
 
   void addInteriorFixup(MovableReference* slot) {
@@ -47,7 +47,7 @@ class HeapCompact::MovableObjectFixups final {
       DCHECK(!it->value);
       return;
     }
-    m_interiorFixups.add(slot, nullptr);
+    m_interiorFixups.insert(slot, nullptr);
     LOG_HEAP_COMPACTION("Interior slot: %p\n", slot);
     Address slotAddress = reinterpret_cast<Address>(slot);
     if (!m_interiors) {
@@ -75,7 +75,7 @@ class HeapCompact::MovableObjectFixups final {
     // isCompactingArena() would be appropriate here, leaving early if
     // |refPage|'s arena isn't in the set.
 
-    m_fixups.add(reference, slot);
+    m_fixups.insert(reference, slot);
 
     // Note: |slot| will reside outside the Oilpan heap if it is a
     // PersistentHeapCollectionBase. Hence pageFromObject() cannot be
@@ -83,11 +83,11 @@ class HeapCompact::MovableObjectFixups final {
     // derive the raw BasePage address here and check if it is a member
     // of the compactable and relocatable page address set.
     Address slotAddress = reinterpret_cast<Address>(slot);
-    BasePage* slotPage = reinterpret_cast<BasePage*>(
-        blinkPageAddress(slotAddress) + blinkGuardPageSize);
-    if (LIKELY(!m_relocatablePages.contains(slotPage)))
+    void* slotPageAddress = blinkPageAddress(slotAddress) + blinkGuardPageSize;
+    if (LIKELY(!m_relocatablePages.contains(slotPageAddress)))
       return;
 #if DCHECK_IS_ON()
+    BasePage* slotPage = reinterpret_cast<BasePage*>(slotPageAddress);
     DCHECK(slotPage->contains(slotAddress));
 #endif
     // Unlikely case, the slot resides on a compacting arena's page.
@@ -107,8 +107,8 @@ class HeapCompact::MovableObjectFixups final {
                         MovingObjectCallback callback,
                         void* callbackData) {
     DCHECK(!m_fixupCallbacks.contains(reference));
-    m_fixupCallbacks.add(reference, std::pair<void*, MovingObjectCallback>(
-                                        callbackData, callback));
+    m_fixupCallbacks.insert(reference, std::pair<void*, MovingObjectCallback>(
+                                           callbackData, callback));
   }
 
   void relocateInteriorFixups(Address from, Address to, size_t size) {
@@ -244,8 +244,10 @@ class HeapCompact::MovableObjectFixups final {
   // Slot => relocated slot/final location.
   HashMap<MovableReference*, Address> m_interiorFixups;
 
-  // All pages that are being compacted.
-  HashSet<BasePage*> m_relocatablePages;
+  // All pages that are being compacted. The set keeps references to
+  // BasePage instances. The void* type was selected to allow to check
+  // arbitrary addresses.
+  HashSet<void*> m_relocatablePages;
 
   std::unique_ptr<SparseHeapBitmap> m_interiors;
 };
@@ -301,18 +303,12 @@ bool HeapCompact::shouldCompact(ThreadState* state,
       reason != BlinkGC::ForcedGC)
     return false;
 
-  const ThreadHeap& heap = state->heap();
-  // If any of the participating threads require a stack scan,
-  // do not compact.
-  //
+  // If the GCing thread requires a stack scan, do not compact.
   // Why? Should the stack contain an iterator pointing into its
   // associated backing store, its references wouldn't be
   // correctly relocated.
-  for (ThreadState* state : heap.threads()) {
-    if (state->stackState() == BlinkGC::HeapPointersOnStack) {
-      return false;
-    }
-  }
+  if (state->stackState() == BlinkGC::HeapPointersOnStack)
+    return false;
 
   // Compaction enable rules:
   //  - It's been a while since the last time.

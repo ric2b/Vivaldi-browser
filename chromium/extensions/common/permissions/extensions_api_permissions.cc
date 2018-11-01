@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -13,7 +14,7 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/socket_permission.h"
 #include "extensions/common/permissions/usb_device_permission.h"
-#include "grit/extensions_strings.h"
+#include "extensions/strings/grit/extensions_strings.h"
 
 namespace extensions {
 
@@ -88,6 +89,7 @@ ExtensionsAPIPermissions::GetAllPermissions() const {
       {APIPermission::kUsbDevice, "usbDevices", APIPermissionInfo::kFlagNone,
        &CreateAPIPermission<UsbDevicePermission>},
       {APIPermission::kVideoCapture, "videoCapture"},
+      {APIPermission::kVirtualKeyboard, "virtualKeyboard"},
       {APIPermission::kVpnProvider, "vpnProvider",
        APIPermissionInfo::kFlagCannotBeOptional},
       // NOTE(kalman): This is provided by a manifest property but needs to

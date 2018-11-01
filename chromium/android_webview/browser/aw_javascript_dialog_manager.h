@@ -18,7 +18,7 @@ class AwJavaScriptDialogManager : public content::JavaScriptDialogManager {
   // Overridden from content::JavaScriptDialogManager:
   void RunJavaScriptDialog(content::WebContents* web_contents,
                            const GURL& origin_url,
-                           content::JavaScriptMessageType message_type,
+                           content::JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
                            const DialogClosedCallback& callback,
@@ -27,7 +27,6 @@ class AwJavaScriptDialogManager : public content::JavaScriptDialogManager {
                              bool is_reload,
                              const DialogClosedCallback& callback) override;
   void CancelDialogs(content::WebContents* web_contents,
-                     bool suppress_callbacks,
                      bool reset_state) override;
 
  private:

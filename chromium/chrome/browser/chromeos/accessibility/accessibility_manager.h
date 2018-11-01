@@ -8,7 +8,6 @@
 #include <set>
 
 #include "ash/common/accessibility_types.h"
-#include "ash/common/session/session_state_observer.h"
 #include "ash/common/shell_observer.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
@@ -21,6 +20,7 @@
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/session_manager/core/session_manager_observer.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/event_router.h"
@@ -29,11 +29,16 @@
 
 class Profile;
 
+namespace gfx {
+class Rect;
+}  // namespace gfx
+
 namespace chromeos {
 
 class AccessibilityExtensionLoader;
 class AccessibilityHighlightManager;
 class SelectToSpeakEventHandler;
+class SwitchAccessEventHandler;
 
 enum AccessibilityNotificationType {
   ACCESSIBILITY_MANAGER_SHUTDOWN,
@@ -89,7 +94,7 @@ class AccessibilityManager
     : public content::NotificationObserver,
       public extensions::api::braille_display_private::BrailleObserver,
       public extensions::ExtensionRegistryObserver,
-      public ash::SessionStateObserver,
+      public user_manager::UserManager::UserSessionStateObserver,
       public session_manager::SessionManagerObserver,
       public ash::ShellObserver,
       public input_method::InputMethodManager::Observer {
@@ -214,11 +219,10 @@ class AccessibilityManager
   // false.
   bool IsBrailleDisplayConnected() const;
 
-  // SessionStateObserver overrides:
-  void ActiveUserChanged(const AccountId& account_id) override;
+  // user_manager::UserManager::UserSessionStateObserver overrides:
+  void ActiveUserChanged(const user_manager::User* active_user) override;
 
   // ShellObserver overrides:
-  void OnAppTerminating() override;
   void OnFullscreenStateChanged(bool is_fullscreen,
                                 ash::WmWindow* root_window) override;
 
@@ -251,6 +255,9 @@ class AccessibilityManager
 
   // Play tick sound indicating spoken feedback will be toggled after countdown.
   bool PlaySpokenFeedbackToggleCountdown(int tick_count);
+
+  // Notify that a view is focused in arc.
+  void OnViewFocusedInArc(const gfx::Rect& bounds_in_screen);
 
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // when their mapped event has occurred. The sound key enums can be found in
@@ -354,7 +361,8 @@ class AccessibilityManager
   content::NotificationRegistrar notification_registrar_;
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
   std::unique_ptr<PrefChangeRegistrar> local_state_pref_change_registrar_;
-  std::unique_ptr<ash::ScopedSessionStateObserver> session_state_observer_;
+  std::unique_ptr<user_manager::ScopedUserSessionStateObserver>
+      session_state_observer_;
 
   PrefHandler large_cursor_pref_handler_;
   PrefHandler spoken_feedback_pref_handler_;
@@ -370,6 +378,7 @@ class AccessibilityManager
   PrefHandler switch_access_pref_handler_;
 
   bool large_cursor_enabled_;
+  int large_cursor_size_in_dip_;
   bool sticky_keys_enabled_;
   bool spoken_feedback_enabled_;
   bool high_contrast_enabled_;
@@ -416,6 +425,11 @@ class AccessibilityManager
 
   std::unique_ptr<chromeos::SelectToSpeakEventHandler>
       select_to_speak_event_handler_;
+
+  std::unique_ptr<AccessibilityExtensionLoader> switch_access_loader_;
+
+  std::unique_ptr<chromeos::SwitchAccessEventHandler>
+      switch_access_event_handler_;
 
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_;
 

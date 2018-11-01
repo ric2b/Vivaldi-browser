@@ -16,6 +16,8 @@ namespace content {
 // to cancel load with any other error code.
 class CONTENT_EXPORT ResourceController {
  public:
+  virtual ~ResourceController() {}
+
   virtual void Cancel() = 0;
   virtual void CancelAndIgnore() = 0;
   virtual void CancelWithError(int error_code) = 0;
@@ -27,11 +29,8 @@ class CONTENT_EXPORT ResourceController {
    * if we add new subclasses, chromium will still use the abstract definition.
    */
   virtual void Resume();
-  virtual void Resume(bool open_when_done,
+  virtual void ResumeParam(bool open_when_done,
                       bool ask_for_target=false);
-
- protected:
-  virtual ~ResourceController() {}
 };
 
 }  // namespace content

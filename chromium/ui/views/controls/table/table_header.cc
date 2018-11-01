@@ -6,8 +6,8 @@
 
 #include <stddef.h>
 
+#include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/canvas.h"
@@ -33,11 +33,6 @@ const int kResizePadding = 5;
 // Amount of space above/below the separator.
 const int kSeparatorPadding = 4;
 
-const SkColor kTextColor = SK_ColorBLACK;
-const SkColor kBackgroundColor1 = SkColorSetRGB(0xF9, 0xF9, 0xF9);
-const SkColor kBackgroundColor2 = SkColorSetRGB(0xE8, 0xE8, 0xE8);
-const SkColor kSeparatorColor = SkColorSetRGB(0xAA, 0xAA, 0xAA);
-
 // Size of the sort indicator (doesn't include padding).
 const int kSortIndicatorSize = 8;
 
@@ -53,26 +48,27 @@ const int TableHeader::kSortIndicatorWidth = kSortIndicatorSize +
 
 typedef std::vector<TableView::VisibleColumn> Columns;
 
-TableHeader::TableHeader(TableView* table) : table_(table) {
-  set_background(Background::CreateVerticalGradientBackground(
-                     kBackgroundColor1, kBackgroundColor2));
-}
+TableHeader::TableHeader(TableView* table) : table_(table) {}
 
-TableHeader::~TableHeader() {
-}
+TableHeader::~TableHeader() {}
 
 void TableHeader::Layout() {
   SetBounds(x(), y(), table_->width(), GetPreferredSize().height());
 }
 
 void TableHeader::OnPaint(gfx::Canvas* canvas) {
+  ui::NativeTheme* theme = GetNativeTheme();
+  const SkColor text_color =
+      theme->GetSystemColor(ui::NativeTheme::kColorId_TableHeaderText);
+  const SkColor separator_color =
+      theme->GetSystemColor(ui::NativeTheme::kColorId_TableHeaderSeparator);
   // Paint the background and a separator at the bottom. The separator color
   // matches that of the border around the scrollview.
   OnPaintBackground(canvas);
-  SkColor border_color = GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_UnfocusedBorderColor);
-  canvas->DrawLine(gfx::Point(0, height() - 1),
-                   gfx::Point(width(), height() - 1), border_color);
+  SkColor border_color =
+      theme->GetSystemColor(ui::NativeTheme::kColorId_UnfocusedBorderColor);
+  canvas->DrawSharpLine(gfx::PointF(0, height() - 1),
+                        gfx::PointF(width(), height() - 1), border_color);
 
   const Columns& columns = table_->visible_columns();
   const int sorted_column_id = table_->sort_descriptors().empty() ? -1 :
@@ -81,9 +77,10 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
     if (columns[i].width >= 2) {
       const int separator_x = GetMirroredXInView(
           columns[i].x + columns[i].width - 1);
-      canvas->DrawLine(gfx::Point(separator_x, kSeparatorPadding),
-                       gfx::Point(separator_x, height() - kSeparatorPadding),
-                       kSeparatorColor);
+      canvas->DrawSharpLine(
+          gfx::PointF(separator_x, kSeparatorPadding),
+          gfx::PointF(separator_x, height() - kSeparatorPadding),
+          separator_color);
     }
 
     const int x = columns[i].x + kHorizontalPadding;
@@ -103,16 +100,16 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
     }
 
     canvas->DrawStringRectWithFlags(
-        columns[i].column.title, font_list_, kTextColor,
+        columns[i].column.title, font_list_, text_color,
         gfx::Rect(GetMirroredXWithWidthInView(x, width), kVerticalPadding,
                   width, height() - kVerticalPadding * 2),
         TableColumnAlignmentToCanvasAlignment(columns[i].column.alignment));
 
     if (paint_sort_indicator) {
-      SkPaint paint;
-      paint.setColor(kTextColor);
-      paint.setStyle(SkPaint::kFill_Style);
-      paint.setAntiAlias(true);
+      cc::PaintFlags flags;
+      flags.setColor(text_color);
+      flags.setStyle(cc::PaintFlags::kFill_Style);
+      flags.setAntiAlias(true);
 
       int indicator_x = 0;
       ui::TableColumn::Alignment alignment = columns[i].column.alignment;
@@ -160,7 +157,7 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
             SkIntToScalar(indicator_y + kSortIndicatorSize));
       }
       indicator_path.close();
-      canvas->DrawPath(indicator_path, paint);
+      canvas->DrawPath(indicator_path, flags);
     }
   }
 }
@@ -227,6 +224,11 @@ void TableHeader::OnGestureEvent(ui::GestureEvent* event) {
       return;
   }
   event->SetHandled();
+}
+
+void TableHeader::OnNativeThemeChanged(const ui::NativeTheme* theme) {
+  set_background(Background::CreateSolidBackground(
+      theme->GetSystemColor(ui::NativeTheme::kColorId_TableHeaderBackground)));
 }
 
 bool TableHeader::StartResize(const ui::LocatedEvent& event) {

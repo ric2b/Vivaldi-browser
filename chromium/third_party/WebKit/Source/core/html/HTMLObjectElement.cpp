@@ -33,15 +33,15 @@
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/HTMLMetaElement.h"
 #include "core/html/HTMLParamElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/api/LayoutEmbeddedItem.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/plugins/PluginView.h"
-#include "platform/Widget.h"
+#include "platform/FrameViewBase.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 
 namespace blink {
@@ -162,7 +162,7 @@ void HTMLObjectElement::parametersForPlugin(Vector<String>& paramNames,
     if (name.isEmpty())
       continue;
 
-    uniqueParamNames.add(name.impl());
+    uniqueParamNames.insert(name.impl());
     paramNames.push_back(p->name());
     paramValues.push_back(p->value());
 
@@ -191,7 +191,7 @@ void HTMLObjectElement::parametersForPlugin(Vector<String>& paramNames,
   String codebase;
   if (MIMETypeRegistry::isJavaAppletMIMEType(serviceType)) {
     codebase = "codebase";
-    uniqueParamNames.add(
+    uniqueParamNames.insert(
         codebase.impl());  // pretend we found it in a PARAM already
   }
 
@@ -387,7 +387,7 @@ void HTMLObjectElement::renderFallbackContent() {
   // Before we give up and use fallback content, check to see if this is a MIME
   // type issue.
   if (m_imageLoader && m_imageLoader->image() &&
-      m_imageLoader->image()->getStatus() != Resource::LoadError) {
+      m_imageLoader->image()->getStatus() != ResourceStatus::LoadError) {
     m_serviceType = m_imageLoader->image()->response().mimeType();
     if (!isImageType()) {
       // If we don't think we have an image type anymore, then clear the image

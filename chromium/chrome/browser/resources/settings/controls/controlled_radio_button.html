@@ -1,9 +1,9 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-radio-button/paper-radio-button.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
-<link rel="import" href="/controls/pref_control_behavior.html">
-<link rel="import" href="/prefs/pref_util.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="pref_control_behavior.html">
+<link rel="import" href="../prefs/pref_util.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="controlled-radio-button">
   <template>
@@ -37,11 +37,11 @@
       <content></content>
     </paper-radio-button>
 
-    <template is="dom-if" if="[[showIndicator_(controlled_, name, pref)]]">
+    <template is="dom-if" if="[[showIndicator_(controlled_, name, pref.*)]]">
       <cr-policy-pref-indicator pref="[[pref]]" on-tap="onIndicatorTap_">
       </cr-policy-pref-indicator>
     </template>
 
   </template>
-  <script src="/controls/controlled_radio_button.js"></script>
+  <script src="controlled_radio_button.js"></script>
 </dom-module>

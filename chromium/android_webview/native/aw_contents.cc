@@ -27,6 +27,7 @@
 #include "android_webview/native/aw_gl_functor.h"
 #include "android_webview/native/aw_pdf_exporter.h"
 #include "android_webview/native/aw_picture.h"
+#include "android_webview/native/aw_renderer_priority_manager.h"
 #include "android_webview/native/aw_web_contents_delegate.h"
 #include "android_webview/native/java_browser_view_renderer_helper.h"
 #include "android_webview/native/permission/aw_permission_request.h"
@@ -55,7 +56,6 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#include "content/public/browser/android/app_web_message_port_service.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/browser_thread.h"
@@ -67,6 +67,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
@@ -79,7 +81,6 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
-
 struct AwDrawSWFunctionTable;
 
 using autofill::ContentAutofillDriverFactory;
@@ -112,6 +113,8 @@ std::string g_locale;
 std::string g_locale_list;
 
 const void* kAwContentsUserDataKey = &kAwContentsUserDataKey;
+const void* kComputedRendererPriorityUserDataKey =
+    &kComputedRendererPriorityUserDataKey;
 
 class AwContentsUserData : public base::SupportsUserData::Data {
  public:
@@ -199,7 +202,10 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
           this,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
       web_contents_(std::move(web_contents)),
-      renderer_manager_key_(GLViewRendererManager::GetInstance()->NullKey()) {
+      renderer_manager_key_(GLViewRendererManager::GetInstance()->NullKey()),
+      renderer_requested_priority_(
+          AwRendererPriorityManager::RENDERER_PRIORITY_HIGH),
+      renderer_priority_waived_when_not_visible_(false) {
   base::subtle::NoBarrier_AtomicIncrement(&g_instance_count, 1);
   icon_helper_.reset(new IconHelper(web_contents_.get()));
   icon_helper_->SetListener(this);
@@ -228,6 +234,8 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
     InitAutofillIfNecessary(autofill_manager_delegate->GetSaveFormData());
   content::SynchronousCompositor::SetClientForWebContents(
       web_contents_.get(), &browser_view_renderer_);
+  UpdateRendererPriority();
+  web_contents_->GetRenderProcessHost()->AddObserver(this);
   AwContentsLifecycleNotifier::OnWebViewCreated();
 }
 
@@ -307,6 +315,8 @@ void AwContents::SetAwAutofillClient(const JavaRef<jobject>& client) {
 
 AwContents::~AwContents() {
   DCHECK_EQ(this, AwContents::FromWebContents(web_contents_.get()));
+  web_contents_->GetRenderProcessHost()->RemoveObserver(this);
+  UpdateRendererPriority(AwRendererPriorityManager::RENDERER_PRIORITY_WAIVED);
   web_contents_->RemoveUserData(kAwContentsUserDataKey);
   if (find_helper_.get())
     find_helper_->SetListener(NULL);
@@ -709,6 +719,12 @@ void AwContents::ClearCache(JNIEnv* env,
     RemoveHttpDiskCache(web_contents_->GetRenderProcessHost());
 }
 
+void AwContents::KillRenderProcess(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  render_view_host_ext_->KillRenderProcess();
+}
+
 FindHelper* AwContents::GetFindHelper() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!find_helper_.get()) {
@@ -859,6 +875,7 @@ void AwContents::SetViewVisibility(JNIEnv* env,
                                    bool visible) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.SetViewVisibility(visible);
+  UpdateRendererPriority();
 }
 
 void AwContents::SetWindowVisibility(JNIEnv* env,
@@ -866,6 +883,7 @@ void AwContents::SetWindowVisibility(JNIEnv* env,
                                      bool visible) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.SetWindowVisibility(visible);
+  UpdateRendererPriority();
 }
 
 void AwContents::SetIsPaused(JNIEnv* env,
@@ -873,6 +891,7 @@ void AwContents::SetIsPaused(JNIEnv* env,
                              bool paused) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.SetIsPaused(paused);
+  UpdateRendererPriority();
 }
 
 void AwContents::OnAttachedToWindow(JNIEnv* env,
@@ -881,12 +900,14 @@ void AwContents::OnAttachedToWindow(JNIEnv* env,
                                     int h) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.OnAttachedToWindow(w, h);
+  UpdateRendererPriority();
 }
 
 void AwContents::OnDetachedFromWindow(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.OnDetachedFromWindow();
+  UpdateRendererPriority();
 }
 
 bool AwContents::IsVisible(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -1173,6 +1194,93 @@ void AwContents::InsertVisualStateCallback(
                  ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
+void AwContents::UpdateRendererPriority(
+    AwRendererPriorityManager::RendererPriority base_priority) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  content::RenderProcessHost* rph = web_contents_->GetRenderProcessHost();
+  AwRendererPriorityManager::RendererPriority computed_priority = base_priority;
+
+  std::unique_ptr<content::RenderWidgetHostIterator> widgets(
+      content::RenderWidgetHost::GetRenderWidgetHosts());
+  content::RenderWidgetHost* widget;
+  while ((widget = widgets->GetNextHost()) != nullptr &&
+         computed_priority <
+             AwRendererPriorityManager::RENDERER_PRIORITY_HIGH) {
+    content::RenderViewHost* view = content::RenderViewHost::From(widget);
+    if (view && rph == view->GetProcess()) {
+      content::WebContents* wc = content::WebContents::FromRenderViewHost(view);
+      if (wc && wc != web_contents_.get()) {
+        AwContents* aw_contents = FromWebContents(wc);
+        if (aw_contents) {
+          computed_priority = std::max(
+              aw_contents->GetComputedRendererPriority(), computed_priority);
+        }
+      }
+    }
+  }
+  GetAwRendererPriorityManager()->SetRendererPriority(computed_priority);
+}
+
+AwRendererPriorityManager::RendererPriority
+AwContents::GetComputedRendererPriority() {
+  if (renderer_priority_waived_when_not_visible_ &&
+      !browser_view_renderer_.IsClientVisible()) {
+    return AwRendererPriorityManager::RENDERER_PRIORITY_WAIVED;
+  }
+  return renderer_requested_priority_;
+}
+
+void AwContents::UpdateRendererPriority() {
+  UpdateRendererPriority(GetComputedRendererPriority());
+}
+
+AwRendererPriorityManager* AwContents::GetAwRendererPriorityManager() {
+  content::RenderProcessHost* rph = web_contents_->GetRenderProcessHost();
+  AwRendererPriorityManager* manager = static_cast<AwRendererPriorityManager*>(
+      rph->GetUserData(kComputedRendererPriorityUserDataKey));
+  if (manager == nullptr) {
+    rph->SetUserData(kComputedRendererPriorityUserDataKey,
+                     manager = new AwRendererPriorityManager(rph));
+  }
+  return manager;
+}
+
+AwRendererPriorityManager::RendererPriority
+AwContents::GetCurrentRendererPriority() {
+  return GetAwRendererPriorityManager()->GetRendererPriority();
+}
+
+jint AwContents::GetRendererCurrentPriority(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return GetCurrentRendererPriority();
+}
+
+jint AwContents::GetRendererRequestedPriority(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return renderer_requested_priority_;
+}
+
+jboolean AwContents::GetRendererPriorityWaivedWhenNotVisible(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return renderer_priority_waived_when_not_visible_;
+}
+
+void AwContents::SetRendererPriorityPolicy(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint renderer_requested_priority,
+    jboolean renderer_priority_waived_when_not_visible) {
+  renderer_requested_priority_ =
+      static_cast<AwRendererPriorityManager::RendererPriority>(
+          renderer_requested_priority);
+  renderer_priority_waived_when_not_visible_ =
+      renderer_priority_waived_when_not_visible;
+  UpdateRendererPriority(renderer_requested_priority_);
+}
+
 void AwContents::ClearView(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.ClearView();
@@ -1233,28 +1341,14 @@ void AwContents::PostMessageToFrame(JNIEnv* env,
                                     const JavaParamRef<jstring>& frame_name,
                                     const JavaParamRef<jstring>& message,
                                     const JavaParamRef<jstring>& target_origin,
-                                    const JavaParamRef<jintArray>& sent_ports) {
+                                    const JavaParamRef<jobjectArray>& ports) {
   // Use an empty source origin for android webview.
-  base::string16 source_origin;
-  base::string16 j_target_origin(ConvertJavaStringToUTF16(env, target_origin));
-  base::string16 j_message(ConvertJavaStringToUTF16(env, message));
-  std::vector<int> j_ports;
-
-  if (sent_ports != nullptr)
-    base::android::JavaIntArrayToIntVector(env, sent_ports, &j_ports);
-
   content::MessagePortProvider::PostMessageToFrame(web_contents_.get(),
-                                                   source_origin,
-                                                   j_target_origin,
-                                                   j_message,
-                                                   j_ports);
-}
-
-void AwContents::CreateMessageChannel(JNIEnv* env,
-                                      const JavaParamRef<jobject>& obj,
-                                      const JavaParamRef<jobjectArray>& ports) {
-  content::MessagePortProvider::GetAppWebMessagePortService()
-      ->CreateMessageChannel(env, ports, web_contents_.get());
+                                                   env,
+                                                   nullptr,
+                                                   target_origin,
+                                                   message,
+                                                   ports);
 }
 
 void AwContents::GrantFileSchemeAccesstoChildProcess(
@@ -1321,6 +1415,20 @@ bool AwContents::CanShowInterstitial() {
   return Java_AwContents_canShowInterstitial(env, obj);
 }
 
+void AwContents::CallProceedOnInterstitialForTesting(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  DCHECK(web_contents_->GetInterstitialPage());
+  web_contents_->GetInterstitialPage()->Proceed();
+}
+
+void AwContents::CallDontProceedOnInterstitialForTesting(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  DCHECK(web_contents_->GetInterstitialPage());
+  web_contents_->GetInterstitialPage()->DontProceed();
+}
+
 void AwContents::OnRenderProcessGone(int child_process_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
@@ -1341,6 +1449,10 @@ bool AwContents::OnRenderProcessGoneDetail(int child_process_id,
 
   return Java_AwContents_onRenderProcessGoneDetail(env, obj,
       child_process_id, crashed);
+}
+
+void AwContents::RenderProcessReady(content::RenderProcessHost* host) {
+  UpdateRendererPriority();
 }
 
 }  // namespace android_webview

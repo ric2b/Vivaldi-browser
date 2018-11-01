@@ -252,7 +252,7 @@ void AnimationPlayer::PushPropertiesTo(AnimationPlayer* player_impl) {
     return;
 
   MarkAbortedAnimationsForDeletion(player_impl);
-  PurgeAnimationsMarkedForDeletion();
+  PurgeAnimationsMarkedForDeletion(/* impl_only */ false);
   PushNewAnimationsToImplThread(player_impl);
 
   // Remove finished impl side animations only after pushing,
@@ -297,6 +297,7 @@ void AnimationPlayer::UpdateState(bool start_ready_animations,
 
   MarkFinishedAnimations(last_tick_time_);
   MarkAnimationsForDeletion(last_tick_time_, events);
+  PurgeAnimationsMarkedForDeletion(/* impl_only */ true);
 
   if (start_ready_animations) {
     if (needs_to_start_animations()) {
@@ -329,6 +330,7 @@ void AnimationPlayer::RemoveFromTicking() {
   DCHECK(animation_host_);
   // Resetting last_tick_time_ here ensures that calling ::UpdateState
   // before ::Animate doesn't start an animation.
+  is_ticking_ = false;
   last_tick_time_ = base::TimeTicks();
   animation_host_->RemoveFromTicking(this);
 }
@@ -1098,12 +1100,13 @@ void AnimationPlayer::MarkAbortedAnimationsForDeletion(
     element_animations_->SetNeedsUpdateImplClientState();
 }
 
-void AnimationPlayer::PurgeAnimationsMarkedForDeletion() {
+void AnimationPlayer::PurgeAnimationsMarkedForDeletion(bool impl_only) {
   animations_.erase(
       std::remove_if(animations_.begin(), animations_.end(),
-                     [](const std::unique_ptr<Animation>& animation) {
+                     [impl_only](const std::unique_ptr<Animation>& animation) {
                        return animation->run_state() ==
-                              Animation::WAITING_FOR_DELETION;
+                              Animation::WAITING_FOR_DELETION &&
+                              (!impl_only || animation->is_impl_only());
                      }),
       animations_.end());
 }

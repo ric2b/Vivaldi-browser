@@ -223,6 +223,8 @@
     <dimen name="webapp_splash_small_title_margin_top">32dp</dimen>
     <dimen name="webapp_splash_large_title_margin_bottom">16dp</dimen>
 
+    <dimen name="webapk_badge_icon_size">24dp</dimen>
+
     <!-- Toolbar dimensions -->
     <dimen name="toolbar_tab_count_text_size_1_digit">12dp</dimen>
     <dimen name="toolbar_tab_count_text_size_2_digit">10dp</dimen>
@@ -232,6 +234,10 @@
     <dimen name="toolbar_button_width">48dp</dimen>
 
     <dimen name="toolbar_edge_padding">8dp</dimen>
+    <dimen name="location_bar_google_g_width">24dp</dimen>
+    <dimen name="location_bar_google_g_margin">8dp</dimen>
+    <!-- location_bar_google_g_width + 2 * location_bar_google_g_margin -->
+    <dimen name="location_bar_google_g_container_width">40dp</dimen>
     <dimen name="location_bar_vertical_margin">8dp</dimen>
     <dimen name="location_bar_url_text_size">16sp</dimen>
     <dimen name="location_bar_incognito_badge_padding">7dp</dimen>
@@ -261,17 +267,22 @@
     <dimen name="omnibox_suggestion_multiline_text_vertical_padding">10dp</dimen>
 
     <!-- NTP dimensions -->
-    <dimen name="most_visited_bg_corner_radius">2dp</dimen>
-    <dimen name="most_visited_layout_max_width">504dp</dimen>
-    <dimen name="most_visited_layout_padding_top">8dp</dimen>
-    <dimen name="most_visited_layout_no_logo_padding_top">20dp</dimen>
-    <dimen name="most_visited_layout_bleed">8dp</dimen>
-    <dimen name="most_visited_vertical_spacing">3dp</dimen>
-    <dimen name="most_visited_min_horizontal_spacing">4dp</dimen>
-    <dimen name="most_visited_max_horizontal_spacing">16dp</dimen>
-    <dimen name="most_visited_tile_width">80dp</dimen>
-    <dimen name="most_visited_icon_size">48dp</dimen>
-    <dimen name="most_visited_offline_badge_size">24dp</dimen>
+    <dimen name="tile_grid_layout_max_width">504dp</dimen>
+    <dimen name="tile_grid_layout_padding_top">8dp</dimen>
+    <dimen name="tile_grid_layout_no_logo_padding_top">20dp</dimen>
+    <dimen name="tile_grid_layout_bleed">8dp</dimen>
+    <dimen name="tile_grid_layout_vertical_spacing">3dp</dimen>
+    <dimen name="tile_grid_layout_min_horizontal_spacing">4dp</dimen>
+    <dimen name="tile_grid_layout_max_horizontal_spacing">16dp</dimen>
+    <dimen name="tile_view_bg_corner_radius">2dp</dimen>
+    <dimen name="tile_view_width">80dp</dimen>
+    <dimen name="tile_view_width_condensed">64dp</dimen>
+    <dimen name="tile_view_icon_size">48dp</dimen>
+    <dimen name="tile_view_icon_margin_top">12dp</dimen>
+    <dimen name="tile_view_icon_margin_top_condensed">8dp</dimen>
+    <dimen name="tile_view_offline_badge_size">24dp</dimen>
+    <dimen name="tile_view_title_margin_top">66dp</dimen>
+    <dimen name="tile_view_title_margin_top_condensed">62dp</dimen>
     <dimen name="ntp_logo_height">116dp</dimen>
     <dimen name="ntp_search_box_height">62dp</dimen>
     <dimen name="ntp_search_box_shadow_width">4dp</dimen>
@@ -283,6 +294,7 @@
     <dimen name="ntp_sign_in_promo_margin_top">20dp</dimen>
     <dimen name="ntp_progress_indicator_diameter">56dp</dimen>
     <dimen name="snippets_thumbnail_size">72dp</dimen>
+    <dimen name="snippets_thumbnail_margin">16dp</dimen>
     <!-- The default padding for the peeking card and the amount the card peeks by in the current
          peeking card animation (the calculations assume this is the same). -->
     <dimen name="snippets_padding">16dp</dimen>
@@ -290,7 +302,6 @@
          (https://crbug.com/660837). -->
     <dimen name="snippets_peeking_card_peek_amount">32dp</dimen>
     <dimen name="snippets_peeking_card_bounce_distance">10dp</dimen>
-    <dimen name="snippets_card_corner_radius">2dp</dimen>
     <dimen name="snippets_card_gap">0.5dp</dimen>
     <dimen name="snippets_article_header_height">40dp</dimen>
     <dimen name="snippets_publisher_margin_top_with_article_snippet">16dp</dimen>
@@ -363,12 +374,10 @@
     <dimen name="payments_section_checking_spacing">6dp</dimen>
     <dimen name="payments_section_descriptive_item_spacing">40dp</dimen>
     <dimen name="payments_section_separator_height">1dp</dimen>
-    <dimen name="payments_section_logo_height">36dp</dimen>
-    <dimen name="payments_section_logo_width">56dp</dimen>
+    <dimen name="payments_section_logo_width">38dp</dimen>
     <dimen name="payments_section_add_button_height">48dp</dimen>
     <dimen name="payments_ui_max_dialog_width">0dp</dimen>
     <dimen name="payments_ui_translation">100dp</dimen>
-    <dimen name="payments_editor_icon_list_size">38dp</dimen>
     <dimen name="payments_favicon_size">24dp</dimen>
 
     <!-- Preferences dimensions
@@ -384,6 +393,7 @@
          is doubled. -->
     <dimen name="pref_autofill_dropdown_bottom_margin">16dp</dimen>
     <dimen name="pref_autofill_touch_target_padding">15dp</dimen>
+    <dimen name="pref_child_account_reduced_padding">4dp</dimen>
 
     <!-- Dialog dimensions.
          https://www.google.com/design/spec/components/dialogs.html#dialogs-simple-dialogs -->
@@ -393,8 +403,17 @@
     <dimen name="downloads_item_icon_size">48dp</dimen>
     <dimen name="downloads_item_margin">16dp</dimen>
 
+    <!-- SelectableListLayout styles -->
+    <dimen name="selectable_list_layout_end_icon">24dp</dimen>
+    <dimen name="selectable_list_layout_row_end_padding">16dp</dimen>
+    <dimen name="selectable_list_layout_start_icon_width">56dp</dimen>
+    <dimen name="toolbar_wide_display_nav_icon_offset">-18dp</dimen>
+    <dimen name="toolbar_wide_display_end_offset">-14dp</dimen>
+
     <!--  Miscellaneous dimensions -->
     <dimen name="action_bar_shadow_height">10dp</dimen>
-    <dimen name="selectable_list_layout_end_icon">24dp</dimen>
-    <dimen name="selectable_list_layout_start_icon_width">64dp</dimen>
+    <dimen name="card_corner_radius">2dp</dimen>
+    <dimen name="list_item_corner_radius">3dp</dimen>
+    <dimen name="list_item_lateral_padding">1dp</dimen>
+    <dimen name="history_default_text_margin">16dp</dimen>
 </resources>

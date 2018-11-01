@@ -16,9 +16,8 @@
 #ifndef NET_QUIC_CORE_QUIC_CONNECTION_H_
 #define NET_QUIC_CORE_QUIC_CONNECTION_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <list>
 #include <map>
@@ -52,6 +51,7 @@ namespace net {
 class QuicClock;
 class QuicConfig;
 class QuicConnection;
+class QuicDecrypter;
 class QuicEncrypter;
 class QuicRandom;
 
@@ -166,12 +166,11 @@ class QUIC_EXPORT_PRIVATE QuicConnectionDebugVisitor
 
   // Called when a packet has been sent.
   virtual void OnPacketSent(const SerializedPacket& serialized_packet,
-                            QuicPathId original_path_id,
                             QuicPacketNumber original_packet_number,
                             TransmissionType transmission_type,
                             QuicTime sent_time) {}
 
-  // Called when an PING frame has been sent.
+  // Called when a PING frame has been sent.
   virtual void OnPingSent() {}
 
   // Called when a packet has been received, but before it is
@@ -484,7 +483,10 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     debug_visitor_ = debug_visitor;
     sent_packet_manager_.SetDebugDelegate(debug_visitor);
   }
+  // Used in Chromium, but not internally.
+  // Must only be called before ping_alarm_ is set.
   void set_ping_timeout(QuicTime::Delta ping_timeout) {
+    DCHECK(!ping_alarm_->IsSet());
     ping_timeout_ = ping_timeout;
   }
   const QuicTime::Delta ping_timeout() { return ping_timeout_; }
@@ -646,10 +648,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     const bool already_delayed_;
   };
 
-  QuicPacketNumber packet_number_of_last_sent_packet() const {
-    return packet_number_of_last_sent_packet_;
-  }
-
   QuicPacketWriter* writer() { return writer_; }
   const QuicPacketWriter* writer() const { return writer_; }
 
@@ -765,12 +763,11 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   bool WritePacket(SerializedPacket* packet);
 
   // Make sure an ack we got from our peer is sane.
-  // Returns nullptr for valid acks or an error std::string if it was invalid.
+  // Returns nullptr for valid acks or an error string if it was invalid.
   const char* ValidateAckFrame(const QuicAckFrame& incoming_ack);
 
   // Make sure a stop waiting we got from our peer is sane.
-  // Returns nullptr if the frame is valid or an error std::string if it was
-  // invalid.
+  // Returns nullptr if the frame is valid or an error string if it was invalid.
   const char* ValidateStopWaitingFrame(
       const QuicStopWaitingFrame& stop_waiting);
 
@@ -797,10 +794,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Attempts to process any queued undecryptable packets.
   void MaybeProcessUndecryptablePackets();
 
-  void ProcessAckFrame(const QuicAckFrame& incoming_ack);
-
-  void ProcessStopWaitingFrame(const QuicStopWaitingFrame& stop_waiting);
-
   // Sends any packets which are a response to the last packet, including both
   // acks and pending writes if an ack opened the congestion window.
   void MaybeSendInResponseToPacket();
@@ -823,7 +816,8 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   void SetRetransmissionAlarm();
 
   // Sets the MTU discovery alarm if necessary.
-  void MaybeSetMtuAlarm();
+  // |sent_packet_number| is the recently sent packet number.
+  void MaybeSetMtuAlarm(QuicPacketNumber sent_packet_number);
 
   HasRetransmittableData IsRetransmittable(const SerializedPacket& packet);
   bool IsTerminationPacket(const SerializedPacket& packet);
@@ -835,15 +829,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // underlying writer, connection, or protocol.
   QuicByteCount GetLimitedMaxPacketSize(
       QuicByteCount suggested_max_packet_size);
-
-  // Called when |path_id| is considered as closed because either a PATH_CLOSE
-  // frame is sent or received. Stops receiving packets on closed path. Drops
-  // receive side of a closed path, and packets with retransmittable frames on a
-  // closed path are marked as retransmissions which will be transmitted on
-  // other paths.
-  // TODO(fayang): complete OnPathClosed once QuicMultipathSentPacketManager and
-  // QuicMultipathReceivedPacketManager are landed in QuicConnection.
-  void OnPathClosed(QuicPathId path_id);
 
   // Do any work which logically would be done in OnPacket but can not be
   // safely done until the packet is validated. Returns true if packet can be
@@ -893,10 +878,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
                                      // parsed or nullptr.
   EncryptionLevel last_decrypted_packet_level_;
   QuicPacketHeader last_header_;
-  // TODO(ianswett): Remove last_stop_waiting_frame_ once
-  // FLAGS_quic_reloadable_flag_quic_receive_packet_once_decrypted is
-  // deprecated.
-  QuicStopWaitingFrame last_stop_waiting_frame_;
   bool should_last_packet_instigate_acks_;
   // Whether the most recent packet was missing before it was received.
   bool was_last_packet_missing_;
@@ -922,7 +903,7 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   bool pending_version_negotiation_packet_;
 
   // When packets could not be sent because the socket was not writable,
-  // they are added to this std::list.  All corresponding frames are in
+  // they are added to this list.  All corresponding frames are in
   // unacked_packets_ if they are to be retransmitted.  Packets encrypted_buffer
   // fields are owned by the QueuedPacketList, in order to ensure they outlast
   // the original scope of the SerializedPacket.
@@ -989,7 +970,7 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // An alarm that is scheduled when the connection can still write and there
   // may be more data to send.
   // TODO(ianswett): Remove resume_writes_alarm when deprecating
-  // FLAGS_quic_only_one_sending_alarm
+  // FLAGS_quic_reloadable_flag_quic_only_one_sending_alarm
   QuicArenaScopedPtr<QuicAlarm> resume_writes_alarm_;
   // An alarm that fires when the connection may have timed out.
   QuicArenaScopedPtr<QuicAlarm> timeout_alarm_;
@@ -1023,10 +1004,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // The the send time of the first retransmittable packet sent after
   // |time_of_last_received_packet_|.
   QuicTime last_send_for_timeout_;
-
-  // packet number of the last sent packet.  Packets are guaranteed to be sent
-  // in packet number order.
-  QuicPacketNumber packet_number_of_last_sent_packet_;
 
   // Sent packet manager which tracks the status of packets sent by this
   // connection and contains the send and receive algorithms to determine when

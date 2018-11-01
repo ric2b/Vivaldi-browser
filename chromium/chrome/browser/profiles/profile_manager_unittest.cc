@@ -178,6 +178,21 @@ class ProfileManagerTest : public testing::Test {
     return profile_manager->GetProfile(path);
   }
 
+  // Helper function to set profile ephemeral at prefs and attributes storage.
+  void SetProfileEphemeral(Profile* profile) {
+    profile->GetPrefs()->SetBoolean(prefs::kForceEphemeralProfiles, true);
+
+    // Update IsEphemeral in attributes storage, normally it happened via
+    // kForceEphemeralProfiles pref change event routed to
+    // ProfileImpl::UpdateIsEphemeralInStorage().
+    ProfileAttributesEntry* entry;
+    ProfileAttributesStorage& storage =
+        g_browser_process->profile_manager()->GetProfileAttributesStorage();
+    EXPECT_TRUE(
+        storage.GetProfileAttributesWithPath(profile->GetPath(), &entry));
+    entry->SetIsEphemeral(true);
+  }
+
 #if defined(OS_CHROMEOS)
   // Helper function to register an user with id |user_id| and create profile
   // with a correct path.
@@ -551,7 +566,7 @@ TEST_F(ProfileManagerTest, AutoloadProfilesWithBackgroundApps) {
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
   local_state_.Get()->SetUserPref(prefs::kBackgroundModeEnabled,
-                                  new base::FundamentalValue(true));
+                                  new base::Value(true));
 
   // Setting a pref which is not applicable to a system (i.e., Android in this
   // case) does not necessarily create it. Don't bother continuing with the
@@ -586,7 +601,7 @@ TEST_F(ProfileManagerTest, DoNotAutoloadProfilesIfBackgroundModeOff) {
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
   local_state_.Get()->SetUserPref(prefs::kBackgroundModeEnabled,
-                                  new base::FundamentalValue(false));
+                                  new base::Value(false));
 
   EXPECT_EQ(0u, storage.GetNumberOfProfiles());
 
@@ -713,7 +728,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfiles) {
   ASSERT_EQ(0U, last_opened_profiles.size());
 
   // Create a browser for profile1.
-  Browser::CreateParams profile1_params(profile1);
+  Browser::CreateParams profile1_params(profile1, true);
   std::unique_ptr<Browser> browser1a(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
@@ -722,7 +737,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfiles) {
   EXPECT_EQ(profile1, last_opened_profiles[0]);
 
   // And for profile2.
-  Browser::CreateParams profile2_params(profile2);
+  Browser::CreateParams profile2_params(profile2, true);
   std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
@@ -775,12 +790,12 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesAtShutdown) {
   ASSERT_TRUE(profile2);
 
   // Create a browser for profile1.
-  Browser::CreateParams profile1_params(profile1);
+  Browser::CreateParams profile1_params(profile1, true);
   std::unique_ptr<Browser> browser1(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
   // And for profile2.
-  Browser::CreateParams profile2_params(profile2);
+  Browser::CreateParams profile2_params(profile2, true);
   std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
@@ -825,7 +840,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesDoesNotContainIncognito) {
   ASSERT_EQ(0U, last_opened_profiles.size());
 
   // Create a browser for profile1.
-  Browser::CreateParams profile1_params(profile1);
+  Browser::CreateParams profile1_params(profile1, true);
   std::unique_ptr<Browser> browser1(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
@@ -834,7 +849,8 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesDoesNotContainIncognito) {
   EXPECT_EQ(profile1, last_opened_profiles[0]);
 
   // And for profile2.
-  Browser::CreateParams profile2_params(profile1->GetOffTheRecordProfile());
+  Browser::CreateParams profile2_params(profile1->GetOffTheRecordProfile(),
+                                        true);
   std::unique_ptr<Browser> browser2a(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
@@ -877,14 +893,14 @@ TEST_F(ProfileManagerTest, EphemeralProfilesDontEndUpAsLastProfile) {
   TestingProfile* profile =
       static_cast<TestingProfile*>(profile_manager->GetProfile(dest_path));
   ASSERT_TRUE(profile);
-  profile->GetPrefs()->SetBoolean(prefs::kForceEphemeralProfiles, true);
+  SetProfileEphemeral(profile);
 
   // Here the last used profile is still the "Default" profile.
   Profile* last_used_profile = profile_manager->GetLastUsedProfile();
   EXPECT_NE(profile, last_used_profile);
 
   // Create a browser for the profile.
-  Browser::CreateParams profile_params(profile);
+  Browser::CreateParams profile_params(profile, true);
   std::unique_ptr<Browser> browser(
       chrome::CreateBrowserWithTestWindowForParams(&profile_params));
   last_used_profile = profile_manager->GetLastUsedProfile();
@@ -917,8 +933,7 @@ TEST_F(ProfileManagerTest, EphemeralProfilesDontEndUpAsLastOpenedAtShutdown) {
   TestingProfile* ephemeral_profile1 =
       static_cast<TestingProfile*>(profile_manager->GetProfile(dest_path2));
   ASSERT_TRUE(ephemeral_profile1);
-  ephemeral_profile1->GetPrefs()->SetBoolean(prefs::kForceEphemeralProfiles,
-                                             true);
+  SetProfileEphemeral(ephemeral_profile1);
 
   // Add second ephemeral profile but don't mark it as such yet.
   TestingProfile* ephemeral_profile2 =
@@ -926,16 +941,16 @@ TEST_F(ProfileManagerTest, EphemeralProfilesDontEndUpAsLastOpenedAtShutdown) {
   ASSERT_TRUE(ephemeral_profile2);
 
   // Create a browser for profile1.
-  Browser::CreateParams profile1_params(normal_profile);
+  Browser::CreateParams profile1_params(normal_profile, true);
   std::unique_ptr<Browser> browser1(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
   // Create browsers for the ephemeral profile.
-  Browser::CreateParams profile2_params(ephemeral_profile1);
+  Browser::CreateParams profile2_params(ephemeral_profile1, true);
   std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
-  Browser::CreateParams profile3_params(ephemeral_profile2);
+  Browser::CreateParams profile3_params(ephemeral_profile2, true);
   std::unique_ptr<Browser> browser3(
       chrome::CreateBrowserWithTestWindowForParams(&profile3_params));
 
@@ -946,8 +961,7 @@ TEST_F(ProfileManagerTest, EphemeralProfilesDontEndUpAsLastOpenedAtShutdown) {
   EXPECT_EQ(ephemeral_profile2, last_opened_profiles[1]);
 
   // Mark the second profile ephemeral.
-  ephemeral_profile2->GetPrefs()->SetBoolean(prefs::kForceEphemeralProfiles,
-                                             true);
+  SetProfileEphemeral(ephemeral_profile2);
 
   // Simulate a shutdown.
   content::NotificationService::current()->Notify(

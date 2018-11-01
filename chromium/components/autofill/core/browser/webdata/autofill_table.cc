@@ -11,8 +11,7 @@
 #include <limits>
 #include <map>
 #include <set>
-#include <string>
-#include <vector>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/guid.h"
@@ -31,12 +30,13 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
 #include "components/autofill/core/browser/webdata/autofill_entry.h"
+#include "components/autofill/core/browser/webdata/autofill_table_encryptor.h"
+#include "components/autofill/core/browser/webdata/autofill_table_encryptor_factory.h"
+#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "components/os_crypt/os_crypt.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/model/metadata_batch.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/webdata/common/web_database.h"
@@ -130,17 +130,19 @@ std::unique_ptr<AutofillProfile> AutofillProfileFromStatement(
 }
 
 void BindEncryptedCardToColumn(sql::Statement* s,
-                                 int column_index,
-                                 const base::string16& number) {
+                               int column_index,
+                               const base::string16& number,
+                               const AutofillTableEncryptor& encryptor) {
   std::string encrypted_data;
-  OSCrypt::EncryptString16(number, &encrypted_data);
+  encryptor.EncryptString16(number, &encrypted_data);
   s->BindBlob(column_index, encrypted_data.data(),
               static_cast<int>(encrypted_data.length()));
 }
 
 void BindCreditCardToStatement(const CreditCard& credit_card,
                                const Time& modification_date,
-                               sql::Statement* s) {
+                               sql::Statement* s,
+                               const AutofillTableEncryptor& encryptor) {
   DCHECK(base::IsValidGUID(credit_card.guid()));
   int index = 0;
   s->BindString(index++, credit_card.guid());
@@ -148,8 +150,8 @@ void BindCreditCardToStatement(const CreditCard& credit_card,
   s->BindString16(index++, GetInfo(credit_card, CREDIT_CARD_NAME_FULL));
   s->BindString16(index++, GetInfo(credit_card, CREDIT_CARD_EXP_MONTH));
   s->BindString16(index++, GetInfo(credit_card, CREDIT_CARD_EXP_4_DIGIT_YEAR));
-  BindEncryptedCardToColumn(s, index++,
-                            credit_card.GetRawInfo(CREDIT_CARD_NUMBER));
+  BindEncryptedCardToColumn(
+      s, index++, credit_card.GetRawInfo(CREDIT_CARD_NUMBER), encryptor);
 
   s->BindInt64(index++, credit_card.use_count());
   s->BindInt64(index++, credit_card.use_date().ToTimeT());
@@ -158,8 +160,10 @@ void BindCreditCardToStatement(const CreditCard& credit_card,
   s->BindString(index++, credit_card.billing_address_id());
 }
 
-base::string16 UnencryptedCardFromColumn(const sql::Statement& s,
-                                         int column_index) {
+base::string16 UnencryptedCardFromColumn(
+    const sql::Statement& s,
+    int column_index,
+    const AutofillTableEncryptor& encryptor) {
   base::string16 credit_card_number;
   int encrypted_number_len = s.ColumnByteLength(column_index);
   if (encrypted_number_len) {
@@ -167,12 +171,14 @@ base::string16 UnencryptedCardFromColumn(const sql::Statement& s,
     encrypted_number.resize(encrypted_number_len);
     memcpy(&encrypted_number[0], s.ColumnBlob(column_index),
            encrypted_number_len);
-    OSCrypt::DecryptString16(encrypted_number, &credit_card_number);
+    encryptor.DecryptString16(encrypted_number, &credit_card_number);
   }
   return credit_card_number;
 }
 
-std::unique_ptr<CreditCard> CreditCardFromStatement(const sql::Statement& s) {
+std::unique_ptr<CreditCard> CreditCardFromStatement(
+    const sql::Statement& s,
+    const AutofillTableEncryptor& encryptor) {
   std::unique_ptr<CreditCard> credit_card(new CreditCard);
 
   int index = 0;
@@ -184,7 +190,7 @@ std::unique_ptr<CreditCard> CreditCardFromStatement(const sql::Statement& s) {
   credit_card->SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR,
                           s.ColumnString16(index++));
   credit_card->SetRawInfo(CREDIT_CARD_NUMBER,
-                          UnencryptedCardFromColumn(s, index++));
+                          UnencryptedCardFromColumn(s, index++, encryptor));
   credit_card->set_use_count(s.ColumnInt64(index++));
   credit_card->set_use_date(Time::FromTimeT(s.ColumnInt64(index++)));
   credit_card->set_modification_date(Time::FromTimeT(s.ColumnInt64(index++)));
@@ -400,7 +406,10 @@ base::string16 Substitute(const base::string16& s,
 // static
 const size_t AutofillTable::kMaxDataLength = 1024;
 
-AutofillTable::AutofillTable() {
+AutofillTable::AutofillTable()
+    : autofill_table_encryptor_(
+          AutofillTableEncryptorFactory::GetInstance()->Create()) {
+  DCHECK(autofill_table_encryptor_);
 }
 
 AutofillTable::~AutofillTable() {
@@ -481,12 +490,12 @@ bool AutofillTable::MigrateToVersion(int version,
 bool AutofillTable::AddFormFieldValues(
     const std::vector<FormFieldData>& elements,
     std::vector<AutofillChange>* changes) {
-  return AddFormFieldValuesTime(elements, changes, Time::Now());
+  return AddFormFieldValuesTime(elements, changes, AutofillClock::Now());
 }
 
 bool AutofillTable::AddFormFieldValue(const FormFieldData& element,
                                       std::vector<AutofillChange>* changes) {
-  return AddFormFieldValueTime(element, changes, Time::Now());
+  return AddFormFieldValueTime(element, changes, AutofillClock::Now());
 }
 
 bool AutofillTable::GetFormValuesForElementName(
@@ -674,7 +683,7 @@ bool AutofillTable::RemoveFormElementsAddedBetween(
 bool AutofillTable::RemoveExpiredFormElements(
     std::vector<AutofillChange>* changes) {
   Time expiration_time =
-      Time::Now() - TimeDelta::FromDays(kExpirationPeriodInDays);
+      AutofillClock::Now() - TimeDelta::FromDays(kExpirationPeriodInDays);
 
   // Query for the name and value of all form elements that were last used
   // before the |expiration_time|.
@@ -886,7 +895,7 @@ bool AutofillTable::AddAutofillProfile(const AutofillProfile& profile) {
       " zipcode, sorting_code, country_code, use_count, use_date, "
       " date_modified, origin, language_code)"
       "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"));
-  BindAutofillProfileToStatement(profile, Time::Now(), &s);
+  BindAutofillProfileToStatement(profile, AutofillClock::Now(), &s);
 
   if (!s.Run())
     return false;
@@ -950,21 +959,22 @@ bool AutofillTable::GetServerProfiles(
 
   sql::Statement s(db_->GetUniqueStatement(
       "SELECT "
-        "id,"
-        "use_count,"
-        "use_date,"
-        "recipient_name,"
-        "company_name,"
-        "street_address,"
-        "address_1,"  // ADDRESS_HOME_STATE
-        "address_2,"  // ADDRESS_HOME_CITY
-        "address_3,"  // ADDRESS_HOME_DEPENDENT_LOCALITY
-        "address_4,"  // Not supported in AutofillProfile yet.
-        "postal_code,"  // ADDRESS_HOME_ZIP
-        "sorting_code,"  // ADDRESS_HOME_SORTING_CODE
-        "country_code,"  // ADDRESS_HOME_COUNTRY
-        "phone_number,"  // PHONE_HOME_WHOLE_NUMBER
-        "language_code "
+      "id,"
+      "use_count,"
+      "use_date,"
+      "recipient_name,"
+      "company_name,"
+      "street_address,"
+      "address_1,"     // ADDRESS_HOME_STATE
+      "address_2,"     // ADDRESS_HOME_CITY
+      "address_3,"     // ADDRESS_HOME_DEPENDENT_LOCALITY
+      "address_4,"     // Not supported in AutofillProfile yet.
+      "postal_code,"   // ADDRESS_HOME_ZIP
+      "sorting_code,"  // ADDRESS_HOME_SORTING_CODE
+      "country_code,"  // ADDRESS_HOME_COUNTRY
+      "phone_number,"  // PHONE_HOME_WHOLE_NUMBER
+      "language_code, "
+      "has_converted "
       "FROM server_addresses addresses "
       "LEFT OUTER JOIN server_address_metadata USING (id)"));
 
@@ -976,7 +986,7 @@ bool AutofillTable::GetServerProfiles(
     profile->set_use_count(s.ColumnInt64(index++));
     profile->set_use_date(Time::FromInternalValue(s.ColumnInt64(index++)));
     // Modification date is not tracked for server profiles. Explicitly set it
-    // here to override the default value of Time::Now().
+    // here to override the default value of AutofillClock::Now().
     profile->set_modification_date(Time());
 
     base::string16 recipient_name = s.ColumnString16(index++);
@@ -992,6 +1002,7 @@ bool AutofillTable::GetServerProfiles(
     profile->SetRawInfo(ADDRESS_HOME_COUNTRY, s.ColumnString16(index++));
     base::string16 phone_number = s.ColumnString16(index++);
     profile->set_language_code(s.ColumnString(index++));
+    profile->set_has_converted(s.ColumnBool(index++));
 
     // SetInfo instead of SetRawInfo so the constituent pieces will be parsed
     // for these data types.
@@ -1055,6 +1066,9 @@ void AutofillTable::SetServerProfiles(
 
     insert.Run();
     insert.Reset(true);
+
+    // Save the use count and use date of the profile.
+    UpdateServerAddressMetadata(profile);
   }
 
   // Delete metadata that's no longer relevant.
@@ -1087,10 +1101,11 @@ bool AutofillTable::UpdateAutofillProfile(const AutofillProfile& profile) {
       "    city=?, state=?, zipcode=?, sorting_code=?, country_code=?, "
       "    use_count=?, use_date=?, date_modified=?, origin=?, language_code=? "
       "WHERE guid=?"));
-  BindAutofillProfileToStatement(
-      profile,
-      update_modification_date ? Time::Now() : old_profile->modification_date(),
-      &s);
+  BindAutofillProfileToStatement(profile,
+                                 update_modification_date
+                                     ? AutofillClock::Now()
+                                     : old_profile->modification_date(),
+                                 &s);
   s.BindString(14, profile.guid());
 
   bool result = s.Run();
@@ -1160,7 +1175,8 @@ bool AutofillTable::AddCreditCard(const CreditCard& credit_card) {
       " card_number_encrypted, use_count, use_date, date_modified, origin,"
       " billing_address_id)"
       "VALUES (?,?,?,?,?,?,?,?,?,?)"));
-  BindCreditCardToStatement(credit_card, Time::Now(), &s);
+  BindCreditCardToStatement(credit_card, AutofillClock::Now(), &s,
+                            *autofill_table_encryptor_);
 
   if (!s.Run())
     return false;
@@ -1183,7 +1199,7 @@ std::unique_ptr<CreditCard> AutofillTable::GetCreditCard(
   if (!s.Step())
     return std::unique_ptr<CreditCard>();
 
-  return CreditCardFromStatement(s);
+  return CreditCardFromStatement(s, *autofill_table_encryptor_);
 }
 
 bool AutofillTable::GetCreditCards(
@@ -1232,7 +1248,8 @@ bool AutofillTable::GetServerCreditCards(
 
     // If the card_number_encrypted field is nonempty, we can assume this card
     // is a full card, otherwise it's masked.
-    base::string16 full_card_number = UnencryptedCardFromColumn(s, index++);
+    base::string16 full_card_number =
+        UnencryptedCardFromColumn(s, index++, *autofill_table_encryptor_);
     base::string16 last_four = s.ColumnString16(index++);
     CreditCard::RecordType record_type = full_card_number.empty() ?
         CreditCard::MASKED_SERVER_CARD :
@@ -1248,7 +1265,7 @@ bool AutofillTable::GetServerCreditCards(
     card->set_use_count(s.ColumnInt64(index++));
     card->set_use_date(Time::FromInternalValue(s.ColumnInt64(index++)));
     // Modification date is not tracked for server cards. Explicitly set it here
-    // to override the default value of Time::Now().
+    // to override the default value of AutofillClock::Now().
     card->set_modification_date(Time());
 
     std::string card_type = s.ColumnString(index++);
@@ -1339,10 +1356,10 @@ bool AutofillTable::UnmaskServerCreditCard(const CreditCard& masked,
   s.BindString(0, masked.server_id());
 
   std::string encrypted_data;
-  OSCrypt::EncryptString16(full_number, &encrypted_data);
+  autofill_table_encryptor_->EncryptString16(full_number, &encrypted_data);
   s.BindBlob(1, encrypted_data.data(),
              static_cast<int>(encrypted_data.length()));
-  s.BindInt64(2, Time::Now().ToInternalValue());  // unmask_date
+  s.BindInt64(2, AutofillClock::Now().ToInternalValue());  // unmask_date
 
   s.Run();
 
@@ -1410,7 +1427,7 @@ bool AutofillTable::UpdateServerAddressMetadata(
                               "VALUES (?,?,?,?)"));
   s.BindInt64(0, profile.use_count());
   s.BindInt64(1, profile.use_date().ToInternalValue());
-  s.BindBool(2, false);
+  s.BindBool(2, profile.has_converted());
   s.BindString(3, profile.server_id());
   s.Run();
 
@@ -1469,11 +1486,11 @@ bool AutofillTable::UpdateCreditCard(const CreditCard& credit_card) {
           "expiration_year=?, card_number_encrypted=?, use_count=?, use_date=?,"
           "date_modified=?, origin=?, billing_address_id=?"
       "WHERE guid=?1"));
-  BindCreditCardToStatement(
-      credit_card,
-      update_modification_date ? Time::Now() :
-                                 old_credit_card->modification_date(),
-      &s);
+  BindCreditCardToStatement(credit_card,
+                            update_modification_date
+                                ? AutofillClock::Now()
+                                : old_credit_card->modification_date(),
+                            &s, *autofill_table_encryptor_);
 
   bool result = s.Run();
   DCHECK_GT(db_->GetLastChangeCount(), 0);
@@ -1686,7 +1703,7 @@ bool AutofillTable::GetAllSyncMetadata(syncer::ModelType model_type,
   syncer::EntityMetadataMap metadata_records;
   if (GetAllSyncEntityMetadata(model_type, &metadata_records)) {
     for (const auto& pair : metadata_records) {
-      // todo(pnoland): add batch transfer of metadata map
+      // TODO(pnoland): Add batch transfer of metadata map.
       metadata_batch->AddMetadata(pair.first, pair.second);
     }
   } else {
@@ -1762,7 +1779,7 @@ bool AutofillTable::GetModelTypeState(syncer::ModelType model_type,
       "SELECT value FROM autofill_model_type_state WHERE id=1"));
 
   if (!s.Step()) {
-    return false;
+    return true;
   }
 
   std::string serialized_state = s.ColumnString(0);

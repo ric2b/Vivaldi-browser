@@ -15,7 +15,7 @@ class RenderViewContextMenuProxy;
 class NotesSubMenuObserver : public RenderViewContextMenuObserver {
  public:
   NotesSubMenuObserver(RenderViewContextMenuProxy* proxy,
-                                 ui::SimpleMenuModel::Delegate* delegate);
+                       ui::SimpleMenuModel::Delegate* delegate);
   ~NotesSubMenuObserver() override;
 
   // RenderViewContextMenuObserver implementation.

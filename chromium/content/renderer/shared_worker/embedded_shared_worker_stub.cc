@@ -96,17 +96,17 @@ class WebServiceWorkerNetworkProviderImpl
     request.setExtraData(extra_data.release());
     // If the provider does not have a controller at this point, the renderer
     // expects subresource requests to never be handled by a controlling service
-    // worker, so set the SkipServiceWorker flag here. Otherwise, a service
-    // worker that is in the process of becoming the controller (i.e., via
-    // claim()) on the browser-side could handle the request and break the
-    // assumptions of the renderer.
+    // worker, so set the ServiceWorkerMode to skip local workers here.
+    // Otherwise, a service worker that is in the process of becoming the
+    // controller (i.e., via claim()) on the browser-side could handle the
+    // request and break the assumptions of the renderer.
     if (request.getRequestContext() !=
             blink::WebURLRequest::RequestContextSharedWorker &&
         !provider->IsControlledByServiceWorker() &&
-        request.skipServiceWorker() !=
-            blink::WebURLRequest::SkipServiceWorker::All) {
-      request.setSkipServiceWorker(
-          blink::WebURLRequest::SkipServiceWorker::Controlling);
+        request.getServiceWorkerMode() !=
+            blink::WebURLRequest::ServiceWorkerMode::None) {
+      request.setServiceWorkerMode(
+          blink::WebURLRequest::ServiceWorkerMode::Foreign);
     }
   }
 
@@ -189,24 +189,19 @@ void EmbeddedSharedWorkerStub::workerScriptLoaded() {
   Send(new WorkerHostMsg_WorkerScriptLoaded(route_id_));
   running_ = true;
   // Process any pending connections.
-  for (PendingChannelList::const_iterator iter = pending_channels_.begin();
-       iter != pending_channels_.end();
-       ++iter) {
-    ConnectToChannel(*iter);
-  }
+  for (auto& item : pending_channels_)
+    ConnectToChannel(item.first, std::move(item.second));
   pending_channels_.clear();
 }
 
 void EmbeddedSharedWorkerStub::workerScriptLoadFailed() {
   Send(new WorkerHostMsg_WorkerScriptLoadFailed(route_id_));
-  for (PendingChannelList::const_iterator iter = pending_channels_.begin();
-       iter != pending_channels_.end();
-       ++iter) {
-    blink::WebMessagePortChannel* channel = *iter;
-    channel->destroy();
-  }
   pending_channels_.clear();
   Shutdown();
+}
+
+void EmbeddedSharedWorkerStub::countFeature(uint32_t feature) {
+  Send(new WorkerHostMsg_CountFeature(route_id_, feature));
 }
 
 void EmbeddedSharedWorkerStub::workerContextClosed() {
@@ -297,24 +292,24 @@ bool EmbeddedSharedWorkerStub::Send(IPC::Message* message) {
 }
 
 void EmbeddedSharedWorkerStub::ConnectToChannel(
-    WebMessagePortChannelImpl* channel) {
-  impl_->connect(channel);
-  Send(
-      new WorkerHostMsg_WorkerConnected(channel->message_port_id(), route_id_));
+    int connection_request_id,
+    std::unique_ptr<WebMessagePortChannelImpl> channel) {
+  impl_->connect(channel.release());
+  Send(new WorkerHostMsg_WorkerConnected(connection_request_id, route_id_));
 }
 
-void EmbeddedSharedWorkerStub::OnConnect(int port,
-                                         int routing_id) {
-  WebMessagePortChannelImpl* channel = new WebMessagePortChannelImpl(
-      routing_id, port, base::ThreadTaskRunnerHandle::Get().get());
+void EmbeddedSharedWorkerStub::OnConnect(int connection_request_id,
+                                         const MessagePort& port) {
+  auto channel = base::MakeUnique<WebMessagePortChannelImpl>(port);
   if (running_) {
-    ConnectToChannel(channel);
+    ConnectToChannel(connection_request_id, std::move(channel));
   } else {
     // If two documents try to load a SharedWorker at the same time, the
     // WorkerMsg_Connect for one of the documents can come in before the
     // worker is started. Just queue up the connect and deliver it once the
     // worker starts.
-    pending_channels_.push_back(channel);
+    pending_channels_.emplace_back(
+        std::make_pair(connection_request_id, std::move(channel)));
   }
 }
 

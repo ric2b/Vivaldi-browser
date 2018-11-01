@@ -35,11 +35,10 @@ std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result,
     result.reset(new base::StringValue(base::SysNSStringToUTF16(wk_result)));
     DCHECK(result->IsType(base::Value::Type::STRING));
   } else if (result_type == CFNumberGetTypeID()) {
-    result.reset(new base::FundamentalValue([wk_result doubleValue]));
+    result.reset(new base::Value([wk_result doubleValue]));
     DCHECK(result->IsType(base::Value::Type::DOUBLE));
   } else if (result_type == CFBooleanGetTypeID()) {
-    result.reset(
-        new base::FundamentalValue(static_cast<bool>([wk_result boolValue])));
+    result.reset(new base::Value(static_cast<bool>([wk_result boolValue])));
     DCHECK(result->IsType(base::Value::Type::BOOLEAN));
   } else if (result_type == CFNullGetTypeID()) {
     result = base::Value::CreateNullValue();
@@ -78,7 +77,7 @@ std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result,
 namespace web {
 
 NSString* const kJSEvaluationErrorDomain = @"JSEvaluationError";
-int const kMaximumParsingRecursionDepth = 8;
+int const kMaximumParsingRecursionDepth = 10;
 
 std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result) {
   return ::ValueResultFromWKResult(wk_result, kMaximumParsingRecursionDepth);

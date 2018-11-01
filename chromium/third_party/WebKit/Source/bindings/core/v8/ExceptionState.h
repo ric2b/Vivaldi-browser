@@ -35,10 +35,10 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/CoreExport.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/WTFString.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -103,6 +103,12 @@ class CORE_EXPORT ExceptionState {
                                        m_exception.newLocal(m_isolate));
     }
   }
+
+  void throwDOMException(ExceptionCode, const char* message);
+  void throwRangeError(const char* message);
+  void throwSecurityError(const char* sanitizedMessage,
+                          const char* unsanitizedMessage = nullptr);
+  void throwTypeError(const char* message);
 
   virtual void throwDOMException(ExceptionCode, const String& message);
   virtual void throwRangeError(const String& message);

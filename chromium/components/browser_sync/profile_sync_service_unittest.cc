@@ -41,6 +41,7 @@
 
 using syncer::DataTypeController;
 using syncer::FakeSyncEngine;
+using syncer::ModelTypeSet;
 using syncer::SyncMergeResult;
 using testing::Return;
 
@@ -53,7 +54,7 @@ const char kEmail[] = "test_user@gmail.com";
 
 class FakeDataTypeManager : public syncer::DataTypeManager {
  public:
-  typedef base::Callback<void(syncer::ConfigureReason)> ConfigureCalled;
+  using ConfigureCalled = base::Callback<void(syncer::ConfigureReason)>;
 
   explicit FakeDataTypeManager(const ConfigureCalled& configure_called)
       : configure_called_(configure_called) {}
@@ -71,7 +72,9 @@ class FakeDataTypeManager : public syncer::DataTypeManager {
   void PurgeForMigration(syncer::ModelTypeSet undesired_types,
                          syncer::ConfigureReason reason) override {}
   void Stop() override{};
-  State state() const override { return syncer::DataTypeManager::CONFIGURED; };
+  ModelTypeSet GetActiveDataTypes() const override { return ModelTypeSet(); }
+  bool IsNigoriEnabled() const override { return true; }
+  State state() const override { return syncer::DataTypeManager::CONFIGURED; }
 
  private:
   ConfigureCalled configure_called_;
@@ -89,7 +92,7 @@ class TestSyncServiceObserver : public syncer::SyncServiceObserver {
  public:
   explicit TestSyncServiceObserver(ProfileSyncService* service)
       : service_(service), setup_in_progress_(false) {}
-  void OnStateChanged() override {
+  void OnStateChanged(syncer::SyncService* sync) override {
     setup_in_progress_ = service_->IsSetupInProgress();
   }
   bool setup_in_progress() const { return setup_in_progress_; }
@@ -125,9 +128,8 @@ class FakeSyncEngineCollectDeleteDirParam : public FakeSyncEngine {
 // called.
 class SyncEngineCaptureClearServerData : public FakeSyncEngine {
  public:
-  typedef base::Callback<void(
-      const syncer::SyncManager::ClearServerDataCallback&)>
-      ClearServerDataCalled;
+  using ClearServerDataCalled =
+      base::Callback<void(const syncer::SyncManager::ClearServerDataCallback&)>;
   explicit SyncEngineCaptureClearServerData(
       const ClearServerDataCalled& clear_server_data_called)
       : clear_server_data_called_(clear_server_data_called) {}
@@ -220,8 +222,6 @@ class ProfileSyncServiceTest : public ::testing::Test {
             ProfileSyncService::AUTO_START, builder.Build());
 
     prefs()->SetBoolean(syncer::prefs::kEnableLocalSyncBackend, true);
-    init_params.local_sync_backend_folder =
-        base::FilePath(FILE_PATH_LITERAL("dummyPath"));
     init_params.oauth2_token_service = nullptr;
     init_params.gaia_cookie_manager_service = nullptr;
 
@@ -248,8 +248,8 @@ class ProfileSyncServiceTest : public ::testing::Test {
   void InitializeForFirstSync() { service_->Initialize(); }
 
   void TriggerPassphraseRequired() {
-    service_->OnPassphraseRequired(syncer::REASON_DECRYPTION,
-                                   sync_pb::EncryptedData());
+    service_->GetEncryptionObserverForTest()->OnPassphraseRequired(
+        syncer::REASON_DECRYPTION, sync_pb::EncryptedData());
   }
 
   void TriggerDataTypeStartRequest() {
@@ -259,6 +259,8 @@ class ProfileSyncServiceTest : public ::testing::Test {
   void OnConfigureCalled(syncer::ConfigureReason configure_reason) {
     syncer::DataTypeManager::ConfigureResult result;
     result.status = syncer::DataTypeManager::OK;
+    if (configure_reason == syncer::CONFIGURE_REASON_CATCH_UP)
+      result.was_catch_up_configure = true;
     service()->OnConfigureDone(result);
   }
 
@@ -371,8 +373,7 @@ TEST_F(ProfileSyncServiceTest, InitialState) {
 
 // Verify a successful initialization.
 TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
-                          new base::FundamentalValue(false));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(false));
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
@@ -384,8 +385,7 @@ TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
 
 // Verify a successful initialization.
 TEST_F(ProfileSyncServiceTest, SuccessfulLocalBackendInitialization) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
-                          new base::FundamentalValue(false));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(false));
   IssueTestTokens();
   CreateServiceWithLocalSyncBackend();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
@@ -398,8 +398,7 @@ TEST_F(ProfileSyncServiceTest, SuccessfulLocalBackendInitialization) {
 // Verify that an initialization where first setup is not complete does not
 // start up the backend.
 TEST_F(ProfileSyncServiceTest, NeedsConfirmation) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
-                          new base::FundamentalValue(false));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(false));
   IssueTestTokens();
   CreateService(ProfileSyncService::MANUAL_START);
   syncer::SyncPrefs sync_prefs(prefs());
@@ -434,8 +433,7 @@ TEST_F(ProfileSyncServiceTest, SetupInProgress) {
 
 // Verify that disable by enterprise policy works.
 TEST_F(ProfileSyncServiceTest, DisabledByPolicyBeforeInit) {
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
-                          new base::FundamentalValue(true));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(true));
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
   InitializeForNthSync();
@@ -455,8 +453,7 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
   EXPECT_FALSE(service()->IsManaged());
   EXPECT_TRUE(service()->IsSyncActive());
 
-  prefs()->SetManagedPref(syncer::prefs::kSyncManaged,
-                          new base::FundamentalValue(true));
+  prefs()->SetManagedPref(syncer::prefs::kSyncManaged, new base::Value(true));
 
   EXPECT_TRUE(service()->IsManaged());
   EXPECT_FALSE(service()->IsSyncActive());
@@ -729,12 +726,15 @@ TEST_F(ProfileSyncServiceTest, OnLocalSetPassphraseEncryption) {
   // configure cycle is started (DTM::Configure is called with
   // CONFIGURE_REASON_CATCH_UP).
   const syncer::SyncEncryptionHandler::NigoriState nigori_state;
-  service()->OnLocalSetPassphraseEncryption(nigori_state);
+  service()->GetEncryptionObserverForTest()->OnLocalSetPassphraseEncryption(
+      nigori_state);
   EXPECT_EQ(syncer::CONFIGURE_REASON_CATCH_UP, configure_reason);
   EXPECT_TRUE(captured_callback.is_null());
 
   // Simulate configure successful. Ensure that SBH::ClearServerData is called.
+  result.was_catch_up_configure = true;
   service()->OnConfigureDone(result);
+  result.was_catch_up_configure = false;
   EXPECT_FALSE(captured_callback.is_null());
 
   // Once SBH::ClearServerData finishes successfully ensure that sync is
@@ -772,7 +772,8 @@ TEST_F(ProfileSyncServiceTest,
   // Simulate user entering encryption passphrase. Ensure Configure was called
   // but don't let it continue.
   const syncer::SyncEncryptionHandler::NigoriState nigori_state;
-  service()->OnLocalSetPassphraseEncryption(nigori_state);
+  service()->GetEncryptionObserverForTest()->OnLocalSetPassphraseEncryption(
+      nigori_state);
   EXPECT_EQ(syncer::CONFIGURE_REASON_CATCH_UP, configure_reason);
 
   // Simulate browser restart. First configuration is a regular one.
@@ -793,7 +794,9 @@ TEST_F(ProfileSyncServiceTest,
 
   // Simulate catch up configure successful. Ensure that SBH::ClearServerData is
   // called.
+  result.was_catch_up_configure = true;
   service()->OnConfigureDone(result);
+  result.was_catch_up_configure = false;
   EXPECT_FALSE(captured_callback.is_null());
 
   ExpectSyncEngineCreation(1);
@@ -822,7 +825,8 @@ TEST_F(ProfileSyncServiceTest,
 
   // Simulate user entering encryption passphrase.
   const syncer::SyncEncryptionHandler::NigoriState nigori_state;
-  service()->OnLocalSetPassphraseEncryption(nigori_state);
+  service()->GetEncryptionObserverForTest()->OnLocalSetPassphraseEncryption(
+      nigori_state);
   EXPECT_FALSE(captured_callback.is_null());
   captured_callback.Reset();
 
@@ -845,7 +849,9 @@ TEST_F(ProfileSyncServiceTest,
 
   // Simulate catch up configure successful. Ensure that SBH::ClearServerData is
   // called.
+  result.was_catch_up_configure = true;
   service()->OnConfigureDone(result);
+  result.was_catch_up_configure = false;
   EXPECT_FALSE(captured_callback.is_null());
 
   ExpectSyncEngineCreation(1);

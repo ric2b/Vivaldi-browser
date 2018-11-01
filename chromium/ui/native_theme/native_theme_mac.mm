@@ -19,6 +19,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/shadow_value.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/native_theme/common_theme.h"
 
@@ -241,7 +242,6 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
     case kColorId_TreeSelectionBackgroundUnfocused:
     case kColorId_TableSelectionBackgroundUnfocused:
       return kUnfocusedSelectedTextBackgroundColor;
-    case kColorId_TreeArrow:
     case kColorId_TableGroupingIndicatorColor:
       return SkColorSetRGB(140, 140, 140);
 
@@ -252,26 +252,26 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
 }
 
 void NativeThemeMac::PaintMenuPopupBackground(
-    SkCanvas* canvas,
+    cc::PaintCanvas* canvas,
     const gfx::Size& size,
     const MenuBackgroundExtraParams& menu_background) const {
-  SkPaint paint;
-  paint.setAntiAlias(true);
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
   if (base::mac::IsOS10_9())
-    paint.setColor(kMenuPopupBackgroundColorMavericks);
+    flags.setColor(kMenuPopupBackgroundColorMavericks);
   else
-    paint.setColor(kMenuPopupBackgroundColor);
+    flags.setColor(kMenuPopupBackgroundColor);
   const SkScalar radius = SkIntToScalar(menu_background.corner_radius);
   SkRect rect = gfx::RectToSkRect(gfx::Rect(size));
-  canvas->drawRoundRect(rect, radius, radius, paint);
+  canvas->drawRoundRect(rect, radius, radius, flags);
 }
 
 void NativeThemeMac::PaintMenuItemBackground(
-    SkCanvas* canvas,
+    cc::PaintCanvas* canvas,
     State state,
     const gfx::Rect& rect,
     const MenuItemExtraParams& menu_item) const {
-  SkPaint paint;
+  cc::PaintFlags flags;
   switch (state) {
     case NativeTheme::kNormal:
     case NativeTheme::kDisabled:
@@ -282,8 +282,8 @@ void NativeThemeMac::PaintMenuItemBackground(
       // pick colors. The System color "selectedMenuItemColor" is actually still
       // blue for Graphite. And while "keyboardFocusIndicatorColor" does change,
       // and is a good shade of gray, it's not blue enough for the Blue theme.
-      paint.setColor(GetSystemColor(kColorId_FocusedMenuItemBackgroundColor));
-      canvas->drawRect(gfx::RectToSkRect(rect), paint);
+      flags.setColor(GetSystemColor(kColorId_FocusedMenuItemBackgroundColor));
+      canvas->drawRect(gfx::RectToSkRect(rect), flags);
       break;
     default:
       NOTREACHED();
@@ -369,7 +369,7 @@ sk_sp<SkShader> NativeThemeMac::GetButtonBorderShader(ButtonBackgroundType type,
 }
 
 // static
-void NativeThemeMac::PaintStyledGradientButton(SkCanvas* canvas,
+void NativeThemeMac::PaintStyledGradientButton(cc::PaintCanvas* canvas,
                                                const gfx::Rect& integer_bounds,
                                                ButtonBackgroundType type,
                                                bool round_left,
@@ -408,30 +408,32 @@ void NativeThemeMac::PaintStyledGradientButton(SkCanvas* canvas,
   else
     shape.setRect(bounds);
 
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setAntiAlias(true);
+  cc::PaintFlags flags;
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setAntiAlias(true);
 
   // First draw the darker "outer" border, with its gradient and shadow. Inside
   // a tab strip, this will draw over the outer border and inner separator.
-  paint.setLooper(gfx::CreateShadowDrawLooper(shadows));
-  paint.setShader(GetButtonBorderShader(type, shape.height()));
-  canvas->drawRRect(shape, paint);
+  flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
+  flags.setShader(
+      cc::WrapSkShader(GetButtonBorderShader(type, shape.height())));
+  canvas->drawRRect(shape, flags);
 
   // Then, inset the rounded rect and draw over that with the inner gradient.
   shape.inset(kBorderThickness, kBorderThickness);
-  paint.setLooper(nullptr);
-  paint.setShader(GetButtonBackgroundShader(type, shape.height()));
-  canvas->drawRRect(shape, paint);
+  flags.setLooper(nullptr);
+  flags.setShader(
+      cc::WrapSkShader(GetButtonBackgroundShader(type, shape.height())));
+  canvas->drawRRect(shape, flags);
 
   if (!focus)
     return;
 
   SkRRect outer_shape;
   shape.outset(kFocusRingThickness, kFocusRingThickness, &outer_shape);
-  paint.setShader(nullptr);
-  paint.setColor(kFocusRingColor);
-  canvas->drawDRRect(outer_shape, shape, paint);
+  flags.setShader(nullptr);
+  flags.setColor(kFocusRingColor);
+  canvas->drawDRRect(outer_shape, shape, flags);
 }
 
 NativeThemeMac::NativeThemeMac() {

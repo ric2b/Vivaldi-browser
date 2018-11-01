@@ -72,6 +72,10 @@ bool RenderWidgetHostDelegate::HasMouseLock(
   return false;
 }
 
+RenderWidgetHostImpl* RenderWidgetHostDelegate::GetMouseLockWidget() {
+  return nullptr;
+}
+
 TextInputManager* RenderWidgetHostDelegate::GetTextInputManager() {
   return nullptr;
 }
@@ -93,6 +97,10 @@ bool RenderWidgetHostDelegate::OnUpdateDragCursor() {
   return false;
 }
 
+bool RenderWidgetHostDelegate::IsWidgetForMainFrame(RenderWidgetHostImpl*) {
+  return false;
+}
+
 bool RenderWidgetHostDelegate::AddDomainInfoToRapporSample(
     rappor::Sample* sample) {
   sample->SetStringField("Domain", "Unknown");
@@ -101,6 +109,10 @@ bool RenderWidgetHostDelegate::AddDomainInfoToRapporSample(
 
 WebContents* RenderWidgetHostDelegate::GetAsWebContents() {
   return nullptr;
+}
+
+bool RenderWidgetHostDelegate::HasFocusedGuests() {
+  return false;
 }
 
 }  // namespace content

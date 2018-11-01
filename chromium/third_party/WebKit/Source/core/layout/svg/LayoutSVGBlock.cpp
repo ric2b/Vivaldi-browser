@@ -21,12 +21,14 @@
 
 #include "core/layout/svg/LayoutSVGBlock.h"
 
+#include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/style/ShadowList.h"
 #include "core/svg/SVGElement.h"
+#include "platform/geometry/TransformState.h"
 
 namespace blink {
 
@@ -105,6 +107,7 @@ void LayoutSVGBlock::mapAncestorToLocal(const LayoutBoxModelObject* ancestor,
                                         MapCoordinatesFlags flags) const {
   if (this == ancestor)
     return;
+
   SVGLayoutSupport::mapAncestorToLocal(*this, ancestor, transformState, flags);
 }
 
@@ -119,12 +122,16 @@ LayoutRect LayoutSVGBlock::absoluteVisualRect() const {
   return SVGLayoutSupport::visualRectInAncestorSpace(*this, *view());
 }
 
-bool LayoutSVGBlock::mapToVisualRectInAncestorSpace(
+bool LayoutSVGBlock::mapToVisualRectInAncestorSpaceInternal(
     const LayoutBoxModelObject* ancestor,
-    LayoutRect& rect,
+    TransformState& transformState,
     VisualRectFlags) const {
-  return SVGLayoutSupport::mapToVisualRectInAncestorSpace(
+  transformState.flatten();
+  LayoutRect rect(transformState.lastPlanarQuad().boundingBox());
+  bool retval = SVGLayoutSupport::mapToVisualRectInAncestorSpace(
       *this, ancestor, FloatRect(rect), rect);
+  transformState.setQuad(FloatQuad(FloatRect(rect)));
+  return retval;
 }
 
 bool LayoutSVGBlock::nodeAtPoint(HitTestResult&,

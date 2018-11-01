@@ -77,16 +77,25 @@ struct MediaQueryExpValue {
   }
 };
 
-class CORE_EXPORT MediaQueryExp
-    : public GarbageCollectedFinalized<MediaQueryExp> {
+class CORE_EXPORT MediaQueryExp {
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+
  public:
-  static MediaQueryExp* createIfValid(const String& mediaFeature,
-                                      const Vector<CSSParserToken, 4>&);
+  // Returns an invalid MediaQueryExp if the arguments are invalid.
+  static MediaQueryExp create(const String& mediaFeature,
+                              const Vector<CSSParserToken, 4>&);
+  static MediaQueryExp invalid() {
+    return MediaQueryExp(String(), MediaQueryExpValue());
+  }
+
+  MediaQueryExp(const MediaQueryExp& other);
   ~MediaQueryExp();
 
   const String& mediaFeature() const { return m_mediaFeature; }
 
   MediaQueryExpValue expValue() const { return m_expValue; }
+
+  bool isValid() const { return !m_mediaFeature.isNull(); }
 
   bool operator==(const MediaQueryExp& other) const;
 
@@ -96,11 +105,6 @@ class CORE_EXPORT MediaQueryExp
 
   String serialize() const;
 
-  MediaQueryExp* copy() const { return new MediaQueryExp(*this); }
-
-  MediaQueryExp(const MediaQueryExp& other);
-
-  DEFINE_INLINE_TRACE() {}
 
  private:
   MediaQueryExp(const String&, const MediaQueryExpValue&);

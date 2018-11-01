@@ -45,6 +45,10 @@ class TextfieldTestApi {
     return textfield_->cursor_blink_timer_.IsRunning();
   }
 
+  gfx::Point GetCursorViewOrigin() { return textfield_->cursor_view_.origin(); }
+
+  bool IsCursorVisible() const { return textfield_->cursor_view_.visible(); }
+
  private:
   Textfield* textfield_;
 

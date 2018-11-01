@@ -2,6 +2,18 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+declare_args() {
+  # Indicates whether typemapping should be supported in this build
+  # configuration. This may be disabled when building external projects which
+  # depend on //mojo but which do not need/want all of the Chromium tree
+  # dependencies that come with typemapping.
+  #
+  # Note that (perhaps obviously) a huge amount of Chromium code will not build
+  # with typemapping disabled, so it is never valid to set this to |false| in
+  # any Chromium build configuration.
+  enable_mojom_typemapping = true
+}
+
 mojom_generator_root = "//mojo/public/tools/bindings"
 mojom_generator_script = "$mojom_generator_root/mojom_bindings_generator.py"
 mojom_generator_sources = [
@@ -24,29 +36,49 @@ mojom_generator_sources = [
   "$mojom_generator_script",
 ]
 
-if (!is_ios) {
-  _bindings_configuration_files = [
-    "//mojo/public/tools/bindings/chromium_bindings_configuration.gni",
-    "//mojo/public/tools/bindings/blink_bindings_configuration.gni",
-  ]
-} else {
-  _bindings_configuration_files =
-      [ "//mojo/public/tools/bindings/chromium_bindings_configuration.gni" ]
-}
-_bindings_configurations = []
-foreach(config_file, _bindings_configuration_files) {
-  _bindings_configurations += [ read_file(config_file, "scope") ]
-}
-foreach(configuration, _bindings_configurations) {
-  # Check that the mojom field of each typemap refers to a mojom that exists.
-  foreach(typemap, configuration.typemaps) {
-    read_file(typemap.mojom, "")
+if (enable_mojom_typemapping) {
+  if (!is_ios) {
+    _bindings_configuration_files = [
+      "//mojo/public/tools/bindings/chromium_bindings_configuration.gni",
+      "//mojo/public/tools/bindings/blink_bindings_configuration.gni",
+    ]
+  } else {
+    _bindings_configuration_files =
+        [ "//mojo/public/tools/bindings/chromium_bindings_configuration.gni" ]
   }
-  if (is_mac && defined(configuration.typemaps_mac)) {
-    foreach(typemap, configuration.typemaps_mac) {
-      read_file(typemap.mojom, "")
+  _bindings_configurations = []
+  foreach(config_file, _bindings_configuration_files) {
+    _bindings_configurations += [ read_file(config_file, "scope") ]
+  }
+  foreach(configuration, _bindings_configurations) {
+    # Check that the mojom field of each typemap refers to a mojom that exists.
+    foreach(typemap, configuration.typemaps) {
+      _typemap_config = {
+      }
+      _typemap_config = typemap.config
+      read_file(_typemap_config.mojom, "")
+    }
+    if (is_mac && defined(configuration.typemaps_mac)) {
+      foreach(typemap, configuration.typemaps_mac) {
+        _typemap_config = {
+        }
+        _typemap_config = typemap.config
+        read_file(_typemap_config.mojom, "")
+      }
     }
   }
+} else {
+  _bindings_configuration_files = []
+  _bindings_configurations = [
+    {
+      typemaps = []
+    },
+    {
+      variant = "blink"
+      for_blink = true
+      typemaps = []
+    },
+  ]
 }
 
 # Generates targets for building C++, JavaScript and Java bindings from mojom
@@ -300,13 +332,19 @@ template("mojom") {
       foreach(source, enabled_sources) {
         # TODO(sammc): Use a map instead of a linear scan when GN supports maps.
         foreach(typemap, bindings_configuration.typemaps) {
-          if (get_path_info(source, "abspath") == typemap.mojom) {
+          _typemap_config = {
+          }
+          _typemap_config = typemap.config
+          if (get_path_info(source, "abspath") == _typemap_config.mojom) {
             active_typemaps += [ typemap ]
           }
         }
         if (is_mac && defined(bindings_configuration.typemaps_mac)) {
           foreach(typemap, bindings_configuration.typemaps_mac) {
-            if (get_path_info(source, "abspath") == typemap.mojom) {
+            _typemap_config = {
+            }
+            _typemap_config = typemap.config
+            if (get_path_info(source, "abspath") == _typemap_config.mojom) {
               active_typemaps += [ typemap ]
             }
           }
@@ -419,20 +457,28 @@ template("mojom") {
         # line length limitations.
         typemap_description = []
         foreach(typemap, active_typemaps) {
+          _typemap_config = {
+          }
+          _typemap_config = typemap.config
           typemap_description += [ "--start-typemap" ]
-          if (defined(typemap.public_headers)) {
-            foreach(value, typemap.public_headers) {
+          if (defined(_typemap_config.public_headers)) {
+            foreach(value, _typemap_config.public_headers) {
               typemap_description += [ "public_headers=$value" ]
             }
           }
-          if (defined(typemap.traits_headers)) {
-            foreach(value, typemap.traits_headers) {
+          if (defined(_typemap_config.traits_headers)) {
+            foreach(value, _typemap_config.traits_headers) {
               typemap_description += [ "traits_headers=$value" ]
             }
           }
-          foreach(value, typemap.type_mappings) {
+          foreach(value, _typemap_config.type_mappings) {
             typemap_description += [ "type_mappings=$value" ]
           }
+
+          # The typemap configuration files are not actually used as inputs here
+          # but this establishes a necessary build dependency to ensure that
+          # typemap changes force a rebuild of affected targets.
+          inputs += [ typemap.filename ]
         }
         args += typemap_description
       }
@@ -510,20 +556,23 @@ template("mojom") {
         }
       }
       foreach(typemap, active_typemaps) {
-        if (defined(typemap.public_headers)) {
-          sources += typemap.public_headers
+        _typemap_config = {
         }
-        if (defined(typemap.traits_headers)) {
-          sources += typemap.traits_headers
+        _typemap_config = typemap.config
+        if (defined(_typemap_config.public_headers)) {
+          sources += _typemap_config.public_headers
         }
-        if (defined(typemap.sources)) {
-          sources += typemap.sources
+        if (defined(_typemap_config.traits_headers)) {
+          sources += _typemap_config.traits_headers
         }
-        if (defined(typemap.public_deps)) {
-          public_deps += typemap.public_deps
+        if (defined(_typemap_config.sources)) {
+          sources += _typemap_config.sources
         }
-        if (defined(typemap.deps)) {
-          deps += typemap.deps
+        if (defined(_typemap_config.public_deps)) {
+          public_deps += _typemap_config.public_deps
+        }
+        if (defined(_typemap_config.deps)) {
+          deps += _typemap_config.deps
         }
       }
       if (defined(bindings_configuration.for_blink) &&

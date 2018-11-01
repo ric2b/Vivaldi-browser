@@ -90,7 +90,6 @@ class WEB_EXPORT WebRemoteFrameImpl final
   void enableViewSourceMode(bool enable) override;
   bool isViewSourceModeEnabled() const override;
   void setReferrerForRequest(WebURLRequest&, const WebURL& referrer) override;
-  void dispatchWillSendRequest(WebURLRequest&) override;
   WebAssociatedURLLoader* createAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) override;
   unsigned unloadListenerCount() const override;
@@ -130,6 +129,8 @@ class WEB_EXPORT WebRemoteFrameImpl final
                                   const WebString& uniqueName,
                                   WebSandboxFlags,
                                   WebFrameClient*,
+                                  blink::InterfaceProvider*,
+                                  blink::InterfaceRegistry*,
                                   WebFrame* previousSibling,
                                   const WebFrameOwnerProperties&,
                                   WebFrame* opener) override;
@@ -145,7 +146,7 @@ class WEB_EXPORT WebRemoteFrameImpl final
   void setReplicatedName(const WebString& name,
                          const WebString& uniqueName) const override;
   void setReplicatedFeaturePolicyHeader(
-      const WebParsedFeaturePolicy& parsedHeader) const override;
+      const WebParsedFeaturePolicyHeader& parsedHeader) const override;
   void addReplicatedContentSecurityPolicyHeader(
       const WebString& headerValue,
       WebContentSecurityPolicyType,

@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/views/views_export.h"
 
@@ -37,6 +38,9 @@ class VIEWS_EXPORT DesktopCaptureClient : public aura::client::CaptureClient {
   explicit DesktopCaptureClient(aura::Window* root);
   ~DesktopCaptureClient() override;
 
+  // Exactly the same as GetGlobalCaptureWindow() but static.
+  static aura::Window* GetCaptureWindowGlobal();
+
   // Overridden from aura::client::CaptureClient:
   void SetCapture(aura::Window* window) override;
   void ReleaseCapture(aura::Window* window) override;
@@ -53,6 +57,8 @@ class VIEWS_EXPORT DesktopCaptureClient : public aura::client::CaptureClient {
 
   // Set of DesktopCaptureClients.
   static CaptureClients* capture_clients_;
+
+  base::ObserverList<aura::client::CaptureClientObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopCaptureClient);
 };

@@ -43,11 +43,10 @@ namespace blink {
 
 ${forward_declarations}
 
-namespace InspectorInstrumentation {
+namespace probe {
 
 $methods
-} // namespace InspectorInstrumentation
-
+} // namespace probe
 } // namespace blink
 
 #endif // !defined(${file_name}_h)
@@ -60,13 +59,21 @@ ${includes}
 namespace blink {
 ${extra_definitions}
 
-namespace InspectorInstrumentation {
+namespace probe {
 $methods
 
-} // namespace InspectorInstrumentation
-
+} // namespace probe
 } // namespace blink
 """)
+
+template_scoped_decl = string.Template("""
+class CORE_EXPORT ${name} {
+    STACK_ALLOCATED()
+public:
+    explicit $name($param_list);
+    ~${name}();
+${member_list}
+};""")
 
 template_impl = string.Template("""
 ${return_type} ${name}(${params})
@@ -81,6 +88,20 @@ template_agent_call = string.Template("""
         for (${agent_class}* agent : agents->${agent_getter}s())
             ${maybe_return}agent->${name}(${params_agent});
     }""")
+
+template_scoped_impl = string.Template("""
+${name}::${name}(${params})${init_list}
+{
+    InstrumentingAgents* agents = instrumentingAgentsFor(${first_param_name});
+    if (!agents)
+        return;${will_body_lines}
+}
+${name}::~${name}()
+{
+    InstrumentingAgents* agents = instrumentingAgentsFor(${first_param_name});
+    if (!agents)
+        return;${did_body_lines}
+}""")
 
 template_instrumenting_agents_h = string.Template("""// Code generated from InspectorInstrumentation.idl
 
@@ -122,13 +143,13 @@ template_instrumenting_agent_accessor = string.Template("""
 template_instrumenting_agent_impl = string.Template("""
 void InstrumentingAgents::add${class_name}(${class_name}* agent)
 {
-    ${member_name}.add(agent);
+    ${member_name}.insert(agent);
     ${has_member_name} = true;
 }
 
 void InstrumentingAgents::remove${class_name}(${class_name}* agent)
 {
-    ${member_name}.remove(agent);
+    ${member_name}.erase(agent);
     ${has_member_name} = !${member_name}.isEmpty();
 }
 """)
@@ -226,7 +247,7 @@ class Method:
         # Splitting parameters by a comma, assuming that attribute lists contain no more than one attribute.
         self.params = map(Parameter, map(str.strip, match.group(4).split(",")))
 
-        self.returns_value = self.return_type != "void"
+        self.returns_value = self.return_type == "bool"
         if self.return_type == "bool":
             self.default_return_value = "false"
         elif self.returns_value:
@@ -243,11 +264,55 @@ class Method:
             sys.stderr.write("Can only return value from a single agent: %s\n" % self.name)
             sys.exit(1)
 
+    def is_scoped(self):
+        return self.return_type == ""
+
     def generate_header(self, header_lines):
-        header_lines.append("CORE_EXPORT %s %s(%s);" % (
-            self.return_type, self.name, ", ".join(map(Parameter.to_str_class, self.params))))
+        param_list = ", ".join(map(Parameter.to_str_class, self.params))
+        if self.is_scoped():
+            member_list = "\n".join(map(generate_member_decl, self.params))
+            header_lines.append(template_scoped_decl.substitute(
+                None,
+                name=self.name,
+                param_list=param_list,
+                member_list=member_list))
+        else:
+            header_lines.append("CORE_EXPORT %s %s(%s);" % (
+                self.return_type, self.name, param_list))
 
     def generate_cpp(self, cpp_lines):
+        if self.is_scoped():
+            self.generate_scoped_cpp(cpp_lines)
+        else:
+            self.generate_unscoped_cpp(cpp_lines)
+
+    def generate_scoped_cpp(self, cpp_lines):
+        will_body_lines = map(self.generate_ref_ptr, self.params)
+        will_body_lines += [self.generate_scoped_agent_call("will", agent) for agent in self.agents]
+        did_body_lines = map(self.generate_ref_ptr, self.params)
+        did_body_lines += [self.generate_scoped_agent_call("did", agent) for agent in self.agents]
+        member_init = ",\n".join(map(generate_member_init, self.params))
+
+        cpp_lines.append(template_scoped_impl.substitute(
+            None,
+            name=self.name,
+            params=", ".join(map(Parameter.to_str_class_and_name, self.params)),
+            init_list=":\n" + member_init if len(member_init) > 0 else "",
+            will_body_lines="".join(will_body_lines),
+            did_body_lines="".join(did_body_lines),
+            first_param_name=self.params[0].name))
+
+    def generate_scoped_agent_call(self, name, agent):
+        agent_class, agent_getter = agent_getter_signature(agent)
+        return template_agent_call.substitute(
+            None,
+            name=name,
+            agent_class=agent_class,
+            agent_getter=agent_getter,
+            maybe_return="",
+            params_agent="*this")
+
+    def generate_unscoped_cpp(self, cpp_lines):
         default_return = "return;"
         maybe_default_return = ""
         if self.returns_value:
@@ -325,6 +390,7 @@ class Parameter:
             self.is_prp = False
             self.value = self.name
 
+        self.is_ptr = self.type[-1] == "*"
 
     def to_str_full(self):
         if self.default_value is None:
@@ -349,7 +415,20 @@ def generate_param_name(param_type):
     return "param" + base_name
 
 
+def generate_member_decl(param):
+    if param.is_ptr:
+        return "    Member<%s> %s;" % (param.type[:-1], param.name)
+    else:
+        return "    %s %s;" % (param.type, param.name)
+
+
+def generate_member_init(param):
+    return "    %s(%s)" % (param.name, param.name)
+
+
 def agent_class_name(agent):
+    if agent == "Performance":
+        return "PerformanceMonitor"
     return "Inspector%sAgent" % agent
 
 
@@ -363,6 +442,8 @@ def include_header(name):
 
 
 def include_inspector_header(name):
+    if name == "PerformanceMonitor":
+        return include_header("core/frame/" + name)
     return include_header("core/inspector/" + name)
 
 

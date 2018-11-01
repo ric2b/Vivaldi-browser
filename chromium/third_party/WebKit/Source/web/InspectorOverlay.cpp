@@ -28,14 +28,18 @@
 
 #include "web/InspectorOverlay.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8InspectorOverlayHost.h"
 #include "core/dom/Node.h"
 #include "core/dom/StaticNodeList.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/input/EventHandler.h"
@@ -50,13 +54,12 @@
 #include "platform/graphics/paint/CullRect.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
+#include "v8/include/v8.h"
 #include "web/ChromeClientImpl.h"
 #include "web/PageOverlay.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/AutoReset.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
@@ -89,18 +92,20 @@ Node* hoveredNodeForEvent(LocalFrame* frame,
 }
 
 Node* hoveredNodeForEvent(LocalFrame* frame,
-                          const PlatformMouseEvent& event,
+                          const WebMouseEvent& event,
                           bool ignorePointerEventsNone) {
-  return hoveredNodeForPoint(frame, event.position(), ignorePointerEventsNone);
+  return hoveredNodeForPoint(frame,
+                             roundedIntPoint(event.positionInRootFrame()),
+                             ignorePointerEventsNone);
 }
 
 Node* hoveredNodeForEvent(LocalFrame* frame,
-                          const PlatformTouchEvent& event,
+                          const WebTouchEvent& event,
                           bool ignorePointerEventsNone) {
-  const Vector<PlatformTouchPoint>& points = event.touchPoints();
-  if (!points.size())
+  if (!event.touchesLength)
     return nullptr;
-  return hoveredNodeForPoint(frame, roundedIntPoint(points[0].pos()),
+  WebTouchPoint transformedPoint = event.touchPointInRootFrame(0);
+  return hoveredNodeForPoint(frame, roundedIntPoint(transformedPoint.position),
                              ignorePointerEventsNone);
 }
 }  // namespace
@@ -157,11 +162,11 @@ class InspectorOverlay::InspectorOverlayChromeClient final
 
   void invalidateRect(const IntRect&) override { m_overlay->invalidate(); }
 
-  void scheduleAnimation(Widget* widget) override {
+  void scheduleAnimation(FrameViewBase* frameViewBase) override {
     if (m_overlay->m_inLayout)
       return;
 
-    m_client->scheduleAnimation(widget);
+    m_client->scheduleAnimation(frameViewBase);
   }
 
  private:
@@ -178,7 +183,10 @@ InspectorOverlay::InspectorOverlay(WebLocalFrameImpl* frameImpl)
       m_drawViewSize(false),
       m_resizeTimerActive(false),
       m_omitTooltip(false),
-      m_timer(this, &InspectorOverlay::onTimer),
+      m_timer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, frameImpl->frame()),
+          this,
+          &InspectorOverlay::onTimer),
       m_suspended(false),
       m_showReloadingBlanket(false),
       m_inLayout(false),
@@ -245,48 +253,43 @@ bool InspectorOverlay::handleInputEvent(const WebInputEvent& inputEvent) {
 
     overlayMainFrame()->eventHandler().handleGestureEvent(transformedEvent);
   }
-  if (WebInputEvent::isMouseEventType(inputEvent.type()) &&
-      inputEvent.type() != WebInputEvent::MouseEnter) {
-    // PlatformMouseEventBuilder does not work with MouseEnter type, so we
-    // filter it out manually.
-    PlatformMouseEvent mouseEvent = PlatformMouseEventBuilder(
-        m_frameImpl->frameView(),
-        static_cast<const WebMouseEvent&>(inputEvent));
+  if (WebInputEvent::isMouseEventType(inputEvent.type())) {
+    WebMouseEvent mouseEvent =
+        TransformWebMouseEvent(m_frameImpl->frameView(),
+                               static_cast<const WebMouseEvent&>(inputEvent));
 
-    if (mouseEvent.type() == PlatformEvent::MouseMoved)
+    if (mouseEvent.type() == WebInputEvent::MouseMove)
       handled = handleMouseMove(mouseEvent);
-    else if (mouseEvent.type() == PlatformEvent::MousePressed)
+    else if (mouseEvent.type() == WebInputEvent::MouseDown)
       handled = handleMousePress();
 
     if (handled)
       return true;
 
-    if (mouseEvent.type() == PlatformEvent::MouseMoved) {
+    if (mouseEvent.type() == WebInputEvent::MouseMove) {
       handled = overlayMainFrame()->eventHandler().handleMouseMoveEvent(
-                    mouseEvent, createPlatformMouseEventVector(
+                    mouseEvent, TransformWebMouseEventVector(
                                     m_frameImpl->frameView(),
                                     std::vector<const WebInputEvent*>())) !=
                 WebInputEventResult::NotHandled;
     }
-    if (mouseEvent.type() == PlatformEvent::MousePressed)
+    if (mouseEvent.type() == WebInputEvent::MouseDown)
       handled = overlayMainFrame()->eventHandler().handleMousePressEvent(
                     mouseEvent) != WebInputEventResult::NotHandled;
-    if (mouseEvent.type() == PlatformEvent::MouseReleased)
+    if (mouseEvent.type() == WebInputEvent::MouseUp)
       handled = overlayMainFrame()->eventHandler().handleMouseReleaseEvent(
                     mouseEvent) != WebInputEventResult::NotHandled;
   }
 
   if (WebInputEvent::isTouchEventType(inputEvent.type())) {
-    PlatformTouchEvent touchEvent = PlatformTouchEventBuilder(
-        m_frameImpl->frameView(),
-        static_cast<const WebTouchEvent&>(inputEvent));
-    handled = handleTouchEvent(touchEvent);
+    WebTouchEvent transformedEvent =
+        TransformWebTouchEvent(m_frameImpl->frameView(),
+                               static_cast<const WebTouchEvent&>(inputEvent));
+    handled = handleTouchEvent(transformedEvent);
     if (handled)
       return true;
     overlayMainFrame()->eventHandler().handleTouchEvent(
-        touchEvent,
-        createPlatformTouchEventVector(m_frameImpl->frameView(),
-                                       std::vector<const WebInputEvent*>()));
+        transformedEvent, Vector<WebTouchEvent>());
   }
   if (WebInputEvent::isKeyboardEventType(inputEvent.type())) {
     overlayMainFrame()->eventHandler().keyEvent(
@@ -396,7 +399,7 @@ void InspectorOverlay::scheduleUpdate() {
   FrameView* view = m_frameImpl->frameView();
   LocalFrame* frame = m_frameImpl->frame();
   if (view && frame)
-    frame->host()->chromeClient().scheduleAnimation(view);
+    frame->page()->chromeClient().scheduleAnimation(view);
 }
 
 void InspectorOverlay::rebuildOverlayPage() {
@@ -496,7 +499,7 @@ float InspectorOverlay::windowToViewportScale() const {
   LocalFrame* frame = m_frameImpl->frame();
   if (!frame)
     return 1.0f;
-  return frame->host()->chromeClient().windowToViewportScalar(1.0f);
+  return frame->page()->chromeClient().windowToViewportScalar(1.0f);
 }
 
 Page* InspectorOverlay::overlayPage() {
@@ -505,17 +508,17 @@ Page* InspectorOverlay::overlayPage() {
 
   ScriptForbiddenScope::AllowUserAgentScript allowScript;
 
-  DEFINE_STATIC_LOCAL(FrameLoaderClient, dummyFrameLoaderClient,
-                      (EmptyFrameLoaderClient::create()));
+  DEFINE_STATIC_LOCAL(LocalFrameClient, dummyLocalFrameClient,
+                      (EmptyLocalFrameClient::create()));
   Page::PageClients pageClients;
   fillWithEmptyClients(pageClients);
   DCHECK(!m_overlayChromeClient);
   m_overlayChromeClient = InspectorOverlayChromeClient::create(
-      m_frameImpl->frame()->host()->chromeClient(), *this);
+      m_frameImpl->frame()->page()->chromeClient(), *this);
   pageClients.chromeClient = m_overlayChromeClient.get();
   m_overlayPage = Page::create(pageClients);
 
-  Settings& settings = m_frameImpl->frame()->host()->settings();
+  Settings& settings = m_frameImpl->frame()->page()->settings();
   Settings& overlaySettings = m_overlayPage->settings();
 
   overlaySettings.genericFontFamilySettings().updateStandard(
@@ -541,7 +544,7 @@ Page* InspectorOverlay::overlayPage() {
   // through some non-composited paint function.
   overlaySettings.setAcceleratedCompositingEnabled(false);
 
-  LocalFrame* frame = LocalFrame::create(&dummyFrameLoaderClient,
+  LocalFrame* frame = LocalFrame::create(&dummyLocalFrameClient,
                                          &m_overlayPage->frameHost(), 0);
   frame->setView(FrameView::create(*frame));
   frame->init();
@@ -590,12 +593,12 @@ void InspectorOverlay::reset(const IntSize& viewportSize,
       protocol::DictionaryValue::create();
   resetData->setDouble(
       "deviceScaleFactor",
-      m_frameImpl->frame()->host()->deviceScaleFactorDeprecated());
+      m_frameImpl->frame()->page()->deviceScaleFactorDeprecated());
   resetData->setDouble("pageScaleFactor",
                        m_frameImpl->frame()->host()->visualViewport().scale());
 
   IntRect viewportInScreen =
-      m_frameImpl->frame()->host()->chromeClient().viewportToScreen(
+      m_frameImpl->frame()->page()->chromeClient().viewportToScreen(
           IntRect(IntPoint(), viewportSize), m_frameImpl->frame()->view());
   resetData->setObject("viewportSize",
                        buildObjectForSize(viewportInScreen.size()));
@@ -708,14 +711,15 @@ void InspectorOverlay::setShowViewportSizeOnResize(bool show) {
   m_drawViewSize = show;
 }
 
-bool InspectorOverlay::handleMouseMove(const PlatformMouseEvent& event) {
+bool InspectorOverlay::handleMouseMove(const WebMouseEvent& event) {
   if (!shouldSearchForNode())
     return false;
 
   LocalFrame* frame = m_frameImpl->frame();
   if (!frame || !frame->view() || frame->contentLayoutItem().isNull())
     return false;
-  Node* node = hoveredNodeForEvent(frame, event, event.shiftKey());
+  Node* node = hoveredNodeForEvent(frame, event,
+                                   event.modifiers() & WebInputEvent::ShiftKey);
 
   // Do not highlight within user agent shadow root unless requested.
   if (m_inspectMode != InspectorDOMAgent::SearchingForUAShadow) {
@@ -731,8 +735,9 @@ bool InspectorOverlay::handleMouseMove(const PlatformMouseEvent& event) {
   if (!node)
     return true;
 
-  Node* eventTarget =
-      event.shiftKey() ? hoveredNodeForEvent(frame, event, false) : nullptr;
+  Node* eventTarget = (event.modifiers() & WebInputEvent::ShiftKey)
+                          ? hoveredNodeForEvent(frame, event, false)
+                          : nullptr;
   if (eventTarget == node)
     eventTarget = nullptr;
 
@@ -741,7 +746,8 @@ bool InspectorOverlay::handleMouseMove(const PlatformMouseEvent& event) {
     if (m_domAgent)
       m_domAgent->nodeHighlightedInOverlay(node);
     highlightNode(node, eventTarget, *m_inspectModeHighlightConfig,
-                  event.ctrlKey() || event.metaKey());
+                  (event.modifiers() &
+                   (WebInputEvent::ControlKey | WebInputEvent::MetaKey)));
   }
   return true;
 }
@@ -770,7 +776,7 @@ bool InspectorOverlay::handleGestureEvent(const WebGestureEvent& event) {
   return false;
 }
 
-bool InspectorOverlay::handleTouchEvent(const PlatformTouchEvent& event) {
+bool InspectorOverlay::handleTouchEvent(const WebTouchEvent& event) {
   if (!shouldSearchForNode())
     return false;
   Node* node = hoveredNodeForEvent(m_frameImpl->frame(), event, false);

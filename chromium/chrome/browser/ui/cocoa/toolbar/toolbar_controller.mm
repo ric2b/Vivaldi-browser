@@ -4,8 +4,10 @@
 
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 
+#include <sys/stat.h>
 #include <algorithm>
 
+#include "base/debug/crash_logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
@@ -52,6 +54,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "chrome/common/crash_keys.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -117,7 +120,6 @@ const CGFloat kMinimumLocationBarWidth = 100.0;
 - (void)addAccessibilityDescriptions;
 - (void)initCommandStatus:(CommandUpdater*)commands;
 - (void)prefChanged:(const std::string&)prefName;
-- (ToolbarView*)toolbarView;
 // Height of the toolbar in pixels when the bookmark bar is closed.
 - (CGFloat)baseToolbarHeight;
 - (void)toolbarFrameChanged;
@@ -212,8 +214,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 
 - (id)initWithCommands:(CommandUpdater*)commands
                profile:(Profile*)profile
-               browser:(Browser*)browser
-        resizeDelegate:(id<ViewResizer>)resizeDelegate {
+               browser:(Browser*)browser {
   DCHECK(commands && profile);
   if ((self = [super initWithNibName:@"Toolbar"
                               bundle:base::mac::FrameworkBundle()])) {
@@ -236,8 +237,6 @@ class NotificationBridge : public AppMenuIconController::Delegate {
     // autoreleased at about the same time as the CommandUpdater (owned by the
     // Browser), so |commands_| may not be valid any more.
 
-    [[self toolbarView] setResizeDelegate:resizeDelegate];
-
     // Start global error services now so we badge the menu correctly.
     SyncGlobalErrorFactory::GetForProfile(profile);
     RecoveryInstallGlobalErrorFactory::GetForProfile(profile);
@@ -256,6 +255,25 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 }
 
 - (void)viewDidLoad {
+  // Temporary: collect information about a potentially missing or inaccessible
+  // nib (https://crbug.com/685985)
+  NSString* nibPath = [self.nibBundle pathForResource:@"Toolbar" ofType:@"nib"];
+  struct stat sb;
+  int nibErrno = 0;
+  if (stat(nibPath.fileSystemRepresentation, &sb) != 0) {
+    nibErrno = errno;
+  }
+  NSString* closestPath = nibPath;
+  while (closestPath && stat(closestPath.fileSystemRepresentation, &sb) != 0) {
+    closestPath = [closestPath stringByDeletingLastPathComponent];
+  }
+  base::debug::ScopedCrashKey nibCrashKey {
+    crash_keys::mac::kToolbarNibInfo,
+        [NSString stringWithFormat:@"errno: %d nib: %@ closest: %@", nibErrno,
+                                   nibPath, closestPath]
+            .UTF8String
+  };
+
   // When linking and running on 10.10+, both -awakeFromNib and -viewDidLoad may
   // be called, don't initialize twice.
   if (locationBarView_) {
@@ -566,6 +584,10 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   [self mouseMoved:event];
 }
 
+- (ToolbarView*)toolbarView {
+  return base::mac::ObjCCastStrict<ToolbarView>([self view]);
+}
+
 - (LocationBarViewMac*)locationBarBridge {
   return locationBarView_.get();
 }
@@ -663,11 +685,6 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   // the toolbar with only the location bar inside it.
   if (!hasToolbar_ && hasLocationBar_)
     [self showLocationBarOnly];
-}
-
-// (Private) Returns the backdrop to the toolbar as a ToolbarView.
-- (ToolbarView*)toolbarView{
-  return base::mac::ObjCCastStrict<ToolbarView>([self view]);
 }
 
 - (id)customFieldEditorForObject:(id)obj {
@@ -816,12 +833,13 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
     CGFloat leftEdge = NSMinX([locationBar_ frame]);
     if ([browserActionsContainerView_ isHidden]) {
-      delta = leftEdge - NSMaxX([appMenuButton_ frame]) +
-              [ToolbarController appMenuPadding] + kButtonInset;
+      delta = leftEdge -
+              (NSMaxX([appMenuButton_ frame]) +
+               [ToolbarController appMenuPadding] + kButtonInset);
     } else {
       delta = leftEdge -
-              NSMaxX([browserActionsContainerView_ animationEndFrame]) +
-              kButtonInset;
+              (NSMaxX([browserActionsContainerView_ animationEndFrame]) +
+               kButtonInset);
     }
   } else {
     CGFloat rightEdge = NSMaxX([locationBar_ frame]);

@@ -3,6 +3,7 @@
 <translationbundle lang="ar">
 <translation id="1065672644894730302">لا يمكن قراءة تفضيلاتك. قد تكون بعض الميزات غير متاحة، ولن يتم حفظ التغييرات في التفضيلات.</translation>
 <translation id="1115445892567829615">‏تعذر على Chromium مزامنة البيانات. الرجاء تحديث عبارة مرور المزامنة.</translation>
+<translation id="1170115874949214249">‏بادِر بتثبيت Chromium على هاتفك. سنرسل رسالة قصيرة SMS إلى رقم هاتف استرداد حسابك.</translation>
 <translation id="1174473354587728743">‏هل تشارك جهاز كمبيوتر؟ يمكنك الآن إعداد Chromium بالطريقة التي تعجبك تمامًا.</translation>
 <translation id="1185134272377778587">‏حول Chromium</translation>
 <translation id="1298199220304005244">‏الحصول على مساعدة بشأن استخدام نظام التشغيل Chromium</translation>
@@ -14,7 +15,6 @@
 <translation id="1502360822835740515">‏جعل Chromium المتصفح الافتراضي</translation>
 <translation id="151962892725702025">‏تعذر على نظام التشغيل Chromium مزامنة البيانات نظرًا لأن المزامنة غير متاحة في نطاقك.</translation>
 <translation id="1559451348202814456">‏ربما لن يعمل Chromium بشكل صحيح لأنه لم يعد مدعومًا على أنظمة Mac OS X 10.6 أو 10.7 أو 10.8.</translation>
-<translation id="1644918877723739397">‏سيُخزن Chromium هذا في <ph name="SAVED_PASSWORD_LINK" /> وسيتذكره عندما تحتاج إليه في المرة القادمة.</translation>
 <translation id="1653828314016431939">موافق - إعادة التشغيل الآن</translation>
 <translation id="1668054258064581266">‏بعد إزالة حسابك من Chromium، قد تحتاج إلى إعادة تحميل علامات التبويب المفتوحة لتفعيلها.</translation>
 <translation id="1688750314291223739">‏يمكنك إعداد المزامنة لحفظ ميزات المتصفح المخصصة على الويب والدخول إليها من Chromium على أي كمبيوتر.</translation>
@@ -49,6 +49,7 @@
 <translation id="2587578672395088481">‏يلزم إعادة تشغيل نظام التشغيل Chromium حتى يتم تطبيق التحديث.</translation>
 <translation id="2605472041568654097">‏ساعد في تحسين Chromium من خلال الإبلاغ عن الإعدادات الحالية.</translation>
 <translation id="2636877269779209383">‏يحتاج Chromium الوصول إلى الكاميرا لمشاركتها مع هذا الموقع.</translation>
+<translation id="2647554856022461007">‏قد يستخدم Chromium خدمات الويب لتحسين تجربة التصفح. يمكنك تعطيل هذه الخدمات بشكل اختياري. <ph name="BEGIN_LINK" />مزيد من المعلومات<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">‏حدث خطأ في نظام التشغيل أثناء عملية التثبيت. الرجاء إعادة تنزيل Chromium.</translation>
 <translation id="2685838254101182273">‏توقف تحديث Chromium ولم يعد متوافقًا مع هذا الإصدار من نظام التشغيل.</translation>
 <translation id="2711502716910134313">‏علامة تبويب Chromium</translation>
@@ -57,6 +58,7 @@
 <translation id="2799223571221894425">إعادة تشغيل</translation>
 <translation id="2847479871509788944">‏إزالة من Chromium</translation>
 <translation id="2886012850691518054">‏اختياري: ساعد في تحسين Chromium عن طريق إرسال إحصائيات الاستخدام وتقارير الأعطال إلى Google تلقائيًا.</translation>
+<translation id="2898082584336937987">‏بادِر بتثبيت Chromium على هاتفك. سنرسل رسالة قصيرة SMS إلى هاتفك: <ph name="PHONE_NUMBER" /></translation>
 <translation id="2905536371227304018">‏يتم عرض نظام تشغيل Chromium بهذه اللغة.</translation>
 <translation id="2910007522516064972">‏حو&amp;ل Chromium</translation>
 <translation id="3032787606318309379">‏جارٍ الإضافة إلى Chromium...</translation>
@@ -82,7 +84,6 @@
 <translation id="358997566136285270">‏شعار Chromium</translation>
 <translation id="3645040538872234961">‏سيؤدي هذا إلى حذف بيانات التصفح من هذا الجهاز نهائيًا. ولاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).</translation>
 <translation id="3738139272394829648">المس للبحث</translation>
-<translation id="3748537968684000502">‏أنت تعرض صفحة Google Chrome آمنة.</translation>
 <translation id="378917192836375108">‏يتيح لك Chromium النقر على رقم هاتف على الويب والاتصال به باستخدام Skype!</translation>
 <translation id="3848258323044014972"><ph name="PAGE_TITLE" /> - Chromium</translation>
 <translation id="3849925841547750267">‏عذرًا، فإن إعدادات موزيلا فَيَرفُكس غير متاحة أثناء تشغيل هذا المتصفح. لاستيراد هذه الإعدادات إلى Chromium، قم بحفظ عملك وإغلاق جميع نوافذ فَيَرفُكس. بعد ذلك انقر على "استمرار".</translation>
@@ -149,6 +150,7 @@
 <translation id="5877064549588274448">تم تغيير القناة. يمكنك إعادة تشغيل الجهاز لتدخل التغييرات حيز التنفيذ.</translation>
 <translation id="5895138241574237353">إعادة التشغيل</translation>
 <translation id="5906655207909574370">أوشك التحديث على الانتهاء! أعِد تشغيل الجهاز لإنهاء التحديث.</translation>
+<translation id="5942225298871134766">‏سيُخزن Chromium هذا مع <ph name="SAVED_PASSWORD_LINK" /> وسيتذكره عندما تحتاج إليه في المرة القادمة.</translation>
 <translation id="5942520288919337908">‏تمت إضافة <ph name="EXTENSION_NAME" /> إلى Chromium.</translation>
 <translation id="59625444380784159">‏يمكن أن تساعد التفاصيل الواردة من جهات اتصالك في ملء النماذج بسرعة في Chromium.</translation>
 <translation id="5987687638152509985">‏تحديث Chromium لبدء المزامنة</translation>
@@ -160,7 +162,7 @@
 <translation id="6248213926982192922">‏جعل Chromium المتصفح الافتراضي</translation>
 <translation id="6295779123002464101">‏قد يكون ملف <ph name="FILE_NAME" /> ضارًا، لذلك فقد حظره Chromium.</translation>
 <translation id="6309712487085796862">‏يستخدم Chromium الكاميرا.</translation>
-<translation id="6333502561965082103">‏عملية أخرى على Chromium قيد التقدم. الرجاء إعادة المحاولة لاحقًا.</translation>
+<translation id="6333502561965082103">‏عملية أخرى على Chromium قيد التقدم. يُرجى إعادة المحاولة لاحقًا.</translation>
 <translation id="6334986366598267305">‏الآن أصبح استخدام Chromium مع حسابك في Google وفي أجهزة الكمبيوتر المشتركة أكثر سهولة.</translation>
 <translation id="6373523479360886564">‏هل تريد فعلًا إزالة Chromium؟</translation>
 <translation id="6394232988457703198">‏يجب إعادة تشغيل Chromium الآن.</translation>
@@ -190,7 +192,6 @@
 <translation id="705851970750939768">‏تحديث Chromium</translation>
 <translation id="7066436765290594559">‏تعذر على نظام التشغيل Chromium مزامنة البيانات. الرجاء تحديث عبارة مرور المزامنة.</translation>
 <translation id="707471633328071618">‏Google Payments (تم النسخ إلى Chromium)</translation>
-<translation id="7090955637699162649">‏قد يستخدم Chromium <ph name="BEGIN_LINK" />خدمات الويب<ph name="END_LINK" /> لتحسين تجربة التصفح. ويمكنك تعطيل هذه الخدمات اختياريًا في أي وقت.</translation>
 <translation id="7114836556269756734">{NUM_ITEMS,plural, =1{‏سيؤدي هذا إلى حذف عنصر $1 من هذا الجهاز نهائيًا. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).}zero{‏سيؤدي هذا إلى حذف $1 عنصر من هذا الجهاز نهائيًا. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).}two{‏سيؤدي هذا إلى حذف عنصرين ($1) من هذا الجهاز نهائيًا. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).}few{‏سيؤدي هذا إلى حذف $1 عناصر من هذا الجهاز نهائيًا. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).}many{‏سيؤدي هذا إلى حذف $1 عنصرًا من هذا الجهاز نهائيًا. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).}other{‏سيؤدي هذا إلى حذف $1 عنصر من هذا الجهاز نهائيًا. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium باعتبارك ($2).}}</translation>
 <translation id="7138853919861947730">‏قد يستخدم Chromium خدمات الويب لتحسين تجربة التصفح لديك.</translation>
 <translation id="7162152143154757523">‏يمكن أن يقدم Chromium تدقيقًا إملائيًا أكثر دقة من خلال إرسال ما تكتبه في المتصفح إلى خوادم Google، مما يتيح لك استخدام تقنية التدقيق الإملائي ذاتها المستخدمة في بحث Google.</translation>
@@ -204,6 +205,7 @@
 <translation id="7318036098707714271">‏ملف التفضيلات تالف أو غير صالح.
 
 يتعذر على Chromium استعادة إعداداتك.</translation>
+<translation id="7331920710658926971">‏بادِر بتثبيت Chromium على هاتفك. سنرسل رسالة قصيرة SMS إلى هاتفك.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">نافذة جديدة</translation>
 <translation id="734373864078049451">‏الويب والإشارات المرجعية وغيرها من عناصر Chromium توجد هنا.</translation>
@@ -233,6 +235,7 @@
 <translation id="8033665941300843262">‏يحتاج Chromium الوصول إلى الأذونات لمشاركتها مع هذا الموقع.</translation>
 <translation id="8134284582177628525">‏إذا كنت تشارك جهاز الكمبيوتر هذا مع <ph name="PROFILE_NAME" />، فأضف نفسك إلى Chromium للتصفح بشكلٍ منفصل. أو ألغِ ربط حسابك بحسابه في Google.</translation>
 <translation id="81770708095080097">‏هذا الملف ضار، لذلك فقد حظره Chromium.</translation>
+<translation id="8222496066431494154">‏بادِر بتثبيت Chromium على هاتفك. سنرسل رسالة قصيرة SMS إلى رقم هاتف استرداد حسابك: <ph name="PHONE_NUMBER" /></translation>
 <translation id="8269379391216269538">‏المساعدة في تحسين Chromium</translation>
 <translation id="8290862415967981663">‏قد يكون هذا الملف ضارًا، لذلك فقد حظره Chromium.</translation>
 <translation id="8340674089072921962">‏كان <ph name="USER_EMAIL_ADDRESS" /> يستخدم Chromium مسبقًا</translation>
@@ -240,7 +243,7 @@
 <translation id="8493179195440786826">‏إصدار Chromium قديم</translation>
 <translation id="85843667276690461">‏الحصول على مساعدة بشأن استخدام Chromium</translation>
 <translation id="8586442755830160949">‏حقوق الطبع والنشر لعام <ph name="YEAR" /> لصالح The Chromium Authors. جميع الحقوق محفوظة.</translation>
-<translation id="8621669128220841554">‏أخفق التثبيت نظرًا لحدوث خطأ غير محدد. الرجاء إعادة تنزيل Chromium.</translation>
+<translation id="8621669128220841554">‏تعذّر التثبيت نظرًا لحدوث خطأ غير محدد. الرجاء إعادة تنزيل Chromium.</translation>
 <translation id="8628626585870903697">‏لا يتضمن Chromium عارض PDF المطلوب لإجراء معاينة الطباعة.</translation>
 <translation id="8667808506758191620">جهاز <ph name="DEVICE_TYPE" /> مُحدّث.</translation>
 <translation id="8697124171261953979">‏كما أنها تتحكم في الصفحة التي تظهر عند تشغيل Chromium أو إجراء بحث من المربع متعدد الاستخدامات.</translation>

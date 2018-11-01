@@ -51,6 +51,8 @@
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
+#include "core/frame/Location.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -59,11 +61,62 @@
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "platform/LayoutTestSupport.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
+
+void V8Window::locationAttributeGetterCustom(
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  v8::Local<v8::Object> holder = info.Holder();
+
+  DOMWindow* window = V8Window::toImpl(holder);
+  Location* location = window->location();
+  DCHECK(location);
+
+  // Keep the wrapper object for the return value alive as long as |this|
+  // object is alive in order to save creation time of the wrapper object.
+  if (DOMDataStore::setReturnValue(info.GetReturnValue(), location))
+    return;
+
+  v8::Local<v8::Value> wrapper;
+
+  // Note that this check is gated on whether or not |window| is remote, not
+  // whether or not |window| is cross-origin. If |window| is local, the
+  // |location| property must always return the same wrapper, even if the
+  // cross-origin status changes by changing properties like |document.domain|.
+  if (window->isRemoteDOMWindow()) {
+    DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
+    const auto* wrapperTypeInfo = location->wrapperTypeInfo();
+    v8::Local<v8::Object> newWrapper =
+        wrapperTypeInfo->domTemplate(isolate, world)
+            ->NewRemoteInstance()
+            .ToLocalChecked();
+
+    DCHECK(!DOMDataStore::containsWrapper(location, isolate));
+    wrapper = V8DOMWrapper::associateObjectWithWrapper(
+        isolate, location, wrapperTypeInfo, newWrapper);
+  } else {
+    wrapper = ToV8(location, holder, isolate);
+  }
+
+  // Keep the wrapper object for the return value alive as long as |this|
+  // object is alive in order to save creation time of the wrapper object.
+  //
+  // TODO(dcheng): The hidden reference behavior is broken in many ways. We
+  // should be caching for all DOM attributes. Even if it's not critical for
+  // remote Location objects, we should clean this up to improve
+  // maintainability. In the long-term, this will be superseded by wrapper
+  // tracing.
+  const char kKeepAliveKey[] = "KeepAlive#Window#location";
+  V8HiddenValue::setHiddenValue(
+      ScriptState::current(isolate), holder,
+      v8AtomicString(isolate, StringView(kKeepAliveKey, sizeof kKeepAliveKey)),
+      wrapper);
+
+  v8SetReturnValue(info, wrapper);
+}
 
 void V8Window::eventAttributeGetterCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -332,12 +385,15 @@ void V8Window::namedPropertyGetterCustom(
 
   if (!hasNamedItem && hasIdItem &&
       !doc->containsMultipleElementsWithId(name)) {
+    UseCounter::count(doc, UseCounter::DOMClobberedVariableAccessed);
     v8SetReturnValueFast(info, doc->getElementById(name), window);
     return;
   }
 
   HTMLCollection* items = doc->windowNamedItems(name);
   if (!items->isEmpty()) {
+    UseCounter::count(doc, UseCounter::DOMClobberedVariableAccessed);
+
     // TODO(esprehn): Firefox doesn't return an HTMLCollection here if there's
     // multiple with the same name, but Chrome and Safari does. What's the
     // right behavior?

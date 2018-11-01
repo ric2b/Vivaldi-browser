@@ -2,19 +2,19 @@
 
 #include <string>
 #include "base/base64.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
-#include "base/json/json_string_value_serializer.h"
 
 #include "notes/notes_attachment.h"
 #include "notes/notes_codec.h"
 
 namespace vivaldi {
 
-base::Value *Notes_attachment::Encode(NotesCodec *checksummer) const {
+base::Value* Notes_attachment::Encode(NotesCodec* checksummer) const {
   DCHECK(checksummer);
 
-  base::DictionaryValue *attachment_value = new base::DictionaryValue();
+  base::DictionaryValue* attachment_value = new base::DictionaryValue();
   attachment_value->SetString("filename", filename);
   checksummer->UpdateChecksum(filename);
   attachment_value->SetString("content-type", content_type);
@@ -25,8 +25,8 @@ base::Value *Notes_attachment::Encode(NotesCodec *checksummer) const {
   return attachment_value;
 }
 
-bool Notes_attachment::Decode(const base::DictionaryValue *input,
-                              NotesCodec *checksummer) {
+bool Notes_attachment::Decode(const base::DictionaryValue* input,
+                              NotesCodec* checksummer) {
   DCHECK(input);
   DCHECK(checksummer);
 
@@ -43,8 +43,9 @@ bool Notes_attachment::Decode(const base::DictionaryValue *input,
   return true;
 }
 
-bool Notes_attachment::GetContent(base::string16 *fname,
-                                  base::string16 *cnt_type, std::string *cnt) {
+bool Notes_attachment::GetContent(base::string16* fname,
+                                  base::string16* cnt_type,
+                                  std::string* cnt) {
   if (fname)
     *fname = filename;
 

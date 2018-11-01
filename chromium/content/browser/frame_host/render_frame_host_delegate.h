@@ -16,7 +16,7 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/public/browser/site_instance.h"
-#include "content/public/common/javascript_message_type.h"
+#include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/http/http_response_headers.h"
@@ -41,13 +41,16 @@ namespace gfx {
 class Rect;
 }
 
+namespace url {
+class Origin;
+}
+
 namespace content {
 class FrameTreeNode;
 class InterstitialPage;
 class PageState;
 class RenderFrameHost;
 class RenderFrameHostImpl;
-class ScreenOrientationProvider;
 class SessionStorageNamespace;
 class WebContents;
 struct AXEventNotificationDetails;
@@ -94,13 +97,13 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void ShowContextMenu(RenderFrameHost* render_frame_host,
                                const ContextMenuParams& params) {}
 
-  // A JavaScript message, confirmation or prompt should be shown.
-  virtual void RunJavaScriptMessage(RenderFrameHost* render_frame_host,
-                                    const base::string16& message,
-                                    const base::string16& default_prompt,
-                                    const GURL& frame_url,
-                                    JavaScriptMessageType type,
-                                    IPC::Message* reply_msg) {}
+  // A JavaScript alert, confirmation or prompt dialog should be shown.
+  virtual void RunJavaScriptDialog(RenderFrameHost* render_frame_host,
+                                   const base::string16& message,
+                                   const base::string16& default_prompt,
+                                   const GURL& frame_url,
+                                   JavaScriptDialogType type,
+                                   IPC::Message* reply_msg) {}
 
   virtual void RunBeforeUnloadConfirm(RenderFrameHost* render_frame_host,
                                       bool is_reload,
@@ -155,8 +158,14 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Checks if we have permission to access the microphone or camera. Note that
   // this does not query the user. |type| must be MEDIA_DEVICE_AUDIO_CAPTURE
   // or MEDIA_DEVICE_VIDEO_CAPTURE.
+  // TODO(guidou): use url::Origin for |security_origin|. See crbug.com/683115.
   virtual bool CheckMediaAccessPermission(const GURL& security_origin,
                                           MediaStreamType type);
+
+  // Returns the ID of the default device for the given media device |type|.
+  // If the returned value is an empty string, it means that there is no
+  // default device for the given |type|.
+  virtual std::string GetDefaultMediaDeviceID(MediaStreamType type);
 
   // Get the accessibility mode for the WebContents that owns this frame.
   virtual AccessibilityMode GetAccessibilityMode() const;
@@ -180,9 +189,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // Gets the WakeLockServiceContext associated with this delegate.
   virtual device::WakeLockServiceContext* GetWakeLockServiceContext();
-
-  // Gets the ScreenOrientationProvider associated with this delegate.
-  virtual ScreenOrientationProvider* GetScreenOrientationProvider();
 
   // Notification that the frame wants to go into fullscreen mode.
   // |origin| represents the origin of the frame that requests fullscreen.
@@ -268,6 +274,21 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                  WindowOpenDisposition disposition,
                                  const gfx::Rect& initial_rect,
                                  bool user_gesture) {}
+
+  // Notifies that mixed content was displayed or ran.
+  virtual void DidDisplayInsecureContent() {}
+  virtual void DidRunInsecureContent(const GURL& security_origin,
+                                     const GURL& target_url) {}
+
+  // Reports that passive mixed content was found at the specified url.
+  virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
+
+  // Checks if running of active mixed content is allowed for the specified
+  // WebContents/tab.
+  virtual bool ShouldAllowRunningInsecureContent(WebContents* web_contents,
+                                                 bool allowed_per_prefs,
+                                                 const url::Origin& origin,
+                                                 const GURL& resource_url);
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

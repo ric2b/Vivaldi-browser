@@ -32,20 +32,22 @@
 #include "core/css/FontFace.h"
 #include "core/css/FontStyleMatcher.h"
 #include "core/css/StyleRule.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/loader/resource/FontResource.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/fonts/FontDescription.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
+
+static unsigned s_version = 0;
 
 FontFaceCache::FontFaceCache() : m_version(0) {}
 
 void FontFaceCache::add(CSSFontSelector* cssFontSelector,
                         const StyleRuleFontFace* fontFaceRule,
                         FontFace* fontFace) {
-  if (!m_styleRuleToFontFace.add(fontFaceRule, fontFace).isNewEntry)
+  if (!m_styleRuleToFontFace.insert(fontFaceRule, fontFace).isNewEntry)
     return;
   addFontFace(cssFontSelector, fontFace, true);
 }
@@ -54,13 +56,13 @@ void FontFaceCache::addFontFace(CSSFontSelector* cssFontSelector,
                                 FontFace* fontFace,
                                 bool cssConnected) {
   FamilyToTraitsMap::AddResult traitsResult =
-      m_fontFaces.add(fontFace->family(), nullptr);
+      m_fontFaces.insert(fontFace->family(), nullptr);
   if (!traitsResult.storedValue->value)
     traitsResult.storedValue->value = new TraitsMap;
 
   TraitsMap::AddResult segmentedFontFaceResult =
-      traitsResult.storedValue->value->add(fontFace->traits().bitfield(),
-                                           nullptr);
+      traitsResult.storedValue->value->insert(fontFace->traits().bitfield(),
+                                              nullptr);
   if (!segmentedFontFaceResult.storedValue->value)
     segmentedFontFaceResult.storedValue->value =
         CSSSegmentedFontFace::create(cssFontSelector, fontFace->traits());
@@ -68,10 +70,10 @@ void FontFaceCache::addFontFace(CSSFontSelector* cssFontSelector,
   segmentedFontFaceResult.storedValue->value->addFontFace(fontFace,
                                                           cssConnected);
   if (cssConnected)
-    m_cssConnectedFontFaces.add(fontFace);
+    m_cssConnectedFontFaces.insert(fontFace);
 
-  m_fonts.remove(fontFace->family());
-  ++m_version;
+  m_fonts.erase(fontFace->family());
+  incrementVersion();
 }
 
 void FontFaceCache::remove(const StyleRuleFontFace* fontFaceRule) {
@@ -101,11 +103,11 @@ void FontFaceCache::removeFontFace(FontFace* fontFace, bool cssConnected) {
     if (familyFontFaces->isEmpty())
       m_fontFaces.remove(fontFacesIter);
   }
-  m_fonts.remove(fontFace->family());
+  m_fonts.erase(fontFace->family());
   if (cssConnected)
     m_cssConnectedFontFaces.remove(fontFace);
 
-  ++m_version;
+  incrementVersion();
 }
 
 void FontFaceCache::clearCSSConnected() {
@@ -122,22 +124,26 @@ void FontFaceCache::clearAll() {
   m_fonts.clear();
   m_styleRuleToFontFace.clear();
   m_cssConnectedFontFaces.clear();
-  ++m_version;
+  incrementVersion();
+}
+
+void FontFaceCache::incrementVersion() {
+  m_version = ++s_version;
 }
 
 CSSSegmentedFontFace* FontFaceCache::get(const FontDescription& fontDescription,
                                          const AtomicString& family) {
-  TraitsMap* familyFontFaces = m_fontFaces.get(family);
+  TraitsMap* familyFontFaces = m_fontFaces.at(family);
   if (!familyFontFaces || familyFontFaces->isEmpty())
     return nullptr;
 
-  FamilyToTraitsMap::AddResult traitsResult = m_fonts.add(family, nullptr);
+  FamilyToTraitsMap::AddResult traitsResult = m_fonts.insert(family, nullptr);
   if (!traitsResult.storedValue->value)
     traitsResult.storedValue->value = new TraitsMap;
 
   FontTraits traits = fontDescription.traits();
   TraitsMap::AddResult faceResult =
-      traitsResult.storedValue->value->add(traits.bitfield(), nullptr);
+      traitsResult.storedValue->value->insert(traits.bitfield(), nullptr);
   if (!faceResult.storedValue->value) {
     for (const auto& item : *familyFontFaces) {
       CSSSegmentedFontFace* candidate = item.value.get();

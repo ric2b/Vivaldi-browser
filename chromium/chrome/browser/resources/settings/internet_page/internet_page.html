@@ -6,20 +6,21 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="/prefs/prefs.html">
-<link rel="import" href="/route.html">
-<link rel="import" href="/settings_page/settings_animated_pages.html">
-<link rel="import" href="/settings_page/settings_subpage.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../prefs/prefs.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../settings_page/settings_animated_pages.html">
+<link rel="import" href="../settings_page/settings_subpage.html">
+<link rel="import" href="../settings_shared_css.html">
 <link rel="import" href="internet_detail_page.html">
 <link rel="import" href="internet_known_networks_page.html">
+<link rel="import" href="internet_subpage.html">
 <link rel="import" href="network_summary.html">
 
 <dom-module id="settings-internet-page">
   <template>
     <style include="settings-shared">
       div.add-no-icon {
-        margin-left: 36px
+        -webkit-margin-start: 36px
       }
 
       iron-icon {
@@ -31,10 +32,8 @@
     </style>
     <settings-animated-pages id="pages" section="internet">
       <neon-animatable route-path="default">
-        <network-summary on-show-detail="onShowDetail_"
-            default-network="{{defaultNetwork}}"
-            on-show-known-networks="onShowKnownNetworks_"
-            global-policy="[[globalPolicy_]]"
+        <network-summary default-network="{{defaultNetwork}}"
+            device-states="{{deviceStates}}"            
             networking-private="[[networkingPrivate]]">
         </network-summary>
         <template is="dom-if" if="[[allowAddConnection_(globalPolicy_)]]">
@@ -49,16 +48,20 @@
             </cr-expand-button>
           </div>
           <template is="dom-if" if="[[addConnectionExpanded_]]">
-            <div actionable class="settings-box continuation center"
-                on-tap="onAddWiFiTap_">
-              <div class="start add-no-icon">$i18n{internetAddWiFi}</div>
-              <button class="icon-external" is="paper-icon-button-light">
-              </button>
-            </div>
+            <template is="dom-if" if="[[deviceIsEnabled_(deviceStates.WiFi)]]">
+              <div actionable class="settings-box continuation center"
+                  on-tap="onAddWiFiTap_">
+                <div class="start add-no-icon">$i18n{internetAddWiFi}</div>
+                <button class="icon-external" is="paper-icon-button-light"
+                    aria-label="$i18n{internetAddWiFi}">
+                </button>
+              </div>
+            </template>
             <div actionable class="settings-box continuation center"
                 on-tap="onAddVPNTap_">
               <div class="start add-no-icon">$i18n{internetAddVPN}</div>
-              <button class="icon-external" is="paper-icon-button-light">
+              <button class="icon-external" is="paper-icon-button-light"
+                  aria-label="$i18n{internetAddVPN}">
               </button>
             </div>
             <template is="dom-repeat" items="[[thirdPartyVpnProviders_]]">
@@ -73,11 +76,12 @@
         </template>
         <template is="dom-if" if="[[!allowAddConnection_(globalPolicy_)]]">
           <div class="settings-box">
-            <iron-icon class="policy" icon="cr:domain"></iron-icon>
+            <iron-icon class="policy" icon="cr20:domain"></iron-icon>
             <div>$i18n{internetAddConnectionNotAllowed}</div>
           </div>
         </template>
       </neon-animatable>
+
       <template is="dom-if" route-path="/networkDetail" no-search>
         <settings-subpage page-title="$i18n{internetDetailPageTitle}">
           <settings-internet-detail-page prefs="{{prefs}}"
@@ -87,15 +91,30 @@
           </settings-internet-detail-page>
         </settings-subpage>
       </template>
+      
       <template is="dom-if" route-path="/knownNetworks" no-search>
         <settings-subpage page-title="$i18n{internetKnownNetworksPageTitle}">
           <settings-internet-known-networks-page
               network-type="[[knownNetworksType_]]"
-              on-show-detail="onShowDetail_"
               networking-private="[[networkingPrivate]]">
           </settings-internet-known-networks-page>
         </settings-subpage>
       </template>
+
+      <template is="dom-if" route-path="/networks" no-search>
+        <settings-subpage page-title="[[getNetworksPageTitle_(subpageType_)]]"
+            show-spinner="[[showSpinner_]]">
+          <settings-internet-subpage 
+              default-network="[[defaultNetwork]]"
+              device-state="[[get(subpageType_, deviceStates)]]"
+              global-policy="[[globalPolicy_]]"
+              third-party-vpn-providers="[[thirdPartyVpnProviders_]]"
+              networking-private="[[networkingPrivate]]"
+              show-spinner="{{showSpinner_}}">
+          </settings-bluetooth-subpage>
+        </settings-subpage>
+      </template>
+
     </settings-animated-pages>
   </template>
   <script src="internet_page.js"></script>

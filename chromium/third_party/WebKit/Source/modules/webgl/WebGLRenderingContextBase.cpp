@@ -25,6 +25,7 @@
 
 #include "modules/webgl/WebGLRenderingContextBase.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptWrappableVisitor.h"
@@ -34,8 +35,10 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/FlexibleArrayBufferView.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
@@ -45,7 +48,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutBox.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
+#include "core/origin_trials/OriginTrials.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/ANGLEInstancedArrays.h"
 #include "modules/webgl/EXTBlendMinMax.h"
@@ -101,7 +104,6 @@
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 #include "wtf/typed_arrays/ArrayBufferContents.h"
-#include <memory>
 
 namespace blink {
 
@@ -109,8 +111,13 @@ namespace {
 
 const double secondsBetweenRestoreAttempts = 1.0;
 const int maxGLErrorsAllowedToConsole = 256;
-const unsigned maxGLActiveContexts = 16;
 const unsigned maxGLActiveContextsOnWorker = 4;
+
+#if OS(ANDROID)
+const unsigned maxGLActiveContexts = 8;
+#else   // OS(ANDROID)
+const unsigned maxGLActiveContexts = 16;
+#endif  // OS(ANDROID)
 
 unsigned currentMaxGLContexts() {
   return isMainThread() ? maxGLActiveContexts : maxGLActiveContextsOnWorker;
@@ -170,7 +177,7 @@ void WebGLRenderingContextBase::forciblyLoseOldestContext(
     return;
 
   candidate->printWarningToConsole(reason);
-  InspectorInstrumentation::didFireWebGLWarning(candidate->canvas());
+  probe::didFireWebGLWarning(candidate->canvas());
 
   // This will call deactivateContext once the context has actually been lost.
   candidate->forceLostContext(WebGLRenderingContextBase::SyntheticLostContext,
@@ -201,9 +208,9 @@ WebGLRenderingContextBase* WebGLRenderingContextBase::oldestEvictedContext() {
   WebGLRenderingContextBase* candidate = nullptr;
   int generation = -1;
   for (WebGLRenderingContextBase* context : forciblyEvictedContexts().keys()) {
-    if (!candidate || forciblyEvictedContexts().get(context) < generation) {
+    if (!candidate || forciblyEvictedContexts().at(context) < generation) {
       candidate = context;
-      generation = forciblyEvictedContexts().get(context);
+      generation = forciblyEvictedContexts().at(context);
     }
   }
 
@@ -223,12 +230,12 @@ void WebGLRenderingContextBase::activateContext(
   }
 
   ASSERT(!context->isContextLost());
-  activeContexts().add(context);
+  activeContexts().insert(context);
 }
 
 void WebGLRenderingContextBase::deactivateContext(
     WebGLRenderingContextBase* context) {
-  activeContexts().remove(context);
+  activeContexts().erase(context);
 }
 
 void WebGLRenderingContextBase::addToEvictedList(
@@ -239,7 +246,7 @@ void WebGLRenderingContextBase::addToEvictedList(
 
 void WebGLRenderingContextBase::removeFromEvictedList(
     WebGLRenderingContextBase* context) {
-  forciblyEvictedContexts().remove(context);
+  forciblyEvictedContexts().erase(context);
 }
 
 void WebGLRenderingContextBase::restoreEvictedContext(
@@ -255,7 +262,7 @@ void WebGLRenderingContextBase::restoreEvictedContext(
          forciblyEvictedContexts().size()) {
     WebGLRenderingContextBase* evictedContext = oldestEvictedContext();
     if (!evictedContext->m_restoreAllowed) {
-      forciblyEvictedContexts().remove(evictedContext);
+      forciblyEvictedContexts().erase(evictedContext);
       continue;
     }
 
@@ -265,7 +272,7 @@ void WebGLRenderingContextBase::restoreEvictedContext(
 
     // If there's room in the pixel budget for this context, restore it.
     if (!desiredSize.isEmpty()) {
-      forciblyEvictedContexts().remove(evictedContext);
+      forciblyEvictedContexts().erase(evictedContext);
       evictedContext->forceRestoreContext();
     }
     break;
@@ -610,6 +617,24 @@ createContextProviderOnWorkerThread(
   return std::move(creationInfo.createdContextProvider);
 }
 
+bool WebGLRenderingContextBase::supportOwnOffscreenSurface(
+    ExecutionContext* executionContext) {
+  // If there's a possibility this context may be used with WebVR make sure it
+  // is created with an offscreen surface that can be swapped out for a
+  // VR-specific surface if needed.
+  //
+  // At this time, treat this as an experimental rendering optimization
+  // that needs a separate opt-in. See crbug.com/691102 for details.
+  if (RuntimeEnabledFeatures::webVRExperimentalRenderingEnabled()) {
+    if (RuntimeEnabledFeatures::webVREnabled() ||
+        OriginTrials::webVREnabled(executionContext)) {
+      DVLOG(1) << "Requesting supportOwnOffscreenSurface";
+      return true;
+    }
+  }
+  return false;
+}
+
 std::unique_ptr<WebGraphicsContext3DProvider>
 WebGLRenderingContextBase::createContextProviderInternal(
     HTMLCanvasElement* canvas,
@@ -621,8 +646,11 @@ WebGLRenderingContextBase::createContextProviderInternal(
   // The canvas is only given on the main thread.
   DCHECK(!canvas || isMainThread());
 
-  Platform::ContextAttributes contextAttributes =
-      toPlatformContextAttributes(attributes, webGLVersion);
+  auto executionContext = canvas ? canvas->document().getExecutionContext()
+                                 : scriptState->getExecutionContext();
+  Platform::ContextAttributes contextAttributes = toPlatformContextAttributes(
+      attributes, webGLVersion, supportOwnOffscreenSurface(executionContext));
+
   Platform::GraphicsInfo glInfo;
   std::unique_ptr<WebGraphicsContext3DProvider> contextProvider;
   const auto& url = canvas ? canvas->document().topDocument().url()
@@ -637,9 +665,8 @@ WebGLRenderingContextBase::createContextProviderInternal(
   }
   if (contextProvider && !contextProvider->bindToCurrentThread()) {
     contextProvider = nullptr;
-    String errorString(glInfo.errorMessage.utf8().data());
-    errorString.insert("bindToCurrentThread failed: ", 0);
-    glInfo.errorMessage = errorString;
+    glInfo.errorMessage =
+        String("bindToCurrentThread failed: " + String(glInfo.errorMessage));
   }
   if (!contextProvider || shouldFailContextCreationForTesting) {
     shouldFailContextCreationForTesting = false;
@@ -676,7 +703,7 @@ WebGLRenderingContextBase::createWebGraphicsContext3DProvider(
   }
   Settings* settings = frame->settings();
 
-  // The FrameLoaderClient might block creation of a new WebGL context despite
+  // The LocalFrameClient might block creation of a new WebGL context despite
   // the page settings; in particular, if WebGL contexts were lost one or more
   // times via the GL_ARB_robustness extension.
   if (!frame->loader().client()->allowWebGL(settings &&
@@ -1039,26 +1066,32 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(
     std::unique_ptr<WebGraphicsContext3DProvider> contextProvider,
     const CanvasContextCreationAttributes& requestedAttributes,
     unsigned version)
-    : WebGLRenderingContextBase(nullptr,
-                                passedOffscreenCanvas,
-                                std::move(contextProvider),
-                                requestedAttributes,
-                                version) {}
+    : WebGLRenderingContextBase(
+          nullptr,
+          passedOffscreenCanvas,
+          TaskRunnerHelper::get(TaskType::WebGL,
+                                passedOffscreenCanvas->getExecutionContext()),
+          std::move(contextProvider),
+          requestedAttributes,
+          version) {}
 
 WebGLRenderingContextBase::WebGLRenderingContextBase(
     HTMLCanvasElement* passedCanvas,
     std::unique_ptr<WebGraphicsContext3DProvider> contextProvider,
     const CanvasContextCreationAttributes& requestedAttributes,
     unsigned version)
-    : WebGLRenderingContextBase(passedCanvas,
-                                nullptr,
-                                std::move(contextProvider),
-                                requestedAttributes,
-                                version) {}
+    : WebGLRenderingContextBase(
+          passedCanvas,
+          nullptr,
+          TaskRunnerHelper::get(TaskType::WebGL, &passedCanvas->document()),
+          std::move(contextProvider),
+          requestedAttributes,
+          version) {}
 
 WebGLRenderingContextBase::WebGLRenderingContextBase(
     HTMLCanvasElement* passedCanvas,
     OffscreenCanvas* passedOffscreenCanvas,
+    RefPtr<WebTaskRunner> taskRunner,
     std::unique_ptr<WebGraphicsContext3DProvider> contextProvider,
     const CanvasContextCreationAttributes& requestedAttributes,
     unsigned version)
@@ -1070,10 +1103,13 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(
       m_contextLostMode(NotLostContext),
       m_autoRecoveryMethod(Manual),
       m_dispatchContextLostEventTimer(
+          taskRunner,
           this,
           &WebGLRenderingContextBase::dispatchContextLostEvent),
       m_restoreAllowed(false),
-      m_restoreTimer(this, &WebGLRenderingContextBase::maybeRestoreContext),
+      m_restoreTimer(taskRunner,
+                     this,
+                     &WebGLRenderingContextBase::maybeRestoreContext),
       m_boundArrayBuffer(this, nullptr),
       m_boundVertexArrayObject(this, nullptr),
       m_currentProgram(this, nullptr),
@@ -1172,6 +1208,7 @@ void WebGLRenderingContextBase::initializeNewContext() {
   ASSERT(drawingBuffer());
 
   m_markedCanvasDirty = false;
+  m_animationFrameInProgress = false;
   m_activeTextureUnit = 0;
   m_packAlignment = 4;
   m_unpackAlignment = 4;
@@ -1387,25 +1424,28 @@ void WebGLRenderingContextBase::markContextChanged(
   if (!canvas())
     return;
 
-  LayoutBox* layoutBox = canvas()->layoutBox();
-  if (layoutBox && layoutBox->hasAcceleratedCompositing()) {
-    m_markedCanvasDirty = true;
-    canvas()->clearCopiedImage();
-    layoutBox->contentChanged(changeType);
-  } else {
-    if (!m_markedCanvasDirty) {
-      m_markedCanvasDirty = true;
-      canvas()->didDraw(
-          FloatRect(FloatPoint(0, 0), FloatSize(clampedCanvasSize())));
+  m_markedCanvasDirty = true;
+
+  if (!m_animationFrameInProgress) {
+    m_animationFrameInProgress = true;
+    LayoutBox* layoutBox = canvas()->layoutBox();
+    if (layoutBox && layoutBox->hasAcceleratedCompositing()) {
+      layoutBox->contentChanged(changeType);
     }
+    IntSize canvasSize = clampedCanvasSize();
+    didDraw(SkIRect::MakeXYWH(0, 0, canvasSize.width(), canvasSize.height()));
   }
+}
+
+void WebGLRenderingContextBase::finalizeFrame() {
+  m_animationFrameInProgress = false;
 }
 
 void WebGLRenderingContextBase::onErrorMessage(const char* message,
                                                int32_t id) {
   if (m_synthesizedErrorsToConsole)
     printGLErrorToConsole(message);
-  InspectorInstrumentation::didFireWebGLErrorOrWarning(canvas(), message);
+  probe::didFireWebGLErrorOrWarning(canvas(), message);
 }
 
 void WebGLRenderingContextBase::notifyCanvasContextChanged() {
@@ -4590,12 +4630,11 @@ PassRefPtr<Image> WebGLRenderingContextBase::drawImageIntoBuffer(
 
   IntRect srcRect(IntPoint(), image->size());
   IntRect destRect(0, 0, size.width(), size.height());
-  SkPaint paint;
+  PaintFlags flags;
   // TODO(ccameron): WebGL should produce sRGB images.
   // https://crbug.com/672299
-  image->draw(buf->canvas(), paint, destRect, srcRect,
-              DoNotRespectImageOrientation, Image::DoNotClampImageToSourceRect,
-              ColorBehavior::transformToGlobalTarget());
+  image->draw(buf->canvas(), flags, destRect, srcRect,
+              DoNotRespectImageOrientation, Image::DoNotClampImageToSourceRect);
   return buf->newImageSnapshot(PreferNoAcceleration,
                                SnapshotReasonWebGLDrawImageIntoBuffer);
 }
@@ -4876,9 +4915,13 @@ void WebGLRenderingContextBase::texImageHelperHTMLImageElement(
     return;
 
   RefPtr<Image> imageForRender = image->cachedImage()->getImage();
-  if (imageForRender && imageForRender->isSVGImage())
+  if (imageForRender && imageForRender->isSVGImage()) {
+    if (canvas()) {
+      UseCounter::count(canvas()->document(), UseCounter::SVGInWebGL);
+    }
     imageForRender = drawImageIntoBuffer(
         imageForRender.release(), image->width(), image->height(), funcName);
+  }
 
   TexImageFunctionType functionType;
   if (functionID == TexImage2D || functionID == TexImage3D)
@@ -5234,17 +5277,9 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
     // Go through the fast path doing a GPU-GPU textures copy without a readback
     // to system memory if possible.  Otherwise, it will fall back to the normal
     // SW path.
-
-    // Note that neither
-    // HTMLVideoElement::copyVideoTextureToPlatformTexture nor
-    // ImageBuffer::copyToPlatformTexture allocate the destination texture
-    // any more.
-    texImage2DBase(target, level, internalformat, video->videoWidth(),
-                   video->videoHeight(), 0, format, type, nullptr);
-
-    if (video->copyVideoTextureToPlatformTexture(contextGL(), texture->object(),
-                                                 m_unpackPremultiplyAlpha,
-                                                 m_unpackFlipY)) {
+    if (video->copyVideoTextureToPlatformTexture(
+            contextGL(), texture->object(), internalformat, type,
+            m_unpackPremultiplyAlpha, m_unpackFlipY)) {
       return;
     }
 
@@ -5267,6 +5302,11 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
 
         // This is a straight GPU-GPU copy, any necessary color space conversion
         // was handled in the paintCurrentFrameInContext() call.
+
+        // Note that copyToPlatformTexture no longer allocates the destination
+        // texture.
+        texImage2DBase(target, level, internalformat, video->videoWidth(),
+                       video->videoHeight(), 0, format, type, nullptr);
 
         if (imageBuffer->copyToPlatformTexture(
                 functionIDToSnapshotReason(functionID), contextGL(),
@@ -6305,53 +6345,6 @@ Extensions3DUtil* WebGLRenderingContextBase::extensionsUtil() {
            gl->GetGraphicsResetStatusKHR() != GL_NO_ERROR);
   }
   return m_extensionsUtil.get();
-}
-
-void WebGLRenderingContextBase::visitChildDOMWrappers(
-    v8::Isolate* isolate,
-    const v8::Persistent<v8::Object>& wrapper) {
-  if (isContextLost()) {
-    return;
-  }
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, m_boundArrayBuffer,
-                                                   isolate);
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-      wrapper, m_renderbufferBinding, isolate);
-
-  for (auto& unit : m_textureUnits) {
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-        wrapper, unit.m_texture2DBinding, isolate);
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-        wrapper, unit.m_textureCubeMapBinding, isolate);
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-        wrapper, unit.m_texture3DBinding, isolate);
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-        wrapper, unit.m_texture2DArrayBinding, isolate);
-  }
-
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-      wrapper, m_framebufferBinding, isolate);
-  if (m_framebufferBinding) {
-    m_framebufferBinding->visitChildDOMWrappers(isolate, wrapper);
-  }
-
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, m_currentProgram,
-                                                   isolate);
-  if (m_currentProgram) {
-    m_currentProgram->visitChildDOMWrappers(isolate, wrapper);
-  }
-
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-      wrapper, m_boundVertexArrayObject, isolate);
-  if (m_boundVertexArrayObject) {
-    m_boundVertexArrayObject->visitChildDOMWrappers(isolate, wrapper);
-  }
-
-  for (ExtensionTracker* tracker : m_extensions) {
-    WebGLExtension* extension = tracker->getExtensionObjectIfAlreadyEnabled();
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, extension,
-                                                     isolate);
-  }
 }
 
 void WebGLRenderingContextBase::stop() {
@@ -7498,8 +7491,11 @@ void WebGLRenderingContextBase::maybeRestoreContext(TimerBase*) {
     m_drawingBuffer.clear();
   }
 
+  auto executionContext = canvas() ? canvas()->document().getExecutionContext()
+                                   : offscreenCanvas()->getExecutionContext();
   Platform::ContextAttributes attributes =
-      toPlatformContextAttributes(creationAttributes(), version());
+      toPlatformContextAttributes(creationAttributes(), version(),
+                                  supportOwnOffscreenSurface(executionContext));
   Platform::GraphicsInfo glInfo;
   std::unique_ptr<WebGraphicsContext3DProvider> contextProvider;
   const auto& url = canvas() ? canvas()->document().topDocument().url()
@@ -7563,7 +7559,7 @@ void WebGLRenderingContextBase::maybeRestoreContext(TimerBase*) {
 
 String WebGLRenderingContextBase::ensureNotNull(const String& text) const {
   if (text.isNull())
-    return WTF::emptyString();
+    return WTF::emptyString;
   return text;
 }
 
@@ -7642,7 +7638,7 @@ void WebGLRenderingContextBase::synthesizeGLError(
     if (!m_lostContextErrors.contains(error))
       m_lostContextErrors.push_back(error);
   }
-  InspectorInstrumentation::didFireWebGLError(canvas(), errorType);
+  probe::didFireWebGLError(canvas(), errorType);
 }
 
 void WebGLRenderingContextBase::emitGLWarning(const char* functionName,
@@ -7652,7 +7648,7 @@ void WebGLRenderingContextBase::emitGLWarning(const char* functionName,
         String("WebGL: ") + String(functionName) + ": " + String(description);
     printGLErrorToConsole(message);
   }
-  InspectorInstrumentation::didFireWebGLWarning(canvas());
+  probe::didFireWebGLWarning(canvas());
 }
 
 void WebGLRenderingContextBase::applyStencilTest() {

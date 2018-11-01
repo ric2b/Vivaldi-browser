@@ -907,14 +907,14 @@ static VisiblePositionTemplate<Strategy> previousBoundary(
 }
 
 template <typename Strategy>
-static VisiblePositionTemplate<Strategy> nextBoundary(
+static PositionTemplate<Strategy> nextBoundary(
     const VisiblePositionTemplate<Strategy>& c,
     BoundarySearchFunction searchFunction) {
   DCHECK(c.isValid()) << c;
   PositionTemplate<Strategy> pos = c.deepEquivalent();
   Node* boundary = parentEditingBoundary(pos);
   if (!boundary)
-    return VisiblePositionTemplate<Strategy>();
+    return PositionTemplate<Strategy>();
 
   Document& d = boundary->document();
   const PositionTemplate<Strategy> start(pos.parentAnchoredEquivalent());
@@ -946,7 +946,9 @@ static VisiblePositionTemplate<Strategy> nextBoundary(
       PositionTemplate<Strategy>::lastPositionInNode(boundary);
   TextIteratorAlgorithm<Strategy> it(
       searchStart, searchEnd,
-      TextIteratorEmitsCharactersBetweenAllVisiblePositions);
+      TextIteratorBehavior::Builder()
+          .setEmitsCharactersBetweenAllVisiblePositions(true)
+          .build());
   const unsigned invalidOffset = static_cast<unsigned>(-1);
   unsigned next = invalidOffset;
   unsigned offset = prefixLength;
@@ -996,7 +998,9 @@ static VisiblePositionTemplate<Strategy> nextBoundary(
     // position.
     CharacterIteratorAlgorithm<Strategy> charIt(
         searchStart, searchEnd,
-        TextIteratorEmitsCharactersBetweenAllVisiblePositions);
+        TextIteratorBehavior::Builder()
+            .setEmitsCharactersBetweenAllVisiblePositions(true)
+            .build());
     charIt.advance(next - prefixLength - 1);
     pos = charIt.endPosition();
 
@@ -1014,8 +1018,7 @@ static VisiblePositionTemplate<Strategy> nextBoundary(
     }
   }
 
-  // generate VisiblePosition, use TextAffinity::Upstream affinity if possible
-  return createVisiblePosition(pos, VP_UPSTREAM_IF_POSSIBLE);
+  return pos;
 }
 
 // ---------
@@ -1103,7 +1106,8 @@ static VisiblePositionTemplate<Strategy> endOfWordAlgorithm(
     return c;
   }
 
-  return nextBoundary(p, endWordBoundary);
+  return createVisiblePosition(nextBoundary(p, endWordBoundary),
+                               VP_UPSTREAM_IF_POSSIBLE);
 }
 
 VisiblePosition endOfWord(const VisiblePosition& c, EWordSide side) {
@@ -1154,7 +1158,8 @@ static unsigned nextWordPositionBoundary(
 
 VisiblePosition nextWordPosition(const VisiblePosition& c) {
   DCHECK(c.isValid()) << c;
-  VisiblePosition next = nextBoundary(c, nextWordPositionBoundary);
+  VisiblePosition next = createVisiblePosition(
+      nextBoundary(c, nextWordPositionBoundary), VP_UPSTREAM_IF_POSSIBLE);
   return honorEditingBoundaryAtOrAfter(next, c.deepEquivalent());
 }
 
@@ -1696,7 +1701,8 @@ template <typename Strategy>
 static VisiblePositionTemplate<Strategy> endOfSentenceAlgorithm(
     const VisiblePositionTemplate<Strategy>& c) {
   DCHECK(c.isValid()) << c;
-  return nextBoundary(c, endSentenceBoundary);
+  return createVisiblePosition(nextBoundary(c, endSentenceBoundary),
+                               VP_UPSTREAM_IF_POSSIBLE);
 }
 
 VisiblePosition endOfSentence(const VisiblePosition& c) {
@@ -1739,8 +1745,47 @@ static unsigned nextSentencePositionBoundary(const UChar* characters,
 
 VisiblePosition nextSentencePosition(const VisiblePosition& c) {
   DCHECK(c.isValid()) << c;
-  VisiblePosition next = nextBoundary(c, nextSentencePositionBoundary);
+  VisiblePosition next = createVisiblePosition(
+      nextBoundary(c, nextSentencePositionBoundary), VP_UPSTREAM_IF_POSSIBLE);
   return honorEditingBoundaryAtOrAfter(next, c.deepEquivalent());
+}
+
+EphemeralRange expandEndToSentenceBoundary(const EphemeralRange& range) {
+  DCHECK(range.isNotNull());
+  const VisiblePosition& visibleEnd =
+      createVisiblePosition(range.endPosition());
+  DCHECK(visibleEnd.isNotNull());
+  const Position& sentenceEnd = endOfSentence(visibleEnd).deepEquivalent();
+  // TODO(xiaochengh): |sentenceEnd < range.endPosition()| is possible,
+  // which would trigger a DCHECK in EphemeralRange's constructor if we return
+  // it directly. However, this shouldn't happen and needs to be fixed.
+  return EphemeralRange(
+      range.startPosition(),
+      sentenceEnd.isNotNull() && sentenceEnd > range.endPosition()
+          ? sentenceEnd
+          : range.endPosition());
+}
+
+EphemeralRange expandRangeToSentenceBoundary(const EphemeralRange& range) {
+  DCHECK(range.isNotNull());
+  const VisiblePosition& visibleStart =
+      createVisiblePosition(range.startPosition());
+  DCHECK(visibleStart.isNotNull());
+  const Position& sentenceStart =
+      startOfSentence(visibleStart).deepEquivalent();
+  // TODO(xiaochengh): |sentenceStart > range.startPosition()| is possible,
+  // which would trigger a DCHECK in EphemeralRange's constructor if we return
+  // it directly. However, this shouldn't happen and needs to be fixed.
+  return expandEndToSentenceBoundary(EphemeralRange(
+      sentenceStart.isNotNull() && sentenceStart < range.startPosition()
+          ? sentenceStart
+          : range.startPosition(),
+      range.endPosition()));
+}
+
+static bool nodeIsUserSelectAll(const Node* node) {
+  return node && node->layoutObject() &&
+         node->layoutObject()->style()->userSelect() == SELECT_ALL;
 }
 
 template <typename Strategy>
@@ -2643,9 +2688,11 @@ VisiblePosition visiblePositionForContentsPoint(const IntPoint& contentsPoint,
   HitTestResult result(request, contentsPoint);
   frame->document()->layoutViewItem().hitTest(result);
 
-  if (Node* node = result.innerNode())
+  if (Node* node = result.innerNode()) {
     return createVisiblePosition(positionRespectingEditingBoundary(
-        frame->selection().selection().start(), result.localPoint(), node));
+        frame->selection().computeVisibleSelectionInDOMTreeDeprecated().start(),
+        result.localPoint(), node));
+  }
   return VisiblePosition();
 }
 
@@ -2698,9 +2745,10 @@ LayoutObject* associatedLayoutObjectOf(const Node& node, int offsetInNode) {
       layoutTextFragment->firstLetterPseudoElement()->layoutObject();
   // TODO(yosin): We're not sure when |firstLetterLayoutObject| has
   // multiple child layout object.
-  DCHECK_EQ(firstLetterLayoutObject->slowFirstChild(),
-            firstLetterLayoutObject->slowLastChild());
-  return firstLetterLayoutObject->slowFirstChild();
+  LayoutObject* child = firstLetterLayoutObject->slowFirstChild();
+  CHECK(child && child->isText());
+  DCHECK_EQ(child, firstLetterLayoutObject->slowLastChild());
+  return child;
 }
 
 int caretMinOffset(const Node* node) {
@@ -2829,9 +2877,22 @@ static bool isStreamer(const PositionIteratorAlgorithm<Strategy>& pos) {
 }
 
 template <typename Strategy>
+static PositionTemplate<Strategy> adjustPositionForBackwardIteration(
+    const PositionTemplate<Strategy>& position) {
+  DCHECK(!position.isNull());
+  if (!position.isAfterAnchor())
+    return position;
+  if (isUserSelectContain(*position.anchorNode()))
+    return position.toOffsetInAnchor();
+  return PositionTemplate<Strategy>::editingPositionOf(
+      position.anchorNode(), Strategy::caretMaxOffset(*position.anchorNode()));
+}
+
+template <typename Strategy>
 static PositionTemplate<Strategy> mostBackwardCaretPosition(
     const PositionTemplate<Strategy>& position,
     EditingBoundaryCrossingRule rule) {
+  DCHECK(!needsLayoutTreeUpdate(position)) << position;
   TRACE_EVENT0("input", "VisibleUnits::mostBackwardCaretPosition");
 
   Node* startNode = position.anchorNode();
@@ -2842,11 +2903,7 @@ static PositionTemplate<Strategy> mostBackwardCaretPosition(
   Node* boundary = enclosingVisualBoundary<Strategy>(startNode);
   // FIXME: PositionIterator should respect Before and After positions.
   PositionIteratorAlgorithm<Strategy> lastVisible(
-      position.isAfterAnchor()
-          ? PositionTemplate<Strategy>::editingPositionOf(
-                position.anchorNode(),
-                Strategy::caretMaxOffset(*position.anchorNode()))
-          : position);
+      adjustPositionForBackwardIteration<Strategy>(position));
   PositionIteratorAlgorithm<Strategy> currentPos = lastVisible;
   bool startEditable = hasEditableStyle(*startNode);
   Node* lastNode = startNode;
@@ -3006,6 +3063,7 @@ template <typename Strategy>
 PositionTemplate<Strategy> mostForwardCaretPosition(
     const PositionTemplate<Strategy>& position,
     EditingBoundaryCrossingRule rule) {
+  DCHECK(!needsLayoutTreeUpdate(position)) << position;
   TRACE_EVENT0("input", "VisibleUnits::mostForwardCaretPosition");
 
   Node* startNode = position.anchorNode();

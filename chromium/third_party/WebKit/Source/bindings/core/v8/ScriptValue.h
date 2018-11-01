@@ -35,10 +35,10 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SharedPersistent.h"
 #include "core/CoreExport.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -163,11 +163,6 @@ class CORE_EXPORT ScriptValue final {
   v8::Local<v8::Value> v8ValueFor(ScriptState*) const;
 
   bool toString(String&) const;
-
-  void setReference(const v8::Persistent<v8::Object>& parent,
-                    v8::Isolate* isolate) {
-    m_value->setReference(parent, isolate);
-  }
 
   static ScriptValue createNull(ScriptState*);
 

@@ -33,7 +33,9 @@
 
 #include "public/platform/WebScreenInfo.h"
 
-using namespace blink;
+namespace blink {
+
+namespace {
 
 class LayoutFullScreenPlaceholder final : public LayoutBlockFlow {
  public:
@@ -60,6 +62,8 @@ void LayoutFullScreenPlaceholder::willBeDestroyed() {
   m_owner->resetPlaceholder();
   LayoutBlockFlow::willBeDestroyed();
 }
+
+}  // namespace
 
 LayoutFullScreen::LayoutFullScreen()
     : LayoutFlexibleBox(nullptr), m_placeholder(nullptr) {
@@ -107,7 +111,7 @@ void LayoutFullScreen::updateStyle(LayoutObject* parent) {
   fullscreenStyle->setAlignItemsPosition(ItemPositionCenter);
   fullscreenStyle->setFlexDirection(FlowColumn);
 
-  fullscreenStyle->setPosition(FixedPosition);
+  fullscreenStyle->setPosition(EPosition::kFixed);
   fullscreenStyle->setLeft(Length(0, blink::Fixed));
   fullscreenStyle->setTop(Length(0, blink::Fixed));
   IntSize viewportSize = document().page()->frameHost().visualViewport().size();
@@ -219,3 +223,5 @@ void LayoutFullScreen::createPlaceholder(PassRefPtr<ComputedStyle> style,
     m_placeholder->setStyleWithWritingModeOfParent(std::move(style));
   }
 }
+
+}  // namespace blink

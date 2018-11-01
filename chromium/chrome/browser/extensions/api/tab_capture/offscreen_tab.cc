@@ -19,6 +19,10 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 
+#if defined(ENABLE_MEDIA_ROUTER)
+#include "chrome/browser/media/router/receiver_presentation_service_delegate_impl.h"  // nogncheck
+#endif
+
 using content::WebContents;
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::OffscreenTabsOwner);
@@ -117,11 +121,15 @@ void OffscreenTab::Start(const GURL& start_url,
   // automatically unmuted, but will be captured into the MediaStream.
   offscreen_tab_web_contents_->SetAudioMuted(true);
 
-  // TODO(imcheng): If |optional_presentation_id| is not empty, register it with
-  // the PresentationRouter.  http://crbug.com/513859
+#if defined(ENABLE_MEDIA_ROUTER)
   if (!optional_presentation_id.empty()) {
-    NOTIMPLEMENTED()
-        << "Register with PresentationRouter, id=" << optional_presentation_id;
+    DVLOG(1) << " Register with ReceiverPresentationServiceDelegateImpl, "
+             << "[presentation_id]: " << optional_presentation_id;
+    // Create a ReceiverPSDImpl associated with the offscreen tab's WebContents.
+    // The new instance will set up the necessary infrastructure to allow
+    // controlling peers the ability to connect to the offscreen tab.
+    media_router::ReceiverPresentationServiceDelegateImpl::CreateForWebContents(
+        offscreen_tab_web_contents_.get(), optional_presentation_id);
 
     if (auto* render_view_host =
             offscreen_tab_web_contents_->GetRenderViewHost()) {
@@ -130,6 +138,7 @@ void OffscreenTab::Start(const GURL& start_url,
       render_view_host->UpdateWebkitPreferences(web_prefs);
     }
   }
+#endif  // defined(ENABLE_MEDIA_ROUTER)
 
   // Navigate to the initial URL.
   content::NavigationController::LoadURLParams load_params(start_url_);
@@ -220,7 +229,7 @@ bool OffscreenTab::ShouldCreateWebContents(
     int32_t route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
-    WindowContainerType window_container_type,
+    content::mojom::WindowContainerType window_container_type,
     const GURL& opener_url,
     const std::string& frame_name,
     const GURL& target_url,

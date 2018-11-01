@@ -6,7 +6,6 @@
 #define KeyboardEventManager_h
 
 #include "core/CoreExport.h"
-#include "platform/PlatformEvent.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Visitor.h"
 #include "public/platform/WebFocusType.h"
@@ -19,6 +18,7 @@ namespace blink {
 class KeyboardEvent;
 class LocalFrame;
 class ScrollManager;
+class WebKeyboardEvent;
 
 enum class OverrideCapsLockState { Default, On, Off };
 

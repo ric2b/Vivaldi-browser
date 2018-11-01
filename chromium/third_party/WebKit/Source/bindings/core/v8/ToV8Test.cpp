@@ -204,15 +204,15 @@ TEST(ToV8Test, basicTypeVectors) {
   TEST_TOV8("true,true,false", boolVector);
 }
 
-TEST(ToV8Test, dictionaryVector) {
+TEST(ToV8Test, pairVector) {
   V8TestingScope scope;
-  Vector<std::pair<String, int>> dictionary;
-  dictionary.push_back(std::make_pair("one", 1));
-  dictionary.push_back(std::make_pair("two", 2));
-  TEST_TOV8("[object Object]", dictionary);
+  Vector<std::pair<String, int>> pairVector;
+  pairVector.push_back(std::make_pair("one", 1));
+  pairVector.push_back(std::make_pair("two", 2));
+  TEST_TOV8("[object Object]", pairVector);
   v8::Local<v8::Context> context = scope.getScriptState()->context();
   v8::Local<v8::Object> result =
-      ToV8(dictionary, context->Global(), scope.isolate())
+      ToV8(pairVector, context->Global(), scope.isolate())
           ->ToObject(context)
           .ToLocalChecked();
   v8::Local<v8::Value> one =
@@ -221,6 +221,59 @@ TEST(ToV8Test, dictionaryVector) {
   v8::Local<v8::Value> two =
       result->Get(context, v8String(scope.isolate(), "two")).ToLocalChecked();
   EXPECT_EQ(2, two->NumberValue(context).FromJust());
+}
+
+TEST(ToV8Test, pairHeapVector) {
+  V8TestingScope scope;
+  HeapVector<std::pair<String, Member<GarbageCollectedScriptWrappable>>>
+      pairHeapVector;
+  pairHeapVector.push_back(
+      std::make_pair("one", new GarbageCollectedScriptWrappable("foo")));
+  pairHeapVector.push_back(
+      std::make_pair("two", new GarbageCollectedScriptWrappable("bar")));
+  TEST_TOV8("[object Object]", pairHeapVector);
+  v8::Local<v8::Context> context = scope.getScriptState()->context();
+  v8::Local<v8::Object> result =
+      ToV8(pairHeapVector, context->Global(), scope.isolate())
+          ->ToObject(context)
+          .ToLocalChecked();
+  v8::Local<v8::Value> one =
+      result->Get(context, v8String(scope.isolate(), "one")).ToLocalChecked();
+  EXPECT_TRUE(one->IsObject());
+  EXPECT_EQ(String("foo"), toCoreString(one->ToString()));
+  v8::Local<v8::Value> two =
+      result->Get(context, v8String(scope.isolate(), "two")).ToLocalChecked();
+  EXPECT_TRUE(two->IsObject());
+  EXPECT_EQ(String("bar"), toCoreString(two->ToString()));
+}
+
+TEST(ToV8Test, stringVectorVector) {
+  V8TestingScope scope;
+
+  Vector<String> stringVector1;
+  stringVector1.push_back("foo");
+  stringVector1.push_back("bar");
+  Vector<String> stringVector2;
+  stringVector2.push_back("quux");
+
+  Vector<Vector<String>> compoundVector;
+  compoundVector.push_back(stringVector1);
+  compoundVector.push_back(stringVector2);
+
+  EXPECT_EQ(2U, compoundVector.size());
+  TEST_TOV8("foo,bar,quux", compoundVector);
+
+  v8::Local<v8::Context> context = scope.getScriptState()->context();
+  v8::Local<v8::Object> result =
+      ToV8(compoundVector, context->Global(), scope.isolate())
+          ->ToObject(context)
+          .ToLocalChecked();
+  v8::Local<v8::Value> vector1 = result->Get(context, 0).ToLocalChecked();
+  EXPECT_TRUE(vector1->IsArray());
+  EXPECT_EQ(2U, vector1.As<v8::Array>()->Length());
+  v8::Local<v8::Value> vector2 = result->Get(context, 1).ToLocalChecked();
+  EXPECT_TRUE(vector2->IsArray());
+  EXPECT_EQ(1U, vector2.As<v8::Array>()->Length());
 }
 
 TEST(ToV8Test, heapVector) {

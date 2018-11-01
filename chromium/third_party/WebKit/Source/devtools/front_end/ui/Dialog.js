@@ -28,24 +28,22 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @unrestricted
- */
-UI.Dialog = class extends UI.Widget {
+UI.Dialog = class extends UI.GlassPane {
   constructor() {
-    super(true);
-    this.markAsRoot();
+    super();
     this.registerRequiredCSS('ui/dialog.css');
-
-    this.contentElement.createChild('content');
     this.contentElement.tabIndex = 0;
-    this.contentElement.addEventListener('focus', this._onFocus.bind(this), false);
-    this._keyDownBound = this._onKeyDown.bind(this);
-
-    this._wrapsContent = false;
-    this._dimmed = false;
+    this.contentElement.addEventListener('focus', () => this.widget().focus(), false);
+    this.contentElement.addEventListener('keydown', this._onKeyDown.bind(this), false);
+    this.setBlockPointerEvents(true);
+    this.setSetOutsideClickCallback(event => {
+      this.hide();
+      event.consume(true);
+    });
     /** @type {!Map<!HTMLElement, number>} */
     this._tabIndexMap = new Map();
+    /** @type {?UI.WidgetFocusRestorer} */
+    this._focusRestorer = null;
   }
 
   /**
@@ -56,104 +54,34 @@ UI.Dialog = class extends UI.Widget {
   }
 
   /**
-   * @param {!UI.Widget} view
-   */
-  static setModalHostView(view) {
-    UI.Dialog._modalHostView = view;
-  }
-
-  /**
-   * FIXME: make utility method in Dialog, so clients use it instead of this getter.
-   * Method should be like Dialog.showModalElement(position params, reposition callback).
-   * @return {?UI.Widget}
-   */
-  static modalHostView() {
-    return UI.Dialog._modalHostView;
-  }
-
-  static modalHostRepositioned() {
-    if (UI.Dialog._instance)
-      UI.Dialog._instance._position();
-  }
-
-  /**
    * @override
+   * @param {!Document|!Element=} where
    */
-  show() {
+  show(where) {
+    var document = /** @type {!Document} */ (
+        where instanceof Document ? where : (where || UI.inspectorView.element).ownerDocument);
     if (UI.Dialog._instance)
       UI.Dialog._instance.detach();
     UI.Dialog._instance = this;
-
-    var document = /** @type {!Document} */ (UI.Dialog._modalHostView.element.ownerDocument);
     this._disableTabIndexOnElements(document);
-
-    this._glassPane = new UI.GlassPane(document, this._dimmed);
-    this._glassPane.element.addEventListener('click', this._onGlassPaneClick.bind(this), false);
-    this.element.ownerDocument.body.addEventListener('keydown', this._keyDownBound, false);
-
-    super.show(this._glassPane.element);
-
-    this._position();
-    this._focusRestorer = new UI.WidgetFocusRestorer(this);
+    super.show(document);
+    this._focusRestorer = new UI.WidgetFocusRestorer(this.widget());
   }
 
   /**
    * @override
    */
-  detach() {
+  hide() {
     this._focusRestorer.restore();
-
-    this.element.ownerDocument.body.removeEventListener('keydown', this._keyDownBound, false);
-    super.detach();
-
-    this._glassPane.dispose();
-    delete this._glassPane;
-
+    super.hide();
     this._restoreTabIndexOnElements();
-
     delete UI.Dialog._instance;
   }
 
   addCloseButton() {
     var closeButton = this.contentElement.createChild('div', 'dialog-close-button', 'dt-close-button');
     closeButton.gray = true;
-    closeButton.addEventListener('click', () => this.detach(), false);
-  }
-
-  /**
-   * @param {number=} positionX
-   * @param {number=} positionY
-   */
-  setPosition(positionX, positionY) {
-    this._defaultPositionX = positionX;
-    this._defaultPositionY = positionY;
-  }
-
-  /**
-   * @param {!UI.Size} size
-   */
-  setMaxSize(size) {
-    this._maxSize = size;
-  }
-
-  /**
-   * @param {boolean} wraps
-   */
-  setWrapsContent(wraps) {
-    this.element.classList.toggle('wraps-content', wraps);
-    this._wrapsContent = wraps;
-  }
-
-  /**
-   * @param {boolean} dimmed
-   */
-  setDimmed(dimmed) {
-    this._dimmed = dimmed;
-  }
-
-  contentResized() {
-    if (this._wrapsContent)
-      this._position();
+    closeButton.addEventListener('click', () => this.hide(), false);
   }
 
   /**
@@ -182,69 +110,10 @@ UI.Dialog = class extends UI.Widget {
   /**
    * @param {!Event} event
    */
-  _onFocus(event) {
-    this.focus();
-  }
-
-  /**
-   * @param {!Event} event
-   */
-  _onGlassPaneClick(event) {
-    if (!this.element.isSelfOrAncestor(/** @type {?Node} */ (event.target)))
-      this.detach();
-  }
-
-  _position() {
-    var container = UI.Dialog._modalHostView.element;
-
-    var width = container.offsetWidth - 10;
-    var height = container.offsetHeight - 10;
-
-    if (this._wrapsContent) {
-      width = Math.min(width, this.contentElement.offsetWidth);
-      height = Math.min(height, this.contentElement.offsetHeight);
-    }
-
-    if (this._maxSize) {
-      width = Math.min(width, this._maxSize.width);
-      height = Math.min(height, this._maxSize.height);
-    }
-
-    var positionX;
-    if (typeof this._defaultPositionX === 'number') {
-      positionX = this._defaultPositionX;
-    } else {
-      positionX = (container.offsetWidth - width) / 2;
-      positionX = Number.constrain(positionX, 0, container.offsetWidth - width);
-    }
-
-    var positionY;
-    if (typeof this._defaultPositionY === 'number') {
-      positionY = this._defaultPositionY;
-    } else {
-      positionY = (container.offsetHeight - height) / 2;
-      positionY = Number.constrain(positionY, 0, container.offsetHeight - height);
-    }
-
-    this.element.style.width = width + 'px';
-    this.element.style.height = height + 'px';
-    this.element.positionAt(positionX, positionY, container);
-  }
-
-  /**
-   * @param {!Event} event
-   */
   _onKeyDown(event) {
     if (event.keyCode === UI.KeyboardShortcut.Keys.Esc.code) {
       event.consume(true);
-      this.detach();
+      this.hide();
     }
   }
 };
-
-
-/** @type {?Element} */
-UI.Dialog._previousFocusedElement = null;
-
-/** @type {?UI.Widget} */
-UI.Dialog._modalHostView = null;

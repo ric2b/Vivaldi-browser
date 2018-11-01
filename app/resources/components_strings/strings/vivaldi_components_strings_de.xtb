@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Zeigt eine gespeicherte (evtl. veraltete) Kopie dieser Seite an.</translation>
 <translation id="1559528461873125649">Datei oder Verzeichnis nicht vorhanden</translation>
 <translation id="1710259589646384581">Betriebssystem</translation>
-<translation id="1838667051080421715">Dies ist die Quelle einer Webseite.</translation>
+<translation id="1728677426644403582">Dies ist der Quelltext einer Webseite</translation>
 <translation id="194030505837763158">Besuchen Sie die Seite <ph name="LINK" />.</translation>
 <translation id="2030481566774242610">Meinten Sie <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Weniger</translation>
 <translation id="2166378884831602661">Diese Website kann keine sichere Verbindung bereitstellen</translation>
 <translation id="2292556288342944218">Ihre Internetverbindung ist gesperrt</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> hat eine ungültige Antwort gesendet.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Der Zugriff auf die Datei wurde verweigert.</translation>
 <translation id="2705137772291741111">Die (im Cache) gespeicherte Kopie dieser Website konnte nicht gelesen werden.</translation>
 <translation id="2784949926578158345">Die Verbindung wurde zurückgesetzt.</translation>
-<translation id="284702764277384724">Das Serverzertifikat bei <ph name="HOST_NAME" /> ist anscheinend eine Fälschung.</translation>
 <translation id="2909946352844186028">Eine Netzwerkänderung ist aufgetreten.</translation>
 <translation id="3005723025932146533">Gespeicherte Kopie anzeigen</translation>
 <translation id="3093245981617870298">Sie sind offline.</translation>
@@ -38,7 +36,6 @@
 <translation id="4021036232240155012">DNS ist der Netzwerkdienst, der den Namen einer Website in die entsprechende Internetadresse umwandelt.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> hat Ihr Anmeldezertifikat nicht akzeptiert oder es wurde keines bereitgestellt.</translation>
 <translation id="4522570452068850558">Details</translation>
-<translation id="4670097147947922288">Sie sehen sich eine Erweiterungsseite an.</translation>
 <translation id="4708268264240856090">Ihre Verbindung wurde unterbrochen</translation>
 <translation id="4744603770635761495">Ausführbarer Pfad</translation>
 <translation id="4764776831041365478">Die Webseite unter <ph name="URL" /> ist möglicherweise vorübergehend nicht verfügbar oder wurde dauerhaft an eine neue Webadresse verschoben.</translation>
@@ -55,7 +52,6 @@
 <translation id="5675650730144413517">Diese Seite funktioniert nicht</translation>
 <translation id="5869405914158311789">Diese Website ist nicht erreichbar</translation>
 <translation id="5990559369517809815">Anfragen an den Server wurden durch eine Erweiterung blockiert.</translation>
-<translation id="6042308850641462728">Mehr</translation>
 <translation id="6146055958333702838">Überprüfen Sie alle Kabel und starten Sie alle verwendeten Router, Modems oder
     andere Netzwerkgeräte neu.</translation>
 <translation id="6165508094623778733">Weitere Informationen</translation>
@@ -64,12 +60,11 @@
 <translation id="6321917430147971392">Überprüfen Sie die DNS-Einstellungen.</translation>
 <translation id="6328639280570009161">Deaktivieren Sie die Netzwerkvervollständigung.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> hat die Verbindung abgelehnt.</translation>
+<translation id="6569060085658103619">Dies ist eine Erweiterungsseite</translation>
 <translation id="6711464428925977395">Mit dem Proxyserver ist ein Problem aufgetreten oder die Adresse ist falsch.</translation>
 <translation id="6757797048963528358">Ihr Gerät geht in den Ruhemodus.</translation>
-<translation id="6830600606572693159">Die Webseite unter <ph name="URL" /> ist zurzeit nicht verfügbar. Möglicherweise ist sie überlastet oder wird gerade gewartet.</translation>
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> erfüllt die Sicherheitsstandards nicht.</translation>
-<translation id="7269802741830436641">Diese Webseite befindet sich in einer Weiterleitungsschleife.</translation>
 <translation id="7353601530677266744">Befehlszeile</translation>
 <translation id="7419106976560586862">Profilpfad</translation>
 <translation id="7518003948725431193">Für die folgende Webadresse wurde keine Webseite gefunden: <ph name="URL" />.</translation>
@@ -77,8 +72,8 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kann diese Anfrage momentan nicht verarbeiten.</translation>
 <translation id="7716424297397655342">Diese Website kann nicht aus dem Cache geladen werden</translation>
 <translation id="7758069387465995638">Möglicherweise wurde die Verbindung von einer Firewall oder Antivirensoftware blockiert.</translation>
-<translation id="778579833039460630">Keine Daten empfangen</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
+<translation id="8089520772729574115">weniger als 1 MB</translation>
 <translation id="8134994873729925007">Die <ph name="BEGIN_ABBR" />DNS-Adresse<ph name="END_ABBR" /> des Servers von <ph name="HOST_NAME" /> wurde nicht gefunden.</translation>
 <translation id="8142868475871995937">Unter &lt;strong&gt;vivaldi://policy&lt;/strong&gt; finden Sie eine Liste der blockierten URLs und andere Richtlinien, die durch Ihren Systemadministrator in Kraft gesetzt wurden.</translation>
 <translation id="8149426793427495338">Ihr Computer geht in den Ruhemodus.</translation>

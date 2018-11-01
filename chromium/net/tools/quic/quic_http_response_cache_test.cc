@@ -2,21 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "net/tools/quic/quic_http_response_cache.h"
 
 #include "base/files/file_path.h"
-#include "base/memory/singleton.h"
 #include "base/path_service.h"
-#include "base/stl_util.h"
+#include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/platform/api/quic_text_utils.h"
-#include "net/spdy/spdy_framer.h"
-#include "net/tools/quic/quic_http_response_cache.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::ContainsKey;
 using base::StringPiece;
-using net::SpdyHeaderBlock;
 using std::string;
 
 namespace net {
@@ -63,7 +58,7 @@ TEST_F(QuicHttpResponseCacheTest, AddSimpleResponseGetResponse) {
   const QuicHttpResponseCache::Response* response =
       cache_.GetResponse("www.google.com", "/");
   ASSERT_TRUE(response);
-  ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+  ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
   EXPECT_EQ("200", response->headers().find(":status")->second);
   EXPECT_EQ(response_body.size(), response->body().length());
 }
@@ -97,38 +92,38 @@ TEST_F(QuicHttpResponseCacheTest, AddResponse) {
 TEST_F(QuicHttpResponseCacheTest, ReadsCacheDir) {
   cache_.InitializeFromDirectory(CacheDirectory());
   const QuicHttpResponseCache::Response* response =
-      cache_.GetResponse("www.example.com", "/index.html");
+      cache_.GetResponse("test.example.com", "/index.html");
   ASSERT_TRUE(response);
-  ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+  ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
   EXPECT_EQ("200", response->headers().find(":status")->second);
   // Connection headers are not valid in HTTP/2.
-  EXPECT_FALSE(ContainsKey(response->headers(), "connection"));
+  EXPECT_FALSE(QuicContainsKey(response->headers(), "connection"));
   EXPECT_LT(0U, response->body().length());
 }
 
 TEST_F(QuicHttpResponseCacheTest, ReadsCacheDirWithServerPushResource) {
   cache_.InitializeFromDirectory(CacheDirectory() + "_with_push");
   std::list<ServerPushInfo> resources =
-      cache_.GetServerPushResources("www.example.com/");
+      cache_.GetServerPushResources("test.example.com/");
   ASSERT_EQ(1UL, resources.size());
 }
 
 TEST_F(QuicHttpResponseCacheTest, ReadsCacheDirWithServerPushResources) {
   cache_.InitializeFromDirectory(CacheDirectory() + "_with_push");
   std::list<ServerPushInfo> resources =
-      cache_.GetServerPushResources("www.example.com/index2.html");
+      cache_.GetServerPushResources("test.example.com/index2.html");
   ASSERT_EQ(2UL, resources.size());
 }
 
 TEST_F(QuicHttpResponseCacheTest, UsesOriginalUrl) {
   cache_.InitializeFromDirectory(CacheDirectory());
   const QuicHttpResponseCache::Response* response =
-      cache_.GetResponse("www.example.com", "/site_map.html");
+      cache_.GetResponse("test.example.com", "/site_map.html");
   ASSERT_TRUE(response);
-  ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+  ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
   EXPECT_EQ("200", response->headers().find(":status")->second);
   // Connection headers are not valid in HTTP/2.
-  EXPECT_FALSE(ContainsKey(response->headers(), "connection"));
+  EXPECT_FALSE(QuicContainsKey(response->headers(), "connection"));
   EXPECT_LT(0U, response->body().length());
 }
 
@@ -151,20 +146,20 @@ TEST_F(QuicHttpResponseCacheTest, DefaultResponse) {
   // Now we should get the default response for the original request.
   response = cache_.GetResponse("www.google.com", "/");
   ASSERT_TRUE(response);
-  ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+  ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
   EXPECT_EQ("200", response->headers().find(":status")->second);
 
   // Now add a set response for / and make sure it is returned
   cache_.AddSimpleResponse("www.google.com", "/", 302, "");
   response = cache_.GetResponse("www.google.com", "/");
   ASSERT_TRUE(response);
-  ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+  ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
   EXPECT_EQ("302", response->headers().find(":status")->second);
 
   // We should get the default response for other requests.
   response = cache_.GetResponse("www.google.com", "/asd");
   ASSERT_TRUE(response);
-  ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+  ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
   EXPECT_EQ("200", response->headers().find(":status")->second);
 }
 
@@ -178,7 +173,7 @@ TEST_F(QuicHttpResponseCacheTest, AddSimpleResponseWithServerPushResources) {
   for (int i = 0; i < NumResources; ++i) {
     string path = "/server_push_src" + QuicTextUtils::Uint64ToString(i);
     string url = scheme + "://" + request_host + path;
-    GURL resource_url(url);
+    QuicUrl resource_url(url);
     string body = QuicStrCat("This is server push response body for ", path);
     SpdyHeaderBlock response_headers;
     response_headers[":version"] = "HTTP/1.1";
@@ -191,13 +186,15 @@ TEST_F(QuicHttpResponseCacheTest, AddSimpleResponseWithServerPushResources) {
 
   cache_.AddSimpleResponseWithServerPushResources(
       request_host, "/", 200, response_body, push_resources);
+
   string request_url = request_host + "/";
   std::list<ServerPushInfo> resources =
       cache_.GetServerPushResources(request_url);
   ASSERT_EQ(kNumResources, resources.size());
   for (const auto& push_resource : push_resources) {
     ServerPushInfo resource = resources.front();
-    EXPECT_EQ(resource.request_url.spec(), push_resource.request_url.spec());
+    EXPECT_EQ(resource.request_url.ToString(),
+              push_resource.request_url.ToString());
     EXPECT_EQ(resource.priority, push_resource.priority);
     resources.pop_front();
   }
@@ -214,7 +211,7 @@ TEST_F(QuicHttpResponseCacheTest, GetServerPushResourcesAndPushResponses) {
   for (int i = 0; i < NumResources; ++i) {
     string path = "/server_push_src" + QuicTextUtils::Uint64ToString(i);
     string url = scheme + "://" + request_host + path;
-    GURL resource_url(url);
+    QuicUrl resource_url(url);
     string body = "This is server push response body for " + path;
     SpdyHeaderBlock response_headers;
     response_headers[":version"] = "HTTP/1.1";
@@ -232,13 +229,13 @@ TEST_F(QuicHttpResponseCacheTest, GetServerPushResourcesAndPushResponses) {
   ASSERT_EQ(kNumResources, resources.size());
   int i = 0;
   for (const auto& push_resource : push_resources) {
-    GURL url = resources.front().request_url;
+    QuicUrl url = resources.front().request_url;
     string host = url.host();
     string path = url.path();
     const QuicHttpResponseCache::Response* response =
         cache_.GetResponse(host, path);
     ASSERT_TRUE(response);
-    ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
+    ASSERT_TRUE(QuicContainsKey(response->headers(), ":status"));
     EXPECT_EQ(push_response_status[i++],
               response->headers().find(":status")->second);
     EXPECT_EQ(push_resource.body, response->body());

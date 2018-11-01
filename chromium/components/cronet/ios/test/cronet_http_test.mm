@@ -322,6 +322,39 @@ TEST_F(HttpTest, SetSystemCookie) {
   EXPECT_TRUE([[delegate_ responseBody] containsString:cookieValue]);
 }
 
+TEST_F(HttpTest, SystemCookieWithNullCreationTime) {
+  const char kCookieHeader[] = "Cookie";
+  NSString* cookieName = [NSString
+      stringWithFormat:@"SetSystemCookie-%@", [[NSUUID UUID] UUIDString]];
+  NSString* cookieValue = [[NSUUID UUID] UUIDString];
+  NSHTTPCookieStorage* systemCookieStorage =
+      [NSHTTPCookieStorage sharedHTTPCookieStorage];
+  NSURL* echoCookieUrl =
+      net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL(kCookieHeader)));
+  NSHTTPCookie* nullCreationTimeCookie = [NSHTTPCookie cookieWithProperties:@{
+    NSHTTPCookiePath : [echoCookieUrl path],
+    NSHTTPCookieName : cookieName,
+    NSHTTPCookieValue : cookieValue,
+    NSHTTPCookieDomain : [echoCookieUrl host],
+    @"Created" : [NSNumber numberWithDouble:0.0],
+  }];
+  [systemCookieStorage setCookie:nullCreationTimeCookie];
+  NSHTTPCookie* normalCookie = [NSHTTPCookie cookieWithProperties:@{
+    NSHTTPCookiePath : [echoCookieUrl path],
+    NSHTTPCookieName : [cookieName stringByAppendingString:@"-normal"],
+    NSHTTPCookieValue : cookieValue,
+    NSHTTPCookieDomain : [echoCookieUrl host],
+  }];
+  [systemCookieStorage setCookie:normalCookie];
+  StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:echoCookieUrl]);
+  [systemCookieStorage deleteCookie:nullCreationTimeCookie];
+  [systemCookieStorage deleteCookie:normalCookie];
+  EXPECT_EQ(nil, [delegate_ error]);
+  // Verify that cookie set in system store was sent to the serever.
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieName]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieValue]);
+}
+
 TEST_F(HttpTest, FilterOutRequest) {
   NSURL* url =
       net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL("User-Agent")));
@@ -338,6 +371,31 @@ TEST_F(HttpTest, FilterOutRequest) {
   EXPECT_FALSE([[delegate_ responseBody]
       containsString:base::SysUTF8ToNSString(kUserAgent)]);
   EXPECT_TRUE([[delegate_ responseBody] containsString:@"CFNetwork"]);
+}
+
+TEST_F(HttpTest, FileSchemeNotSupported) {
+  NSString* fileData = @"Hello, World!";
+  NSString* documentsDirectory = [NSSearchPathForDirectoriesInDomains(
+      NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+  NSString* filePath = [documentsDirectory
+      stringByAppendingPathComponent:[[NSProcessInfo processInfo]
+                                         globallyUniqueString]];
+  [fileData writeToFile:filePath
+             atomically:YES
+               encoding:NSUTF8StringEncoding
+                  error:nil];
+
+  NSURL* url = [NSURL fileURLWithPath:filePath];
+  NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
+  [Cronet setRequestFilterBlock:^(NSURLRequest* request) {
+    [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+    EXPECT_TRUE(false) << "Block should not be called for unsupported requests";
+    return YES;
+  }];
+  StartDataTaskAndWaitForCompletion(task);
+  [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+  EXPECT_EQ(nil, [delegate_ error]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:fileData]);
 }
 
 }  // namespace cronet

@@ -15,14 +15,18 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" >
 
-        <include layout="@layout/bookmark_main_content" />
+        <org.chromium.chrome.browser.widget.selection.SelectableListLayout
+            android:id="@+id/selectable_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/default_primary_color" />
 
         <org.chromium.chrome.browser.bookmarks.BookmarkDrawerListView
             android:id="@+id/bookmark_drawer_list"
             android:layout_width="@dimen/drawer_width"
             android:layout_height="match_parent"
             android:layout_gravity="start"
-            android:background="#fff"
+            android:background="@android:color/white"
             android:choiceMode="singleChoice"
             android:divider="@null"
             android:dividerHeight="0dp" />

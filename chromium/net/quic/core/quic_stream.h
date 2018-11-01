@@ -17,10 +17,8 @@
 #ifndef NET_QUIC_CORE_QUIC_STREAM_H_
 #define NET_QUIC_CORE_QUIC_STREAM_H_
 
-#include <stddef.h>
-#include <stdint.h>
-#include <sys/types.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <list>
 #include <string>
 
@@ -315,7 +313,8 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // limited).
   bool stream_contributes_to_connection_flow_control_;
 
-  // For debugging only, used for busy loop check.
+  // A counter incremented when OnCanWrite() is called and no progress is made.
+  // For debugging only.
   size_t busy_counter_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicStream);

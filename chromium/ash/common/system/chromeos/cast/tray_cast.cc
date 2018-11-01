@@ -15,7 +15,6 @@
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/chromeos/screen_security/screen_tray_item.h"
 #include "ash/common/system/tray/fixed_sized_image_view.h"
-#include "ash/common/system/tray/fixed_sized_scroll_view.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
@@ -28,11 +27,11 @@
 #include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/interfaces/cast_config.mojom.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -43,6 +42,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 
@@ -80,16 +80,15 @@ namespace tray {
 // actually pick the cast receiver.
 class CastSelectDefaultView : public TrayItemMore {
  public:
-  CastSelectDefaultView(SystemTrayItem* owner, bool show_more);
+  explicit CastSelectDefaultView(SystemTrayItem* owner);
   ~CastSelectDefaultView() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CastSelectDefaultView);
 };
 
-CastSelectDefaultView::CastSelectDefaultView(SystemTrayItem* owner,
-                                             bool show_more)
-    : TrayItemMore(owner, show_more) {
+CastSelectDefaultView::CastSelectDefaultView(SystemTrayItem* owner)
+    : TrayItemMore(owner) {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
 
   // Update the image and label.
@@ -215,7 +214,7 @@ void CastCastView::ButtonPressed(views::Button* sender,
 class CastDuplexView : public views::View {
  public:
   CastDuplexView(SystemTrayItem* owner,
-                 bool show_more,
+                 bool enabled,
                  const std::vector<mojom::SinkAndRoutePtr>& sinks_routes);
   ~CastDuplexView() override;
 
@@ -243,9 +242,10 @@ class CastDuplexView : public views::View {
 
 CastDuplexView::CastDuplexView(
     SystemTrayItem* owner,
-    bool show_more,
+    bool enabled,
     const std::vector<mojom::SinkAndRoutePtr>& sinks_routes) {
-  select_view_ = new CastSelectDefaultView(owner, show_more);
+  select_view_ = new CastSelectDefaultView(owner);
+  select_view_->SetEnabled(enabled);
   cast_view_ = new CastCastView();
   cast_view_->UpdateLabel(sinks_routes);
   SetLayoutManager(new views::FillLayout());
@@ -420,7 +420,7 @@ void CastDetailedView::UpdateReceiverListFromCachedData() {
   }
 
   scroll_content()->SizeToPreferredSize();
-  static_cast<views::View*>(scroller())->Layout();
+  scroller()->Layout();
 }
 
 views::View* CastDetailedView::AddToReceiverList(

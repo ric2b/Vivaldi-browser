@@ -43,9 +43,9 @@ namespace vivaldi {
 // bookmark drags.
 class DragTabHandler :
 #if defined(OS_MACOSX)
-public WebDragBookmarkHandlerMac {
+    public WebDragBookmarkHandlerMac {
 #else
-public WebDragBookmarkHandlerAura {
+    public WebDragBookmarkHandlerAura {
 #endif  // OS_MACOSX
  public:
   DragTabHandler();
@@ -57,13 +57,18 @@ public WebDragBookmarkHandlerAura {
   void OnDragEnter() override;
   void OnDrop() override;
   void OnDragLeave() override;
-  blink::WebDragOperationsMask OnDragEnd(int screen_x, int screen_y,
+  blink::WebDragOperationsMask OnDragEnd(int screen_x,
+                                         int screen_y,
                                          blink::WebDragOperationsMask ops,
                                          bool cancelled) override;
 
 #if defined(USE_AURA)
   void OnReceiveDragData(const ui::OSExchangeData& data) override;
 #endif  // defined(USE_AURA)
+
+#if defined(OS_MACOSX)
+  void SetDragData(const content::DropData* data) override;
+#endif  // OS_MACOSX
 
  private:
   content::WebContents* web_contents_;

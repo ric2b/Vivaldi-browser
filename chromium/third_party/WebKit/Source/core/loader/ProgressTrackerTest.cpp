@@ -12,7 +12,7 @@
 
 namespace blink {
 
-class ProgressClient : public EmptyFrameLoaderClient {
+class ProgressClient : public EmptyLocalFrameClient {
  public:
   ProgressClient() : m_lastProgress(0.0) {}
 
@@ -32,8 +32,7 @@ class ProgressTrackerTest : public ::testing::Test {
       : m_response(KURL(ParsedURLString, "http://example.com"),
                    "text/html",
                    1024,
-                   nullAtom,
-                   String()) {}
+                   nullAtom) {}
 
   void SetUp() override {
     m_client = new ProgressClient;
@@ -52,7 +51,7 @@ class ProgressTrackerTest : public ::testing::Test {
   // to ProgressTracker with identifier 1, but tests are responsible for
   // emulating payload and load completion.
   void emulateMainResourceRequestAndResponse() const {
-    progress().progressStarted();
+    progress().progressStarted(FrameLoadTypeStandard);
     progress().willStartLoading(1ul, ResourceLoadPriorityVeryHigh);
     EXPECT_EQ(0.0, lastProgress());
     progress().incrementProgress(1ul, responseHeaders());
@@ -66,7 +65,7 @@ class ProgressTrackerTest : public ::testing::Test {
 };
 
 TEST_F(ProgressTrackerTest, Static) {
-  progress().progressStarted();
+  progress().progressStarted(FrameLoadTypeStandard);
   EXPECT_EQ(0.0, lastProgress());
   progress().finishedParsing();
   EXPECT_EQ(1.0, lastProgress());

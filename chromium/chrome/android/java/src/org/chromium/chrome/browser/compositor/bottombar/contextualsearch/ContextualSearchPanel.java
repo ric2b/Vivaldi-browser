@@ -291,7 +291,8 @@ public class ContextualSearchPanel extends OverlayPanel {
             if (getSearchBarControl().getQuickActionControl().hasQuickAction()
                     && isCoordinateInsideActionTarget(x)) {
                 mPanelMetrics.setWasQuickActionClicked();
-                getSearchBarControl().getQuickActionControl().sendIntent();
+                getSearchBarControl().getQuickActionControl().sendIntent(
+                        mActivity.getActivityTab());
             } else {
                 // super takes care of expanding the Panel when peeking.
                 super.handleBarClick(time, x, y);
@@ -395,6 +396,16 @@ public class ContextualSearchPanel extends OverlayPanel {
                     : MathUtils.interpolate(0.f, 1.f, getPromoHeightPx() / threshold);
         }
         return barShadowOpacity;
+    }
+
+    @Override
+    public boolean shouldHideAndroidBrowserControls() {
+        // Account for the Chrome Home bottom sheet when making this decision. If the bottom sheet
+        // is being used, Contextual Search will show in place of the toolbar. This means that the
+        // Android view needs to be hidden immediately when the Contextual Search bar starts
+        // peeking.
+        return (mActivity != null && mActivity.getBottomSheet() != null && isShowing())
+                || super.shouldHideAndroidBrowserControls();
     }
 
     // ============================================================================================
@@ -566,7 +577,8 @@ public class ContextualSearchPanel extends OverlayPanel {
         mPanelMetrics.onSearchTermResolved();
         getSearchBarControl().setSearchTerm(searchTerm);
         getSearchBarControl().animateSearchTermResolution();
-        getSearchBarControl().setQuickAction(quickActionUri, quickActionCategory);
+        getSearchBarControl().setQuickAction(quickActionUri, quickActionCategory,
+                mActivity.getToolbarManager().getPrimaryColor());
         getImageControl().setThumbnailUrl(thumbnailUrl);
     }
 

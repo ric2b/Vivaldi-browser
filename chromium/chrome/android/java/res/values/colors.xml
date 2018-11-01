@@ -113,9 +113,9 @@
     <color name="snippets_list_header_text_color">#646464</color>
     <color name="snippets_headline_text_color">#333333</color>
 
-    <!-- Most Visited colors. -->
-    <color name="most_visited_text">#6f6f6f</color>
-    <color name="most_visited_offline_badge_tint">#4285f4</color>
+    <!-- Site suggestion tile colors. -->
+    <color name="tile_view_text">#6f6f6f</color>
+    <color name="tile_view_offline_badge_tint">#4285f4</color>
 
     <!-- Contextual Search colors -->
     <color name="contextual_search_promo_text_color">#333333</color>
@@ -140,6 +140,7 @@
     <color name="locationbar_status_color_light">#ffffff</color>
     <color name="locationbar_status_separator_color">#3d000000</color>
     <color name="locationbar_status_separator_color_light">#3dffffff</color>
+    <color name="omnibox_focused_fading_background_color">#a6000000</color>
 
     <!-- Find in Page colors -->
     <color name="find_result_bar_background_color">#bfffffff</color>
@@ -177,11 +178,6 @@
 
     <!-- Bookmark widget colors -->
     <color name="bookmark_widget_pressed_highlight">#1D000000</color>
-
-    <!-- Physical Web colors -->
-    <color name="physical_web_header_color">#333</color>
-    <color name="physical_web_url_color">#969696</color>
-    <color name="physical_web_url_description_color">#646464</color>
 
     <!-- Physical Web diagnostics colors -->
     <color name="physical_web_diags_success_color">#00933b</color>

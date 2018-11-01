@@ -28,7 +28,6 @@
 #define Internals_h
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/Iterable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
@@ -48,6 +47,8 @@ class ClientRect;
 class ClientRectList;
 class DOMArrayBuffer;
 class DOMPoint;
+class DOMWindow;
+class Dictionary;
 class DictionaryTest;
 class Document;
 class DocumentMarker;
@@ -57,6 +58,7 @@ class GCObservation;
 class HTMLInputElement;
 class HTMLMediaElement;
 class HTMLSelectElement;
+class HTMLVideoElement;
 class InternalRuntimeFlags;
 class InternalSettings;
 class LayerRectList;
@@ -77,8 +79,7 @@ class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 
 class Internals final : public GarbageCollected<Internals>,
-                        public ScriptWrappable,
-                        public ValueIterable<int> {
+                        public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -89,8 +90,6 @@ class Internals final : public GarbageCollected<Internals>,
   static void resetToConsistentState(Page*);
 
   String elementLayoutTreeAsText(Element*, ExceptionState&);
-
-  String address(Node*);
 
   GCObservation* observeGC(ScriptValue);
 
@@ -368,9 +367,10 @@ class Internals final : public GarbageCollected<Internals>,
   void setIsCursorVisible(Document*, bool, ExceptionState&);
 
   String effectivePreload(HTMLMediaElement*);
-
   void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement*, bool);
   void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement*, bool);
+  void setMediaElementNetworkState(HTMLMediaElement*, int state);
+  void setPersistent(HTMLVideoElement*, bool);
 
   void registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme);
   void registerURLSchemeAsBypassingContentSecurityPolicy(
@@ -419,7 +419,12 @@ class Internals final : public GarbageCollected<Internals>,
   int selectPopupItemStyleFontHeight(Node*, int);
   void resetTypeAheadSession(HTMLSelectElement*);
 
+  Node* visibleSelectionAnchorNode();
+  unsigned visibleSelectionAnchorOffset();
+  Node* visibleSelectionFocusNode();
+  unsigned visibleSelectionFocusOffset();
   ClientRect* selectionBounds(ExceptionState&);
+  String textAffinity();
 
   bool loseSharedGraphicsContext3D();
 
@@ -491,9 +496,18 @@ class Internals final : public GarbageCollected<Internals>,
   float visualViewportScrollY();
 
   // Return true if the given use counter exists for the given document.
-  // |useCounterId| must be one of the values from the UseCounter::Feature enum.
-  bool isUseCounted(Document*, int useCounterId);
+  // |feature| must be one of the values from the UseCounter::Feature enum.
+  bool isUseCounted(Document*, uint32_t feature);
   bool isCSSPropertyUseCounted(Document*, const String&);
+
+  // Observes changes on Document's UseCounter. Returns a promise that is
+  // resolved when |feature| is counted. When |feature| was already counted,
+  // it's immediately resolved.
+  ScriptPromise observeUseCounter(ScriptState*, Document*, uint32_t feature);
+
+  // Used by the iterable<>.
+  unsigned length() const { return 5; }
+  int anonymousIndexedGetter(uint32_t index) const { return index * index; }
 
   String unscopableAttribute();
   String unscopableMethod();
@@ -508,8 +522,6 @@ class Internals final : public GarbageCollected<Internals>,
   // Translate given platform monotonic time in seconds to high resolution
   // document time in seconds
   double monotonicTimeToZeroBasedDocumentTime(double, ExceptionState&);
-
-  void setMediaElementNetworkState(HTMLMediaElement*, int state);
 
   // Returns the run state of the node's scroll animator (see
   // ScrollAnimatorCompositorCoordinater::RunState), or -1 if the node does not
@@ -543,8 +555,6 @@ class Internals final : public GarbageCollected<Internals>,
                            ExceptionState&);
   Member<InternalRuntimeFlags> m_runtimeFlags;
   Member<Document> m_document;
-
-  IterationSource* startIteration(ScriptState*, ExceptionState&) override;
 };
 
 }  // namespace blink

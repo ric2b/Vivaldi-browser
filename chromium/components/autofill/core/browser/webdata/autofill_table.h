@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -23,16 +24,12 @@ namespace base {
 class Time;
 }
 
-namespace sync_pb {
-class EntityMetadata;
-class ModelTypeState;
-}
-
 namespace autofill {
 
 class AutofillChange;
 class AutofillEntry;
 class AutofillProfile;
+class AutofillTableEncryptor;
 class AutofillTableTest;
 class CreditCard;
 
@@ -549,6 +546,8 @@ class AutofillTable : public WebDatabaseTable {
   bool InitServerAddressMetadataTable();
   bool InitAutofillSyncMetadataTable();
   bool InitModelTypeStateTable();
+
+  std::unique_ptr<AutofillTableEncryptor> autofill_table_encryptor_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillTable);
 };

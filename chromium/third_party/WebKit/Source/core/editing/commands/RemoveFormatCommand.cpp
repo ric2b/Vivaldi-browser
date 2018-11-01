@@ -58,12 +58,16 @@ static bool isElementForRemoveFormatCommand(const Element* element) {
 void RemoveFormatCommand::doApply(EditingState* editingState) {
   LocalFrame* frame = document().frame();
 
-  if (!frame->selection().selection().isNonOrphanedCaretOrRange())
+  if (!frame->selection()
+           .computeVisibleSelectionInDOMTreeDeprecated()
+           .isNonOrphanedCaretOrRange())
     return;
 
   // Get the default style for this editable root, it's the style that we'll
   // give the content that we're operating on.
-  Element* root = frame->selection().rootEditableElement();
+  Element* root = frame->selection()
+                      .computeVisibleSelectionInDOMTreeDeprecated()
+                      .rootEditableElement();
   EditingStyle* defaultStyle = EditingStyle::create(root);
 
   // We want to remove everything but transparent background.

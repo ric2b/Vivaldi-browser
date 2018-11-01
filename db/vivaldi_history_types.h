@@ -33,9 +33,9 @@ class UrlVisitCount {
   typedef base::Callback<void(const TopUrlsPerDayList&)> TopUrlsPerDayCallback;
 
  private:
-    std::string date_;
-    GURL url_;
-    int count_;
+  std::string date_;
+  GURL url_;
+  int count_;
 };
 
 class Visit {

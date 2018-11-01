@@ -3,8 +3,8 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
-<link rel="import" href="/languages_page/languages.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="languages.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-add-languages-dialog">
   <template>
@@ -23,10 +23,10 @@
 
       .ripple-padding {
         /* Create a little extra space for checkbox ink ripple to flow into. */
-        padding-left: 20px;
+        -webkit-padding-start: 20px;
       }
     </style>
-    <dialog is="cr-dialog" id="dialog">
+    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
       <div class="title">$i18n{addLanguagesDialogTitle}</div>
       <div class="body">
         <!-- TODO(michaelpg): Dynamic language search/filtering. -->

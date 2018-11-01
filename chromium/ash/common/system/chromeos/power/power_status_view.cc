@@ -11,10 +11,10 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
-#include "grit/ash_strings.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/native_theme/native_theme.h"
@@ -143,16 +143,14 @@ void PowerStatusView::UpdateText() {
   time_status_label_->SetVisible(!battery_time_status.empty());
   time_status_label_->SetText(battery_time_status);
 
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+  if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
     accessible_name_ = PowerStatus::Get()->GetAccessibleNameString(true);
-}
 
-void PowerStatusView::UpdateStyle() {
-  TrayPopupItemStyle style(GetNativeTheme(),
-                           TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
-  style.SetupLabel(percentage_label_);
-  style.SetupLabel(separator_label_);
-  style.SetupLabel(time_status_label_);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
+    style.SetupLabel(percentage_label_);
+    style.SetupLabel(separator_label_);
+    style.SetupLabel(time_status_label_);
+  }
 }
 
 void PowerStatusView::ChildPreferredSizeChanged(views::View* child) {
@@ -169,10 +167,6 @@ void PowerStatusView::Layout() {
     separator_label_->SetX(percentage_label_->bounds().right() + 1);
     time_status_label_->SetX(separator_label_->bounds().right() + 1);
   }
-}
-
-void PowerStatusView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
-  UpdateStyle();
 }
 
 void PowerStatusView::GetAccessibleNodeData(ui::AXNodeData* node_data) {

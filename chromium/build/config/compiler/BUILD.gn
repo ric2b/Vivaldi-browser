@@ -92,6 +92,9 @@ declare_args() {
   # Optimize for coverage guided fuzzing (balance between speed and number of
   # branches)
   optimize_for_fuzzing = false
+
+  # Optimize symbol files for maximizing goma cache hit rate.
+  strip_absolute_paths_from_debug_symbols = false
 }
 
 if (is_clang && !is_nacl) {
@@ -182,10 +185,6 @@ config("compiler") {
     # --------------------------------
     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
     cflags_cc += [
-      # If this is removed then remove the corresponding /Zc:threadSafeInit- for
-      # Windows.
-      "-fno-threadsafe-statics",
-
       # Not exporting C++ inline functions can generally be applied anywhere
       # so we do so here. Normal function visibility is controlled by
       # //build/config/gcc:symbol_visibility_hidden.
@@ -224,6 +223,26 @@ config("compiler") {
     }
   }
 
+  # Eliminate build metadata (__DATE__, __TIME__ and __TIMESTAMP__) for
+  # deterministic build.  See https://crbug.com/314403
+  if (!is_official_build) {
+    if (is_win && !is_clang) {
+      cflags += [
+        "/wd4117",  # Trying to define or undefine a predefined macro.
+        "/D__DATE__=",
+        "/D__TIME__=",
+        "/D__TIMESTAMP__=",
+      ]
+    } else {
+      cflags += [
+        "-Wno-builtin-macro-redefined",
+        "-D__DATE__=",
+        "-D__TIME__=",
+        "-D__TIMESTAMP__=",
+      ]
+    }
+  }
+
   if (is_clang && is_debug) {
     # Allow comparing the address of references and 'this' against 0
     # in debug builds. Technically, these can never be null in
@@ -240,7 +259,7 @@ config("compiler") {
     # when turning clang on or off. (defines are passed via the command line,
     # and build system rebuild things when their commandline changes). Nothing
     # should ever read this define.
-    defines += [ "CR_CLANG_REVISION=$clang_revision" ]
+    defines += [ "CR_CLANG_REVISION=\"$clang_revision\"" ]
   }
 
   # Non-Mac Posix compiler flags setup.
@@ -410,7 +429,7 @@ config("compiler") {
   # clang-cl (used if is_win) doesn't expose this flag.
   # Currently disabled for nacl since its toolchain lacks this flag (too old).
   # TODO(zforman): Once nacl's toolchain is updated, remove check.
-  if (is_clang && is_linux) {
+  if (is_clang && is_linux && strip_absolute_paths_from_debug_symbols) {
     absolute_path = rebase_path("//.")
     cflags += [ "-fdebug-prefix-map=$absolute_path=." ]
   }
@@ -1069,7 +1088,10 @@ config("default_warnings") {
         "-Wno-shift-negative-value",
       ]
     }
-    if (!is_nacl && !use_xcode_clang) {
+
+    # use_xcode_clang only refers to the iOS toolchain, host binaries use
+    # chromium's clang always.
+    if (!is_nacl && (!use_xcode_clang || current_toolchain == host_toolchain)) {
       # Flags NaCl (Clang 3.7) and Xcode 7.3 (Clang clang-703.0.31) do not
       # recognize.
       cflags += [
@@ -1081,13 +1103,16 @@ config("default_warnings") {
 
         # TODO(hans): https://crbug.com/637306
         "-Wno-address-of-packed-member",
+
+        # TODO(thakis): Consider turning this on, https://crbug.com/691120
+        "-Wno-block-capture-autoreleasing",
+
+        # TODO(hans): https://crbug.com/681136
+        "-Wno-unused-lambda-capture",
+
+        # TODO(thakis ): https://crbug.com/683349
+        "-Wno-user-defined-warnings",
       ]
-      if (llvm_force_head_revision) {
-        cflags += [
-          # TODO(hans): https://crbug.com/681136
-          "-Wno-unused-lambda-capture",
-        ]
-      }
     }
   }
 }
@@ -1432,6 +1457,7 @@ config("no_optimize") {
     cflags = [
       "/Od",  # Disable optimization.
       "/Ob0",  # Disable all inlining (on by default).
+      "/GF",  # Enable string pooling (off by default).
     ]
   } else if (is_android && !android_full_debug) {
     # On Android we kind of optimize some things that don't affect debugging
@@ -1475,9 +1501,8 @@ config("optimize_max") {
             # incremental value of C4702 for PGO builds is likely very small.
             "/wd4702",
           ]
-        } else if (is_clang && use_lld) {
-          cflags += [ "-flto" ]  # Link-time optimization (whole program optimization).
         }
+        # TODO(crbug.com/598772): Enable -flto for Clang.
       }
     } else if (optimize_for_fuzzing) {
       cflags = [ "-O1" ] + common_optimize_on_cflags
@@ -1621,8 +1646,11 @@ config("symbols") {
       # debug information (repeated in every .obj file) makes linker memory
       # consumption and link times unsustainable (crbug.com/630074).
       cflags = []
+    } else if (use_goma) {
+      # Note that this requires is_win_fastlink, enforced elsewhere.
+      cflags = [ "/Z7" ]  # Debug information in the .obj files.
     } else {
-    cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
+      cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
     }
 
     if (is_win_fastlink) {

@@ -51,6 +51,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
@@ -243,8 +244,6 @@ public class WebsiteSettingsPopup implements OnClickListener {
     private static final int MAX_TABLET_DIALOG_WIDTH_DP = 400;
 
     private final Context mContext;
-    private final Profile mProfile;
-    private final WebContents mWebContents;
     private final WindowAndroid mWindowAndroid;
     private final Tab mTab;
 
@@ -309,13 +308,11 @@ public class WebsiteSettingsPopup implements OnClickListener {
     private WebsiteSettingsPopup(Activity activity, Tab tab, String offlinePageCreationDate,
             String publisher) {
         mContext = activity;
-        mProfile = tab.getProfile();
-        mWebContents = tab.getWebContents();
         mTab = tab;
         if (offlinePageCreationDate != null) {
             mOfflinePageCreationDate = offlinePageCreationDate;
         }
-        mWindowAndroid = ContentViewCore.fromWebContents(mWebContents).getWindowAndroid();
+        mWindowAndroid = ContentViewCore.fromWebContents(mTab.getWebContents()).getWindowAndroid();
         mContentPublisher = publisher;
 
         // Find the container and all it's important subviews.
@@ -335,7 +332,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
         });
 
         mUrlTitle = (ElidedUrlTextView) mContainer.findViewById(R.id.website_settings_url);
-        mUrlTitle.setProfile(mProfile);
+        mUrlTitle.setProfile(mTab.getProfile());
         mUrlTitle.setOnClickListener(this);
         // Long press the url text to copy it to the clipboard.
         mUrlTitle.setOnLongClickListener(new OnLongClickListener() {
@@ -375,7 +372,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
         setVisibilityOfPermissionsList(false);
 
         // Work out the URL and connection message and status visibility.
-        mFullUrl = mWebContents.getVisibleUrl();
+        mFullUrl = mTab.getWebContents().getVisibleUrl();
         if (isShowingOfflinePage()) {
             mFullUrl = OfflinePageUtils.stripSchemeFromOnlineUrl(mFullUrl);
         }
@@ -387,16 +384,16 @@ public class WebsiteSettingsPopup implements OnClickListener {
             mParsedUrl = null;
             mIsInternalPage = false;
         }
-        mSecurityLevel = SecurityStateModel.getSecurityLevelForWebContents(mWebContents);
+        mSecurityLevel = SecurityStateModel.getSecurityLevelForWebContents(mTab.getWebContents());
 
         SpannableStringBuilder urlBuilder = new SpannableStringBuilder(mFullUrl);
-        OmniboxUrlEmphasizer.emphasizeUrl(urlBuilder, mContext.getResources(), mProfile,
+        OmniboxUrlEmphasizer.emphasizeUrl(urlBuilder, mContext.getResources(), mTab.getProfile(),
                 mSecurityLevel, mIsInternalPage, true, true);
         mUrlTitle.setText(urlBuilder);
 
         if (mParsedUrl == null || mParsedUrl.getScheme() == null
-                || !(mParsedUrl.getScheme().equals("http")
-                           || mParsedUrl.getScheme().equals("https"))) {
+                || !(mParsedUrl.getScheme().equals(UrlConstants.HTTP_SCHEME)
+                           || mParsedUrl.getScheme().equals(UrlConstants.HTTPS_SCHEME))) {
             mSiteSettingsButton.setVisibility(View.GONE);
         }
 
@@ -455,8 +452,9 @@ public class WebsiteSettingsPopup implements OnClickListener {
         }
 
         // This needs to come after other member initialization.
-        mNativeWebsiteSettingsPopup = nativeInit(this, mWebContents);
-        final WebContentsObserver webContentsObserver = new WebContentsObserver(mWebContents) {
+        mNativeWebsiteSettingsPopup = nativeInit(this, mTab.getWebContents());
+        final WebContentsObserver webContentsObserver =
+                new WebContentsObserver(mTab.getWebContents()) {
             @Override
             public void navigationEntryCommitted() {
                 // If a navigation is committed (e.g. from in-page redirect), the data we're showing
@@ -523,13 +521,20 @@ public class WebsiteSettingsPopup implements OnClickListener {
      */
     private boolean isConnectionDetailsLinkVisible() {
         return mContentPublisher == null && !isShowingOfflinePage() && mParsedUrl != null
-                && mParsedUrl.getScheme() != null && mParsedUrl.getScheme().equals("https");
+                && mParsedUrl.getScheme() != null
+                        && mParsedUrl.getScheme().equals(UrlConstants.HTTPS_SCHEME);
     }
 
     private boolean hasAndroidPermission(int contentSettingType) {
-        String androidPermission = PrefServiceBridge.getAndroidPermissionForContentSetting(
-                contentSettingType);
-        return androidPermission == null || mWindowAndroid.hasPermission(androidPermission);
+        String[] androidPermissions =
+                PrefServiceBridge.getAndroidPermissionsForContentSetting(contentSettingType);
+        if (androidPermissions == null) return true;
+        for (int i = 0; i < androidPermissions.length; i++) {
+            if (!mWindowAndroid.hasPermission(androidPermissions[i])) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -580,7 +585,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
             } else if (!hasAndroidPermission(permission.type)) {
                 warningTextResource = R.string.page_info_android_permission_blocked;
                 permissionRow.setTag(R.id.permission_type,
-                        PrefServiceBridge.getAndroidPermissionForContentSetting(permission.type));
+                        PrefServiceBridge.getAndroidPermissionsForContentSetting(permission.type));
             }
 
             if (warningTextResource != 0) {
@@ -739,7 +744,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
                     Bundle fragmentArguments =
                             SingleWebsitePreferences.createFragmentArgsForSite(mFullUrl);
                     fragmentArguments.putParcelable(SingleWebsitePreferences.EXTRA_WEB_CONTENTS,
-                            mWebContents);
+                            mTab.getWebContents());
                     Intent preferencesIntent = PreferencesLauncher.createIntentForSettingsPage(
                             mContext, SingleWebsitePreferences.class.getName());
                     preferencesIntent.putExtra(
@@ -761,10 +766,10 @@ public class WebsiteSettingsPopup implements OnClickListener {
             runAfterDismiss(new Runnable() {
                 @Override
                 public void run() {
-                    if (!mWebContents.isDestroyed()) {
+                    if (!mTab.getWebContents().isDestroyed()) {
                         recordAction(
                                 WebsiteSettingsAction.WEBSITE_SETTINGS_SECURITY_DETAILS_OPENED);
-                        ConnectionInfoPopup.show(mContext, mWebContents);
+                        ConnectionInfoPopup.show(mContext, mTab.getWebContents());
                     }
                 }
             });
@@ -773,17 +778,23 @@ public class WebsiteSettingsPopup implements OnClickListener {
 
             if (intentOverride == null && mWindowAndroid != null) {
                 // Try and immediately request missing Android permissions where possible.
-                final String permissionType = (String) view.getTag(R.id.permission_type);
-                if (mWindowAndroid.canRequestPermission(permissionType)) {
-                    final String[] permissionRequest = new String[] {permissionType};
-                    mWindowAndroid.requestPermissions(permissionRequest, new PermissionCallback() {
+                final String[] permissionType = (String[]) view.getTag(R.id.permission_type);
+                for (int i = 0; i < permissionType.length; i++) {
+                    if (!mWindowAndroid.canRequestPermission(permissionType[i])) continue;
+
+                    // If any permissions can be requested, attempt to request them all.
+                    mWindowAndroid.requestPermissions(permissionType, new PermissionCallback() {
                         @Override
                         public void onRequestPermissionsResult(
                                 String[] permissions, int[] grantResults) {
-                            if (grantResults.length > 0
-                                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                                updatePermissionDisplay();
+                            boolean allGranted = true;
+                            for (int i = 0; i < grantResults.length; i++) {
+                                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                                    allGranted = false;
+                                    break;
+                                }
                             }
+                            if (allGranted) updatePermissionDisplay();
                         }
                     });
                     return;

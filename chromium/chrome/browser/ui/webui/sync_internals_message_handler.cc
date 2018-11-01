@@ -155,7 +155,7 @@ void SyncInternalsMessageHandler::HandleGetAllNodes(
     const base::ListValue* args) {
   DCHECK_EQ(1U, args->GetSize());
   int request_id = 0;
-  bool success = args->GetInteger(0, &request_id);
+  bool success = ExtractIntegerValue(args, &request_id);
   DCHECK(success);
 
   ProfileSyncService* service = GetProfileSyncService();
@@ -169,12 +169,12 @@ void SyncInternalsMessageHandler::HandleGetAllNodes(
 void SyncInternalsMessageHandler::OnReceivedAllNodes(
     int request_id,
     std::unique_ptr<base::ListValue> nodes) {
-  base::FundamentalValue id(request_id);
+  base::Value id(request_id);
   web_ui()->CallJavascriptFunctionUnsafe(
       syncer::sync_ui_util::kGetAllNodesCallback, id, *nodes);
 }
 
-void SyncInternalsMessageHandler::OnStateChanged() {
+void SyncInternalsMessageHandler::OnStateChanged(syncer::SyncService* sync) {
   SendAboutInfo();
 }
 

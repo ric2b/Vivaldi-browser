@@ -3,6 +3,7 @@
 #ifndef EXTENSIONS_PERMISSIONS_VIVALDI_API_PERMISSIONS_H_
 #define EXTENSIONS_PERMISSIONS_VIVALDI_API_PERMISSIONS_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -19,4 +20,4 @@ class VivaldiAPIPermissions : public PermissionsProvider {
 
 }  // namespace extensions
 
-#endif // EXTENSIONS_PERMISSIONS_VIVALDI_API_PERMISSIONS_H_
+#endif  // EXTENSIONS_PERMISSIONS_VIVALDI_API_PERMISSIONS_H_

@@ -31,7 +31,6 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
-#include "chrome/installer/util/install_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -75,7 +74,7 @@ content::WebUIDataSource* CreateSetAsDefaultBrowserUIHTMLSource() {
                                   IDS_METRO_FLOW_DESCRIPTION);
   data_source->AddLocalizedString("flowNext", IDS_METRO_FLOW_SET_DEFAULT);
   data_source->AddLocalizedString("chromeLogoString",
-                                  IDS_METRO_FLOW_LOGO_STRING_ALT);
+                                  IDS_SHORT_PRODUCT_LOGO_ALT_TEXT);
   data_source->SetJsonPath("strings.js");
   data_source->AddResourcePath("set_as_default_browser.js",
                                IDR_SET_AS_DEFAULT_BROWSER_JS);

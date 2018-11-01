@@ -1,0 +1,44 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module payments.mojom;
+
+import "components/payments/content/payment_request.mojom";
+import "url/mojo/url.mojom";
+
+enum PaymentAppManifestError {
+  NONE,
+  NOT_IMPLEMENTED,
+  NO_ACTIVE_WORKER,
+  MANIFEST_STORAGE_OPERATION_FAILED,
+};
+
+struct PaymentAppOption {
+  string name;
+  string? icon;
+  string id;
+  array<string> enabled_methods;
+};
+
+struct PaymentAppManifest {
+  string name;
+  string? icon;
+  array<PaymentAppOption> options;
+};
+
+interface PaymentAppManager {
+  Init(string service_worker_scope);
+  SetManifest(PaymentAppManifest payment_app_manifest)
+      => (PaymentAppManifestError error);
+  GetManifest()
+      => (PaymentAppManifest payment_app_manifest, PaymentAppManifestError error);
+};
+
+struct PaymentAppRequest {
+  url.mojom.Url origin;
+  array<PaymentMethodData> methodData;
+  PaymentItem total;
+  array<PaymentDetailsModifier> modifiers;
+  string optionId;
+};

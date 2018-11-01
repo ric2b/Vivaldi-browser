@@ -33,16 +33,13 @@ IntSize SVGImageForContainer::size() const {
   return roundedIntSize(scaledContainerSize);
 }
 
-void SVGImageForContainer::draw(SkCanvas* canvas,
-                                const SkPaint& paint,
+void SVGImageForContainer::draw(PaintCanvas* canvas,
+                                const PaintFlags& flags,
                                 const FloatRect& dstRect,
                                 const FloatRect& srcRect,
                                 RespectImageOrientationEnum,
-                                ImageClampingMode,
-                                const ColorBehavior& colorBehavior) {
-  // TODO(ccameron): This function should not ignore |colorBehavior|.
-  // https://crbug.com/667431
-  m_image->drawForContainer(canvas, paint, m_containerSize, m_zoom, dstRect,
+                                ImageClampingMode) {
+  m_image->drawForContainer(canvas, flags, m_containerSize, m_zoom, dstRect,
                             srcRect, m_url);
 }
 

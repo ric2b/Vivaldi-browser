@@ -49,6 +49,8 @@ Polymer({
 
     /**
      * Dictionary defining page visibility.
+     * This is only set when in guest mode. All pages are visible when not set
+     * because polymer only notifies after a property is set.
      * @private {!GuestModePageVisibility}
      */
     pageVisibility_: Object,
@@ -123,6 +125,7 @@ Polymer({
 
     if (loadTimeData.getBoolean('isGuest')) {
       this.pageVisibility_ = {
+        passwordsAndForms: false,
         people: false,
         onStartup: false,
         reset: false,
@@ -144,7 +147,6 @@ Polymer({
           searchPrediction: false,
           networkPrediction: false,
         },
-        passwordsAndForms: false,
         downloads: {
           googleDrive: false,
         },
@@ -161,6 +163,11 @@ Polymer({
     // Preload bold Roboto so it doesn't load and flicker the first time used.
     document.fonts.load('bold 12px Roboto');
     settings.setGlobalScrollTarget(this.$.headerPanel.scroller);
+  },
+
+  /** @override */
+  detached: function() {
+    settings.resetRouteForTesting();
   },
 
   /** @param {!settings.Route} route */
@@ -211,7 +218,7 @@ Polymer({
 
     settings.navigateTo(
         settings.Route.BASIC,
-        query.length > 0 ? new URLSearchParams(`search=${query}`) : undefined,
+        query.length > 0 ? new URLSearchParams('search=' + query) : undefined,
         /* removeSearch */ true);
   },
 
@@ -220,7 +227,7 @@ Polymer({
    * @private
    */
   onIronActivate_: function(event) {
-    if (event.detail.item.id != 'advancedPage')
+    if (event.detail.item.id != 'advancedSubmenu')
       this.$.drawer.closeDrawer();
   },
 

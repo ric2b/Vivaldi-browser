@@ -18,6 +18,8 @@ static_library("router") {
     "//url",
   ]
   sources = [
+    "browser_presentation_connection_proxy.cc",
+    "browser_presentation_connection_proxy.h",
     "create_presentation_connection_request.cc",
     "create_presentation_connection_request.h",
     "issue.cc",
@@ -41,6 +43,8 @@ static_library("router") {
     "media_routes_observer.h",
     "media_sink.cc",
     "media_sink.h",
+    "media_sink_service.cc",
+    "media_sink_service.h",
     "media_sinks_observer.cc",
     "media_sinks_observer.h",
     "media_source.cc",
@@ -89,8 +93,6 @@ static_library("router") {
       "mojo/media_router_mojo_impl.h",
       "mojo/media_router_mojo_metrics.cc",
       "mojo/media_router_mojo_metrics.h",
-      "mojo/media_router_type_converters.cc",
-      "mojo/media_router_type_converters.h",
     ]
   }
 }
@@ -102,6 +104,7 @@ mojom("mojo_bindings") {
 
   public_deps = [
     "//mojo/common:common_custom_types",
+    "//url/mojo:url_mojom_origin",
   ]
 }
 

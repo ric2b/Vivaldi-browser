@@ -1,49 +1,47 @@
 // Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
 
-
 #include <stack>
 #include <string>
 #include <vector>
 
-#include "chrome/browser/importer/importer_list.h"
-
+#include "app/vivaldi_resources.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_tokenizer.h"
-#include "base/path_service.h"
-#include "chrome/common/ini_parser.h"
+#include "chrome/browser/importer/importer_list.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/common/ini_parser.h"
 #include "chrome/grit/generated_resources.h"
-#include "ui/base/l10n/l10n_util.h"
-
-#include "app/vivaldi_resources.h"
-#include "importer/viv_importer_utils.h"
 #include "importer/viv_importer.h"
+#include "importer/viv_importer_utils.h"
 #include "importer/viv_opera_reader.h"
+#include "ui/base/l10n/l10n_util.h"
 
 class OperaBookmarkReader : public OperaAdrFileReader {
  public:
   OperaBookmarkReader() {}
-  ~OperaBookmarkReader() override {};
+  ~OperaBookmarkReader() override{};
 
-  void AddBookmark(std::vector<base::string16> &current_folder,
-                   const base::DictionaryValue &entries, bool is_folder,
-                   base::string16 *item_name = NULL);
+  void AddBookmark(const std::vector<base::string16>& current_folder,
+                   const base::DictionaryValue& entries,
+                   bool is_folder,
+                   base::string16* item_name = NULL);
 
-  const std::vector<ImportedBookmarkEntry> &Bookmarks() const {
+  const std::vector<ImportedBookmarkEntry>& Bookmarks() const {
     return bookmarks;
   }
 
  protected:
-  void HandleEntry(const std::string &category,
-                   const base::DictionaryValue &entries) override;
+  void HandleEntry(const std::string& category,
+                   const base::DictionaryValue& entries) override;
 
  private:
   std::vector<base::string16> current_folder;
@@ -52,8 +50,8 @@ class OperaBookmarkReader : public OperaAdrFileReader {
   DISALLOW_COPY_AND_ASSIGN(OperaBookmarkReader);
 };
 
-void OperaBookmarkReader::HandleEntry(const std::string &category,
-                                      const base::DictionaryValue &entries) {
+void OperaBookmarkReader::HandleEntry(const std::string& category,
+                                      const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
     base::string16 foldername;
     AddBookmark(current_folder, entries, true, &foldername);
@@ -66,9 +64,10 @@ void OperaBookmarkReader::HandleEntry(const std::string &category,
 }
 
 void OperaBookmarkReader::AddBookmark(
-    std::vector<base::string16> &current_folder,
-    const base::DictionaryValue &entries, bool is_folder,
-    base::string16 *item_name) {
+    const std::vector<base::string16>& current_folder,
+    const base::DictionaryValue& entries,
+    bool is_folder,
+    base::string16* item_name) {
   std::string temp;
   base::string16 name;
   base::string16 url;
@@ -116,20 +115,20 @@ void OperaBookmarkReader::AddBookmark(
   bookmarks.push_back(entry);
 }
 
-bool OperaImporter::ImportBookMarks(std::string& error) {
+bool OperaImporter::ImportBookMarks(std::string* error) {
   if (bookmarkfilename_.empty()) {
-    error = "No bookmark filename provided.";
+    *error = "No bookmark filename provided.";
     return false;
   }
   base::FilePath file(bookmarkfilename_);
   OperaBookmarkReader reader;
 
   if (!reader.LoadFile(file)) {
-    error = "Bookmark file does not exist.";
+    *error = "Bookmark file does not exist.";
     return false;
   }
   if (!reader.Bookmarks().empty() && !cancelled()) {
-    const base::string16 &first_folder_name =
+    const base::string16& first_folder_name =
         bridge_->GetLocalizedString(IDS_BOOKMARK_GROUP_FROM_OPERA);
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);
   }

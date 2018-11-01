@@ -14,12 +14,10 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/mouse_watcher.h"
 #include "ui/views/view.h"
 
 namespace gfx {
 class Rect;
-class Size;
 }
 
 namespace views {
@@ -29,7 +27,6 @@ class FocusManager;
 namespace ash {
 
 enum class LoginStatus;
-class PopupMessage;
 class SystemTrayItem;
 
 namespace tray {
@@ -37,14 +34,10 @@ namespace tray {
 // The view of a user item in system tray bubble.
 class UserView : public views::View,
                  public views::ButtonListener,
-                 public views::MouseWatcherListener,
                  public views::FocusChangeListener {
  public:
   UserView(SystemTrayItem* owner, LoginStatus login, UserIndex index);
   ~UserView() override;
-
-  // Overridden from MouseWatcherListener:
-  void MouseMovedOutOfHost() override;
 
   TrayUser::TestState GetStateForTest() const;
   gfx::Rect GetBoundsInScreenOfUserButtonForTest();
@@ -56,9 +49,7 @@ class UserView : public views::View,
   bool IsActiveUser() const;
 
   // Overridden from views::View.
-  gfx::Size GetPreferredSize() const override;
   int GetHeightForWidth(int width) const override;
-  void Layout() override;
 
   // Overridden from views::ButtonListener.
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -69,7 +60,6 @@ class UserView : public views::View,
 
   void AddLogoutButton(LoginStatus login);
   void AddUserCard(LoginStatus login);
-  void AddUserCardMd(LoginStatus login);
 
   // Create the menu option to add another user. If |disabled| is set the user
   // cannot actively click on the item.
@@ -89,14 +79,10 @@ class UserView : public views::View,
   bool is_user_card_button_;
 
   views::View* logout_button_;
-  std::unique_ptr<PopupMessage> popup_message_;
   std::unique_ptr<views::Widget> add_menu_option_;
 
   // False when the add user panel is visible but not activatable.
   bool add_user_enabled_;
-
-  // The mouse watcher which takes care of out of window hover events.
-  std::unique_ptr<views::MouseWatcher> mouse_watcher_;
 
   // The focus manager which we use to detect focus changes.
   views::FocusManager* focus_manager_;

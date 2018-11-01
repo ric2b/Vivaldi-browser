@@ -23,8 +23,9 @@
 
 namespace {
 
-static const char kCanvasTestHtmlPage[] = "/media/canvas_capture_color.html";
-
+static const char kCanvasCaptureTestHtmlFile[] = "/media/canvas_capture.html";
+static const char kCanvasCaptureColorTestHtmlFile[] =
+    "/media/canvas_capture_color.html";
 static const char kVideoAudioHtmlFile[] =
     "/media/video_audio_element_capture_test.html";
 
@@ -62,6 +63,9 @@ class WebRtcCaptureFromElementBrowserTest
     // Allow <video>/<audio>.play() when not initiated by user gesture.
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kDisableGestureRequirementForMediaPlayback);
+    // Allow experimental canvas features.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kEnableExperimentalCanvasFeatures);
   }
 
  private:
@@ -69,8 +73,44 @@ class WebRtcCaptureFromElementBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
-                       VerifyCanvasCaptureColor) {
-  MakeTypicalCall("testCanvasCaptureColors();", kCanvasTestHtmlPage);
+                       VerifyCanvas2DCaptureColor) {
+  MakeTypicalCall("testCanvas2DCaptureColors();",
+                  kCanvasCaptureColorTestHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
+                       VerifyCanvasWebGLCaptureColor) {
+#if !defined(OS_MACOSX)
+  // TODO(crbug.com/706009): Make this test pass on mac.  Behavior is not buggy
+  // (verified manually) on mac, but for some reason this test fails on the mac
+  // bot.
+  MakeTypicalCall("testCanvasWebGLCaptureColors();",
+                  kCanvasCaptureColorTestHtmlFile);
+#endif
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
+                       VerifyCanvasCapture2DFrames) {
+  MakeTypicalCall("testCanvasCapture(draw2d);", kCanvasCaptureTestHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
+                       VerifyCanvasCaptureWebGLFrames) {
+  MakeTypicalCall("testCanvasCapture(drawWebGL);", kCanvasCaptureTestHtmlFile);
+}
+
+// This test causes GL related issues on Win and Mac: https://crbug.com/695452.
+IN_PROC_BROWSER_TEST_F(
+    WebRtcCaptureFromElementBrowserTest,
+    DISABLED_VerifyCanvasCaptureOffscreenCanvasCommitFrames) {
+  MakeTypicalCall("testCanvasCapture(drawOffscreenCanvasCommit);",
+                  kCanvasCaptureTestHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
+                       VerifyCanvasCaptureBitmapRendererFrames) {
+  MakeTypicalCall("testCanvasCapture(drawBitmapRenderer);",
+                  kCanvasCaptureTestHtmlFile);
 }
 
 IN_PROC_BROWSER_TEST_P(WebRtcCaptureFromElementBrowserTest,

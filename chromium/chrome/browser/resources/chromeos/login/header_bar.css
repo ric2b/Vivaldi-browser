@@ -23,12 +23,12 @@ html[screen=oobe] .login-header-bar-hidden {
 
 html[screen=lock] .login-header-bar-animate-fast,
 html[screen=oobe] .login-header-bar-animate-fast {
-  -webkit-transition: opacity 200ms ease-out;
+  transition: opacity 200ms ease-out;
 }
 
 html[screen=lock] .login-header-bar-animate-slow,
 html[screen=oobe] .login-header-bar-animate-slow {
-  -webkit-transition: opacity 2s ease-out;
+  transition: opacity 2s ease-out;
 }
 
 #login-header-bar button,
@@ -66,22 +66,20 @@ html[screen=oobe] .login-header-bar-animate-slow {
   background-color: white;
   border: 1px solid lightgray;
   border-radius: 2px;
-  bottom: 15px;
+  bottom: 0;
   color: black !important;
   display: block;
   font-size: 13px;
   height: auto;
-  left: 15px;
-  margin: 0 0 -10px -10px;
   min-height: 34px;
   position: absolute;
   text-align: center;
   width: 180px;
 }
 
-html[dir=rtl] #more-settings-header-bar-item.active
-                button.add-supervised-user-menu {
-  right: 0;
+#more-settings-header-bar-item.active button.add-supervised-user-menu:focus {
+  border: 2px solid var(--google-blue-500);
+  border-radius: 2px;
 }
 
 html[dir=rtl] .header-bar-item {

@@ -271,7 +271,9 @@ class COMPOSITOR_EXPORT Layer
   bool GetTargetTransformRelativeTo(const Layer* ancestor,
                                     gfx::Transform* transform) const;
 
-  // See description in View for details
+  // Note: Setting a layer non-opaque has significant performance impact,
+  // especially on low-end Chrome OS devices. Please ensure you are not
+  // adding unnecessary overdraw. When in doubt, talk to the graphics team.
   void SetFillsBoundsOpaquely(bool fills_bounds_opaquely);
   bool fills_bounds_opaquely() const { return fills_bounds_opaquely_; }
 
@@ -292,9 +294,10 @@ class COMPOSITOR_EXPORT Layer
   void SetTextureFlipped(bool flipped);
   bool TextureFlipped() const;
 
-  // Begins showing content from a surface with a particular id.
-  void SetShowSurface(const cc::SurfaceInfo& surface_info,
-                      scoped_refptr<cc::SurfaceReferenceFactory> surface_ref);
+  // Begins showing content from a surface with a particular ID.
+  void SetShowPrimarySurface(
+      const cc::SurfaceInfo& surface_info,
+      scoped_refptr<cc::SurfaceReferenceFactory> surface_ref);
 
   bool has_external_content() {
     return texture_layer_.get() || surface_layer_.get();
@@ -349,7 +352,9 @@ class COMPOSITOR_EXPORT Layer
 
   // Makes this Layer scrollable, clipping to |parent_clip_layer|. |on_scroll|
   // is invoked when scrolling performed by the cc::InputHandler is committed.
-  void SetScrollable(Layer* parent_clip_layer, const base::Closure& on_scroll);
+  void SetScrollable(
+      Layer* parent_clip_layer,
+      const base::Callback<void(const gfx::ScrollOffset&)>& on_scroll);
 
   // Gets and sets the current scroll offset of the layer.
   gfx::ScrollOffset CurrentScrollOffset() const;
@@ -421,6 +426,8 @@ class COMPOSITOR_EXPORT Layer
   cc::Layer* GetCcLayer() const override;
   LayerThreadedAnimationDelegate* GetThreadedAnimationDelegate() override;
   LayerAnimatorCollection* GetLayerAnimatorCollection() override;
+  int GetFrameNumber() const override;
+  float GetRefreshRate() const override;
 
   // Creates a corresponding composited layer for |type_|.
   void CreateCcLayer();
@@ -463,7 +470,9 @@ class COMPOSITOR_EXPORT Layer
   // Visibility of this layer. See SetVisible/IsDrawn for more details.
   bool visible_;
 
+  // See SetFillsBoundsOpaquely(). Defaults to true.
   bool fills_bounds_opaquely_;
+
   bool fills_bounds_completely_;
 
   // Union of damaged rects, in layer space, that SetNeedsDisplayRect should

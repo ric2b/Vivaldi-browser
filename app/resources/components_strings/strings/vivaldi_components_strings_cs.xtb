@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Zobrazí uloženou (tj. zastaralou) kopii této stránky.</translation>
 <translation id="1559528461873125649">Daný soubor nebo adresář neexistuje</translation>
 <translation id="1710259589646384581">Operační systém</translation>
-<translation id="1838667051080421715">Zobrazuje se vám zdrojový kód webové stránky.</translation>
+<translation id="1728677426644403582">Prohlížíte si zdrojový kód webové stránky</translation>
 <translation id="194030505837763158">Přejít na odkaz <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Měli jste na mysli <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Méně</translation>
 <translation id="2166378884831602661">Tento web nemůže poskytnout zabezpečené připojení</translation>
 <translation id="2292556288342944218">Vaše připojení k internetu je blokováno</translation>
 <translation id="255002559098805027">Web <ph name="HOST_NAME" /> vrátil neplatnou odpověď.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Přístup k souboru byl odepřen</translation>
 <translation id="2705137772291741111">Kopii tohoto webu uloženou v mezipaměti se nepodařilo přečíst.</translation>
 <translation id="2784949926578158345">Připojení bylo resetováno.</translation>
-<translation id="284702764277384724">Zdá se, že certifikát serveru webu <ph name="HOST_NAME" /> je podvrh.</translation>
 <translation id="2909946352844186028">Byla zjištěna změna sítě.</translation>
 <translation id="3005723025932146533">Zobrazit uloženou kopii</translation>
 <translation id="3093245981617870298">Nejste připojeni k Internetu.</translation>
@@ -35,7 +33,6 @@
 <translation id="4021036232240155012">DNS je síťová služba, která překládá názvy webů na internetové adresy.</translation>
 <translation id="4432688616882109544">Web <ph name="HOST_NAME" /> nepřijal přihlašovací certifikát, případně žádný certifikát nebyl poskytnut.</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
-<translation id="4670097147947922288">Prohlížíte si stránku rozšíření.</translation>
 <translation id="4708268264240856090">Připojení bylo přerušeno</translation>
 <translation id="4744603770635761495">Spustitelná cesta</translation>
 <translation id="4764776831041365478">Webové stránky na adrese <ph name="URL" /> jsou možná dočasně nedostupné nebo mohly být přemístěny na novou webovou adresu.</translation>
@@ -52,7 +49,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="5675650730144413517">Tato stránka nefunguje</translation>
 <translation id="5869405914158311789">Tento web není dostupný</translation>
 <translation id="5990559369517809815">Žádosti na tento server jsou blokovány rozšířením.</translation>
-<translation id="6042308850641462728">Více</translation>
 <translation id="6146055958333702838">Zkontrolujte všechny kabely a restartujte všechny směrovače, modemy a další síťová zařízení, která používáte.</translation>
 <translation id="6165508094623778733">Další informace</translation>
 <translation id="6203231073485539293">Zkontrolujte připojení k internetu</translation>
@@ -60,12 +56,11 @@ Kontaktujte administrátora systému.</translation>
 <translation id="6321917430147971392">Zkontrolujte nastavení DNS</translation>
 <translation id="6328639280570009161">Zkuste deaktivovat předvídání akcí sítě</translation>
 <translation id="6433595998831338502">Web <ph name="HOST_NAME" /> odmítl připojení.</translation>
+<translation id="6569060085658103619">Prohlížíte si stránku rozšíření</translation>
 <translation id="6711464428925977395">Došlo k chybě proxy serveru nebo jste zadali nesprávnou adresu.</translation>
 <translation id="6757797048963528358">Počítač přešel do režimu spánku.</translation>
-<translation id="6830600606572693159">Stránky na adrese <ph name="URL" /> nejsou v tuto chvíli k dispozici. Důvodem může být přetížení nebo provádění údržby.</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7210863904660874423">Web <ph name="HOST_NAME" /> nevyhovuje bezpečnostním standardům.</translation>
-<translation id="7269802741830436641">Tato stránka obsahuje smyčku přesměrování</translation>
 <translation id="7353601530677266744">Parametry spuštění</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
 <translation id="7518003948725431193">Na webové adrese <ph name="URL" /> se nepodařilo nalézt žádnou webovou stránku.</translation>
@@ -73,8 +68,8 @@ Kontaktujte administrátora systému.</translation>
 <translation id="759889825892636187">Web <ph name="HOST_NAME" /> momentálně tento požadavek nemůže zpracovat.</translation>
 <translation id="7716424297397655342">Tento web nelze načíst z mezipaměti</translation>
 <translation id="7758069387465995638">Připojení mohlo být zablokováno firewallem nebo antivirovým softwarem.</translation>
-<translation id="778579833039460630">Nebyla přijata žádná data</translation>
 <translation id="7951415247503192394">(32bitový)</translation>
+<translation id="8089520772729574115">méně než 1 MB</translation>
 <translation id="8134994873729925007"><ph name="BEGIN_ABBR" />Adresa DNS<ph name="END_ABBR" /> serveru <ph name="HOST_NAME" /> nebyla nalezena.</translation>
 <translation id="8142868475871995937">Na stránce &lt;strong&gt;vivaldi://policy&lt;/strong&gt; naleznete seznam zakázaných adres URL a další zásady vynucené vaším správcem systému.</translation>
 <translation id="8149426793427495338">Počítač přešel do režimu spánku.</translation>

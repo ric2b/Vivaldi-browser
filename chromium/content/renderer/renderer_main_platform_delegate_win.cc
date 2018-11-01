@@ -29,7 +29,7 @@
 #include "ui/gfx/win/direct_write.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/win/mf_util.h"
+#include "platform_media/common/win/mf_util.h"
 #endif
 
 namespace content {

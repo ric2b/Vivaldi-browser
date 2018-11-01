@@ -168,6 +168,13 @@ def write_buildflag_header_manually(root_gen_dir, header, flags):
 
   os.remove(temp_path)
 
+def write_build_date_header(root_gen_dir):
+  check_call([
+       os.path.join(SRC_ROOT, 'build', 'write_build_date_header.py'),
+       os.path.join(root_gen_dir, 'base/generated_build_date.h'),
+       'default',
+  ])
+
 def build_gn_with_ninja_manually(tempdir, options):
   root_gen_dir = os.path.join(tempdir, 'gen')
   mkdir_p(root_gen_dir)
@@ -180,6 +187,8 @@ def build_gn_with_ninja_manually(tempdir, options):
           'ENABLE_PROFILING': 'false',
           'ENABLE_MEMORY_TASK_PROFILER': 'false'
       })
+
+  write_build_date_header(root_gen_dir)
 
   if is_mac:
     # //base/build_time.cc needs base/generated_build_date.h,
@@ -394,6 +403,8 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/at_exit.cc',
       'base/base_paths.cc',
       'base/base_switches.cc',
+      'base/build_time.cc',
+      'base/callback_helpers.cc',
       'base/callback_internal.cc',
       'base/command_line.cc',
       'base/debug/activity_tracker.cc',
@@ -402,6 +413,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/debug/stack_trace.cc',
       'base/debug/task_annotator.cc',
       'base/environment.cc',
+      'base/feature_list.cc',
       'base/files/file.cc',
       'base/files/file_enumerator.cc',
       'base/files/file_path.cc',
@@ -431,6 +443,8 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/message_loop/message_pump.cc',
       'base/message_loop/message_pump_default.cc',
       'base/metrics/bucket_ranges.cc',
+      'base/metrics/field_trial.cc',
+      'base/metrics/field_trial_param_associator.cc',
       'base/metrics/histogram.cc',
       'base/metrics/histogram_base.cc',
       'base/metrics/histogram_samples.cc',
@@ -446,12 +460,14 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/pending_task.cc',
       'base/pickle.cc',
       'base/process/kill.cc',
+      'base/process/memory.cc',
       'base/process/process_handle.cc',
       'base/process/process_iterator.cc',
       'base/process/process_metrics.cc',
       'base/profiler/scoped_profile.cc',
       'base/profiler/scoped_tracker.cc',
       'base/profiler/tracked_time.cc',
+      'base/rand_util.cc',
       'base/run_loop.cc',
       'base/sequence_token.cc',
       'base/sequence_checker_impl.cc',
@@ -520,6 +536,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/memory_allocator_dump_guid.cc',
       'base/trace_event/memory_dump_manager.cc',
       'base/trace_event/memory_dump_request_args.cc',
+      'base/trace_event/memory_dump_scheduler.cc',
       'base/trace_event/memory_dump_session_state.cc',
       'base/trace_event/memory_infra_background_whitelist.cc',
       'base/trace_event/process_memory_dump.cc',
@@ -554,11 +571,13 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/memory/shared_memory_helper.cc',
         'base/message_loop/message_pump_libevent.cc',
         'base/posix/file_descriptor_shuffle.cc',
+        'base/posix/global_descriptors.cc',
         'base/posix/safe_strerror.cc',
         'base/process/kill_posix.cc',
         'base/process/process_handle_posix.cc',
         'base/process/process_metrics_posix.cc',
         'base/process/process_posix.cc',
+        'base/rand_util_posix.cc',
         'base/strings/string16.cc',
         'base/synchronization/condition_variable_posix.cc',
         'base/synchronization/lock_impl_posix.cc',
@@ -610,6 +629,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/memory/shared_memory_posix.cc',
         'base/nix/xdg_util.cc',
         'base/process/internal_linux.cc',
+        'base/process/memory_linux.cc',
         'base/process/process_handle_linux.cc',
         'base/process/process_iterator_linux.cc',
         'base/process/process_linux.cc',
@@ -630,7 +650,6 @@ def write_gn_ninja(path, root_gen_dir, options):
     static_libraries['base']['sources'].extend([
         'base/base_paths_mac.mm',
         'base/build_time.cc',
-        'base/rand_util.cc',
         'base/rand_util_posix.cc',
         'base/files/file_util_mac.mm',
         'base/mac/bundle_locations.mm',
@@ -698,7 +717,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/process/process_win.cc',
         'base/profiler/native_stack_sampler_win.cc',
         'base/profiler/win32_stack_frame_unwinder.cc',
-        'base/rand_util.cc',
         'base/rand_util_win.cc',
         'base/strings/sys_string_conversions_win.cc',
         'base/sync_socket_win.cc',

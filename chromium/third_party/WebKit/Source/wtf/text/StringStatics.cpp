@@ -32,22 +32,6 @@
 
 namespace WTF {
 
-StringImpl* StringImpl::empty() {
-  DEFINE_STATIC_LOCAL(StringImpl, emptyString, (ConstructEmptyString));
-  WTF_ANNOTATE_BENIGN_RACE(&emptyString,
-                           "Benign race on the reference counter of a static "
-                           "string created by StringImpl::empty");
-  return &emptyString;
-}
-
-StringImpl* StringImpl::empty16Bit() {
-  DEFINE_STATIC_LOCAL(StringImpl, emptyString, (ConstructEmptyString16Bit));
-  WTF_ANNOTATE_BENIGN_RACE(&emptyString,
-                           "Benign race on the reference counter of a static "
-                           "string created by StringImpl::empty16Bit");
-  return &emptyString;
-}
-
 WTF_EXPORT DEFINE_GLOBAL(AtomicString, nullAtom);
 WTF_EXPORT DEFINE_GLOBAL(AtomicString, emptyAtom);
 WTF_EXPORT DEFINE_GLOBAL(AtomicString, starAtom);
@@ -61,6 +45,9 @@ WTF_EXPORT DEFINE_GLOBAL(AtomicString, httpsAtom);
 // event/element/attribute name, so it shouldn't pollute the AtomicString hash
 // table.
 WTF_EXPORT DEFINE_GLOBAL(String, xmlnsWithColon);
+
+WTF_EXPORT DEFINE_GLOBAL(String, emptyString);
+WTF_EXPORT DEFINE_GLOBAL(String, emptyString16Bit);
 
 NEVER_INLINE unsigned StringImpl::hashSlowCase() const {
   if (is8Bit())
@@ -88,6 +75,10 @@ PassRefPtr<StringImpl> addStaticASCIILiteral(
 
 void StringStatics::init() {
   DCHECK(isMainThread());
+
+  StringImpl::initStatics();
+  new (NotNull, (void*)&emptyString) String(StringImpl::empty);
+  new (NotNull, (void*)&emptyString16Bit) String(StringImpl::empty16Bit);
 
   // FIXME: These should be allocated at compile time.
   new (NotNull, (void*)&starAtom) AtomicString("*");

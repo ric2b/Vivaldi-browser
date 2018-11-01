@@ -202,7 +202,6 @@ RenderViewHostImpl::RenderViewHostImpl(
       frames_ref_count_(0),
       delegate_(delegate),
       instance_(static_cast<SiteInstanceImpl*>(instance)),
-      enabled_bindings_(0),
       is_active_(!swapped_out),
       is_swapped_out_(swapped_out),
       main_frame_routing_id_(main_frame_routing_id),
@@ -320,11 +319,6 @@ bool RenderViewHostImpl::CreateRenderView(
 
   GetProcess()->GetRendererInterface()->CreateView(std::move(params));
 
-  // If it's enabled, tell the renderer to set up the Javascript bindings for
-  // sending messages back to the browser.
-  if (GetProcess()->IsForGuestsOnly() && !vivaldi::IsVivaldiRunning())
-    DCHECK_EQ(0, enabled_bindings_);
-  Send(new ViewMsg_AllowBindings(GetRoutingID(), enabled_bindings_));
   // Let our delegate know that we created a RenderView.
   delegate_->RenderViewCreated(this);
 
@@ -540,8 +534,28 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   if (delegate_ && delegate_->HideDownloadUI())
     prefs.hide_download_ui = true;
 
+  // `media_controls_enabled` is `true` by default.
+  if (delegate_ && delegate_->HasPersistentVideo())
+    prefs.media_controls_enabled = false;
+
   prefs.background_video_track_optimization_enabled =
       base::FeatureList::IsEnabled(media::kBackgroundVideoTrackOptimization);
+
+  // TODO(avayvod, asvitkine): Query the value directly when it is available in
+  // the renderer process. See https://crbug.com/681160.
+  prefs.max_keyframe_distance_to_disable_background_video =
+      base::TimeDelta::FromMilliseconds(
+          variations::GetVariationParamByFeatureAsInt(
+              media::kBackgroundVideoTrackOptimization,
+              "max_keyframe_distance_ms",
+              base::TimeDelta::FromSeconds(10).InMilliseconds()));
+
+  // TODO(servolk, asvitkine): Query the value directly when it is available in
+  // the renderer process. See https://crbug.com/681160.
+  prefs.enable_instant_source_buffer_gc =
+      variations::GetVariationParamByFeatureAsBool(
+          media::kMemoryPressureBasedSourceBufferGC,
+          "enable_instant_source_buffer_gc", false);
 
   std::map<std::string, std::string> expensive_background_throttling_prefs;
   variations::GetVariationParamsByFeature(
@@ -639,51 +653,13 @@ RenderFrameHost* RenderViewHostImpl::GetMainFrame() {
   return RenderFrameHost::FromID(GetProcess()->GetID(), main_frame_routing_id_);
 }
 
-void RenderViewHostImpl::AllowBindings(int bindings_flags) {
-  // Never grant any bindings to browser plugin guests.
-#if (0) //_VIVALDI_DISABLED_THIS_
-  if (GetProcess()->IsForGuestsOnly()) {
-    NOTREACHED() << "Never grant bindings to a guest process.";
-    return;
-  }
-#endif // _VIVALDI_DISABLED_THIS_
-
-  // Ensure we aren't granting WebUI bindings to a process that has already
-  // been used for non-privileged views.
-  if (bindings_flags & BINDINGS_POLICY_WEB_UI &&
-      GetProcess()->HasConnection() &&
-      !ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
-          GetProcess()->GetID())) {
-    // This process has no bindings yet. Make sure it does not have more
-    // than this single active view.
-    // --single-process only has one renderer.
-    if (GetProcess()->GetActiveViewCount() > 1 &&
-        !base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kSingleProcess))
-      return;
-  }
-
-  if (bindings_flags & BINDINGS_POLICY_WEB_UI) {
-    ChildProcessSecurityPolicyImpl::GetInstance()->GrantWebUIBindings(
-        GetProcess()->GetID());
-  }
-
-  enabled_bindings_ |= bindings_flags;
-  if (GetWidget()->renderer_initialized())
-    Send(new ViewMsg_AllowBindings(GetRoutingID(), enabled_bindings_));
-}
-
-int RenderViewHostImpl::GetEnabledBindings() const {
-  return enabled_bindings_;
-}
-
 void RenderViewHostImpl::SetWebUIProperty(const std::string& name,
                                           const std::string& value) {
   // This is a sanity check before telling the renderer to enable the property.
   // It could lie and send the corresponding IPC messages anyway, but we will
   // not act on them if enabled_bindings_ doesn't agree. If we get here without
   // WebUI bindings, kill the renderer process.
-  if (enabled_bindings_ & BINDINGS_POLICY_WEB_UI) {
+  if (GetMainFrame()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI) {
     Send(new ViewMsg_SetWebUIProperty(GetRoutingID(), name, value));
   } else {
     RecordAction(
@@ -764,7 +740,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowFullscreenWidget,
                         OnShowFullscreenWidget)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateState, OnUpdateState)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateTargetURL, OnUpdateTargetURL)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Close, OnClose)
     IPC_MESSAGE_HANDLER(ViewHostMsg_RequestMove, OnRequestMove)
@@ -826,20 +801,6 @@ void RenderViewHostImpl::OnRenderProcessGone(int status, int exit_code) {
   // RenderViewHostImpl and destroy itself.
   // TODO(nasko): Remove this hack once RenderViewHost and RenderWidgetHost are
   // decoupled.
-}
-
-void RenderViewHostImpl::OnUpdateState(const PageState& state) {
-  // Without this check, the renderer can trick the browser into using
-  // filenames it can't access in a future session restore.
-  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  int child_id = GetProcess()->GetID();
-  if (!policy->CanReadAllFiles(child_id, state.GetReferencedFiles())) {
-    bad_message::ReceivedBadMessage(
-        GetProcess(), bad_message::RVH_CAN_ACCESS_FILES_OF_PAGE_STATE);
-    return;
-  }
-
-  delegate_->UpdateState(this, state);
 }
 
 void RenderViewHostImpl::OnUpdateTargetURL(const GURL& url) {
@@ -943,19 +904,6 @@ void RenderViewHostImpl::OnWebkitPreferencesChanged() {
   updating_web_preferences_ = true;
   UpdateWebkitPreferences(ComputeWebkitPrefs());
   updating_web_preferences_ = false;
-}
-
-void RenderViewHostImpl::ClearFocusedElement() {
-  // TODO(ekaramad): We should move this to WebContents instead
-  // (https://crbug.com/675975).
-  if (delegate_)
-    delegate_->ClearFocusedElement();
-}
-
-bool RenderViewHostImpl::IsFocusedElementEditable() {
-  // TODO(ekaramad): We should move this to WebContents instead
-  // (https://crbug.com/675975).
-  return delegate_ && delegate_->IsFocusedElementEditable();
 }
 
 void RenderViewHostImpl::DisableScrollbarsForThreshold(const gfx::Size& size) {

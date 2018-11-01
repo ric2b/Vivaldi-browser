@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
 
-#ifndef VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_
-#define VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_
+#ifndef CLIENTPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_
+#define CLIENTPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_
 
 #include <string>
 #include <vector>
@@ -31,9 +31,8 @@ class VivaldiContentBrowserClientParts
   ~VivaldiContentBrowserClientParts() override {}
 
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
-  void OverrideWebkitPrefs(content::RenderViewHost *rvh,
-                           content::WebPreferences *web_prefs) override;
+  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+                           content::WebPreferences* web_prefs) override;
 };
 
-#endif  // VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_
-
+#endif  // CLIENTPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_

@@ -10,7 +10,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -50,7 +49,6 @@ class SyncBrowserThreadModelWorkerTest : public testing::Test {
   // This is the work that will be scheduled to be done on the DB thread.
   SyncerError DoWork() {
     EXPECT_TRUE(db_thread_.task_runner()->BelongsToCurrentThread());
-    timer_.Stop();  // Stop the failure timer so the test succeeds.
     main_message_loop_.task_runner()->PostTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     did_do_work_ = true;

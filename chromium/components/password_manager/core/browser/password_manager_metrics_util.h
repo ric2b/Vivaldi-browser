@@ -52,6 +52,7 @@ enum UIDismissalReason {
   AUTO_SIGNIN_TOAST_TIMEOUT,
   AUTO_SIGNIN_TOAST_CLICKED_OBSOLETE,  // obsolete.
   CLICKED_BRAND_NAME,
+  CLICKED_PASSWORDS_DASHBOARD,
   NUM_UI_RESPONSES,
 };
 
@@ -228,8 +229,11 @@ void LogShouldBlockPasswordForSameOriginButDifferentScheme(bool should_block);
 // Logs number of passwords migrated from HTTP to HTTPS.
 void LogCountHttpMigratedPasswords(int count);
 
-// Log if the account chooser has empty username or duplicate usernames.
-void LogAccountChooserUsability(AccountChooserUsabilityMetric usability);
+// Log if the account chooser has empty username or duplicate usernames. In
+// addition record number of the placeholder avatars and total number of rows.
+void LogAccountChooserUsability(AccountChooserUsabilityMetric usability,
+                                int count_empty_icons,
+                                int count_accounts);
 
 // Log the result of navigator.credentials.get. |status| specifies the
 // "unmediated" parameter of the API method.

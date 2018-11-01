@@ -139,7 +139,9 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 363
+#   For your editing convenience: highest ID currently used: 366
+#   And don't forget to also update the EnterprisePolicies enum of
+#   histograms.xml (run tools/metrics/histograms/update_policies.py).
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -281,6 +283,41 @@
 
           This policy is not available on Windows instances that are not joined
           to an Active Directory domain.''',
+        },
+      ],
+    },
+    {
+      'name': 'NewTabPage',
+      'type': 'group',
+      'caption': '''New Tab Page''',
+      'desc': '''Configure the default New Tab page in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.''',
+      'policies': [
+        {
+          'name': 'NewTabPageLocation',
+          'type': 'string',
+          'schema': { 'type': 'string' },
+          'supported_on': ['chrome.*:58-', 'chrome_os:58-'],
+          'features': {
+            'can_be_recommended': True,
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': 'https://www.chromium.org',
+          'id': 360,
+          'caption': '''Configure the New Tab page URL''',
+          'tags': [],
+          'desc': '''Configures the default New Tab page URL in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing it.
+
+          The New Tab page is the page opened when new tabs are created (including the one opened in new windows).
+
+          This policy does not decide which pages to be opened on start up. They are controlled by the RestoreOnStartup policies, which could be to open the New Tab page.
+
+          The NewTabPageLocation can be set to a URL you specify here. It will also affect the Home Page if it is set to open the New Tab page, as well as the startup page if set to New Tab page.
+
+          If the policy is not set or left empty the default new tab page is used.
+
+          This policy is not available on Windows instances that are not joined to an Active Directory domain.''',
+          'label': '''New Tab page URL''',
         },
       ],
     },
@@ -1341,7 +1378,7 @@
       'id': 19,
       'caption': '''Specify a list of disabled plugins''',
       'tags': [],
-      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">$1<ex>DefaultPluginsSetting</ex></ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">$1<ex>AlwaysOpenPdfExternally</ex></ph> to control whether the integrated PDF viewer should be used for opening PDF files.
+      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">DefaultPluginsSetting</ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">AlwaysOpenPdfExternally</ph> to control whether the integrated PDF viewer should be used for opening PDF files.
 
       Specifies a list of plugins that are disabled in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
 
@@ -1371,7 +1408,7 @@
       'id': 78,
       'caption': '''Specify a list of enabled plugins''',
       'tags': ['system-security'],
-      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">$1<ex>DefaultPluginsSetting</ex></ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">$1<ex>AlwaysOpenPdfExternally</ex></ph> to control whether the integrated PDF viewer should be used for opening PDF files.
+      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">DefaultPluginsSetting</ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">AlwaysOpenPdfExternally</ph> to control whether the integrated PDF viewer should be used for opening PDF files.
 
       Specifies a list of plugins that are enabled in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
 
@@ -1401,7 +1438,7 @@
       'id': 79,
       'caption': '''Specify a list of plugins that the user can enable or disable''',
       'tags': [],
-      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">$1<ex>DefaultPluginsSetting</ex></ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">$1<ex>AlwaysOpenPdfExternally</ex></ph> to control whether the integrated PDF viewer should be used for opening PDF files.
+      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">DefaultPluginsSetting</ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">AlwaysOpenPdfExternally</ph> to control whether the integrated PDF viewer should be used for opening PDF files.
 
       Specifies a list of plugins that user can enable or disable in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
 
@@ -1965,10 +2002,6 @@
       ],
     },
     {
-      # TODO(joaodasilva): Make this the default and deprecate the other proxy
-      # policies once all providers are ready to load 'dict' policies.
-      # This is currently an internal policy.
-      # https://crbug.com/108992, https://crbug.com/108996
       'name': 'ProxySettings',
       'type': 'dict',
       'schema': {
@@ -4818,6 +4851,25 @@
       If this policy is not set, or it is set to false, then <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> follows the publicly announced SHA-1 deprecation schedule.''',
     },
     {
+      'name': 'EnableCommonNameFallbackForLocalAnchors',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:58-65', 'chrome_os:58-65', 'android:58-65'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 366,
+      'caption': '''Whether to allow certificates issued by local trust anchors that are missing the subjectAlternativeName extension''',
+      'tags': ['system-security'],
+      'desc': '''When this setting is enabled, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use the commonName of a server certificate to match a hostname if the certificate is missing a subjectAlternativeName extension, as long as it successfully validates and chains to a locally-installed CA certificates.
+
+      Note that this is not recommended, as this may allow bypassing the nameConstraints extension that restricts the hostnames that a given certificate can be authorized for.
+
+      If this policy is not set, or is set to false, server certificates that lack a subjectAlternativeName extension containing either a DNS name or IP address will not be trusted.''',
+    },
+    {
       'name': 'ForceEphemeralProfiles',
       'type': 'main',
       'schema': { 'type': 'boolean' },
@@ -5077,17 +5129,17 @@
       'supported_on': ['chrome_os:55-'],
       'features': {
         'dynamic_refresh': True,
-        'per_profile': False,
+        'per_profile': True,
       },
-      'example_value': False,
+      'example_value': True,
       'id': 349,
       'caption': '''Report information about status of Android''',
       'tags': ['admin-sharing'],
       'desc': '''Information about the status of Android is sent back to the
       server.
 
-      If the policy is set to false, no status information is reported.
-      If set to true or left unset, status information is reported.
+      If the policy is set to false or left unset, no status information is reported.
+      If set to true, status information is reported.
 
       This policy only applies if Android apps are enabled.''',
     },
@@ -8163,6 +8215,7 @@
         'dynamic_refresh': True,
         'per_profile': False,
       },
+      'deprecated': True,
       'example_value': 'ssl3',
       'id': 279,
       'caption': '''Minimum SSL version enabled''',
@@ -8221,6 +8274,48 @@
       Otherwise, if compatibility with a buggy server must be maintained, this policy may be set to "tls1.1". This is a stopgap measure and the server should be rapidly fixed.''',
     },
     {
+      'name': 'SSLVersionMax',
+      'type': 'string-enum',
+      'schema': {
+        'type': 'string',
+        'enum': [
+          'tls1.2',
+          'tls1.3',
+        ],
+      },
+      'items': [
+        {
+          'name': 'TLSv1.2',
+          'value': 'tls1.2',
+          'caption': 'TLS 1.2',
+        },
+        {
+          'name': 'TLSv1.3',
+          'value': 'tls1.3',
+          'caption': 'TLS 1.3',
+        },
+      ],
+      'supported_on': [
+        'chrome.*:58-',
+        'chrome_os:58-',
+        'android:58-',
+        'ios:58-',
+      ],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': 'tls1.2',
+      'id': 361,
+      'caption': '''Maximum SSL version enabled''',
+      'tags': ['system-security'],
+      'desc': '''Warning: The max TLS version policy will be entirely removed from <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> around version 66 (around February 2018).
+
+      If this policy is not configured then <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> uses the default maximum version.
+
+      Otherwise it may be set to one of the following values: "tls1.2" or "tls1.3". When set, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will not use SSL/TLS versions greater than the specified version. An unrecognized value will be ignored.''',
+    },
+    {
       'name': 'CertificateTransparencyEnforcementDisabledForUrls',
       'type': 'list',
       'schema': {
@@ -8264,6 +8359,7 @@
         'dynamic_refresh': True,
         'per_profile': False,
       },
+      'deprecated': True,
       'example_value': False,
       'id': 310,
       'caption': '''Whether RC4 cipher suites in TLS are enabled''',
@@ -8288,6 +8384,7 @@
         'dynamic_refresh': True,
         'per_profile': False,
       },
+      'deprecated': True,
       'example_value': False,
       'id': 334,
       'caption': '''Whether DHE cipher suites in TLS are enabled''',
@@ -8772,7 +8869,7 @@
       'type': 'int-enum',
       'schema': {
         'type': 'integer',
-        'enum': [ 0, 1, 2, 3 ],
+        'enum': [ 0, 1, 2, 3, 4 ],
       },
       'items': [
         {
@@ -8793,7 +8890,12 @@
         {
           'name': 'TimezoneAutomaticDetectionSendWiFiAccessPoints',
           'value': 3,
-          'caption': '''Always send WiFi acess-points to server while resolving timezone.''',
+          'caption': '''Always send WiFi access-points to server while resolving timezone.''',
+        },
+        {
+          'name': 'TimezoneAutomaticDetectionSendAllLocationInfo',
+          'value': 4,
+          'caption': '''Always send any available location signals to the server while resolving timezone.''',
         },
       ],
       'supported_on': ['chrome_os:53-'],
@@ -8814,6 +8916,8 @@
       If set to TimezoneAutomaticDetectionIPOnly, timezone controls in chrome://settings will be disabled. Automatic timezone detection will be always on. Timezone detection will use IP-only method to resolve location.
 
       If set to TimezoneAutomaticDetectionSendWiFiAccessPoints, timezone controls in chrome://settings will be disabled. Automatic timezone detection will be always on. The list of visible WiFi access-points will be always sent to Geolocation API server for fine-grained timezone detection.
+
+      If set to TimezoneAutomaticDetectionSendAllLocationInfo, timezone controls in chrome://settings will be disabled. Automatic timezone detection will be always on. Location information (such as WiFi access-points, reachable Cell Towers, GPS) will be sent to a server for fine-grained timezone detection.
 
       If this policy is not set, it will behave as if TimezoneAutomaticDetectionUsersDecide is set.
 
@@ -8842,7 +8946,7 @@
       'name': 'NetworkThrottlingEnabled',
       'device_only': True,
       'caption': '''Enables throttling network bandwidth''',
-      'desc': '''Allows choosing whether network throttling is enabled or not.
+      'desc': '''Allows enabling or disabling network throttling.
       This applies to all users, and to all interfaces on the device. Once set,
       the throttling persists until the policy is changed to disable it.
 
@@ -8899,13 +9003,14 @@
       allowed.'''
     },
     {
-      'name': 'LoginApps',
+      'name': 'DeviceLoginScreenAppInstallList',
       'type': 'list',
       'schema': {
         'type': 'array',
         'items': { 'type': 'string' },
       },
-      'supported_on': ['chrome_os:54-'],
+      'supported_on': ['chrome_os:58-'],
+      'future': True,
       'device_only': True,
       'features': {
         'dynamic_refresh': True,
@@ -9064,19 +9169,48 @@
       The desire is to remove this override in the future.''',
     },
     {
-      'name': 'EnableMediaRouter',
-      'type': 'main',
-      'schema': { 'type': 'boolean' },
-      'supported_on': ['chrome.*:52-', 'chrome_os:52-', 'android:52-'],
-      'features': {
-        'dynamic_refresh': False,
-        'per_profile': True,
-      },
-      'example_value': True,
-      'id': 333,
-      'caption': '''Enables cast''',
-      'tags': [],
-      'desc': '''If this is set to true or is not set, users will be able to cast tabs, sites or the desktop from the browser. If set to false, this option will be disabled.'''
+      'name': 'GoogleCast',
+      'type': 'group',
+      'caption': '''Google Cast''',
+      'desc': '''Configure policies for Google Cast, a feature that allows users to send the contents of tabs, sites or the desktop from the browser to remote displays and sound systems.''',
+      'policies': [
+        {
+          'name': 'EnableMediaRouter',
+          'type': 'main',
+          'schema': { 'type': 'boolean' },
+          'supported_on': ['chrome.*:52-', 'chrome_os:52-', 'android:52-'],
+          'features': {
+            'dynamic_refresh': False,
+            'per_profile': True,
+          },
+          'example_value': True,
+          'id': 333,
+          'caption': '''Enables Google Cast''',
+          'tags': [],
+          'desc': '''If this policy is set to true or is not set, Google Cast will be enabled, and users will be able to launch it from the app menu, page context menus, media controls on Cast-enabled websites, and (if shown) the Cast toolbar icon.
+
+          If this policy set to false, Google Cast will be disabled.'''
+        },
+        {
+          'name': 'ShowCastIconInToolbar',
+          'type': 'main',
+          'schema': { 'type': 'boolean' },
+          'supported_on': ['chrome.*:58-', 'chrome_os:58-'],
+          'features': {
+            'dynamic_refresh': False,
+            'per_profile': True,
+          },
+          'example_value': False,
+          'id': 362,
+          'caption': '''Shows the Google Cast toolbar icon''',
+          'tags': [],
+          'desc': '''If this policy is set to true, the Cast toolbar icon will always be shown on the toolbar or the overflow menu, and users will not be able to remove it.
+
+          If this policy is set to false or is not set, users will be able to pin or remove the icon via its contextual menu.
+
+          If the policy "EnableMediaRouter" is set to false, then this policy's value would have no effect, and the toolbar icon would not be shown.'''
+        },
+      ],
     },
     {
       'name': 'ArcBackupRestoreEnabled',
@@ -9441,6 +9575,48 @@
       If the device wallpaper policy is set, the Chrome OS device will download and use the wallpaper image on the login screen if no user has yet signed in to the device. Once the user logs in, the user's wallpaper policy kicks in.
 
       If the device wallpaper policy is left not set, it's the user's wallpaper policy to decide what to show if the user's wallpaper policy is set.''',
+    },
+    {
+      'name': 'DeviceLoginScreenLocales',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'supported_on': ['chrome_os:58-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': False,
+      },
+      'example_value': [ "en-US" ],
+      'max_size': 16777216,
+      'id': 364,
+      'caption': '''Device sign-in screen locale''',
+      'tags': [],
+      'desc': '''Configures the locale which is enforced on the <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> sign-in screen.
+
+      If this policy is set, the sign-in screen will always be displayed in the locale which is given by the first value of this policy (the policy is defined as a list for forward compatibility).  If this policy is not set or is set to an empty list, the sign-in screen will be displayed in the locale of the last user session.  If this policy is set to a value which is not a valid locale, the sign-in screen will be displayed in a fallback locale (currently, en-US).'''
+    },
+    {
+      'name': 'DeviceLoginScreenInputMethods',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'supported_on': ['chrome_os:58-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': [ "xkb:us::en", "xkb:ch::ger" ],
+      'max_size': 16777216,
+      'id': 365,
+      'caption': '''Device sign-in screen keyboard layouts''',
+      'tags': [],
+      'desc': '''Configures which keyboard layouts are allowed on the <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> sign-in screen.
+
+      If this policy is set to a list of input method identifiers, the given input methods will be available on the sign-in screen. The first given input method will be preselected. While a user pod is focused on the sign-in screen, the user's least recently used input method will be available in addition to the input methods given by this policy.  If this policy is not set, the input methods on the sign-in screen will be derived from the locale in which the sign-in screen is displayed.  Values which are not valid input method identifiers will be ignored.''',
     },
   ],
   'messages': {

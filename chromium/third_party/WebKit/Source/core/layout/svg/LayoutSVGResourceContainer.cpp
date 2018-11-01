@@ -22,20 +22,20 @@
 #include "core/layout/svg/SVGResources.h"
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/svg/SVGElementProxy.h"
+#include "core/svg/SVGTreeScopeResources.h"
 #include "wtf/AutoReset.h"
 
 namespace blink {
 
-static inline SVGDocumentExtensions& svgExtensionsFromElement(
+static inline SVGTreeScopeResources& svgTreeScopeResourcesFromElement(
     Element* element) {
-  ASSERT(element);
-  return element->document().accessSVGExtensions();
+  DCHECK(element);
+  return element->treeScope().ensureSVGTreeScopedResources();
 }
 
 LayoutSVGResourceContainer::LayoutSVGResourceContainer(SVGElement* node)
     : LayoutSVGHiddenContainer(node),
       m_isInLayout(false),
-      m_id(node->getIdAttribute()),
       m_invalidationMask(0),
       m_registered(false),
       m_isInvalidating(false) {}
@@ -73,21 +73,25 @@ void LayoutSVGResourceContainer::willBeDestroyed() {
   detachAllClients();
 
   LayoutSVGHiddenContainer::willBeDestroyed();
-  if (m_registered)
-    svgExtensionsFromElement(element()).removeResource(m_id);
+  if (!m_registered)
+    return;
+  svgTreeScopeResourcesFromElement(element()).removeResource(
+      element()->getIdAttribute());
 }
 
 void LayoutSVGResourceContainer::styleDidChange(StyleDifference diff,
                                                 const ComputedStyle* oldStyle) {
   LayoutSVGHiddenContainer::styleDidChange(diff, oldStyle);
 
-  if (!m_registered) {
-    m_registered = true;
-    registerResource();
-  }
+  if (m_registered)
+    return;
+  m_registered = true;
+  svgTreeScopeResourcesFromElement(element()).updateResource(
+      element()->getIdAttribute(), this);
 }
 
 void LayoutSVGResourceContainer::detachAllClients() {
+  const AtomicString& id = element()->getIdAttribute();
   for (auto* client : m_clients) {
     // Unlink the resource from the client's SVGResources. (The actual
     // removal will be signaled after processing all the clients.)
@@ -99,23 +103,23 @@ void LayoutSVGResourceContainer::detachAllClients() {
 
     // Add a pending resolution based on the id of the old resource.
     Element* clientElement = toElement(client->node());
-    svgExtensionsFromElement(clientElement)
-        .addPendingResource(m_id, clientElement);
+    svgTreeScopeResourcesFromElement(clientElement)
+        .addPendingResource(id, *clientElement);
   }
 
   removeAllClientsFromCache();
 }
 
-void LayoutSVGResourceContainer::idChanged() {
+void LayoutSVGResourceContainer::idChanged(const AtomicString& oldId,
+                                           const AtomicString& newId) {
   // Invalidate all our current clients.
   removeAllClientsFromCache();
 
   // Remove old id, that is guaranteed to be present in cache.
-  SVGDocumentExtensions& extensions = svgExtensionsFromElement(element());
-  extensions.removeResource(m_id);
-  m_id = element()->getIdAttribute();
-
-  registerResource();
+  SVGTreeScopeResources& treeScopeResources =
+      svgTreeScopeResourcesFromElement(element());
+  treeScopeResources.removeResource(oldId);
+  treeScopeResources.updateResource(newId, this);
 }
 
 void LayoutSVGResourceContainer::markAllClientsForInvalidation(
@@ -184,14 +188,14 @@ void LayoutSVGResourceContainer::markClientForInvalidation(
 
 void LayoutSVGResourceContainer::addClient(LayoutObject* client) {
   ASSERT(client);
-  m_clients.add(client);
+  m_clients.insert(client);
   clearInvalidationMask();
 }
 
 void LayoutSVGResourceContainer::removeClient(LayoutObject* client) {
   ASSERT(client);
   removeClientFromCache(client, false);
-  m_clients.remove(client);
+  m_clients.erase(client);
 }
 
 void LayoutSVGResourceContainer::invalidateCacheAndMarkForLayout(
@@ -205,38 +209,6 @@ void LayoutSVGResourceContainer::invalidateCacheAndMarkForLayout(
 
   if (everHadLayout())
     removeAllClientsFromCache();
-}
-
-void LayoutSVGResourceContainer::registerResource() {
-  SVGDocumentExtensions& extensions = svgExtensionsFromElement(element());
-  if (!extensions.hasPendingResource(m_id)) {
-    extensions.addResource(m_id, this);
-    return;
-  }
-
-  SVGDocumentExtensions::SVGPendingElements* clients(
-      extensions.removePendingResource(m_id));
-
-  // Cache us with the new id.
-  extensions.addResource(m_id, this);
-
-  // Update cached resources of pending clients.
-  for (const auto& pendingClient : *clients) {
-    DCHECK(pendingClient->hasPendingResources());
-    extensions.clearHasPendingResourcesIfPossible(pendingClient);
-    LayoutObject* layoutObject = pendingClient->layoutObject();
-    if (!layoutObject)
-      continue;
-    DCHECK(layoutObject->isSVG() && (resourceType() != FilterResourceType ||
-                                     !layoutObject->isSVGRoot()));
-
-    StyleDifference diff;
-    diff.setNeedsFullLayout();
-    SVGResourcesCache::clientStyleChanged(layoutObject, diff,
-                                          layoutObject->styleRef());
-    layoutObject->setNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::SvgResourceInvalidated);
-  }
 }
 
 static inline void removeFromCacheAndInvalidateDependencies(
@@ -266,14 +238,14 @@ static inline void removeFromCacheAndInvalidateDependencies(
 
   for (SVGElement* element : *dependencies) {
     if (LayoutObject* layoutObject = element->layoutObject()) {
-      if (UNLIKELY(!invalidatingDependencies.add(element).isNewEntry)) {
+      if (UNLIKELY(!invalidatingDependencies.insert(element).isNewEntry)) {
         // Reference cycle: we are in process of invalidating this dependant.
         continue;
       }
 
       LayoutSVGResourceContainer::markForLayoutAndParentResourceInvalidation(
           layoutObject, needsLayout);
-      invalidatingDependencies.remove(element);
+      invalidatingDependencies.erase(element);
     }
   }
 }

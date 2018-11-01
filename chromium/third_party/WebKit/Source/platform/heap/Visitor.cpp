@@ -5,20 +5,19 @@
 #include "platform/heap/Visitor.h"
 
 #include "platform/heap/BlinkGC.h"
-#include "platform/heap/MarkingVisitor.h"
 #include "platform/heap/ThreadState.h"
+#include "platform/heap/VisitorImpl.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
 namespace blink {
 
-std::unique_ptr<Visitor> Visitor::create(ThreadState* state,
-                                         VisitorMarkingMode mode) {
-  return WTF::makeUnique<MarkingVisitor>(state, mode);
+std::unique_ptr<Visitor> Visitor::create(ThreadState* state, MarkingMode mode) {
+  return WTF::makeUnique<Visitor>(state, mode);
 }
 
-Visitor::Visitor(ThreadState* state, VisitorMarkingMode markingMode)
-    : VisitorHelper(state, markingMode) {
+Visitor::Visitor(ThreadState* state, MarkingMode markingMode)
+    : m_state(state), m_markingMode(markingMode) {
   // See ThreadState::runScheduledGC() why we need to already be in a
   // GCForbiddenScope before any safe point is entered.
   DCHECK(state->isGCForbidden());
@@ -28,5 +27,9 @@ Visitor::Visitor(ThreadState* state, VisitorMarkingMode markingMode)
 }
 
 Visitor::~Visitor() {}
+
+void Visitor::markNoTracingCallback(Visitor* visitor, void* object) {
+  visitor->markNoTracing(object);
+}
 
 }  // namespace blink

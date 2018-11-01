@@ -49,6 +49,7 @@ options.AutomaticTimezoneDetectionType = {
   DISABLED: 1,
   IP_ONLY: 2,
   SEND_WIFI_ACCESS_POINTS: 3,
+  SEND_ALL_LOCATION_INFO: 4,
 };
 
 cr.define('options', function() {
@@ -193,10 +194,10 @@ cr.define('options', function() {
         $('advanced-settings').hidden = true;
       }
 
-      $('advanced-settings').addEventListener('webkitTransitionEnd',
+      $('advanced-settings').addEventListener('transitionend',
           this.updateAdvancedSettingsExpander_.bind(this));
 
-      if (loadTimeData.getBoolean('showAbout')) {
+      if (loadTimeData.valueExists('aboutOverlayTabTitle')) {
         $('about-button').hidden = false;
         $('about-button').addEventListener('click', function() {
           PageManager.showPageByName('help');
@@ -925,7 +926,7 @@ cr.define('options', function() {
       // If the section is already animating, dispatch a synthetic transition
       // end event as the upcoming code will cancel the current one.
       if (section.classList.contains('sliding'))
-        cr.dispatchSimpleEvent(section, 'webkitTransitionEnd');
+        cr.dispatchSimpleEvent(section, 'transitionend');
 
       this.addTransitionEndListener_(section);
 
@@ -1049,7 +1050,7 @@ cr.define('options', function() {
     },
 
     /**
-     * Adds a |webkitTransitionEnd| listener to the given section so that
+     * Adds a |transitionend| listener to the given section so that
      * it can be animated. The listener will only be added to a given section
      * once, so this can be called as multiple times.
      * @param {HTMLElement} section The section to be animated.
@@ -1059,14 +1060,14 @@ cr.define('options', function() {
       if (section.hasTransitionEndListener_)
         return;
 
-      section.addEventListener('webkitTransitionEnd',
+      section.addEventListener('transitionend',
           this.onTransitionEnd_.bind(this));
       section.hasTransitionEndListener_ = true;
     },
 
     /**
      * Called after an animation transition has ended.
-     * @param {Event} event The webkitTransitionEnd event. NOTE: May be
+     * @param {Event} event The transitionend event. NOTE: May be
      *     synthetic.
      * @private
      */

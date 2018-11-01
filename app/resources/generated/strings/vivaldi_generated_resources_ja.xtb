@@ -13,6 +13,7 @@
 <translation id="1187722533808055681">アイドル状態からの復帰</translation>
 <translation id="119944043368869598">すべてクリア</translation>
 <translation id="1244303850296295656">拡張機能のエラー</translation>
+<translation id="1278049586634282054">検証:</translation>
 <translation id="1368832886055348810">左から右</translation>
 <translation id="1465176863081977902">音声のアドレスをコピー(&amp;O)</translation>
 <translation id="1476607407192946488">言語設定</translation>
@@ -25,7 +26,6 @@
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1627276047960621195">ファイル記述子</translation>
 <translation id="1635033183663317347">管理責任者によってインストールされています。</translation>
-<translation id="1652965563555864525">ミュート(&amp;M)</translation>
 <translation id="1723824996674794290">新しいウィンドウ(&amp;N)</translation>
 <translation id="1725149567830788547">コントロールを表示</translation>
 <translation id="1729533290416704613">この拡張機能では、アドレスバーからの検索時に表示されるページも制御されます。</translation>
@@ -38,8 +38,8 @@
 <translation id="1859234291848436338">文章の方向</translation>
 <translation id="1901303067676059328">すべて選択(&amp;A)</translation>
 <translation id="1965328510789761112">専有メモリ</translation>
+<translation id="1989112275319619282">参照</translation>
 <translation id="1992397118740194946">未設定</translation>
-<translation id="2011110593081822050">Web Worker: <ph name="WORKER_NAME" /></translation>
 <translation id="2019718679933488176">音声を新しいタブで開く</translation>
 <translation id="2076269580855484719">このプラグインを表示しない</translation>
 <translation id="2087822576218954668">印刷: <ph name="PRINT_NAME" /></translation>
@@ -67,10 +67,10 @@
 <translation id="2482878487686419369">通知</translation>
 <translation id="2501797496290880632">ショートカットを入力する</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> のインストール</translation>
-<translation id="253434972992662860">一時停止(&amp;P)</translation>
 <translation id="2550212893339833758">スワップ対象メモリ</translation>
 <translation id="2662876636500006917">Chrome Webストア</translation>
 <translation id="2678063897982469759">再度有効にする</translation>
+<translation id="2721037002783622288"><ph name="SEARCH_ENGINE" /> で画像を検索(&amp;S)</translation>
 <translation id="2785873697295365461">ファイル記述子</translation>
 <translation id="2809586584051668049">、他 <ph name="NUMBER_ADDITIONAL_DISABLED" /> 件</translation>
 <translation id="2844111009524261443">クリックして実行</translation>
@@ -83,7 +83,9 @@
 <translation id="2972581237482394796">やり直し(&amp;R)</translation>
 <translation id="299483336428448530">保護者によりインストールされています。</translation>
 <translation id="3003623123441819449">CSSのキャッシュ</translation>
+<translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">フレームのソースを表示(&amp;V)</translation>
+<translation id="302620147503052030">ボタンを表示</translation>
 <translation id="3080207940057008665">パソコン上の別のプログラムにより、Vivaldi の動作方法を変更する可能性のあるテーマが追加されました。</translation>
 <translation id="3084548735795614657">ここにドロップすると、拡張機能がインストールされます</translation>
 <translation id="3122464029669770682">CPU</translation>
@@ -91,14 +93,17 @@
 <translation id="3149510190863420837">Chromeアプリ</translation>
 <translation id="3222066309010235055">事前レンダリング: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">マイク</translation>
+<translation id="32279126412636473">再読み込み(⌘R)</translation>
 <translation id="3241680850019875542">パッケージ化する拡張機能のルート ディレクトリを選択します。拡張機能を更新するには、再使用する秘密鍵ファイルも選択してください。</translation>
 <translation id="3280237271814976245">名前を付けて保存(&amp;A)...</translation>
 <translation id="3285322247471302225">新しいタブ(&amp;T)</translation>
 <translation id="3288047731229977326">デベロッパー モードで実行される拡張機能はパソコンにダメージを与える恐れがあります。デベロッパーでない場合は、安全のため、デベロッパー モードで実行されているこれらの拡張機能を無効にしてください。</translation>
 <translation id="329838636886466101">修復</translation>
 <translation id="33022249435934718">GDI ハンドル</translation>
+<translation id="3308134619352333507">ボタンを隠す</translation>
 <translation id="3309747692199697901">常に実行</translation>
 <translation id="3319048459796106952">シークレット ウィンドウを開く(&amp;I)</translation>
+<translation id="3341703758641437857">ファイルURLへのアクセスを許可</translation>
 <translation id="3347086966102161372">画像のアドレスをコピー(&amp;O)</translation>
 <translation id="335985608243443814">参照...</translation>
 <translation id="3378572629723696641">この拡張機能は破損している可能性があります。</translation>
@@ -115,6 +120,7 @@
 <translation id="3760460896538743390">バックグラウンド ページの検証(&amp;B)</translation>
 <translation id="3789841737615482174">インストール</translation>
 <translation id="3798449238516105146">バージョン</translation>
+<translation id="3855441664322950881">拡張機能のパッケージ化</translation>
 <translation id="3866249974567520381">説明</translation>
 <translation id="3905761538810670789">アプリを修復</translation>
 <translation id="3908393983276948098"><ph name="PLUGIN_NAME" /> は期限切れです</translation>
@@ -124,11 +130,10 @@
 <translation id="3927932062596804919">拒否</translation>
 <translation id="3936390757709632190">オーディオを新しいタブで開く(&amp;O)</translation>
 <translation id="3943582379552582368">戻る(&amp;B)</translation>
-<translation id="3954582159466790312">ミュート解除(&amp;M)</translation>
+<translation id="3948116654032448504"><ph name="SEARCH_ENGINE" /> で画像を検索(&amp;S)</translation>
 <translation id="3978267865113951599">拡張機能が異常終了しました</translation>
 <translation id="3979395879372752341">新しい拡張機能が追加されました（<ph name="EXTENSION_NAME" />）</translation>
 <translation id="4021279097213088397">–</translation>
-<translation id="4059285154003114015">フレームを印刷(&amp;P)...</translation>
 <translation id="4087089424473531098">拡張機能を作成しました:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -160,19 +165,16 @@
 <translation id="4593021220803146968"><ph name="URL" /> に移動(&amp;G)</translation>
 <translation id="4595560905247879544">アプリと拡張機能は管理者（<ph name="CUSTODIAN_NAME" />）だけが変更できます。</translation>
 <translation id="4613271546271159013">拡張機能によって、新しいタブを開いたときに表示されるページが変更されました。</translation>
-<translation id="4623537843784569564">この拡張機能は更新が正しく行われなかった可能性があります。再インストールしてみてください。</translation>
 <translation id="4643612240819915418">動画を新しいタブで開く</translation>
 <translation id="4677772697204437347">GPU メモリ</translation>
 <translation id="4711638718396952945">設定を復元</translation>
 <translation id="4742746985488890273">シェルフにピン留めする</translation>
 <translation id="4839303808932127586">名前を付けて動画を保存(&amp;V)...</translation>
+<translation id="4850258771229959924">開発者ツールで表示</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> をインストールしますか？信頼できるプラグインのみをインストールしてください。</translation>
-<translation id="4861833787540810454">再生(&amp;P)</translation>
-<translation id="4883993111890464517">この拡張機能は破損している可能性があります。再インストールしてみてください。</translation>
 <translation id="488785315393301722">詳細を表示</translation>
 <translation id="4911714727432509308">どの拡張機能にもキーボード ショートカットは割り当てられていません。</translation>
 <translation id="4912643508233590958">アイドル状態からの復帰</translation>
-<translation id="4919987486109157213">拡張機能が破損しています。再インストールしてみてください。</translation>
 <translation id="4927301649992043040">拡張機能のパッケージ化</translation>
 <translation id="4927753642311223124">エラーは特にありませんでした。</translation>
 <translation id="49896407730300355">反時計回りに回転(&amp;O)</translation>
@@ -200,6 +202,7 @@
 <translation id="5483785310822538350">ファイルとデバイスのアクセスを取り消す</translation>
 <translation id="5485102783864353244">アプリを追加</translation>
 <translation id="5486561344817861625">ブラウザ再起動のシミュレート</translation>
+<translation id="5488468185303821006">シークレット モードでの実行を許可</translation>
 <translation id="5509693895992845810">名前を付けて保存(&amp;A)...</translation>
 <translation id="5521078259930077036">このホーム ページでよろしいですか？</translation>
 <translation id="5532223876348815659">グローバル</translation>
@@ -224,6 +227,7 @@
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" />（最大 <ph name="NUM_KILOBYTES_LIVE" />）</translation>
 <translation id="5965661248935608907">この拡張機能では、ホーム ボタンのクリック時、またはアドレスバーからの検索時に表示されるページも制御されます。</translation>
 <translation id="6025215716629925253">スタックトレース</translation>
+<translation id="6040143037577758943">閉じる</translation>
 <translation id="6086814797483779854">クリックしたときに実行</translation>
 <translation id="6086846494333236931">管理者によりインストールされています</translation>
 <translation id="6101226222197207147">新しいアプリが追加されました（<ph name="EXTENSION_NAME" />）</translation>
@@ -232,6 +236,8 @@
 <translation id="6156863943908443225">スクリプト キャッシュ</translation>
 <translation id="6196854373336333322">拡張機能「<ph name="EXTENSION_NAME" />」によってプロキシ設定が制御されています。オンラインで行う操作は、この拡張機能によって変更、遮断、傍受される可能性があります。この変更が行われた理由に心当たりがない場合、これは不正な変更と考えられます。</translation>
 <translation id="6206311232642889873">画像をコピー(&amp;Y)</translation>
+<translation id="6220413761270491930">拡張機能の読み込みエラー</translation>
+<translation id="6226777517901268232">秘密鍵ファイル (省略可能)</translation>
 <translation id="6239558157302047471">フレームを再読み込み(&amp;F)</translation>
 <translation id="6247802389331535091">システム: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">GDI ハンドル</translation>
@@ -255,9 +261,10 @@
 <translation id="6706210727756204531">スコープ</translation>
 <translation id="6786747875388722282">拡張機能</translation>
 <translation id="6787839852456839824">キーボード ショートカット</translation>
+<translation id="6788210894632713004">パッケージ化されていない拡張機能</translation>
 <translation id="6798954102094737107">プラグイン: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">変更を保持</translation>
-<translation id="6844537474943985871">この拡張機能は破損している可能性があります。いったんアンインストールし、再インストールしてみてください。</translation>
+<translation id="6841186874966388268">エラー</translation>
 <translation id="6863910145616405334">プラグインが見つかりません</translation>
 <translation id="6886871292305414135">新しいタブで開く(&amp;T)</translation>
 <translation id="6900284862687837908">バックグラウンド アプリ: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -283,7 +290,6 @@
 <translation id="7551643184018910560">シェルフにピン留めする</translation>
 <translation id="7554791636758816595">新しいタブ</translation>
 <translation id="7564847347806291057">プロセスを終了</translation>
-<translation id="7618337809041914424">フレームを印刷(&amp;P)...</translation>
 <translation id="7629827748548208700">タブ:<ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">キャンセル</translation>
 <translation id="7663719505383602579">レシーバー: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -309,6 +315,7 @@
 <translation id="7947962633355574091">動画のアドレスをコピー(&amp;O)</translation>
 <translation id="7965010376480416255">共有メモリ</translation>
 <translation id="7966241909927244760">画像のアドレスをコピー(&amp;O)</translation>
+<translation id="7967437925638594022">拡張機能</translation>
 <translation id="7978412674231730200">秘密鍵</translation>
 <translation id="7982789257301363584">ネットワーク</translation>
 <translation id="7997826902155442747">プロセスの優先値</translation>
@@ -347,6 +354,7 @@
 <translation id="8719653885894320876"><ph name="PLUGIN_NAME" /> をダウンロードできませんでした</translation>
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> の更新が完了したら、ページを再読み込みして有効にします</translation>
 <translation id="8763204422633679667"><ph name="PLUGIN_NAME" /> のインストールが完了したら、ページを再読み込みして有効にします</translation>
+<translation id="8770406935328356739">拡張機能のルート ディレクトリ</translation>
 <translation id="8798099450830957504">既定</translation>
 <translation id="8808478386290700967">ウェブストア</translation>
 <translation id="8859174528519900719">サブフレーム: <ph name="SUBFRAME_SITE" /></translation>
@@ -355,9 +363,9 @@
 <translation id="8938356204940892126">読み込みを諦める</translation>
 <translation id="895944840846194039">JavaScript メモリ</translation>
 <translation id="8962083179518285172">詳細を非表示</translation>
+<translation id="9003647077635673607">全てのウェブサイトでの実行を許可</translation>
 <translation id="9027459031423301635">新しいタブで開く(&amp;T)</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> は会社のポリシーによってブロックされています</translation>
-<translation id="9101691533782776290">アプリを起動</translation>
 <translation id="9145718805518496796">拡張機能をパッケージ化...</translation>
 <translation id="9153341767479566106">その他の読み込みに失敗した拡張機能:</translation>
 <translation id="9170848237812810038">取消(&amp;U)</translation>

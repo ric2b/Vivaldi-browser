@@ -30,6 +30,8 @@
 
 #include "modules/peerconnection/RTCPeerConnection.h"
 
+#include <algorithm>
+#include <memory>
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/Microtask.h"
@@ -49,10 +51,10 @@
 #include "core/frame/Deprecation.h"
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/VoidCallback.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "modules/crypto/CryptoResultImpl.h"
 #include "modules/mediastream/MediaConstraintsImpl.h"
 #include "modules/mediastream/MediaStreamEvent.h"
@@ -87,6 +89,7 @@
 #include "public/platform/WebRTCConfiguration.h"
 #include "public/platform/WebRTCDataChannelHandler.h"
 #include "public/platform/WebRTCDataChannelInit.h"
+#include "public/platform/WebRTCError.h"
 #include "public/platform/WebRTCICECandidate.h"
 #include "public/platform/WebRTCKeyParams.h"
 #include "public/platform/WebRTCOfferOptions.h"
@@ -96,8 +99,6 @@
 #include "public/platform/WebRTCVoidRequest.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
-#include <algorithm>
-#include <memory>
 
 namespace blink {
 
@@ -794,15 +795,15 @@ RTCSessionDescription* RTCPeerConnection::remoteDescription() {
   return RTCSessionDescription::create(webSessionDescription);
 }
 
-void RTCPeerConnection::updateIce(ExecutionContext* context,
-                                  const RTCConfiguration& rtcConfiguration,
-                                  const Dictionary&,
-                                  ExceptionState& exceptionState) {
+void RTCPeerConnection::setConfiguration(
+    ScriptState* scriptState,
+    const RTCConfiguration& rtcConfiguration,
+    ExceptionState& exceptionState) {
   if (throwExceptionIfSignalingStateClosed(m_signalingState, exceptionState))
     return;
 
-  WebRTCConfiguration configuration =
-      parseConfiguration(context, rtcConfiguration, exceptionState);
+  WebRTCConfiguration configuration = parseConfiguration(
+      scriptState->getExecutionContext(), rtcConfiguration, exceptionState);
 
   if (exceptionState.hadException())
     return;
@@ -813,11 +814,20 @@ void RTCPeerConnection::updateIce(ExecutionContext* context,
     return;
   }
 
-  // TODO(deadbeef): When this changes to setConfiguration, call
-  // m_peerHandler->setConfiguration.
-  exceptionState.throwDOMException(
-      SyntaxError,
-      "Could not update the ICE Agent with the given configuration.");
+  WebRTCErrorType error = m_peerHandler->setConfiguration(configuration);
+  if (error != WebRTCErrorType::kNone) {
+    // All errors besides InvalidModification should have been detected above.
+    if (error == WebRTCErrorType::kInvalidModification) {
+      exceptionState.throwDOMException(
+          InvalidModificationError,
+          "Attempted to modify the PeerConnection's "
+          "configuration in an unsupported way.");
+    } else {
+      exceptionState.throwDOMException(
+          OperationError,
+          "Could not update the PeerConnection with the given configuration.");
+    }
+  }
 }
 
 ScriptPromise RTCPeerConnection::generateCertificate(
@@ -1056,7 +1066,7 @@ String RTCPeerConnection::iceConnectionState() const {
   return String();
 }
 
-void RTCPeerConnection::addStream(ExecutionContext* context,
+void RTCPeerConnection::addStream(ScriptState* scriptState,
                                   MediaStream* stream,
                                   const Dictionary& mediaConstraints,
                                   ExceptionState& exceptionState) {
@@ -1074,8 +1084,8 @@ void RTCPeerConnection::addStream(ExecutionContext* context,
     return;
 
   MediaErrorState mediaErrorState;
-  WebMediaConstraints constraints =
-      MediaConstraintsImpl::create(context, mediaConstraints, mediaErrorState);
+  WebMediaConstraints constraints = MediaConstraintsImpl::create(
+      scriptState->getExecutionContext(), mediaConstraints, mediaErrorState);
   if (mediaErrorState.hadException()) {
     mediaErrorState.raiseException(exceptionState);
     return;
@@ -1164,7 +1174,7 @@ ScriptPromise RTCPeerConnection::getStats(ScriptState* scriptState) {
 }
 
 RTCDataChannel* RTCPeerConnection::createDataChannel(
-    ExecutionContext* context,
+    ScriptState* scriptState,
     String label,
     const Dictionary& options,
     ExceptionState& exceptionState) {
@@ -1176,6 +1186,7 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(
   DictionaryHelper::get(options, "negotiated", init.negotiated);
 
   unsigned short value = 0;
+  ExecutionContext* context = scriptState->getExecutionContext();
   if (DictionaryHelper::get(options, "id", value))
     init.id = value;
   if (DictionaryHelper::get(options, "maxRetransmits", value)) {

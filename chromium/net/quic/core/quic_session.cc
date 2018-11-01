@@ -4,13 +4,15 @@
 
 #include "net/quic/core/quic_session.h"
 
-#include "base/stl_util.h"
-#include "net/quic/core/crypto/proof_verifier.h"
+#include <cstdint>
+#include <utility>
+
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_flow_controller.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_str_cat.h"
 
 using base::StringPiece;
@@ -19,7 +21,7 @@ using std::string;
 namespace net {
 
 #define ENDPOINT \
-  (perspective() == Perspective::IS_SERVER ? "Server: " : " Client: ")
+  (perspective() == Perspective::IS_SERVER ? "Server: " : "Client: ")
 
 QuicSession::QuicSession(QuicConnection* connection,
                          Visitor* owner,
@@ -41,8 +43,11 @@ QuicSession::QuicSession(QuicConnection* connection,
                        perspective(),
                        kMinimumFlowControlSendWindow,
                        config_.GetInitialSessionFlowControlWindowToSend(),
-                       perspective() == Perspective::IS_SERVER),
-      currently_writing_stream_id_(0) {}
+                       perspective() == Perspective::IS_SERVER,
+                       nullptr),
+      currently_writing_stream_id_(0),
+      flow_control_invariant_(
+          FLAGS_quic_reloadable_flag_quic_flow_control_invariant) {}
 
 void QuicSession::Initialize() {
   connection_->set_visitor(this);
@@ -83,7 +88,7 @@ void QuicSession::OnStreamFrame(const QuicStreamFrame& frame) {
 }
 
 void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
-  if (base::ContainsKey(static_stream_map_, frame.stream_id)) {
+  if (QuicContainsKey(static_stream_map_, frame.stream_id)) {
     connection()->CloseConnection(
         QUIC_INVALID_STREAM_ID, "Attempt to reset a static stream",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
@@ -311,7 +316,7 @@ QuicConsumedData QuicSession::WritevData(
 void QuicSession::SendRstStream(QuicStreamId id,
                                 QuicRstStreamErrorCode error,
                                 QuicStreamOffset bytes_written) {
-  if (base::ContainsKey(static_stream_map_, id)) {
+  if (QuicContainsKey(static_stream_map_, id)) {
     QUIC_BUG << "Cannot send RST for a static stream with ID " << id;
     return;
   }
@@ -624,8 +629,8 @@ void QuicSession::ActivateStream(std::unique_ptr<QuicStream> stream) {
   QuicStreamId stream_id = stream->id();
   QUIC_DLOG(INFO) << ENDPOINT << "num_streams: " << dynamic_stream_map_.size()
                   << ". activating " << stream_id;
-  DCHECK(!base::ContainsKey(dynamic_stream_map_, stream_id));
-  DCHECK(!base::ContainsKey(static_stream_map_, stream_id));
+  DCHECK(!QuicContainsKey(dynamic_stream_map_, stream_id));
+  DCHECK(!QuicContainsKey(static_stream_map_, stream_id));
   dynamic_stream_map_[stream_id] = std::move(stream);
   if (IsIncomingStream(stream_id)) {
     ++num_dynamic_incoming_streams_;
@@ -649,8 +654,8 @@ QuicStream* QuicSession::GetOrCreateStream(const QuicStreamId stream_id) {
 }
 
 void QuicSession::StreamDraining(QuicStreamId stream_id) {
-  DCHECK(base::ContainsKey(dynamic_stream_map_, stream_id));
-  if (!base::ContainsKey(draining_streams_, stream_id)) {
+  DCHECK(QuicContainsKey(dynamic_stream_map_, stream_id));
+  if (!QuicContainsKey(draining_streams_, stream_id)) {
     draining_streams_.insert(stream_id);
     if (IsIncomingStream(stream_id)) {
       ++num_draining_incoming_streams_;
@@ -703,7 +708,7 @@ bool QuicSession::ShouldYield(QuicStreamId stream_id) {
 
 QuicStream* QuicSession::GetOrCreateDynamicStream(
     const QuicStreamId stream_id) {
-  DCHECK(!base::ContainsKey(static_stream_map_, stream_id))
+  DCHECK(!QuicContainsKey(static_stream_map_, stream_id))
       << "Attempt to call GetOrCreateDynamicStream for a static stream";
 
   DynamicStreamMap::iterator it = dynamic_stream_map_.find(stream_id);
@@ -772,13 +777,13 @@ bool QuicSession::IsClosedStream(QuicStreamId id) {
   }
   // For peer created streams, we also need to consider available streams.
   return id <= largest_peer_created_stream_id_ &&
-         !base::ContainsKey(available_streams_, id);
+         !QuicContainsKey(available_streams_, id);
 }
 
 bool QuicSession::IsOpenStream(QuicStreamId id) {
   DCHECK_NE(0u, id);
-  if (base::ContainsKey(static_stream_map_, id) ||
-      base::ContainsKey(dynamic_stream_map_, id)) {
+  if (QuicContainsKey(static_stream_map_, id) ||
+      QuicContainsKey(dynamic_stream_map_, id)) {
     // Stream is active
     return true;
   }

@@ -37,9 +37,6 @@
 #include "core/html/track/CueTimeline.h"
 #include "core/html/track/TextTrackCueList.h"
 #include "core/html/track/TextTrackList.h"
-#include "core/html/track/vtt/VTTRegion.h"
-#include "core/html/track/vtt/VTTRegionList.h"
-#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -93,7 +90,6 @@ TextTrack::TextTrack(const AtomicString& kind,
     : TrackBase(WebMediaPlayer::TextTrack, kind, label, language, id),
       m_cues(this, nullptr),
       m_activeCues(nullptr),
-      m_regions(nullptr),
       m_trackList(nullptr),
       m_mode(disabledKeyword()),
       m_trackType(type),
@@ -281,77 +277,6 @@ void TextTrack::removeCue(TextTrackCue* cue, ExceptionState& exceptionState) {
     cueTimeline()->removeCue(this, cue);
 }
 
-VTTRegionList* TextTrack::ensureVTTRegionList() {
-  if (!m_regions)
-    m_regions = VTTRegionList::create();
-
-  return m_regions.get();
-}
-
-VTTRegionList* TextTrack::regions() {
-  // If the text track mode of the text track that the TextTrack object
-  // represents is not the text track disabled mode, then the regions
-  // attribute must return a live VTTRegionList object that represents
-  // the text track list of regions of the text track. Otherwise, it must
-  // return null. When an object is returned, the same object must be returned
-  // each time.
-  if (RuntimeEnabledFeatures::webVTTRegionsEnabled() &&
-      m_mode != disabledKeyword())
-    return ensureVTTRegionList();
-  return nullptr;
-}
-
-void TextTrack::addRegion(VTTRegion* region) {
-  if (!region)
-    return;
-
-  VTTRegionList* regionList = ensureVTTRegionList();
-
-  // 1. If the given region is in a text track list of regions, then remove
-  // region from that text track list of regions.
-  TextTrack* regionTrack = region->track();
-  if (regionTrack && regionTrack != this)
-    regionTrack->removeRegion(region, ASSERT_NO_EXCEPTION);
-
-  // 2. If the method's TextTrack object's text track list of regions contains
-  // a region with the same identifier as region replace the values of that
-  // region's width, height, anchor point, viewport anchor point and scroll
-  // attributes with those of region.
-  VTTRegion* existingRegion = regionList->getRegionById(region->id());
-  if (existingRegion) {
-    existingRegion->updateParametersFromRegion(region);
-    return;
-  }
-
-  // Otherwise: add region to the method's TextTrack object's text track
-  // list of regions.
-  region->setTrack(this);
-  regionList->add(region);
-}
-
-void TextTrack::removeRegion(VTTRegion* region,
-                             ExceptionState& exceptionState) {
-  if (!region)
-    return;
-
-  // 1. If the given region is not currently listed in the method's TextTrack
-  // object's text track list of regions, then throw a NotFoundError exception.
-  if (region->track() != this) {
-    exceptionState.throwDOMException(NotFoundError,
-                                     "The specified region is not listed in "
-                                     "the TextTrack's list of regions.");
-    return;
-  }
-
-  if (!m_regions || !m_regions->remove(region)) {
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "Failed to remove the specified region.");
-    return;
-  }
-
-  region->setTrack(0);
-}
-
 void TextTrack::cueWillChange(TextTrackCue* cue) {
   // The cue may need to be repositioned in the media element's interval tree,
   // may need to be re-rendered, etc, so remove it before the modification...
@@ -448,7 +373,6 @@ Node* TextTrack::owner() const {
 DEFINE_TRACE(TextTrack) {
   visitor->trace(m_cues);
   visitor->trace(m_activeCues);
-  visitor->trace(m_regions);
   visitor->trace(m_trackList);
   TrackBase::trace(visitor);
   EventTargetWithInlineData::trace(visitor);

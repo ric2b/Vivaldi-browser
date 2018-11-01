@@ -79,13 +79,12 @@ unsigned uncachedNthLastOfTypeIndex(Element& element, unsigned& siblingCount) {
 }  // namespace
 
 unsigned NthIndexCache::nthChildIndex(Element& element) {
-  if (element.isPseudoElement())
+  if (element.isPseudoElement() || !element.parentNode())
     return 1;
-  DCHECK(element.parentNode());
   NthIndexCache* nthIndexCache = element.document().nthIndexCache();
   NthIndexData* nthIndexData = nullptr;
   if (nthIndexCache && nthIndexCache->m_parentMap)
-    nthIndexData = nthIndexCache->m_parentMap->get(element.parentNode());
+    nthIndexData = nthIndexCache->m_parentMap->at(element.parentNode());
   if (nthIndexData)
     return nthIndexData->nthIndex(element);
   unsigned index = uncachedNthChildIndex(element);
@@ -95,13 +94,12 @@ unsigned NthIndexCache::nthChildIndex(Element& element) {
 }
 
 unsigned NthIndexCache::nthLastChildIndex(Element& element) {
-  if (element.isPseudoElement())
+  if (element.isPseudoElement() && !element.parentNode())
     return 1;
-  DCHECK(element.parentNode());
   NthIndexCache* nthIndexCache = element.document().nthIndexCache();
   NthIndexData* nthIndexData = nullptr;
   if (nthIndexCache && nthIndexCache->m_parentMap)
-    nthIndexData = nthIndexCache->m_parentMap->get(element.parentNode());
+    nthIndexData = nthIndexCache->m_parentMap->at(element.parentNode());
   if (nthIndexData)
     return nthIndexData->nthLastIndex(element);
   unsigned index = uncachedNthLastChildIndex(element);
@@ -114,13 +112,13 @@ NthIndexData* NthIndexCache::nthTypeIndexDataForParent(Element& element) const {
   DCHECK(element.parentNode());
   if (!m_parentMapForType)
     return nullptr;
-  if (const IndexByType* map = m_parentMapForType->get(element.parentNode()))
-    return map->get(element.tagName());
+  if (const IndexByType* map = m_parentMapForType->at(element.parentNode()))
+    return map->at(element.tagName());
   return nullptr;
 }
 
 unsigned NthIndexCache::nthOfTypeIndex(Element& element) {
-  if (element.isPseudoElement())
+  if (element.isPseudoElement() || !element.parentNode())
     return 1;
   NthIndexCache* nthIndexCache = element.document().nthIndexCache();
   if (nthIndexCache) {
@@ -136,7 +134,7 @@ unsigned NthIndexCache::nthOfTypeIndex(Element& element) {
 }
 
 unsigned NthIndexCache::nthLastOfTypeIndex(Element& element) {
-  if (element.isPseudoElement())
+  if (element.isPseudoElement() || !element.parentNode())
     return 1;
   NthIndexCache* nthIndexCache = element.document().nthIndexCache();
   if (nthIndexCache) {
@@ -157,7 +155,7 @@ void NthIndexCache::cacheNthIndexDataForParent(Element& element) {
     m_parentMap = new ParentMap();
 
   ParentMap::AddResult addResult =
-      m_parentMap->add(element.parentNode(), nullptr);
+      m_parentMap->insert(element.parentNode(), nullptr);
   DCHECK(addResult.isNewEntry);
   addResult.storedValue->value = new NthIndexData(*element.parentNode());
 }
@@ -168,7 +166,7 @@ NthIndexCache::IndexByType& NthIndexCache::ensureTypeIndexMap(
     m_parentMapForType = new ParentMapForType();
 
   ParentMapForType::AddResult addResult =
-      m_parentMapForType->add(&parent, nullptr);
+      m_parentMapForType->insert(&parent, nullptr);
   if (addResult.isNewEntry)
     addResult.storedValue->value = new IndexByType();
 
@@ -178,8 +176,8 @@ NthIndexCache::IndexByType& NthIndexCache::ensureTypeIndexMap(
 
 void NthIndexCache::cacheNthOfTypeIndexDataForParent(Element& element) {
   DCHECK(element.parentNode());
-  IndexByType::AddResult addResult =
-      ensureTypeIndexMap(*element.parentNode()).add(element.tagName(), nullptr);
+  IndexByType::AddResult addResult = ensureTypeIndexMap(*element.parentNode())
+                                         .insert(element.tagName(), nullptr);
   DCHECK(addResult.isNewEntry);
   addResult.storedValue->value =
       new NthIndexData(*element.parentNode(), element.tagQName());
@@ -232,7 +230,7 @@ NthIndexData::NthIndexData(ContainerNode& parent) {
   for (Element* sibling = ElementTraversal::firstChild(parent); sibling;
        sibling = ElementTraversal::nextSibling(*sibling)) {
     if (!(++count % spread))
-      m_elementIndexMap.add(sibling, count);
+      m_elementIndexMap.insert(sibling, count);
   }
   DCHECK(count);
   m_count = count;
@@ -252,7 +250,7 @@ NthIndexData::NthIndexData(ContainerNode& parent, const QualifiedName& type) {
        sibling;
        sibling = ElementTraversal::nextSibling(*sibling, HasTagName(type))) {
     if (!(++count % spread))
-      m_elementIndexMap.add(sibling, count);
+      m_elementIndexMap.insert(sibling, count);
   }
   DCHECK(count);
   m_count = count;

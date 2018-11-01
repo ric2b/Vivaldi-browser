@@ -17,6 +17,10 @@
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/web/public/test/http_server.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 NSString* const kFlakyEarlGreyTestTargetSuffix = @"_flaky_egtests";
@@ -70,11 +74,13 @@ NSArray* whiteListedMultitaskingTests = @[
   @"testUserFeedbackPageOpenPrivacyPolicy",  // UserFeedbackTestCase
   @"testVersion",                            // WebUITestCase
 ];
+
+const CFTimeInterval kDrainTimeout = 5;
 }  // namespace
 
 @interface ChromeTestCase () {
   // Block to be executed during object tearDown.
-  base::mac::ScopedBlock<ProceduralBlock> _tearDownHandler;
+  ProceduralBlock _tearDownHandler;
 
   BOOL _isHTTPServerStopped;
   BOOL _isMockAuthenticationDisabled;
@@ -155,7 +161,7 @@ NSArray* whiteListedMultitaskingTests = @[
   [super setUp];
   _isHTTPServerStopped = NO;
   _isMockAuthenticationDisabled = NO;
-  _tearDownHandler.reset();
+  _tearDownHandler = nil;
 
   chrome_test_util::OpenNewTab();
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
@@ -166,7 +172,7 @@ NSArray* whiteListedMultitaskingTests = @[
 // server are running.
 - (void)tearDown {
   if (_tearDownHandler) {
-    _tearDownHandler.get()();
+    _tearDownHandler();
   }
 
   // Clear any remaining test accounts and signed in users.
@@ -195,7 +201,7 @@ NSArray* whiteListedMultitaskingTests = @[
 - (void)setTearDownHandler:(ProceduralBlock)tearDownHandler {
   // Enforce that only one |_tearDownHandler| is set per test.
   DCHECK(!_tearDownHandler);
-  _tearDownHandler.reset([tearDownHandler copy]);
+  _tearDownHandler = [tearDownHandler copy];
 }
 
 + (void)removeAnyOpenMenusAndInfoBars {
@@ -204,12 +210,14 @@ NSArray* whiteListedMultitaskingTests = @[
   // After programatically removing UI elements, allow Earl Grey's
   // UI synchronization to become idle, so subsequent steps won't start before
   // the UI is in a good state.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [[GREYUIThreadExecutor sharedInstance]
+      drainUntilIdleWithTimeout:kDrainTimeout];
 }
 
 + (void)closeAllTabs {
   chrome_test_util::CloseAllTabs();
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [[GREYUIThreadExecutor sharedInstance]
+      drainUntilIdleWithTimeout:kDrainTimeout];
 }
 
 - (void)disableMockAuthentication {

@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">이 확장 프로그램은 특별한 권한이 필요하지 않습니다.</translation>
 <translation id="1620510694547887537">카메라</translation>
 <translation id="1635033183663317347">관리자가 설치함</translation>
-<translation id="1652965563555864525">음소거(&amp;M)</translation>
 <translation id="1723824996674794290">새 창(&amp;N)</translation>
 <translation id="1729533290416704613">또한 검색주소창에서 검색할 때 표시되는 페이지를 설정합니다.</translation>
 <translation id="1789575671122666129">팝업</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">전체 선택(&amp;A)</translation>
 <translation id="1965328510789761112">개별 메모리</translation>
 <translation id="1992397118740194946">설정 안됨</translation>
-<translation id="2011110593081822050">웹 작업자: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">이 플러그인 숨기기</translation>
 <translation id="2087822576218954668">인쇄: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">플러그인 업데이트</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">알림</translation>
 <translation id="2501797496290880632">단축키 입력</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> 설치</translation>
-<translation id="253434972992662860">일시중지(&amp;P)</translation>
 <translation id="2550212893339833758">교체된 메모리</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">다시 사용</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">거부</translation>
 <translation id="3936390757709632190">새 탭에서 오디오 열기(&amp;O)</translation>
 <translation id="3943582379552582368">뒤로(&amp;B)</translation>
-<translation id="3954582159466790312">음소거 취소(&amp;M)</translation>
 <translation id="3979395879372752341">새 확장 프로그램이 추가됨(<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">확장 프로그램(파일: <ph name="EXTENSION_FILE" />)을 만들었습니다.</translation>
@@ -121,16 +117,12 @@
 <translation id="4593021220803146968"><ph name="URL" />(으)로 이동(&amp;G)</translation>
 <translation id="4595560905247879544">앱 및 확장 프로그램은 관리자(<ph name="CUSTODIAN_NAME" />)만 수정할 수 있습니다.</translation>
 <translation id="4613271546271159013">새 탭을 열면 표시되는 페이지가 확장 프로그램에 의해 변경되었습니다.</translation>
-<translation id="4623537843784569564">이 확장 프로그램이 잘못 업데이트되었을 수 있습니다. 다시 설치해 보세요.</translation>
 <translation id="4677772697204437347">GPU 메모리</translation>
 <translation id="4711638718396952945">설정값 복원</translation>
 <translation id="4839303808932127586">동영상을 다른 이름으로 저장...(&amp;V)</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" />을(를) 설치하시겠습니까? 신뢰하는 플러그인만 설치하세요.</translation>
-<translation id="4861833787540810454">재생(&amp;P)</translation>
-<translation id="4883993111890464517">확장 프로그램이 손상되었을 수 있습니다. 다시 설치해 보세요.</translation>
 <translation id="488785315393301722">세부정보 표시</translation>
 <translation id="4911714727432509308">단축키가 할당된 확장 프로그램이 없습니다.</translation>
-<translation id="4919987486109157213">확장 프로그램이 손상되었습니다. 다시 설치해 보세요.</translation>
 <translation id="4927301649992043040">확장 프로그램 압축</translation>
 <translation id="49896407730300355">반시계 방향으로 회전(&amp;O)</translation>
 <translation id="4989966318180235467">백그라운드 페이지 검사(&amp;B)</translation>
@@ -193,7 +185,6 @@
 <translation id="6787839852456839824">단축키</translation>
 <translation id="6798954102094737107">플러그인: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">변경사항 유지</translation>
-<translation id="6844537474943985871">확장 프로그램이 손상되었을 수 있습니다. 제거 후 다시 설치해 보세요.</translation>
 <translation id="6863910145616405334">플러그인을 찾을 수 없습니다.</translation>
 <translation id="6886871292305414135">새 탭에서 링크 열기(&amp;T)</translation>
 <translation id="6900284862687837908">백그라운드 앱: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -212,7 +203,6 @@
 <translation id="7521387064766892559">자바스크립트</translation>
 <translation id="7554791636758816595">새 탭</translation>
 <translation id="7564847347806291057">프로세스 종료</translation>
-<translation id="7618337809041914424">프레임 인쇄(&amp;P)</translation>
 <translation id="7629827748548208700">탭: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">취소</translation>
 <translation id="7663719505383602579">수신기: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -258,7 +248,6 @@
 <translation id="8916476537757519021">시크릿 모드 서브프레임: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">세부정보 숨기기</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" />이(가) 기업 정책에 의해 차단되었습니다.</translation>
-<translation id="9101691533782776290">앱 실행</translation>
 <translation id="9170848237812810038">실행 취소(&amp;U)</translation>
 <translation id="9215293857209265904">'<ph name="EXTENSION_NAME" />'이(가) 추가됨</translation>
 <translation id="9219103736887031265">이미지</translation>

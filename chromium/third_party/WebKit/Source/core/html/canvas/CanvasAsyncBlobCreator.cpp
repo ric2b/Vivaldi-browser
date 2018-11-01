@@ -4,6 +4,7 @@
 
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
 
+#include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/Blob.h"
@@ -29,10 +30,6 @@ namespace {
 const double SlackBeforeDeadline =
     0.001;  // a small slack period between deadline and current time for safety
 const int NumChannelsPng = 4;
-const int LongTaskImageSizeThreshold =
-    1000 *
-    1000;  // The max image size we expect to encode in 14ms on Linux in PNG
-           // format
 
 // The encoding task is highly likely to switch from idle task to alternative
 // code path when the startTimeoutDelay is set to be below 150ms. As we want the
@@ -252,15 +249,10 @@ void CanvasAsyncBlobCreator::scheduleAsyncBlobCreation(const double& quality) {
                         wrapPersistent(this)));
 
     } else {
-      BackgroundTaskRunner::TaskSize taskSize =
-          (m_size.height() * m_size.width() >= LongTaskImageSizeThreshold)
-              ? BackgroundTaskRunner::TaskSizeLongRunningTask
-              : BackgroundTaskRunner::TaskSizeShortRunningTask;
       BackgroundTaskRunner::postOnBackgroundThread(
           BLINK_FROM_HERE,
           crossThreadBind(&CanvasAsyncBlobCreator::encodeImageOnEncoderThread,
-                          wrapCrossThreadPersistent(this), quality),
-          taskSize);
+                          wrapCrossThreadPersistent(this), quality));
     }
   } else {
     m_idleTaskStatus = IdleTaskNotStarted;
@@ -487,8 +479,8 @@ void CanvasAsyncBlobCreator::createNullAndReturnResult() {
                    WTF::bind(&BlobCallback::handleEvent,
                              wrapPersistent(m_callback.get()), nullptr));
   } else {
-    Blob* blob = nullptr;
-    m_scriptPromiseResolver->reject(blob);
+    m_scriptPromiseResolver->reject(DOMException::create(
+        EncodingError, "Encoding of the source image has failed."));
   }
   // Avoid unwanted retention, see dispose().
   dispose();
@@ -501,10 +493,10 @@ void CanvasAsyncBlobCreator::encodeImageOnEncoderThread(double quality) {
   if (!ImageDataBuffer(m_size, m_data->data())
            .encodeImage("image/webp", quality, m_encodedImage.get())) {
     m_parentFrameTaskRunner->get(TaskType::CanvasBlobSerialization)
-        ->postTask(BLINK_FROM_HERE,
-                   crossThreadBind(&BlobCallback::handleEvent,
-                                   wrapCrossThreadPersistent(m_callback.get()),
-                                   nullptr));
+        ->postTask(
+            BLINK_FROM_HERE,
+            crossThreadBind(&CanvasAsyncBlobCreator::createNullAndReturnResult,
+                            wrapCrossThreadPersistent(this)));
     return;
   }
 

@@ -195,7 +195,8 @@ IN_PROC_BROWSER_TEST_F(DebuggerApiTest, InfoBar) {
   scoped_refptr<DebuggerAttachFunction> attach_function;
   scoped_refptr<DebuggerDetachFunction> detach_function;
 
-  Browser* another_browser = new Browser(Browser::CreateParams(profile()));
+  Browser* another_browser =
+      new Browser(Browser::CreateParams(profile(), true));
   AddBlankTabAndShow(another_browser);
   AddBlankTabAndShow(another_browser);
   int tab_id2 = SessionTabHelper::IdForTab(
@@ -261,8 +262,13 @@ IN_PROC_BROWSER_TEST_F(DebuggerApiTest, InfoBar) {
   EXPECT_EQ(1u, service2->infobar_count());
   EXPECT_EQ(1u, service3->infobar_count());
 
-  // Closing infobar should cause detach and remove all infobars.
+  // Calling delegate()->InfoBarDismissed() on a global infobar should
+  // cause detach and removal of all infobars, except the one used to
+  // fetch the delegate (i.e., service2->infobar_at(0) itself).
+  // Afterwards, service2->infobar_at(0) must be explicitly removed.
+  // See InfoBarView::ButtonPressed for an example.
   service2->infobar_at(0)->delegate()->InfoBarDismissed();
+  service2->infobar_at(0)->RemoveSelf();
   EXPECT_EQ(0u, service1->infobar_count());
   EXPECT_EQ(0u, service2->infobar_count());
   EXPECT_EQ(0u, service3->infobar_count());

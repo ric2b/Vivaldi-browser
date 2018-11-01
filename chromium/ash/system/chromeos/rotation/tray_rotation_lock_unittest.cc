@@ -133,8 +133,9 @@ TEST_F(TrayRotationLockTest, CreateTrayViewDuringMaximizeModeAndRotationLock) {
   TearDownViews();
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
-  Shell::GetInstance()->screen_orientation_controller()->SetRotationLocked(
-      true);
+  Shell::GetInstance()
+      ->screen_orientation_controller()
+      ->ToggleUserRotationLock();
   SetUpForStatusAreaWidget(StatusAreaWidgetTestHelper::GetStatusAreaWidget());
   EXPECT_TRUE(tray_view()->visible());
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
@@ -148,8 +149,9 @@ TEST_F(TrayRotationLockTest, TrayViewVisibilityChangesDuringMaximizeMode) {
   ASSERT_FALSE(tray_view()->visible());
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
-  Shell::GetInstance()->screen_orientation_controller()->SetRotationLocked(
-      true);
+  Shell::GetInstance()
+      ->screen_orientation_controller()
+      ->ToggleUserRotationLock();
   EXPECT_TRUE(tray_view()->visible());
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       false);
@@ -159,8 +161,6 @@ TEST_F(TrayRotationLockTest, TrayViewVisibilityChangesDuringMaximizeMode) {
 // Tests that the when the tray view is created for a secondary display, that
 // it is not visible, and that MaximizeMode does not affect visibility.
 TEST_F(TrayRotationLockTest, CreateSecondaryTrayView) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("400x400,200x200");
 
   SetUpForStatusAreaWidget(
@@ -206,8 +206,6 @@ TEST_F(TrayRotationLockTest, DefaultViewVisibilityChangesDuringMaximizeMode) {
 // Tests that no default view is created when the target is a secondary
 // display.
 TEST_F(TrayRotationLockTest, CreateSecondaryDefaultView) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("400x400,200x200");
 
   TearDownViews();
@@ -254,6 +252,8 @@ TEST_F(TrayRotationLockTest, InternalDisplayNotAvailableAtCreation) {
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
   EXPECT_TRUE(default_view->visible());
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      false);
 }
 
 // Tests that when the tray view is deleted, while TrayRotationLock has not been
@@ -262,8 +262,9 @@ TEST_F(TrayRotationLockTest, LockUpdatedDuringDesctruction) {
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       true);
   DestroyTrayView();
-  Shell::GetInstance()->screen_orientation_controller()->SetRotationLocked(
-      true);
+  Shell::GetInstance()
+      ->screen_orientation_controller()
+      ->ToggleUserRotationLock();
   WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
       false);
 }

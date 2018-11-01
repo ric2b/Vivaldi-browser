@@ -30,10 +30,12 @@
 
 #include "core/frame/FrameSerializer.h"
 
+#include <string>
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "platform/SerializedResource.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
@@ -41,7 +43,6 @@
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebSettings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
@@ -56,11 +57,11 @@ using blink::URLTestHelpers::registerMockedURLLoad;
 
 namespace blink {
 
-class FrameSerializerTest : public testing::Test,
+class FrameSerializerTest : public ::testing::Test,
                             public FrameSerializer::Delegate {
  public:
   FrameSerializerTest()
-      : m_folder(WebString::fromUTF8("frameserializer/")),
+      : m_folder("frameserializer/"),
         m_baseUrl(toKURL("http://www.test.com")) {}
 
  protected:
@@ -70,19 +71,19 @@ class FrameSerializerTest : public testing::Test,
   }
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
-  void setBaseFolder(const char* folder) {
-    m_folder = WebString::fromUTF8(folder);
-  }
+  void setBaseFolder(const char* folder) { m_folder = folder; }
 
   void setRewriteURLFolder(const char* folder) { m_rewriteFolder = folder; }
 
   void registerURL(const KURL& url, const char* file, const char* mimeType) {
-    registerMockedURLLoad(url, WebString::fromUTF8(file), m_folder,
-                          WebString::fromUTF8(mimeType));
+    registerMockedURLLoad(
+        url, testing::webTestDataPath(WebString::fromUTF8(m_folder + file)),
+        WebString::fromUTF8(mimeType));
   }
 
   void registerURL(const char* url, const char* file, const char* mimeType) {
@@ -107,7 +108,7 @@ class FrameSerializerTest : public testing::Test,
   }
 
   void registerRewriteURL(const char* fromURL, const char* toURL) {
-    m_rewriteURLs.add(fromURL, toURL);
+    m_rewriteURLs.insert(fromURL, toURL);
   }
 
   void registerSkipURL(const char* url) {
@@ -178,7 +179,7 @@ class FrameSerializerTest : public testing::Test,
     StringBuilder uriBuilder;
     uriBuilder.append(m_rewriteFolder);
     uriBuilder.append('/');
-    uriBuilder.append(m_rewriteURLs.get(completeURL));
+    uriBuilder.append(m_rewriteURLs.at(completeURL));
     rewrittenLink = uriBuilder.toString();
     return true;
   }
@@ -188,7 +189,7 @@ class FrameSerializerTest : public testing::Test,
   }
 
   FrameTestHelpers::WebViewHelper m_helper;
-  WebString m_folder;
+  std::string m_folder;
   KURL m_baseUrl;
   Deque<SerializedResource> m_resources;
   HashMap<String, String> m_rewriteURLs;

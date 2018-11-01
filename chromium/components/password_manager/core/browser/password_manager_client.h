@@ -19,6 +19,8 @@ namespace autofill {
 class AutofillManager;
 }
 
+class GURL;
+
 namespace password_manager {
 
 class LogManager;
@@ -48,12 +50,6 @@ class PasswordManagerClient {
   PasswordManagerClient() {}
   virtual ~PasswordManagerClient() {}
 
-  // For automated testing, the save password prompt should sometimes not be
-  // shown, and password immediately saved instead. That can be enforced by
-  // a command-line flag. If auto-saving is enforced, this method returns true.
-  // The default return value is false.
-  virtual bool IsAutomaticPasswordSavingEnabled() const;
-
   // Is saving new data for password autofill and filling of saved data enabled
   // for the current profile and page? For example, saving is disabled in
   // Incognito mode.
@@ -62,6 +58,10 @@ class PasswordManagerClient {
   // Checks if filling is enabled for the current page. Filling is disabled when
   // password manager is disabled, or in the presence of SSL errors on a page.
   virtual bool IsFillingEnabledForCurrentPage() const;
+
+  // Checks whether HTTP Strict Transport Security (HSTS) is active for the host
+  // of the given origin.
+  virtual bool IsHSTSActiveForHost(const GURL& origin) const;
 
   // Checks if the Credential Manager API is allowed to run on the page. It's
   // not allowed while prerendering and the pre-rendered WebContents will be

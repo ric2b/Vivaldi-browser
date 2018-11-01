@@ -12,6 +12,10 @@
 #import "ios/web/public/test/http_server.h"
 #import "ios/web/public/test/http_server_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 // Tests for tab history popup.
 @interface TabHistoryPopupControllerTestCase : ChromeTestCase
 @end
@@ -48,7 +52,7 @@
 
   // Long press on back button.
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::buttonWithAccessibilityLabelId(
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    IDS_ACCNAME_BACK)]
       performAction:grey_longPress()];
 
@@ -66,12 +70,12 @@
   [[EarlGrey selectElementWithMatcher:grey_text(entry1)]
       performAction:grey_tap()];
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::omniboxText(URL1.GetContent())]
+      selectElementWithMatcher:chrome_test_util::OmniboxText(URL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 
   // Long press forward button.
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::buttonWithAccessibilityLabelId(
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    IDS_ACCNAME_FORWARD)]
       performAction:grey_longPress()];
 
@@ -86,7 +90,7 @@
   [[EarlGrey selectElementWithMatcher:grey_text(entry3)]
       performAction:grey_tap()];
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::omniboxText(URL3.GetContent())]
+      selectElementWithMatcher:chrome_test_util::OmniboxText(URL3.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
 

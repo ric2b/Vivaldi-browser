@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "ui/gl/gl_version_info.h"
 
 namespace gpu {
 namespace gles2 {
@@ -16,6 +17,7 @@ error::Error GenHelper(GLsizei n,
                        const volatile ClientType* client_ids,
                        ClientServiceMap<ClientType, ServiceType>* id_map,
                        GenFunction gen_function) {
+  DCHECK(n >= 0);
   std::vector<ClientType> client_ids_copy(client_ids, client_ids + n);
   for (GLsizei ii = 0; ii < n; ++ii) {
     if (id_map->GetServiceID(client_ids_copy[ii], nullptr)) {
@@ -52,6 +54,7 @@ error::Error DeleteHelper(GLsizei n,
                           const volatile ClientType* client_ids,
                           ClientServiceMap<ClientType, ServiceType>* id_map,
                           DeleteFunction delete_function) {
+  DCHECK(n >= 0);
   std::vector<ServiceType> service_ids(n, 0);
   for (GLsizei ii = 0; ii < n; ++ii) {
     ClientType client_id = client_ids[ii];
@@ -575,6 +578,12 @@ error::Error GLES2DecoderPassthroughImpl::DoCullFace(GLenum mode) {
 error::Error GLES2DecoderPassthroughImpl::DoDeleteBuffers(
     GLsizei n,
     const volatile GLuint* buffers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(
       n, buffers, &resources_->buffer_id_map,
       [](GLsizei n, GLuint* buffers) { glDeleteBuffersARB(n, buffers); });
@@ -583,6 +592,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteBuffers(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteFramebuffers(
     GLsizei n,
     const volatile GLuint* framebuffers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(n, framebuffers, &framebuffer_id_map_,
                       [](GLsizei n, GLuint* framebuffers) {
                         glDeleteFramebuffersEXT(n, framebuffers);
@@ -597,6 +612,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteProgram(GLuint program) {
 error::Error GLES2DecoderPassthroughImpl::DoDeleteRenderbuffers(
     GLsizei n,
     const volatile GLuint* renderbuffers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(n, renderbuffers, &resources_->renderbuffer_id_map,
                       [](GLsizei n, GLuint* renderbuffers) {
                         glDeleteRenderbuffersEXT(n, renderbuffers);
@@ -606,6 +627,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteRenderbuffers(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteSamplers(
     GLsizei n,
     const volatile GLuint* samplers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(
       n, samplers, &resources_->sampler_id_map,
       [](GLsizei n, GLuint* samplers) { glDeleteSamplers(n, samplers); });
@@ -625,6 +652,13 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteShader(GLuint shader) {
 error::Error GLES2DecoderPassthroughImpl::DoDeleteTextures(
     GLsizei n,
     const volatile GLuint* textures) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
+
   // Textures that are currently associated with a mailbox are stored in the
   // texture_object_map_ and are deleted automatically when they are
   // unreferenced.  Only delete textures that are not in this map.
@@ -650,6 +684,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteTextures(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteTransformFeedbacks(
     GLsizei n,
     const volatile GLuint* ids) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(n, ids, &transform_feedback_id_map_,
                       [](GLsizei n, GLuint* transform_feedbacks) {
                         glDeleteTransformFeedbacks(n, transform_feedbacks);
@@ -1089,7 +1129,7 @@ error::Error GLES2DecoderPassthroughImpl::DoGetProgramInfoLog(
   std::vector<char> buffer(info_log_len, 0);
   glGetProgramInfoLog(GetProgramServiceID(program, resources_), info_log_len,
                       nullptr, buffer.data());
-  *infolog = std::string(buffer.data());
+  *infolog = info_log_len > 0 ? std::string(buffer.data()) : std::string();
   return error::kNoError;
 }
 
@@ -1143,7 +1183,7 @@ error::Error GLES2DecoderPassthroughImpl::DoGetShaderInfoLog(
   glGetShaderiv(service_id, GL_INFO_LOG_LENGTH, &info_log_len);
   std::vector<char> buffer(info_log_len, 0);
   glGetShaderInfoLog(service_id, info_log_len, nullptr, buffer.data());
-  *infolog = std::string(buffer.data());
+  *infolog = info_log_len > 0 ? std::string(buffer.data()) : std::string();
   return error::kNoError;
 }
 
@@ -1378,6 +1418,11 @@ error::Error GLES2DecoderPassthroughImpl::DoInvalidateFramebuffer(
     GLenum target,
     GLsizei count,
     const volatile GLenum* attachments) {
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> attachments_copy(attachments, attachments + count);
   glInvalidateFramebuffer(target, count, attachments_copy.data());
   return error::kNoError;
@@ -1391,6 +1436,11 @@ error::Error GLES2DecoderPassthroughImpl::DoInvalidateSubFramebuffer(
     GLint y,
     GLsizei width,
     GLsizei height) {
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> attachments_copy(attachments, attachments + count);
   glInvalidateSubFramebuffer(target, count, attachments_copy.data(), x, y,
                              width, height);
@@ -2201,8 +2251,18 @@ GLES2DecoderPassthroughImpl::DoRenderbufferStorageMultisampleCHROMIUM(
     GLenum internalformat,
     GLsizei width,
     GLsizei height) {
-  glRenderbufferStorageMultisampleANGLE(target, samples, internalformat, width,
-                                        height);
+  if (!feature_info_->feature_flags().chromium_framebuffer_multisample) {
+    return error::kUnknownCommand;
+  }
+
+  if (feature_info_->feature_flags().angle_framebuffer_multisample) {
+    glRenderbufferStorageMultisampleANGLE(target, samples, internalformat,
+                                          width, height);
+  } else {
+    DCHECK(feature_info_->gl_version_info().is_es3);
+    glRenderbufferStorageMultisample(target, samples, internalformat, width,
+                                     height);
+  }
   return error::kNoError;
 }
 
@@ -2212,8 +2272,18 @@ error::Error GLES2DecoderPassthroughImpl::DoRenderbufferStorageMultisampleEXT(
     GLenum internalformat,
     GLsizei width,
     GLsizei height) {
-  glRenderbufferStorageMultisampleANGLE(target, samples, internalformat, width,
-                                        height);
+  if (!feature_info_->feature_flags().chromium_framebuffer_multisample) {
+    return error::kUnknownCommand;
+  }
+
+  if (feature_info_->feature_flags().angle_framebuffer_multisample) {
+    glRenderbufferStorageMultisampleANGLE(target, samples, internalformat,
+                                          width, height);
+  } else {
+    DCHECK(feature_info_->gl_version_info().is_es3);
+    glRenderbufferStorageMultisample(target, samples, internalformat, width,
+                                     height);
+  }
   return error::kNoError;
 }
 
@@ -2249,6 +2319,12 @@ error::Error GLES2DecoderPassthroughImpl::DoGenQueriesEXT(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteQueriesEXT(
     GLsizei n,
     const volatile GLuint* queries) {
+  // Validate n is non-negative before allcoating a vector of size n
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
+
   std::vector<GLuint> queries_copy(queries, queries + n);
   // If any of these queries are pending or active, remove them from the lists
   for (GLuint query_client_id : queries_copy) {
@@ -2291,6 +2367,10 @@ error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(
     int32_t sync_shm_id,
     uint32_t sync_shm_offset,
     uint32_t submit_count) {
+  if (!feature_info_->feature_flags().ext_disjoint_timer_query) {
+    return error::kUnknownCommand;
+  }
+
   GLuint service_id = GetQueryServiceID(id, &query_id_map_);
 
   // Flush all previous errors
@@ -2463,6 +2543,11 @@ error::Error GLES2DecoderPassthroughImpl::DoBindVertexArrayOES(GLuint array) {
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoSwapBuffers() {
+  if (offscreen_) {
+    NOTIMPLEMENTED();
+    return error::kNoError;
+  }
+
   gfx::SwapResult result = surface_->SwapBuffers();
   if (result == gfx::SwapResult::SWAP_FAILED) {
     LOG(ERROR) << "Context lost because SwapBuffers failed.";
@@ -2667,14 +2752,22 @@ error::Error GLES2DecoderPassthroughImpl::DoGetTranslatedShaderSourceANGLE(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoSwapBuffersWithDamageCHROMIUM(
-    GLint x,
-    GLint y,
-    GLint width,
-    GLint height) {
-  gfx::SwapResult result = surface_->PostSubBuffer(x, y, width, height);
+error::Error GLES2DecoderPassthroughImpl::DoSwapBuffersWithBoundsCHROMIUM(
+    GLsizei count,
+    const volatile GLint* rects) {
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
+
+  std::vector<gfx::Rect> bounds(count);
+  for (GLsizei i = 0; i < count; ++i) {
+    bounds[i] = gfx::Rect(rects[i * 4 + 0], rects[i * 4 + 1], rects[i * 4 + 2],
+                          rects[i * 4 + 3]);
+  }
+  gfx::SwapResult result = surface_->SwapBuffersWithBounds(bounds);
   if (result == gfx::SwapResult::SWAP_FAILED) {
-    LOG(ERROR) << "Context lost because PostSubBuffer failed.";
+    LOG(ERROR) << "Context lost because SwapBuffersWithBounds failed.";
   }
   // TODO(geofflang): force the context loss?
   return error::kNoError;
@@ -2691,6 +2784,7 @@ error::Error GLES2DecoderPassthroughImpl::DoPostSubBufferCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoCopyTextureCHROMIUM(
     GLenum source_id,
     GLint source_level,
+    GLenum dest_target,
     GLenum dest_id,
     GLint dest_level,
     GLint internalformat,
@@ -2698,6 +2792,10 @@ error::Error GLES2DecoderPassthroughImpl::DoCopyTextureCHROMIUM(
     GLboolean unpack_flip_y,
     GLboolean unpack_premultiply_alpha,
     GLboolean unpack_unmultiply_alpha) {
+  if (!feature_info_->feature_flags().chromium_copy_texture) {
+    return error::kUnknownCommand;
+  }
+
   glCopyTextureCHROMIUM(GetTextureServiceID(source_id, resources_, false),
                         GetTextureServiceID(dest_id, resources_, false),
                         internalformat, dest_type, unpack_flip_y,
@@ -2708,6 +2806,7 @@ error::Error GLES2DecoderPassthroughImpl::DoCopyTextureCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoCopySubTextureCHROMIUM(
     GLenum source_id,
     GLint source_level,
+    GLenum dest_target,
     GLenum dest_id,
     GLint dest_level,
     GLint xoffset,
@@ -2719,6 +2818,10 @@ error::Error GLES2DecoderPassthroughImpl::DoCopySubTextureCHROMIUM(
     GLboolean unpack_flip_y,
     GLboolean unpack_premultiply_alpha,
     GLboolean unpack_unmultiply_alpha) {
+  if (!feature_info_->feature_flags().chromium_copy_texture) {
+    return error::kUnknownCommand;
+  }
+
   glCopySubTextureCHROMIUM(GetTextureServiceID(source_id, resources_, false),
                            GetTextureServiceID(dest_id, resources_, false),
                            xoffset, yoffset, x, y, width, height, unpack_flip_y,
@@ -2729,6 +2832,10 @@ error::Error GLES2DecoderPassthroughImpl::DoCopySubTextureCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoCompressedCopyTextureCHROMIUM(
     GLenum source_id,
     GLenum dest_id) {
+  if (!feature_info_->feature_flags().chromium_copy_compressed_texture) {
+    return error::kUnknownCommand;
+  }
+
   glCompressedCopyTextureCHROMIUM(
       GetTextureServiceID(source_id, resources_, false),
       GetTextureServiceID(dest_id, resources_, false));
@@ -2896,19 +3003,38 @@ error::Error GLES2DecoderPassthroughImpl::DoBindUniformLocationCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoBindTexImage2DCHROMIUM(
     GLenum target,
     GLint imageId) {
-  // TODO(geofflang): error handling
+  if (target != GL_TEXTURE_2D) {
+    InsertError(GL_INVALID_ENUM, "Invalid target");
+    return error::kNoError;
+  }
+
   gl::GLImage* image = image_manager_->LookupImage(imageId);
+  if (image == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "No image found with the given ID");
+    return error::kNoError;
+  }
+
   if (!image->BindTexImage(target)) {
     image->CopyTexImage(target);
   }
+
   return error::kNoError;
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoReleaseTexImage2DCHROMIUM(
     GLenum target,
     GLint imageId) {
-  // TODO(geofflang): error handling
+  if (target != GL_TEXTURE_2D) {
+    InsertError(GL_INVALID_ENUM, "Invalid target");
+    return error::kNoError;
+  }
+
   gl::GLImage* image = image_manager_->LookupImage(imageId);
+  if (image == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "No image found with the given ID");
+    return error::kNoError;
+  }
+
   image->ReleaseTexImage(target);
   return error::kNoError;
 }
@@ -2929,8 +3055,23 @@ error::Error GLES2DecoderPassthroughImpl::DoDiscardFramebufferEXT(
     GLenum target,
     GLsizei count,
     const volatile GLenum* attachments) {
+  if (!feature_info_->feature_flags().ext_discard_framebuffer) {
+    return error::kUnknownCommand;
+  }
+
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> attachments_copy(attachments, attachments + count);
-  glDiscardFramebufferEXT(target, count, attachments_copy.data());
+
+  if (feature_info_->gl_version_info().is_es3) {
+    glInvalidateFramebuffer(target, count, attachments_copy.data());
+  } else {
+    glDiscardFramebufferEXT(target, count, attachments_copy.data());
+  }
+
   return error::kNoError;
 }
 
@@ -2956,18 +3097,23 @@ error::Error GLES2DecoderPassthroughImpl::DoWaitSyncTokenCHROMIUM(
     CommandBufferNamespace namespace_id,
     CommandBufferId command_buffer_id,
     GLuint64 release_count) {
-  if (wait_fence_sync_callback_.is_null()) {
+  if (wait_sync_token_callback_.is_null()) {
     return error::kNoError;
   }
-  return wait_fence_sync_callback_.Run(namespace_id, command_buffer_id,
-                                       release_count)
-             ? error::kNoError
-             : error::kDeferCommandUntilLater;
+  SyncToken sync_token(namespace_id, 0, command_buffer_id, release_count);
+  return wait_sync_token_callback_.Run(sync_token)
+             ? error::kDeferCommandUntilLater
+             : error::kNoError;
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoDrawBuffersEXT(
     GLsizei count,
     const volatile GLenum* bufs) {
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> bufs_copy(bufs, bufs + count);
   glDrawBuffersARB(count, bufs_copy.data());
   return error::kNoError;
@@ -3318,6 +3464,15 @@ error::Error GLES2DecoderPassthroughImpl::DoOverlayPromotionHintCHROMIUM(
     GLboolean promotion_hint,
     GLint display_x,
     GLint display_y) {
+  NOTIMPLEMENTED();
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoSetDrawRectangleCHROMIUM(
+    GLint x,
+    GLint y,
+    GLint width,
+    GLint height) {
   NOTIMPLEMENTED();
   return error::kNoError;
 }

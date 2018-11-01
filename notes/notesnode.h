@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+
 #include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
@@ -34,17 +35,20 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   explicit Notes_Node(int64_t id);
   ~Notes_Node() override;
 
-  base::Value *Encode(NotesCodec *checksummer,
-      const std::vector<const Notes_Node *> *extra_nodes=NULL) const;
-  bool Decode(const base::DictionaryValue &input, int64_t &max_node_id,
-              NotesCodec *checksummer);
+  base::Value* Encode(
+      NotesCodec* checksummer,
+      const std::vector<const Notes_Node*>* extra_nodes = NULL) const;
+  bool Decode(const base::DictionaryValue& input,
+              int64_t* max_node_id,
+              NotesCodec* checksummer);
 
   void SetType(Type type) { type_ = type; }
-  Type type() const {return type_;}
-  bool is_folder() const { return type_ == FOLDER || type_ == TRASH ||
-                              type_ == OTHER; }
-  bool is_note() const {return type_ == NOTE;}
-  bool is_other() const {return type_ == OTHER;}
+  Type type() const { return type_; }
+  bool is_folder() const {
+    return type_ == FOLDER || type_ == TRASH || type_ == OTHER;
+  }
+  bool is_note() const { return type_ == NOTE; }
+  bool is_other() const { return type_ == OTHER; }
   bool is_trash() const { return type_ == TRASH; }
 
   // Returns an unique id for this node.
@@ -57,26 +61,26 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   base::Time GetCreationTime() const { return creation_time_; }
   base::string16 GetFilename() { return filename_; }
 
-  const base::string16 &GetContent() const { return content_; }
+  const base::string16& GetContent() const { return content_; }
 
-  const GURL &GetURL() const { return url_; }
+  const GURL& GetURL() const { return url_; }
 
-  const Notes_attachment &GetAttachment(int index) const {
+  const Notes_attachment& GetAttachment(int index) const {
     return attachments_[index];
   }
-  const std::vector<Notes_attachment> &GetAttachments() const {
+  const std::vector<Notes_attachment>& GetAttachments() const {
     return attachments_;
   }
-  void SetContent(const base::string16 &content) { content_ = content; }
-  void SetURL(const GURL &url) { url_ = url; }
+  void SetContent(const base::string16& content) { content_ = content; }
+  void SetURL(const GURL& url) { url_ = url; }
   void SetCreationTime(const base::Time creation_time) {
     creation_time_ = creation_time;
   }
 
-  void AddAttachment(const Notes_attachment &attachment) {
+  void AddAttachment(const Notes_attachment& attachment) {
     attachments_.push_back(attachment);
   }
-  void SetAttachments(const Notes_attachments &attachments) {
+  void SetAttachments(const Notes_attachments& attachments) {
     attachments_ = attachments;
   }
   void DeleteAttachment(int index) {
@@ -86,10 +90,7 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   void set_sync_transaction_version(int64_t sync_transaction_version) {
     sync_transaction_version_ = sync_transaction_version;
   }
-  int64_t sync_transaction_version() const {
-    return sync_transaction_version_;
-  }
-
+  int64_t sync_transaction_version() const { return sync_transaction_version_; }
 
  private:
   friend class Notes_Model;
@@ -119,7 +120,6 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
 
   DISALLOW_COPY_AND_ASSIGN(Notes_Node);
 };
-
 
 }  // namespace vivaldi
 

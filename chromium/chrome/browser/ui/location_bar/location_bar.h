@@ -76,9 +76,6 @@ class LocationBar {
   virtual bool ShowPageActionPopup(const extensions::Extension* extension,
                                    bool grant_active_tab) = 0;
 
-  // Updates the state of the button to open a PDF in Adobe Reader.
-  virtual void UpdateOpenPDFInReaderPrompt() = 0;
-
   // Saves the state of the location bar to the specified WebContents, so that
   // it can be restored later. (Done when switching tabs).
   virtual void SaveStateToContents(content::WebContents* contents) = 0;
@@ -131,6 +128,10 @@ class LocationBarTesting {
 
   // Returns whether or not the bookmark star decoration is visible.
   virtual bool GetBookmarkStarVisibility() = 0;
+
+  // Invokes the content setting image at |index|, displaying the bubble.
+  // Returns false if there is none.
+  virtual bool TestContentSettingImagePressed(size_t index) = 0;
 
  protected:
   virtual ~LocationBarTesting() {}

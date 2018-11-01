@@ -12,6 +12,7 @@
 #include "base/message_loop/message_loop.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_frame.h"
+#include "skia/ext/platform_canvas.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -104,7 +105,7 @@ TEST_F(PluginInstanceThrottlerImplTest, ThrottleByKeyframe) {
   gfx::Canvas canvas(gfx::Size(20, 10), 1.0f, true);
   canvas.FillRect(gfx::Rect(20, 10), SK_ColorBLACK);
   canvas.FillRect(gfx::Rect(10, 10), SK_ColorWHITE);
-  SkBitmap interesting_bitmap = skia::ReadPixels(canvas.sk_canvas());
+  SkBitmap interesting_bitmap = canvas.ToBitmap();
 
   // Don't throttle for a boring frame.
   throttler()->OnImageFlush(boring_bitmap);

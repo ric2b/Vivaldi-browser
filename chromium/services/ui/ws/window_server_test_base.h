@@ -20,11 +20,9 @@
 
 namespace aura {
 class Env;
-class MusContextFactory;
 }
 
 namespace ui {
-class Gpu;
 
 // WindowServerTestBase is a base class for use with shell tests that use
 // WindowServer. SetUp() connects to the WindowServer and blocks until OnEmbed()
@@ -86,7 +84,6 @@ class WindowServerTestBase
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               aura::Window* target) override;
-  aura::client::CaptureClient* GetCaptureClient() override;
   aura::PropertyConverter* GetPropertyConverter() override;
 
   // WindowManagerDelegate:
@@ -96,6 +93,7 @@ class WindowServerTestBase
       aura::Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) override;
+  void OnWmSetCanFocus(aura::Window* window, bool can_focus) override;
   aura::Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
@@ -134,9 +132,6 @@ class WindowServerTestBase
   ::wm::WMState wm_state_;
   display::ScreenBase screen_;
   aura::PropertyConverter property_converter_;
-
-  std::unique_ptr<Gpu> gpu_;
-  std::unique_ptr<aura::MusContextFactory> compositor_context_factory_;
 
   std::vector<std::unique_ptr<aura::WindowTreeClient>> window_tree_clients_;
 

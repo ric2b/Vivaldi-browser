@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
 
+#include "cc/paint/paint_flags.h"
+#include "cc/paint/paint_shader.h"
 #include "chrome/browser/ui/infobar_container_delegate.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/infobars/infobar_view.h"
@@ -11,7 +13,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/skia_util.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/views/view_targeter.h"
 
 namespace {
@@ -26,7 +28,7 @@ const SkAlpha kLargeShadowAlpha = 0x1A;
 class ContentShadow : public views::View {
  public:
   ContentShadow() {
-    SetPaintToLayer(true);
+    SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
   }
   ~ContentShadow() override {}
@@ -35,22 +37,22 @@ class ContentShadow : public views::View {
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     // The first shader (small shadow) blurs from 0 to kSmallShadowHeight.
-    SkPaint paint;
-    paint.setShader(gfx::CreateGradientShader(
+    cc::PaintFlags flags;
+    flags.setShader(gfx::CreateGradientShader(
         0, kSmallShadowHeight, SkColorSetA(SK_ColorBLACK, kSmallShadowAlpha),
         SkColorSetA(SK_ColorBLACK, SK_AlphaTRANSPARENT)));
     gfx::Rect small_shadow_bounds = GetLocalBounds();
     small_shadow_bounds.set_height(kSmallShadowHeight);
-    canvas->DrawRect(small_shadow_bounds, paint);
+    canvas->DrawRect(small_shadow_bounds, flags);
 
     // The second shader (large shadow) is solid from 0 to kSmallShadowHeight
     // (blending with the first shader) and then blurs from kSmallShadowHeight
     // to kLargeShadowHeight.
-    paint.setShader(gfx::CreateGradientShader(
+    flags.setShader(gfx::CreateGradientShader(
         kSmallShadowHeight, height(),
         SkColorSetA(SK_ColorBLACK, kLargeShadowAlpha),
         SkColorSetA(SK_ColorBLACK, SK_AlphaTRANSPARENT)));
-    canvas->DrawRect(GetLocalBounds(), paint);
+    canvas->DrawRect(GetLocalBounds(), flags);
   }
 
  private:
@@ -118,6 +120,14 @@ void InfoBarContainerView::Layout() {
 void InfoBarContainerView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_GROUP;
   node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR_CONTAINER));
+}
+
+void InfoBarContainerView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
+  // Infobars must be redrawn when the NativeTheme changes because
+  // they have a border with color COLOR_TOOLBAR_BOTTOM_SEPARATOR,
+  // which might have changed.
+  for (int i = 0; i < child_count(); ++i)
+    child_at(i)->SchedulePaint();
 }
 
 void InfoBarContainerView::PlatformSpecificAddInfoBar(

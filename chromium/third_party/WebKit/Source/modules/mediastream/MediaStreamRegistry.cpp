@@ -49,7 +49,7 @@ void MediaStreamRegistry::registerURL(SecurityOrigin*,
 
 void MediaStreamRegistry::unregisterURL(const KURL& url) {
   DCHECK(isMainThread());
-  m_streamDescriptors.remove(url.getString());
+  m_streamDescriptors.erase(url.getString());
 }
 
 bool MediaStreamRegistry::contains(const String& url) {
@@ -60,7 +60,7 @@ bool MediaStreamRegistry::contains(const String& url) {
 MediaStreamDescriptor* MediaStreamRegistry::lookupMediaStreamDescriptor(
     const String& url) {
   DCHECK(isMainThread());
-  return m_streamDescriptors.get(url);
+  return m_streamDescriptors.at(url);
 }
 
 MediaStreamRegistry::MediaStreamRegistry() {

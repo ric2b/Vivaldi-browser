@@ -3,19 +3,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
-#define VIVALDI_SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
+#ifndef SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
+#define SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "notes/notes_model.h"
+#include "notes/notesnode.h"
+#include "notes/tests/notes_contenthelper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
-#include "notes/notesnode.h"
-#include "notes/notes_model.h"
-#include "notes/tests/notes_contenthelper.h"
 
 class GURL;
 using vivaldi::Notes_Model;
@@ -161,4 +161,4 @@ int CountFoldersWithTitlesMatching(int profile,
 
 }  // namespace notes_helper
 
-#endif  // VIVALDI_SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
+#endif  // SYNC_TEST_INTEGRATION_NOTES_HELPER_H_

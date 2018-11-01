@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">یک نسخه ذخیره‌شده (یعنی قدیمی) از این صفحه نشان داده شود.</translation>
 <translation id="1559528461873125649">فاقد چنین فایل یا دایرکتوری است</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">درحال مشاهده منبع یک صفحه وب هستید.</translation>
 <translation id="194030505837763158">رفتن به <ph name="LINK" /></translation>
 <translation id="2030481566774242610">منظورتان <ph name="LINK" /> بود؟</translation>
-<translation id="2089090684895656482">کمتر</translation>
 <translation id="2166378884831602661">این سایت نمی‌تواند اتصالی ایمن ارائه دهد</translation>
 <translation id="2292556288342944218">دسترسی شما به اینترنت مسدود است</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> پاسخی نامعتبر ارسال کرد.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">دسترسی به فایل رد شد</translation>
 <translation id="2705137772291741111">کپی ذخیره‌شده (ذخیره موقت‌شده) این سایت قابل خواندن نبود.</translation>
 <translation id="2784949926578158345">اتصال مجدداً برقرار شد.</translation>
-<translation id="284702764277384724">به نظر می‌رسد که گواهی سرور در <ph name="HOST_NAME" /> جعلی باشد.</translation>
 <translation id="2909946352844186028">تغییر شبکه تشخیص داده شد.</translation>
 <translation id="3005723025932146533">نمایش کپی ذخیره شده</translation>
 <translation id="3093245981617870298">شما آفلاین هستید.</translation>
@@ -39,7 +36,6 @@
 <translation id="4021036232240155012">‏DNS خدماتی از شبکه است که نام وب‌سایت را به آدرس اینترنتی آن ترجمه می‌کند.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> گواهی ورود به سیستمتان را نپذیرفت یا ممکن است گواهی‌ای ارائه نشده باشد.</translation>
 <translation id="4522570452068850558">جزئیات</translation>
-<translation id="4670097147947922288">درحال مشاهده یک صفحه افزونه هستید.</translation>
 <translation id="4708268264240856090">اتصال شما قطع شد</translation>
 <translation id="4744603770635761495">مسیر قابل اجرا</translation>
 <translation id="4764776831041365478">ممکن است صفحهٔ وب <ph name="URL" /> موقتاً خراب باشد یا ممکن است برای همیشه به آدرس وب جدید منتقل شده باشد.</translation>
@@ -56,7 +52,6 @@
 <translation id="5675650730144413517">این صفحه کار نمی‌کند</translation>
 <translation id="5869405914158311789">دسترسی به این سایت امکان‌پذیر نیست</translation>
 <translation id="5990559369517809815">درخواست‌های ارسالی به سرور توسط یک برنامهٔ افزودنی مسدود شد.</translation>
-<translation id="6042308850641462728">بیشتر</translation>
 <translation id="6146055958333702838">همه کابل‌ها را بررسی کنید و همه ره‌یاب‌ها، مودم‌ها، یا دیگر دستگاه‌های
    شبکه‌ای را که ممکن است درحال استفاده از آن‌ها باشید مجدداً راه‌اندازی کنید.</translation>
 <translation id="6165508094623778733">بیشتر بدانید</translation>
@@ -66,10 +61,8 @@
 <translation id="6328639280570009161">غیرفعال کردن پیش‌بینی شبکه را امتحان کنید</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> از اتصال خودداری کرد.</translation>
 <translation id="6711464428925977395">مشکلی در سرور پروکسی وجود دارد یا این آدرس درست نیست.</translation>
-<translation id="6830600606572693159">صفحهٔ وب موجود در <ph name="URL" /> در حال حاضر موجود نیست. ممکن است بیش از حد مشغول باشد یا برای انجام تعمیرات در دسترس نباشد.</translation>
 <translation id="6897140037006041989">نماینده کاربر</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> از استانداردهای امنیتی پیروی نمی‌کند.</translation>
-<translation id="7269802741830436641">این صفحهٔ وب دارای یک دور هدایت مجدد است</translation>
 <translation id="7353601530677266744">خط فرمان</translation>
 <translation id="7419106976560586862">مسیر نمایه</translation>
 <translation id="7518003948725431193">صفحه وبی با این آدرس وب یافت نشد: <ph name="URL" /></translation>
@@ -77,7 +70,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> درحال حاضر نمی‌تواند این درخواست را انجام دهد.</translation>
 <translation id="7716424297397655342">این سایت نمی‌تواند از حافظه پنهان بار شود</translation>
 <translation id="7758069387465995638">دیوار آتش یا نرم‌افزار ضدویروس ممکن است مانع اتصال شده باشد.</translation>
-<translation id="778579833039460630">داده‌ای دریافت نشد</translation>
 <translation id="7951415247503192394">(۳۲ بیت)</translation>
 <translation id="8134994873729925007">‏<ph name="BEGIN_ABBR" />نشانی DNS<ph name="END_ABBR" /> سرور <ph name="HOST_NAME" /> پیدا نشد.</translation>
 <translation id="8142868475871995937">‏برای مشاهده فهرست نشانی‌های وب ممنوع و سایر خط‌مشی‌های اجباری براساس تصمیم سرپرست سیستم خود از &lt;strong&gt;vivaldi://policy&lt;/strong&gt; بازدید نمایید.</translation>

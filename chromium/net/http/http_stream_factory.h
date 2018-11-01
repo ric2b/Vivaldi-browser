@@ -22,9 +22,14 @@
 // introduce any link dependency to net/websockets.
 #include "net/websockets/websocket_handshake_stream_base.h"
 
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
+
 namespace net {
 
-class AuthCredentials;
 class BidirectionalStreamImpl;
 class HostMappingRules;
 class HttpAuthController;
@@ -163,8 +168,7 @@ class NET_EXPORT_PRIVATE HttpStreamRequest {
   // will have been called.  It now becomes the delegate's responsibility
   // to collect the necessary credentials, and then call this method to
   // resume the HttpStream creation process.
-  virtual int RestartTunnelWithProxyAuth(
-      const AuthCredentials& credentials) = 0;
+  virtual int RestartTunnelWithProxyAuth() = 0;
 
   // Called when the priority of the parent transaction changes.
   virtual void SetPriority(RequestPriority priority) = 0;
@@ -234,6 +238,12 @@ class NET_EXPORT HttpStreamFactory {
                                  const HttpRequestInfo& info) = 0;
 
   virtual const HostMappingRules* GetHostMappingRules() const = 0;
+
+  // Dumps memory allocation stats. |parent_dump_absolute_name| is the name
+  // used by the parent MemoryAllocatorDump in the memory dump hierarchy.
+  virtual void DumpMemoryStats(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const std::string& parent_absolute_name) const = 0;
 
  protected:
   HttpStreamFactory();

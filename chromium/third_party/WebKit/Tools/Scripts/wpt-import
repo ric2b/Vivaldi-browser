@@ -1,0 +1,20 @@
+#!/usr/bin/python
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+"""Pulls the latest revisions of the web-platform-tests or csswg-test repos."""
+
+from webkitpy.common import version_check
+from webkitpy.common.host import Host
+from webkitpy.w3c.test_importer import TestImporter
+
+
+if __name__ == '__main__':
+    host = Host()
+    importer = TestImporter(host)
+    try:
+        host.exit(importer.main())
+    except KeyboardInterrupt:
+        host.print_("Interrupted, exiting")
+        host.exit(130)

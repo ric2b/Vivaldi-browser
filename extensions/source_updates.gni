@@ -5,7 +5,7 @@ post_process_target("//chrome/test:browser_tests") {
   ]
 }
 
-post_process_target("//extensions/browser:browser") {
+post_process_target("//extensions/browser:browser_sources") {
   sources +=
       [ "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp" ]
   deps += [

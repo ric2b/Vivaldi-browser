@@ -40,10 +40,10 @@ import random
 import re
 import unittest
 
-import cpp as cpp_style
-from cpp import CppChecker
-from ..filter import FilterConfiguration
 from webkitpy.common.system.filesystem import FileSystem
+from webkitpy.style.checkers import cpp as cpp_style
+from webkitpy.style.checkers.cpp import CppChecker
+from webkitpy.style.filter import FilterConfiguration
 
 # This class works as an error collector and replaces cpp_style.Error
 # function for the unit tests.  We also verify each category we see
@@ -1455,91 +1455,91 @@ class CppStyleTest(CppStyleTestBase):
     # CHECK/EXPECT_TRUE/EXPECT_FALSE replacements
     def test_check_check(self):
         self.assert_lint('CHECK(x == 42)',
-                         'Consider using CHECK_EQ instead of CHECK(a == b)'
+                         'Consider using CHECK_EQ(a, b) instead of CHECK(a == b)'
                          '  [readability/check] [2]')
         self.assert_lint('CHECK(x != 42)',
-                         'Consider using CHECK_NE instead of CHECK(a != b)'
+                         'Consider using CHECK_NE(a, b) instead of CHECK(a != b)'
                          '  [readability/check] [2]')
         self.assert_lint('CHECK(x >= 42)',
-                         'Consider using CHECK_GE instead of CHECK(a >= b)'
+                         'Consider using CHECK_GE(a, b) instead of CHECK(a >= b)'
                          '  [readability/check] [2]')
         self.assert_lint('CHECK(x > 42)',
-                         'Consider using CHECK_GT instead of CHECK(a > b)'
+                         'Consider using CHECK_GT(a, b) instead of CHECK(a > b)'
                          '  [readability/check] [2]')
         self.assert_lint('CHECK(x <= 42)',
-                         'Consider using CHECK_LE instead of CHECK(a <= b)'
+                         'Consider using CHECK_LE(a, b) instead of CHECK(a <= b)'
                          '  [readability/check] [2]')
         self.assert_lint('CHECK(x < 42)',
-                         'Consider using CHECK_LT instead of CHECK(a < b)'
+                         'Consider using CHECK_LT(a, b) instead of CHECK(a < b)'
                          '  [readability/check] [2]')
 
         self.assert_lint('DCHECK(x == 42)',
-                         'Consider using DCHECK_EQ instead of DCHECK(a == b)'
+                         'Consider using DCHECK_EQ(a, b) instead of DCHECK(a == b)'
                          '  [readability/check] [2]')
         self.assert_lint('DCHECK(x != 42)',
-                         'Consider using DCHECK_NE instead of DCHECK(a != b)'
+                         'Consider using DCHECK_NE(a, b) instead of DCHECK(a != b)'
                          '  [readability/check] [2]')
         self.assert_lint('DCHECK(x >= 42)',
-                         'Consider using DCHECK_GE instead of DCHECK(a >= b)'
+                         'Consider using DCHECK_GE(a, b) instead of DCHECK(a >= b)'
                          '  [readability/check] [2]')
         self.assert_lint('DCHECK(x > 42)',
-                         'Consider using DCHECK_GT instead of DCHECK(a > b)'
+                         'Consider using DCHECK_GT(a, b) instead of DCHECK(a > b)'
                          '  [readability/check] [2]')
         self.assert_lint('DCHECK(x <= 42)',
-                         'Consider using DCHECK_LE instead of DCHECK(a <= b)'
+                         'Consider using DCHECK_LE(a, b) instead of DCHECK(a <= b)'
                          '  [readability/check] [2]')
         self.assert_lint('DCHECK(x < 42)',
-                         'Consider using DCHECK_LT instead of DCHECK(a < b)'
+                         'Consider using DCHECK_LT(a, b) instead of DCHECK(a < b)'
                          '  [readability/check] [2]')
 
         self.assert_lint(
             'EXPECT_TRUE("42" == x)',
-            'Consider using EXPECT_EQ instead of EXPECT_TRUE(a == b)'
+            'Consider using EXPECT_EQ(a, b) instead of EXPECT_TRUE(a == b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_TRUE("42" != x)',
-            'Consider using EXPECT_NE instead of EXPECT_TRUE(a != b)'
+            'Consider using EXPECT_NE(a, b) instead of EXPECT_TRUE(a != b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_TRUE(+42 >= x)',
-            'Consider using EXPECT_GE instead of EXPECT_TRUE(a >= b)'
+            'Consider using EXPECT_GE(a, b) instead of EXPECT_TRUE(a >= b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_TRUE_M(-42 > x)',
-            'Consider using EXPECT_GT_M instead of EXPECT_TRUE_M(a > b)'
+            'Consider using EXPECT_GT_M(a, b) instead of EXPECT_TRUE_M(a > b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_TRUE_M(42U <= x)',
-            'Consider using EXPECT_LE_M instead of EXPECT_TRUE_M(a <= b)'
+            'Consider using EXPECT_LE_M(a, b) instead of EXPECT_TRUE_M(a <= b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_TRUE_M(42L < x)',
-            'Consider using EXPECT_LT_M instead of EXPECT_TRUE_M(a < b)'
+            'Consider using EXPECT_LT_M(a, b) instead of EXPECT_TRUE_M(a < b)'
             '  [readability/check] [2]')
 
         self.assert_lint(
             'EXPECT_FALSE(x == 42)',
-            'Consider using EXPECT_NE instead of EXPECT_FALSE(a == b)'
+            'Consider using EXPECT_NE(a, b) instead of EXPECT_FALSE(a == b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_FALSE(x != 42)',
-            'Consider using EXPECT_EQ instead of EXPECT_FALSE(a != b)'
+            'Consider using EXPECT_EQ(a, b) instead of EXPECT_FALSE(a != b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_FALSE(x >= 42)',
-            'Consider using EXPECT_LT instead of EXPECT_FALSE(a >= b)'
+            'Consider using EXPECT_LT(a, b) instead of EXPECT_FALSE(a >= b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'ASSERT_FALSE(x > 42)',
-            'Consider using ASSERT_LE instead of ASSERT_FALSE(a > b)'
+            'Consider using ASSERT_LE(a, b) instead of ASSERT_FALSE(a > b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'ASSERT_FALSE(x <= 42)',
-            'Consider using ASSERT_GT instead of ASSERT_FALSE(a <= b)'
+            'Consider using ASSERT_GT(a, b) instead of ASSERT_FALSE(a <= b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'ASSERT_FALSE_M(x < 42)',
-            'Consider using ASSERT_GE_M instead of ASSERT_FALSE_M(a < b)'
+            'Consider using ASSERT_GE_M(a, b) instead of ASSERT_FALSE_M(a < b)'
             '  [readability/check] [2]')
 
         self.assert_lint('CHECK(some_iterator == obj.end())', '')
@@ -1550,23 +1550,23 @@ class CppStyleTest(CppStyleTestBase):
         self.assert_lint('CHECK(CreateTestFile(dir, (1 >> 20)));', '')
 
         self.assert_lint('CHECK(x<42)',
-                         'Consider using CHECK_LT instead of CHECK(a < b)'
+                         'Consider using CHECK_LT(a, b) instead of CHECK(a < b)'
                          '  [readability/check] [2]')
         self.assert_lint('CHECK(x>42)',
-                         'Consider using CHECK_GT instead of CHECK(a > b)'
+                         'Consider using CHECK_GT(a, b) instead of CHECK(a > b)'
                          '  [readability/check] [2]')
 
         self.assert_lint(
             '  EXPECT_TRUE(42 < x) // Random comment.',
-            'Consider using EXPECT_LT instead of EXPECT_TRUE(a < b)'
+            'Consider using EXPECT_LT(a, b) instead of EXPECT_TRUE(a < b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'EXPECT_TRUE( 42 < x )',
-            'Consider using EXPECT_LT instead of EXPECT_TRUE(a < b)'
+            'Consider using EXPECT_LT(a, b) instead of EXPECT_TRUE(a < b)'
             '  [readability/check] [2]')
         self.assert_lint(
             'CHECK("foo" == "foo")',
-            'Consider using CHECK_EQ instead of CHECK(a == b)'
+            'Consider using CHECK_EQ(a, b) instead of CHECK(a == b)'
             '  [readability/check] [2]')
 
         self.assert_lint('CHECK_EQ("foo", "foo")', '')
@@ -2079,7 +2079,7 @@ class CppStyleTest(CppStyleTestBase):
                     'Consider converting bool bitfields to unsigned.  [runtime/bitfields] [5]'
                     % (name, bool_list, unsigned_list))
 
-        def build_test_case(bitfields, name, will_warn, extra_warnings=[]):
+        def build_test_case(bitfields, name, will_warn, extra_warnings=None):
             bool_bitfields = []
             unsigned_bitfields = []
             test_string = 'class %s {\n' % (name,)
@@ -2271,53 +2271,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
         self.assertEqual('Found header this file implements after other header.',
                          self.include_state.check_next_include_order(cpp_style._PRIMARY_HEADER, False, True))
 
-    def test_check_alphabetical_include_order(self):
-        self.assert_language_rules_check('foo.h',
-                                         '#include "a.h"\n'
-                                         '#include "c.h"\n'
-                                         '#include "b.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
-
-        self.assert_language_rules_check('foo.h',
-                                         '#include "a.h"\n'
-                                         '#include "b.h"\n'
-                                         '#include "c.h"\n',
-                                         '')
-
-        self.assert_language_rules_check('foo.h',
-                                         '#include <assert.h>\n'
-                                         '#include "bar.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
-
-        self.assert_language_rules_check('foo.h',
-                                         '#include "bar.h"\n'
-                                         '#include <assert.h>\n',
-                                         '')
-
-    def test_check_alphabetical_include_order_errors_reported_for_both_lines(self):
-        # If one of the two lines of out of order headers are filtered, the error should be
-        # reported on the other line.
-        self.assert_language_rules_check('foo.h',
-                                         '#include "a.h"\n'
-                                         '#include "c.h"\n'
-                                         '#include "b.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]',
-                                         lines_to_check=[2])
-
-        self.assert_language_rules_check('foo.h',
-                                         '#include "a.h"\n'
-                                         '#include "c.h"\n'
-                                         '#include "b.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]',
-                                         lines_to_check=[3])
-
-        # If no lines are filtered, the error should be reported only once.
-        self.assert_language_rules_check('foo.h',
-                                         '#include "a.h"\n'
-                                         '#include "c.h"\n'
-                                         '#include "b.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
-
     def test_check_line_break_after_own_header(self):
         self.assert_language_rules_check('foo.cpp',
                                          '#include "foo.h"\n'
@@ -2342,38 +2295,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                                          '#endif"\n'
                                          '#include "bar.h"\n',  # No flag because previous is in preprocessor section
                                          '')
-
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "foo.h"\n'
-                                         '\n'
-                                         '#ifdef BAZ\n'
-                                         '#include "baz.h"\n'
-                                         '#endif"\n'
-                                         '#include "bar.h"\n'
-                                         '#include "a.h"\n',  # Should still flag this.
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
-
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "foo.h"\n'
-                                         '\n'
-                                         '#ifdef BAZ\n'
-                                         '#include "baz.h"\n'
-                                         '#include "bar.h"\n'  # Should still flag this
-                                         '#endif"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
-
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "foo.h"\n'
-                                         '\n'
-                                         '#ifdef BAZ\n'
-                                         '#include "baz.h"\n'
-                                         '#endif"\n'
-                                         '#ifdef FOOBAR\n'
-                                         '#include "foobar.h"\n'
-                                         '#endif"\n'
-                                         '#include "bar.h"\n'
-                                         '#include "a.h"\n',  # Should still flag this.
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
 
         # Check that after an already included error, the sorting rules still work.
         self.assert_language_rules_check('foo.cpp',
@@ -2417,30 +2338,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                                          '')
 
         os.path.isfile = self.os_path_isfile_orig
-
-    def test_public_primary_header(self):
-        # System header is not considered a primary header.
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "config.h"\n'
-                                         '#include <other/foo.h>\n'
-                                         '\n'
-                                         '#include "a.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
-
-        # ...except that it starts with public/.
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include <public/foo.h>\n'
-                                         '\n'
-                                         '#include "a.h"\n',
-                                         '')
-
-        # Even if it starts with public/ its base part must match with the source file name.
-        self.assert_language_rules_check('foo.cpp',
-                                         '#include "config.h"\n'
-                                         '#include <public/foop.h>\n'
-                                         '\n'
-                                         '#include "a.h"\n',
-                                         'Alphabetical sorting problem.  [build/include_order] [4]')
 
     def test_check_wtf_includes(self):
         self.assert_language_rules_check('foo.cpp',
@@ -2494,14 +2391,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                          classify_include('PrefixFooCustom.cpp',
                                           'Foo.h',
                                           False, include_state))
-        self.assertEqual(cpp_style._MOC_HEADER,
-                         classify_include('foo.cpp',
-                                          'foo.moc',
-                                          False, include_state))
-        self.assertEqual(cpp_style._MOC_HEADER,
-                         classify_include('foo.cpp',
-                                          'moc_foo.cpp',
-                                          False, include_state))
         # <public/foo.h> must be considered as primary even if is_system is True.
         self.assertEqual(cpp_style._PRIMARY_HEADER,
                          classify_include('foo/foo.cpp',
@@ -2515,11 +2404,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                          classify_include('foo.cpp',
                                           'public/foop.h',
                                           True, include_state))
-        # Qt private APIs use _p.h suffix.
-        self.assertEqual(cpp_style._PRIMARY_HEADER,
-                         classify_include('foo.cpp',
-                                          'foo_p.h',
-                                          False, include_state))
         # Tricky example where both includes might be classified as primary.
         self.assert_language_rules_check('ScrollbarThemeWince.cpp',
                                          '#include "ScrollbarThemeWince.h"\n'
@@ -2533,11 +2417,6 @@ class OrderOfIncludesTest(CppStyleTestBase):
                                          'Found header this file implements after a header this file implements.'
                                          ' Should be: primary header, blank line, and then alphabetically sorted.'
                                          '  [build/include_order] [4]')
-        self.assert_language_rules_check('ResourceHandleWin.cpp',
-                                         '#include "ResourceHandle.h"\n'
-                                         '\n'
-                                         '#include "ResourceHandleWin.h"\n',
-                                         '')
 
     def test_try_drop_common_suffixes(self):
         self.assertEqual('foo/foo', cpp_style._drop_common_suffixes('foo/foo-inl.h'))

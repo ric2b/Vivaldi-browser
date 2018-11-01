@@ -19,10 +19,8 @@
 @class AutoReloadBridge;
 @class CastController;
 @protocol CRWNativeContentProvider;
-@class CRWSessionEntry;
 @class CRWWebController;
 @class ExternalAppLauncher;
-@class FindInPageController;
 @class FormInputAccessoryViewController;
 @class FullScreenController;
 @protocol FullScreenControllerDelegate;
@@ -43,8 +41,6 @@ class GURL;
 @protocol TabHeadersDelegate;
 @class TabModel;
 @protocol TabSnapshottingDelegate;
-@class TranslateControllerImplIOS;
-@class WebControllerSnapshotHelper;
 
 namespace infobars {
 class InfoBarManager;
@@ -60,10 +56,11 @@ struct SessionTab;
 }
 
 namespace web {
+class NavigationItem;
+class NavigationManager;
 class NavigationManagerImpl;
 struct Referrer;
 class WebState;
-class WebStateImpl;
 }
 
 // Notification sent by a Tab when it starts to load a new URL. This
@@ -118,16 +115,20 @@ extern NSString* const kProxyPassthroughHeaderValue;
 @property(nonatomic, readonly) NSString* originalTitle;
 
 @property(nonatomic, readonly) NSString* urlDisplayString;
-@property(nonatomic, readonly) NSString* windowName;
 
-// ID associated with this tab, from the SessionManager.
+// ID associated with this tab.
 @property(nonatomic, readonly) NSString* tabId;
+
+// ID of the opener of this tab.
+@property(nonatomic, readonly) NSString* openerID;
+
+// NavigationIndex of the opener of this tab.
+@property(nonatomic, readonly) NSInteger openerNavigationIndex;
 
 // |YES| if snapshot overlay should load from the grey image cache.
 @property(nonatomic, assign) BOOL useGreyImageCache;
 
-// webStateImpl is deprecated: use webState instead.
-@property(nonatomic, readonly) web::WebStateImpl* webStateImpl;
+// The Webstate associated with this Tab.
 @property(nonatomic, readonly) web::WebState* webState;
 
 @property(nonatomic, readonly) CRWWebController* webController;
@@ -138,7 +139,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 @property(nonatomic, assign) id<TabHeadersDelegate> tabHeadersDelegate;
 @property(nonatomic, assign) id<TabSnapshottingDelegate>
     tabSnapshottingDelegate;
-@property(nonatomic, readonly) BOOL useDesktopUserAgent;
+
+// Whether or not desktop user agent is used for the currently visible page.
+@property(nonatomic, readonly) BOOL usesDesktopUserAgent;
+
 @property(nonatomic, assign) id<StoreKitLauncher> storeKitLauncher;
 @property(nonatomic, assign) id<FullScreenControllerDelegate>
     fullScreenControllerDelegate;
@@ -158,30 +162,37 @@ extern NSString* const kProxyPassthroughHeaderValue;
 @property(nonatomic, assign) BOOL isLinkLoadingPrerenderTab;
 @property(nonatomic, assign) BOOL isVoiceSearchResultsTab;
 
+// |YES| if the tab has finished loading.
+@property(nonatomic, readonly) BOOL loadFinished;
+
 // Creates a new tab with the given state. |opener| is nil unless another tab
 // is conceptually the parent of this tab. |openedByDOM| is YES if the page was
 // opened by DOM. |model| and |browserState| must not be nil.
-- (instancetype)initWithWindowName:(NSString*)windowName
-                            opener:(Tab*)opener
-                       openedByDOM:(BOOL)openedByDOM
-                             model:(TabModel*)parentModel
-                      browserState:(ios::ChromeBrowserState*)browserState;
+- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
+                              opener:(Tab*)opener
+                         openedByDOM:(BOOL)openedByDOM
+                               model:(TabModel*)parentModel;
 
 // Create a new tab with given web state and tab model. All must be non-nil.
 - (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState
+                           model:(TabModel*)parentModel;
+
+// Create a new tab with given web state and tab model, optionally attaching
+// the tab helpers (controlled by |attachTabHelpers|). All must be non-nil.
+- (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState
                            model:(TabModel*)parentModel
+                attachTabHelpers:(BOOL)attachTabHelpers
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
 
 // Creates a new Tab instance loading |url| with |transition|, configured
 // with no TabModel. |opener| may be nil, and behaves exactly as for
-// -initWithWindowName:opener:model:browserState:.
-// |configuration| is a block that will be run before |url| starts loading,
-// and is the correct place to set properties and delegates on the tab.
-// Calling code must take ownership of the tab -- this is particularly important
-// with Tab instances, because they will fail a DCHECK if they are deallocated
-// when falling out of scope without -close being called.
+// -initWithBrowserState:opener:openedByDOM:model. |configuration| is a block
+// that will be run before |url| starts loading, and is the correct place to set
+// properties and delegates on the tab. Calling code must take ownership of the
+// tab -- this is particularly important with Tab instances, because they will
+// fail a DCHECK if they are deallocated without -close being called.
 + (Tab*)newPreloadingTabWithBrowserState:(ios::ChromeBrowserState*)browserState
                                      url:(const GURL&)url
                                 referrer:(const web::Referrer&)referrer
@@ -191,9 +202,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
                         desktopUserAgent:(BOOL)desktopUserAgent
                            configuration:(void (^)(Tab*))configuration;
 
-// The current ID of the session (each Tab represents a session).
-- (NSString*)currentSessionID;
-
 // Sets the parent tab model for this tab.  Can only be called if the tab does
 // not already have a parent tab model set.
 // TODO(crbug.com/228575): Create a delegate interface and remove this.
@@ -201,9 +209,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Replace the content of the tab with the content described by |SessionTab|.
 - (void)loadSessionTab:(const sessions::SessionTab*)sessionTab;
-
-// Evaluate JavaScript asynchronously in the tab.
-- (void)openJavascript:(NSString*)javascript;
 
 // Stop the page loading.
 // Equivalent to the user pressing 'stop', or a window.stop() command.
@@ -243,7 +248,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Returns the NavigationManager for this tab's WebState. Requires WebState to
 // be populated. Can return null.
-- (web::NavigationManagerImpl*)navigationManager;
+// TODO(crbug.com/620465): remove navigationManagerImpl once Tab no longer uses
+// nor exposes private ios/web/ API.
+- (web::NavigationManager*)navigationManager;
+- (web::NavigationManagerImpl*)navigationManagerImpl;
 
 // Update the tab's history by replacing all previous navigations with
 // |navigations|.
@@ -251,8 +259,8 @@ extern NSString* const kProxyPassthroughHeaderValue;
             (const std::vector<sessions::SerializedNavigationEntry>&)navigations
                          currentIndex:(NSInteger)currentIndex;
 
-// Navigate forwards or backwards to |entry|.
-- (void)goToEntry:(CRWSessionEntry*)entry;
+// Navigate forwards or backwards to |item|.
+- (void)goToItem:(const web::NavigationItem*)item;
 - (void)reload;
 
 // Navigates forwards or backwards.
@@ -288,9 +296,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Remove the UIWebView and reload the current url.  Used by request desktop
 // so the updated user agent is used.
 - (void)reloadForDesktopUserAgent;
-
-// Accessor for Find in Page Controller.
-- (FindInPageController*)findInPageController;
 
 // Ensures the toolbar visibility matches |visible|.
 - (void)updateFullscreenWithToolbarVisible:(BOOL)visible;

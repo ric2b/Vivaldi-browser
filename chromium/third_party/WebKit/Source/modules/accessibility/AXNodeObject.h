@@ -96,6 +96,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool isDetached() const override { return !m_node; }
   bool isAXNodeObject() const final { return true; }
 
+  void getSparseAXAttributes(AXSparseAttributeClient&) const override;
+
   // Check object role or purpose.
   bool isAnchor() const final;
   bool isControl() const override;
@@ -127,6 +129,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool isClickable() const final;
   bool isEnabled() const override;
   AccessibilityExpanded isExpanded() const override;
+  bool isModal() const final;
   bool isPressed() const final;
   bool isReadOnly() const override;
   bool isRequired() const final;
@@ -177,6 +180,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
                      AXRelatedObjectVector*) const override;
   String placeholder(AXNameFrom) const override;
   bool nameFromLabelElement() const override;
+  bool nameFromContents() const override;
 
   // Location
   void getRelativeBounds(AXObject** outContainer,
@@ -233,7 +237,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
                                NameSources*,
                                bool* foundTextAlternative) const;
   float stepValueForRange() const;
-  bool isDescendantOfElementType(const HTMLQualifiedName& tagName) const;
+  bool isDescendantOfElementType(HashSet<QualifiedName>& tagNames) const;
   String placeholderFromNativeAttribute() const;
 };
 

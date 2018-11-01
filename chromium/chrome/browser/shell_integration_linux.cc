@@ -258,23 +258,6 @@ bool IsFirefoxDefaultBrowser() {
   return browser.find("irefox") != std::string::npos;
 }
 
-bool IsOperaDefaultBrowser() {
-  std::vector<std::string> argv;
-  argv.push_back(kXdgSettings);
-  argv.push_back("get");
-  argv.push_back(kXdgSettingsDefaultBrowser);
-
-  std::string browser;
-  // We don't care about the return value here.
-  base::GetAppOutput(base::CommandLine(argv), &browser);
-  return base::ToLowerASCII(browser).find("opera") != std::string::npos;
-}
-
-bool IsChromeDefaultBrowser() {
-  //todo arnar
-  return false;
-}
-
 DefaultWebClientState IsDefaultProtocolClient(const std::string& protocol) {
   return GetIsDefaultWebClient(protocol);
 }

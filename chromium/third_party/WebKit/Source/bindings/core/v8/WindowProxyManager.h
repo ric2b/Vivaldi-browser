@@ -5,14 +5,15 @@
 #ifndef WindowProxyManager_h
 #define WindowProxyManager_h
 
+#include <utility>
+
 #include "bindings/core/v8/LocalWindowProxy.h"
 #include "bindings/core/v8/RemoteWindowProxy.h"
 #include "core/CoreExport.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/RemoteFrame.h"
 #include "platform/heap/Handle.h"
-#include <utility>
-#include <v8.h>
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -29,10 +30,13 @@ class WindowProxyManagerBase : public GarbageCollected<WindowProxyManagerBase> {
   void clearForClose();
   void CORE_EXPORT clearForNavigation();
 
-  void CORE_EXPORT
-  releaseGlobals(HashMap<DOMWrapperWorld*, v8::Local<v8::Object>>&);
-  void CORE_EXPORT
-  setGlobals(const HashMap<DOMWrapperWorld*, v8::Local<v8::Object>>&);
+  // Globals are passed in a vector to maintain their order: global object for
+  // the main world is always first. This is needed to prevent bugs like
+  // https://crbug.com/700077.
+  using GlobalsVector =
+      Vector<std::pair<DOMWrapperWorld*, v8::Local<v8::Object>>>;
+  void CORE_EXPORT releaseGlobals(GlobalsVector&);
+  void CORE_EXPORT setGlobals(const GlobalsVector&);
 
  protected:
   using IsolatedWorldMap = HeapHashMap<int, Member<WindowProxy>>;

@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "base/strings/string_piece.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -61,6 +62,8 @@ class PluginInfoMessageFilter : public content::BrowserMessageFilter {
     Context(int render_process_id, Profile* profile);
 
     ~Context();
+
+    int render_process_id() { return render_process_id_; }
 
     void DecidePluginStatus(
         const GURL& url,
@@ -150,11 +153,22 @@ class PluginInfoMessageFilter : public content::BrowserMessageFilter {
       std::vector<base::string16>* additional_param_values);
 #endif
 
+  // Reports usage metrics to RAPPOR and UKM. This must be a class function,
+  // because UkmService requires a friend declaration by design to call.
+  void ReportMetrics(int render_frame_id,
+                     const base::StringPiece& mime_type,
+                     const GURL& url,
+                     const url::Origin& main_frame_origin,
+                     int32_t ukm_source_id);
+
   Context context_;
   std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
       shutdown_notifier_;
 
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+
+  const int32_t ukm_source_id_;
+
   base::WeakPtrFactory<PluginInfoMessageFilter> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PluginInfoMessageFilter);

@@ -232,12 +232,12 @@ void FontFaceSet::addToLoadingFonts(FontFace* fontFace) {
       m_ready->reset();
     handlePendingEventsAndPromisesSoon();
   }
-  m_loadingFonts.add(fontFace);
+  m_loadingFonts.insert(fontFace);
   fontFace->addCallback(this);
 }
 
 void FontFaceSet::removeFromLoadingFonts(FontFace* fontFace) {
-  m_loadingFonts.remove(fontFace);
+  m_loadingFonts.erase(fontFace);
   if (m_loadingFonts.isEmpty())
     handlePendingEventsAndPromisesSoon();
 }
@@ -257,7 +257,7 @@ FontFaceSet* FontFaceSet::addForBinding(ScriptState*,
   if (isCSSConnectedFontFace(fontFace))
     return this;
   CSSFontSelector* fontSelector = document()->styleEngine().fontSelector();
-  m_nonCSSConnectedFaces.add(fontFace);
+  m_nonCSSConnectedFaces.insert(fontFace);
   fontSelector->fontFaceCache()->addFontFace(fontSelector, fontFace, false);
   if (fontFace->loadStatus() == FontFace::Loading)
     addToLoadingFonts(fontFace);
@@ -431,8 +431,8 @@ bool FontFaceSet::check(const String& fontString,
     return true;
   for (const FontFamily* f = &font.getFontDescription().family(); f;
        f = f->next()) {
-    if (fontSelector->isPlatformFontAvailable(font.getFontDescription(),
-                                              f->family()))
+    if (fontSelector->isPlatformFamilyMatchAvailable(font.getFontDescription(),
+                                                     f->family()))
       return true;
   }
   return false;

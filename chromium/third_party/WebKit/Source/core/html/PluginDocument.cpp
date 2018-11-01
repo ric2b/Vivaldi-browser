@@ -29,6 +29,7 @@
 #include "core/dom/RawDataDocumentParser.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLEmbedElement.h"
@@ -36,7 +37,6 @@
 #include "core/layout/LayoutEmbeddedObject.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/plugins/PluginView.h"
 
 namespace blink {
@@ -75,7 +75,7 @@ void PluginDocumentParser::createDocumentStructure() {
   // and assert were added for the security bug in
   // http://trac.webkit.org/changeset/87566
   DCHECK(document());
-  RELEASE_ASSERT(document()->loader());
+  CHECK(document()->loader());
 
   LocalFrame* frame = document()->frame();
   if (!frame)
@@ -158,9 +158,10 @@ void PluginDocumentParser::finish() {
 }
 
 PluginView* PluginDocumentParser::pluginView() const {
-  if (Widget* widget = toPluginDocument(document())->pluginWidget()) {
-    SECURITY_DCHECK(widget->isPluginContainer());
-    return toPluginView(widget);
+  if (FrameViewBase* frameViewBase =
+          toPluginDocument(document())->pluginWidget()) {
+    SECURITY_DCHECK(frameViewBase->isPluginContainer());
+    return toPluginView(frameViewBase);
   }
   return 0;
 }
@@ -178,14 +179,14 @@ DocumentParser* PluginDocument::createParser() {
   return PluginDocumentParser::create(this);
 }
 
-Widget* PluginDocument::pluginWidget() {
+FrameViewBase* PluginDocument::pluginWidget() {
   if (m_pluginNode && m_pluginNode->layoutObject()) {
     CHECK(m_pluginNode->layoutObject()->isEmbeddedObject());
-    Widget* widget =
+    FrameViewBase* frameViewBase =
         toLayoutEmbeddedObject(m_pluginNode->layoutObject())->widget();
-    if (!widget || !widget->isPluginContainer())
+    if (!frameViewBase || !frameViewBase->isPluginContainer())
       return nullptr;
-    return widget;
+    return frameViewBase;
   }
   return 0;
 }

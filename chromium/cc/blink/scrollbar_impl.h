@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "cc/input/scrollbar.h"
+#include "cc/paint/paint_canvas.h"
 #include "third_party/WebKit/public/platform/WebScrollbarThemePainter.h"
 
 namespace blink {
@@ -36,9 +37,13 @@ class ScrollbarImpl : public cc::Scrollbar {
   gfx::Rect TrackRect() const override;
   float ThumbOpacity() const override;
   bool NeedsPaintPart(cc::ScrollbarPart part) const override;
-  void PaintPart(SkCanvas* canvas,
+  void PaintPart(cc::PaintCanvas* canvas,
                  cc::ScrollbarPart part,
                  const gfx::Rect& content_rect) override;
+
+  bool UsesNinePatchThumbResource() const override;
+  gfx::Size NinePatchThumbCanvasSize() const override;
+  gfx::Rect NinePatchThumbAperture() const override;
 
  private:
   std::unique_ptr<blink::WebScrollbar> scrollbar_;

@@ -32,7 +32,6 @@ if (is_android) {
   import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
-  import("//build_overrides/v8.gni")
   import("//media/cdm/ppapi/cdm_paths.gni")
   import("//third_party/icu/config.gni")
 }
@@ -220,8 +219,10 @@ if (!is_android && !is_mac) {
         "/DELAYLOAD:oleaut32.dll",
       ]
 
-      # Turn on CFG for this project.
-      configs += [ "//build/config/win:win_msvc_cfg" ]
+      if (current_cpu == "x64") {
+        # Increase the initial stack size. The default is 1MB, this is 2MB.
+        ldflags += [ "/STACK:2097152" ]
+      }
     } else if (use_aura) {
       # Non-Windows aura entrypoint.
       sources += [ "app/chrome_exe_main_aura.cc" ]
@@ -388,6 +389,12 @@ if (is_win) {
     if (is_multi_dll_chrome) {
       defines += [ "CHROME_MULTIPLE_DLL_BROWSER" ]
       deps += [ "//content/public/app:browser" ]
+      assert_no_deps = [
+        # The browser DLL may not depend on blink or v8.
+        "//third_party/WebKit/public:blink",
+        "//gin",
+        "//v8",
+      ]
     } else {
       deps += [
         ":child_dependencies",
@@ -466,10 +473,7 @@ if (is_win) {
 } else if (is_mac) {
   chrome_helper_name = chrome_product_full_name + " Helper"
   chrome_framework_name = chrome_product_full_name + " Framework"
-
-  if (enable_xpc_notifications) {
-    chrome_framework_version = "A"
-  }
+  chrome_framework_version = "A"
 
   group("chrome") {
     deps = [
@@ -550,6 +554,10 @@ if (is_win) {
       "//build/config/sanitizers:deps",
       "//chrome/common:version_header",
     ]
+
+    if (is_chrome_branded) {
+      deps += [ ":chrome_helpers" ]
+    }
 
     # Remove the default strip configuration (which strips all symbols) so that
     # a saves file can be specified.
@@ -653,6 +661,18 @@ if (is_win) {
     ]
   }
 
+  if (is_chrome_branded) {
+    bundle_data("chrome_helpers") {
+      sources = [
+        "installer/mac/internal/keychain_reauthorizers/$chrome_mac_bundle_id",
+      ]
+
+      outputs = [
+        "{{bundle_root_dir}}/Helpers/{{source_file_part}}",
+      ]
+    }
+  }
+
   bundle_data("chrome_versioned_bundle_data") {
     sources = [
       "$root_out_dir/$chrome_framework_name.framework",
@@ -677,6 +697,13 @@ if (is_win) {
       # non-component builds, will ensure the export symbol table is correct.
       ":verify_chrome_framework_order",
     ]
+
+    # Only official builds that include Widevine need the widevine
+    # signature file.
+    if (is_chrome_branded && enable_pepper_cdms) {
+      sources += [ "$root_out_dir/Widevine Resources.bundle" ]
+      public_deps += [ ":widevine_resources_bundle" ]
+    }
   }
 
   action("clean_up_old_versions") {
@@ -890,12 +917,25 @@ if (is_win) {
         ":widevine_cdm_library_copy",
         "//third_party/widevine/cdm:widevinecdmadapter",
       ]
+
+      # Signatures are only generated for official chrome.
+      if (is_chrome_branded) {
+        sources += [
+          "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin.sig",
+          "$root_out_dir/libwidevinecdm.dylib.sig",
+        ]
+        public_deps += [ ":sign_cdm_adapter_for_widevine" ]
+      }
     }
 
     copy("widevine_cdm_library_copy") {
       sources = [
         "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
       ]
+      if (is_chrome_branded) {
+        sources +=
+            [ "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib.sig" ]
+      }
       outputs = [
         "$root_out_dir/{{source_file_part}}",
       ]
@@ -917,6 +957,71 @@ if (is_win) {
         "//third_party/widevine/cdm:widevine_cdm_manifest",
       ]
     }
+
+    widevine_sign_file("sign_cdm_adapter_for_widevine") {
+      file = "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin"
+      flags = 0
+      deps = [
+        "//third_party/widevine/cdm:widevinecdmadapter",
+      ]
+    }
+
+    widevine_sign_file("sign_chrome_framework_for_widevine") {
+      file = "$root_out_dir/$chrome_framework_name.framework/"
+      if (defined(chrome_framework_version)) {
+        file += "Versions/$chrome_framework_version/"
+      }
+      file += "$chrome_framework_name"
+      flags = 1
+      signature_file = "$root_out_dir/$chrome_framework_name.sig"
+      deps = [
+        ":chrome_framework",
+      ]
+    }
+
+    mac_info_plist("widevine_resources_plist") {
+      info_plist = "//third_party/widevine/cdm/widevine_resources.plist"
+      extra_substitutions = [
+        "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
+        "BUNDLE_ID=widevine_resources",
+      ]
+      executable_name = "Widevine Resources"
+    }
+
+    bundle_data("widevine_resources_plist_bundle_data") {
+      sources = get_target_outputs(":widevine_resources_plist")
+      outputs = [
+        "{{bundle_root_dir}}/Info.plist",
+      ]
+      public_deps = [
+        ":widevine_resources_plist",
+      ]
+    }
+
+    bundle_data("framework_widevine_signature") {
+      sources = [
+        "$root_out_dir/$chrome_framework_name.sig",
+      ]
+
+      outputs = [
+        "{{bundle_resources_dir}}/{{source_file_part}}",
+      ]
+
+      public_deps = [
+        ":sign_chrome_framework_for_widevine",
+      ]
+    }
+
+    create_bundle("widevine_resources_bundle") {
+      output_name = "Widevine Resources.bundle"
+      bundle_root_dir = "$root_build_dir/$output_name/Contents"
+      bundle_resources_dir = bundle_root_dir + "/Resources"
+
+      deps = [
+        ":framework_widevine_signature",
+        ":widevine_resources_plist_bundle_data",
+      ]
+    }
   }
 
   group("widevine_cdm_library") {
@@ -933,7 +1038,11 @@ if (is_win) {
       script = "//chrome/tools/build/mac/copy_keystone_framework.py"
 
       framework_path = "//third_party/googlemac/Releases/Keystone/KeystoneRegistration.framework"
-      output_path = "$root_out_dir/$chrome_framework_name.framework/Frameworks/"
+      output_path = "$root_out_dir/$chrome_framework_name.framework/"
+      if (defined(chrome_framework_version)) {
+        output_path += "/Versions/$chrome_framework_version/"
+      }
+      output_path += "Frameworks/"
 
       sources = [
         framework_path,
@@ -1012,6 +1121,7 @@ if (is_win) {
       "//components/crash/content/app",
       "//components/policy:generated",
       "//content/public/app:both",
+      "//headless:headless_shell_lib",
       "//pdf",
       "//third_party/cld",
     ]
@@ -1044,7 +1154,10 @@ if (is_win) {
       ]
 
       if (is_chrome_branded) {
-        framework_contents += [ "Default Apps" ]
+        framework_contents += [
+          "Default Apps",
+          "Frameworks",  # For KeystoneRegistration.framework.
+        ]
       }
       if (enable_nacl) {
         framework_contents += [ "Internet Plug-Ins" ]
@@ -1256,16 +1369,20 @@ group("browser_dependencies") {
 
   if (!is_component_build) {
     assert_no_deps = [
-      # Blink and V8 should not be used in the browser process. In component
-      # build this is OK because all of content is linked into one library.
-      # Note that the blink_headers target is OK, so we can't do a wildcard for
-      # all blink targets.
+      # Blink should not be used in the browser process. In component build this
+      # is OK because all of content is linked into one library. Note that the
+      # blink_headers target is OK, so we can't do a wildcard for all blink
+      # targets.
       "//third_party/WebKit/public:blink",
-      # TODO(brettw) bug 581766: V8 should not be linked into the browser
-      # process, and then we can enable this. When testing whether you can
-      # enable this, run with a non-component build.
-      #"//v8/*",
     ]
+
+    if (is_win) {
+      assert_no_deps += [
+        # V8/Gin should not be used in the browser DLL on Windows.
+        "//gin",
+        "//v8",
+      ]
+    }
   }
 }
 
@@ -1371,28 +1488,35 @@ group("resources") {
 }
 
 group("extra_resources") {
+  # Deps should be same as those in chrome_extra_paks() within chrome_paks.gni.
   public_deps = [
-    "//chrome/browser/resources:component_extension_resources",
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:net_internals_resources",
-    "//chrome/browser/resources:options_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
-    "//chrome/browser/resources:settings_resources",
+    "//chrome/browser/resources:quota_internals_resources",
     "//chrome/browser/resources:task_scheduler_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
+    "//chrome/browser/resources:webapks_ui_resources",
   ]
+
+  if (!is_android && !is_ios) {
+    public_deps += [
+      "//chrome/browser/resources:component_extension_resources",
+      "//chrome/browser/resources:options_resources",
+      "//chrome/browser/resources:settings_resources",
+    ]
+  }
 
   if (is_chromeos) {
     public_deps += [ "//chrome/browser/resources/chromeos/chromevox" ]
     public_deps += [ "//chrome/browser/resources/chromeos/select_to_speak" ]
+    public_deps += [ "//chrome/browser/resources/chromeos/switch_access" ]
   }
 
   if (enable_extensions) {
-    public_deps += [
-      "//chrome/browser/resources:quota_internals_resources",
-      "//chrome/browser/resources:sync_file_system_internals_resources",
-    ]
+    public_deps +=
+        [ "//chrome/browser/resources:sync_file_system_internals_resources" ]
   }
 }
 
@@ -1459,14 +1583,16 @@ chrome_paks("packed_resources") {
 
 repack("browser_tests_pak") {
   sources = [
-    "$root_gen_dir/chrome/options_test_resources.pak",
     "$root_gen_dir/chrome/webui_test_resources.pak",
   ]
   output = "$root_out_dir/browser_tests.pak"
   deps = [
-    "//chrome/browser/resources:options_test_resources",
     "//chrome/test/data:webui_test_resources",
   ]
+  if (!is_android && !is_ios) {
+    sources += [ "$root_gen_dir/chrome/options_test_resources.pak" ]
+    deps += [ "//chrome/browser/resources:options_test_resources" ]
+  }
 }
 
 group("strings") {

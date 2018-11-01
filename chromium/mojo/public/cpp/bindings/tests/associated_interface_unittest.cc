@@ -19,7 +19,6 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
@@ -80,10 +79,8 @@ class IntegerSenderConnectionImpl : public IntegerSenderConnection {
   }
 
   void AsyncGetSender(const AsyncGetSenderCallback& callback) override {
-    AssociatedInterfaceRequest<IntegerSender> request;
     IntegerSenderAssociatedPtrInfo ptr_info;
-    binding_.associated_group()->CreateAssociatedInterface(
-        AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
+    auto request = MakeRequest(&ptr_info);
     GetSender(std::move(request));
     callback.Run(std::move(ptr_info));
   }
@@ -106,12 +103,13 @@ class AssociatedInterfaceTest : public testing::Test {
   template <typename T>
   AssociatedInterfacePtrInfo<T> EmulatePassingAssociatedPtrInfo(
       AssociatedInterfacePtrInfo<T> ptr_info,
+      scoped_refptr<MultiplexRouter> source,
       scoped_refptr<MultiplexRouter> target) {
     ScopedInterfaceEndpointHandle handle = ptr_info.PassHandle();
-    CHECK(!handle.is_local());
-    return AssociatedInterfacePtrInfo<T>(
-        target->CreateLocalEndpointHandle(handle.release()),
-        ptr_info.version());
+    CHECK(handle.pending_association());
+    auto id = source->AssociateInterface(std::move(handle));
+    return AssociatedInterfacePtrInfo<T>(target->CreateLocalEndpointHandle(id),
+                                         ptr_info.version());
   }
 
   void CreateRouterPair(scoped_refptr<MultiplexRouter>* router0,
@@ -130,10 +128,9 @@ class AssociatedInterfaceTest : public testing::Test {
       IntegerSenderAssociatedPtrInfo* ptr_info0,
       scoped_refptr<MultiplexRouter> router1,
       IntegerSenderAssociatedRequest* request1) {
-    router1->CreateAssociatedGroup()->CreateAssociatedInterface(
-        AssociatedGroup::WILL_PASS_PTR, ptr_info0, request1);
-    *ptr_info0 =
-        EmulatePassingAssociatedPtrInfo(std::move(*ptr_info0), router0);
+    *request1 = MakeRequest(ptr_info0);
+    *ptr_info0 = EmulatePassingAssociatedPtrInfo(std::move(*ptr_info0), router1,
+                                                 router0);
   }
 
   void CreateIntegerSender(IntegerSenderAssociatedPtrInfo* ptr_info,
@@ -557,8 +554,7 @@ TEST_F(AssociatedInterfaceTest, PassAssociatedInterfaces) {
   IntegerSenderConnectionImpl connection(MakeRequest(&connection_ptr));
 
   IntegerSenderAssociatedPtr sender0;
-  connection_ptr->GetSender(
-      MakeRequest(&sender0, connection_ptr.associated_group()));
+  connection_ptr->GetSender(MakeRequest(&sender0));
 
   int32_t echoed_value = 0;
   base::RunLoop run_loop;
@@ -586,8 +582,7 @@ TEST_F(AssociatedInterfaceTest, BindingWaitAndPauseWhenNoAssociatedInterfaces) {
   IntegerSenderConnectionImpl connection(MakeRequest(&connection_ptr));
 
   IntegerSenderAssociatedPtr sender0;
-  connection_ptr->GetSender(
-      MakeRequest(&sender0, connection_ptr.associated_group()));
+  connection_ptr->GetSender(MakeRequest(&sender0));
 
   EXPECT_FALSE(connection.binding()->HasAssociatedInterfaces());
   // There are no associated interfaces running on the pipe yet. It is okay to
@@ -695,8 +690,8 @@ TEST_F(AssociatedInterfaceTest, BindingWithFilters) {
   PingProviderImpl provider_impl(MakeRequest(&provider));
 
   PingServiceAssociatedPtr ping_a, ping_b;
-  provider->GetPing(MakeRequest(&ping_a, provider.associated_group()));
-  provider->GetPing(MakeRequest(&ping_b, provider.associated_group()));
+  provider->GetPing(MakeRequest(&ping_a));
+  provider->GetPing(MakeRequest(&ping_b));
   provider_impl.WaitForBindings(2);
 
   ASSERT_EQ(2u, provider_impl.ping_services().size());
@@ -874,7 +869,7 @@ TEST_F(AssociatedInterfaceTest, StrongBindingFlushForTesting) {
                         MakeRequest(&ptr));
   bool called = false;
   IntegerSenderAssociatedPtr sender_ptr;
-  ptr->GetSender(MakeRequest(&sender_ptr, ptr.associated_group()));
+  ptr->GetSender(MakeRequest(&sender_ptr));
   sender_ptr->Echo(1, base::Bind(&SetBoolWithUnusedParameter<int>, &called));
   EXPECT_FALSE(called);
   // Because the flush is sent from the binding, it only guarantees that the
@@ -950,6 +945,29 @@ TEST_F(AssociatedInterfaceTest, AssociatedBindingConnectionErrorWithReason) {
   run_loop.Run();
 }
 
+TEST_F(AssociatedInterfaceTest,
+       PendingAssociatedBindingConnectionErrorWithReason) {
+  // Test that AssociatedBinding is notified with connection error when the
+  // interface hasn't associated with a message pipe and the peer is closed.
+
+  IntegerSenderAssociatedPtr ptr;
+  IntegerSenderImpl impl(MakeRequest(&ptr));
+
+  base::RunLoop run_loop;
+  impl.binding()->set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(123u, custom_reason);
+        EXPECT_EQ("farewell", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  ptr.ResetWithReason(123u, "farewell");
+
+  run_loop.Run();
+}
+
 TEST_F(AssociatedInterfaceTest, AssociatedPtrConnectionErrorWithReason) {
   AssociatedInterfaceRequest<IntegerSender> request;
   IntegerSenderAssociatedPtrInfo ptr_info;
@@ -970,6 +988,28 @@ TEST_F(AssociatedInterfaceTest, AssociatedPtrConnectionErrorWithReason) {
       run_loop.QuitClosure()));
 
   impl.binding()->CloseWithReason(456u, "farewell");
+
+  run_loop.Run();
+}
+
+TEST_F(AssociatedInterfaceTest, PendingAssociatedPtrConnectionErrorWithReason) {
+  // Test that AssociatedInterfacePtr is notified with connection error when the
+  // interface hasn't associated with a message pipe and the peer is closed.
+
+  IntegerSenderAssociatedPtr ptr;
+  auto request = MakeRequest(&ptr);
+
+  base::RunLoop run_loop;
+  ptr.set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(456u, custom_reason);
+        EXPECT_EQ("farewell", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  request.ResetWithReason(456u, "farewell");
 
   run_loop.Run();
 }
@@ -1002,8 +1042,7 @@ TEST_F(AssociatedInterfaceTest, ThreadSafeAssociatedInterfacePtr) {
   IntegerSenderConnectionImpl connection(MakeRequest(&connection_ptr));
 
   IntegerSenderAssociatedPtr sender;
-  connection_ptr->GetSender(
-      MakeRequest(&sender, connection_ptr.associated_group()));
+  connection_ptr->GetSender(MakeRequest(&sender));
 
   scoped_refptr<ThreadSafeIntegerSenderAssociatedPtr> thread_safe_sender =
       ThreadSafeIntegerSenderAssociatedPtr::Create(std::move(sender));
@@ -1055,50 +1094,49 @@ TEST_F(AssociatedInterfaceTest, ThreadSafeAssociatedInterfacePtr) {
 struct ForwarderTestContext {
   IntegerSenderConnectionPtr connection_ptr;
   std::unique_ptr<IntegerSenderConnectionImpl> interface_impl;
+  IntegerSenderAssociatedRequest sender_request;
 };
 
-TEST_F(AssociatedInterfaceTest, BindLaterThreadSafeAssociatedInterfacePtr) {
+TEST_F(AssociatedInterfaceTest,
+       ThreadSafeAssociatedInterfacePtrWithTaskRunner) {
   // Start the thread from where we'll bind the interface pointer.
   base::Thread other_thread("service test thread");
   other_thread.Start();
   const scoped_refptr<base::SingleThreadTaskRunner>& other_thread_task_runner =
       other_thread.message_loop()->task_runner();
-  ForwarderTestContext* context = new ForwarderTestContext();
 
-  base::WaitableEvent echo_called_event(
+  ForwarderTestContext* context = new ForwarderTestContext();
+  IntegerSenderAssociatedPtrInfo sender_info;
+  base::WaitableEvent sender_info_bound_event(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
+  auto setup = [](base::WaitableEvent* sender_info_bound_event,
+                  IntegerSenderAssociatedPtrInfo* sender_info,
+                  ForwarderTestContext* context) {
+    context->interface_impl = base::MakeUnique<IntegerSenderConnectionImpl>(
+        MakeRequest(&context->connection_ptr));
 
-  // Create a ThreadSafeAssociatedPtr that we'll bind from a different thread.
+    auto sender_request = MakeRequest(sender_info);
+    context->connection_ptr->GetSender(std::move(sender_request));
+
+    // Unblock the main thread as soon as |sender_info| is set.
+    sender_info_bound_event->Signal();
+  };
+  other_thread_task_runner->PostTask(
+      FROM_HERE,
+      base::Bind(setup, &sender_info_bound_event, &sender_info, context));
+  sender_info_bound_event.Wait();
+
+  // Create a ThreadSafeAssociatedPtr that binds on the background thread and is
+  // associated with |connection_ptr| there.
   scoped_refptr<ThreadSafeIntegerSenderAssociatedPtr> thread_safe_ptr =
-      ThreadSafeIntegerSenderAssociatedPtr::CreateUnbound(
-          other_thread_task_runner);
+      ThreadSafeIntegerSenderAssociatedPtr::Create(std::move(sender_info),
+                                                   other_thread_task_runner);
 
-  base::RunLoop bind_run_loop;
-  auto run_method = base::Bind(
-      [](base::WaitableEvent* echo_called_event,
-         const scoped_refptr<ThreadSafeIntegerSenderAssociatedPtr>&
-             thread_safe_ptr,
-          ForwarderTestContext* context) {
-        // Wait for echo to be called on the main thread so the interface method
-        // call happens before the bind.
-        echo_called_event->Wait();
-
-        // We are on the background thread, create the interface ptr.
-        context->interface_impl =
-            base::MakeUnique<IntegerSenderConnectionImpl>(
-                MakeRequest(&(context->connection_ptr)));
-        IntegerSenderAssociatedPtr sender;
-        context->connection_ptr->GetSender(
-            MakeRequest(&sender, context->connection_ptr.associated_group()));
-        thread_safe_ptr->Bind(std::move(sender));
-      },
-      &echo_called_event, thread_safe_ptr, context);
-
-  other_thread_task_runner->PostTask(FROM_HERE, run_method);
-
+  // Issue a call on the thread-safe ptr immediately. Note that this may happen
+  // before the interface is bound on the background thread, and that must be
+  // OK.
   {
-    // Now we can call methods on the interface from the main thread.
     auto echo_callback =
         base::Bind([](const base::Closure& quit_closure, int32_t result) {
           EXPECT_EQ(123, result);
@@ -1107,9 +1145,6 @@ TEST_F(AssociatedInterfaceTest, BindLaterThreadSafeAssociatedInterfacePtr) {
     base::RunLoop run_loop;
     (*thread_safe_ptr)
         ->Echo(123, base::Bind(echo_callback, run_loop.QuitClosure()));
-
-    // Let the bind happen on the background thread.
-    echo_called_event.Signal();
 
     // Block until the method callback is called.
     run_loop.Run();
@@ -1120,6 +1155,33 @@ TEST_F(AssociatedInterfaceTest, BindLaterThreadSafeAssociatedInterfacePtr) {
   // Reset the pointer now so the InterfacePtr associated resources can be
   // deleted before the background thread's message loop is invalidated.
   thread_safe_ptr = nullptr;
+}
+
+class DiscardingAssociatedPingProviderProvider
+    : public AssociatedPingProviderProvider {
+ public:
+  void GetPingProvider(
+      AssociatedPingProviderAssociatedRequest request) override {}
+};
+
+TEST_F(AssociatedInterfaceTest, CloseWithoutBindingAssociatedRequest) {
+  DiscardingAssociatedPingProviderProvider ping_provider_provider;
+  mojo::Binding<AssociatedPingProviderProvider> binding(
+      &ping_provider_provider);
+  auto provider_provider = binding.CreateInterfacePtrAndBind();
+  AssociatedPingProviderAssociatedPtr provider;
+  provider_provider->GetPingProvider(mojo::MakeRequest(&provider));
+  PingServiceAssociatedPtr ping;
+  provider->GetPing(mojo::MakeRequest(&ping));
+  base::RunLoop run_loop;
+  ping.set_connection_error_handler(run_loop.QuitClosure());
+  run_loop.Run();
+}
+
+TEST_F(AssociatedInterfaceTest, GetIsolatedInterface) {
+  IntegerSenderAssociatedPtr sender;
+  GetIsolatedInterface(MakeRequest(&sender).PassHandle());
+  sender->Send(42);
 }
 
 }  // namespace

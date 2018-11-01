@@ -509,21 +509,21 @@ struct FuzzTraits<base::ListValue> {
           bool tmp;
           p->GetBoolean(index, &tmp);
           fuzzer->FuzzBool(&tmp);
-          p->Set(index, new base::FundamentalValue(tmp));
+          p->Set(index, new base::Value(tmp));
           break;
         }
         case base::Value::Type::INTEGER: {
           int tmp;
           p->GetInteger(index, &tmp);
           fuzzer->FuzzInt(&tmp);
-          p->Set(index, new base::FundamentalValue(tmp));
+          p->Set(index, new base::Value(tmp));
           break;
         }
         case base::Value::Type::DOUBLE: {
           double tmp;
           p->GetDouble(index, &tmp);
           fuzzer->FuzzDouble(&tmp);
-          p->Set(index, new base::FundamentalValue(tmp));
+          p->Set(index, new base::Value(tmp));
           break;
         }
         case base::Value::Type::STRING: {
@@ -581,19 +581,19 @@ struct FuzzTraits<base::DictionaryValue> {
         case base::Value::Type::BOOLEAN: {
           bool tmp;
           fuzzer->FuzzBool(&tmp);
-          p->SetWithoutPathExpansion(property, new base::FundamentalValue(tmp));
+          p->SetWithoutPathExpansion(property, new base::Value(tmp));
           break;
         }
         case base::Value::Type::INTEGER: {
           int tmp;
           fuzzer->FuzzInt(&tmp);
-          p->SetWithoutPathExpansion(property, new base::FundamentalValue(tmp));
+          p->SetWithoutPathExpansion(property, new base::Value(tmp));
           break;
         }
         case base::Value::Type::DOUBLE: {
           double tmp;
           fuzzer->FuzzDouble(&tmp);
-          p->SetWithoutPathExpansion(property, new base::FundamentalValue(tmp));
+          p->SetWithoutPathExpansion(property, new base::Value(tmp));
           break;
         }
         case base::Value::Type::STRING: {
@@ -1500,23 +1500,6 @@ struct FuzzTraits<ppapi::SocketOptionData> {
     if (!FuzzParam(&tmp, fuzzer))
       return false;
     p->SetInt32(tmp);
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<printing::PdfRenderSettings> {
-  static bool Fuzz(printing::PdfRenderSettings* p, Fuzzer* fuzzer) {
-    gfx::Rect area = p->area;
-    int dpi = p->dpi;
-    bool autorotate = p->autorotate;
-    if (!FuzzParam(&area, fuzzer))
-      return false;
-    if (!FuzzParam(&dpi, fuzzer))
-      return false;
-    if (!FuzzParam(&autorotate, fuzzer))
-      return false;
-    *p = printing::PdfRenderSettings(area, dpi, autorotate);
     return true;
   }
 };

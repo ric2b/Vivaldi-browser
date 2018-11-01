@@ -12,15 +12,17 @@
 
 namespace mojo {
 
-template <typename Interface>
-struct BindingSetTraits<AssociatedBinding<Interface>> {
+template <typename Interface, typename ImplRefTraits>
+struct BindingSetTraits<AssociatedBinding<Interface, ImplRefTraits>> {
   using ProxyType = AssociatedInterfacePtr<Interface>;
   using RequestType = AssociatedInterfaceRequest<Interface>;
+  using BindingType = AssociatedBinding<Interface, ImplRefTraits>;
+  using ImplPointerType = typename BindingType::ImplPointerType;
 };
 
-template <typename Interface>
+template <typename Interface, typename ContextType = void>
 using AssociatedBindingSet =
-    BindingSet<Interface, AssociatedBinding<Interface>>;
+    BindingSetBase<Interface, AssociatedBinding<Interface>, ContextType>;
 
 }  // namespace mojo
 

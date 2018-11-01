@@ -12,6 +12,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/text/TextDirection.h"
 #include "wtf/text/WTFString.h"
+
 #include <unicode/ubidi.h>
 #include <unicode/uscript.h>
 
@@ -21,28 +22,37 @@ class ComputedStyle;
 class LayoutBlockFlow;
 class LayoutObject;
 class LayoutUnit;
+struct MinAndMaxContentSizes;
 class NGConstraintSpace;
-class NGFragment;
-class NGLayoutAlgorithm;
 class NGLayoutInlineItem;
 class NGLayoutInlineItemRange;
 class NGLayoutInlineItemsBuilder;
+class NGLayoutResult;
 class NGLineBuilder;
 
-// Represents an inline node to be laid out.
+// Represents an anonymous block box to be laid out, that contains consecutive
+// inline nodes and their descendants.
 class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
  public:
-  NGInlineNode(LayoutObject* start_inline, ComputedStyle* block_style);
+  NGInlineNode(LayoutObject* start_inline, const ComputedStyle* block_style);
   ~NGInlineNode() override;
 
-  bool Layout(NGConstraintSpace*, NGFragment**) override;
-  bool LayoutInline(NGConstraintSpace*, NGLineBuilder*);
+  const ComputedStyle* BlockStyle() const { return block_style_.get(); }
+
+  RefPtr<NGLayoutResult> Layout(NGConstraintSpace*, NGBreakToken*) override;
+  void LayoutInline(NGConstraintSpace*, NGLineBuilder*);
   NGInlineNode* NextSibling() override;
+  LayoutObject* GetLayoutObject() override;
 
-  // Prepare inline and text content for layout. Must be called before
-  // calling the Layout method.
-  void PrepareLayout();
+  // Computes the value of min-content and max-content for this anonymous block
+  // box. min-content is the inline size when lines wrap at every break
+  // opportunity, and max-content is when lines do not wrap at all.
+  MinAndMaxContentSizes ComputeMinAndMaxContentSizes();
 
+  // Instruct to re-compute |PrepareLayout| on the next layout.
+  void InvalidatePrepareLayout();
+
+  const String& Text() const { return text_content_; }
   String Text(unsigned start_offset, unsigned end_offset) const {
     return text_content_.substring(start_offset, end_offset);
   }
@@ -55,10 +65,19 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
 
   bool IsBidiEnabled() const { return is_bidi_enabled_; }
 
+  void AssertOffset(unsigned index, unsigned offset) const;
+  void AssertEndOffset(unsigned index, unsigned offset) const;
+
   DECLARE_VIRTUAL_TRACE();
 
  protected:
   NGInlineNode();  // This constructor is only for testing.
+
+  // Prepare inline and text content for layout. Must be called before
+  // calling the Layout method.
+  void PrepareLayout();
+  bool IsPrepareLayoutFinished() const { return !items_.isEmpty(); }
+
   void CollectInlines(LayoutObject* start, LayoutObject* last);
   void CollectInlines(LayoutObject* start,
                       LayoutObject* last,
@@ -68,10 +87,9 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
 
   LayoutObject* start_inline_;
   LayoutObject* last_inline_;
-  RefPtr<ComputedStyle> block_style_;
+  RefPtr<const ComputedStyle> block_style_;
 
   Member<NGInlineNode> next_sibling_;
-  Member<NGLayoutAlgorithm> layout_algorithm_;
 
   // Text content for all inline items represented by a single NGInlineNode
   // instance. Encoded either as UTF-16 or latin-1 depending on content.
@@ -118,6 +136,11 @@ class NGLayoutInlineItem {
   void SetEndOffset(unsigned);
 
   LayoutUnit InlineSize() const;
+  LayoutUnit InlineSize(unsigned start, unsigned end) const;
+
+  void GetFallbackFonts(HashSet<const SimpleFontData*>*,
+                        unsigned start,
+                        unsigned end) const;
 
   static void Split(Vector<NGLayoutInlineItem>&,
                     unsigned index,
@@ -127,6 +150,9 @@ class NGLayoutInlineItem {
                                unsigned end_offset,
                                UBiDiLevel);
 
+  void AssertOffset(unsigned offset) const;
+  void AssertEndOffset(unsigned offset) const;
+
  private:
   unsigned start_offset_;
   unsigned end_offset_;
@@ -135,11 +161,28 @@ class NGLayoutInlineItem {
   FontFallbackPriority fallback_priority_;
   bool rotate_sideways_;
   const ComputedStyle* style_;
-  Vector<RefPtr<const ShapeResult>> shape_results_;
+  RefPtr<const ShapeResult> shape_result_;
   LayoutObject* layout_object_;
 
   friend class NGInlineNode;
 };
+
+inline void NGLayoutInlineItem::AssertOffset(unsigned offset) const {
+  DCHECK(offset >= start_offset_ && offset < end_offset_);
+}
+
+inline void NGLayoutInlineItem::AssertEndOffset(unsigned offset) const {
+  DCHECK(offset >= start_offset_ && offset <= end_offset_);
+}
+
+inline void NGInlineNode::AssertOffset(unsigned index, unsigned offset) const {
+  items_[index].AssertOffset(offset);
+}
+
+inline void NGInlineNode::AssertEndOffset(unsigned index,
+                                          unsigned offset) const {
+  items_[index].AssertEndOffset(offset);
+}
 
 DEFINE_TYPE_CASTS(NGInlineNode,
                   NGLayoutInputNode,

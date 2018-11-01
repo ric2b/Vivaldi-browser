@@ -321,7 +321,7 @@ const char* ariaWidgets[] = {
 static ARIAWidgetSet* createARIARoleWidgetSet() {
   ARIAWidgetSet* widgetSet = new HashSet<String, CaseFoldingHash>();
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(ariaWidgets); ++i)
-    widgetSet->add(String(ariaWidgets[i]));
+    widgetSet->insert(String(ariaWidgets[i]));
   return widgetSet;
 }
 
@@ -724,14 +724,17 @@ bool AXObject::isHiddenForTextAlternativeCalculation() const {
   // aria-labelledby. So we need to explicitly call the style resolver to check
   // whether it's invisible or display:none, rather than relying on the style
   // cached in the LayoutObject.
-  Document* doc = getDocument();
-  if (doc && doc->frame() && getNode() && getNode()->isElementNode()) {
-    RefPtr<ComputedStyle> style =
-        doc->ensureStyleResolver().styleForElement(toElement(getNode()));
-    return style->display() == EDisplay::None ||
-           style->visibility() != EVisibility::kVisible;
+  Document* document = getDocument();
+  if (!document || !document->frame())
+    return false;
+  if (Node* node = getNode()) {
+    if (node->isConnected() && node->isElementNode()) {
+      RefPtr<ComputedStyle> style =
+          document->ensureStyleResolver().styleForElement(toElement(node));
+      return style->display() == EDisplay::None ||
+             style->visibility() != EVisibility::kVisible;
+    }
   }
-
   return false;
 }
 
@@ -744,7 +747,7 @@ String AXObject::ariaTextAlternative(bool recursive,
                                      bool* foundTextAlternative) const {
   String textAlternative;
   bool alreadyVisited = visited.contains(this);
-  visited.add(this);
+  visited.insert(this);
 
   // Step 2A from: http://www.w3.org/TR/accname-aam-1.1
   // If you change this logic, update AXNodeObject::nameFromLabelElement, too.
@@ -1348,14 +1351,25 @@ LayoutRect AXObject::getBoundsInFrameCoordinates() const {
 // Modify or take an action on an object.
 //
 
-bool AXObject::press() const {
-  Element* actionElem = actionElement();
-  if (!actionElem)
+bool AXObject::press() {
+  Document* document = getDocument();
+  if (!document)
     return false;
-  UserGestureIndicator gestureIndicator(DocumentUserGestureToken::create(
-      &actionElem->document(), UserGestureToken::NewGesture));
-  actionElem->accessKeyAction(true);
-  return true;
+
+  UserGestureIndicator gestureIndicator(
+      DocumentUserGestureToken::create(document, UserGestureToken::NewGesture));
+  Element* actionElem = actionElement();
+  if (actionElem) {
+    actionElem->accessKeyAction(true);
+    return true;
+  }
+
+  if (canSetFocusAttribute()) {
+    setFocused(true);
+    return true;
+  }
+
+  return false;
 }
 
 void AXObject::scrollToMakeVisible() const {
@@ -1505,9 +1519,15 @@ void AXObject::scrollToMakeVisibleWithSubFocus(const IntRect& subfocus) const {
   newSubfocus.move(newElementRect.x(), newElementRect.y());
   newSubfocus.move(-scrollParentRect.x(), -scrollParentRect.y());
 
-  // Recursively make sure the scroll parent itself is visible.
-  if (scrollParent->parentObject())
+  if (scrollParent->parentObject()) {
+    // Recursively make sure the scroll parent itself is visible.
     scrollParent->scrollToMakeVisibleWithSubFocus(newSubfocus);
+  } else {
+    // To minimize the number of notifications, only fire one on the topmost
+    // object that has been scrolled.
+    axObjectCache().postNotification(const_cast<AXObject*>(this),
+                                     AXObjectCacheImpl::AXLocationChanged);
+  }
 }
 
 void AXObject::scrollToGlobalPoint(const IntPoint& globalPoint) const {
@@ -1569,6 +1589,13 @@ void AXObject::scrollToGlobalPoint(const IntPoint& globalPoint) const {
       offsetY = 0;
     }
   }
+
+  // To minimize the number of notifications, only fire one on the topmost
+  // object that has been scrolled.
+  DCHECK(objects[0]);
+  // TODO(nektar): Switch to postNotification(objects[0] and remove |getNode|.
+  axObjectCache().postNotification(objects[0]->getNode(),
+                                   AXObjectCacheImpl::AXLocationChanged);
 }
 
 void AXObject::setSequentialFocusNavigationStartingPoint() {
@@ -1640,7 +1667,7 @@ AccessibilityRole AXObject::ariaRoleToWebCoreRole(const String& value) {
   value.split(' ', roleVector);
   AccessibilityRole role = UnknownRole;
   for (const auto& child : roleVector) {
-    role = roleMap->get(child);
+    role = roleMap->at(child);
     if (role)
       return role;
   }

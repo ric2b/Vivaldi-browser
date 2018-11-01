@@ -17,7 +17,6 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_util.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/grit/chromium_strings.h"
@@ -31,6 +30,10 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if defined(OS_WIN)
+#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_util.h"
+#endif
 
 namespace metrics_util = password_manager::metrics_util;
 
@@ -255,8 +258,11 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
   }
 
   if (state_ == password_manager::ui::CONFIRMATION_STATE) {
-    base::string16 save_confirmation_link =
-        l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_LINK);
+    base::string16 save_confirmation_link = base::UTF8ToUTF16(
+        GURL(base::ASCIIToUTF16(
+                 password_manager::kPasswordManagerAccountDashboardURL))
+            .host());
+
     size_t offset;
     save_confirmation_text_ =
         l10n_util::GetStringFUTF16(IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TEXT,
@@ -372,6 +378,13 @@ void ManagePasswordsBubbleModel::OnManageLinkClicked() {
   delegate_->NavigateToPasswordManagerSettingsPage();
 }
 
+void ManagePasswordsBubbleModel::
+    OnNavigateToPasswordManagerAccountDashboardLinkClicked() {
+  interaction_keeper_->set_dismissal_reason(
+      metrics_util::CLICKED_PASSWORDS_DASHBOARD);
+  delegate_->NavigateToPasswordManagerAccountDashboard();
+}
+
 void ManagePasswordsBubbleModel::OnBrandLinkClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_BRAND_NAME);
   delegate_->NavigateToSmartLockHelpPage();
@@ -446,17 +459,19 @@ bool ManagePasswordsBubbleModel::ReplaceToShowPromotionIfNeeded() {
     interaction_keeper_->set_sign_in_promo_shown_count(show_count);
     return true;
   }
-  // Desktop to mobile promotion.
-  if (desktop_ios_promotion::IsEligibleForIOSPromotion()) {
+#if defined(OS_WIN)
+  // Desktop to mobile promotion only enabled on windows.
+  if (desktop_ios_promotion::IsEligibleForIOSPromotion(
+          prefs, sync_service,
+          desktop_ios_promotion::PromotionEntryPoint::SAVE_PASSWORD_BUBBLE)) {
     interaction_keeper_->ReportInteractions(this);
     title_brand_link_range_ = gfx::Range();
-    title_ = l10n_util::GetStringUTF16(
-        IDS_PASSWORD_MANAGER_DESKTOP_TO_IOS_PROMO_TITLE);
+    title_ = desktop_ios_promotion::GetPromoTitle(
+        desktop_ios_promotion::PromotionEntryPoint::SAVE_PASSWORD_BUBBLE);
     state_ = password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE;
-    // TODO(crbug.com/676655): Update impression count.
-    // TODO(crbug.com/676655): Add required logging.
     return true;
   }
+#endif
   return false;
 }
 

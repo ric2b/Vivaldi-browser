@@ -102,6 +102,7 @@ class AuraTestBase : public testing::Test,
       Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) override;
+  void OnWmSetCanFocus(Window* window, bool can_focus) override;
   Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
@@ -125,7 +126,6 @@ class AuraTestBase : public testing::Test,
       const std::vector<gfx::Rect>& additional_client_areas) override;
   bool IsWindowActive(aura::Window* window) override;
   void OnWmDeactivateWindow(Window* window) override;
-  client::CaptureClient* GetCaptureClient() override;
   PropertyConverter* GetPropertyConverter() override;
 
  private:
@@ -158,6 +158,18 @@ class AuraTestBaseWithType : public AuraTestBase,
   bool setup_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AuraTestBaseWithType);
+};
+
+class AuraTestBaseMus : public AuraTestBase {
+ public:
+  AuraTestBaseMus();
+  ~AuraTestBaseMus() override;
+
+  // AuraTestBase:
+  void SetUp() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AuraTestBaseMus);
 };
 
 }  // namespace test

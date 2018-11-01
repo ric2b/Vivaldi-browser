@@ -107,6 +107,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/download/intercept_download_resource_throttle.h"
+#include "chrome/browser/android/offline_pages/background_loader_offliner.h"
 #include "chrome/browser/android/offline_pages/downloads/resource_throttle.h"
 #include "chrome/browser/loader/data_reduction_proxy_resource_throttle_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
@@ -374,8 +375,16 @@ void NotifyUIThreadOfRequestComplete(
     LogMainFrameMetricsOnUIThread(url, net_error, request_loading_time,
                                   web_contents);
   }
-  if (!was_cached)
+  if (!was_cached) {
     UpdatePrerenderNetworkBytesCallback(web_contents, total_received_bytes);
+#if defined(OS_ANDROID)
+    offline_pages::BackgroundLoaderOffliner* background_loader =
+        offline_pages::BackgroundLoaderOffliner::FromWebContents(web_contents);
+
+    if (background_loader)
+      background_loader->OnNetworkBytesChanged(total_received_bytes);
+#endif  // OS_ANDROID
+  }
   page_load_metrics::MetricsWebContentsObserver* metrics_observer =
       page_load_metrics::MetricsWebContentsObserver::FromWebContents(
           web_contents);
@@ -567,14 +576,21 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
                                     content::RESOURCE_TYPE_MAIN_FRAME,
                                     throttles);
 #if defined(OS_ANDROID)
-    throttles->push_back(
-        base::MakeUnique<InterceptDownloadResourceThrottle>(
-            request, info->GetWebContentsGetterForRequest()));
     // On Android, forward text/html downloads to OfflinePages backend.
     throttles->push_back(
         base::MakeUnique<offline_pages::downloads::ResourceThrottle>(request));
 #endif
   }
+
+#if defined(OS_ANDROID)
+  // Add the InterceptDownloadResourceThrottle after calling
+  // AppendStandardResourceThrottles so the download will not bypass
+  // safebrowsing checks.
+  if (is_content_initiated) {
+    throttles->push_back(base::MakeUnique<InterceptDownloadResourceThrottle>(
+        request, info->GetWebContentsGetterForRequest()));
+  }
+#endif
 }
 
 ResourceDispatcherHostLoginDelegate*
@@ -881,12 +897,18 @@ content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(
   data_reduction_proxy::DataReductionProxyIOData* data_reduction_proxy_io_data =
       io_data->data_reduction_proxy_io_data();
 
+  content::PreviewsState previews_state = content::PREVIEWS_UNSPECIFIED;
+
   if (data_reduction_proxy_io_data) {
-    return data_reduction_proxy_io_data->ShouldEnableLoFiMode(url_request)
-               ? content::SERVER_LOFI_ON
-               : content::PREVIEWS_OFF;
+    if (data_reduction_proxy_io_data->ShouldEnableLoFi(url_request))
+      previews_state |= content::SERVER_LOFI_ON;
+    if (data_reduction_proxy_io_data->ShouldEnableLitePages(url_request))
+      previews_state |= content::SERVER_LITE_PAGE_ON;
   }
-  return content::PREVIEWS_OFF;
+
+  if (previews_state == content::PREVIEWS_UNSPECIFIED)
+    return content::PREVIEWS_OFF;
+  return previews_state;
 }
 
 // static

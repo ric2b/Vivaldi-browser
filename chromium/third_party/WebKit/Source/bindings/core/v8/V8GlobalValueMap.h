@@ -5,11 +5,11 @@
 #ifndef V8GlobalValueMap_h
 #define V8GlobalValueMap_h
 
+#include "v8-util.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashMap.h"
 #include "wtf/text/StringHash.h"
-#include <v8-util.h>
-#include <v8.h>
 
 namespace blink {
 
@@ -48,7 +48,7 @@ class V8GlobalValueMapTraits {
     return oldValue;
   }
   static v8::PersistentContainerValue Get(const Impl* impl, KeyType key) {
-    return impl->get(key);
+    return impl->at(key);
   }
 
   static v8::PersistentContainerValue Remove(Impl* impl, KeyType key) {

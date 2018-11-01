@@ -84,6 +84,11 @@ class CONTENT_EXPORT InputRouterImpl
   friend class InputRouterImplTest;
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            SubframeTouchEventRouting);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           MainframeTouchEventRouting);
+
+  // Keeps track of last position of touch points and sets MovementXY for them.
+  void SetMovementXYForTouchPoints(blink::WebTouchEvent* event);
 
   // TouchpadTapSuppressionControllerClient
   void SendMouseEventImmediately(
@@ -250,13 +255,16 @@ class CONTENT_EXPORT InputRouterImpl
   bool touch_scroll_started_sent_;
 
   MouseWheelEventQueue wheel_event_queue_;
-  TouchEventQueue touch_event_queue_;
+  std::unique_ptr<TouchEventQueue> touch_event_queue_;
   GestureEventQueue gesture_event_queue_;
   TouchActionFilter touch_action_filter_;
   InputEventStreamValidator input_stream_validator_;
   InputEventStreamValidator output_stream_validator_;
 
   float device_scale_factor_;
+
+  // Last touch position relative to screen. Used to compute movementX/Y.
+  std::map<int, gfx::Point> global_touch_position_;
 
   DISALLOW_COPY_AND_ASSIGN(InputRouterImpl);
 };

@@ -74,8 +74,8 @@ class CORE_EXPORT ObjectPaintInvalidator {
   void invalidatePaintIncludingNonSelfPaintingLayerDescendants(
       const LayoutBoxModelObject& paintInvalidationContainer);
 
-  LayoutPoint previousLocationInBacking() const;
-  void setPreviousLocationInBacking(const LayoutPoint&);
+  LayoutPoint locationInBacking() const;
+  void setLocationInBacking(const LayoutPoint&);
 
  private:
   void invalidatePaintIncludingNonSelfPaintingLayerDescendantsInternal(
@@ -112,8 +112,12 @@ class ObjectPaintInvalidatorWithContext : public ObjectPaintInvalidator {
                             const LayoutRect& oldVisualRect,
                             const LayoutRect& newVisualRect);
 
+  void invalidatePaintRectangleWithContext(const LayoutRect&,
+                                           PaintInvalidationReason);
+
  private:
   void invalidateSelectionIfNeeded(PaintInvalidationReason);
+  bool parentFullyInvalidatedOnSameBacking();
 
   const PaintInvalidatorContext& m_context;
 };

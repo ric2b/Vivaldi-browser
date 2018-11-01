@@ -8,4 +8,4 @@
 #define LegacyTwoClientBookmarksSyncTest VivaldiLegacyTwoClientBookmarksSyncTest
 #define SyncTest VivaldiSyncTest
 
-#include "chromium/chrome/browser/sync/test/integration/two_client_bookmarks_sync_test.cc"
+#include "chromium/chrome/browser/sync/test/integration/two_client_bookmarks_sync_test.cc"  // NOLINT

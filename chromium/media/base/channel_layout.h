@@ -112,6 +112,8 @@ enum ChannelLayout {
   CHANNEL_LAYOUT_MAX = CHANNEL_LAYOUT_4_1_QUAD_SIDE
 };
 
+// Note: Do not reorder or reassign these values; other code depends on their
+// ordering to operate correctly. E.g., CoreAudio channel layout computations.
 enum Channels {
   LEFT = 0,
   RIGHT,
@@ -126,6 +128,10 @@ enum Channels {
   SIDE_RIGHT,
   CHANNELS_MAX = SIDE_RIGHT, // Must always equal the largest value ever logged.
 };
+
+// The maximum number of concurrently active channels for all possible layouts.
+// ChannelLayoutToChannelCount() will never return a value higher than this.
+constexpr int kMaxConcurrentChannels = 8;
 
 // Returns the expected channel position in an interleaved stream.  Values of -1
 // mean the channel at that index is not used for that layout.  Values range

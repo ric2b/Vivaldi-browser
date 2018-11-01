@@ -5,13 +5,13 @@
 #include "ash/common/shelf/shelf_controller.h"
 
 #include "ash/common/shelf/shelf_item_delegate.h"
-#include "ash/common/shelf/shelf_menu_model.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/root_window_controller.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -53,55 +53,31 @@ class ShelfItemDelegateMus : public ShelfItemDelegate {
   void set_title(const base::string16& title) { title_ = title; }
 
  private:
-  // This application menu model for ShelfItemDelegateMus lists open windows.
-  class ShelfMenuModelMus : public ShelfMenuModel,
-                            public ui::SimpleMenuModel::Delegate {
-   public:
-    explicit ShelfMenuModelMus(ShelfItemDelegateMus* item_delegate)
-        : ShelfMenuModel(this), item_delegate_(item_delegate) {
-      AddSeparator(ui::SPACING_SEPARATOR);
-      AddItem(0, item_delegate_->title());
-      AddSeparator(ui::SPACING_SEPARATOR);
-      for (const auto& window : item_delegate_->window_id_to_title())
-        AddItem(window.first, window.second);
-      AddSeparator(ui::SPACING_SEPARATOR);
-    }
-    ~ShelfMenuModelMus() override {}
-
-    // ShelfMenuModel:
-    bool IsCommandActive(int command_id) const override { return false; }
-
-    // ui::SimpleMenuModel::Delegate:
-    bool IsCommandIdChecked(int command_id) const override { return false; }
-    bool IsCommandIdEnabled(int command_id) const override {
-      return command_id > 0;
-    }
-    void ExecuteCommand(int command_id, int event_flags) override {
-      NOTIMPLEMENTED();
-    }
-
-   private:
-    ShelfItemDelegateMus* item_delegate_;
-
-    DISALLOW_COPY_AND_ASSIGN(ShelfMenuModelMus);
-  };
-
   // ShelfItemDelegate:
-  ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override {
+  ShelfAction ItemSelected(ui::EventType event_type,
+                           int event_flags,
+                           int64_t display_id,
+                           ShelfLaunchSource source) override {
     if (window_id_to_title_.empty()) {
       delegate_->LaunchItem();
-      return kNewWindowCreated;
+      return SHELF_ACTION_NEW_WINDOW_CREATED;
     }
     if (window_id_to_title_.size() == 1) {
-      // TODO(mash): Activate the window and return kExistingWindowActivated.
+      // TODO(mash): Activate the window and return
+      // SHELF_ACTION_WINDOW_ACTIVATED.
       NOTIMPLEMENTED();
     }
-    return kNoAction;
+    return SHELF_ACTION_NONE;
   }
 
-  ShelfMenuModel* CreateApplicationMenu(int event_flags) override {
-    return new ShelfMenuModelMus(this);
+  ShelfAppMenuItemList GetAppMenuItems(int event_flags) override {
+    // Return an empty item list to avoid showing an application menu.
+    return ShelfAppMenuItemList();
+  }
+
+  void ExecuteCommand(uint32_t command_id, int event_flags) override {
+    // This delegate does not support showing an application menu.
+    NOTIMPLEMENTED();
   }
 
   void Close() override { NOTIMPLEMENTED(); }
@@ -187,9 +163,6 @@ void ShelfController::AddObserver(
 
 void ShelfController::SetAlignment(ShelfAlignment alignment,
                                    int64_t display_id) {
-  if (!ash::WmShelf::CanChangeShelfAlignment())
-    return;
-
   WmShelf* shelf = GetShelfForDisplay(display_id);
   // TODO(jamescook): The initialization check should not be necessary, but
   // otherwise this wrongly tries to set the alignment on a secondary display

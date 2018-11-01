@@ -164,8 +164,6 @@ static_library("content_shell_lib") {
     "common/shell_origin_trial_policy.h",
     "common/shell_switches.cc",
     "common/shell_switches.h",
-    "common/shell_test_configuration.cc",
-    "common/shell_test_configuration.h",
     "renderer/layout_test/blink_test_helpers.cc",
     "renderer/layout_test/blink_test_helpers.h",
     "renderer/layout_test/blink_test_runner.cc",
@@ -225,7 +223,6 @@ static_library("content_shell_lib") {
     "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
     "//components/keyed_service/content",
     "//components/plugins/renderer",
-    "//components/test_runner:test_runner",
     "//components/url_formatter",
     "//components/web_cache/renderer",
     "//content:resources",
@@ -233,6 +230,7 @@ static_library("content_shell_lib") {
     "//content/app/strings",
     "//content/gpu",
     "//content/public/common:service_names",
+    "//content/shell/test_runner:test_runner",
     "//content/test:content_test_mojo_bindings",
     "//content/test:layouttest_support",
     "//content/test:test_support",
@@ -279,6 +277,7 @@ static_library("content_shell_lib") {
 
   if (enable_plugins) {
     deps += [
+      "//cc/paint",
       "//content/ppapi_plugin",
       "//ppapi:blink_deprecated_test_plugin",
       "//ppapi:blink_test_plugin",
@@ -370,7 +369,7 @@ static_library("content_shell_lib") {
   }
 
   if (is_linux) {
-    deps += [ "//third_party/freetype2" ]
+    deps += [ "//third_party/freetype-android:freetype" ]
   }
 
   if (!enable_plugins) {
@@ -385,6 +384,7 @@ grit("content_shell_resources_grit") {
   # External code should depend on ":resources" instead.
   visibility = [ ":*" ]
   source = "shell_resources.grd"
+  use_qualified_include = true
   outputs = [
     "grit/shell_resources.h",
     "shell_resources.pak",
@@ -409,10 +409,10 @@ group("resources") {
     ":copy_shell_resources",
   ]
   deps = [
-    "//components/test_runner:resources",
+    "//content/shell/test_runner:resources",
   ]
   data_deps = [
-    "//components/test_runner:resources",
+    "//content/shell/test_runner:resources",
   ]
 }
 
@@ -451,7 +451,7 @@ repack("pak") {
         [ "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak" ]
   }
 
-  sources += [ "$root_gen_dir/blink/devtools_resources.pak" ]
+  sources += [ "$root_gen_dir/content/browser/devtools/devtools_resources.pak" ]
   deps += [ "//content/browser/devtools:resources" ]
   output = "$root_out_dir/content_shell.pak"
 }
@@ -487,7 +487,7 @@ if (is_android) {
       # TODO(rsesek): Remove this after GYP is gone, since it only needs to
       # be here per the comment in blink_test_platform_support_mac.mm about
       # the bundle structure.
-      "//components/test_runner:resources",
+      "//content/shell/test_runner:resources",
     ]
     ldflags = [
       # The main app is at Content Shell.app/Contents/MacOS/Content Shell
@@ -760,6 +760,51 @@ if (is_mac) {
 
 mojom("mojo_bindings") {
   sources = [
+    "common/layout_test.mojom",
     "common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom",
   ]
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
+    "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+group("content_shell_crash_test") {
+  testonly = true
+  data_deps = [
+    ":content_shell",
+    "//third_party/mesa:osmesa",
+  ]
+  data = [
+    "//content/shell/tools/breakpad_integration_test.py",
+    "//testing/scripts/common.py",
+    "//testing/scripts/content_shell_crash_test.py",
+    "//testing/xvfb.py",
+  ]
+  if (is_posix) {
+    data += [
+      "//components/crash/content/tools/generate_breakpad_symbols.py",
+      "//components/crash/content/tools/dmp2minidump.py",
+    ]
+  }
+  if (is_win) {
+    data_deps += [ ":content_shell_crash_service" ]
+  }
+  if (is_posix && !is_android) {
+    data_deps += [
+      "//breakpad:dump_syms($host_toolchain)",
+      "//breakpad:minidump_stackwalk($host_toolchain)",
+    ]
+  }
+  if (is_android) {
+    data_deps += [
+      "//breakpad:dump_syms",
+      "//breakpad:microdump_stackwalk",
+      "//breakpad:minidump_dump",
+      "//breakpad:minidump_stackwalk",
+      "//breakpad:symupload",
+      "//tools/android/forwarder2",
+    ]
+  }
 }

@@ -140,7 +140,7 @@ InterpolationValue CSSSizeListInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSSizeListInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   return maybeConvertCSSSizeList(value);
 }
@@ -155,8 +155,7 @@ PairwiseInterpolationValue CSSSizeListInterpolationType::maybeMergeSingles(
 
 InterpolationValue
 CSSSizeListInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  const ComputedStyle& style = *state.style();
+    const ComputedStyle& style) const {
   return convertSizeList(
       SizeListPropertyFunctions::getSizeList(cssProperty(), style),
       style.effectiveZoom());

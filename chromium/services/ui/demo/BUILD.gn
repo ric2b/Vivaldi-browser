@@ -2,15 +2,32 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ui.gni")
+import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
 source_set("lib") {
   sources = [
     "mus_demo.cc",
     "mus_demo.h",
+    "window_tree_data.cc",
+    "window_tree_data.h",
   ]
+
+  if (use_ozone && !is_chromeos) {
+    sources += [
+      "mus_demo_external.cc",
+      "mus_demo_external.h",
+    ]
+  } else {
+    sources += [
+      "mus_demo_internal.cc",
+      "mus_demo_internal.h",
+    ]
+  }
 
   public_deps = [
     "//services/service_manager/public/cpp:sources",
@@ -32,16 +49,21 @@ source_set("lib") {
 }
 
 service("mus_demo") {
-  sources = [
-    "main.cc",
-  ]
+  if (use_ozone && !is_chromeos) {
+    sources = [
+      "main_external.cc",
+    ]
+  } else {
+    sources = [
+      "main_internal.cc",
+    ]
+  }
 
   deps = [
     ":lib",
   ]
 
   data_deps = [
-    ":manifest",
     "//services/ui",
   ]
 }
@@ -56,31 +78,40 @@ service_manifest("test_manifest") {
   source = "test_manifest.json"
 }
 
-test("mus_demo_unittests") {
+service_test("mus_demo_unittests") {
   testonly = true
 
   sources = [
     "mus_demo_unittests.cc",
   ]
 
+  catalog = ":mus_demo_unittests_catalog"
+
   deps = [
     ":demo",
     "//base",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/ui/common:run_all_service_tests",
     "//services/ui/public/interfaces",
     "//testing/gtest",
   ]
 
   data_deps = [
     ":mus_demo",
-    ":test_manifest",
   ]
 }
 
 group("demo") {
   deps = [
     ":mus_demo",
+  ]
+}
+
+catalog("mus_demo_unittests_catalog") {
+  embedded_services = [ ":test_manifest" ]
+
+  standalone_services = [
+    ":manifest",
+    "//services/ui:manifest",
   ]
 }

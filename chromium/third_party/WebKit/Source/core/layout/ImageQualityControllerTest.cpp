@@ -55,13 +55,12 @@ class TestImageAnimated : public Image {
   }
   IntSize size() const override { return IntSize(); }
   void destroyDecodedData() override {}
-  void draw(SkCanvas*,
-            const SkPaint&,
+  void draw(PaintCanvas*,
+            const PaintFlags&,
             const FloatRect& dstRect,
             const FloatRect& srcRect,
             RespectImageOrientationEnum,
-            ImageClampingMode,
-            const ColorBehavior&) override {}
+            ImageClampingMode) override {}
   sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override {
     return nullptr;
   }
@@ -86,13 +85,12 @@ class TestImageWithContrast : public Image {
   }
   IntSize size() const override { return IntSize(); }
   void destroyDecodedData() override {}
-  void draw(SkCanvas*,
-            const SkPaint&,
+  void draw(PaintCanvas*,
+            const PaintFlags&,
             const FloatRect& dstRect,
             const FloatRect& srcRect,
             RespectImageOrientationEnum,
-            ImageClampingMode,
-            const ColorBehavior&) override {}
+            ImageClampingMode) override {}
 
   bool isBitmapImage() const override { return true; }
   sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override {
@@ -121,13 +119,12 @@ class TestImageLowQuality : public Image {
   }
   IntSize size() const override { return IntSize(1, 1); }
   void destroyDecodedData() override {}
-  void draw(SkCanvas*,
-            const SkPaint&,
+  void draw(PaintCanvas*,
+            const PaintFlags&,
             const FloatRect& dstRect,
             const FloatRect& srcRect,
             RespectImageOrientationEnum,
-            ImageClampingMode,
-            const ColorBehavior&) override {}
+            ImageClampingMode) override {}
 
   bool isBitmapImage() const override { return true; }
   sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override {

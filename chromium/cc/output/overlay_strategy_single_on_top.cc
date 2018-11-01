@@ -19,9 +19,11 @@ OverlayStrategySingleOnTop::OverlayStrategySingleOnTop(
 
 OverlayStrategySingleOnTop::~OverlayStrategySingleOnTop() {}
 
-bool OverlayStrategySingleOnTop::Attempt(ResourceProvider* resource_provider,
-                                         RenderPass* render_pass,
-                                         OverlayCandidateList* candidate_list) {
+bool OverlayStrategySingleOnTop::Attempt(
+    ResourceProvider* resource_provider,
+    RenderPass* render_pass,
+    OverlayCandidateList* candidate_list,
+    std::vector<gfx::Rect>* content_bounds) {
   QuadList* quad_list = &render_pass->quad_list;
   for (auto it = quad_list->begin(); it != quad_list->end(); ++it) {
     OverlayCandidate candidate;
@@ -39,6 +41,10 @@ bool OverlayStrategySingleOnTop::TryOverlay(
     OverlayCandidateList* candidate_list,
     const OverlayCandidate& candidate,
     QuadList::Iterator candidate_iterator) {
+  // Reject transformed overlays.
+  // TODO(dcastagna): Remove this once drm platform supports transforms.
+  if (candidate.transform != gfx::OVERLAY_TRANSFORM_NONE)
+    return false;
   // Check that no prior quads overlap it.
   if (OverlayCandidate::IsOccluded(candidate, quad_list->cbegin(),
                                    candidate_iterator))

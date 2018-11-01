@@ -47,7 +47,7 @@ class ArcAppDeferredLauncherController
   void OnAppRemoved(const std::string& app_id) override;
 
   // arc::ArcSessionManager::Observer:
-  void OnArcOptInChanged(bool enabled) override;
+  void OnArcPlayStoreEnabledChanged(bool enabled) override;
 
   // Removes entry from the list of tracking items.
   void Remove(const std::string& app_id);
@@ -58,7 +58,7 @@ class ArcAppDeferredLauncherController
 
  private:
   // Defines mapping of a shelf app id to a corresponded controller. Shelf app
-  // id is optional mapping (for example, Play Store to Arc Host Support).
+  // id is optional mapping (for example, Play Store to ARC Host Support).
   using AppControllerMap =
       std::map<std::string, ArcAppDeferredLauncherItemController*>;
 

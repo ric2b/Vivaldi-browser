@@ -217,6 +217,10 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   LayoutRect debugRect() const override;
 
+  void autosizingMultiplerChanged() {
+    m_knownToHaveNoOverflowAndNoFallbackFonts = false;
+  }
+
  protected:
   void willBeDestroyed() override;
 
@@ -352,6 +356,7 @@ inline LayoutText* Text::layoutObject() const {
 }
 
 void applyTextTransform(const ComputedStyle*, String&, UChar);
+AtomicString localeForLineBreakIterator(const ComputedStyle&);
 
 }  // namespace blink
 

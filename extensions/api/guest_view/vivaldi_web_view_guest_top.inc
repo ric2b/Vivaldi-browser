@@ -19,24 +19,23 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 
 #ifdef USE_AURA
+#include "base/timer/timer.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/cursor_client_observer.h"
 #include "ui/aura/window.h"
-#include "base/timer/timer.h"
-#endif // USE_AURA
-
+#endif  // USE_AURA
 
 namespace extensions {
 
 class ExtensionHostForWebContents : public ExtensionHost {
-  public:
-  ExtensionHostForWebContents(const Extension *extension,
-                              content::SiteInstance *site_instance,
-                              const GURL &url, ViewType host_type,
-                              content::WebContents *host_contents);
+ public:
+  ExtensionHostForWebContents(const Extension* extension,
+                              content::SiteInstance* site_instance,
+                              const GURL& url,
+                              ViewType host_type,
+                              content::WebContents* host_contents);
 
   ~ExtensionHostForWebContents() override;
-
 };
 
-} //extensions
+}  // extensions

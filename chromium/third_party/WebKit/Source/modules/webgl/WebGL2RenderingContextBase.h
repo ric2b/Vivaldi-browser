@@ -1067,9 +1067,6 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   void resetUnpackParameters() override;
   void restoreUnpackParameters() override;
 
-  void visitChildDOMWrappers(v8::Isolate*,
-                             const v8::Persistent<v8::Object>&) override;
-
   void renderbufferStorageHelper(GLenum target,
                                  GLsizei samples,
                                  GLenum internalformat,

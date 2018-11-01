@@ -28,6 +28,7 @@
 #endif
 
 #include "app/vivaldi_resources.h"
+#include "browser/shell_integration/vivaldi_shell_integration.h"
 #include "importer/viv_importer.h"
 #include "importer/chromium_profile_importer.h"
 
@@ -137,7 +138,7 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
   // The first run import will automatically take settings from the first
   // profile detected, which should be the user's current default.
 #if defined(OS_WIN)
-  if (shell_integration::IsOperaDefaultBrowser()) {
+  if (vivaldi::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     DetectBuiltinWindowsProfiles(&profiles);
@@ -148,19 +149,19 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     viv_importer::DetectOperaProfiles(&profiles);
     DetectBuiltinWindowsProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
-  } else if (shell_integration::IsChromeDefaultBrowser()) {
+  } else if (vivaldi::IsChromeDefaultBrowser()) {
     DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
     DetectBuiltinWindowsProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
-  }else {
+  } else {
     DetectBuiltinWindowsProfiles(&profiles);
     viv_importer::DetectOperaProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
   }
 #elif defined(OS_MACOSX)
-  if (shell_integration::IsOperaDefaultBrowser()) {
+  if (vivaldi::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     DetectSafariProfiles(&profiles);

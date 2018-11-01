@@ -5,6 +5,8 @@
 
 #include "sync/vivaldi_invalidation_service.h"
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
@@ -12,7 +14,6 @@
 #include "components/signin/core/browser/profile_identity_provider.h"
 #include "sync/vivaldi_profile_oauth2_token_service_factory.h"
 #include "sync/vivaldi_signin_manager_factory.h"
-
 
 namespace vivaldi {
 

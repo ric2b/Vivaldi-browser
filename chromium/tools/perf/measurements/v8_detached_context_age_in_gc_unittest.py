@@ -27,8 +27,9 @@ class FakeTab(object):
     self.histograms = histograms
     self.current_histogram_index = 0
 
-  def EvaluateJavaScript(self, script):
-    if 'V8.DetachedContextAgeInGC' in script:
+  def EvaluateJavaScript(self, script, **kwargs):
+    histogram_name = 'V8.DetachedContextAgeInGC'
+    if kwargs.get('name') == histogram_name or histogram_name in script:
       self.current_histogram_index += 1
       return self.histograms[self.current_histogram_index - 1]
     return '{}'

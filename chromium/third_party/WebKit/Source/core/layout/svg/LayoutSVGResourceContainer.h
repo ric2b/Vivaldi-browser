@@ -21,7 +21,7 @@
 #define LayoutSVGResourceContainer_h
 
 #include "core/layout/svg/LayoutSVGHiddenContainer.h"
-#include "core/svg/SVGDocumentExtensions.h"
+#include "core/svg/SVGTreeScopeResources.h"
 
 namespace blink {
 
@@ -62,7 +62,7 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
            resourceType == RadialGradientResourceType;
   }
 
-  void idChanged();
+  void idChanged(const AtomicString& oldId, const AtomicString& newId);
 
   void invalidateCacheAndMarkForLayout(SubtreeLayoutScope* = nullptr);
 
@@ -99,9 +99,6 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   void removeClient(LayoutObject*);
   void detachAllClients();
 
-  void registerResource();
-
-  AtomicString m_id;
   // Track global (markAllClientsForInvalidation) invals to avoid redundant
   // crawls.
   unsigned m_invalidationMask : 8;
@@ -113,23 +110,11 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   HashSet<LayoutObject*> m_clients;
 };
 
-inline LayoutSVGResourceContainer* getLayoutSVGResourceContainerById(
-    TreeScope& treeScope,
-    const AtomicString& id) {
-  if (id.isEmpty())
-    return nullptr;
-
-  if (LayoutSVGResourceContainer* layoutResource =
-          treeScope.document().accessSVGExtensions().resourceById(id))
-    return layoutResource;
-
-  return nullptr;
-}
-
 template <typename Layout>
-Layout* getLayoutSVGResourceById(TreeScope& treeScope, const AtomicString& id) {
+Layout* getLayoutSVGResourceById(SVGTreeScopeResources& treeScopeResources,
+                                 const AtomicString& id) {
   if (LayoutSVGResourceContainer* container =
-          getLayoutSVGResourceContainerById(treeScope, id)) {
+          treeScopeResources.resourceById(id)) {
     if (container->resourceType() == Layout::s_resourceType)
       return static_cast<Layout*>(container);
   }

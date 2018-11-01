@@ -312,8 +312,9 @@ class IndexedDBDatabase::DeleteRequest
   }
 
   void DoDelete() {
-    leveldb::Status s =
-        db_->backing_store_->DeleteDatabase(db_->metadata_.name);
+    leveldb::Status s;
+    if (db_->backing_store_)
+      s = db_->backing_store_->DeleteDatabase(db_->metadata_.name);
     if (!s.ok()) {
       // TODO(jsbell): Consider including sanitized leveldb status message.
       IndexedDBDatabaseError error(blink::WebIDBDatabaseExceptionUnknownError,
@@ -1683,10 +1684,9 @@ leveldb::Status IndexedDBDatabase::DeleteRangeOperation(
     IndexedDBTransaction* transaction) {
   IDB_TRACE1("IndexedDBDatabase::DeleteRangeOperation", "txn.id",
              transaction->id());
-  size_t delete_count = 0;
   leveldb::Status s =
       backing_store_->DeleteRange(transaction->BackingStoreTransaction(), id(),
-                                  object_store_id, *key_range, &delete_count);
+                                  object_store_id, *key_range);
   if (!s.ok())
     return s;
   callbacks->OnSuccess();
@@ -1852,8 +1852,13 @@ void IndexedDBDatabase::OpenConnection(
 }
 
 void IndexedDBDatabase::DeleteDatabase(
-    scoped_refptr<IndexedDBCallbacks> callbacks) {
+    scoped_refptr<IndexedDBCallbacks> callbacks,
+    bool force_close) {
   AppendRequest(base::MakeUnique<DeleteRequest>(this, callbacks));
+  // Close the connections only after the request is queued to make sure
+  // the store is still open.
+  if (force_close)
+    ForceClose();
 }
 
 void IndexedDBDatabase::ForceClose() {

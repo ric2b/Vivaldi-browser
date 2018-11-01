@@ -28,10 +28,9 @@
 
 #include "core/CoreExport.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
-
-class SkPaint;
 
 namespace blink {
 
@@ -49,11 +48,15 @@ class CORE_EXPORT FilterEffectBuilder final {
   STACK_ALLOCATED();
 
  public:
+  FilterEffectBuilder(const FloatRect& zoomedReferenceBox,
+                      float zoom,
+                      const PaintFlags* fillFlags = nullptr,
+                      const PaintFlags* strokeFlags = nullptr);
   FilterEffectBuilder(Node*,
                       const FloatRect& zoomedReferenceBox,
                       float zoom,
-                      const SkPaint* fillPaint = nullptr,
-                      const SkPaint* strokePaint = nullptr);
+                      const PaintFlags* fillFlags = nullptr,
+                      const PaintFlags* strokeFlags = nullptr);
 
   Filter* buildReferenceFilter(SVGFilterElement&,
                                FilterEffect* previousEffect,
@@ -70,8 +73,8 @@ class CORE_EXPORT FilterEffectBuilder final {
   Member<Node> m_targetContext;
   FloatRect m_referenceBox;
   float m_zoom;
-  const SkPaint* m_fillPaint;
-  const SkPaint* m_strokePaint;
+  const PaintFlags* m_fillFlags;
+  const PaintFlags* m_strokeFlags;
 };
 
 }  // namespace blink

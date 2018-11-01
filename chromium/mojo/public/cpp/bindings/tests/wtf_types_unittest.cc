@@ -14,6 +14,7 @@
 #include "mojo/public/interfaces/bindings/tests/test_wtf_types.mojom-blink.h"
 #include "mojo/public/interfaces/bindings/tests/test_wtf_types.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/Source/wtf/text/StringHash.h"
 
 namespace mojo {
 namespace test {
@@ -75,9 +76,9 @@ WTF::Vector<WTF::String> ConstructStringArray() {
 WTF::HashMap<WTF::String, WTF::String> ConstructStringMap() {
   WTF::HashMap<WTF::String, WTF::String> str_map;
   // A null string as value.
-  str_map.add("0", WTF::String());
-  str_map.add("1", kHelloWorld);
-  str_map.add("2", WTF::String::fromUTF8(kUTF8HelloWorld));
+  str_map.insert("0", WTF::String());
+  str_map.insert("1", kHelloWorld);
+  str_map.insert("2", WTF::String::fromUTF8(kUTF8HelloWorld));
 
   return str_map;
 }
@@ -157,9 +158,7 @@ TEST_F(WTFTypesTest, Serialization_WTFVectorToStlVector) {
 }
 
 TEST_F(WTFTypesTest, Serialization_PublicAPI) {
-  blink::TestWTFStructPtr input(blink::TestWTFStruct::New());
-  input->str = kHelloWorld;
-  input->integer = 42;
+  blink::TestWTFStructPtr input(blink::TestWTFStruct::New(kHelloWorld, 42));
 
   blink::TestWTFStructPtr cloned_input = input.Clone();
 

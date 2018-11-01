@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
-#define VIVALDI_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
+#ifndef NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
+#define NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -29,4 +29,4 @@ class NotesModelLoadedObserver : public NotesModelObserver {
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
+#endif  // NOTES_NOTES_MODEL_LOADED_OBSERVER_H_

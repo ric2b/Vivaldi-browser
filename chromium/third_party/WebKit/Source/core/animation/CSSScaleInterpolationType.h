@@ -17,7 +17,7 @@ class CSSScaleInterpolationType : public CSSInterpolationType {
   }
 
   InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
-      const StyleResolverState&) const final;
+      const ComputedStyle&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
@@ -34,7 +34,7 @@ class CSSScaleInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   InterpolationValue maybeConvertValue(const CSSValue&,
-                                       const StyleResolverState&,
+                                       const StyleResolverState*,
                                        ConversionCheckers&) const final;
   void additiveKeyframeHook(InterpolationValue&) const final;
 

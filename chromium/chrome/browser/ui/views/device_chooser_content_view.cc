@@ -6,6 +6,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/ui/views/harmony/layout_delegate.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -14,7 +16,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/table/table_view.h"
@@ -22,10 +23,6 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
-
-const int kChooserWidth = 370;
-
-const int kChooserHeight = 260;
 
 const int kThrobberDiameter = 24;
 
@@ -95,10 +92,6 @@ DeviceChooserContentView::~DeviceChooserContentView() {
   table_view_->SetModel(nullptr);
 }
 
-gfx::Size DeviceChooserContentView::GetPreferredSize() const {
-  return gfx::Size(kChooserWidth, kChooserHeight);
-}
-
 void DeviceChooserContentView::Layout() {
   gfx::Rect rect(GetContentsBounds());
   table_parent_->SetBoundsRect(rect);
@@ -116,6 +109,16 @@ void DeviceChooserContentView::Layout() {
   turn_adapter_off_help_->SizeToFit(rect.width() -
                                     2 * kAdapterOffHelpLinkPadding);
   views::View::Layout();
+}
+
+gfx::Size DeviceChooserContentView::GetPreferredSize() const {
+  constexpr int kHeight = 320;
+  constexpr int kDefaultWidth = 402;
+  int width = LayoutDelegate::Get()->GetDialogPreferredWidth(
+      LayoutDelegate::DialogWidth::MEDIUM);
+  if (!width)
+    width = kDefaultWidth;
+  return gfx::Size(width, kHeight);
 }
 
 int DeviceChooserContentView::RowCount() {
@@ -156,10 +159,8 @@ gfx::ImageSkia DeviceChooserContentView::GetIcon(int row) {
   DCHECK_GE(row, 0);
   DCHECK_LT(row, base::checked_cast<int>(num_options));
 
-  if (chooser_controller_->IsConnected(row)) {
-    return gfx::CreateVectorIcon(gfx::VectorIconId::BLUETOOTH_CONNECTED,
-                                 gfx::kChromeIconGrey);
-  }
+  if (chooser_controller_->IsConnected(row))
+    return gfx::CreateVectorIcon(kBluetoothConnectedIcon, gfx::kChromeIconGrey);
 
   int level = chooser_controller_->GetSignalStrengthLevel(row);
 

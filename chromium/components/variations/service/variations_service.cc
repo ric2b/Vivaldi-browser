@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -521,7 +522,14 @@ std::unique_ptr<VariationsService> VariationsService::CreateForTesting(
 
 void VariationsService::DoActualFetch() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!pending_seed_request_);
+
+  // Normally, there shouldn't be a |pending_request_| when this fires. However
+  // it's not impossible - for example if Chrome was paused (e.g. in a debugger
+  // or if the machine was suspended) and OnURLFetchComplete() hasn't had a
+  // chance to run yet from the previous request. In this case, don't start a
+  // new request and just let the previous one finish.
+  if (pending_seed_request_)
+    return;
 
   pending_seed_request_ = net::URLFetcher::Create(0, variations_server_url_,
                                                   net::URLFetcher::GET, this);
@@ -529,6 +537,7 @@ void VariationsService::DoActualFetch() {
       pending_seed_request_.get(),
       data_use_measurement::DataUseUserData::VARIATIONS);
   pending_seed_request_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
+                                      net::LOAD_DO_NOT_SEND_AUTH_DATA |
                                       net::LOAD_DO_NOT_SAVE_COOKIES);
   pending_seed_request_->SetRequestContext(client_->GetURLRequestContext());
   bool enable_deltas = false;

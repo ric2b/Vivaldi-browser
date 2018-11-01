@@ -62,6 +62,16 @@
     ]
   },
 
+  "NewTabPageLocation": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "NewTabPageLocation": "http://chromium.org" },
+    "pref_mappings": [
+      { "pref": "newtab_page_location_override"
+      }
+    ]
+  },
+
   "DefaultBrowserSettingEnabled": {
     "os": ["win", "mac", "linux"],
     "test_policy": { "DefaultBrowserSettingEnabled": true },
@@ -678,6 +688,16 @@
     "test_policy": { "EnableSha1ForLocalAnchors": true },
     "pref_mappings": [
       { "pref": "ssl.sha1_enabled_for_local_anchors",
+        "local_state": true
+      }
+    ]
+  },
+
+  "EnableCommonNameFallbackForLocalAnchors": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "EnableCommonNameFallbackForLocalAnchors": true },
+    "pref_mappings": [
+      { "pref": "ssl.common_name_fallback_enabled_for_local_anchors",
         "local_state": true
       }
     ]
@@ -1934,9 +1954,21 @@
   },
 
   "SSLVersionMin": {
+    "note": "This policy is retired, see https://crbug.com/487730."
   },
 
   "SSLVersionFallbackMin": {
+    "note": "This policy is retired, see https://crbug.com/621780."
+  },
+
+  "SSLVersionMax": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SSLVersionMax": "tls1.2" },
+    "pref_mappings": [
+      { "pref": "ssl.version_max",
+        "local_state": true
+      }
+    ]
   },
 
   "CertificateTransparencyEnforcementDisabledForUrls": {
@@ -1948,16 +1980,11 @@
   },
 
   "RC4Enabled": {
+    "note": "This policy is retired, see https://crbug.com/375342."
   },
 
   "DHEEnabled": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "DHEEnabled": true },
-    "pref_mappings": [
-      { "pref": "ssl.dhe_enabled",
-        "local_state": true
-      }
-    ]
+    "note": "This policy is retired, see https://crbug.com/619194."
   },
 
   "WelcomePageOnOSUpgradeEnabled": {
@@ -2015,6 +2042,14 @@
     "test_policy": { "EnableMediaRouter": true },
     "pref_mappings": [
       { "pref": "media_router.enable_media_router" }
+    ]
+  },
+
+  "ShowCastIconInToolbar": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ShowCastIconInToolbar": false },
+    "pref_mappings": [
+      { "pref": "media_router.show_cast_icon_in_toolbar" }
     ]
   },
 
@@ -2713,8 +2748,7 @@
     "can_be_recommended": false,
     "test_policy": { "ReportArcStatusEnabled": false },
     "pref_mappings": [
-      { "pref": "arc.status_reporting_enabled",
-        "local_state": true }
+      { "pref": "arc.status_reporting_enabled" }
     ]
   },
 
@@ -2904,6 +2938,12 @@
   "DeviceLoginScreenDefaultVirtualKeyboardEnabled" : {
   },
 
+  "DeviceLoginScreenLocales" : {
+  },
+
+  "DeviceLoginScreenInputMethods" : {
+  },
+
   "UptimeLimit": {
   },
 
@@ -3003,11 +3043,11 @@
     ]
   },
 
-  "LoginApps": {
+  "DeviceLoginScreenAppInstallList": {
     "os": ["chromeos"],
-    "test_policy": { "LoginApps": [ "abcdefghijklmnopabcdefghijklmnop" ] },
+    "test_policy": { "DeviceLoginScreenAppInstallList": [ "abcdefghijklmnopabcdefghijklmnop" ] },
     "pref_mappings": [
-      { "pref": "cros.device.login_apps" }
+      { "pref": "cros.device.login_screen_app_install_list" }
     ]
   },
 

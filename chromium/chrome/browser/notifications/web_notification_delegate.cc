@@ -22,7 +22,7 @@ using message_center::NotifierId;
 namespace features {
 
 const base::Feature kAllowFullscreenWebNotificationsFeature{
-  "FSNotificationsWeb", base::FEATURE_DISABLED_BY_DEFAULT
+  "FSNotificationsWeb", base::FEATURE_ENABLED_BY_DEFAULT
 };
 
 } // namespace features
@@ -42,8 +42,13 @@ std::string WebNotificationDelegate::id() const {
   return notification_id_;
 }
 
-void WebNotificationDelegate::SettingsClick() {
+bool WebNotificationDelegate::SettingsClick() {
+#if !defined(OS_CHROMEOS)
   NotificationCommon::OpenNotificationSettings(browser_context_);
+  return true;
+#else
+  return false;
+#endif
 }
 
 bool WebNotificationDelegate::ShouldDisplaySettingsButton() {

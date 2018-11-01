@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/android_apps_handler.h"
 
 #include "base/values.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"  // kSettingsAppId
 #include "ui/events/event_constants.h"
@@ -64,7 +64,7 @@ std::unique_ptr<base::DictionaryValue>
 AndroidAppsHandler::BuildAndroidAppsInfo() {
   std::unique_ptr<base::DictionaryValue> info(new base::DictionaryValue);
   bool app_ready = false;
-  if (arc::ArcSessionManager::Get()->IsArcEnabled()) {
+  if (arc::IsArcPlayStoreEnabledForProfile(profile_)) {
     std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
         ArcAppListPrefs::Get(profile_)->GetApp(arc::kSettingsAppId);
     app_ready = app_info && app_info->ready;
@@ -92,7 +92,7 @@ void AndroidAppsHandler::ShowAndroidAppsSettings(const base::ListValue* args) {
   int flags = activated_from_keyboard ? ui::EF_NONE : ui::EF_LEFT_MOUSE_BUTTON;
 
   // Settings in secondary profile cannot access ARC.
-  CHECK(arc::ArcSessionManager::IsAllowedForProfile(profile_));
+  CHECK(arc::IsArcAllowedForProfile(profile_));
   arc::LaunchAndroidSettingsApp(profile_, flags);
 }
 

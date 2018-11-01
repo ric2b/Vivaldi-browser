@@ -1,7 +1,9 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_SYNC_MODEL_H
-#define VIVALDI_SYNC_MODEL_H
+#ifndef SYNC_VIVALDI_SYNC_MODEL_H_
+#define SYNC_VIVALDI_SYNC_MODEL_H_
+
+#include <string>
 
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -27,10 +29,11 @@ class VivaldiSyncModel : public KeyedService {
 
   void newMessage(const std::string& param1, const std::string& param2);
 
+ private:
   // The observers.
   base::ObserverList<vivaldi::VivaldiSyncModelObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiSyncModel);
 };
 
-#endif  // VIVALDI_SYNC_MODEL_H
+#endif  // SYNC_VIVALDI_SYNC_MODEL_H_

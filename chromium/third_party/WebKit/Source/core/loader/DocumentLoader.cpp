@@ -29,32 +29,28 @@
 
 #include "core/loader/DocumentLoader.h"
 
+#include <memory>
 #include "core/dom/Document.h"
-#include "core/dom/DocumentParser.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/events/Event.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/FetchUtils.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/html/parser/HTMLDocumentParser.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/FrameFetchContext.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/LinkLoader.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/loader/ProgressTracker.h"
+#include "core/loader/SubresourceFilter.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/FontResource.h"
@@ -64,6 +60,11 @@
 #include "core/page/Page.h"
 #include "platform/HTTPNames.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/FetchUtils.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/HTTPParsers.h"
@@ -72,11 +73,9 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebDocumentSubresourceFilter.h"
 #include "wtf/Assertions.h"
 #include "wtf/AutoReset.h"
 #include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
@@ -105,6 +104,7 @@ DocumentLoader::DocumentLoader(LocalFrame* frame,
       m_originalRequest(req),
       m_substituteData(substituteData),
       m_request(req),
+      m_loadType(FrameLoadTypeStandard),
       m_isClientRedirect(clientRedirectPolicy ==
                          ClientRedirectPolicy::ClientRedirect),
       m_replacesCurrentHistoryItem(false),
@@ -130,9 +130,9 @@ FrameLoader& DocumentLoader::frameLoader() const {
   return m_frame->loader();
 }
 
-FrameLoaderClient& DocumentLoader::frameLoaderClient() const {
+LocalFrameClient& DocumentLoader::localFrameClient() const {
   DCHECK(m_frame);
-  FrameLoaderClient* client = m_frame->client();
+  LocalFrameClient* client = m_frame->client();
   // LocalFrame clears its |m_client| only after detaching all DocumentLoaders
   // (i.e. calls detachFromFrame() which clears |m_frame|) owned by the
   // LocalFrame's FrameLoader. So, if |m_frame| is non nullptr, |client| is
@@ -153,6 +153,7 @@ DEFINE_TRACE(DocumentLoader) {
   visitor->trace(m_fetcher);
   visitor->trace(m_mainResource);
   visitor->trace(m_writer);
+  visitor->trace(m_subresourceFilter);
   visitor->trace(m_documentLoadTiming);
   visitor->trace(m_applicationCacheHost);
   visitor->trace(m_contentSecurityPolicy);
@@ -175,13 +176,13 @@ const ResourceRequest& DocumentLoader::getRequest() const {
   return m_request;
 }
 
-const KURL& DocumentLoader::url() const {
-  return m_request.url();
+void DocumentLoader::setSubresourceFilter(
+    SubresourceFilter* subresourceFilter) {
+  m_subresourceFilter = subresourceFilter;
 }
 
-void DocumentLoader::setSubresourceFilter(
-    std::unique_ptr<WebDocumentSubresourceFilter> subresourceFilter) {
-  m_subresourceFilter = std::move(subresourceFilter);
+const KURL& DocumentLoader::url() const {
+  return m_request.url();
 }
 
 Resource* DocumentLoader::startPreload(Resource::Type type,
@@ -228,15 +229,6 @@ Resource* DocumentLoader::startPreload(Resource::Type type,
   return resource;
 }
 
-void DocumentLoader::didRedirect(const KURL& oldURL, const KURL& newURL) {
-  timing().addRedirect(oldURL, newURL);
-
-  // If a redirection happens during a back/forward navigation, don't restore
-  // any state from the old HistoryItem. There is a provisional history item for
-  // back/forward navigation only. In the other case, clearing it is a no-op.
-  frameLoader().clearProvisionalHistoryItem();
-}
-
 void DocumentLoader::dispatchLinkHeaderPreloads(
     ViewportDescriptionWrapper* viewport,
     LinkLoader::MediaPreloadPolicy mediaPolicy) {
@@ -247,16 +239,16 @@ void DocumentLoader::dispatchLinkHeaderPreloads(
 }
 
 void DocumentLoader::didChangePerformanceTiming() {
-  if (m_frame && m_frame->isMainFrame() && m_state >= Committed) {
-    frameLoaderClient().didChangePerformanceTiming();
+  if (m_frame && m_state >= Committed) {
+    localFrameClient().didChangePerformanceTiming();
   }
 }
 
 void DocumentLoader::didObserveLoadingBehavior(
     WebLoadingBehaviorFlag behavior) {
-  if (m_frame && m_frame->isMainFrame()) {
+  if (m_frame) {
     DCHECK_GE(m_state, Committed);
-    frameLoaderClient().didObserveLoadingBehavior(behavior);
+    localFrameClient().didObserveLoadingBehavior(behavior);
   }
 }
 
@@ -300,7 +292,7 @@ void DocumentLoader::notifyFinished(Resource* resource) {
     m_applicationCacheHost->failedLoadingMainResource();
 
   if (m_mainResource->resourceError().wasBlockedByResponse()) {
-    InspectorInstrumentation::canceledAfterReceivedResourceResponse(
+    probe::canceledAfterReceivedResourceResponse(
         m_frame, this, mainResourceIdentifier(), resource->response(),
         m_mainResource.get());
   }
@@ -312,7 +304,7 @@ void DocumentLoader::notifyFinished(Resource* resource) {
 void DocumentLoader::finishedLoading(double finishTime) {
   DCHECK(m_frame->loader().stateMachine()->creatingInitialEmptyDocument() ||
          !m_frame->page()->suspended() ||
-         InspectorInstrumentation::isDebuggerPaused(m_frame));
+         MainThreadDebugger::instance()->isPaused());
 
   double responseEndTime = finishTime;
   if (!responseEndTime)
@@ -375,16 +367,22 @@ bool DocumentLoader::redirectReceived(
   }
   if (!frameLoader().shouldContinueForNavigationPolicy(
           m_request, SubstituteData(), this, CheckContentSecurityPolicy,
-          m_navigationType, NavigationPolicyCurrentTab,
-          replacesCurrentHistoryItem(), isClientRedirect(), nullptr)) {
+          m_navigationType, NavigationPolicyCurrentTab, m_loadType,
+          isClientRedirect(), nullptr)) {
     m_fetcher->stopFetching();
     return false;
   }
 
   DCHECK(timing().fetchStart());
   appendRedirect(requestURL);
-  didRedirect(redirectResponse.url(), requestURL);
-  frameLoaderClient().dispatchDidReceiveServerRedirectForProvisionalLoad();
+  timing().addRedirect(redirectResponse.url(), requestURL);
+
+  // If a redirection happens during a back/forward navigation, don't restore
+  // any state from the old HistoryItem. There is a provisional history item for
+  // back/forward navigation only. In the other case, clearing it is a no-op.
+  frameLoader().clearProvisionalHistoryItem();
+
+  localFrameClient().dispatchDidReceiveServerRedirectForProvisionalLoad();
 
   return true;
 }
@@ -422,7 +420,7 @@ bool DocumentLoader::shouldContinueForResponse() const {
 
 void DocumentLoader::cancelLoadAfterCSPDenied(
     const ResourceResponse& response) {
-  InspectorInstrumentation::canceledAfterReceivedResourceResponse(
+  probe::canceledAfterReceivedResourceResponse(
       m_frame, this, mainResourceIdentifier(), response, m_mainResource.get());
 
   setWasBlockedAfterCSP();
@@ -439,7 +437,7 @@ void DocumentLoader::cancelLoadAfterCSPDenied(
   m_request.setURL(blockedURL);
   m_redirectChain.pop_back();
   appendRedirect(blockedURL);
-  m_response = ResourceResponse(blockedURL, "text/html", 0, nullAtom, String());
+  m_response = ResourceResponse(blockedURL, "text/html", 0, nullAtom);
   finishedLoading(monotonicallyIncreasingTime());
 
   return;
@@ -512,9 +510,8 @@ void DocumentLoader::responseReceived(
     m_mainResource->setDataBufferingPolicy(BufferData);
 
   if (!shouldContinueForResponse()) {
-    InspectorInstrumentation::continueWithPolicyIgnore(
-        m_frame, this, m_mainResource->identifier(), m_response,
-        m_mainResource.get());
+    probe::continueWithPolicyIgnore(m_frame, this, m_mainResource->identifier(),
+                                    m_response, m_mainResource.get());
     m_fetcher->stopFetching();
     return;
   }
@@ -708,8 +705,7 @@ bool DocumentLoader::maybeLoadEmpty() {
   if (m_request.url().isEmpty() &&
       !frameLoader().stateMachine()->creatingInitialEmptyDocument())
     m_request.setURL(blankURL());
-  m_response =
-      ResourceResponse(m_request.url(), "text/html", 0, nullAtom, String());
+  m_response = ResourceResponse(m_request.url(), "text/html", 0, nullAtom);
   finishedLoading(monotonicallyIncreasingTime());
   return true;
 }

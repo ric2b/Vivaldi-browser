@@ -45,7 +45,6 @@ namespace blink {
 template <typename T>
 class GarbageCollected;
 class HeapObjectHeader;
-class InlinedGlobalMarkingVisitor;
 template <typename T>
 class TraceTrait;
 class ThreadState;
@@ -69,62 +68,24 @@ struct TraceMethodDelegate {
   }
 };
 
-#define DECLARE_TRACE_IMPL(maybevirtual)                       \
- public:                                                       \
-  maybevirtual void trace(blink::Visitor*);                    \
-  maybevirtual void trace(blink::InlinedGlobalMarkingVisitor); \
-                                                               \
- private:                                                      \
-  template <typename VisitorDispatcher>                        \
-  void traceImpl(VisitorDispatcher);                           \
-                                                               \
- public:
-#define DEFINE_TRACE(T)                                          \
-  void T::trace(blink::Visitor* visitor) { traceImpl(visitor); } \
-  void T::trace(blink::InlinedGlobalMarkingVisitor visitor) {    \
-    traceImpl(visitor);                                          \
-  }                                                              \
-  template <typename VisitorDispatcher>                          \
-  ALWAYS_INLINE void T::traceImpl(VisitorDispatcher visitor)
+#define DECLARE_TRACE_IMPL(maybevirtual) \
+ public:                                 \
+  maybevirtual void trace(blink::Visitor*);
 
-#define DEFINE_INLINE_TRACE_IMPL(maybevirtual)                             \
-  maybevirtual void trace(blink::Visitor* visitor) { traceImpl(visitor); } \
-  maybevirtual void trace(blink::InlinedGlobalMarkingVisitor visitor) {    \
-    traceImpl(visitor);                                                    \
-  }                                                                        \
-  template <typename VisitorDispatcher>                                    \
-  inline void traceImpl(VisitorDispatcher visitor)
+#define DECLARE_TRACE_AFTER_DISPATCH() \
+ public:                               \
+  void traceAfterDispatch(blink::Visitor*);
 
-#define DECLARE_TRACE_AFTER_DISPATCH()                         \
- public:                                                       \
-  void traceAfterDispatch(blink::Visitor*);                    \
-  void traceAfterDispatch(blink::InlinedGlobalMarkingVisitor); \
-                                                               \
- private:                                                      \
-  template <typename VisitorDispatcher>                        \
-  void traceAfterDispatchImpl(VisitorDispatcher);              \
-                                                               \
- public:
+#define DEFINE_TRACE(T) void T::trace(blink::Visitor* visitor)
 
-#define DEFINE_TRACE_AFTER_DISPATCH(T)                                     \
-  void T::traceAfterDispatch(blink::Visitor* visitor) {                    \
-    traceAfterDispatchImpl(visitor);                                       \
-  }                                                                        \
-  void T::traceAfterDispatch(blink::InlinedGlobalMarkingVisitor visitor) { \
-    traceAfterDispatchImpl(visitor);                                       \
-  }                                                                        \
-  template <typename VisitorDispatcher>                                    \
-  ALWAYS_INLINE void T::traceAfterDispatchImpl(VisitorDispatcher visitor)
+#define DEFINE_INLINE_TRACE_IMPL(maybevirtual) \
+  maybevirtual void trace(blink::Visitor* visitor)
 
-#define DEFINE_INLINE_TRACE_AFTER_DISPATCH()                            \
-  void traceAfterDispatch(blink::Visitor* visitor) {                    \
-    traceAfterDispatchImpl(visitor);                                    \
-  }                                                                     \
-  void traceAfterDispatch(blink::InlinedGlobalMarkingVisitor visitor) { \
-    traceAfterDispatchImpl(visitor);                                    \
-  }                                                                     \
-  template <typename VisitorDispatcher>                                 \
-  inline void traceAfterDispatchImpl(VisitorDispatcher visitor)
+#define DEFINE_TRACE_AFTER_DISPATCH(T) \
+  void T::traceAfterDispatch(blink::Visitor* visitor)
+
+#define DEFINE_INLINE_TRACE_AFTER_DISPATCH() \
+  void traceAfterDispatch(blink::Visitor* visitor)
 
 #define EMPTY_MACRO_ARGUMENT
 
@@ -133,37 +94,40 @@ struct TraceMethodDelegate {
 #define DEFINE_INLINE_TRACE() DEFINE_INLINE_TRACE_IMPL(EMPTY_MACRO_ARGUMENT)
 #define DEFINE_INLINE_VIRTUAL_TRACE() DEFINE_INLINE_TRACE_IMPL(virtual)
 
-enum class VisitorMarkingMode {
-  // This is a default visitor. This is used for GCType=GCWithSweep
-  // and GCType=GCWithoutSweep.
-  GlobalMarking,
-  // This visitor does not trace objects outside the heap of the
-  // GCing thread. This is used for GCType=ThreadTerminationGC.
-  ThreadLocalMarking,
-  // This visitor just marks objects and ignores weak processing.
-  // This is used for GCType=TakeSnapshot.
-  SnapshotMarking,
-  // This visitor is used to trace objects during weak processing.
-  // This visitor is allowed to trace only already marked objects.
-  WeakProcessing,
-  // Perform global marking along with preparing for additional sweep
-  // compaction of heap arenas afterwards. Compared to the GlobalMarking
-  // visitor, this visitor will also register references to objects
-  // that might be moved during arena compaction -- the compaction
-  // pass will then fix up those references when the object move goes
-  // ahead.
-  GlobalMarkingWithCompaction,
-};
-
-// VisitorHelper contains common implementation of Visitor helper methods.
+// Visitor is used to traverse the Blink object graph. Used for the
+// marking phase of the mark-sweep garbage collector.
 //
-// VisitorHelper avoids virtual methods by using CRTP.
-// c.f. http://en.wikipedia.org/wiki/Curiously_Recurring_Template_Pattern
-template <typename Derived>
-class VisitorHelper {
+// Pointers are marked and pushed on the marking stack by calling the
+// |mark| method with the pointer as an argument.
+//
+// Pointers within objects are traced by calling the |trace| methods
+// with the object as an argument. Tracing objects will mark all of the
+// contained pointers and push them on the marking stack.
+class PLATFORM_EXPORT Visitor {
  public:
-  VisitorHelper(ThreadState* state, VisitorMarkingMode markingMode)
-      : m_state(state), m_markingMode(markingMode) {}
+  enum MarkingMode {
+    // This is a default visitor. This is used for GCType=GCWithSweep
+    // and GCType=GCWithoutSweep.
+    GlobalMarking,
+    // This visitor just marks objects and ignores weak processing.
+    // This is used for GCType=TakeSnapshot.
+    SnapshotMarking,
+    // This visitor is used to trace objects during weak processing.
+    // This visitor is allowed to trace only already marked objects.
+    WeakProcessing,
+    // Perform global marking along with preparing for additional sweep
+    // compaction of heap arenas afterwards. Compared to the GlobalMarking
+    // visitor, this visitor will also register references to objects
+    // that might be moved during arena compaction -- the compaction
+    // pass will then fix up those references when the object move goes
+    // ahead.
+    GlobalMarkingWithCompaction,
+  };
+
+  static std::unique_ptr<Visitor> create(ThreadState*, MarkingMode);
+
+  Visitor(ThreadState*, MarkingMode);
+  virtual ~Visitor();
 
   // One-argument templated mark method. This uses the static type of
   // the argument to get the TraceTrait. By default, the mark method
@@ -176,7 +140,7 @@ class VisitorHelper {
                   "T needs to be a garbage collected object");
     if (!t)
       return;
-    TraceTrait<T>::mark(Derived::fromHelper(this), t);
+    TraceTrait<T>::mark(this, t);
   }
 
   // Member version of the one-argument templated trace method.
@@ -223,7 +187,7 @@ class VisitorHelper {
   template <typename T>
   void traceInCollection(T& t,
                          WTF::ShouldWeakPointersBeMarkedStrongly strongify) {
-    HashTraits<T>::traceInCollection(Derived::fromHelper(this), t, strongify);
+    HashTraits<T>::traceInCollection(this, t, strongify);
   }
 
   // Fallback trace method for part objects to allow individual trace methods
@@ -242,16 +206,7 @@ class VisitorHelper {
       if (!vtable)
         return;
     }
-    TraceTrait<T>::trace(Derived::fromHelper(this), &const_cast<T&>(t));
-  }
-
-  void markNoTracing(const void* pointer) {
-    Derived::fromHelper(this)->mark(pointer,
-                                    reinterpret_cast<TraceCallback>(0));
-  }
-  void markHeaderNoTracing(HeapObjectHeader* header) {
-    Derived::fromHelper(this)->markHeader(header,
-                                          reinterpret_cast<TraceCallback>(0));
+    TraceTrait<T>::trace(this, &const_cast<T&>(t));
   }
 
   // For simple cases where you just want to zero out a cell when the thing
@@ -265,7 +220,7 @@ class VisitorHelper {
   // threads are stopped during weak cell callbacks.
   template <typename T>
   void registerWeakCell(T** cell) {
-    Derived::fromHelper(this)->registerWeakCellWithCallback(
+    registerWeakCallback(
         reinterpret_cast<void**>(
             const_cast<typename std::remove_const<T>::type**>(cell)),
         &handleWeakCell<T>);
@@ -273,67 +228,16 @@ class VisitorHelper {
 
   template <typename T, void (T::*method)(Visitor*)>
   void registerWeakMembers(const T* obj) {
-    registerWeakMembers(obj, &TraceMethodDelegate<T, method>::trampoline);
+    registerWeakCallback(const_cast<T*>(obj),
+                         &TraceMethodDelegate<T, method>::trampoline);
   }
 
-  void registerWeakMembers(const void* object, WeakCallback callback) {
-    Derived::fromHelper(this)->registerWeakMembers(object, object, callback);
-  }
 
-  void registerBackingStoreReference(void* slot) {
-    if (getMarkingMode() != VisitorMarkingMode::GlobalMarkingWithCompaction)
-      return;
-    Derived::fromHelper(this)->registerMovingObjectReference(
-        reinterpret_cast<MovableReference*>(slot));
-  }
+  inline void registerBackingStoreReference(void* slot);
 
-  void registerBackingStoreCallback(void* backingStore,
-                                    MovingObjectCallback callback,
-                                    void* callbackData) {
-    if (getMarkingMode() != VisitorMarkingMode::GlobalMarkingWithCompaction)
-      return;
-    Derived::fromHelper(this)->registerMovingObjectCallback(
-        reinterpret_cast<MovableReference>(backingStore), callback,
-        callbackData);
-  }
-
-  inline ThreadState* state() const { return m_state; }
-  inline ThreadHeap& heap() const { return state()->heap(); }
-
-  inline VisitorMarkingMode getMarkingMode() const { return m_markingMode; }
-
-  inline bool isGlobalMarking() const {
-    return m_markingMode == VisitorMarkingMode::GlobalMarking ||
-           m_markingMode == VisitorMarkingMode::GlobalMarkingWithCompaction;
-  }
-
- private:
-  template <typename T>
-  static void handleWeakCell(Visitor* self, void* object);
-
-  ThreadState* const m_state;
-  const VisitorMarkingMode m_markingMode;
-};
-
-// Visitor is used to traverse the Blink object graph. Used for the
-// marking phase of the mark-sweep garbage collector.
-//
-// Pointers are marked and pushed on the marking stack by calling the
-// |mark| method with the pointer as an argument.
-//
-// Pointers within objects are traced by calling the |trace| methods
-// with the object as an argument. Tracing objects will mark all of the
-// contained pointers and push them on the marking stack.
-class PLATFORM_EXPORT Visitor : public VisitorHelper<Visitor> {
- public:
-  friend class VisitorHelper<Visitor>;
-  friend class InlinedGlobalMarkingVisitor;
-
-  static std::unique_ptr<Visitor> create(ThreadState*, VisitorMarkingMode);
-
-  virtual ~Visitor();
-
-  using VisitorHelper<Visitor>::mark;
+  inline void registerBackingStoreCallback(void* backingStore,
+                                           MovingObjectCallback,
+                                           void* callbackData);
 
   // This method marks an object and adds it to the set of objects
   // that should have their trace method called. Since not all
@@ -341,10 +245,7 @@ class PLATFORM_EXPORT Visitor : public VisitorHelper<Visitor> {
   // explicit argument, but we can use the templated one-argument
   // mark method above to automatically provide the callback
   // function.
-  virtual void mark(const void*, TraceCallback) = 0;
-
-  // Used to mark objects during conservative scanning.
-  virtual void markHeader(HeapObjectHeader*, TraceCallback) = 0;
+  inline void mark(const void* objectPointer, TraceCallback);
 
   // Used to delay the marking of objects until the usual marking
   // including emphemeron iteration is done. This is used to delay
@@ -353,7 +254,7 @@ class PLATFORM_EXPORT Visitor : public VisitorHelper<Visitor> {
   // object. If collection backings are reachable from other
   // locations we strongify them to avoid issues with iterators and
   // weak processing.
-  virtual void registerDelayedMarkNoTracing(const void*) = 0;
+  inline void registerDelayedMarkNoTracing(const void* pointer);
 
   // If the object calls this during the regular trace callback, then the
   // WeakCallback argument may be called later, when the strong roots
@@ -367,41 +268,44 @@ class PLATFORM_EXPORT Visitor : public VisitorHelper<Visitor> {
   // that even removing things from HeapHashSet or HeapHashMap can cause
   // an allocation if the backing store resizes, but these collections know
   // how to remove WeakMember elements safely.
-  //
-  // The weak pointer callbacks are run on the thread that owns the
-  // object and other threads are not stopped during the
-  // callbacks. Since isAlive is used in the callback to determine
-  // if objects pointed to are alive it is crucial that the object
-  // pointed to belong to the same thread as the object receiving
-  // the weak callback. Since other threads have been resumed the
-  // mark bits are not valid for objects from other threads.
-  virtual void registerWeakMembers(const void*, const void*, WeakCallback) = 0;
-  using VisitorHelper<Visitor>::registerWeakMembers;
+  inline void registerWeakCallback(void* closure, WeakCallback);
 
-  virtual void registerWeakTable(const void*,
-                                 EphemeronCallback,
-                                 EphemeronCallback) = 0;
+  inline void registerWeakTable(const void* closure,
+                                EphemeronCallback iterationCallback,
+                                EphemeronCallback iterationDoneCallback);
+
 #if DCHECK_IS_ON()
-  virtual bool weakTableRegistered(const void*) = 0;
+  inline bool weakTableRegistered(const void* closure);
 #endif
 
-  virtual bool ensureMarked(const void*) = 0;
+  inline bool ensureMarked(const void* pointer);
 
-  virtual void registerMovingObjectReference(MovableReference*) = 0;
+  inline void markNoTracing(const void* pointer) {
+    mark(pointer, reinterpret_cast<TraceCallback>(0));
+  }
 
-  virtual void registerMovingObjectCallback(MovableReference,
-                                            MovingObjectCallback,
-                                            void*) = 0;
+  inline void markHeaderNoTracing(HeapObjectHeader*);
 
-  virtual void registerWeakCellWithCallback(void**, WeakCallback) = 0;
+  // Used to mark objects during conservative scanning.
+  inline void markHeader(HeapObjectHeader*,
+                         const void* objectPointer,
+                         TraceCallback);
 
- protected:
-  Visitor(ThreadState*, VisitorMarkingMode);
+  inline void markHeader(HeapObjectHeader*, TraceCallback);
+
+  inline ThreadState* state() const { return m_state; }
+  inline ThreadHeap& heap() const { return state()->heap(); }
+
+  inline MarkingMode getMarkingMode() const { return m_markingMode; }
 
  private:
-  static Visitor* fromHelper(VisitorHelper<Visitor>* helper) {
-    return static_cast<Visitor*>(helper);
-  }
+  template <typename T>
+  static void handleWeakCell(Visitor* self, void*);
+
+  static void markNoTracingCallback(Visitor*, void*);
+
+  ThreadState* const m_state;
+  const MarkingMode m_markingMode;
 };
 
 }  // namespace blink

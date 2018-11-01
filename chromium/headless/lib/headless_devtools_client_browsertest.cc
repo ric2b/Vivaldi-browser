@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "base/json/json_reader.h"
+#include "base/run_loop.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -21,6 +22,7 @@
 #include "headless/public/headless_devtools_client.h"
 #include "headless/public/headless_devtools_target.h"
 #include "headless/test/headless_browser_test.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -29,6 +31,8 @@
     EXPECT_EQ((expected).width(), (actual).width());   \
     EXPECT_EQ((expected).height(), (actual).height()); \
   } while (false)
+
+using testing::ElementsAre;
 
 namespace headless {
 
@@ -60,7 +64,11 @@ class HeadlessDevToolsClientNavigationTest
             .SetUrl(embedded_test_server()->GetURL("/hello.html").spec())
             .Build();
     devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
-    devtools_client_->GetPage()->Enable();
+    base::RunLoop run_loop;
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    run_loop.Run();
     devtools_client_->GetPage()->Navigate(std::move(params));
   }
 
@@ -153,8 +161,13 @@ class HeadlessDevToolsClientObserverTest
  public:
   void RunDevTooledTest() override {
     EXPECT_TRUE(embedded_test_server()->Start());
+    base::RunLoop run_loop;
     devtools_client_->GetNetwork()->AddObserver(this);
-    devtools_client_->GetNetwork()->Enable();
+    devtools_client_->GetNetwork()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
+
     devtools_client_->GetPage()->Navigate(
         embedded_test_server()->GetURL("/hello.html").spec());
   }
@@ -189,6 +202,12 @@ class HeadlessDevToolsClientExperimentalTest
  public:
   void RunDevTooledTest() override {
     EXPECT_TRUE(embedded_test_server()->Start());
+    base::RunLoop run_loop;
+    devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
     // Check that experimental commands require parameter objects.
     devtools_client_->GetRuntime()
         ->GetExperimental()
@@ -202,8 +221,6 @@ class HeadlessDevToolsClientExperimentalTest
     devtools_client_->GetRuntime()->GetExperimental()->RunIfWaitingForDebugger(
         runtime::RunIfWaitingForDebuggerParams::Builder().Build());
 
-    devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
-    devtools_client_->GetPage()->Enable();
     devtools_client_->GetPage()->Navigate(
         embedded_test_server()->GetURL("/hello.html").spec());
   }
@@ -635,8 +652,12 @@ class HeadlessDevToolsNavigationControlTest
  public:
   void RunDevTooledTest() override {
     EXPECT_TRUE(embedded_test_server()->Start());
+    base::RunLoop run_loop;
     devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
-    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
     devtools_client_->GetPage()->GetExperimental()->SetControlNavigations(
         headless::page::SetControlNavigationsParams::Builder()
             .SetEnabled(true)
@@ -758,8 +779,12 @@ class HeadlessDevToolsMethodCallErrorTest
  public:
   void RunDevTooledTest() override {
     EXPECT_TRUE(embedded_test_server()->Start());
+    base::RunLoop run_loop;
     devtools_client_->GetPage()->AddObserver(this);
-    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
     devtools_client_->GetPage()->Navigate(
         embedded_test_server()->GetURL("/hello.html").spec());
   }
@@ -788,5 +813,68 @@ class HeadlessDevToolsMethodCallErrorTest
 };
 
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessDevToolsMethodCallErrorTest);
+
+class HeadlessDevToolsNetworkBlockedUrlTest
+    : public HeadlessAsyncDevTooledBrowserTest,
+      public page::Observer,
+      public network::Observer {
+ public:
+  void RunDevTooledTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    base::RunLoop run_loop;
+    devtools_client_->GetPage()->AddObserver(this);
+    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetNetwork()->AddObserver(this);
+    devtools_client_->GetNetwork()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
+    devtools_client_->GetNetwork()->GetExperimental()->AddBlockedURL(
+        network::AddBlockedURLParams::Builder()
+            .SetUrl("dom_tree_test.css")
+            .Build());
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/dom_tree_test.html").spec());
+  }
+
+  std::string GetUrlPath(const std::string& url) const {
+    GURL gurl(url);
+    return gurl.path();
+  }
+
+  void OnRequestWillBeSent(
+      const network::RequestWillBeSentParams& params) override {
+    std::string path = GetUrlPath(params.GetRequest()->GetUrl());
+    requests_to_be_sent_.push_back(path);
+    request_id_to_path_[params.GetRequestId()] = path;
+  }
+
+  void OnResponseReceived(
+      const network::ResponseReceivedParams& params) override {
+    responses_received_.push_back(GetUrlPath(params.GetResponse()->GetUrl()));
+  }
+
+  void OnLoadingFailed(const network::LoadingFailedParams& failed) override {
+    failures_.push_back(request_id_to_path_[failed.GetRequestId()]);
+    EXPECT_EQ(network::BlockedReason::INSPECTOR, failed.GetBlockedReason());
+  }
+
+  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+    EXPECT_THAT(requests_to_be_sent_,
+                ElementsAre("/dom_tree_test.html", "/dom_tree_test.css",
+                            "/iframe.html"));
+    EXPECT_THAT(responses_received_,
+                ElementsAre("/dom_tree_test.html", "/iframe.html"));
+    EXPECT_THAT(failures_, ElementsAre("/dom_tree_test.css"));
+    FinishAsynchronousTest();
+  }
+
+  std::map<std::string, std::string> request_id_to_path_;
+  std::vector<std::string> requests_to_be_sent_;
+  std::vector<std::string> responses_received_;
+  std::vector<std::string> failures_;
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessDevToolsNetworkBlockedUrlTest);
 
 }  // namespace headless

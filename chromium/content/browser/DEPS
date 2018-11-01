@@ -23,15 +23,18 @@ include_rules = [
   "+device/nfc",
   "+device/power_save_blocker",
   "+device/screen_orientation/public/interfaces",
-  "+device/sensors/public",
+  "+device/sensors",
   "+device/vibration",  # For Vibration API
   "+device/vr",  # For WebVR API
   "+device/wake_lock",
+  # This can only be used on POSIX, in particular it mustn't be used on Windows
+  # in the browser DLL.
   "+gin/v8_initializer.h",
   "+mojo",
   "+services",
   "+sql",
   "+ui/aura_extra",
+  "+ui/vector_icons",
   "+ui/webui",
   "+win8/util",
 
@@ -57,15 +60,18 @@ include_rules = [
   # header-only types, and some selected common code.
   "-third_party/WebKit",
   "+third_party/WebKit/public/platform/WebAddressSpace.h",
+  "+third_party/WebKit/public/platform/WebContentSecurityPolicy.h",
   "+third_party/WebKit/public/platform/WebCursorInfo.h",
   "+third_party/WebKit/public/platform/WebDisplayMode.h",
   "+third_party/WebKit/public/platform/WebDragOperation.h",
+  "+third_party/WebKit/public/platform/WebFeaturePolicy.h",
   "+third_party/WebKit/public/platform/WebFocusType.h",
   "+third_party/WebKit/public/platform/WebGamepad.h",
   "+third_party/WebKit/public/platform/WebGamepads.h",
   "+third_party/WebKit/public/platform/WebGestureEvent.h",
   "+third_party/WebKit/public/platform/WebInputEvent.h",
   "+third_party/WebKit/public/platform/WebInsecureRequestPolicy.h",
+  "+third_party/WebKit/public/platform/WebKeyboardEvent.h",
   "+third_party/WebKit/public/platform/WebMixedContentContextType.h",
   "+third_party/WebKit/public/platform/WebMouseEvent.h",
   "+third_party/WebKit/public/platform/WebMouseWheelEvent.h",
@@ -74,16 +80,18 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
   "+third_party/WebKit/public/platform/WebSecurityStyle.h",
-  "+third_party/WebKit/public/platform/WebString.h",
+  "+third_party/WebKit/public/platform/WebTouchEvent.h",
   "+third_party/WebKit/public/platform/WebTextInputType.h",
   "+third_party/WebKit/public/platform/mime_registry.mojom.h",
   "+third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom.h",
+  "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
   "+third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
   "+third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification.mojom.h",
+  "+third_party/WebKit/public/platform/modules/notifications/notification_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
@@ -105,7 +113,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebAXEnums.h",
   "+third_party/WebKit/public/web/WebCompositionUnderline.h",
   "+third_party/WebKit/public/web/WebConsoleMessage.h",
-  "+third_party/WebKit/public/web/WebContentSecurityPolicy.h",
   "+third_party/WebKit/public/web/WebDeviceEmulationParams.h",
   "+third_party/WebKit/public/web/WebDragStatus.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",
@@ -120,11 +127,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/WebTreeScopeType.h",
   "+third_party/WebKit/public/web/mac/WebScrollbarTheme.h",
-
-  # Until we define where mojo interfaces should live in blink we whitelist each
-  # one separately.
-  "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
-  "+third_party/WebKit/public/platform/modules/notifications/notification_service.mojom.h",
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module

@@ -28,6 +28,7 @@
 #include "cc/output/copy_output_result.h"
 #include "cc/surfaces/sequence_surface_reference_factory.h"
 #include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/surface_reference_factory.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/test/pixel_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1806,7 +1807,7 @@ TEST_F(LayerWithDelegateTest, ExternalContent) {
 
   // Showing surface content changes the underlying cc layer.
   before = child->cc_layer_for_testing();
-  child->SetShowSurface(
+  child->SetShowPrimarySurface(
       cc::SurfaceInfo(cc::SurfaceId(), 1.0, gfx::Size(10, 10)),
       new TestSurfaceReferenceFactory());
   EXPECT_TRUE(child->cc_layer_for_testing());
@@ -1821,44 +1822,47 @@ TEST_F(LayerWithDelegateTest, ExternalContent) {
 
 TEST_F(LayerWithDelegateTest, ExternalContentMirroring) {
   std::unique_ptr<Layer> layer(CreateLayer(LAYER_SOLID_COLOR));
+  scoped_refptr<cc::SurfaceReferenceFactory> reference_factory(
+      new TestSurfaceReferenceFactory());
 
   cc::SurfaceId surface_id(
       cc::FrameSinkId(0, 1),
-      cc::LocalFrameId(2, base::UnguessableToken::Create()));
+      cc::LocalSurfaceId(2, base::UnguessableToken::Create()));
   cc::SurfaceInfo surface_info(surface_id, 1.0f, gfx::Size(10, 10));
-  layer->SetShowSurface(surface_info, new TestSurfaceReferenceFactory());
+  layer->SetShowPrimarySurface(surface_info, reference_factory);
 
   const auto mirror = layer->Mirror();
   auto* const cc_layer = mirror->cc_layer_for_testing();
   const auto* surface = static_cast<cc::SurfaceLayer*>(cc_layer);
 
   // Mirroring preserves surface state.
-  EXPECT_EQ(surface_info, surface->surface_info());
+  EXPECT_EQ(surface_info, surface->primary_surface_info());
 
   surface_id =
       cc::SurfaceId(cc::FrameSinkId(1, 2),
-                    cc::LocalFrameId(3, base::UnguessableToken::Create()));
+                    cc::LocalSurfaceId(3, base::UnguessableToken::Create()));
   cc::SurfaceInfo surface_info_2(surface_id, 2.0f, gfx::Size(20, 20));
-  layer->SetShowSurface(surface_info_2, new TestSurfaceReferenceFactory());
+  layer->SetShowPrimarySurface(surface_info_2, reference_factory);
 
-  // A new cc::Layer should be created for the mirror.
-  EXPECT_NE(cc_layer, mirror->cc_layer_for_testing());
-  surface = static_cast<cc::SurfaceLayer*>(mirror->cc_layer_for_testing());
+  // The mirror should continue to use the same cc_layer.
+  EXPECT_EQ(cc_layer, mirror->cc_layer_for_testing());
+  layer->SetShowPrimarySurface(surface_info_2, reference_factory);
 
   // Surface updates propagate to the mirror.
-  EXPECT_EQ(surface_info_2, surface->surface_info());
+  EXPECT_EQ(surface_info_2, surface->primary_surface_info());
 }
 
-// Test if frame size in dip is properly calculated in SetShowSurface
+// Test if frame size in dip is properly calculated in SetShowPrimarySurface.
 TEST_F(LayerWithDelegateTest, FrameSizeInDip) {
   std::unique_ptr<Layer> layer(CreateLayer(LAYER_SOLID_COLOR));
 
   cc::SurfaceId surface_id(
       cc::FrameSinkId(0, 1),
-      cc::LocalFrameId(2, base::UnguessableToken::Create()));
+      cc::LocalSurfaceId(2, base::UnguessableToken::Create()));
 
-  layer->SetShowSurface(cc::SurfaceInfo(surface_id, 2.0f, gfx::Size(30, 40)),
-                        new TestSurfaceReferenceFactory());
+  layer->SetShowPrimarySurface(
+      cc::SurfaceInfo(surface_id, 2.0f, gfx::Size(30, 40)),
+      new TestSurfaceReferenceFactory());
 
   EXPECT_EQ(layer->frame_size_in_dip_for_testing(), gfx::Size(15, 20));
 }
@@ -1877,7 +1881,7 @@ TEST_F(LayerWithDelegateTest, LayerFiltersSurvival) {
 
   // Showing surface content changes the underlying cc layer.
   scoped_refptr<cc::Layer> before = layer->cc_layer_for_testing();
-  layer->SetShowSurface(
+  layer->SetShowPrimarySurface(
       cc::SurfaceInfo(cc::SurfaceId(), 1.0, gfx::Size(10, 10)),
       new TestSurfaceReferenceFactory());
   EXPECT_EQ(layer->layer_grayscale(), 0.5f);
@@ -1895,8 +1899,8 @@ TEST_F(LayerWithRealCompositorTest, AddRemoveThreadedAnimations) {
   l1->SetAnimator(LayerAnimator::CreateImplicitAnimator());
   l2->SetAnimator(LayerAnimator::CreateImplicitAnimator());
 
-  auto player1 = l1->GetAnimator()->GetAnimationPlayerForTesting();
-  auto player2 = l2->GetAnimator()->GetAnimationPlayerForTesting();
+  auto* player1 = l1->GetAnimator()->GetAnimationPlayerForTesting();
+  auto* player2 = l2->GetAnimator()->GetAnimationPlayerForTesting();
 
   EXPECT_FALSE(player1->has_any_animation());
 
@@ -2201,7 +2205,7 @@ TEST(LayerDelegateTest, DelegatedFrameDamage) {
 
   FrameDamageCheckingDelegate delegate;
   layer->set_delegate(&delegate);
-  layer->SetShowSurface(
+  layer->SetShowPrimarySurface(
       cc::SurfaceInfo(cc::SurfaceId(), 1.0, gfx::Size(10, 10)),
       new TestSurfaceReferenceFactory());
 
@@ -2226,6 +2230,52 @@ TEST_F(LayerWithRealCompositorTest, CompositorAnimationObserverTest) {
   EXPECT_FALSE(animation_observer.shutdown());
   ResetCompositor();
   EXPECT_TRUE(animation_observer.shutdown());
+}
+
+// A simple AnimationMetricsReporter class that remembers smoothness metric
+// when animation completes.
+class TestMetricsReporter : public ui::AnimationMetricsReporter {
+ public:
+  TestMetricsReporter() {}
+  ~TestMetricsReporter() override {}
+
+  bool report_called() { return report_called_; }
+  int value() const { return value_; }
+
+ protected:
+  void Report(int value) override {
+    value_ = value;
+    report_called_ = true;
+  }
+
+ private:
+  bool report_called_ = false;
+  int value_ = -1;
+
+  DISALLOW_COPY_AND_ASSIGN(TestMetricsReporter);
+};
+
+// Starts an animation and tests that incrementing compositor frame count can
+// be used to report animation smoothness metrics.
+TEST_F(LayerWithRealCompositorTest, ReportMetrics) {
+  std::unique_ptr<Layer> root(CreateLayer(LAYER_SOLID_COLOR));
+  GetCompositor()->SetRootLayer(root.get());
+  LayerAnimator* animator = root->GetAnimator();
+  std::unique_ptr<ui::LayerAnimationElement> animation_element =
+      ui::LayerAnimationElement::CreateColorElement(
+          SK_ColorRED, base::TimeDelta::FromMilliseconds(100));
+  ui::LayerAnimationSequence* animation_sequence =
+      new ui::LayerAnimationSequence(std::move(animation_element));
+  TestMetricsReporter reporter;
+  animation_sequence->SetAnimationMetricsReporter(&reporter);
+  animator->StartAnimation(animation_sequence);
+  while (!reporter.report_called())
+    WaitForSwap();
+  ResetCompositor();
+  // Even though most of the time 100% smooth animations are expected, on the
+  // test bots this cannot be guaranteed. Therefore simply check that some
+  // value was reported.
+  EXPECT_GT(reporter.value(), 0);
 }
 
 TEST(LayerDebugInfoTest, LayerNameDoesNotClobber) {

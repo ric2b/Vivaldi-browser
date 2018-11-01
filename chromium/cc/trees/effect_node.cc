@@ -4,8 +4,6 @@
 
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/layers/layer.h"
-#include "cc/proto/gfx_conversions.h"
-#include "cc/proto/skia_conversions.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/property_tree.h"
 
@@ -19,7 +17,6 @@ EffectNode::EffectNode()
       screen_space_opacity(1.f),
       blend_mode(SkBlendMode::kSrcOver),
       has_render_surface(false),
-      render_surface(nullptr),
       surface_is_clipped(false),
       has_copy_request(false),
       hidden_by_backface_visibility(false),

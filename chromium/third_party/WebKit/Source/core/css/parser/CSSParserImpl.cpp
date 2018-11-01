@@ -84,7 +84,7 @@ MutableStylePropertySet::SetResult CSSParserImpl::parseVariableValue(
     const CSSCustomPropertyDeclaration* parsedDeclaration =
         toCSSCustomPropertyDeclaration(parser.m_parsedProperties[0].value());
     if (parsedDeclaration->value() && registry) {
-      const PropertyRegistry::Registration* registration =
+      const PropertyRegistration* registration =
           registry->registration(propertyName);
       // TODO(timloh): This is a bit wasteful, we parse the registered property
       // to validate but throw away the result.
@@ -120,7 +120,7 @@ static inline void filterProperties(
           toCSSCustomPropertyDeclaration(property.value())->name();
       if (seenCustomProperties.contains(name))
         continue;
-      seenCustomProperties.add(name);
+      seenCustomProperties.insert(name);
     } else if (property.id() == CSSPropertyApplyAtRule) {
       // TODO(timloh): Do we need to do anything here?
     } else {
@@ -156,8 +156,7 @@ ImmutableStylePropertySet* CSSParserImpl::parseInlineStyleDeclaration(
     Element* element) {
   Document& document = element->document();
   CSSParserContext* context = CSSParserContext::create(
-      document.elementSheet().contents()->parserContext(),
-      UseCounter::getFrom(&document));
+      document.elementSheet().contents()->parserContext(), &document);
   CSSParserMode mode = element->isHTMLElement() && !document.inQuirksMode()
                            ? HTMLStandardMode
                            : HTMLQuirksMode;
@@ -245,6 +244,8 @@ void CSSParserImpl::parseStyleSheet(const String& string,
                                styleSheet->parserAppendRule(rule);
                              });
   styleSheet->setHasSyntacticallyValidCSSHeader(firstRuleValid);
+  if (parser.m_lazyState)
+    parser.m_lazyState->finishInitialParsing();
   TRACE_EVENT_END0("blink,blink_style", "CSSParserImpl::parseStyleSheet.parse");
 
   TRACE_EVENT_END2("blink,blink_style", "CSSParserImpl::parseStyleSheet",
@@ -453,7 +454,7 @@ StyleRuleBase* CSSParserImpl::consumeAtRule(CSSParserTokenRange& range,
   CSSParserTokenRange prelude = range.makeSubRange(preludeStart, &range.peek());
   CSSAtRuleID id = cssAtRuleID(name);
   if (id != CSSAtRuleInvalid && m_context->isUseCounterRecordingEnabled())
-    countAtRule(m_context->useCounter(), id);
+    countAtRule(m_context, id);
 
   if (range.atEnd() || range.peek().type() == SemicolonToken) {
     range.consume();
@@ -701,8 +702,7 @@ StyleRuleKeyframes* CSSParserImpl::consumeKeyframesRule(
   if (nameToken.type() == IdentToken) {
     name = nameToken.value().toString();
   } else if (nameToken.type() == StringToken && webkitPrefixed) {
-    if (m_context->isUseCounterRecordingEnabled())
-      m_context->useCounter()->count(UseCounter::QuotedKeyframesRule);
+    m_context->count(UseCounter::QuotedKeyframesRule);
     name = nameToken.value().toString();
   } else {
     return nullptr;  // Parse error; expected ident token in @keyframes header

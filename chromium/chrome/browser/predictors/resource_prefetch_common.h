@@ -19,6 +19,13 @@ class WebContents;
 
 namespace predictors {
 
+extern const char kSpeculativeResourcePrefetchingFeatureName[];
+extern const char kModeParamName[];
+extern const char kLearningMode[];
+extern const char kExternalPrefetchingMode[];
+extern const char kPrefetchingMode[];
+extern const char kEnableUrlLearningParamName[];
+
 struct ResourcePrefetchPredictorConfig;
 
 // Returns true if prefetching is enabled. And will initilize the |config|
@@ -70,8 +77,8 @@ struct ResourcePrefetchPredictorConfig {
   // The mode the prefetcher is running in. Forms a bit map.
   enum Mode {
     LEARNING = 1 << 0,
-    PREFETCHING_FOR_NAVIGATION = 1 << 2,  // Also enables LEARNING.
-    PREFETCHING_FOR_EXTERNAL = 1 << 3     // Also enables LEARNING.
+    PREFETCHING_FOR_NAVIGATION = 1 << 2,  // Should also turn on LEARNING.
+    PREFETCHING_FOR_EXTERNAL = 1 << 3     // Should also turn on LEARNING.
   };
   int mode;
 
@@ -115,6 +122,8 @@ struct ResourcePrefetchPredictorConfig {
   // Maximum number of prefetches that can be inflight for a host for a single
   // navigation.
   size_t max_prefetches_inflight_per_host_per_navigation;
+  // True iff the predictor could use a url-based database.
+  bool is_url_learning_enabled;
 };
 
 }  // namespace predictors

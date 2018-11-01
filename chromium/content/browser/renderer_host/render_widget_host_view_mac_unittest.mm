@@ -308,7 +308,9 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
   }
 
  protected:
-  std::string selected_text() const { return rwhv_mac_->selected_text_; }
+  std::string selected_text() const {
+    return base::UTF16ToUTF8(rwhv_mac_->GetTextSelection()->selected_text());
+  }
 
   RenderWidgetHostViewMac* rwhv_mac_;
   base::scoped_nsobject<RenderWidgetHostViewCocoa> rwhv_cocoa_;
@@ -1174,7 +1176,8 @@ class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
         break;
     }
     DCHECK(message);
-    std::tuple<IPC::WebInputEventPointer, ui::LatencyInfo,
+    std::tuple<IPC::WebInputEventPointer,
+               std::vector<IPC::WebInputEventPointer>, ui::LatencyInfo,
                InputEventDispatchType>
         data;
     InputMsg_HandleInputEvent::Read(message, &data);

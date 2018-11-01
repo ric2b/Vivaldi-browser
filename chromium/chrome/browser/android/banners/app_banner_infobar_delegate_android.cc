@@ -6,7 +6,6 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/timer/elapsed_timer.h"
@@ -66,7 +65,7 @@ bool AppBannerInfoBarDelegateAndroid::Create(
           weak_manager, app_title, std::move(shortcut_info), std::move(icon),
           event_request_id, is_webapk, is_webapk_already_installed,
           webapk_install_source));
-  auto raw_delegate = infobar_delegate.get();
+  auto* raw_delegate = infobar_delegate.get();
   auto infobar = base::MakeUnique<AppBannerInfoBarAndroid>(
       std::move(infobar_delegate), url, is_webapk);
   if (!InfoBarService::FromWebContents(web_contents)
@@ -295,12 +294,8 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApp(
   AppBannerSettingsHelper::RecordBannerInstallEvent(
       web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
 
-  if (weak_manager_) {
-    const std::string& uid = base::GenerateGUID();
-    ShortcutHelper::AddToLauncherWithSkBitmap(
-        web_contents->GetBrowserContext(), *shortcut_info_, uid,
-        *icon_.get(), weak_manager_->FetchWebappSplashScreenImageCallback(uid));
-  }
+  ShortcutHelper::AddToLauncherWithSkBitmap(web_contents, *shortcut_info_,
+                                            *icon_.get());
 
   SendBannerAccepted();
   return true;
@@ -354,8 +349,7 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
   WebApkInstaller::FinishCallback callback =
       base::Bind(&AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished,
                   weak_ptr_factory_.GetWeakPtr());
-  ShortcutHelper::InstallWebApkWithSkBitmap(web_contents->GetBrowserContext(),
-                                            *shortcut_info_,
+  ShortcutHelper::InstallWebApkWithSkBitmap(web_contents, *shortcut_info_,
                                             *icon_.get(), callback);
   SendBannerAccepted();
 
@@ -379,22 +373,38 @@ void AppBannerInfoBarDelegateAndroid::SendBannerAccepted() {
 }
 
 void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished(
-    bool success,
+    WebApkInstallResult result,
     const std::string& webapk_package_name) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  if (!success) {
-    DVLOG(1) << "The WebAPK installation failed.";
-    Java_AppBannerInfoBarDelegateAndroid_showWebApkInstallFailureToast(env);
-    webapk::TrackInstallEvent(webapk::INSTALL_FAILED);
-    if (infobar())
-      infobar()->RemoveSelf();
+  if (result != WebApkInstallResult::SUCCESS) {
+    OnWebApkInstallFailed(result);
     return;
   }
-
   UpdateStateForInstalledWebAPK(webapk_package_name);
   webapk::TrackInstallDuration(timer_->Elapsed());
   timer_.reset();
   webapk::TrackInstallEvent(webapk::INSTALL_COMPLETED);
+}
+
+void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFailed(
+    WebApkInstallResult result) {
+  DVLOG(1) << "The WebAPK installation failed.";
+  webapk::TrackInstallEvent(webapk::INSTALL_FAILED);
+
+  if (!infobar())
+    return;
+
+  // If the install didn't definitely fail, we don't add a shortcut. This could
+  // happen if Play was busy with another install and this one is still queued
+  // (and hence might succeed in the future).
+  if (result == WebApkInstallResult::FAILURE) {
+    content::WebContents* web_contents =
+        InfoBarService::WebContentsFromInfoBar(infobar());
+    // Add webapp shortcut to the homescreen.
+    ShortcutHelper::AddToLauncherWithSkBitmap(web_contents, *shortcut_info_,
+                                              *icon_.get());
+  }
+
+  infobar()->RemoveSelf();
 }
 
 void AppBannerInfoBarDelegateAndroid::TrackWebApkInstallationDismissEvents(

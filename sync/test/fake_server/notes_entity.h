@@ -3,10 +3,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_
-#define VIVALDI_SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_
+#ifndef SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_
+#define SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "components/sync/base/model_type.h"
@@ -34,7 +35,7 @@ class NotesEntity : public FakeServerEntity {
   // some of the existing entity when creating a new entity.
   static std::unique_ptr<FakeServerEntity> CreateUpdatedVersion(
       const sync_pb::SyncEntity& client_entity,
-      FakeServerEntity& current_server_entity,
+      const FakeServerEntity& current_server_entity,
       const std::string& parent_id);
 
   NotesEntity(const std::string& id,
@@ -70,4 +71,4 @@ class NotesEntity : public FakeServerEntity {
 
 }  // namespace fake_server
 
-#endif  // VIVALDI_SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_
+#endif  // SYNC_TEST_FAKE_SERVER_NOTES_ENTITY_H_

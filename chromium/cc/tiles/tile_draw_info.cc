@@ -9,27 +9,21 @@
 
 namespace cc {
 
-TileDrawInfo::TileDrawInfo()
-    : mode_(RESOURCE_MODE),
-      solid_color_(SK_ColorWHITE),
-      resource_(nullptr),
-      contents_swizzled_(false),
-      was_ever_ready_to_draw_(false),
-      was_ever_used_to_draw_(false),
-      was_a_prepaint_tile_(false) {}
-
+TileDrawInfo::TileDrawInfo() = default;
 TileDrawInfo::~TileDrawInfo() {
   DCHECK(!resource_);
-  if (was_ever_ready_to_draw_ && was_a_prepaint_tile_) {
-    UMA_HISTOGRAM_BOOLEAN("Renderer4.ReadyToDrawTileDrawStatus",
-                          was_ever_used_to_draw_);
-  }
 }
 
 void TileDrawInfo::AsValueInto(base::trace_event::TracedValue* state) const {
   state->SetBoolean("is_solid_color", mode_ == SOLID_COLOR_MODE);
   state->SetBoolean("is_transparent",
                     mode_ == SOLID_COLOR_MODE && !SkColorGetA(solid_color_));
+}
+
+Resource* TileDrawInfo::TakeResource() {
+  Resource* resource = resource_;
+  set_resource(nullptr);
+  return resource;
 }
 
 }  // namespace cc

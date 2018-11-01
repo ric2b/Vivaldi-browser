@@ -35,7 +35,6 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/events/MessageEvent.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/InProcessWorkerMessagingProxy.h"
@@ -66,7 +65,7 @@ InProcessWorkerObjectProxy::~InProcessWorkerObjectProxy() {}
 
 void InProcessWorkerObjectProxy::postMessageToWorkerObject(
     PassRefPtr<SerializedScriptValue> message,
-    std::unique_ptr<MessagePortChannelArray> channels) {
+    MessagePortChannelArray channels) {
   getParentFrameTaskRunners()
       ->get(TaskType::PostedMessage)
       ->postTask(BLINK_FROM_HERE,
@@ -78,7 +77,7 @@ void InProcessWorkerObjectProxy::postMessageToWorkerObject(
 
 void InProcessWorkerObjectProxy::processMessageFromWorkerObject(
     PassRefPtr<SerializedScriptValue> message,
-    std::unique_ptr<MessagePortChannelArray> channels,
+    MessagePortChannelArray channels,
     WorkerThread* workerThread) {
   WorkerGlobalScope* globalScope =
       toWorkerGlobalScope(workerThread->globalScope());

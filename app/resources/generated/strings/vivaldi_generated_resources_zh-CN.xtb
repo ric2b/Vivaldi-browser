@@ -29,7 +29,6 @@
 <translation id="1620510694547887537">摄像头</translation>
 <translation id="1627276047960621195">文件描述符数量</translation>
 <translation id="1635033183663317347">这是您的监护人安装的。</translation>
-<translation id="1652965563555864525">静音(&amp;M)</translation>
 <translation id="1682548588986054654">新建隐身窗口</translation>
 <translation id="1708338024780164500">（闲置）</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" />（ID：<ph name="ID_PH" />）</translation>
@@ -49,7 +48,6 @@
 <translation id="1979718561647571293">这是您想要的启动页吗？</translation>
 <translation id="1989112275319619282">浏览</translation>
 <translation id="1992397118740194946">未设置</translation>
-<translation id="2011110593081822050">Web Worker：<ph name="WORKER_NAME" /></translation>
 <translation id="2019718679933488176">在新标签中打开音频(&amp;O)</translation>
 <translation id="2076269580855484719">隐藏此插件</translation>
 <translation id="2087822576218954668">打印：<ph name="PRINT_NAME" /></translation>
@@ -79,7 +77,6 @@
 <translation id="2482878487686419369">通知</translation>
 <translation id="2501797496290880632">输入快捷键</translation>
 <translation id="2509857212037838238">安装 <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">暂停(&amp;P)</translation>
 <translation id="2550212893339833758">已交换的内存</translation>
 <translation id="2662876636500006917">Chrome 線上應用商店</translation>
 <translation id="2678063897982469759">重新启用</translation>
@@ -147,11 +144,9 @@
 <translation id="3927932062596804919">拒绝</translation>
 <translation id="3936390757709632190">在新标签中打开音频(&amp;O)</translation>
 <translation id="3943582379552582368">返回(&amp;B)</translation>
-<translation id="3954582159466790312">取消静音(&amp;M)</translation>
 <translation id="3978267865113951599">（已崩溃）</translation>
 <translation id="3979395879372752341">已添加新扩展程序（<ph name="EXTENSION_NAME" />）</translation>
 <translation id="4021279097213088397">–</translation>
-<translation id="4059285154003114015">打印框架(&amp;P)...</translation>
 <translation id="4087089424473531098">已创建扩展程序：
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -185,7 +180,6 @@
 <translation id="4593021220803146968">转到 <ph name="URL" />(&amp;G)</translation>
 <translation id="4595560905247879544">只有管理员（<ph name="CUSTODIAN_NAME" />）可以修改应用和扩展程序。</translation>
 <translation id="4613271546271159013">某个扩展程序更改了您打开新标签页时系统显示的页面。</translation>
-<translation id="4623537843784569564">此扩展程序可能未正确更新，请尝试重新安装。</translation>
 <translation id="4643612240819915418">在新标签中打开视频(&amp;O)</translation>
 <translation id="4677772697204437347">GPU内存</translation>
 <translation id="4711638718396952945">恢复设置</translation>
@@ -194,12 +188,9 @@
 <translation id="4839303808932127586">视频另存为(&amp;V)...</translation>
 <translation id="4850258771229959924">在开发者工具中查看</translation>
 <translation id="4851858059374029925">要安装 <ph name="PLUGIN_NAME" /> 吗？请仅安装您信任的插件。</translation>
-<translation id="4861833787540810454">播放(&amp;P)</translation>
-<translation id="4883993111890464517">此扩展程序可能已损坏，请尝试重新安装。</translation>
 <translation id="488785315393301722">显示详细信息</translation>
 <translation id="4911714727432509308">尚未为任何扩展程序分配键盘快捷键。</translation>
 <translation id="4912643508233590958">闲置状态唤醒</translation>
-<translation id="4919987486109157213">扩展程序已损坏，请尝试重新安装。</translation>
 <translation id="4927301649992043040">打包扩展程序</translation>
 <translation id="4927753642311223124">一切皆空，继续前行。</translation>
 <translation id="49896407730300355">逆时针旋转(&amp;O)</translation>
@@ -295,7 +286,6 @@
 <translation id="6798954102094737107">插件：<ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">保留更改</translation>
 <translation id="6841186874966388268">错误</translation>
-<translation id="6844537474943985871">此扩展程序可能已损坏，请尝试卸载并重新安装。</translation>
 <translation id="6863910145616405334">未找到插件</translation>
 <translation id="6886871292305414135">在新标签中打开链接(&amp;T)</translation>
 <translation id="6900284862687837908">后台应用：<ph name="BACKGROUND_APP_URL" /></translation>
@@ -324,7 +314,6 @@
 <translation id="7551643184018910560">固定在归纳栏</translation>
 <translation id="7554791636758816595">新标签页</translation>
 <translation id="7564847347806291057">结束进程</translation>
-<translation id="7618337809041914424">打印框架(&amp;P)...</translation>
 <translation id="7629827748548208700">标签页：<ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">取消</translation>
 <translation id="7663719505383602579">接收器：<ph name="ARC_PROCESS_NAME" /></translation>
@@ -406,7 +395,6 @@
 <translation id="9003647077635673607">允许在所有网站运行</translation>
 <translation id="9027459031423301635">在新标签页中打开链接(&amp;T)</translation>
 <translation id="9088234649737575428">系统已根据企业政策屏蔽 <ph name="PLUGIN_NAME" /></translation>
-<translation id="9101691533782776290">启动应用</translation>
 <translation id="9145718805518496796">打包扩展程序...</translation>
 <translation id="9153341767479566106">加载失败的其他扩展程序：</translation>
 <translation id="9170848237812810038">撤消(&amp;U)</translation>

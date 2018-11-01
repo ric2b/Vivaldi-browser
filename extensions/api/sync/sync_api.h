@@ -5,8 +5,11 @@
 // See
 // http://www.chromium.org/developers/design-documents/extensions/proposed-changes/creating-new-apis
 
-#ifndef VIVALDI_EXTENSIONS_API_SYNC_API_H_
-#define VIVALDI_EXTENSIONS_API_SYNC_API_H_
+#ifndef EXTENSIONS_API_SYNC_SYNC_API_H_
+#define EXTENSIONS_API_SYNC_SYNC_API_H_
+
+#include <memory>
+#include <string>
 
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -86,14 +89,13 @@ class SyncSendFunction : public ChromeAsyncExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("sync.send", SYNC_SEND)
   SyncSendFunction();
 
- protected:
+ private:
   ~SyncSendFunction() override;
   // ExtensionFunction:
   bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncSendFunction);
 };
+}  // namespace extensions
 
-}
-
-#endif  // VIVALDI_EXTENSIONS_API_SYNC_API_H_
+#endif  // EXTENSIONS_API_SYNC_SYNC_API_H_

@@ -28,29 +28,13 @@ const char kLongPage2[] =
     "http://ios/web/shell/test/http_server_files/tall_page.html?2";
 
 // Test scroll offsets.
-const CGFloat kScrollOffset1 = 20.0f;
-const CGFloat kScrollOffset2 = 40.0f;
-
-// Returns a matcher for asserting that element's content offset matches the
-// given |offset|.
-id<GREYMatcher> contentOffset(CGPoint offset) {
-  MatchesBlock matches = ^BOOL(UIScrollView* element) {
-    return CGPointEqualToPoint([element contentOffset], offset);
-  };
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:@"contentOffset"];
-  };
-  return grey_allOf(
-      grey_kindOfClass([UIScrollView class]),
-      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                           descriptionBlock:describe],
-      nil);
-}
+const CGFloat kOffset1 = 20.0f;
+const CGFloat kOffset2 = 40.0f;
 
 // Waits for the web view scroll view is scrolled to |y_offset|.
 void WaitForOffset(CGFloat y_offset) {
-  CGPoint content_offset = CGPointMake(0.0, y_offset);
-  NSString* content_offset_string = NSStringFromCGPoint(content_offset);
+  CGPoint offset = CGPointMake(0.0, y_offset);
+  NSString* content_offset_string = NSStringFromCGPoint(offset);
   NSString* name =
       [NSString stringWithFormat:@"Wait for scroll view to scroll to %@.",
                                  content_offset_string];
@@ -59,8 +43,8 @@ void WaitForOffset(CGFloat y_offset) {
                   block:^BOOL {
                     NSError* error = nil;
                     [[EarlGrey
-                        selectElementWithMatcher:web::webViewScrollView()]
-                        assertWithMatcher:contentOffset(content_offset)
+                        selectElementWithMatcher:web::WebViewScrollView()]
+                        assertWithMatcher:grey_scrollViewContentOffset(offset)
                                     error:&error];
                     return (error == nil);
                   }];
@@ -89,29 +73,29 @@ using web::test::HttpServer;
   [ShellEarlGrey loadURL:HttpServer::MakeUrl(kLongPage1)];
 
   // Scroll the first page and verify the offset.
-  [[EarlGrey selectElementWithMatcher:web::webViewScrollView()]
-      performAction:grey_scrollInDirection(kGREYDirectionDown, kScrollOffset1)];
-  [[EarlGrey selectElementWithMatcher:web::webViewScrollView()]
-      assertWithMatcher:contentOffset(CGPointMake(0, kScrollOffset1))];
+  [[EarlGrey selectElementWithMatcher:web::WebViewScrollView()]
+      performAction:grey_scrollInDirection(kGREYDirectionDown, kOffset1)];
+  [[EarlGrey selectElementWithMatcher:web::WebViewScrollView()]
+      assertWithMatcher:grey_scrollViewContentOffset(CGPointMake(0, kOffset1))];
 
   // Load second URL, which is also a long page.
   [ShellEarlGrey loadURL:HttpServer::MakeUrl(kLongPage2)];
 
   // Scroll the second page and verify the offset.
-  [[EarlGrey selectElementWithMatcher:web::webViewScrollView()]
-      performAction:grey_scrollInDirection(kGREYDirectionDown, kScrollOffset2)];
-  [[EarlGrey selectElementWithMatcher:web::webViewScrollView()]
-      assertWithMatcher:contentOffset(CGPointMake(0, kScrollOffset2))];
+  [[EarlGrey selectElementWithMatcher:web::WebViewScrollView()]
+      performAction:grey_scrollInDirection(kGREYDirectionDown, kOffset2)];
+  [[EarlGrey selectElementWithMatcher:web::WebViewScrollView()]
+      assertWithMatcher:grey_scrollViewContentOffset(CGPointMake(0, kOffset2))];
 
   // Go back and verify that the first page offset has been restored.
-  [[EarlGrey selectElementWithMatcher:web::backButton()]
+  [[EarlGrey selectElementWithMatcher:web::BackButton()]
       performAction:grey_tap()];
-  WaitForOffset(kScrollOffset1);
+  WaitForOffset(kOffset1);
 
   // Go forward and verify that the second page offset has been restored.
-  [[EarlGrey selectElementWithMatcher:web::forwardButton()]
+  [[EarlGrey selectElementWithMatcher:web::ForwardButton()]
       performAction:grey_tap()];
-  WaitForOffset(kScrollOffset2);
+  WaitForOffset(kOffset2);
 }
 
 @end

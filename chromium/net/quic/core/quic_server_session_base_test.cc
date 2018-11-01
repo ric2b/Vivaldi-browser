@@ -31,7 +31,7 @@
 #include "net/test/gtest_util.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_simple_server_stream.h"
-#include "net/tools/quic/test_tools/mock_quic_server_session_visitor.h"
+#include "net/tools/quic/test_tools/mock_quic_session_visitor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -120,7 +120,7 @@ const size_t kMaxStreamsForTest = 10;
 class QuicServerSessionBaseTest : public ::testing::TestWithParam<QuicVersion> {
  protected:
   QuicServerSessionBaseTest()
-      : QuicServerSessionBaseTest(CryptoTestUtils::ProofSourceForTesting()) {}
+      : QuicServerSessionBaseTest(crypto_test_utils::ProofSourceForTesting()) {}
 
   explicit QuicServerSessionBaseTest(std::unique_ptr<ProofSource> proof_source)
       : crypto_config_(QuicCryptoServerConfig::TESTING,
@@ -474,8 +474,11 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
 
   // Bandwidth estimate has now changed sufficiently, enough time has passed,
   // and enough packets have been sent.
-  QuicConnectionPeer::SetPacketNumberOfLastSentPacket(
-      session_->connection(), kMinPacketsBetweenServerConfigUpdates);
+  SerializedPacket packet(
+      kDefaultPathId, 1 + kMinPacketsBetweenServerConfigUpdates,
+      PACKET_6BYTE_PACKET_NUMBER, nullptr, 1000, false, false);
+  sent_packet_manager->OnPacketSent(&packet, 0, now, NOT_RETRANSMISSION,
+                                    HAS_RETRANSMITTABLE_DATA);
 
   // Verify that the proto has exactly the values we expect.
   CachedNetworkParameters expected_network_params;
@@ -599,14 +602,13 @@ INSTANTIATE_TEST_CASE_P(StreamMemberLifetimeTests,
 // ProofSource::GetProof.  Delay the completion of the operation until after the
 // stream has been destroyed, and verify that there are no memory bugs.
 TEST_P(StreamMemberLifetimeTest, Basic) {
-  FLAGS_quic_reloadable_flag_enable_async_get_proof = true;
   FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   FLAGS_quic_reloadable_flag_quic_use_cheap_stateless_rejects = true;
   FLAGS_quic_reloadable_flag_quic_create_session_after_insertion = true;
 
   const QuicClock* clock = helper_.GetClock();
   QuicVersion version = AllSupportedVersions().front();
-  CryptoHandshakeMessage chlo = CryptoTestUtils::GenerateDefaultInchoateCHLO(
+  CryptoHandshakeMessage chlo = crypto_test_utils::GenerateDefaultInchoateCHLO(
       clock, version, &crypto_config_);
   chlo.SetVector(kCOPT, QuicTagVector{kSREJ});
   std::vector<QuicVersion> packet_version_list = {version};

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "media/audio/test_audio_input_controller_factory.h"
-#include "media/audio/audio_file_writer.h"
 #include "media/audio/audio_io.h"
 
 namespace media {
@@ -14,13 +13,15 @@ TestAudioInputController::TestAudioInputController(
     const AudioParameters& audio_parameters,
     EventHandler* event_handler,
     SyncWriter* sync_writer,
-    UserInputMonitor* user_input_monitor)
+    UserInputMonitor* user_input_monitor,
+    StreamType type)
     : AudioInputController(audio_manager->GetTaskRunner(),
                            event_handler,
                            sync_writer,
-                           nullptr,
                            user_input_monitor,
-                           false),
+                           audio_parameters,
+                           type,
+                           audio_manager->GetTaskRunner()),
       audio_parameters_(audio_parameters),
       factory_(factory),
       event_handler_(event_handler),
@@ -57,11 +58,12 @@ AudioInputController* TestAudioInputControllerFactory::Create(
     AudioManager* audio_manager,
     AudioInputController::EventHandler* event_handler,
     AudioParameters params,
-    UserInputMonitor* user_input_monitor) {
+    UserInputMonitor* user_input_monitor,
+    AudioInputController::StreamType type) {
   DCHECK(!controller_);  // Only one test instance managed at a time.
   controller_ =
       new TestAudioInputController(this, audio_manager, params, event_handler,
-                                   sync_writer, user_input_monitor);
+                                   sync_writer, user_input_monitor, type);
   return controller_;
 }
 

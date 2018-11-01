@@ -14,7 +14,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/hash_tables.h"
-#include "base/lazy_instance.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -29,6 +29,7 @@
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_drm_bridge_delegate.h"
 #include "media/base/cdm_key_information.h"
+#include "media/base/media_switches.h"
 #include "media/base/provision_fetcher.h"
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
@@ -166,8 +167,10 @@ std::vector<std::string> KeySystemManager::GetPlatformKeySystemNames() {
   return key_systems;
 }
 
-base::LazyInstance<KeySystemManager>::Leaky g_key_system_manager =
-    LAZY_INSTANCE_INITIALIZER;
+KeySystemManager* GetKeySystemManager() {
+  static KeySystemManager* ksm = new KeySystemManager();
+  return ksm;
+}
 
 // Checks whether |key_system| is supported with |container_mime_type|. Only
 // checks |key_system| support if |container_mime_type| is empty.
@@ -183,7 +186,7 @@ bool IsKeySystemSupportedWithTypeImpl(const std::string& key_system,
     return false;
   }
 
-  UUID scheme_uuid = g_key_system_manager.Get().GetUUID(key_system);
+  UUID scheme_uuid = GetKeySystemManager()->GetUUID(key_system);
   if (scheme_uuid.empty())
     return false;
 
@@ -259,6 +262,20 @@ bool MediaDrmBridge::IsKeySystemSupported(const std::string& key_system) {
 }
 
 // static
+bool MediaDrmBridge::IsPersistentLicenseTypeSupported(
+    const std::string& key_system) {
+  if (!MediaDrmBridge::IsAvailable())
+    return false;
+
+  if (!base::FeatureList::IsEnabled(kMediaDrmPersistentLicense)) {
+    return false;
+  }
+
+  NOTIMPLEMENTED() << "In development. See http://crbug.com/493521";
+  return false;
+}
+
+// static
 bool MediaDrmBridge::IsKeySystemSupportedWithType(
     const std::string& key_system,
     const std::string& container_mime_type) {
@@ -275,7 +292,7 @@ std::vector<std::string> MediaDrmBridge::GetPlatformKeySystemNames() {
   if (!MediaDrmBridge::IsAvailable())
     return std::vector<std::string>();
 
-  return g_key_system_manager.Get().GetPlatformKeySystemNames();
+  return GetKeySystemManager()->GetPlatformKeySystemNames();
 }
 
 // static
@@ -290,7 +307,7 @@ scoped_refptr<MediaDrmBridge> MediaDrmBridge::CreateInternal(
   // All paths requires the MediaDrmApis.
   DCHECK(AreMediaDrmApisAvailable());
 
-  UUID scheme_uuid = g_key_system_manager.Get().GetUUID(key_system);
+  UUID scheme_uuid = GetKeySystemManager()->GetUUID(key_system);
   if (scheme_uuid.empty())
     return nullptr;
 
@@ -423,6 +440,8 @@ void MediaDrmBridge::LoadSession(
     std::unique_ptr<media::NewSessionCdmPromise> promise) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DVLOG(2) << __func__;
+
+  DCHECK(base::FeatureList::IsEnabled(kMediaDrmPersistentLicense));
 
   NOTIMPLEMENTED() << "EME persistent sessions not yet supported on Android.";
   promise->reject(CdmPromise::NOT_SUPPORTED_ERROR, 0,

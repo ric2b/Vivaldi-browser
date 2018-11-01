@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/timer/timer.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
@@ -120,7 +121,7 @@ void RecordV4GetHashCheckResult(V4GetHashCheckResultType result_type) {
 
 const char kPermission[] = "permission";
 const char kPhaPatternType[] = "pha_pattern_type";
-const char kMalwarePatternType[] = "malware_pattern_type";
+const char kMalwareThreatType[] = "malware_threat_type";
 const char kSePatternType[] = "se_pattern_type";
 const char kLanding[] = "LANDING";
 const char kDistribution[] = "DISTRIBUTION";
@@ -310,6 +311,8 @@ void V4GetHashProtocolManager::GetFullHashes(
   fetcher->SetExtraRequestHeaders(headers.ToString());
   fetcher->SetLoadFlags(net::LOAD_DISABLE_CACHE);
   fetcher->SetRequestContext(request_context_getter_.get());
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher, data_use_measurement::DataUseUserData::SAFE_BROWSING);
   fetcher->Start();
 }
 
@@ -590,7 +593,7 @@ void V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
              match.threat_type() == POTENTIALLY_HARMFUL_APPLICATION) {
     for (const ThreatEntryMetadata::MetadataEntry& m :
          match.threat_entry_metadata().entries()) {
-      if (m.key() == kPhaPatternType || m.key() == kMalwarePatternType) {
+      if (m.key() == kPhaPatternType || m.key() == kMalwareThreatType) {
         if (m.value() == kLanding) {
           metadata->threat_pattern_type = ThreatPatternType::MALWARE_LANDING;
           break;

@@ -50,7 +50,6 @@
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/SliderThumbElement.h"
 #include "core/layout/LayoutSlider.h"
-#include "platform/PlatformMouseEvent.h"
 #include "wtf/MathExtras.h"
 #include "wtf/NonCopyingSort.h"
 #include <limits>
@@ -152,7 +151,7 @@ bool RangeInputType::isSteppable() const {
 }
 
 void RangeInputType::handleMouseDownEvent(MouseEvent* event) {
-  if (element().isDisabledOrReadOnly())
+  if (element().isDisabledFormControl())
     return;
 
   Node* targetNode = event->target()->toNode();
@@ -171,7 +170,7 @@ void RangeInputType::handleMouseDownEvent(MouseEvent* event) {
 }
 
 void RangeInputType::handleKeydownEvent(KeyboardEvent* event) {
-  if (element().isDisabledOrReadOnly())
+  if (element().isDisabledFormControl())
     return;
 
   const String& key = event->key();

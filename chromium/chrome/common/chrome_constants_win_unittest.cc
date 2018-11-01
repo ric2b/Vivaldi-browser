@@ -12,6 +12,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#include "app/vivaldi_constants.h"
+
 namespace chrome {
 
 // Verify that |kChromeVersion| is equal to the version in the VS_VERSION_INFO
@@ -26,7 +28,7 @@ TEST(ChromeConstants, ChromeVersion) {
       FileVersionInfo::CreateFileVersionInfo(chrome_exe_path));
   ASSERT_TRUE(file_version_info);
   EXPECT_EQ(base::UTF16ToASCII(file_version_info->file_version()),
-            kChromeVersion);
+            vivaldi::kVivaldiVersion);
 }
 
 }  // namespace chrome

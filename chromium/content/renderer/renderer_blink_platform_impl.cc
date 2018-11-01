@@ -13,6 +13,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
@@ -55,13 +56,13 @@
 #include "content/renderer/gamepad_shared_memory_reader.h"
 #include "content/renderer/media/audio_decoder.h"
 #include "content/renderer/media/audio_device_factory.h"
-#include "content/renderer/media/canvas_capture_handler.h"
-#include "content/renderer/media/html_audio_element_capturer_source.h"
-#include "content/renderer/media/html_video_element_capturer_source.h"
+#include "content/renderer/media/capturefromelement/canvas_capture_handler.h"
+#include "content/renderer/media/capturefromelement/html_audio_element_capturer_source.h"
+#include "content/renderer/media/capturefromelement/html_video_element_capturer_source.h"
 #include "content/renderer/media/image_capture_frame_grabber.h"
-#include "content/renderer/media/media_recorder_handler.h"
 #include "content/renderer/media/renderer_webaudiodevice_impl.h"
 #include "content/renderer/media/renderer_webmidiaccessor_impl.h"
+#include "content/renderer/media_recorder/media_recorder_handler.h"
 #include "content/renderer/mojo/blink_interface_provider_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_clipboard_delegate.h"
@@ -77,7 +78,6 @@
 #include "media/audio/audio_output_device.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "media/filters/stream_parser_factory.h"
-#include "mojo/public/cpp/bindings/associated_group.h"
 #include "ppapi/features/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
@@ -86,6 +86,7 @@
 #include "third_party/WebKit/public/platform/BlameContext.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebAudioLatencyHint.h"
 #include "third_party/WebKit/public/platform/WebBlobRegistry.h"
 #include "third_party/WebKit/public/platform/WebDeviceLightListener.h"
 #include "third_party/WebKit/public/platform/WebFileInfo.h"
@@ -116,7 +117,7 @@
 #include <string>
 
 #include "base/synchronization/lock.h"
-#include "content/common/child_process_sandbox_support_impl_linux.h"
+#include "content/child/child_process_sandbox_support_impl_linux.h"
 #include "third_party/WebKit/public/platform/linux/WebFallbackFont.h"
 #include "third_party/WebKit/public/platform/linux/WebSandboxSupport.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
@@ -141,6 +142,7 @@
 
 using blink::Platform;
 using blink::WebAudioDevice;
+using blink::WebAudioLatencyHint;
 using blink::WebBlobRegistry;
 using blink::WebCanvasCaptureHandler;
 using blink::WebDatabaseObserver;
@@ -304,7 +306,7 @@ blink::WebURLLoader* RendererBlinkPlatformImpl::createURLLoader() {
   // data URLs to bypass the ResourceDispatcher.
   return new content::WebURLLoaderImpl(
       child_thread ? child_thread->resource_dispatcher() : nullptr,
-      url_loader_factory_.get(), url_loader_factory_.associated_group());
+      url_loader_factory_.get());
 }
 
 blink::WebThread* RendererBlinkPlatformImpl::currentThread() {
@@ -380,8 +382,7 @@ bool RendererBlinkPlatformImpl::isLinkVisited(unsigned long long link_hash) {
 void RendererBlinkPlatformImpl::createMessageChannel(
     blink::WebMessagePortChannel** channel1,
     blink::WebMessagePortChannel** channel2) {
-  WebMessagePortChannelImpl::CreatePair(
-      default_task_runner_, channel1, channel2);
+  WebMessagePortChannelImpl::CreatePair(channel1, channel2);
 }
 
 blink::WebPrescientNetworking*
@@ -659,73 +660,34 @@ WebDatabaseObserver* RendererBlinkPlatformImpl::databaseObserver() {
 }
 
 WebAudioDevice* RendererBlinkPlatformImpl::createAudioDevice(
-    size_t buffer_size,
     unsigned input_channels,
     unsigned channels,
-    double sample_rate,
+    const blink::WebAudioLatencyHint& latency_hint,
     WebAudioDevice::RenderCallback* callback,
     const blink::WebString& input_device_id,
     const blink::WebSecurityOrigin& security_origin) {
   // Use a mock for testing.
   blink::WebAudioDevice* mock_device =
-      GetContentClient()->renderer()->OverrideCreateAudioDevice(sample_rate);
+      GetContentClient()->renderer()->OverrideCreateAudioDevice();
   if (mock_device)
     return mock_device;
 
   // The |channels| does not exactly identify the channel layout of the
   // device. The switch statement below assigns a best guess to the channel
   // layout based on number of channels.
-  media::ChannelLayout layout = media::CHANNEL_LAYOUT_UNSUPPORTED;
-  switch (channels) {
-    case 1:
-      layout = media::CHANNEL_LAYOUT_MONO;
-      break;
-    case 2:
-      layout = media::CHANNEL_LAYOUT_STEREO;
-      break;
-    case 3:
-      layout = media::CHANNEL_LAYOUT_2_1;
-      break;
-    case 4:
-      layout = media::CHANNEL_LAYOUT_4_0;
-      break;
-    case 5:
-      layout = media::CHANNEL_LAYOUT_5_0;
-      break;
-    case 6:
-      layout = media::CHANNEL_LAYOUT_5_1;
-      break;
-    case 7:
-      layout = media::CHANNEL_LAYOUT_7_0;
-      break;
-    case 8:
-      layout = media::CHANNEL_LAYOUT_7_1;
-      break;
-    default:
-      // If the layout is not supported (more than 9 channels), falls back to
-      // discrete mode.
-      layout = media::CHANNEL_LAYOUT_DISCRETE;
-  }
+  media::ChannelLayout layout = media::GuessChannelLayout(channels);
+  if (layout == media::CHANNEL_LAYOUT_UNSUPPORTED)
+    layout = media::CHANNEL_LAYOUT_DISCRETE;
 
   int session_id = 0;
   if (input_device_id.isNull() ||
-      !base::StringToInt(base::UTF16ToUTF8(
-          base::StringPiece16(input_device_id)), &session_id)) {
-    if (input_channels > 0)
-      DLOG(WARNING) << "createAudioDevice(): request for audio input ignored";
-
-    input_channels = 0;
+      !base::StringToInt(input_device_id.utf8(), &session_id)) {
+    session_id = 0;
   }
 
-  // For CHANNEL_LAYOUT_DISCRETE, pass the explicit channel count along with
-  // the channel layout when creating an |AudioParameters| object.
-  media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                layout, static_cast<int>(sample_rate), 16,
-                                buffer_size);
-  params.set_channels_for_discrete(channels);
-
-  return new RendererWebAudioDeviceImpl(
-      params, callback, session_id, static_cast<url::Origin>(security_origin));
+  return RendererWebAudioDeviceImpl::Create(
+      layout, channels, latency_hint, callback, session_id,
+      static_cast<url::Origin>(security_origin));
 }
 
 bool RendererBlinkPlatformImpl::loadAudioResource(
@@ -759,13 +721,14 @@ void RendererBlinkPlatformImpl::getPluginList(
   RenderThread::Get()->Send(
       new FrameHostMsg_GetPlugins(refresh, mainFrameOrigin, &plugins));
   for (const WebPluginInfo& plugin : plugins) {
-    builder->addPlugin(
-        plugin.name, plugin.desc,
-        plugin.path.BaseName().AsUTF16Unsafe());
+    builder->addPlugin(WebString::fromUTF16(plugin.name),
+                       WebString::fromUTF16(plugin.desc),
+                       blink::FilePathToWebString(plugin.path.BaseName()));
 
     for (const WebPluginMimeType& mime_type : plugin.mime_types) {
       builder->addMediaTypeToLastPlugin(
-          WebString::fromUTF8(mime_type.mime_type), mime_type.description);
+          WebString::fromUTF8(mime_type.mime_type),
+          WebString::fromUTF16(mime_type.description));
 
       for (const auto& extension : mime_type.file_extensions) {
         builder->addFileExtensionToLastMediaType(
@@ -1019,13 +982,19 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
 
   bool is_software_rendering = gpu_channel_host->gpu_info().software_rendering;
 
-  // This is an offscreen context, which doesn't use the default frame buffer,
-  // so don't request any alpha, depth, stencil, antialiasing.
+  // This is an offscreen context. Generally it won't use the default
+  // frame buffer, in that case don't request any alpha, depth, stencil,
+  // antialiasing. But we do need those attributes for the "own
+  // offscreen surface" optimization which supports directly drawing
+  // to a custom surface backed frame buffer.
   gpu::gles2::ContextCreationAttribHelper attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
+  attributes.alpha_size = web_attributes.supportAlpha ? 8 : -1;
+  attributes.depth_size = web_attributes.supportDepth ? 24 : 0;
+  attributes.stencil_size = web_attributes.supportStencil ? 8 : 0;
+  attributes.samples = web_attributes.supportAntialias ? 4 : 0;
+  attributes.own_offscreen_surface =
+      web_attributes.supportAlpha || web_attributes.supportDepth ||
+      web_attributes.supportStencil || web_attributes.supportAntialias;
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   // Prefer discrete GPU for WebGL.
@@ -1085,7 +1054,8 @@ RendererBlinkPlatformImpl::createSharedOffscreenGraphicsContext3DProvider() {
 
 gpu::GpuMemoryBufferManager*
 RendererBlinkPlatformImpl::getGpuMemoryBufferManager() {
-  return RenderThreadImpl::current()->GetGpuMemoryBufferManager();
+  RenderThreadImpl* thread = RenderThreadImpl::current();
+  return thread ? thread->GetGpuMemoryBufferManager() : nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -1106,7 +1076,7 @@ blink::WebCompositorSupport* RendererBlinkPlatformImpl::compositorSupport() {
 
 blink::WebString RendererBlinkPlatformImpl::convertIDNToUnicode(
     const blink::WebString& host) {
-  return url_formatter::IDNToUnicode(host.utf8());
+  return WebString::fromUTF16(url_formatter::IDNToUnicode(host.utf8()));
 }
 
 //------------------------------------------------------------------------------
@@ -1291,6 +1261,15 @@ void RendererBlinkPlatformImpl::workerContextCreated(
     const v8::Local<v8::Context>& worker) {
   GetContentClient()->renderer()->DidInitializeWorkerContextOnWorkerThread(
       worker);
+}
+
+//------------------------------------------------------------------------------
+void RendererBlinkPlatformImpl::requestPurgeMemory() {
+  // TODO(tasak|bashi): We should use ChildMemoryCoordinator here, but
+  // ChildMemoryCoordinator isn't always available as it's only initialized
+  // when kMemoryCoordinatorV0 is enabled.
+  // Use ChildMemoryCoordinator when memory coordinator is always enabled.
+  base::MemoryCoordinatorClientRegistry::GetInstance()->PurgeMemory();
 }
 
 }  // namespace content

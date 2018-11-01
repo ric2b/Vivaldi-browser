@@ -164,7 +164,7 @@ void MediaSession::setActionHandler(const String& action,
     if (m_actionHandlers.find(action) == m_actionHandlers.end())
       return;
 
-    m_actionHandlers.remove(action);
+    m_actionHandlers.erase(action);
 
     notifyActionChange(action, ActionChangeType::ActionDisabled);
   }
@@ -228,13 +228,6 @@ void MediaSession::DidReceiveAction(
     return;
 
   iter->value->call(this);
-}
-
-void MediaSession::setV8ReferencesForHandlers(
-    v8::Isolate* isolate,
-    const v8::Persistent<v8::Object>& wrapper) {
-  for (auto handler : m_actionHandlers.values())
-    handler->setWrapperReference(isolate, wrapper);
 }
 
 DEFINE_TRACE(MediaSession) {

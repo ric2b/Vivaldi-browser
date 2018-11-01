@@ -21,6 +21,7 @@
 #include "net/http2/http2_constants.h"
 #include "net/http2/http2_constants_test_util.h"
 #include "net/http2/http2_structures.h"
+#include "net/http2/platform/api/http2_reconstruct_object.h"
 #include "net/http2/tools/http2_frame_builder.h"
 #include "net/http2/tools/random_decoder_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -120,7 +121,6 @@ template <class Decoder,
           class Listener,
           bool SupportedFrameType = true>
 class AbstractPayloadDecoderTest : public PayloadDecoderBaseTest {
-
  protected:
   // An ApproveSize function returns true to approve decoding the specified
   // size of payload, else false to skip that size. Typically used for negative
@@ -161,8 +161,7 @@ class AbstractPayloadDecoderTest : public PayloadDecoderBaseTest {
   }
 
   void PreparePayloadDecoder() override {
-    payload_decoder_.~Decoder();
-    new (&payload_decoder_) Decoder;
+    Http2DefaultReconstructObject(&payload_decoder_, RandomPtr());
   }
 
   Http2FrameDecoderListener* PrepareListener() override {
@@ -395,7 +394,7 @@ class AbstractPaddablePayloadDecoderTest
   ::testing::AssertionResult VerifyDetectsPaddingTooLong(
       base::StringPiece payload,
       const Http2FrameHeader& header,
-      int expected_missing_length) {
+      size_t expected_missing_length) {
     set_frame_header(header);
     auto& listener = listener_;
     Validator validator = [header, expected_missing_length, &listener](
@@ -441,7 +440,8 @@ class AbstractPaddablePayloadDecoderTest
     // The missing length is the amount we cut off the end, unless
     // payload_length is zero, in which case the decoder knows only that 1
     // byte, the Pad Length field, is missing.
-    int missing_length = payload_length == 0 ? 1 : fb.size() - payload_length;
+    size_t missing_length =
+        payload_length == 0 ? 1 : fb.size() - payload_length;
     VLOG(1) << "missing_length=" << missing_length;
 
     const Http2FrameHeader header(payload_length, DecoderPeer::FrameType(),

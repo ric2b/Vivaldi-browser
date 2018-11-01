@@ -18,6 +18,8 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_service.mojom.h"
 #include "content/shell/browser/shell.h"
+#include "media/base/bind_to_current_loop.h"
+#include "media/base/test_data_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
@@ -45,6 +47,11 @@ class RenderProcessHostTest : public ContentBrowserTest,
                               public RenderProcessHostObserver {
  public:
   RenderProcessHostTest() : process_exits_(0), host_destructions_(0) {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(
+        switches::kDisableGestureRequirementForMediaPlayback);
+  }
 
  protected:
   void set_process_exit_callback(const base::Closure& callback) {
@@ -233,6 +240,89 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessOnBadMojoMessage) {
 
   run_loop.Run();
 
+  EXPECT_EQ(1, process_exits_);
+  EXPECT_EQ(0, host_destructions_);
+  if (!host_destructions_)
+    rph->RemoveObserver(this);
+}
+
+class MediaStopObserver : public WebContentsObserver {
+ public:
+  MediaStopObserver(WebContents* web_contents, base::Closure quit_closure)
+      : WebContentsObserver(web_contents),
+        quit_closure_(std::move(quit_closure)) {}
+  ~MediaStopObserver() override {}
+
+  void MediaStoppedPlaying(
+      const WebContentsObserver::MediaPlayerInfo& media_info,
+      const WebContentsObserver::MediaPlayerId& id) override {
+    quit_closure_.Run();
+  }
+
+ private:
+  base::Closure quit_closure_;
+};
+
+// Tests that audio stream counts (used for process priority calculations) are
+// properly set and cleared during media playback and renderer terminations.
+//
+// Note: This test can't run when the Mojo Renderer is used since it does not
+// create audio streams through the normal audio pathways; at present this is
+// only used by Chromecast.
+#if defined(ENABLE_MOJO_RENDERER)
+#define KillProcessZerosAudioStreams DISABLED_KillProcessZerosAudioStreams
+#endif
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
+  embedded_test_server()->ServeFilesFromSourceDirectory(
+      media::GetTestDataPath());
+  ASSERT_TRUE(embedded_test_server()->Start());
+  NavigateToURL(shell(), embedded_test_server()->GetURL("/sfx_s16le.wav"));
+  RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
+      shell()->web_contents()->GetMainFrame()->GetProcess());
+
+  {
+    // Wait for media playback to complete. We use the stop signal instead of
+    // the start signal here since the start signal does not mean the audio
+    // has actually started playing yet. Whereas the stop signal is sent before
+    // the audio device is actually torn down.
+    base::RunLoop run_loop;
+    MediaStopObserver stop_observer(shell()->web_contents(),
+                                    run_loop.QuitClosure());
+    run_loop.Run();
+
+    // No point in running the rest of the test if this is wrong.
+    ASSERT_EQ(1, rph->get_audio_stream_count_for_testing());
+  }
+
+  host_destructions_ = 0;
+  process_exits_ = 0;
+  rph->AddObserver(this);
+
+  mojom::TestServicePtr service;
+  rph->GetRemoteInterfaces()->GetInterface(&service);
+
+  {
+    // Force a bad message event to occur which will terminate the renderer.
+    // Note: We post task the QuitClosure since RenderProcessExited() is called
+    // before destroying BrowserMessageFilters; and the next portion of the test
+    // must run after these notifications have been delivered.
+    base::RunLoop run_loop;
+    set_process_exit_callback(media::BindToCurrentLoop(run_loop.QuitClosure()));
+    service->DoSomething(base::Bind(&base::DoNothing));
+    run_loop.Run();
+  }
+
+  {
+    // Cycle UI and IO loop once to ensure OnChannelClosing() has been delivered
+    // to audio stream owners and they get a chance to notify of stream closure.
+    base::RunLoop run_loop;
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            media::BindToCurrentLoop(run_loop.QuitClosure()));
+    run_loop.Run();
+  }
+
+  // Verify shutdown went as expected.
+  EXPECT_EQ(0, rph->get_audio_stream_count_for_testing());
   EXPECT_EQ(1, process_exits_);
   EXPECT_EQ(0, host_destructions_);
   if (!host_destructions_)

@@ -36,7 +36,6 @@
 <translation id="1540800554400757039">સરનામું 1</translation>
 <translation id="1545749641540134597">QR કોડ સ્કેન કરો</translation>
 <translation id="1580783302095112590">મેઇલ મોકલ્યો છે.</translation>
-<translation id="1634828734222219955">કુલ</translation>
 <translation id="1646446875146297738">‘ટ્રેક કરશો નહીં' સક્ષમ કરવાનો અર્થ એ છે કે વિનંતીને તમારા બ્રાઉઝિંગ ટ્રાફિક સાથે શામેલ કરવામાં આવશે. કોઈપણ પ્રભાવ વેબસાઇટ વિનંતીનો પ્રતિસાદ આપે છે કે કેમ અને કેવી રીતે વિનંતીનું અર્થઘટન થાય છે તેના પર નિર્ભર છે. 
 
 ઉદાહરણ તરીકે, કેટલીક વેબસાઇટ્સ આ વિનંતીનો પ્રતિસાદ તમને તેવી જાહેરાતો બતાવીને આપી શકે છે કે જે તમે મુલાકાત લીધેલી અન્ય વેબસાઇટ્સ પર આધારિત નથી. ઘણી વેબસાઇટ્સ તો પણ તમારા બ્રાઉઝિંગ ડેટાને એકત્રિત કરશે અને તેનો ઉપયોગ - ઉદાહરણ તરીકે, સુરક્ષા વધારવા માટે, તેમની વેબસાઇટ્સ પર સામગ્રી, સેવાઓ, જાહેરાતો અને ભલામણ પ્રદાન કરવા માટે, રિપોર્ટિંગ આંકડા જનરેટ કરવા માટે કરશે. <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
@@ -52,7 +51,6 @@
 <translation id="1809939268435598390">ફોલ્ડર કાઢી નાખો</translation>
 <translation id="1813414402673211292">બ્રાઉઝિંગ ડેટા સાફ કરો</translation>
 <translation id="1820259098641718022">વાંચન સૂચિમાં ઉમેર્યું</translation>
-<translation id="1842969606798536927">ચુકવણી કરો</translation>
 <translation id="1876721852596493031">ઉપયોગ ડેટા મોકલો</translation>
 <translation id="1886928167269928266">શરૂઆતથી</translation>
 <translation id="1894451531427596130">આની કાર્ય કરવાની રીતને <ph name="BEGIN_LINK" />સેટિંગ્સ<ph name="END_LINK" />માં નિયંત્રિત કરો</translation>
@@ -61,7 +59,6 @@
 <translation id="1952728750904661634">સંચાલિત એકાઉન્ટ સાથે સાઇન ઇન કરો</translation>
 <translation id="1974060860693918893">વિગતવાર</translation>
 <translation id="1989112275319619282">બ્રાઉઝ કરો</translation>
-<translation id="2054511809411770085">QR કોડ અથવા બારકોડ</translation>
 <translation id="2068952045031577364">ગત અઠવાડિયા</translation>
 <translation id="2079545284768500474">પૂર્વવત કરો</translation>
 <translation id="209018056901015185">ડેસ્કટોપ સાઇટની વિનંતી કરો</translation>
@@ -104,6 +101,7 @@
 <translation id="2871695793448672541">છુપાયેલ, પાસવર્ડ</translation>
 <translation id="2898963176829412617">નવું ફોલ્ડર…</translation>
 <translation id="2903493209154104877">સરનામાંઓ</translation>
+<translation id="291754862089661335">QR કોડ અથવા બારકોડને આ ફ્રેમમાં મૂકો</translation>
 <translation id="2921219216347069551">પૃષ્ઠને શેર કરી શકાતું નથી</translation>
 <translation id="292639812446257861">વાંચ્યા વગરની તરીકે ચિહ્નિત કરો</translation>
 <translation id="2933759065870693102">ટોર્ચ</translation>
@@ -135,6 +133,7 @@
 <translation id="3478058380795961209">સમય સમાપ્તિ મહિનો</translation>
 <translation id="3482959374254649722">તમારા ટેબ્સને સમન્વયિત કરી રહ્યું છે...</translation>
 <translation id="3489372701259491571">સાચવેલ પાસવર્ડ કાઢી નાખો</translation>
+<translation id="3494788280727468875">બ્રાઉઝિંગ ડેટા સાફ કરવાની પુષ્ટિ કરો</translation>
 <translation id="3519193562722059437">વેબ બ્રાઉઝ કરવા ટેબ ખોલો.</translation>
 <translation id="3527085408025491307">ફોલ્ડર</translation>
 <translation id="3551320343578183772">ટૅબ બંધ કરો</translation>
@@ -167,6 +166,7 @@
 <translation id="4121993058175073134">ચોખ્ખો-નિકાસ ડેટા મોકલવા માટે, કૃપા કરીને સેટિંગ્સ એપ્લિકેશનમાં તમારા ઇમેઇલ એકાઉન્ટને ગોઠવો.</translation>
 <translation id="4124987746317609294">સમય શ્રેણી</translation>
 <translation id="4172051516777682613">હંમેશા બતાવો</translation>
+<translation id="418156467088430727">ઑફલાઇન સંસ્કરણ નવા ટૅબમાં જુઓ</translation>
 <translation id="424315890655130736">પાસફ્રેઝ દાખલ કરો</translation>
 <translation id="4272631900155121838">QR કોડને સ્કેન કરવા માટે, સેટિંગ્સમાંથી કૅમેરો સક્ષમ કરો</translation>
 <translation id="4281844954008187215">સેવાની શરતો</translation>
@@ -174,7 +174,6 @@
 <translation id="4359125752503270327">આ પૃષ્ઠ બીજી અ‍ૅપ્લિકેશનમાં ખુલશે.</translation>
 <translation id="4378154925671717803">ફોન</translation>
 <translation id="441868831736628555">ગોપનીયતા સૂચના</translation>
-<translation id="4426508677408162512">બધા બુકમાર્ક્સ</translation>
 <translation id="4473991315115669931">છુપા મોડમાં દાખલ થાઓ</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> પર સાચવેલા પાસવર્ડ્સ જુઓ અને સંચાલિત કરો</translation>
 <translation id="4536418791685807335">ફરીથી સાઇન ઇન કરવાનો પ્રયાસ કરો.</translation>
@@ -184,14 +183,13 @@
 <translation id="4666531726415300315"><ph name="EMAIL" /> તરીકે સાઇન ઇન થયાં.
 
 તમારો ડેટા તમારા સમન્વયન પાસફ્રેઝ સાથે એન્ક્રિપ્ટ કરવામાં આવ્યો છે. સમન્વયન શરૂ કરવા માટે તે દાખલ કરો.</translation>
-<translation id="4728558894243024398">પ્લેટફોર્મ</translation>
 <translation id="473775607612524610">અપડેટ કરો</translation>
+<translation id="4750394297954878236">સૂચનો</translation>
 <translation id="4773461607542755386">આ પૃષ્ઠને <ph name="APP_NAME" /> એપ્લિકેશનમાં ખોલીએ?</translation>
 <translation id="481968316161811770">કુકીઝ, સાઇટ ડેટા</translation>
 <translation id="4875622588773761625">શું તમે ઇચ્છો છો કે આ સાઇટ માટે <ph name="PASSWORD_MANAGER_BRAND" /> તમારો પાસવર્ડ અપડેટ કરે?</translation>
 <translation id="4881695831933465202">ખોલો</translation>
 <translation id="4904877109095351937">વાંચેલ તરીકે ચિહ્નિત કરો</translation>
-<translation id="4923459931733593730">ચુકવણી</translation>
 <translation id="4930268273022498155">અસ્તિત્વમાંનો ડેટા કાઢી નાખો. તમે <ph name="USER_EMAIL1" /> પર પાછા સ્વિચ કરીને તેને પુનઃપ્રાપ્ત કરી શકો છો.</translation>
 <translation id="4941089862236492464">માફ કરશો, તમારી આઇટમને શેર કરવામાં સમસ્યા આવી હતી.</translation>
 <translation id="4979397965658815378">તમારા બુકમાર્ક્સ, પાસવર્ડ્સ, ઇતિહાસ અને અન્ય સેટિંગ્સને તમારા બધા ઉપકરણો પર મેળવવા માટે તમારા Google એકાઉન્ટ સાથે સાઇન ઇન કરો.</translation>
@@ -207,14 +205,11 @@
 <translation id="5186185447130319458">ખાનગી</translation>
 <translation id="5190835502935405962">બુકમાર્ક્સ બાર</translation>
 <translation id="5197255632782567636">ઇન્ટરનેટ</translation>
-<translation id="5198972191746488848">કાર્ડ ઉમેરો...</translation>
 <translation id="5228579091201413441">સમન્વયન સક્ષમ કરો</translation>
-<translation id="5230733896359313003">વિતરણ માટેનું સરનામું</translation>
 <translation id="5244474230056479698"><ph name="EMAIL" /> પર સમન્વયિત કરી રહ્યાં છે</translation>
 <translation id="5300589172476337783">બતાવો</translation>
 <translation id="5317780077021120954">સાચવો</translation>
 <translation id="5327248766486351172">નામ</translation>
-<translation id="5332219387342487447">શિપિંગ પદ્ધતિ</translation>
 <translation id="5388358297987318779">છબી ખોલો</translation>
 <translation id="5409365236829784218">ત્યાં એવી કોઈ ઍપ્લિકેશન ઇન્સ્ટોલ કરેલ નથી જે આ ફાઇલ ખોલી શકે.</translation>
 <translation id="54401264925851789">પૃષ્ઠ સુરક્ષા માહિતી</translation>
@@ -284,7 +279,6 @@
 <translation id="6418346271604475326">PDF તૈયાર કરી રહ્યાં છે</translation>
 <translation id="6445051938772793705">દેશ</translation>
 <translation id="6445981559479772097">સંદેશ મોકલ્યો.</translation>
-<translation id="6456339708790392414">તમારી ચુકવણી</translation>
 <translation id="6456425917241817154">Chrome દ્વારા પાસવર્ડ જનરેટ કરાયો</translation>
 <translation id="6464071786529933911">નવા છુપા ટૅબમાં ખોલો</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> આઇટમ કાઢી નાખી</translation>
@@ -340,11 +334,9 @@
 <translation id="7649070708921625228">સહાય</translation>
 <translation id="7658239707568436148">રદ કરો</translation>
 <translation id="7671141431838911305">ઇન્સ્ટોલ કરો</translation>
-<translation id="7682287625158474539">શિપિંગ</translation>
 <translation id="7765158879357617694">સ્થાન</translation>
 <translation id="7769602470925380267">સ્વીકારો અને સાઇન આઉટ કરો</translation>
 <translation id="7772032839648071052">પાસફ્રેઝની પુષ્ટિ કરો</translation>
-<translation id="7791543448312431591">ઉમેરો</translation>
 <translation id="780301667611848630">નહીં, આભાર</translation>
 <translation id="7851858861565204677">અન્ય ઉપકરણો</translation>
 <translation id="7859704718976024901">બ્રાઉઝિંગ ઇતિહાસ</translation>
@@ -385,7 +377,6 @@
 <translation id="8654802032646794042">રદ કરો</translation>
 <translation id="8668210798914567634">આ પૃષ્ઠ, તમારી વાંચન સૂચિમાં સાચવવામાં આવ્યું છે.</translation>
 <translation id="8680787084697685621">એકાઉન્ટ સાઇન-ઇન વિગતો જૂની થઈ ગઈ છે.</translation>
-<translation id="8699098509676302392">સરનામું ઉમેરો...</translation>
 <translation id="8721297211384281569">સાધન મેનૂ</translation>
 <translation id="8725066075913043281">ફરી પ્રયાસ કરો</translation>
 <translation id="8730621377337864115">થઈ ગયું</translation>
@@ -405,7 +396,6 @@
 <translation id="9055772144595778347">સાઇન ઇન કરી શકાતું નથી</translation>
 <translation id="9065203028668620118">સંપાદન</translation>
 <translation id="9079935439869366234">તમામને વાંચ્યા વગરની તરીકે ચિહ્નિત કરો</translation>
-<translation id="9080712759204168376">ઑર્ડરનો સારાંશ</translation>
 <translation id="9083392325882095631">1 આઇટમ</translation>
 <translation id="9100610230175265781">પાસફ્રેઝ આવશ્યક છે</translation>
 <translation id="9148126808321036104">ફરીથી સાઇન ઇન કરો </translation>

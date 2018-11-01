@@ -21,7 +21,7 @@
 #include "extensions/common/manifest_handlers/permissions_parser.h"
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/switches.h"
-#include "grit/extensions_strings.h"
+#include "extensions/strings/grit/extensions_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::ASCIIToUTF16;
@@ -267,7 +267,7 @@ bool BackgroundManifestHandler::Parse(Extension* extension,
     return false;
   }
 
-  extension->SetManifestData(kBackground, info.release());
+  extension->SetManifestData(kBackground, std::move(info));
   return true;
 }
 

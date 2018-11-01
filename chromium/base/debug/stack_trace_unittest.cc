@@ -122,6 +122,22 @@ TEST_F(StackTraceTest, MAYBE_OutputToStream) {
 #endif  // define(OS_MACOSX)
 }
 
+#if !defined(OFFICIAL_BUILD)
+// Disabled in Official builds, where Link-Time Optimization can result in two
+// or fewer stack frames being available, causing the test to fail.
+TEST_F(StackTraceTest, TruncatedTrace) {
+  StackTrace trace;
+
+  size_t count = 0;
+  trace.Addresses(&count);
+  ASSERT_LT(2u, count);
+
+  StackTrace truncated(2);
+  truncated.Addresses(&count);
+  EXPECT_EQ(2u, count);
+}
+#endif  // !defined(OFFICIAL_BUILD)
+
 // The test is used for manual testing, e.g., to see the raw output.
 TEST_F(StackTraceTest, DebugOutputToStream) {
   StackTrace trace;
@@ -285,6 +301,16 @@ TEST_F(StackTraceTest, MAYBE_TraceStackFramePointers) {
   constexpr size_t kDepth = 5;
   const void* frames[kDepth];
   ExpectStackFramePointers<kDepth>(frames, kDepth);
+}
+
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#define MAYBE_StackEnd StackEnd
+#else
+#define MAYBE_StackEnd DISABLED_StackEnd
+#endif
+
+TEST_F(StackTraceTest, MAYBE_StackEnd) {
+  EXPECT_NE(0u, GetStackEnd());
 }
 
 #endif  // HAVE_TRACE_STACK_FRAME_POINTERS

@@ -22,12 +22,6 @@ WebState* WebStateDelegateBridge::OpenURLFromWebState(
   return nullptr;
 }
 
-void WebStateDelegateBridge::LoadProgressChanged(WebState* source,
-                                                 double progress) {
-  if ([delegate_ respondsToSelector:@selector(webState:didChangeProgress:)])
-    [delegate_ webState:source didChangeProgress:progress];
-}
-
 bool WebStateDelegateBridge::HandleContextMenu(
     WebState* source,
     const ContextMenuParams& params) {
@@ -35,6 +29,21 @@ bool WebStateDelegateBridge::HandleContextMenu(
     return [delegate_ webState:source handleContextMenu:params];
   }
   return NO;
+}
+
+void WebStateDelegateBridge::ShowRepostFormWarningDialog(
+    WebState* source,
+    const base::Callback<void(bool)>& callback) {
+  base::Callback<void(bool)> local_callback(callback);
+  SEL selector = @selector(webState:runRepostFormDialogWithCompletionHandler:);
+  if ([delegate_ respondsToSelector:selector]) {
+    [delegate_ webState:source
+        runRepostFormDialogWithCompletionHandler:^(BOOL should_continue) {
+          local_callback.Run(should_continue);
+        }];
+  } else {
+    local_callback.Run(true);
+  }
 }
 
 JavaScriptDialogPresenter* WebStateDelegateBridge::GetJavaScriptDialogPresenter(

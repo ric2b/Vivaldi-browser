@@ -15,40 +15,41 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/skia_util.h"
 
 // See aura_constants.cc for bool, int32_t, int64_t, std::string, gfx::Rect,
 // base::string16, uint32_t (via SkColor), and gfx::ImageSkia.
-DECLARE_WINDOW_PROPERTY_TYPE(uint8_t)
-DECLARE_WINDOW_PROPERTY_TYPE(uint16_t)
-DECLARE_WINDOW_PROPERTY_TYPE(uint64_t)
-DECLARE_WINDOW_PROPERTY_TYPE(int8_t)
-DECLARE_WINDOW_PROPERTY_TYPE(int16_t)
+DECLARE_UI_CLASS_PROPERTY_TYPE(uint8_t)
+DECLARE_UI_CLASS_PROPERTY_TYPE(uint16_t)
+DECLARE_UI_CLASS_PROPERTY_TYPE(uint64_t)
+DECLARE_UI_CLASS_PROPERTY_TYPE(int8_t)
+DECLARE_UI_CLASS_PROPERTY_TYPE(int16_t)
 
 namespace aura {
 
 namespace {
 
-DEFINE_WINDOW_PROPERTY_KEY(bool, kTestPropertyKey0, false);
-DEFINE_WINDOW_PROPERTY_KEY(bool, kTestPropertyKey1, true);
-DEFINE_WINDOW_PROPERTY_KEY(uint8_t, kTestPropertyKey2, UINT8_MAX / 3);
-DEFINE_WINDOW_PROPERTY_KEY(uint16_t, kTestPropertyKey3, UINT16_MAX / 3);
-DEFINE_WINDOW_PROPERTY_KEY(uint32_t, kTestPropertyKey4, UINT32_MAX);
-DEFINE_WINDOW_PROPERTY_KEY(uint64_t, kTestPropertyKey5, UINT64_MAX);
-DEFINE_WINDOW_PROPERTY_KEY(int8_t, kTestPropertyKey6, 0);
-DEFINE_WINDOW_PROPERTY_KEY(int16_t, kTestPropertyKey7, 1);
-DEFINE_WINDOW_PROPERTY_KEY(int32_t, kTestPropertyKey8, -1);
-DEFINE_WINDOW_PROPERTY_KEY(int64_t, kTestPropertyKey9, 777);
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kTestPropertyKey0, false);
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kTestPropertyKey1, true);
+DEFINE_UI_CLASS_PROPERTY_KEY(uint8_t, kTestPropertyKey2, UINT8_MAX / 3);
+DEFINE_UI_CLASS_PROPERTY_KEY(uint16_t, kTestPropertyKey3, UINT16_MAX / 3);
+DEFINE_UI_CLASS_PROPERTY_KEY(uint32_t, kTestPropertyKey4, UINT32_MAX);
+DEFINE_UI_CLASS_PROPERTY_KEY(uint64_t, kTestPropertyKey5, UINT64_MAX);
+DEFINE_UI_CLASS_PROPERTY_KEY(int8_t, kTestPropertyKey6, 0);
+DEFINE_UI_CLASS_PROPERTY_KEY(int16_t, kTestPropertyKey7, 1);
+DEFINE_UI_CLASS_PROPERTY_KEY(int32_t, kTestPropertyKey8, -1);
+DEFINE_UI_CLASS_PROPERTY_KEY(int64_t, kTestPropertyKey9, 777);
 
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(gfx::ImageSkia, kTestImagePropertyKey,
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(gfx::ImageSkia, kTestImagePropertyKey,
                                  nullptr);
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(gfx::Rect, kTestRectPropertyKey, nullptr);
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(gfx::Size, kTestSizePropertyKey, nullptr);
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(std::string, kTestStringPropertyKey, nullptr);
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(base::string16, kTestString16PropertyKey,
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(gfx::Rect, kTestRectPropertyKey, nullptr);
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(gfx::Size, kTestSizePropertyKey, nullptr);
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(
+     std::string, kTestStringPropertyKey, nullptr);
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(base::string16, kTestString16PropertyKey,
                                  nullptr);
 
 const char kTestPropertyServerKey0[] = "test-property-server0";
@@ -76,9 +77,11 @@ void TestPrimitiveProperty(PropertyConverter* property_converter,
                            const char* transport_name,
                            T value_1,
                            T value_2) {
-  property_converter->RegisterProperty(key, transport_name);
+  property_converter->RegisterProperty(
+      key, transport_name, PropertyConverter::CreateAcceptAnyValueCallback());
   EXPECT_EQ(transport_name,
             property_converter->GetTransportNameForPropertyKey(key));
+  EXPECT_TRUE(property_converter->IsTransportNameRegistered(transport_name));
 
   window->SetProperty(key, value_1);
   EXPECT_EQ(value_1, window->GetProperty(key));
@@ -110,6 +113,10 @@ void TestPrimitiveProperty(PropertyConverter* property_converter,
   EXPECT_EQ(value_2, static_cast<T>(decoded_value_2));
 }
 
+bool OnlyAllowNegativeNumbers(int64_t number) {
+  return number < 0;
+}
+
 }  // namespace
 
 using PropertyConverterTest = test::AuraTestBase;
@@ -118,6 +125,9 @@ using PropertyConverterTest = test::AuraTestBase;
 TEST_F(PropertyConverterTest, PrimitiveProperties) {
   PropertyConverter property_converter;
   std::unique_ptr<Window> window(CreateNormalWindow(1, root_window(), nullptr));
+
+  EXPECT_FALSE(
+      property_converter.IsTransportNameRegistered(kTestPropertyServerKey0));
 
   const bool value_0a = true, value_0b = false;
   TestPrimitiveProperty(&property_converter, window.get(), kTestPropertyKey0,
@@ -160,6 +170,30 @@ TEST_F(PropertyConverterTest, PrimitiveProperties) {
                         kTestPropertyServerKey9, value_9a, value_9b);
 }
 
+TEST_F(PropertyConverterTest, TestPrimitiveVerifier) {
+  std::unique_ptr<Window> window(CreateNormalWindow(1, root_window(), nullptr));
+
+  PropertyConverter property_converter;
+  property_converter.RegisterProperty(kTestPropertyKey8,
+                                      kTestPropertyServerKey8,
+                                      base::Bind(&OnlyAllowNegativeNumbers));
+
+  // Test that we reject invalid TransportValues during
+  // GetPropertyValueFromTransportValue().
+  int64_t int_value = 5;
+  std::vector<uint8_t> transport =
+      mojo::ConvertTo<std::vector<uint8_t>>(int_value);
+  EXPECT_FALSE(property_converter.GetPropertyValueFromTransportValue(
+      kTestPropertyServerKey8, transport, &int_value));
+
+  // Test that we reject invalid TransportValues during
+  // SetPropertyFromTransportValue().
+  EXPECT_EQ(-1, window->GetProperty(kTestPropertyKey8));
+  property_converter.SetPropertyFromTransportValue(
+      window.get(), kTestPropertyServerKey8, &transport);
+  EXPECT_EQ(-1, window->GetProperty(kTestPropertyKey8));
+}
+
 // Verifies property setting behavior for a gfx::ImageSkia* property.
 TEST_F(PropertyConverterTest, ImageSkiaProperty) {
   PropertyConverter property_converter;
@@ -168,6 +202,8 @@ TEST_F(PropertyConverterTest, ImageSkiaProperty) {
   EXPECT_EQ(
       kTestImagePropertyServerKey,
       property_converter.GetTransportNameForPropertyKey(kTestImagePropertyKey));
+  EXPECT_TRUE(property_converter.IsTransportNameRegistered(
+      kTestImagePropertyServerKey));
 
   SkBitmap bitmap_1;
   bitmap_1.allocN32Pixels(16, 32);
@@ -208,6 +244,8 @@ TEST_F(PropertyConverterTest, RectProperty) {
   EXPECT_EQ(
       kTestRectPropertyServerKey,
       property_converter.GetTransportNameForPropertyKey(kTestRectPropertyKey));
+  EXPECT_TRUE(
+      property_converter.IsTransportNameRegistered(kTestRectPropertyServerKey));
 
   gfx::Rect value_1(1, 2, 3, 4);
   std::unique_ptr<Window> window(CreateNormalWindow(1, root_window(), nullptr));
@@ -239,6 +277,8 @@ TEST_F(PropertyConverterTest, SizeProperty) {
   EXPECT_EQ(
       kTestSizePropertyServerKey,
       property_converter.GetTransportNameForPropertyKey(kTestSizePropertyKey));
+  EXPECT_TRUE(
+      property_converter.IsTransportNameRegistered(kTestSizePropertyServerKey));
 
   gfx::Size value_1(1, 2);
   std::unique_ptr<Window> window(CreateNormalWindow(1, root_window(), nullptr));
@@ -270,6 +310,8 @@ TEST_F(PropertyConverterTest, StringProperty) {
   EXPECT_EQ(kTestStringPropertyServerKey,
             property_converter.GetTransportNameForPropertyKey(
                 kTestStringPropertyKey));
+  EXPECT_TRUE(property_converter.IsTransportNameRegistered(
+      kTestStringPropertyServerKey));
 
   std::string value_1 = "test value";
   std::unique_ptr<Window> window(CreateNormalWindow(1, root_window(), nullptr));
@@ -301,6 +343,8 @@ TEST_F(PropertyConverterTest, String16Property) {
   EXPECT_EQ(kTestString16PropertyServerKey,
             property_converter.GetTransportNameForPropertyKey(
                 kTestString16PropertyKey));
+  EXPECT_TRUE(property_converter.IsTransportNameRegistered(
+      kTestString16PropertyServerKey));
 
   base::string16 value_1 = base::ASCIIToUTF16("test value");
   std::unique_ptr<Window> window(CreateNormalWindow(1, root_window(), nullptr));

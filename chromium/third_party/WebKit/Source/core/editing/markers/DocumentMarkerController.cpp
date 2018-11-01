@@ -67,8 +67,6 @@ DocumentMarker::MarkerTypeIndex MarkerTypeToMarkerIndex(
       return DocumentMarker::GrammarMarkerIndex;
     case DocumentMarker::TextMatch:
       return DocumentMarker::TextMatchMarkerIndex;
-    case DocumentMarker::InvisibleSpellcheck:
-      return DocumentMarker::InvisibleSpellcheckMarkerIndex;
     case DocumentMarker::Composition:
       return DocumentMarker::CompositionMarkerIndex;
   }
@@ -95,16 +93,15 @@ void DocumentMarkerController::clear() {
 void DocumentMarkerController::addMarker(const Position& start,
                                          const Position& end,
                                          DocumentMarker::MarkerType type,
-                                         const String& description,
-                                         uint32_t hash) {
+                                         const String& description) {
   // Use a TextIterator to visit the potentially multiple nodes the range
   // covers.
   for (TextIterator markedText(start, end); !markedText.atEnd();
        markedText.advance()) {
-    addMarker(markedText.currentContainer(),
-              DocumentMarker(type, markedText.startOffsetInCurrentContainer(),
-                             markedText.endOffsetInCurrentContainer(),
-                             description, hash));
+    addMarker(
+        markedText.currentContainer(),
+        DocumentMarker(type, markedText.startOffsetInCurrentContainer(),
+                       markedText.endOffsetInCurrentContainer(), description));
   }
 }
 
@@ -236,7 +233,7 @@ void DocumentMarkerController::addMarker(Node* node,
   m_possiblyExistingMarkerTypes.add(newMarker.type());
 
   Member<MarkerLists>& markers =
-      m_markers.add(node, nullptr).storedValue->value;
+      m_markers.insert(node, nullptr).storedValue->value;
   if (!markers) {
     markers = new MarkerLists;
     markers->grow(DocumentMarker::MarkerTypeIndexesCount);
@@ -303,7 +300,7 @@ void DocumentMarkerController::copyMarkers(Node* srcNode,
     return;
   DCHECK(!m_markers.isEmpty());
 
-  MarkerLists* markers = m_markers.get(srcNode);
+  MarkerLists* markers = m_markers.at(srcNode);
   if (!markers)
     return;
 
@@ -356,7 +353,7 @@ void DocumentMarkerController::removeMarkers(
     return;
   DCHECK(!(m_markers.isEmpty()));
 
-  MarkerLists* markers = m_markers.get(node);
+  MarkerLists* markers = m_markers.at(node);
   if (!markers)
     return;
 
@@ -422,7 +419,7 @@ void DocumentMarkerController::removeMarkers(
   }
 
   if (emptyListsCount == DocumentMarker::MarkerTypeIndexesCount) {
-    m_markers.remove(node);
+    m_markers.erase(node);
     if (m_markers.isEmpty())
       m_possiblyExistingMarkerTypes = 0;
   }
@@ -437,7 +434,7 @@ DocumentMarkerVector DocumentMarkerController::markersFor(
     DocumentMarker::MarkerTypes markerTypes) {
   DocumentMarkerVector result;
 
-  MarkerLists* markers = m_markers.get(node);
+  MarkerLists* markers = m_markers.at(node);
   if (!markers)
     return result;
 
@@ -555,7 +552,7 @@ void DocumentMarkerController::updateMarkerRenderedRectIfNeeded(
 
 void DocumentMarkerController::invalidateRectsForMarkersInNode(
     const Node& node) {
-  MarkerLists* markers = m_markers.get(&node);
+  MarkerLists* markers = m_markers.at(&node);
 
   for (auto& markerList : *markers) {
     if (!markerList || markerList->isEmpty())
@@ -734,7 +731,7 @@ void DocumentMarkerController::shiftMarkers(Node* node,
     return;
   DCHECK(!m_markers.isEmpty());
 
-  MarkerLists* markers = m_markers.get(node);
+  MarkerLists* markers = m_markers.at(node);
   if (!markers)
     return;
 
@@ -796,7 +793,7 @@ bool DocumentMarkerController::setMarkersActive(Node* node,
                                                 unsigned startOffset,
                                                 unsigned endOffset,
                                                 bool active) {
-  MarkerLists* markers = m_markers.get(node);
+  MarkerLists* markers = m_markers.at(node);
   if (!markers)
     return false;
 
@@ -832,7 +829,7 @@ void DocumentMarkerController::showMarkers() const {
        nodeIterator != end; ++nodeIterator) {
     const Node* node = nodeIterator->key;
     builder.append(String::format("%p", node));
-    MarkerLists* markers = m_markers.get(node);
+    MarkerLists* markers = m_markers.at(node);
     for (size_t markerListIndex = 0;
          markerListIndex < DocumentMarker::MarkerTypeIndexesCount;
          ++markerListIndex) {

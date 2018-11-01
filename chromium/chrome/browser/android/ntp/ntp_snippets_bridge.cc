@@ -22,10 +22,8 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_metrics.h"
-#include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
-#include "components/prefs/pref_service.h"
 #include "jni/SnippetsBridge_jni.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -65,7 +63,8 @@ ScopedJavaLocalRef<jobject> ToJavaSuggestionList(
             ConvertUTF16ToJavaString(env, suggestion.publisher_name()),
             ConvertUTF16ToJavaString(env, suggestion.snippet_text()),
             ConvertUTF8ToJavaString(env, suggestion.url().spec()),
-            suggestion.publish_date().ToJavaTime(), suggestion.score());
+            suggestion.publish_date().ToJavaTime(), suggestion.score(),
+            suggestion.fetch_date().ToJavaTime());
     if (suggestion.id().category().IsKnownCategory(
             KnownCategories::DOWNLOADS) &&
         suggestion.download_suggestion_extra() != nullptr) {
@@ -87,8 +86,7 @@ ScopedJavaLocalRef<jobject> ToJavaSuggestionList(
         suggestion.recent_tab_suggestion_extra() != nullptr) {
       Java_SnippetsBridge_setRecentTabDataForSuggestion(
           env, java_suggestion,
-          ConvertUTF8ToJavaString(
-              env, suggestion.recent_tab_suggestion_extra()->tab_id),
+          suggestion.recent_tab_suggestion_extra()->tab_id,
           suggestion.recent_tab_suggestion_extra()->offline_page_id);
     }
   }
@@ -203,9 +201,8 @@ base::android::ScopedJavaLocalRef<jobject> NTPSnippetsBridge::GetCategoryInfo(
   }
   return Java_SnippetsBridge_createSuggestionsCategoryInfo(
       env, j_category_id, ConvertUTF16ToJavaString(env, info->title()),
-      static_cast<int>(info->card_layout()), info->has_more_action(),
-      info->has_reload_action(), info->has_view_all_action(),
-      info->show_if_empty(),
+      static_cast<int>(info->card_layout()), info->has_fetch_action(),
+      info->has_view_all_action(), info->show_if_empty(),
       ConvertUTF16ToJavaString(env, info->no_suggestions_message()));
 }
 
@@ -327,16 +324,12 @@ void NTPSnippetsBridge::OnSuggestionShown(JNIEnv* env,
                                           jint j_category_id,
                                           jint position_in_category,
                                           jlong publish_timestamp_ms,
-                                          jfloat score) {
-  PrefService* pref_service = ProfileManager::GetLastUsedProfile()->GetPrefs();
-  base::Time last_background_fetch_time =
-      base::Time::FromInternalValue(pref_service->GetInt64(
-          ntp_snippets::prefs::kLastSuccessfulBackgroundFetchTime));
-
+                                          jfloat score,
+                                          jlong fetch_timestamp_ms) {
   ntp_snippets::metrics::OnSuggestionShown(
       global_position, Category::FromIDValue(j_category_id),
       position_in_category, base::Time::FromJavaTime(publish_timestamp_ms),
-      last_background_fetch_time, score);
+      score, base::Time::FromJavaTime(fetch_timestamp_ms));
   if (global_position == 0) {
     content_suggestions_service_->user_classifier()->OnEvent(
         ntp_snippets::UserClassifier::Metric::SUGGESTIONS_SHOWN);

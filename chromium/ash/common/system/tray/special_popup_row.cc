@@ -10,8 +10,8 @@
 #include "ash/common/system/tray/throbber_view.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_header_button.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
+#include "ash/resources/grit/ash_resources.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
@@ -142,8 +142,7 @@ void SpecialPopupRow::AddViewAfterContent(views::View* view,
   }
 
   if (add_separator) {
-    views::Separator* separator =
-        new views::Separator(views::Separator::VERTICAL);
+    views::Separator* separator = new views::Separator();
     separator->SetColor(ash::kBorderDarkColor);
     separator->SetBorder(
         views::CreateEmptyBorder(kSeparatorInset, 0, kSeparatorInset, 0));

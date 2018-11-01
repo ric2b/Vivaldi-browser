@@ -23,7 +23,7 @@ class PaintLayerTest
   PaintLayerTest()
       : ScopedSlimmingPaintV2ForTest(GetParam().first),
         ScopedRootLayerScrollingForTest(GetParam().second),
-        RenderingTest(SingleChildFrameLoaderClient::create()) {}
+        RenderingTest(SingleChildLocalFrameClient::create()) {}
 };
 
 SlimmingPaintAndRootLayerScrolling foo[] = {
@@ -550,8 +550,11 @@ TEST_P(PaintLayerTest, FloatLayerAndAbsoluteUnderInlineLayer) {
       toLayoutBoxModelObject(getLayoutObjectByElementId("container"))->layer();
 
   EXPECT_EQ(span, floating->parent());
+  EXPECT_EQ(container, floating->containingLayer());
   EXPECT_EQ(span, absolute->parent());
+  EXPECT_EQ(span, absolute->containingLayer());
   EXPECT_EQ(container, span->parent());
+  EXPECT_EQ(container, span->containingLayer());
 
   EXPECT_EQ(LayoutPoint(83, 83), floating->location());
   EXPECT_EQ(LayoutPoint(50, 50), absolute->location());
@@ -563,6 +566,39 @@ TEST_P(PaintLayerTest, FloatLayerAndAbsoluteUnderInlineLayer) {
   EXPECT_EQ(LayoutPoint(83, 83), floating->visualOffsetFromAncestor(container));
   EXPECT_EQ(LayoutPoint(183, 183),
             absolute->visualOffsetFromAncestor(container));
+}
+
+TEST_P(PaintLayerTest, FloatLayerUnderInlineLayerScrolled) {
+  setBodyInnerHTML(
+      "<div id='container' style='overflow: scroll; width: 50px; height: 50px'>"
+      "  <span id='span' style='position: relative; top: 100px; left: 100px'>"
+      "    <div id='floating'"
+      "      style='float: left; position: relative; top: 50px; left: 50px'>"
+      "    </div>"
+      "  </span>"
+      "  <div style='height: 1000px'></div>"
+      "</div>");
+
+  PaintLayer* floating =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("floating"))->layer();
+  PaintLayer* span =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("span"))->layer();
+  PaintLayer* container =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("container"))->layer();
+  container->getScrollableArea()->setScrollOffset(ScrollOffset(0, 400),
+                                                  ProgrammaticScroll);
+
+  EXPECT_EQ(span, floating->parent());
+  EXPECT_EQ(container, floating->containingLayer());
+  EXPECT_EQ(container, span->parent());
+  EXPECT_EQ(container, span->containingLayer());
+
+  EXPECT_EQ(LayoutPoint(50, -350), floating->location());
+  EXPECT_EQ(LayoutPoint(100, -300), span->location());
+
+  EXPECT_EQ(LayoutPoint(-50, -50), floating->visualOffsetFromAncestor(span));
+  EXPECT_EQ(LayoutPoint(50, -350),
+            floating->visualOffsetFromAncestor(container));
 }
 
 TEST_P(PaintLayerTest, FloatLayerUnderBlockUnderInlineLayer) {
@@ -582,6 +618,7 @@ TEST_P(PaintLayerTest, FloatLayerUnderBlockUnderInlineLayer) {
       toLayoutBoxModelObject(getLayoutObjectByElementId("span"))->layer();
 
   EXPECT_EQ(span, floating->parent());
+  EXPECT_EQ(span, floating->containingLayer());
 
   EXPECT_EQ(LayoutPoint(83, 83), floating->location());
   EXPECT_EQ(LayoutPoint(100, 100), span->location());
@@ -605,6 +642,9 @@ TEST_P(PaintLayerTest, FloatLayerUnderFloatUnderInlineLayer) {
       toLayoutBoxModelObject(getLayoutObjectByElementId("floating"))->layer();
   PaintLayer* span =
       toLayoutBoxModelObject(getLayoutObjectByElementId("span"))->layer();
+
+  EXPECT_EQ(span, floating->parent());
+  EXPECT_EQ(span->parent(), floating->containingLayer());
 
   EXPECT_EQ(LayoutPoint(83, 83), floating->location());
   EXPECT_EQ(LayoutPoint(100, 100), span->location());
@@ -633,6 +673,11 @@ TEST_P(PaintLayerTest, FloatLayerUnderFloatLayerUnderInlineLayer) {
   PaintLayer* span =
       toLayoutBoxModelObject(getLayoutObjectByElementId("span"))->layer();
 
+  EXPECT_EQ(floatingParent, floating->parent());
+  EXPECT_EQ(floatingParent, floating->containingLayer());
+  EXPECT_EQ(span, floatingParent->parent());
+  EXPECT_EQ(span->parent(), floatingParent->containingLayer());
+
   EXPECT_EQ(LayoutPoint(50, 50), floating->location());
   EXPECT_EQ(LayoutPoint(33, 33), floatingParent->location());
   EXPECT_EQ(LayoutPoint(100, 100), span->location());
@@ -659,6 +704,9 @@ TEST_P(PaintLayerTest, LayerUnderFloatUnderInlineLayer) {
       toLayoutBoxModelObject(getLayoutObjectByElementId("child"))->layer();
   PaintLayer* span =
       toLayoutBoxModelObject(getLayoutObjectByElementId("span"))->layer();
+
+  EXPECT_EQ(span, child->parent());
+  EXPECT_EQ(span->parent(), child->containingLayer());
 
   EXPECT_EQ(LayoutPoint(83, 83), child->location());
   EXPECT_EQ(LayoutPoint(100, 100), span->location());
@@ -717,9 +765,48 @@ TEST_P(PaintLayerTest, CompositingContainerSelfPaintingNonStackedFloat) {
   EXPECT_TRUE(target->isSelfPaintingLayer());
   EXPECT_FALSE(target->stackingNode()->isStacked());
 
+  PaintLayer* container =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("container"))->layer();
   PaintLayer* span =
       toLayoutBoxModelObject(getLayoutObjectByElementId("span"))->layer();
+  EXPECT_EQ(container, target->containingLayer());
   EXPECT_EQ(span, target->compositingContainer());
+}
+
+TEST_P(PaintLayerTest, ColumnSpanLayerUnderExtraLayerScrolled) {
+  setBodyInnerHTML(
+      "<div id='columns' style='overflow: hidden; width: 80px; height: 80px; "
+      "    columns: 2; column-gap: 0'>"
+      "  <div id='extraLayer'"
+      "      style='position: relative; top: 100px; left: 100px'>"
+      "    <div id='spanner' style='column-span: all; position: relative; "
+      "        top: 50px; left: 50px'>"
+      "    </div>"
+      "  </div>"
+      "  <div style='height: 1000px'></div>"
+      "</div>");
+
+  PaintLayer* spanner =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("spanner"))->layer();
+  PaintLayer* extraLayer =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("extraLayer"))->layer();
+  PaintLayer* columns =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("columns"))->layer();
+  columns->getScrollableArea()->setScrollOffset(ScrollOffset(200, 0),
+                                                ProgrammaticScroll);
+
+  EXPECT_EQ(extraLayer, spanner->parent());
+  EXPECT_EQ(columns, spanner->containingLayer());
+  EXPECT_EQ(columns, extraLayer->parent()->parent());
+  EXPECT_EQ(columns, extraLayer->containingLayer()->parent());
+
+  EXPECT_EQ(LayoutPoint(-150, 50), spanner->location());
+  EXPECT_EQ(LayoutPoint(100, 100), extraLayer->location());
+  // -60 = 2nd-column-x(40) - scroll-offset-x(200) + x-location(100)
+  // 20 = y-location(100) - column-height(80)
+  EXPECT_EQ(LayoutPoint(-60, 20),
+            extraLayer->visualOffsetFromAncestor(columns));
+  EXPECT_EQ(LayoutPoint(-150, 50), spanner->visualOffsetFromAncestor(columns));
 }
 
 }  // namespace blink

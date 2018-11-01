@@ -4,21 +4,15 @@
 
 package org.chromium.chrome.browser.customtabs;
 
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.net.Uri;
-import android.os.AsyncTask;
 import android.view.Menu;
 import android.view.MenuItem;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
-import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.share.ShareHelper;
@@ -27,7 +21,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 /**
  * App menu properties delegate for {@link CustomTabActivity}.
@@ -39,10 +32,10 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
     private final boolean mIsMediaViewer;
     private final boolean mShowStar;
     private final boolean mShowDownload;
+    private final boolean mIsOpenedByChrome;
 
     private final List<String> mMenuEntries;
     private final Map<MenuItem, Integer> mItemToIndexMap = new HashMap<MenuItem, Integer>();
-    private final AsyncTask<Void, Void, String> mDefaultBrowserFetcher;
 
     private boolean mIsCustomEntryAdded;
 
@@ -58,29 +51,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
         mIsMediaViewer = isMediaViewer;
         mShowStar = showStar;
         mShowDownload = showDownload;
-
-        mDefaultBrowserFetcher = new AsyncTask<Void, Void, String>() {
-            @Override
-            protected String doInBackground(Void... params) {
-                String packageLabel = null;
-                if (isOpenedByChrome) {
-                    // If the Custom Tab was created by Chrome, Chrome should open it.
-                    packageLabel = BuildInfo.getPackageLabel(activity);
-                } else {
-                    // Check if there is a default handler for the Intent.  If so, grab its label.
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(SAMPLE_URL));
-                    PackageManager pm = activity.getPackageManager();
-                    ResolveInfo info = pm.resolveActivity(intent, 0);
-                    if (info != null && info.match != 0) {
-                        packageLabel = info.loadLabel(pm).toString();
-                    }
-                }
-
-                return packageLabel == null
-                        ? activity.getString(R.string.menu_open_in_product_default)
-                        : activity.getString(R.string.menu_open_in_product, packageLabel);
-            }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        mIsOpenedByChrome = isOpenedByChrome;
     }
 
     @Override
@@ -106,8 +77,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
             MenuItem bookmarkItem = menu.findItem(R.id.bookmark_this_page_id);
             MenuItem downloadItem = menu.findItem(R.id.offline_page_id);
-            MenuItem addToHomeScreenItem = menu.findItem(R.id.add_to_homescreen_id);
-            addToHomeScreenItem.setTitle(AppBannerManager.getHomescreenLanguageOption());
+
+            boolean addToHomeScreenVisible = true;
 
             // Hide request desktop site on all chrome:// pages except for the NTP. Check request
             // desktop site if it's activated on this page.
@@ -120,14 +91,10 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 openInChromeItem.setVisible(false);
                 menu.findItem(R.id.find_in_page_id).setVisible(false);
                 menu.findItem(R.id.request_desktop_site_id).setVisible(false);
-                addToHomeScreenItem.setVisible(false);
+                addToHomeScreenVisible = false;
             } else {
-                try {
-                    openInChromeItem.setTitle(mDefaultBrowserFetcher.get());
-                } catch (InterruptedException | ExecutionException e) {
-                    openInChromeItem.setTitle(
-                            mActivity.getString(R.string.menu_open_in_product_default));
-                }
+                openInChromeItem.setTitle(
+                        DefaultBrowserInfo.getTitleOpenInDefaultBrowser(mIsOpenedByChrome));
                 updateBookmarkMenuItem(bookmarkItem, currentTab);
             }
             bookmarkItem.setVisible(mShowStar);
@@ -136,16 +103,16 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 openInChromeItem.setVisible(false);
                 bookmarkItem.setVisible(false);
                 downloadItem.setVisible(false);
-                addToHomeScreenItem.setVisible(false);
+                addToHomeScreenVisible = false;
             }
 
             downloadItem.setEnabled(DownloadUtils.isAllowedToDownloadPage(currentTab));
 
             String url = currentTab.getUrl();
-            boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_SCHEME)
-                    || url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME);
+            boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_URL_PREFIX)
+                    || url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
             if (isChromeScheme) {
-                addToHomeScreenItem.setVisible(false);
+                addToHomeScreenVisible = false;
             }
 
             // Add custom menu items. Make sure they are only added once.
@@ -156,6 +123,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                     mItemToIndexMap.put(item, i);
                 }
             }
+
+            prepareAddToHomescreenMenuItem(menu, currentTab.getUrl(), addToHomeScreenVisible);
         }
     }
 

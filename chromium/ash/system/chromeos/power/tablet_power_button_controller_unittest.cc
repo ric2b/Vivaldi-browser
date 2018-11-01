@@ -52,7 +52,7 @@ class TabletPowerButtonControllerTest : public AshTestBase {
     power_manager_client_ = new chromeos::FakePowerManagerClient();
     dbus_setter->SetPowerManagerClient(base::WrapUnique(power_manager_client_));
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kAshEnableTouchViewTesting);
+        switches::kAshEnableTouchView);
     AshTestBase::SetUp();
 
     lock_state_controller_ = Shell::GetInstance()->lock_state_controller();
@@ -75,8 +75,11 @@ class TabletPowerButtonControllerTest : public AshTestBase {
 
   void TearDown() override {
     generator_ = nullptr;
+    const bool is_mash = WmShell::Get()->IsRunningInMash();
     AshTestBase::TearDown();
-    chromeos::DBusThreadManager::Shutdown();
+    // Mash shuts down dbus after each test.
+    if (!is_mash)
+      chromeos::DBusThreadManager::Shutdown();
   }
 
  protected:
@@ -437,6 +440,61 @@ TEST_F(TabletPowerButtonControllerTest,
   power_manager_client_->SendPowerButtonEvent(false, tick_clock_->NowTicks());
   EXPECT_FALSE(GetLockedState());
   EXPECT_FALSE(GetBacklightsForcedOff());
+}
+
+// Tests that repeated power button releases are ignored (crbug.com/675291).
+TEST_F(TabletPowerButtonControllerTest, IgnoreRepeatedPowerButtonReleases) {
+  // Advance a long duration from initialized last resume time in
+  // |tablet_controller_| to avoid cross interference.
+  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(2000));
+
+  // Set backlights forced off for starting point.
+  PressPowerButton();
+  ReleasePowerButton();
+  power_manager_client_->SendBrightnessChanged(0, false);
+  EXPECT_TRUE(GetBacklightsForcedOff());
+
+  // Test that a pressing-releasing operation after a short duration, backlights
+  // forced off is stopped since we don't drop request for power button pressed.
+  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(200));
+  power_manager_client_->SendPowerButtonEvent(true, tick_clock_->NowTicks());
+  power_manager_client_->SendBrightnessChanged(kNonZeroBrightness, false);
+  power_manager_client_->SendPowerButtonEvent(false, tick_clock_->NowTicks());
+  EXPECT_FALSE(GetBacklightsForcedOff());
+
+  // Test that after another short duration, backlights will not be forced off
+  // since this immediately following forcing off request needs to be dropped.
+  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(200));
+  power_manager_client_->SendPowerButtonEvent(true, tick_clock_->NowTicks());
+  power_manager_client_->SendPowerButtonEvent(false, tick_clock_->NowTicks());
+  EXPECT_FALSE(GetBacklightsForcedOff());
+
+  // Test that after another long duration, backlights should be forced off.
+  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(800));
+  power_manager_client_->SendPowerButtonEvent(true, tick_clock_->NowTicks());
+  power_manager_client_->SendPowerButtonEvent(false, tick_clock_->NowTicks());
+  power_manager_client_->SendBrightnessChanged(0, false);
+  EXPECT_TRUE(GetBacklightsForcedOff());
+}
+
+// Tests that with system reboot, the local state of touchscreen enabled state
+// should be synced with new backlights forced off state from powerd.
+TEST_F(TabletPowerButtonControllerTest, SyncTouchscreenStatus) {
+  shell_delegate_->SetTouchscreenEnabledInPrefs(false,
+                                                true /* use_local_state */);
+  ASSERT_FALSE(shell_delegate_->IsTouchscreenEnabledInPrefs(true));
+
+  // Simulate system reboot by resetting backlights forced off state in powerd
+  // and TabletPowerButtonController.
+  power_manager_client_->SetBacklightsForcedOff(false);
+  Shell::GetInstance()
+      ->power_button_controller()
+      ->ResetTabletPowerButtonControllerForTest();
+
+  // Check that the local state of touchscreen enabled state is in line with
+  // backlights forced off state.
+  EXPECT_FALSE(GetBacklightsForcedOff());
+  EXPECT_TRUE(shell_delegate_->IsTouchscreenEnabledInPrefs(true));
 }
 
 }  // namespace test

@@ -29,7 +29,6 @@ import re
 import unittest
 
 from webkitpy.common.host import Host
-from webkitpy.common.system.output_capture import OutputCapture
 from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.w3c.test_converter import _W3CTestConverter, convert_for_webkit
 from webkitpy.common.system.system_host_mock import MockSystemHost
@@ -79,14 +78,9 @@ CONTENT OF TEST
 """
         converter = _W3CTestConverter(DUMMY_PATH, DUMMY_FILENAME, None)
 
-        oc = OutputCapture()
-        oc.capture_output()
-        try:
-            converter.feed(test_html)
-            converter.close()
-            converted = converter.output()
-        finally:
-            oc.restore_output()
+        converter.feed(test_html)
+        converter.close()
+        converted = converter.output()
 
         self.verify_no_conversion_happened(converted, test_html)
 
@@ -112,14 +106,9 @@ CONTENT OF TEST
         converter = _W3CTestConverter(fake_dir_path, DUMMY_FILENAME, None)
         test_content = self.generate_test_content(converter.prefixed_properties, 1, test_html)
 
-        oc = OutputCapture()
-        oc.capture_output()
-        try:
-            converter.feed(test_content[1])
-            converter.close()
-            converted = converter.output()
-        finally:
-            oc.restore_output()
+        converter.feed(test_content[1])
+        converter.close()
+        converted = converter.output()
 
         self.verify_conversion_happened(converted)
         self.verify_prefixed_properties(converted, test_content[0])
@@ -197,16 +186,11 @@ CONTENT OF TEST
 </html>
 """
         converter = _W3CTestConverter(DUMMY_PATH, DUMMY_FILENAME, None)
-        test_content = self.generate_test_content(converter.prefixed_properties, 22, test_html)
+        test_content = self.generate_test_content(converter.prefixed_properties, 4, test_html)
 
-        oc = OutputCapture()
-        oc.capture_output()
-        try:
-            converter.feed(test_content[1])
-            converter.close()
-            converted = converter.output()
-        finally:
-            oc.restore_output()
+        converter.feed(test_content[1])
+        converter.close()
+        converted = converter.output()
 
         self.verify_conversion_happened(converted)
         self.verify_prefixed_properties(converted, test_content[0])
@@ -231,15 +215,9 @@ CONTENT OF TEST
         }
         converter = _W3CTestConverter(DUMMY_PATH, DUMMY_FILENAME, test_reference_support_info)
 
-        oc = OutputCapture()
-        oc.capture_output()
-
-        try:
-            converter.feed(test_html)
-            converter.close()
-            converted = converter.output()
-        finally:
-            oc.restore_output()
+        converter.feed(test_html)
+        converter.close()
+        converted = converter.output()
 
         self.verify_conversion_happened(converted)
         self.verify_reference_relative_paths(converted, test_reference_support_info)
@@ -285,15 +263,13 @@ CONTENT OF TEST
         return (test_properties, html)
 
     def test_convert_for_webkit_with_non_utf8(self):
-        files = {'/file': 'e\x87[P',
-                 '/mock-checkout/third_party/WebKit/Source/core/css/CSSProperties.in': '', }
+        files = {'/file': 'e\x87[P', }
         host = MockSystemHost(filesystem=MockFileSystem(files=files))
         convert_for_webkit('', '/file', '', host)
 
     # This test passes if no Exception is raised
     def test_convert_for_webkit_with_utf8(self):
-        files = {'/file': 'foo',
-                 '/mock-checkout/third_party/WebKit/Source/core/css/CSSProperties.in': '', }
+        files = {'/file': 'foo', }
         host = MockSystemHost(filesystem=MockFileSystem(files=files))
         convert_for_webkit('', '/file', '', host)
 

@@ -125,7 +125,6 @@ Network.NetworkLogViewColumns = class {
     this._dataGridScroller.addEventListener('mousewheel', this._onMouseWheel.bind(this, true), true);
 
     this._waterfallScroller = this._waterfallColumn.contentElement.createChild('div', 'network-waterfall-v-scroll');
-    this._waterfallScroller.addEventListener('scroll', this._syncScrollers.bind(this), {passive: true});
     this._waterfallScrollerContent = this._waterfallScroller.createChild('div', 'network-waterfall-v-scroll-content');
 
     this._dataGrid.addEventListener(DataGrid.DataGrid.Events.PaddingChanged, () => {
@@ -151,8 +150,11 @@ Network.NetworkLogViewColumns = class {
       var node = this._waterfallColumn.getNodeFromPoint(event.offsetX, event.offsetY);
       if (!node)
         return;
+      var request = node.request();
+      if (!request)
+        return;
       var contextMenu = new UI.ContextMenu(event);
-      this._networkLogView.handleContextMenuForRequest(contextMenu, node.request());
+      this._networkLogView.handleContextMenuForRequest(contextMenu, request);
       contextMenu.show();
     }
   }
@@ -191,6 +193,7 @@ Network.NetworkLogViewColumns = class {
           this._activeScroller.scrollTop, this._eventDividersShown ? this._eventDividers : undefined);
       return;
     }
+    this._syncScrollers();
     var nodes = this._networkLogView.flatNodesList();
     this._waterfallColumn.update(this._activeScroller.scrollTop, this._eventDividers, nodes);
   }
@@ -202,8 +205,9 @@ Network.NetworkLogViewColumns = class {
         'contextmenu', event => this._innerHeaderContextMenu(new UI.ContextMenu(event)));
     var innerElement = this._waterfallHeaderElement.createChild('div');
     innerElement.textContent = Common.UIString('Waterfall');
-    this._waterfallColumnSortIcon = this._waterfallHeaderElement.createChild('div', 'sort-order-icon-container')
-                                        .createChild('div', 'sort-order-icon');
+    this._waterfallColumnSortIcon = UI.Icon.create('', 'sort-order-icon');
+    this._waterfallHeaderElement.createChild('div', 'sort-order-icon-container')
+        .appendChild(this._waterfallColumnSortIcon);
 
     /**
      * @this {Network.NetworkLogViewColumns}
@@ -222,10 +226,6 @@ Network.NetworkLogViewColumns = class {
    */
   setCalculator(x) {
     this._waterfallColumn.setCalculator(x);
-  }
-
-  dataChanged() {
-    this._waterfallRequestsAreStale = true;
   }
 
   scheduleRefresh() {
@@ -265,20 +265,19 @@ Network.NetworkLogViewColumns = class {
   _sortHandler() {
     var columnId = this._dataGrid.sortColumnId();
     this._networkLogView.removeAllNodeHighlights();
-    this._waterfallColumnSortIcon.classList.remove('sort-ascending', 'sort-descending');
-
+    this._waterfallRequestsAreStale = true;
     if (columnId === 'waterfall') {
       if (this._dataGrid.sortOrder() === DataGrid.DataGrid.Order.Ascending)
-        this._waterfallColumnSortIcon.classList.add('sort-ascending');
+        this._waterfallColumnSortIcon.setIconType('smallicon-triangle-up');
       else
-        this._waterfallColumnSortIcon.classList.add('sort-descending');
+        this._waterfallColumnSortIcon.setIconType('smallicon-triangle-down');
 
-      this._waterfallRequestsAreStale = true;
       var sortFunction = Network.NetworkRequestNode.RequestPropertyComparator.bind(null, this._activeWaterfallSortId);
       this._dataGrid.sortNodes(sortFunction, !this._dataGrid.isSortOrderAscending());
       this._networkLogView.dataGridSorted();
       return;
     }
+    this._waterfallColumnSortIcon.setIconType('');
 
     var columnConfig = this._columns.find(columnConfig => columnConfig.id === columnId);
     if (!columnConfig || !columnConfig.sortingFunction)
@@ -445,9 +444,9 @@ Network.NetworkLogViewColumns = class {
         customHeaders, headerTitle => !!this._addCustomHeader(headerTitle), this._changeCustomHeader.bind(this),
         this._removeCustomHeader.bind(this));
     var dialog = new UI.Dialog();
-    manageCustomHeaders.show(dialog.element);
-    dialog.setWrapsContent(true);
-    dialog.show();
+    manageCustomHeaders.show(dialog.contentElement);
+    dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.MeasureContent);
+    dialog.show(this._networkLogView.element);
   }
 
   /**

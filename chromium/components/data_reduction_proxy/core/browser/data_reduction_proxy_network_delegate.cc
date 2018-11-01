@@ -205,7 +205,7 @@ void DataReductionProxyNetworkDelegate::OnBeforeSendHeadersInternal(
   DCHECK(data_reduction_proxy_config_);
   DCHECK(request);
 
-  // If this is after a redirect, reset |request|'s DataReductionProxyData.
+  // Reset |request|'s DataReductionProxyData.
   DataReductionProxyData::ClearData(request);
 
   if (params::IsIncludedInHoldbackFieldTrial()) {
@@ -220,13 +220,14 @@ void DataReductionProxyNetworkDelegate::OnBeforeSendHeadersInternal(
   }
 
   bool using_data_reduction_proxy = true;
-  // The following checks rule out direct, invalid, and othe connection types.
-  if (!proxy_info.is_http() && !proxy_info.is_https() && !proxy_info.is_quic())
+  // The following checks rule out direct, invalid, and other connection types.
+  if (!proxy_info.is_http() && !proxy_info.is_https() &&
+      !proxy_info.is_quic()) {
     using_data_reduction_proxy = false;
-  else if (proxy_info.proxy_server().host_port_pair().IsEmpty())
+  } else if (proxy_info.proxy_server().host_port_pair().IsEmpty()) {
     using_data_reduction_proxy = false;
-  else if (!data_reduction_proxy_config_->IsDataReductionProxy(
-               proxy_info.proxy_server(), nullptr)) {
+  } else if (!data_reduction_proxy_config_->IsDataReductionProxy(
+                 proxy_info.proxy_server(), nullptr)) {
     using_data_reduction_proxy = false;
   }
 
@@ -276,6 +277,14 @@ void DataReductionProxyNetworkDelegate::OnBeforeSendHeadersInternal(
   data_reduction_proxy_request_options_->AddRequestHeader(headers);
   if (lofi_decider)
     lofi_decider->MaybeSetIgnorePreviewsBlacklistDirective(headers);
+}
+
+void DataReductionProxyNetworkDelegate::OnBeforeRedirectInternal(
+    net::URLRequest* request,
+    const GURL& new_location) {
+  // Since this is after a redirect response, reset |request|'s
+  // DataReductionProxyData.
+  DataReductionProxyData::ClearData(request);
 }
 
 void DataReductionProxyNetworkDelegate::OnCompletedInternal(
@@ -391,8 +400,7 @@ void DataReductionProxyNetworkDelegate::RecordContentLength(
       data_reduction_proxy_io_data_ &&
           data_reduction_proxy_io_data_->IsEnabled() &&
           data_reduction_proxy_io_data_->lofi_decider() &&
-          data_reduction_proxy_io_data_->lofi_decider()->IsUsingLoFiMode(
-              request),
+          data_reduction_proxy_io_data_->lofi_decider()->IsUsingLoFi(request),
       request.received_response_content_length(), original_content_length,
       freshness_lifetime);
 

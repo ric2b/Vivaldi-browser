@@ -106,6 +106,7 @@ source_set("stack_view") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "card_set_unittest.mm",
@@ -126,6 +127,7 @@ source_set("unit_tests") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "stack_view_egtest.mm",
@@ -142,6 +144,7 @@ source_set("eg_tests") {
     "//ios/chrome/browser/ui/tools_menu",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
   ]
   libs = [ "XCTest.framework" ]

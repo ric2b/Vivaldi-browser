@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "components/sync/base/hash_util.h"
-#include "components/sync/model/model_error.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model_impl/in_memory_metadata_change_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -162,7 +161,7 @@ FakeModelTypeSyncBridge::FakeModelTypeSyncBridge(
       db_(base::MakeUnique<Store>()) {}
 
 FakeModelTypeSyncBridge::~FakeModelTypeSyncBridge() {
-  CheckPostConditions();
+  EXPECT_FALSE(error_next_);
 }
 
 EntitySpecifics FakeModelTypeSyncBridge::WriteItem(const std::string& key,
@@ -337,10 +336,6 @@ void FakeModelTypeSyncBridge::SetConflictResolution(
 void FakeModelTypeSyncBridge::ErrorOnNextCall() {
   EXPECT_FALSE(error_next_);
   error_next_ = true;
-}
-
-void FakeModelTypeSyncBridge::CheckPostConditions() {
-  EXPECT_FALSE(error_next_);
 }
 
 }  // namespace syncer

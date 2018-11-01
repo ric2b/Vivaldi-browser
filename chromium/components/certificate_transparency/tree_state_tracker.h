@@ -15,6 +15,7 @@
 #include "net/cert/sth_observer.h"
 
 namespace net {
+class NetLog;
 class CTLogVerifier;
 class X509Certificate;
 
@@ -26,6 +27,7 @@ struct SignedTreeHead;
 }  // namespace net
 
 namespace certificate_transparency {
+class LogDnsClient;
 class SingleTreeTracker;
 
 // This class receives notifications of new Signed Tree Heads (STHs) and
@@ -42,8 +44,8 @@ class TreeStateTracker : public net::CTVerifier::Observer,
   // is based on the assumption that the list of recognized logs does not change
   // during the object's life time.
   // Observed STHs from logs not in this list will be simply ignored.
-  explicit TreeStateTracker(
-      std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs);
+  TreeStateTracker(std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs,
+                   net::NetLog* net_log);
   ~TreeStateTracker() override;
 
   // net::ct::CTVerifier::Observer implementation.
@@ -56,6 +58,12 @@ class TreeStateTracker : public net::CTVerifier::Observer,
   void NewSTHObserved(const net::ct::SignedTreeHead& sth) override;
 
  private:
+  // A Log DNS client for fetching inclusion proof and leaf indices from
+  // DNS front-end of CT logs.
+  // Shared between all SingleTreeTrackers, for rate-limiting across all
+  // trackers. Must be deleted after the tree trackers.
+  std::unique_ptr<LogDnsClient> dns_client_;
+
   // Holds the SingleTreeTracker for each log
   std::map<std::string, std::unique_ptr<SingleTreeTracker>> tree_trackers_;
 

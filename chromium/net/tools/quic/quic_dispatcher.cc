@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_flags.h"
@@ -14,6 +13,7 @@
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_stack_trace.h"
 #include "net/tools/quic/chlo_extractor.h"
 #include "net/tools/quic/quic_per_connection_packet_writer.h"
 #include "net/tools/quic/quic_simple_server_session.h"
@@ -276,9 +276,8 @@ bool QuicDispatcher::OnUnauthenticatedPublicHeader(
   }
 
   // Check if we are buffering packets for this connection ID
-  if (FLAGS_quic_reloadable_flag_enable_async_get_proof &&
-      (temporarily_buffered_connections_.find(connection_id) !=
-       temporarily_buffered_connections_.end())) {
+  if (temporarily_buffered_connections_.find(connection_id) !=
+      temporarily_buffered_connections_.end()) {
     // This packet was received while the a CHLO for the same connection ID was
     // being processed.  Buffer it.
     BufferEarlyPacket(connection_id);
@@ -308,8 +307,7 @@ bool QuicDispatcher::OnUnauthenticatedPublicHeader(
   QuicVersion version = GetSupportedVersions().front();
   if (header.version_flag) {
     QuicVersion packet_version = header.versions.front();
-    if (FLAGS_quic_reloadable_flag_quic_fix_version_manager &&
-        framer_.supported_versions() != GetSupportedVersions()) {
+    if (framer_.supported_versions() != GetSupportedVersions()) {
       // Reset framer's version if version flags change in flight.
       framer_.SetSupportedVersions(GetSupportedVersions());
     }
@@ -386,14 +384,11 @@ void QuicDispatcher::ProcessUnauthenticatedHeaderFate(
           current_server_address_, current_client_address_, connection_id,
           packet_number, *current_packet_);
 
-      if (FLAGS_quic_reloadable_flag_enable_async_get_proof) {
-        // Any packets which were buffered while the stateless rejector logic
-        // was running should be discarded.  Do not inform the time wait list
-        // manager, which should already have a made a decision about sending a
-        // reject based on the CHLO alone.
-        buffered_packets_.DiscardPackets(connection_id);
-      }
-
+      // Any packets which were buffered while the stateless rejector logic was
+      // running should be discarded.  Do not inform the time wait list manager,
+      // which should already have a made a decision about sending a reject
+      // based on the CHLO alone.
+      buffered_packets_.DiscardPackets(connection_id);
       break;
     case kFateBuffer:
       // This packet is a non-CHLO packet which has arrived before the
@@ -497,11 +492,11 @@ void QuicDispatcher::OnConnectionClosed(QuicConnectionId connection_id,
     QUIC_BUG << "ConnectionId " << connection_id
              << " does not exist in the session map.  Error: "
              << QuicErrorCodeToString(error);
-    QUIC_BUG << base::debug::StackTrace().ToString();
+    QUIC_BUG << QuicStackTrace();
     return;
   }
 
-  DVLOG_IF(1, error != QUIC_NO_ERROR)
+  QUIC_DLOG_IF(INFO, error != QUIC_NO_ERROR)
       << "Closing connection (" << connection_id
       << ") due to error: " << QuicErrorCodeToString(error)
       << ", with details: " << error_details;
@@ -888,13 +883,11 @@ void QuicDispatcher::MaybeRejectStatelessly(QuicConnectionId connection_id,
   }
 
   // Insert into set of connection IDs to buffer
-  if (FLAGS_quic_reloadable_flag_enable_async_get_proof) {
-    const bool ok =
-        temporarily_buffered_connections_.insert(connection_id).second;
-    QUIC_BUG_IF(!ok)
-        << "Processing multiple stateless rejections for connection ID "
-        << connection_id;
-  }
+  const bool ok =
+      temporarily_buffered_connections_.insert(connection_id).second;
+  QUIC_BUG_IF(!ok)
+      << "Processing multiple stateless rejections for connection ID "
+      << connection_id;
 
   // Continue stateless rejector processing
   std::unique_ptr<StatelessRejectorProcessDoneCallback> cb(
@@ -910,23 +903,21 @@ void QuicDispatcher::OnStatelessRejectorProcessDone(
     std::unique_ptr<QuicReceivedPacket> current_packet,
     QuicPacketNumber packet_number,
     QuicVersion first_version) {
-  if (FLAGS_quic_reloadable_flag_enable_async_get_proof) {
-    // Stop buffering packets on this connection
-    const auto num_erased =
-        temporarily_buffered_connections_.erase(rejector->connection_id());
-    QUIC_BUG_IF(num_erased != 1) << "Completing stateless rejection logic for "
-                                    "non-buffered connection ID "
-                                 << rejector->connection_id();
+  // Stop buffering packets on this connection
+  const auto num_erased =
+      temporarily_buffered_connections_.erase(rejector->connection_id());
+  QUIC_BUG_IF(num_erased != 1) << "Completing stateless rejection logic for "
+                                  "non-buffered connection ID "
+                               << rejector->connection_id();
 
-    // If this connection has gone into time-wait during the async processing,
-    // don't proceed.
-    if (time_wait_list_manager_->IsConnectionIdInTimeWait(
-            rejector->connection_id())) {
-      time_wait_list_manager_->ProcessPacket(
-          current_server_address, current_client_address,
-          rejector->connection_id(), packet_number, *current_packet);
-      return;
-    }
+  // If this connection has gone into time-wait during the async processing,
+  // don't proceed.
+  if (time_wait_list_manager_->IsConnectionIdInTimeWait(
+          rejector->connection_id())) {
+    time_wait_list_manager_->ProcessPacket(
+        current_server_address, current_client_address,
+        rejector->connection_id(), packet_number, *current_packet);
+    return;
   }
 
   // Reset current_* to correspond to the packet which initiated the stateless

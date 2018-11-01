@@ -343,7 +343,7 @@ TEST_F(SpdyStreamTest, PushedStream) {
 
   data.RunUntilPaused();
 
-  base::WeakPtr<SpdyStream> push_stream;
+  SpdyStream* push_stream;
   EXPECT_THAT(session->GetPushStream(GURL(kPushUrl), IDLE, &push_stream,
                                      NetLogWithSource()),
               IsOk());
@@ -355,7 +355,7 @@ TEST_F(SpdyStreamTest, PushedStream) {
   EXPECT_EQ(g_time_now, load_timing_info.push_start);
   EXPECT_TRUE(load_timing_info.push_end.is_null());
 
-  StreamDelegateDoNothing push_delegate(push_stream);
+  StreamDelegateDoNothing push_delegate(push_stream->GetWeakPtr());
   push_stream->SetDelegate(&push_delegate);
 
   data.Resume();
@@ -563,7 +563,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeaders) {
   AddRead(reply);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();
@@ -622,7 +622,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeadersOnPush) {
   AddWrite(priority);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(2, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(2, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadPause();
@@ -656,7 +656,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeadersOnPush) {
 
   data.RunUntilPaused();
 
-  base::WeakPtr<SpdyStream> push_stream;
+  SpdyStream* push_stream;
   EXPECT_THAT(session->GetPushStream(GURL(kPushUrl), IDLE, &push_stream,
                                      NetLogWithSource()),
               IsOk());
@@ -686,7 +686,7 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatus) {
   AddRead(reply);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();
@@ -751,7 +751,7 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatusOnPushedStream) {
   AddRead(pushed_reply);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(2, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(2, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   SpdySerializedFrame body(
@@ -808,7 +808,7 @@ TEST_F(SpdyStreamTest, HeadersMustPreceedData) {
   AddRead(body);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();
@@ -861,7 +861,7 @@ TEST_F(SpdyStreamTest, HeadersMustPreceedDataOnPushedStream) {
   AddRead(pushed_body);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(2, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(2, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   SpdySerializedFrame body(
@@ -931,7 +931,7 @@ TEST_F(SpdyStreamTest, TrailersMustNotFollowTrailers) {
   AddRead(second_trailers);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();
@@ -991,7 +991,7 @@ TEST_F(SpdyStreamTest, DataMustNotFollowTrailers) {
   AddRead(body);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();
@@ -1098,7 +1098,7 @@ TEST_F(SpdyStreamTest, StatusMustStartWithNumber) {
   AddRead(reply);
 
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_PROTOCOL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();
@@ -1203,7 +1203,7 @@ TEST_F(SpdyStreamTest, IncreaseSendWindowSizeOverflow) {
   // Triggered by the overflowing call to IncreaseSendWindowSize
   // below.
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_FLOW_CONTROL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_FLOW_CONTROL_ERROR));
   AddWrite(rst);
 
   AddReadEOF();

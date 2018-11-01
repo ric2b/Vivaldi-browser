@@ -13,6 +13,7 @@
 #include "core/workers/WorkerThread.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "core/workers/WorkerThreadTestHelper.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -57,8 +58,7 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
   void countFeature(UseCounter::Feature feature) {
     EXPECT_TRUE(isCurrentThread());
     globalScope()->countFeature(feature);
-    workerReportingProxy()
-        .getParentFrameTaskRunners()
+    getParentFrameTaskRunners()
         ->get(TaskType::UnspecedTimer)
         ->postTask(BLINK_FROM_HERE, crossThreadBind(&testing::exitRunLoop));
   }
@@ -74,8 +74,7 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
     String consoleMessage = consoleMessageStorage()->at(0)->message();
     EXPECT_TRUE(consoleMessage.contains("deprecated"));
 
-    workerReportingProxy()
-        .getParentFrameTaskRunners()
+    getParentFrameTaskRunners()
         ->get(TaskType::UnspecedTimer)
         ->postTask(BLINK_FROM_HERE, crossThreadBind(&testing::exitRunLoop));
   }
@@ -117,13 +116,15 @@ class InProcessWorkerMessagingProxyForTest
     CSPHeaderAndType headerAndType("contentSecurityPolicy",
                                    ContentSecurityPolicyHeaderTypeReport);
     headers->push_back(headerAndType);
-    workerThread()->start(WorkerThreadStartupData::create(
-        scriptURL, "fake user agent", source, nullptr /* cachedMetaData */,
-        DontPauseWorkerGlobalScopeOnStart, headers.get(),
-        "" /* referrerPolicy */, m_securityOrigin.get(),
-        nullptr /* workerClients */, WebAddressSpaceLocal,
-        nullptr /* originTrialTokens */, nullptr /* workerSettings */,
-        WorkerV8Settings::Default()));
+    workerThread()->start(
+        WorkerThreadStartupData::create(
+            scriptURL, "fake user agent", source, nullptr /* cachedMetaData */,
+            DontPauseWorkerGlobalScopeOnStart, headers.get(),
+            "" /* referrerPolicy */, m_securityOrigin.get(),
+            nullptr /* workerClients */, WebAddressSpaceLocal,
+            nullptr /* originTrialTokens */, nullptr /* workerSettings */,
+            WorkerV8Settings::Default()),
+        getParentFrameTaskRunners());
 
     workerInspectorProxy()->workerThreadCreated(
         toDocument(getExecutionContext()), m_workerThread.get(), scriptURL);
@@ -216,7 +217,7 @@ class DedicatedWorkerTest : public ::testing::Test {
 
   void dispatchMessageEvent() {
     workerMessagingProxy()->postMessageToWorkerGlobalScope(
-        nullptr /* message */, nullptr /* channels */);
+        nullptr /* message */, MessagePortChannelArray());
   }
 
   InProcessWorkerMessagingProxyForTest* workerMessagingProxy() {
@@ -385,8 +386,8 @@ TEST_F(DedicatedWorkerTest, UseCounter) {
   EXPECT_FALSE(UseCounter::isCounted(document(), feature1));
   workerThread()->postTask(
       BLINK_FROM_HERE,
-      createCrossThreadTask(&DedicatedWorkerThreadForTest::countFeature,
-                            crossThreadUnretained(workerThread()), feature1));
+      crossThreadBind(&DedicatedWorkerThreadForTest::countFeature,
+                      crossThreadUnretained(workerThread()), feature1));
   testing::enterRunLoop();
   EXPECT_TRUE(UseCounter::isCounted(document(), feature1));
 
@@ -398,8 +399,8 @@ TEST_F(DedicatedWorkerTest, UseCounter) {
   EXPECT_FALSE(UseCounter::isCounted(document(), feature2));
   workerThread()->postTask(
       BLINK_FROM_HERE,
-      createCrossThreadTask(&DedicatedWorkerThreadForTest::countDeprecation,
-                            crossThreadUnretained(workerThread()), feature2));
+      crossThreadBind(&DedicatedWorkerThreadForTest::countDeprecation,
+                      crossThreadUnretained(workerThread()), feature2));
   testing::enterRunLoop();
   EXPECT_TRUE(UseCounter::isCounted(document(), feature2));
 }

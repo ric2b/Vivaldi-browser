@@ -34,7 +34,7 @@ config("modules_implementation") {
 }
 
 make_names("module_names") {
-  in_files = [ "indexeddb/IndexedDBNames.in" ]
+  in_files = [ "indexeddb/IndexedDBNames.json5" ]
   outputs = [
     "$blink_modules_output_dir/IndexedDBNames.cpp",
     "$blink_modules_output_dir/IndexedDBNames.h",
@@ -108,6 +108,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/csspaint",
     "//third_party/WebKit/Source/modules/device_light",
     "//third_party/WebKit/Source/modules/device_orientation",
+    "//third_party/WebKit/Source/modules/document_metadata",
     "//third_party/WebKit/Source/modules/donottrack",
     "//third_party/WebKit/Source/modules/encoding",
     "//third_party/WebKit/Source/modules/encryptedmedia",
@@ -121,6 +122,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/indexeddb",
     "//third_party/WebKit/Source/modules/installation",
     "//third_party/WebKit/Source/modules/installedapp",
+    "//third_party/WebKit/Source/modules/media_capabilities",
     "//third_party/WebKit/Source/modules/mediacapturefromelement",
     "//third_party/WebKit/Source/modules/mediarecorder",
     "//third_party/WebKit/Source/modules/mediasession",
@@ -152,6 +154,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/vr",
     "//third_party/WebKit/Source/modules/wake_lock",
     "//third_party/WebKit/Source/modules/webaudio",
+    "//third_party/WebKit/Source/modules/webauth",
     "//third_party/WebKit/Source/modules/webdatabase",
     "//third_party/WebKit/Source/modules/webgl",
     "//third_party/WebKit/Source/modules/webmidi",
@@ -240,6 +243,7 @@ source_set("unit_tests") {
     "credentialmanager/PasswordCredentialTest.cpp",
     "csspaint/PaintRenderingContext2DTest.cpp",
     "csspaint/PaintWorkletTest.cpp",
+    "document_metadata/CopylessPasteExtractorTest.cpp",
     "eventsource/EventSourceParserTest.cpp",
     "fetch/BlobBytesConsumerTest.cpp",
     "fetch/BodyStreamBufferTest.cpp",
@@ -269,7 +273,7 @@ source_set("unit_tests") {
     "payments/CompleteTest.cpp",
     "payments/OnPaymentResponseTest.cpp",
     "payments/PaymentAddressTest.cpp",
-    "payments/PaymentAppRequestDataConversionTest.cpp",
+    "payments/PaymentAppRequestConversionTest.cpp",
     "payments/PaymentRequestDetailsTest.cpp",
     "payments/PaymentRequestTest.cpp",
     "payments/PaymentRequestUpdateEventTest.cpp",
@@ -286,6 +290,7 @@ source_set("unit_tests") {
     "remoteplayback/RemotePlaybackTest.cpp",
     "serviceworkers/ServiceWorkerContainerTest.cpp",
     "webaudio/AudioBasicProcessorHandlerTest.cpp",
+    "webaudio/AudioContextTest.cpp",
     "webaudio/AudioWorkletThreadTest.cpp",
     "webaudio/BaseAudioContextTest.cpp",
     "webaudio/ConvolverNodeTest.cpp",
@@ -306,7 +311,7 @@ source_set("unit_tests") {
   deps = [
     ":modules",
     ":modules_testing",
-    "//components/payments:payment_request_blink",
+    "//components/payments/content:payment_request_blink",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

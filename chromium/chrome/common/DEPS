@@ -35,9 +35,9 @@ include_rules = [
   "+ppapi/c",
   "+ppapi/shared_impl",
   "+ppapi/thunk",
+  "+rlz/features/features.h",
   "+sandbox/linux/services/credentials.h",
   "+third_party/boringssl/src/include",
-  "+third_party/kasko",
 
   # FIXME - refactor code and remove these dependencies
   "+chrome/installer",

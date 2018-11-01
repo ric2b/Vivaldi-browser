@@ -414,6 +414,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
 
   // Test with invalid mandatory audio sourceID.
+  // TODO(guidou): Update error string when spec-compliant constraint resolution
+  // for audio is implemented. See http://crbug.com/657733.
   NavigateToURL(shell(), url);
   EXPECT_EQ("DevicesNotFoundError", ExecuteJavascriptAndReturnResult(
       GenerateGetUserMediaWithMandatorySourceID(
@@ -422,13 +424,15 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
           video_ids[0])));
 
   // Test with invalid mandatory video sourceID.
-  EXPECT_EQ("DevicesNotFoundError", ExecuteJavascriptAndReturnResult(
-      GenerateGetUserMediaWithMandatorySourceID(
-          kGetUserMediaAndExpectFailure,
-          audio_ids[0],
-          "something invalid")));
+  EXPECT_EQ("ConstraintNotSatisfiedError",
+            ExecuteJavascriptAndReturnResult(
+                GenerateGetUserMediaWithMandatorySourceID(
+                    kGetUserMediaAndExpectFailure, audio_ids[0],
+                    "something invalid")));
 
   // Test with empty mandatory audio sourceID.
+  // TODO(guidou): Update error string when spec-compliant constraint resolution
+  // for audio is implemented. See http://crbug.com/657733.
   EXPECT_EQ("DevicesNotFoundError", ExecuteJavascriptAndReturnResult(
       GenerateGetUserMediaWithMandatorySourceID(
           kGetUserMediaAndExpectFailure,
@@ -580,16 +584,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
             ExecuteJavascriptAndReturnResult(call));
 }
 
-#if defined(OS_ANDROID)
-// Disabled until http://crbug.com/679302 is fixed.
-#define MAYBE_GetUserMediaFailToAccessAudioDevice \
-    DISABLED_GetUserMediaFailToAccessAudioDevice
-#else
-#define MAYBE_GetUserMediaFailToAccessAudioDevice \
-    GetUserMediaFailToAccessAudioDevice
-#endif
 IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       MAYBE_GetUserMediaFailToAccessAudioDevice) {
+                       GetUserMediaFailToAccessAudioDevice) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));

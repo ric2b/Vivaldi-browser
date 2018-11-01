@@ -6,10 +6,9 @@
 #define CC_INPUT_SCROLLBAR_H_
 
 #include "cc/base/cc_export.h"
+#include "cc/paint/paint_canvas.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-
-class SkCanvas;
 
 namespace cc {
 
@@ -33,9 +32,12 @@ class Scrollbar {
   virtual gfx::Rect TrackRect() const = 0;
   virtual float ThumbOpacity() const = 0;
   virtual bool NeedsPaintPart(ScrollbarPart part) const = 0;
-  virtual void PaintPart(SkCanvas* canvas,
+  virtual void PaintPart(PaintCanvas* canvas,
                          ScrollbarPart part,
                          const gfx::Rect& content_rect) = 0;
+  virtual bool UsesNinePatchThumbResource() const = 0;
+  virtual gfx::Size NinePatchThumbCanvasSize() const = 0;
+  virtual gfx::Rect NinePatchThumbAperture() const = 0;
 };
 
 }  // namespace cc

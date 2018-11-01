@@ -1309,6 +1309,18 @@ bool GLES2Util::IsSizedColorFormat(uint32_t internal_format) {
   }
 }
 
+GLint GLES2Util::GetColorEncodingFromInternalFormat(uint32_t internalformat) {
+  switch (internalformat) {
+    case GL_SRGB_EXT:
+    case GL_SRGB_ALPHA_EXT:
+    case GL_SRGB8:
+    case GL_SRGB8_ALPHA8:
+      return GL_SRGB;
+    default:
+      return GL_LINEAR;
+  }
+}
+
 void GLES2Util::GetColorFormatComponentSizes(
     uint32_t internal_format, uint32_t type, int* r, int* g, int* b, int* a) {
   DCHECK(r && g && b && a);
@@ -1866,6 +1878,36 @@ bool IsWebGLContextType(ContextType context_type) {
   return false;
 }
 
+bool IsWebGL1OrES2ContextType(ContextType context_type) {
+  // Switch statement to cause a compile-time error if we miss a case.
+  switch (context_type) {
+    case CONTEXT_TYPE_WEBGL1:
+    case CONTEXT_TYPE_OPENGLES2:
+      return true;
+    case CONTEXT_TYPE_WEBGL2:
+    case CONTEXT_TYPE_OPENGLES3:
+      return false;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
+bool IsWebGL2OrES3ContextType(ContextType context_type) {
+  // Switch statement to cause a compile-time error if we miss a case.
+  switch (context_type) {
+    case CONTEXT_TYPE_OPENGLES3:
+    case CONTEXT_TYPE_WEBGL2:
+      return true;
+    case CONTEXT_TYPE_WEBGL1:
+    case CONTEXT_TYPE_OPENGLES2:
+      return false;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
 ContextCreationAttribHelper::ContextCreationAttribHelper()
     : gpu_preference(gl::PreferIntegratedGpu),
       alpha_size(-1),
@@ -1881,6 +1923,7 @@ ContextCreationAttribHelper::ContextCreationAttribHelper()
       fail_if_major_perf_caveat(false),
       lose_context_when_out_of_memory(false),
       should_use_native_gmb_for_backbuffer(false),
+      own_offscreen_surface(false),
       context_type(CONTEXT_TYPE_OPENGLES2) {}
 
 ContextCreationAttribHelper::ContextCreationAttribHelper(

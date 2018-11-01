@@ -22,12 +22,12 @@
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebContextMenuData.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrameClient.h"
@@ -63,12 +63,6 @@
   do {                                             \
     EXPECT_FLOAT_EQ((expected).x(), (actual).x()); \
     EXPECT_FLOAT_EQ((expected).y(), (actual).y()); \
-  } while (false)
-
-#define EXPECT_POINT_EQ(expected, actual)    \
-  do {                                       \
-    EXPECT_EQ((expected).x(), (actual).x()); \
-    EXPECT_EQ((expected).y(), (actual).y()); \
   } while (false)
 
 #define EXPECT_SIZE_EQ(expected, actual)               \
@@ -109,8 +103,8 @@ namespace {
 
 typedef bool TestParamRootLayerScrolling;
 class VisualViewportTest
-    : public testing::Test,
-      public testing::WithParamInterface<TestParamRootLayerScrolling>,
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
       private ScopedRootLayerScrollingForTest {
  public:
   VisualViewportTest()
@@ -136,8 +130,9 @@ class VisualViewportTest
   }
 
   ~VisualViewportTest() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   void navigateTo(const std::string& url) {
@@ -149,9 +144,16 @@ class VisualViewportTest
   }
 
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(m_baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), blink::testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
+  }
+
+  void registerMockedHttpURLLoad(const std::string& url,
+                                 const std::string& fileName) {
+    URLTestHelpers::registerMockedURLLoad(
+        toKURL(url),
+        blink::testing::webTestDataPath(WebString::fromUTF8(fileName)));
   }
 
   WebLayer* getRootScrollLayer() {
@@ -1167,12 +1169,12 @@ TEST_P(VisualViewportTest, TestContextMenuShownInCorrectLocation) {
 
   // Do a sanity check with no scale applied.
   webViewImpl()->mainFrameImpl()->setClient(&mockWebFrameClient);
-  webViewImpl()->handleInputEvent(mouseDownEvent);
-  webViewImpl()->handleInputEvent(mouseUpEvent);
+  webViewImpl()->handleInputEvent(WebCoalescedInputEvent(mouseDownEvent));
+  webViewImpl()->handleInputEvent(WebCoalescedInputEvent(mouseUpEvent));
 
   Mock::VerifyAndClearExpectations(&mockWebFrameClient);
   mouseDownEvent.button = WebMouseEvent::Button::Left;
-  webViewImpl()->handleInputEvent(mouseDownEvent);
+  webViewImpl()->handleInputEvent(WebCoalescedInputEvent(mouseDownEvent));
 
   // Now pinch zoom into the page and move the visual viewport. The context menu
   // should still appear at the location of the event, relative to the WebView.
@@ -1185,8 +1187,8 @@ TEST_P(VisualViewportTest, TestContextMenuShownInCorrectLocation) {
                                       mouseDownEvent.x, mouseDownEvent.y)));
 
   mouseDownEvent.button = WebMouseEvent::Button::Right;
-  webViewImpl()->handleInputEvent(mouseDownEvent);
-  webViewImpl()->handleInputEvent(mouseUpEvent);
+  webViewImpl()->handleInputEvent(WebCoalescedInputEvent(mouseDownEvent));
+  webViewImpl()->handleInputEvent(WebCoalescedInputEvent(mouseUpEvent));
 
   // Reset the old client so destruction can occur naturally.
   webViewImpl()->mainFrameImpl()->setClient(oldClient);
@@ -1652,13 +1654,15 @@ TEST_P(VisualViewportTest, TestChangingContentSizeAffectsScrollBounds) {
   navigateTo(m_baseURL + "content-width-1000.html");
 
   FrameView& frameView = *webViewImpl()->mainFrameImpl()->frameView();
-  WebLayer* scrollLayer = frameView.layerForScrolling()->platformLayer();
 
   webViewImpl()->mainFrame()->executeScript(
       WebScriptSource("var content = document.getElementById(\"content\");"
                       "content.style.width = \"1500px\";"
                       "content.style.height = \"2400px\";"));
   frameView.updateAllLifecyclePhases();
+  WebLayer* scrollLayer = frameView.layoutViewportScrollableArea()
+                              ->layerForScrolling()
+                              ->platformLayer();
 
   EXPECT_SIZE_EQ(IntSize(1500, 2400), IntSize(scrollLayer->bounds()));
 }
@@ -2015,7 +2019,7 @@ TEST_P(VisualViewportTest, PinchZoomGestureScrollsVisualViewportOnly) {
   pinchUpdate.data.pinchUpdate.scale = 2;
   pinchUpdate.data.pinchUpdate.zoomDisabled = false;
 
-  webViewImpl()->handleInputEvent(pinchUpdate);
+  webViewImpl()->handleInputEvent(WebCoalescedInputEvent(pinchUpdate));
 
   VisualViewport& visualViewport =
       webViewImpl()->page()->frameHost().visualViewport();
@@ -2147,8 +2151,7 @@ TEST_P(VisualViewportTest, ResizeCompositedAndFixedBackground) {
   webViewImpl->resizeWithBrowserControls(WebSize(pageWidth, pageHeight),
                                          browserControlsHeight, false);
 
-  URLTestHelpers::registerMockedURLLoad(toKURL("http://example.com/foo.png"),
-                                        "white-1x1.png");
+  registerMockedHttpURLLoad("http://example.com/foo.png", "white-1x1.png");
   WebURL baseURL = URLTestHelpers::toKURL("http://example.com/");
   FrameTestHelpers::loadHTMLString(webViewImpl->mainFrame(),
                                    "<!DOCTYPE html>"
@@ -2230,8 +2233,7 @@ TEST_P(VisualViewportTest, ResizeNonCompositedAndFixedBackground) {
   webViewImpl->resizeWithBrowserControls(WebSize(pageWidth, pageHeight),
                                          browserControlsHeight, false);
 
-  URLTestHelpers::registerMockedURLLoad(toKURL("http://example.com/foo.png"),
-                                        "white-1x1.png");
+  registerMockedHttpURLLoad("http://example.com/foo.png", "white-1x1.png");
   WebURL baseURL = URLTestHelpers::toKURL("http://example.com/");
   FrameTestHelpers::loadHTMLString(webViewImpl->mainFrame(),
                                    "<!DOCTYPE html>"
@@ -2338,8 +2340,7 @@ TEST_P(VisualViewportTest, ResizeNonFixedBackgroundNoLayoutOrInvalidation) {
   webViewImpl->resizeWithBrowserControls(WebSize(pageWidth, pageHeight),
                                          browserControlsHeight, false);
 
-  URLTestHelpers::registerMockedURLLoad(toKURL("http://example.com/foo.png"),
-                                        "white-1x1.png");
+  registerMockedHttpURLLoad("http://example.com/foo.png", "white-1x1.png");
   WebURL baseURL = URLTestHelpers::toKURL("http://example.com/");
   // This time the background is the default attachment.
   FrameTestHelpers::loadHTMLString(webViewImpl->mainFrame(),

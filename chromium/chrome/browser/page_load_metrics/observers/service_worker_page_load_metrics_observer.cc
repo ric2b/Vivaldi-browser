@@ -9,6 +9,11 @@
 
 namespace internal {
 
+const char kHistogramServiceWorkerParseStart[] =
+    "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart";
+const char kBackgroundHistogramServiceWorkerParseStart[] =
+    "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart."
+    "Background";
 const char kHistogramServiceWorkerFirstContentfulPaint[] =
     "PageLoad.Clients.ServiceWorker.PaintTiming."
     "NavigationToFirstContentfulPaint";
@@ -43,7 +48,7 @@ namespace {
 
 bool IsServiceWorkerControlled(
     const page_load_metrics::PageLoadExtraInfo& info) {
-  return (info.metadata.behavior_flags &
+  return (info.main_frame_metadata.behavior_flags &
           blink::WebLoadingBehaviorFlag::
               WebLoadingBehaviorServiceWorkerControlled) != 0;
 }
@@ -74,7 +79,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnFirstContentfulPaint(
       internal::kHistogramServiceWorkerParseStartToFirstContentfulPaint,
       timing.first_contentful_paint.value() - timing.parse_start.value());
 
-  if (IsInboxSite(info.committed_url)) {
+  if (IsInboxSite(info.url)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramServiceWorkerFirstContentfulPaintInbox,
         timing.first_contentful_paint.value());
@@ -95,7 +100,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnDomContentLoadedEventStart(
   }
   PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerDomContentLoaded,
                       timing.dom_content_loaded_event_start.value());
-  if (IsInboxSite(info.committed_url)) {
+  if (IsInboxSite(info.url)) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerDomContentLoadedInbox,
                         timing.dom_content_loaded_event_start.value());
   }
@@ -111,8 +116,23 @@ void ServiceWorkerPageLoadMetricsObserver::OnLoadEventStart(
     return;
   PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerLoad,
                       timing.load_event_start.value());
-  if (IsInboxSite(info.committed_url)) {
+  if (IsInboxSite(info.url)) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerLoadInbox,
                         timing.load_event_start.value());
+  }
+}
+
+void ServiceWorkerPageLoadMetricsObserver::OnParseStart(
+    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::PageLoadExtraInfo& info) {
+  if (!IsServiceWorkerControlled(info))
+    return;
+  if (WasStartedInForegroundOptionalEventInForeground(timing.parse_start,
+                                                      info)) {
+    PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerParseStart,
+                        timing.parse_start.value());
+  } else {
+    PAGE_LOAD_HISTOGRAM(internal::kBackgroundHistogramServiceWorkerParseStart,
+                        timing.parse_start.value());
   }
 }

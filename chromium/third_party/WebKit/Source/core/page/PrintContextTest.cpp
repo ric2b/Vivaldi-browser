@@ -4,6 +4,8 @@
 
 #include "core/page/PrintContext.h"
 
+#include <memory>
+
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLElement.h"
@@ -14,12 +16,11 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
+#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/text/TextStream.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include <memory>
 
 namespace blink {
 
@@ -72,8 +73,8 @@ class MockCanvas : public SkCanvas {
 
 class PrintContextTest : public RenderingTest {
  protected:
-  explicit PrintContextTest(FrameLoaderClient* frameLoaderClient = nullptr)
-      : RenderingTest(frameLoaderClient) {}
+  explicit PrintContextTest(LocalFrameClient* localFrameClient = nullptr)
+      : RenderingTest(localFrameClient) {}
 
   void SetUp() override {
     RenderingTest::SetUp();
@@ -87,12 +88,12 @@ class PrintContextTest : public RenderingTest {
     document().body()->setInnerHTML(bodyContent);
   }
 
-  void printSinglePage(SkCanvas& canvas) {
+  void printSinglePage(MockCanvas& canvas) {
     IntRect pageRect(0, 0, kPageWidth, kPageHeight);
     printContext().begin(pageRect.width(), pageRect.height());
     document().view()->updateAllLifecyclePhases();
-    SkPictureBuilder pictureBuilder(pageRect);
-    GraphicsContext& context = pictureBuilder.context();
+    PaintRecordBuilder builder(pageRect);
+    GraphicsContext& context = builder.context();
     context.setPrinting(true);
     document().view()->paintContents(context, GlobalPaintPrinting, pageRect);
     {
@@ -101,7 +102,7 @@ class PrintContextTest : public RenderingTest {
                                pageRect);
       printContext().outputLinkedDestinations(context, pageRect);
     }
-    pictureBuilder.endRecording()->playback(&canvas);
+    builder.endRecording()->playback(&canvas);
     printContext().end();
   }
 
@@ -143,7 +144,7 @@ class PrintContextTest : public RenderingTest {
 class PrintContextFrameTest : public PrintContextTest {
  public:
   PrintContextFrameTest()
-      : PrintContextTest(SingleChildFrameLoaderClient::create()) {}
+      : PrintContextTest(SingleChildLocalFrameClient::create()) {}
 };
 
 #define EXPECT_SKRECT_EQ(expectedX, expectedY, expectedWidth, expectedHeight, \

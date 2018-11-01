@@ -47,13 +47,13 @@
 }
 
 .error-header {
-  /* A hack used to prevent aliasing on High-DPI displays. */
-  -webkit-transform: scale3d(1,1,1);
   background-clip: padding-box;
   background-color: white;
   border-bottom: 1px solid rgb(238,238,238);
   padding: 71px 20px 50px;
   text-align: center;
+  /* A hack used to prevent aliasing on High-DPI displays. */
+  transform: scale3d(1,1,1);
 }
 
 .error-icon {
@@ -112,7 +112,7 @@
   display: block;
 }
 
-@-webkit-keyframes connecting-indicator-ellipsis {
+@keyframes connecting-indicator-ellipsis {
   0% {
     opacity: 0;
   }
@@ -128,15 +128,15 @@
 }
 
 #connecting-indicator-ellipsis-1 {
-  -webkit-animation: connecting-indicator-ellipsis 3s 0 infinite;
+  animation: connecting-indicator-ellipsis 3s 0 infinite;
 }
 
 #connecting-indicator-ellipsis-2 {
-  -webkit-animation: connecting-indicator-ellipsis 3s 500ms infinite;
+  animation: connecting-indicator-ellipsis 3s 500ms infinite;
 }
 
 #connecting-indicator-ellipsis-3 {
-  -webkit-animation: connecting-indicator-ellipsis 3s 1s infinite;
+  animation: connecting-indicator-ellipsis 3s 1s infinite;
 }
 
 #error-navigation {

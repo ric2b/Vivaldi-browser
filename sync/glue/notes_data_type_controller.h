@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_GLUE_NOTES_DATA_TYPE_CONTROLLER_H__
-#define VIVALDI_SYNC_GLUE_NOTES_DATA_TYPE_CONTROLLER_H__
+#ifndef SYNC_GLUE_NOTES_DATA_TYPE_CONTROLLER_H_
+#define SYNC_GLUE_NOTES_DATA_TYPE_CONTROLLER_H_
 
 #include <string>
 
@@ -42,4 +42,4 @@ class NotesDataTypeController : public syncer::FrontendDataTypeController,
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_GLUE_NOTES_DATA_TYPE_CONTROLLER_H__
+#endif  // SYNC_GLUE_NOTES_DATA_TYPE_CONTROLLER_H_

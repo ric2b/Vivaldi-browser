@@ -74,9 +74,8 @@ void ChosenObjectRow::ButtonPressed(views::Button* sender,
       WebsiteSettingsUI::GetChosenObjectIcon(*info_, true);
   icon_->SetImage(image.ToImageSkia());
 
-  RemoveChildView(delete_button_);
-  delete delete_button_;
-  delete_button_ = nullptr;
+  DCHECK(delete_button_->visible());
+  delete_button_->SetVisible(false);
 
   for (ChosenObjectRowObserver& observer : observer_list_)
     observer.OnChosenObjectDeleted(*info_);

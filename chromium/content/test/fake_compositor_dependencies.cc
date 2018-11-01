@@ -24,10 +24,6 @@ bool FakeCompositorDependencies::IsGpuRasterizationForced() {
   return false;
 }
 
-bool FakeCompositorDependencies::IsGpuRasterizationEnabled() {
-  return false;
-}
-
 bool FakeCompositorDependencies::IsAsyncWorkerContextEnabled() {
   return false;
 }
@@ -90,6 +86,10 @@ bool FakeCompositorDependencies::AreImageDecodeTasksEnabled() {
 
 bool FakeCompositorDependencies::IsThreadedAnimationEnabled() {
   return true;
+}
+
+bool FakeCompositorDependencies::IsScrollAnimatorEnabled() {
+  return false;
 }
 
 }  // namespace content

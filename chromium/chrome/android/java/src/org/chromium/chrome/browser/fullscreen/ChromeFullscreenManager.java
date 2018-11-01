@@ -96,6 +96,11 @@ public class ChromeFullscreenManager
          * @param enabled Whether to enter or leave overlay video mode.
          */
         public void onToggleOverlayVideoMode(boolean enabled);
+
+        /**
+         * Called when the height of the controls are changed.
+         */
+        public void onBottomControlsHeightChanged(int bottomControlsHeight);
     }
 
     private final Runnable mUpdateVisibilityRunnable = new Runnable() {
@@ -335,7 +340,11 @@ public class ChromeFullscreenManager
      * Sets the height of the bottom controls.
      */
     public void setBottomControlsHeight(int bottomControlsHeight) {
+        if (mBottomControlContainerHeight == bottomControlsHeight) return;
         mBottomControlContainerHeight = bottomControlsHeight;
+        for (int i = 0; i < mListeners.size(); i++) {
+            mListeners.get(i).onBottomControlsHeightChanged(mBottomControlContainerHeight);
+        }
     }
 
     @Override
@@ -440,9 +449,16 @@ public class ChromeFullscreenManager
         if (mInGesture || mContentViewScrolling) return;
 
         // Update content viewport size only when the browser controls are not animating.
-        int contentOffset = (int) mRendererTopContentOffset;
-        if (contentOffset != 0 && contentOffset != getTopControlsHeight()) return;
-        viewCore.setTopControlsHeight(getTopControlsHeight(), contentOffset > 0);
+        int topContentOffset = (int) mRendererTopContentOffset;
+        int bottomControlOffset = (int) mRendererBottomControlOffset;
+        if ((topContentOffset != 0 && topContentOffset != getTopControlsHeight())
+                && bottomControlOffset != 0 && bottomControlOffset != getBottomControlsHeight()) {
+            return;
+        }
+        boolean controlsResizeView =
+                topContentOffset > 0 || bottomControlOffset < getBottomControlsHeight();
+        viewCore.setTopControlsHeight(getTopControlsHeight(), controlsResizeView);
+        viewCore.setBottomControlsHeight(getBottomControlsHeight());
     }
 
     @Override

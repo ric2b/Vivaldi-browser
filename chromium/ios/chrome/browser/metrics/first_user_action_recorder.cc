@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -35,7 +35,6 @@ namespace {
 // task or continuing an existing task.
 const char* kIgnoredActions[] = {
     "MobileOmniboxUse",
-    "MobileBreakpadUploadAttempt",
     "MobileFirstUserAction_Continuation",
     "MobileFirstUserAction_Expiration",
     "MobileFirstUserAction_NewTask",

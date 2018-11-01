@@ -10,7 +10,6 @@
 #include "services/video_capture/public/interfaces/device_factory.mojom.h"
 #include "services/video_capture/test/fake_device_test.h"
 #include "services/video_capture/test/mock_receiver.h"
-#include "services/video_capture/test/service_test.h"
 
 using testing::_;
 using testing::Invoke;
@@ -30,15 +29,22 @@ struct FrameInfo {
 
 namespace video_capture {
 
-TEST_F(FakeDeviceTest, DISABLED_FrameCallbacksArrive) {
+// This alias ensures test output is easily attributed to this service's tests.
+// TODO(rockot/chfremer): Consider just renaming the type.
+using FakeVideoCaptureDeviceTest = FakeDeviceTest;
+
+TEST_F(FakeVideoCaptureDeviceTest, DISABLED_FrameCallbacksArrive) {
   base::RunLoop wait_loop;
-  const int kNumFramesToWaitFor = 3;
+  // These two constants must be static as a workaround
+  // for a MSVC++ bug about lambda captures, see the discussion at
+  // https://social.msdn.microsoft.com/Forums/SqlServer/4abf18bd-4ae4-4c72-ba3e-3b13e7909d5f
+  static const int kNumFramesToWaitFor = 3;
   int num_frames_arrived = 0;
   mojom::ReceiverPtr receiver_proxy;
   MockReceiver receiver(mojo::MakeRequest(&receiver_proxy));
   EXPECT_CALL(receiver, OnIncomingCapturedVideoFramePtr(_))
       .WillRepeatedly(InvokeWithoutArgs(
-          [&wait_loop, &kNumFramesToWaitFor, &num_frames_arrived]() {
+          [&wait_loop, &num_frames_arrived]() {
             num_frames_arrived += 1;
             if (num_frames_arrived >= kNumFramesToWaitFor) {
               wait_loop.Quit();
@@ -51,17 +57,21 @@ TEST_F(FakeDeviceTest, DISABLED_FrameCallbacksArrive) {
 
 // Tests that frames received from a fake capture device match the requested
 // format and have increasing timestamps.
-TEST_F(FakeDeviceTest, DISABLED_ReceiveFramesFromFakeCaptureDevice) {
+TEST_F(FakeVideoCaptureDeviceTest,
+       DISABLED_ReceiveFramesFromFakeCaptureDevice) {
   base::RunLoop wait_loop;
   mojom::ReceiverPtr receiver_proxy;
-  constexpr int num_frames_to_receive = 2;
+  // These two constants must be static as a workaround
+  // for a MSVC++ bug about lambda captures, see the discussion at
+  // https://social.msdn.microsoft.com/Forums/SqlServer/4abf18bd-4ae4-4c72-ba3e-3b13e7909d5f
+  static const int num_frames_to_receive = 2;
   FrameInfo received_frame_infos[num_frames_to_receive];
   int received_frame_count = 0;
   MockReceiver receiver(mojo::MakeRequest(&receiver_proxy));
   EXPECT_CALL(receiver, OnIncomingCapturedVideoFramePtr(_))
       .WillRepeatedly(Invoke(
-          [&received_frame_infos, &received_frame_count, &num_frames_to_receive,
-           &wait_loop](const media::mojom::VideoFramePtr* frame) {
+          [&received_frame_infos, &received_frame_count, &wait_loop]
+          (const media::mojom::VideoFramePtr* frame) {
             if (received_frame_count >= num_frames_to_receive)
               return;
             auto video_frame = frame->To<scoped_refptr<media::VideoFrame>>();

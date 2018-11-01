@@ -4,7 +4,11 @@
 
 #include "chrome/browser/android/vr_shell/vr_shell_gl.h"
 
+#include <limits>
+#include <utility>
+
 #include "base/android/jni_android.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -12,12 +16,13 @@
 #include "chrome/browser/android/vr_shell/ui_scene.h"
 #include "chrome/browser/android/vr_shell/vr_controller.h"
 #include "chrome/browser/android/vr_shell/vr_gl_util.h"
-#include "chrome/browser/android/vr_shell/vr_input_manager.h"
 #include "chrome/browser/android/vr_shell/vr_math.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
+#include "chrome/browser/android/vr_shell/vr_shell_delegate.h"
 #include "chrome/browser/android/vr_shell/vr_shell_renderer.h"
+#include "device/vr/android/gvr/gvr_device.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "ui/gfx/vsync_provider.h"
+#include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "ui/gl/android/scoped_java_surface.h"
 #include "ui/gl/android/surface_texture.h"
 #include "ui/gl/gl_bindings.h"
@@ -28,8 +33,9 @@
 namespace vr_shell {
 
 namespace {
-// Constant taken from treasure_hunt demo.
-static constexpr long kPredictionTimeWithoutVsyncNanos = 50000000;
+// TODO(mthiesse): If gvr::PlatformInfo().GetPosePredictionTime() is ever
+// exposed, use that instead (it defaults to 50ms on most platforms).
+static constexpr int64_t kPredictionTimeWithoutVsyncNanos = 50000000;
 
 static constexpr float kZNear = 0.1f;
 static constexpr float kZFar = 1000.0f;
@@ -51,18 +57,9 @@ static constexpr gvr::Vec3f kOrigin = {0.0f, 0.0f, 0.0f};
 // TODO(mthiesse): Handedness options.
 static constexpr gvr::Vec3f kHandPosition = {0.2f, -0.5f, -0.2f};
 
-// If there is no content quad, and the reticle isn't hitting another element,
-// draw the reticle at this distance.
-static constexpr float kDefaultReticleDistance = 2.0f;
-
 // Fraction of the distance to the object the cursor is drawn at to avoid
 // rounding errors drawing the cursor behind the object.
 static constexpr float kReticleOffset = 0.99f;
-
-// Limit the rendering distance of the reticle to the distance to a corner of
-// the content quad, times this value. This lets the rendering distance
-// adjust according to content quad placement.
-static constexpr float kReticleDistanceMultiplier = 1.5f;
 
 // GVR buffer indices for use with viewport->SetSourceBufferIndex
 // or frame.BindBuffer. We use one for world content (with reprojection)
@@ -81,6 +78,10 @@ static constexpr gvr::Rectf kHeadlockedBufferFov = {20.f, 20.f, 20.f, 20.f};
 // GVR buffer.
 static constexpr int kViewportListPrimaryOffset = 0;
 static constexpr int kViewportListHeadlockedOffset = 2;
+
+// Buffer size large enough to handle the current backlog of poses which is
+// 2-3 frames.
+static constexpr unsigned kPoseRingBufferSize = 8;
 
 // Magic numbers used to mark valid pose index values encoded in frame
 // data. Must match the magic numbers used in blink's VRDisplay.cpp.
@@ -140,73 +141,58 @@ enum class ViewerType {
   VIEWER_TYPE_MAX,
 };
 
-int GetPixelEncodedPoseIndexByte() {
-  TRACE_EVENT0("gpu", "VrShellGl::GetPixelEncodedPoseIndex");
-  // Read the pose index encoded in a bottom left pixel as color values.
-  // See also third_party/WebKit/Source/modules/vr/VRDisplay.cpp which
-  // encodes the pose index, and device/vr/android/gvr/gvr_device.cc
-  // which tracks poses. Returns the low byte (0..255) if valid, or -1
-  // if not valid due to bad magic number.
-  uint8_t pixels[4];
-  // Assume we're reading from the framebuffer we just wrote to.
-  // That's true currently, we may need to use glReadBuffer(GL_BACK)
-  // or equivalent if the rendering setup changes in the future.
-  glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-  // Check for the magic number written by VRDevice.cpp on submit.
-  // This helps avoid glitches from garbage data in the render
-  // buffer that can appear during initialization or resizing. These
-  // often appear as flashes of all-black or all-white pixels.
-  if (pixels[1] == kWebVrPosePixelMagicNumbers[0] &&
-      pixels[2] == kWebVrPosePixelMagicNumbers[1]) {
-    // Pose is good.
-    return pixels[0];
-  }
-  VLOG(1) << "WebVR: reject decoded pose index " << (int)pixels[0] <<
-      ", bad magic number " << (int)pixels[1] << ", " << (int)pixels[2];
-  return -1;
-}
-
 int64_t TimeInMicroseconds() {
   return std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count();
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
 }
 
-void WaitForSwapAck(const base::Closure& callback, gfx::SwapResult result) {
-  callback.Run();
+void RunVRDisplayInfoCallback(
+    const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
+    device::mojom::VRDisplayInfoPtr info) {
+  callback.Run(std::move(info));
 }
 
 }  // namespace
 
 VrShellGl::VrShellGl(
     const base::WeakPtr<VrShell>& weak_vr_shell,
-    const base::WeakPtr<VrInputManager>& content_input_manager,
-    const base::WeakPtr<VrInputManager>& ui_input_manager,
+    const base::WeakPtr<VrShellDelegate>& delegate_provider,
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
     gvr_context* gvr_api,
     bool initially_web_vr,
     bool reprojected_rendering)
-      : web_vr_mode_(initially_web_vr),
-        surfaceless_rendering_(reprojected_rendering),
-        task_runner_(base::ThreadTaskRunnerHandle::Get()),
-        weak_vr_shell_(weak_vr_shell),
-        content_input_manager_(content_input_manager),
-        ui_input_manager_(ui_input_manager),
-        main_thread_task_runner_(std::move(main_thread_task_runner)),
-        weak_ptr_factory_(this) {
+    : web_vr_mode_(initially_web_vr),
+      surfaceless_rendering_(reprojected_rendering),
+      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      binding_(this),
+      weak_vr_shell_(weak_vr_shell),
+      delegate_provider_(delegate_provider),
+      main_thread_task_runner_(std::move(main_thread_task_runner)),
+      weak_ptr_factory_(this) {
   GvrInit(gvr_api);
 }
 
 VrShellGl::~VrShellGl() {
-  draw_task_.Cancel();
+  vsync_task_.Cancel();
+  if (!callback_.is_null()) {
+    // When this VSync provider is going away we have to respond to pending
+    // callbacks, so instead of providing a VSync, tell the requester to try
+    // again. A VSyncProvider is guaranteed to exist, so the request in response
+    // to this message will go through some other VSyncProvider.
+    base::ResetAndReturn(&callback_)
+        .Run(nullptr, base::TimeDelta(), -1,
+             device::mojom::VRVSyncProvider::Status::RETRY);
+  }
+  if (binding_.is_bound()) {
+    main_thread_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&VrShellDelegate::OnVRVsyncProviderRequest,
+                   delegate_provider_, base::Passed(binding_.Unbind())));
+  }
 }
 
 void VrShellGl::Initialize() {
-  gvr::Mat4f identity;
-  SetIdentityM(identity);
-  webvr_head_pose_.resize(kPoseRingBufferSize, identity);
-  webvr_head_pose_valid_.resize(kPoseRingBufferSize, false);
-
   scene_.reset(new UiScene);
 
   if (surfaceless_rendering_) {
@@ -249,46 +235,44 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
     return;
   }
 
-  // TODO(mthiesse): We don't appear to have a VSync provider ever here. This is
-  // sort of okay, because the GVR swap chain will block if we render too fast,
-  // but we should address this properly.
-  if (surface_->GetVSyncProvider()) {
-    surface_->GetVSyncProvider()->GetVSyncParameters(base::Bind(
-        &VrShellGl::UpdateVSyncParameters, weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    LOG(ERROR) << "No VSync Provider";
-  }
-
   unsigned int textures[2];
   glGenTextures(2, textures);
   ui_texture_id_ = textures[0];
   content_texture_id_ = textures[1];
   ui_surface_texture_ = gl::SurfaceTexture::Create(ui_texture_id_);
   content_surface_texture_ = gl::SurfaceTexture::Create(content_texture_id_);
-  ui_surface_.reset(new gl::ScopedJavaSurface(ui_surface_texture_.get()));
-  content_surface_.reset(new gl::ScopedJavaSurface(
-      content_surface_texture_.get()));
+  CreateUiSurface();
+  CreateContentSurface();
   ui_surface_texture_->SetFrameAvailableCallback(base::Bind(
-        &VrShellGl::OnUIFrameAvailable, weak_ptr_factory_.GetWeakPtr()));
+      &VrShellGl::OnUIFrameAvailable, weak_ptr_factory_.GetWeakPtr()));
   content_surface_texture_->SetFrameAvailableCallback(base::Bind(
-        &VrShellGl::OnContentFrameAvailable, weak_ptr_factory_.GetWeakPtr()));
-
+      &VrShellGl::OnContentFrameAvailable, weak_ptr_factory_.GetWeakPtr()));
   content_surface_texture_->SetDefaultBufferSize(
       content_tex_physical_size_.width, content_tex_physical_size_.height);
   ui_surface_texture_->SetDefaultBufferSize(ui_tex_physical_size_.width,
                                             ui_tex_physical_size_.height);
-
-  main_thread_task_runner_->PostTask(FROM_HERE, base::Bind(
-      &VrShell::SurfacesChanged, weak_vr_shell_,
-      content_surface_->j_surface().obj(),
-      ui_surface_->j_surface().obj()));
-
   InitializeRenderer();
 
-  draw_task_.Reset(base::Bind(&VrShellGl::DrawFrame, base::Unretained(this)));
-  ScheduleNextDrawFrame();
+  vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
+  OnVSync();
 
   ready_to_draw_ = true;
+}
+
+void VrShellGl::CreateContentSurface() {
+  content_surface_ =
+      base::MakeUnique<gl::ScopedJavaSurface>(content_surface_texture_.get());
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&VrShell::ContentSurfaceChanged, weak_vr_shell_,
+                            content_surface_->j_surface().obj()));
+}
+
+void VrShellGl::CreateUiSurface() {
+  ui_surface_ =
+      base::MakeUnique<gl::ScopedJavaSurface>(ui_surface_texture_.get());
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&VrShell::UiSurfaceChanged, weak_vr_shell_,
+                            ui_surface_->j_surface().obj()));
 }
 
 void VrShellGl::OnUIFrameAvailable() {
@@ -297,6 +281,45 @@ void VrShellGl::OnUIFrameAvailable() {
 
 void VrShellGl::OnContentFrameAvailable() {
   content_surface_texture_->UpdateTexImage();
+  received_frame_ = true;
+}
+
+bool VrShellGl::GetPixelEncodedFrameIndex(uint16_t* frame_index) {
+  TRACE_EVENT0("gpu", "VrShellGl::GetPixelEncodedFrameIndex");
+  if (!received_frame_) {
+    if (last_frame_index_ == (uint16_t)-1)
+      return false;
+    *frame_index = last_frame_index_;
+    return true;
+  }
+  received_frame_ = false;
+
+  // Read the pose index encoded in a bottom left pixel as color values.
+  // See also third_party/WebKit/Source/modules/vr/VRDisplay.cpp which
+  // encodes the pose index, and device/vr/android/gvr/gvr_device.cc
+  // which tracks poses. Returns the low byte (0..255) if valid, or -1
+  // if not valid due to bad magic number.
+  uint8_t pixels[4];
+  // Assume we're reading from the framebuffer we just wrote to.
+  // That's true currently, we may need to use glReadBuffer(GL_BACK)
+  // or equivalent if the rendering setup changes in the future.
+  glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+  // Check for the magic number written by VRDevice.cpp on submit.
+  // This helps avoid glitches from garbage data in the render
+  // buffer that can appear during initialization or resizing. These
+  // often appear as flashes of all-black or all-white pixels.
+  if (pixels[1] == kWebVrPosePixelMagicNumbers[0] &&
+      pixels[2] == kWebVrPosePixelMagicNumbers[1]) {
+    // Pose is good.
+    *frame_index = pixels[0];
+    last_frame_index_ = pixels[0];
+    return true;
+  }
+  VLOG(1) << "WebVR: reject decoded pose index " << static_cast<int>(pixels[0])
+          << ", bad magic number " << static_cast<int>(pixels[1]) << ", "
+          << static_cast<int>(pixels[2]);
+  return false;
 }
 
 void VrShellGl::GvrInit(gvr_context* gvr_api) {
@@ -317,7 +340,7 @@ void VrShellGl::GvrInit(gvr_context* gvr_api) {
       break;
   }
   UMA_HISTOGRAM_ENUMERATION("VRViewerType", static_cast<int>(viewerType),
-      static_cast<int>(ViewerType::VIEWER_TYPE_MAX));
+                            static_cast<int>(ViewerType::VIEWER_TYPE_MAX));
 }
 
 void VrShellGl::InitializeRenderer() {
@@ -326,16 +349,17 @@ void VrShellGl::InitializeRenderer() {
   // surface, but store it separately to avoid future confusion.
   // TODO(klausw,crbug.com/655722): remove this.
   webvr_texture_id_ = content_texture_id_;
-  // Out of paranoia, explicitly reset the "pose valid" flags to false
-  // from the GL thread. The constructor ran in the UI thread.
-  // TODO(klausw,crbug.com/655722): remove this.
-  webvr_head_pose_valid_.assign(kPoseRingBufferSize, false);
 
   gvr_api_->InitializeGl();
+  webvr_head_pose_.assign(kPoseRingBufferSize,
+                          gvr_api_->GetHeadSpaceFromStartSpaceRotation(
+                              gvr::GvrApi::GetTimePointNow()));
+
   std::vector<gvr::BufferSpec> specs;
   // For kFramePrimaryBuffer (primary VrShell and WebVR content)
   specs.push_back(gvr_api_->CreateBufferSpec());
   render_size_primary_ = specs[kFramePrimaryBuffer].GetSize();
+  render_size_primary_vrshell_ = render_size_primary_;
 
   // For kFrameHeadlockedBuffer (for WebVR insecure content warning).
   // Set this up at fixed resolution, the (smaller) FOV gets set below.
@@ -394,8 +418,8 @@ void VrShellGl::InitializeRenderer() {
                                            webvr_right_viewport_.get());
   webvr_right_viewport_->SetSourceBufferIndex(kFramePrimaryBuffer);
 
-  main_thread_task_runner_->PostTask(FROM_HERE, base::Bind(
-      &VrShell::GvrDelegateReady, weak_vr_shell_));
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&VrShell::GvrDelegateReady, weak_vr_shell_));
 }
 
 void VrShellGl::UpdateController(const gvr::Vec3f& forward_vector) {
@@ -412,7 +436,8 @@ void VrShellGl::UpdateController(const gvr::Vec3f& forward_vector) {
   if (web_vr_mode_) {
     // Process screen touch events for Cardboard button compatibility.
     // Also send tap events for controller "touchpad click" events.
-    if (touch_pending_ || controller_->ButtonUpHappened(
+    if (touch_pending_ ||
+        controller_->ButtonUpHappened(
             gvr::ControllerButton::GVR_CONTROLLER_BUTTON_CLICK)) {
       touch_pending_ = false;
       std::unique_ptr<WebGestureEvent> gesture(new WebGestureEvent(
@@ -447,41 +472,26 @@ void VrShellGl::UpdateController(const gvr::Vec3f& forward_vector) {
   // in the field of view. This is physically correct, but hard to use. For
   // usability, do the following instead:
   //
-  // - Project the controller laser onto an outer surface, which is the
-  //   closer of the desktop plane, or a distance-limiting sphere.
+  // - Project the controller laser onto a distance-limiting sphere.
   // - Create a vector between the eyes and the outer surface point.
-  // - If any UI elements intersect this vector, choose the closest to the eyes,
-  //   and place the reticle at the intersection point.
+  // - If any UI elements intersect this vector, and is within the bounding
+  //   sphere, choose the closest to the eyes, and place the reticle at the
+  //   intersection point.
 
-  // Find distance to a corner of the content quad, and limit the cursor
-  // distance to a multiple of that distance. This lets us keep the reticle on
-  // the content plane near the content window, and on the surface of a sphere
-  // in other directions. Note that this approach uses distance from controller,
-  // rather than eye, for simplicity. This will make the sphere slightly
-  // off-center.
-  float distance = kDefaultReticleDistance;
-  ContentRectangle* content_plane = scene_->GetContentQuad();
-  if (content_plane) {
-    distance = content_plane->GetRayDistance(origin, forward);
-    gvr::Vec3f corner = {0.5f, 0.5f, 0.0f};
-    corner = MatrixVectorMul(content_plane->transform.to_world, corner);
-    float max_distance = Distance(origin, corner) * kReticleDistanceMultiplier;
-    if (distance > max_distance || distance <= 0.0f) {
-      distance = max_distance;
-    }
-  }
-
+  // Compute the distance from the eyes to the distance limiting sphere. Note
+  // that the sphere is centered at the controller, rather than the eye, for
+  // simplicity.
+  float distance = scene_->GetBackgroundDistance();
   target_point_ = GetRayPoint(origin, forward, distance);
   gvr::Vec3f eye_to_target = target_point_;
   NormalizeVector(eye_to_target);
 
   // Determine which UI element (if any) intersects the line between the eyes
   // and the controller target position.
-  float closest_element_distance = std::numeric_limits<float>::infinity();
+  float closest_element_distance = VectorLength(target_point_);
   int pixel_x = 0;
   int pixel_y = 0;
   target_element_ = nullptr;
-  InputTarget input_target = InputTarget::NONE;
 
   for (const auto& plane : scene_->GetUiElements()) {
     if (!plane->IsHitTestable())
@@ -493,28 +503,46 @@ void VrShellGl::UpdateController(const gvr::Vec3f& forward_vector) {
 
     gvr::Vec3f rect_2d_point =
         MatrixVectorMul(plane->transform.from_world, plane_intersection_point);
-    if (distance_to_plane > 0 && distance_to_plane < closest_element_distance) {
-      float x = rect_2d_point.x + 0.5f;
-      float y = 0.5f - rect_2d_point.y;
-      bool is_inside = x >= 0.0f && x < 1.0f && y >= 0.0f && y < 1.0f;
-      if (!is_inside)
-        continue;
+    if (distance_to_plane < 0 ||
+        distance_to_plane >= closest_element_distance) {
+      continue;
+    }
 
-      closest_element_distance = distance_to_plane;
-      Rectf pixel_rect;
-      if (plane->content_quad) {
-        pixel_rect = {0, 0, content_tex_css_width_, content_tex_css_height_};
-      } else {
-        pixel_rect = {plane->copy_rect.x, plane->copy_rect.y,
-                      plane->copy_rect.width, plane->copy_rect.height};
-      }
-      pixel_x = pixel_rect.width * x + pixel_rect.x;
-      pixel_y = pixel_rect.height * y + pixel_rect.y;
+    float x = rect_2d_point.x + 0.5f;
+    float y = 0.5f - rect_2d_point.y;
+    bool is_inside = x >= 0.0f && x < 1.0f && y >= 0.0f && y < 1.0f;
+    if (!is_inside)
+      continue;
 
-      target_point_ = plane_intersection_point;
-      target_element_ = plane.get();
-      input_target = plane->content_quad ? InputTarget::CONTENT
-                                         : InputTarget::UI;
+    closest_element_distance = distance_to_plane;
+    Rectf pixel_rect;
+    if (plane->fill == Fill::CONTENT) {
+      pixel_rect = {0, 0, content_tex_css_width_, content_tex_css_height_};
+    } else {
+      pixel_rect = {plane->copy_rect.x, plane->copy_rect.y,
+                    plane->copy_rect.width, plane->copy_rect.height};
+    }
+    pixel_x = pixel_rect.width * x + pixel_rect.x;
+    pixel_y = pixel_rect.height * y + pixel_rect.y;
+
+    target_point_ = plane_intersection_point;
+    target_element_ = plane.get();
+  }
+
+  // Treat UI elements, which do not show web content, as NONE input
+  // targets since they cannot make use of the input anyway.
+  InputTarget input_target = InputTarget::NONE;
+  if (target_element_ != nullptr) {
+    switch (target_element_->fill) {
+      case Fill::CONTENT:
+        input_target = InputTarget::CONTENT;
+        break;
+      case Fill::SPRITE:
+        input_target = InputTarget::UI;
+        break;
+      default:
+        input_target = InputTarget::NONE;
+        break;
     }
   }
   SendEventsToTarget(input_target, pixel_x, pixel_y);
@@ -537,22 +565,37 @@ void VrShellGl::SendEventsToTarget(InputTarget input_target,
     gesture_list.push_back(std::move(event));
   }
 
-  for (const auto& gesture : gesture_list) {
+  for (auto& gesture : gesture_list) {
+    gesture->x = pixel_x;
+    gesture->y = pixel_y;
+    auto movableGesture = base::MakeUnique<WebGestureEvent>(*gesture);
+
     switch (gesture->type()) {
+      // Once the user starts scrolling send all the scroll events to this
+      // element until the scrolling stops.
       case WebInputEvent::GestureScrollBegin:
-      case WebInputEvent::GestureScrollUpdate:
+        current_scroll_target = input_target;
+        if (current_scroll_target != InputTarget::NONE) {
+          SendGesture(current_scroll_target, std::move(movableGesture));
+        }
+        break;
       case WebInputEvent::GestureScrollEnd:
+        if (current_scroll_target != InputTarget::NONE) {
+          SendGesture(current_scroll_target, std::move(movableGesture));
+        }
+        current_scroll_target = InputTarget::NONE;
+        break;
+      case WebInputEvent::GestureScrollUpdate:
       case WebInputEvent::GestureFlingCancel:
       case WebInputEvent::GestureFlingStart:
-        SendGesture(InputTarget::CONTENT,
-                    base::WrapUnique(new WebGestureEvent(*gesture)));
+        if (current_scroll_target != InputTarget::NONE) {
+          SendGesture(current_scroll_target, std::move(movableGesture));
+        }
         break;
       case WebInputEvent::GestureTapDown:
-        gesture->x = pixel_x;
-        gesture->y = pixel_y;
-        if (input_target != InputTarget::NONE)
-          SendGesture(input_target,
-                      base::WrapUnique(new WebGestureEvent(*gesture)));
+        if (input_target != InputTarget::NONE) {
+          SendGesture(input_target, std::move(movableGesture));
+        }
         break;
       case WebInputEvent::Undefined:
         break;
@@ -580,45 +623,101 @@ void VrShellGl::SendEventsToTarget(InputTarget input_target,
 void VrShellGl::SendGesture(InputTarget input_target,
                             std::unique_ptr<blink::WebInputEvent> event) {
   DCHECK(input_target != InputTarget::NONE);
-  const base::WeakPtr<VrInputManager>& weak_ptr =
-      input_target == InputTarget::CONTENT ? content_input_manager_
-                                           : ui_input_manager_;
+  auto&& target = input_target == InputTarget::CONTENT
+                      ? &VrShell::ProcessContentGesture
+                      : &VrShell::ProcessUIGesture;
   main_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&VrInputManager::ProcessUpdatedGesture, weak_ptr,
-                 base::Passed(std::move(event))));
-}
-
-void VrShellGl::SetGvrPoseForWebVr(const gvr::Mat4f& pose, uint32_t pose_num) {
-  webvr_head_pose_[pose_num % kPoseRingBufferSize] = pose;
-  webvr_head_pose_valid_[pose_num % kPoseRingBufferSize] = true;
-}
-
-bool VrShellGl::WebVrPoseByteIsValid(int pose_index_byte) {
-  if (pose_index_byte < 0) {
-    return false;
-  }
-  if (!webvr_head_pose_valid_[pose_index_byte % kPoseRingBufferSize]) {
-    VLOG(1) << "WebVR: reject decoded pose index " << pose_index_byte <<
-        ", not a valid pose";
-    return false;
-  }
-  return true;
+      base::Bind(target, weak_vr_shell_, base::Passed(std::move(event))));
 }
 
 void VrShellGl::DrawFrame() {
   TRACE_EVENT0("gpu", "VrShellGl::DrawFrame");
+
   // Reset the viewport list to just the pair of viewports for the
   // primary buffer each frame. Head-locked viewports get added by
   // DrawVrShell if needed.
   buffer_viewport_list_->SetToRecommendedBufferViewports();
 
-  gvr::Frame frame = swap_chain_->AcquireFrame();
-  gvr::ClockTimePoint target_time = gvr::GvrApi::GetTimePointNow();
-  target_time.monotonic_system_time_nanos += kPredictionTimeWithoutVsyncNanos;
+  // Resize render buffers to match desired resolution when switching
+  // modes between WebVR and VrShell mode.
+  if (web_vr_mode_) {
+    // If needed, resize the primary buffer for use with WebVR so that
+    // it matches the canvas size used for WebGL rendering.
+    if (render_size_primary_ != render_size_primary_webvr_) {
+      if (!render_size_primary_webvr_.width) {
+        DVLOG(2) << "WebVR rendering size not known yet, dropping frame";
+        return;
+      }
+      render_size_primary_ = render_size_primary_webvr_;
+      swap_chain_->ResizeBuffer(kFramePrimaryBuffer, render_size_primary_);
+    }
+  } else {
+    // Restore high resolution for VrShell mode.
+    if (render_size_primary_ != render_size_primary_vrshell_) {
+      render_size_primary_ = render_size_primary_vrshell_;
+      swap_chain_->ResizeBuffer(kFramePrimaryBuffer, render_size_primary_);
+    }
+  }
 
-  gvr::Mat4f head_pose =
-      gvr_api_->GetHeadSpaceFromStartSpaceRotation(target_time);
+  gvr::Frame frame = swap_chain_->AcquireFrame();
+  if (!frame.is_valid()) {
+    return;
+  }
+  frame.BindBuffer(kFramePrimaryBuffer);
+  if (web_vr_mode_) {
+    DrawWebVr();
+  }
+
+  uint16_t frame_index;
+  gvr::Mat4f head_pose;
+
+  // When using async reprojection, we need to know which pose was used in
+  // the WebVR app for drawing this frame. Due to unknown amounts of
+  // buffering in the compositor and SurfaceTexture, we read the pose number
+  // from a corner pixel. There's no point in doing this for legacy
+  // distortion rendering since that doesn't need a pose, and reading back
+  // pixels is an expensive operation. TODO(klausw,crbug.com/655722): stop
+  // doing this once we have working no-compositor rendering for WebVR.
+  if (web_vr_mode_ && gvr_api_->GetAsyncReprojectionEnabled() &&
+      GetPixelEncodedFrameIndex(&frame_index)) {
+    static_assert(!((kPoseRingBufferSize - 1) & kPoseRingBufferSize),
+                  "kPoseRingBufferSize must be a power of 2");
+    head_pose = webvr_head_pose_[frame_index % kPoseRingBufferSize];
+    // Process all pending_bounds_ changes targeted for before this frame, being
+    // careful of wrapping frame indices.
+    static constexpr unsigned max =
+        std::numeric_limits<decltype(frame_index_)>::max();
+    static_assert(max > kPoseRingBufferSize * 2,
+                  "To detect wrapping, kPoseRingBufferSize must be smaller "
+                  "than half of frame_index_ range.");
+    while (!pending_bounds_.empty()) {
+      uint16_t index = pending_bounds_.front().first;
+      // If index is less than the frame_index it's possible we've wrapped, so
+      // we extend the range and 'un-wrap' to account for this.
+      if (index < frame_index)
+        index += max;
+      // If the pending bounds change is for an upcoming frame within our buffer
+      // size, wait to apply it. Otherwise, apply it immediately. This
+      // guarantees that even if we miss many frames, the queue can't fill up
+      // with stale bounds.
+      if (index > frame_index && index <= frame_index + kPoseRingBufferSize)
+        break;
+
+      const BoundsPair& bounds = pending_bounds_.front().second;
+      webvr_left_viewport_->SetSourceUv(bounds.first);
+      webvr_right_viewport_->SetSourceUv(bounds.second);
+      pending_bounds_.pop();
+    }
+    buffer_viewport_list_->SetBufferViewport(GVR_LEFT_EYE,
+                                             *webvr_left_viewport_);
+    buffer_viewport_list_->SetBufferViewport(GVR_RIGHT_EYE,
+                                             *webvr_right_viewport_);
+  } else {
+    gvr::ClockTimePoint target_time = gvr::GvrApi::GetTimePointNow();
+    target_time.monotonic_system_time_nanos += kPredictionTimeWithoutVsyncNanos;
+    head_pose = gvr_api_->GetHeadSpaceFromStartSpaceRotation(target_time);
+  }
 
   gvr::Vec3f position = GetTranslation(head_pose);
   if (position.x == 0.0f && position.y == 0.0f && position.z == 0.0f) {
@@ -630,46 +729,11 @@ void VrShellGl::DrawFrame() {
     gvr_api_->ApplyNeckModel(head_pose, 1.0f);
   }
 
-  frame.BindBuffer(kFramePrimaryBuffer);
-
   // Update the render position of all UI elements (including desktop).
   const float screen_tilt = kDesktopScreenTiltDefault * M_PI / 180.0f;
   scene_->UpdateTransforms(screen_tilt, TimeInMicroseconds());
 
   UpdateController(GetForwardVector(head_pose));
-
-  if (web_vr_mode_) {
-    DrawWebVr();
-
-    // When using async reprojection, we need to know which pose was used in
-    // the WebVR app for drawing this frame. Due to unknown amounts of
-    // buffering in the compositor and SurfaceTexture, we read the pose number
-    // from a corner pixel. There's no point in doing this for legacy
-    // distortion rendering since that doesn't need a pose, and reading back
-    // pixels is an expensive operation. TODO(klausw,crbug.com/655722): stop
-    // doing this once we have working no-compositor rendering for WebVR.
-    if (gvr_api_->GetAsyncReprojectionEnabled()) {
-      int pose_index_byte = GetPixelEncodedPoseIndexByte();
-      if (WebVrPoseByteIsValid(pose_index_byte)) {
-        // We have a valid pose, use it for reprojection.
-        webvr_left_viewport_->SetReprojection(GVR_REPROJECTION_FULL);
-        webvr_right_viewport_->SetReprojection(GVR_REPROJECTION_FULL);
-        head_pose = webvr_head_pose_[pose_index_byte % kPoseRingBufferSize];
-        // We can't mark the used pose as invalid since unfortunately
-        // we have to reuse them. The compositor will re-submit stale
-        // frames on vsync, and we can't tell that this has happened
-        // until we've read the pose index from it, and at that point
-        // it's too late to skip rendering.
-      } else {
-        // If we don't get a valid frame ID back we shouldn't attempt
-        // to reproject by an invalid matrix, so turn off reprojection
-        // instead. Invalid poses can permanently break reprojection
-        // for this GVR instance: http://crbug.com/667327
-        webvr_left_viewport_->SetReprojection(GVR_REPROJECTION_NONE);
-        webvr_right_viewport_->SetReprojection(GVR_REPROJECTION_NONE);
-      }
-    }
-  }
 
   DrawVrShell(head_pose, frame);
 
@@ -677,22 +741,13 @@ void VrShellGl::DrawFrame() {
   frame.Submit(*buffer_viewport_list_, head_pose);
 
   // No need to swap buffers for surfaceless rendering.
-  if (surfaceless_rendering_) {
-    ScheduleNextDrawFrame();
-    return;
-  }
-
-  if (surface_->SupportsAsyncSwap()) {
-    surface_->SwapBuffersAsync(base::Bind(&WaitForSwapAck, base::Bind(
-        &VrShellGl::ScheduleNextDrawFrame, weak_ptr_factory_.GetWeakPtr())));
-  } else {
+  if (!surfaceless_rendering_) {
+    // TODO(mthiesse): Support asynchronous SwapBuffers.
     surface_->SwapBuffers();
-    ScheduleNextDrawFrame();
   }
 }
 
-void VrShellGl::DrawVrShell(const gvr::Mat4f& head_pose,
-                            gvr::Frame &frame) {
+void VrShellGl::DrawVrShell(const gvr::Mat4f& head_pose, gvr::Frame& frame) {
   TRACE_EVENT0("gpu", "VrShellGl::DrawVrShell");
   std::vector<const ContentRectangle*> head_locked_elements;
   std::vector<const ContentRectangle*> world_elements;
@@ -720,7 +775,9 @@ void VrShellGl::DrawVrShell(const gvr::Mat4f& head_pose,
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
 
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    const Colorf& backgroundColor = scene_->GetBackgroundColor();
+    glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b,
+                 backgroundColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
   if (!world_elements.empty()) {
@@ -761,14 +818,20 @@ void VrShellGl::DrawUiView(const gvr::Mat4f* head_pose,
                            const gvr::Sizei& render_size,
                            int viewport_offset) {
   TRACE_EVENT0("gpu", "VrShellGl::DrawUiView");
-  for (auto eye : {GVR_LEFT_EYE, GVR_RIGHT_EYE}) {
-    buffer_viewport_list_->GetBufferViewport(
-        eye + viewport_offset, buffer_viewport_.get());
 
-    gvr::Mat4f view_matrix = gvr_api_->GetEyeFromHeadMatrix(eye);
-    if (head_pose != nullptr) {
-      view_matrix = MatrixMul(view_matrix, *head_pose);
-    }
+  gvr::Mat4f view_matrix;
+  if (head_pose) {
+    view_matrix = *head_pose;
+  } else {
+    SetIdentityM(view_matrix);
+  }
+  auto elementsInDrawOrder = GetElementsInDrawOrder(view_matrix, elements);
+
+  for (auto eye : {GVR_LEFT_EYE, GVR_RIGHT_EYE}) {
+    buffer_viewport_list_->GetBufferViewport(eye + viewport_offset,
+                                             buffer_viewport_.get());
+
+    view_matrix = MatrixMul(gvr_api_->GetEyeFromHeadMatrix(eye), view_matrix);
 
     gvr::Recti pixel_rect =
         CalculatePixelSpaceRect(render_size, buffer_viewport_->GetSourceUv());
@@ -776,12 +839,12 @@ void VrShellGl::DrawUiView(const gvr::Mat4f* head_pose,
                pixel_rect.right - pixel_rect.left,
                pixel_rect.top - pixel_rect.bottom);
 
-    const gvr::Mat4f render_matrix = MatrixMul(
-        PerspectiveMatrixFromView(
-            buffer_viewport_->GetSourceFov(), kZNear, kZFar),
-        view_matrix);
+    const gvr::Mat4f render_matrix =
+        MatrixMul(PerspectiveMatrixFromView(buffer_viewport_->GetSourceFov(),
+                                            kZNear, kZFar),
+                  view_matrix);
 
-    DrawElements(render_matrix, elements);
+    DrawElements(render_matrix, view_matrix, elementsInDrawOrder);
     if (head_pose != nullptr && !web_vr_mode_) {
       DrawCursor(render_matrix);
     }
@@ -789,27 +852,90 @@ void VrShellGl::DrawUiView(const gvr::Mat4f* head_pose,
 }
 
 void VrShellGl::DrawElements(
-    const gvr::Mat4f& render_matrix,
+    const gvr::Mat4f& view_proj_matrix,
+    const gvr::Mat4f& view_matrix,
     const std::vector<const ContentRectangle*>& elements) {
-  for (const auto& rect : elements) {
-    Rectf copy_rect;
-    jint texture_handle;
-    if (rect->content_quad) {
-      copy_rect = {0, 0, 1, 1};
-      texture_handle = content_texture_id_;
-    } else {
-      copy_rect.x = static_cast<float>(rect->copy_rect.x) / ui_tex_css_width_;
-      copy_rect.y = static_cast<float>(rect->copy_rect.y) / ui_tex_css_height_;
-      copy_rect.width = static_cast<float>(rect->copy_rect.width) /
-          ui_tex_css_width_;
-      copy_rect.height = static_cast<float>(rect->copy_rect.height) /
-          ui_tex_css_height_;
-      texture_handle = ui_texture_id_;
+  for (const auto* rect : elements) {
+    gvr::Mat4f transform =
+        MatrixMul(view_proj_matrix, rect->transform.to_world);
+
+    switch (rect->fill) {
+      case Fill::SPRITE: {
+        Rectf copy_rect;
+        copy_rect.x = static_cast<float>(rect->copy_rect.x) / ui_tex_css_width_;
+        copy_rect.y =
+            static_cast<float>(rect->copy_rect.y) / ui_tex_css_height_;
+        copy_rect.width =
+            static_cast<float>(rect->copy_rect.width) / ui_tex_css_width_;
+        copy_rect.height =
+            static_cast<float>(rect->copy_rect.height) / ui_tex_css_height_;
+        jint texture_handle = ui_texture_id_;
+        vr_shell_renderer_->GetTexturedQuadRenderer()->AddQuad(
+            texture_handle, transform, copy_rect, rect->computed_opacity);
+        break;
+      }
+      case Fill::OPAQUE_GRADIENT: {
+        vr_shell_renderer_->GetTexturedQuadRenderer()->Flush();
+        vr_shell_renderer_->GetGradientQuadRenderer()->Draw(
+            transform, rect->edge_color, rect->center_color,
+            rect->computed_opacity);
+        break;
+      }
+      case Fill::GRID_GRADIENT: {
+        vr_shell_renderer_->GetTexturedQuadRenderer()->Flush();
+        vr_shell_renderer_->GetGradientGridRenderer()->Draw(
+            transform, rect->edge_color, rect->center_color,
+            rect->gridline_count, rect->computed_opacity);
+        break;
+      }
+      case Fill::CONTENT: {
+        Rectf copy_rect = {0, 0, 1, 1};
+        jint texture_handle = content_texture_id_;
+        vr_shell_renderer_->GetTexturedQuadRenderer()->AddQuad(
+            texture_handle, transform, copy_rect, rect->computed_opacity);
+        break;
+      }
+      default:
+        break;
     }
-    gvr::Mat4f transform = MatrixMul(render_matrix, rect->transform.to_world);
-    vr_shell_renderer_->GetTexturedQuadRenderer()->Draw(
-        texture_handle, transform, copy_rect, rect->computed_opacity);
   }
+
+  vr_shell_renderer_->GetTexturedQuadRenderer()->Flush();
+}
+
+std::vector<const ContentRectangle*> VrShellGl::GetElementsInDrawOrder(
+    const gvr::Mat4f& view_matrix,
+    const std::vector<const ContentRectangle*>& elements) {
+  typedef std::pair<float, const ContentRectangle*> DistanceElementPair;
+  std::vector<DistanceElementPair> zOrderedElementPairs;
+  zOrderedElementPairs.reserve(elements.size());
+
+  for (const auto* element : elements) {
+    // Distance is the abs(z) value in view space.
+    gvr::Vec3f element_position = GetTranslation(element->transform.to_world);
+    float distance =
+        std::fabs(MatrixVectorMul(view_matrix, element_position).z);
+    zOrderedElementPairs.push_back(std::make_pair(distance, element));
+  }
+
+  // Sort elements primarily based on their draw phase (lower draw phase first)
+  // and secondarily based on their distance (larger distance first).
+  std::sort(
+      zOrderedElementPairs.begin(), zOrderedElementPairs.end(),
+      [](const DistanceElementPair& first, const DistanceElementPair& second) {
+        if (first.second->draw_phase != second.second->draw_phase) {
+          return first.second->draw_phase < second.second->draw_phase;
+        } else {
+          return first.first > second.first;
+        }
+      });
+
+  std::vector<const ContentRectangle*> zOrderedElements;
+  zOrderedElements.reserve(elements.size());
+  for (auto distanceElementPair : zOrderedElementPairs) {
+    zOrderedElements.push_back(distanceElementPair.second);
+  }
+  return zOrderedElements;
 }
 
 void VrShellGl::DrawCursor(const gvr::Mat4f& render_matrix) {
@@ -857,11 +983,9 @@ void VrShellGl::DrawCursor(const gvr::Mat4f& render_matrix) {
   const gvr::Quatf q = QuatFromAxisAngle({1.0f, 0.0f, 0.0f}, -M_PI / 2);
   mat = MatrixMul(QuatToMatrix(q), mat);
 
-  const gvr::Vec3f beam_direction = {
-    target_point_.x - kHandPosition.x,
-    target_point_.y - kHandPosition.y,
-    target_point_.z - kHandPosition.z
-  };
+  const gvr::Vec3f beam_direction = {target_point_.x - kHandPosition.x,
+                                     target_point_.y - kHandPosition.y,
+                                     target_point_.z - kHandPosition.z};
   const gvr::Mat4f beam_direction_mat =
       QuatToMatrix(GetRotationFromZAxis(beam_direction));
 
@@ -897,11 +1021,6 @@ void VrShellGl::DrawWebVr() {
 
   glViewport(0, 0, render_size_primary_.width, render_size_primary_.height);
   vr_shell_renderer_->GetWebVrRenderer()->Draw(webvr_texture_id_);
-
-  buffer_viewport_list_->SetBufferViewport(GVR_LEFT_EYE,
-                                           *webvr_left_viewport_);
-  buffer_viewport_list_->SetBufferViewport(GVR_RIGHT_EYE,
-                                           *webvr_right_viewport_);
 }
 
 void VrShellGl::OnTriggerEvent() {
@@ -910,7 +1029,7 @@ void VrShellGl::OnTriggerEvent() {
 }
 
 void VrShellGl::OnPause() {
-  draw_task_.Cancel();
+  vsync_task_.Cancel();
   controller_->OnPause();
   gvr_api_->PauseTracking();
 }
@@ -920,8 +1039,8 @@ void VrShellGl::OnResume() {
   gvr_api_->ResumeTracking();
   controller_->OnResume();
   if (ready_to_draw_) {
-    draw_task_.Reset(base::Bind(&VrShellGl::DrawFrame, base::Unretained(this)));
-    ScheduleNextDrawFrame();
+    vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
+    OnVSync();
   }
 }
 
@@ -929,14 +1048,16 @@ void VrShellGl::SetWebVrMode(bool enabled) {
   web_vr_mode_ = enabled;
 }
 
-void VrShellGl::UpdateWebVRTextureBounds(const gvr::Rectf& left_bounds,
+void VrShellGl::UpdateWebVRTextureBounds(int16_t frame_index,
+                                         const gvr::Rectf& left_bounds,
                                          const gvr::Rectf& right_bounds) {
-  webvr_left_viewport_->SetSourceUv(left_bounds);
-  webvr_right_viewport_->SetSourceUv(right_bounds);
-}
-
-gvr::GvrApi* VrShellGl::gvr_api() {
-  return gvr_api_.get();
+  if (frame_index < 0) {
+    webvr_left_viewport_->SetSourceUv(left_bounds);
+    webvr_right_viewport_->SetSourceUv(right_bounds);
+  } else {
+    pending_bounds_.emplace(
+        std::make_pair(frame_index, std::make_pair(left_bounds, right_bounds)));
+  }
 }
 
 void VrShellGl::ContentBoundsChanged(int width, int height) {
@@ -950,6 +1071,8 @@ void VrShellGl::ContentPhysicalBoundsChanged(int width, int height) {
     content_surface_texture_->SetDefaultBufferSize(width, height);
   content_tex_physical_size_.width = width;
   content_tex_physical_size_.height = height;
+  render_size_primary_webvr_.width = width;
+  render_size_primary_webvr_.height = height;
 }
 
 void VrShellGl::UIBoundsChanged(int width, int height) {
@@ -968,25 +1091,56 @@ base::WeakPtr<VrShellGl> VrShellGl::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-void VrShellGl::UpdateVSyncParameters(const base::TimeTicks timebase,
-                                      const base::TimeDelta interval) {
-  vsync_timebase_ = timebase;
-  vsync_interval_ = interval;
-}
-
-void VrShellGl::ScheduleNextDrawFrame() {
+void VrShellGl::OnVSync() {
   base::TimeTicks now = base::TimeTicks::Now();
   base::TimeTicks target;
 
-  if (vsync_interval_.is_zero()) {
-    target = now;
-  } else {
-    target = now + vsync_interval_;
-    int64_t intervals = (target - vsync_timebase_) / vsync_interval_;
-    target = vsync_timebase_ + intervals * vsync_interval_;
-  }
+  // Don't send VSyncs until we have a timebase/interval.
+  if (vsync_interval_.is_zero())
+    return;
+  target = now + vsync_interval_;
+  int64_t intervals = (target - vsync_timebase_) / vsync_interval_;
+  target = vsync_timebase_ + intervals * vsync_interval_;
+  task_runner_->PostDelayedTask(FROM_HERE, vsync_task_.callback(),
+                                target - now);
 
-  task_runner_->PostDelayedTask(FROM_HERE, draw_task_.callback(), target - now);
+  base::TimeDelta time = intervals * vsync_interval_;
+  if (!callback_.is_null()) {
+    SendVSync(time, base::ResetAndReturn(&callback_));
+  } else {
+    pending_vsync_ = true;
+    pending_time_ = time;
+  }
+  DrawFrame();
+}
+
+void VrShellGl::OnRequest(device::mojom::VRVSyncProviderRequest request) {
+  binding_.Close();
+  binding_.Bind(std::move(request));
+}
+
+void VrShellGl::GetVSync(const GetVSyncCallback& callback) {
+  if (!pending_vsync_) {
+    if (!callback_.is_null()) {
+      mojo::ReportBadMessage(
+          "Requested VSync before waiting for response to previous request.");
+      binding_.Close();
+      return;
+    }
+    callback_ = callback;
+    return;
+  }
+  pending_vsync_ = false;
+  SendVSync(pending_time_, callback);
+}
+
+void VrShellGl::UpdateVSyncInterval(int64_t timebase_nanos,
+                                    double interval_seconds) {
+  vsync_timebase_ = base::TimeTicks();
+  vsync_timebase_ += base::TimeDelta::FromMicroseconds(timebase_nanos / 1000);
+  vsync_interval_ = base::TimeDelta::FromSecondsD(interval_seconds);
+  vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
+  OnVSync();
 }
 
 void VrShellGl::ForceExitVr() {
@@ -996,6 +1150,42 @@ void VrShellGl::ForceExitVr() {
 
 void VrShellGl::UpdateScene(std::unique_ptr<base::ListValue> commands) {
   scene_->HandleCommands(std::move(commands), TimeInMicroseconds());
+}
+
+void VrShellGl::SendVSync(base::TimeDelta time,
+                          const GetVSyncCallback& callback) {
+  uint8_t frame_index = frame_index_++;
+
+  TRACE_EVENT1("input", "VrShellGl::SendVSync", "frame", frame_index);
+
+  gvr::ClockTimePoint target_time = gvr::GvrApi::GetTimePointNow();
+  target_time.monotonic_system_time_nanos += kPredictionTimeWithoutVsyncNanos;
+
+  gvr::Mat4f head_mat =
+      gvr_api_->GetHeadSpaceFromStartSpaceRotation(target_time);
+  head_mat = gvr_api_->ApplyNeckModel(head_mat, 1.0f);
+
+  webvr_head_pose_[frame_index % kPoseRingBufferSize] = head_mat;
+
+  callback.Run(VrShell::VRPosePtrFromGvrPose(head_mat), time, frame_index,
+               device::mojom::VRVSyncProvider::Status::SUCCESS);
+}
+
+void VrShellGl::ResetPose() {
+  // Should never call RecenterTracking when using with Daydream viewers. On
+  // those devices recentering should only be done via the controller.
+  if (gvr_api_ && gvr_api_->GetViewerType() == GVR_VIEWER_TYPE_CARDBOARD)
+    gvr_api_->RecenterTracking();
+}
+
+void VrShellGl::CreateVRDisplayInfo(
+    const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
+    uint32_t device_id) {
+  device::mojom::VRDisplayInfoPtr info = VrShell::CreateVRDisplayInfo(
+      gvr_api_.get(), content_tex_physical_size_, device_id);
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&RunVRDisplayInfoCallback, callback, base::Passed(&info)));
 }
 
 }  // namespace vr_shell

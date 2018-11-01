@@ -136,10 +136,27 @@ bool WindowManagerAccessPolicy::CanSetAcceptDrops(
   return true;
 }
 
-bool WindowManagerAccessPolicy::CanSetAcceptEvents(
+bool WindowManagerAccessPolicy::CanSetEventTargetingPolicy(
     const ServerWindow* window) const {
   return WasCreatedByThisClient(window) ||
          delegate_->HasRootForAccessPolicy(window);
+}
+
+bool WindowManagerAccessPolicy::CanStackAbove(
+    const ServerWindow* above,
+    const ServerWindow* below) const {
+  // This API is for clients. Window managers can perform any arbitrary
+  // reordering of the windows and don't need to go through this constrained
+  // API.
+  return false;
+}
+
+bool WindowManagerAccessPolicy::CanStackAtTop(
+    const ServerWindow* window) const {
+  // This API is for clients. Window managers can perform any arbitrary
+  // reordering of the windows and don't need to go through this constrained
+  // API.
+  return false;
 }
 
 bool WindowManagerAccessPolicy::CanSetCursorProperties(

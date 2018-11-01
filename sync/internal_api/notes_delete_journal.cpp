@@ -5,6 +5,9 @@
 
 #include "sync/internal_api/notes_delete_journal.h"
 
+#include <set>
+#include <string>
+
 #include "components/sync/syncable/base_transaction.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/syncable_base_transaction.h"
@@ -62,4 +65,4 @@ void DeleteJournal::PurgeDeleteJournals(BaseTransaction* trans,
       trans->GetWrappedTrans(), ids);
 }
 
-}  // namespace syncer
+}  // namespace notessyncer

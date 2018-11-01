@@ -45,8 +45,6 @@ class ContentFaviconDriver
   // FaviconDriver implementation.
   gfx::Image GetFavicon() const override;
   bool FaviconIsValid() const override;
-  int StartDownload(const GURL& url, int max_bitmap_size) override;
-  bool IsOffTheRecord() override;
   GURL GetActiveURL() override;
 
  protected:
@@ -59,23 +57,24 @@ class ContentFaviconDriver
  private:
   friend class content::WebContentsUserData<ContentFaviconDriver>;
 
-  // FaviconDriver implementation.
-  void OnFaviconUpdated(
-      const GURL& page_url,
-      FaviconDriverObserver::NotificationIconType icon_type,
-      const GURL& icon_url,
-      bool icon_url_changed,
-      const gfx::Image& image) override;
+  // FaviconHandler::Delegate implementation.
+  int DownloadImage(const GURL& url,
+                    int max_image_size,
+                    ImageDownloadCallback callback) override;
+  bool IsOffTheRecord() override;
+  void OnFaviconUpdated(const GURL& page_url,
+                        FaviconDriverObserver::NotificationIconType icon_type,
+                        const GURL& icon_url,
+                        bool icon_url_changed,
+                        const gfx::Image& image) override;
 
   // content::WebContentsObserver implementation.
   void DidUpdateFaviconURL(
       const std::vector<content::FaviconURL>& candidates) override;
-  void DidStartNavigationToPendingEntry(
-      const GURL& url,
-      content::ReloadType reload_type) override;
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
   GURL bypass_cache_page_url_;
   std::vector<content::FaviconURL> favicon_urls_;

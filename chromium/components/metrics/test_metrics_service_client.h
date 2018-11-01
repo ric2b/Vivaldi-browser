@@ -10,7 +10,9 @@
 #include <string>
 
 #include "base/macros.h"
+#include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_service_client.h"
+#include "components/metrics/test_metrics_log_uploader.h"
 
 namespace metrics {
 
@@ -37,12 +39,15 @@ class TestMetricsServiceClient : public MetricsServiceClient {
   std::unique_ptr<MetricsLogUploader> CreateUploader(
       const std::string& server_url,
       const std::string& mime_type,
+      MetricsLogUploader::MetricServiceType service_type,
       const base::Callback<void(int)>& on_upload_complete) override;
   base::TimeDelta GetStandardUploadInterval() override;
   bool IsReportingPolicyManaged() override;
   EnableMetricsDefault GetMetricsReportingDefaultState() override;
 
   const std::string& get_client_id() const { return client_id_; }
+  // Returns a weak ref to the last created uploader.
+  TestMetricsLogUploader* uploader() { return uploader_; }
   void set_version_string(const std::string& str) { version_string_ = str; }
   void set_product(int32_t product) { product_ = product; }
   void set_reporting_is_managed(bool managed) {
@@ -58,6 +63,9 @@ class TestMetricsServiceClient : public MetricsServiceClient {
   int32_t product_;
   bool reporting_is_managed_;
   EnableMetricsDefault enable_default_;
+
+  // A weak ref to the last created TestMetricsLogUploader.
+  TestMetricsLogUploader* uploader_;
 
   DISALLOW_COPY_AND_ASSIGN(TestMetricsServiceClient);
 };

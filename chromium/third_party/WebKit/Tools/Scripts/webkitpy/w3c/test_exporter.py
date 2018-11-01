@@ -5,20 +5,19 @@
 import logging
 
 from webkitpy.w3c.local_wpt import LocalWPT
-from webkitpy.w3c.chromium_commit import ChromiumCommit
+from webkitpy.w3c.common import exportable_commits_since
+from webkitpy.w3c.wpt_github import WPTGitHub
 
 _log = logging.getLogger(__name__)
-
-CHROMIUM_WPT_DIR = 'third_party/WebKit/LayoutTests/external/wpt/'
 
 
 class TestExporter(object):
 
-    def __init__(self, host, wpt_github, dry_run=False):
+    def __init__(self, host, gh_user, gh_token, dry_run=False):
         self.host = host
-        self.wpt_github = wpt_github
+        self.wpt_github = WPTGitHub(host, gh_user, gh_token)
         self.dry_run = dry_run
-        self.local_wpt = LocalWPT(self.host)
+        self.local_wpt = LocalWPT(self.host, gh_token)
         self.local_wpt.fetch()
 
     def run(self):
@@ -77,7 +76,7 @@ class TestExporter(object):
         _log.info('chromium@%s', chromium_commit.sha)
         _log.info('(%d behind chromium@origin/master)', chromium_commit.num_behind_master())
 
-        exportable_commits = self.exportable_commits_since(chromium_commit.sha)
+        exportable_commits = exportable_commits_since(chromium_commit.sha, self.host, self.local_wpt)
 
         if not exportable_commits:
             _log.info('No exportable commits found in Chromium, stopping.')
@@ -115,31 +114,3 @@ class TestExporter(object):
         if response_data:
             data, status_code = self.wpt_github.add_label(response_data['number'])
             _log.info('Add label response (status %s): %s', status_code, data)
-
-    def exportable_commits_since(self, commit):
-        """Returns SHAs of exportable commits since `commit` in chronological order.
-
-        Args:
-            commit: The SHA of the Chromium commit from which this method will look.
-        """
-        repo_root = self.host.executive.run_command([
-            'git', 'rev-parse', '--show-toplevel'
-        ]).strip()
-
-        commits = self.host.executive.run_command([
-            'git', 'rev-list', '{}..HEAD'.format(commit), '--reverse',
-            '--', repo_root + '/' + CHROMIUM_WPT_DIR
-        ]).splitlines()
-
-        chromium_commits = [ChromiumCommit(self.host, sha=c) for c in commits]
-
-        def is_exportable(chromium_commit):
-            patch = chromium_commit.format_patch()
-            return (
-                patch
-                and self.local_wpt.test_patch(patch)
-                and 'NOEXPORT=true' not in chromium_commit.message()
-                and not chromium_commit.message().startswith('Import ')
-            )
-
-        return [c for c in chromium_commits if is_exportable(c)]

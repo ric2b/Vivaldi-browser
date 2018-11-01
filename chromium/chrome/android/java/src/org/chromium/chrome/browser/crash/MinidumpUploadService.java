@@ -4,9 +4,14 @@
 
 package org.chromium.chrome.browser.crash;
 
+import android.annotation.SuppressLint;
 import android.app.IntentService;
+import android.app.job.JobInfo;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
+import android.os.PersistableBundle;
 import android.support.annotation.StringDef;
 
 import org.chromium.base.Log;
@@ -14,10 +19,13 @@ import org.chromium.base.StreamUtil;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
+import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.minidump_uploader.MinidumpUploadCallable;
+import org.chromium.components.minidump_uploader.MinidumpUploadJobService;
 import org.chromium.components.minidump_uploader.util.CrashReportingPermissionManager;
 
 import java.io.BufferedReader;
@@ -30,32 +38,20 @@ import java.io.IOException;
  */
 public class MinidumpUploadService extends IntentService {
     private static final String TAG = "MinidmpUploadService";
+
     // Intent actions
-    private static final String ACTION_FIND_LAST =
-            "com.google.android.apps.chrome.crash.ACTION_FIND_LAST";
-
-    @VisibleForTesting
-    static final String ACTION_FIND_ALL = "com.google.android.apps.chrome.crash.ACTION_FIND_ALL";
-
     @VisibleForTesting
     static final String ACTION_UPLOAD = "com.google.android.apps.chrome.crash.ACTION_UPLOAD";
-
-    @VisibleForTesting
-    static final String ACTION_FORCE_UPLOAD =
-            "com.google.android.apps.chrome.crash.ACTION_FORCE_UPLOAD";
 
     // Intent bundle keys
     @VisibleForTesting
     static final String FILE_TO_UPLOAD_KEY = "minidump_file";
     static final String UPLOAD_LOG_KEY = "upload_log";
-    static final String FINISHED_LOGCAT_EXTRACTION_KEY = "upload_extraction_completed";
-    static final String LOCAL_CRASH_ID_KEY = "local_id";
 
     /**
      * The number of times we will try to upload a crash.
      */
-    @VisibleForTesting
-    static final int MAX_TRIES_ALLOWED = 3;
+    public static final int MAX_TRIES_ALLOWED = 3;
 
     /**
      * Histogram related constants.
@@ -80,55 +76,41 @@ public class MinidumpUploadService extends IntentService {
     }
 
     /**
-     * Attempts to populate logcat dumps to be associated with the minidumps
-     * if they do not already exists.
+     * @return Whether to use the JobSchduler API to upload crash reports, rather than directly
+     *     creating a service for uploading.
      */
-    private void tryPopulateLogcat(Intent redirectAction) {
-        redirectAction.putExtra(FINISHED_LOGCAT_EXTRACTION_KEY, true);
-        Context context = getApplicationContext();
-        CrashFileManager fileManager = new CrashFileManager(context.getCacheDir());
-        File[] dumps = fileManager.getMinidumpWithoutLogcat();
+    public static boolean shouldUseJobSchedulerForUploads() {
+        // The JobScheduler API is only available as of Android M.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
 
-        if (dumps.length == 0) {
-            onHandleIntent(redirectAction);
-            return;
-        }
-        context.startService(LogcatExtractionService.createLogcatExtractionTask(
-                context, dumps, redirectAction));
-    }
-
-    @Override
-    protected void onHandleIntent(Intent intent) {
-        if (intent == null) return;
-        if (!intent.getBooleanExtra(FINISHED_LOGCAT_EXTRACTION_KEY, false)) {
-            // The current intent was sent before a chance to gather some
-            // logcat information. tryPopulateLogcat will re-send the
-            // same action once it has a go at gather logcat.
-            tryPopulateLogcat(intent);
-        } else if (ACTION_FIND_LAST.equals(intent.getAction())) {
-            handleFindAndUploadLastCrash(intent);
-        } else if (ACTION_FIND_ALL.equals(intent.getAction())) {
-            handleFindAndUploadAllCrashes();
-        } else if (ACTION_UPLOAD.equals(intent.getAction())) {
-            handleUploadCrash(intent);
-        } else if (ACTION_FORCE_UPLOAD.equals(intent.getAction())) {
-            handleForceUploadCrash(intent);
-        } else {
-            Log.w(TAG, "Got unknown action from intent: " + intent.getAction());
-        }
+        return ChromeFeatureList.isEnabled(
+                ChromeFeatureList.UPLOAD_CRASH_REPORTS_USING_JOB_SCHEDULER);
     }
 
     /**
-     * Creates an intent that when started will find the last created or
-     * updated minidump, and try to upload it.
-     *
-     * @param context the context to use for the intent.
-     * @return an Intent to use to start the service.
+     * Schedules uploading of all pending minidumps, using the JobScheduler API.
      */
-    public static Intent createFindAndUploadLastCrashIntent(Context context) {
-        Intent intent = new Intent(context, MinidumpUploadService.class);
-        intent.setAction(ACTION_FIND_LAST);
-        return intent;
+    @SuppressLint("NewApi")
+    public static void scheduleUploadJob(Context context) {
+        assert shouldUseJobSchedulerForUploads();
+
+        CrashReportingPermissionManager permissionManager = PrivacyPreferencesManager.getInstance();
+        PersistableBundle permissions = new PersistableBundle();
+        permissions.putBoolean(ChromeMinidumpUploaderDelegate.IS_CLIENT_IN_METRICS_SAMPLE,
+                permissionManager.isClientInMetricsSample());
+        permissions.putBoolean(
+                ChromeMinidumpUploaderDelegate.IS_CRASH_UPLOAD_DISABLED_BY_COMMAND_LINE,
+                permissionManager.isCrashUploadDisabledByCommandLine());
+        permissions.putBoolean(ChromeMinidumpUploaderDelegate.IS_UPLOAD_ENABLED_FOR_TESTS,
+                permissionManager.isUploadEnabledForTests());
+
+        JobInfo.Builder builder =
+                new JobInfo
+                        .Builder(TaskIds.CHROME_MINIDUMP_UPLOADING_JOB_ID,
+                                new ComponentName(context, ChromeMinidumpUploadJobService.class))
+                        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                        .setExtras(permissions);
+        MinidumpUploadJobService.scheduleUpload(context, builder);
     }
 
     /**
@@ -138,15 +120,11 @@ public class MinidumpUploadService extends IntentService {
         for (String type : TYPES) {
             for (int success = pref.getCrashSuccessUploadCount(type); success > 0; success--) {
                 RecordHistogram.recordEnumeratedHistogram(
-                        HISTOGRAM_NAME_PREFIX + type,
-                        SUCCESS,
-                        HISTOGRAM_MAX);
+                        HISTOGRAM_NAME_PREFIX + type, SUCCESS, HISTOGRAM_MAX);
             }
             for (int fail = pref.getCrashFailureUploadCount(type); fail > 0; fail--) {
                 RecordHistogram.recordEnumeratedHistogram(
-                        HISTOGRAM_NAME_PREFIX + type,
-                        FAILURE,
-                        HISTOGRAM_MAX);
+                        HISTOGRAM_NAME_PREFIX + type, FAILURE, HISTOGRAM_MAX);
             }
 
             pref.setCrashSuccessUploadCount(type, 0);
@@ -154,63 +132,14 @@ public class MinidumpUploadService extends IntentService {
         }
     }
 
-    private void handleFindAndUploadLastCrash(Intent intent) {
-        CrashFileManager fileManager = new CrashFileManager(getApplicationContext().getCacheDir());
-        File[] minidumpFiles = fileManager.getAllMinidumpFiles(MAX_TRIES_ALLOWED);
-        if (minidumpFiles.length == 0) {
-            // Try again later. Maybe the minidump hasn't finished being written.
-            Log.d(TAG, "Could not find any crash dumps to upload");
+    @Override
+    protected void onHandleIntent(Intent intent) {
+        if (intent == null) return;
+        if (!ACTION_UPLOAD.equals(intent.getAction())) {
+            Log.w(TAG, "Got unknown action from intent: " + intent.getAction());
             return;
         }
-        File minidumpFile = minidumpFiles[0];
-        File logfile = fileManager.getCrashUploadLogFile();
-        Intent uploadIntent = createUploadIntent(getApplicationContext(), minidumpFile, logfile);
 
-        // We should have at least one chance to secure logcat to the minidump now.
-        uploadIntent.putExtra(FINISHED_LOGCAT_EXTRACTION_KEY, true);
-        startService(uploadIntent);
-    }
-
-    /**
-     * Creates an intent that when started will find all minidumps, and try to upload them.
-     *
-     * @param context the context to use for the intent.
-     * @return an Intent to use to start the service.
-     */
-    @VisibleForTesting
-    static Intent createFindAndUploadAllCrashesIntent(Context context) {
-        Intent intent = new Intent(context, MinidumpUploadService.class);
-        intent.setAction(ACTION_FIND_ALL);
-        return intent;
-    }
-
-    private void handleFindAndUploadAllCrashes() {
-        CrashFileManager fileManager = new CrashFileManager(getApplicationContext().getCacheDir());
-        File[] minidumps = fileManager.getAllMinidumpFiles(MAX_TRIES_ALLOWED);
-        File logfile = fileManager.getCrashUploadLogFile();
-        Log.i(TAG, "Attempting to upload accumulated crash dumps.");
-        for (File minidump : minidumps) {
-            Intent uploadIntent = createUploadIntent(getApplicationContext(), minidump, logfile);
-            startService(uploadIntent);
-        }
-    }
-
-    /**
-     * Creates an intent that when started will find all minidumps, and try to upload them.
-     *
-     * @param minidumpFile the minidump file to upload.
-     * @return an Intent to use to start the service.
-     */
-    @VisibleForTesting
-    public static Intent createUploadIntent(Context context, File minidumpFile, File logfile) {
-        Intent intent = new Intent(context, MinidumpUploadService.class);
-        intent.setAction(ACTION_UPLOAD);
-        intent.putExtra(FILE_TO_UPLOAD_KEY, minidumpFile.getAbsolutePath());
-        intent.putExtra(UPLOAD_LOG_KEY, logfile.getAbsolutePath());
-        return intent;
-    }
-
-    private void handleUploadCrash(Intent intent) {
         String minidumpFileName = intent.getStringExtra(FILE_TO_UPLOAD_KEY);
         if (minidumpFileName == null || minidumpFileName.isEmpty()) {
             Log.w(TAG, "Cannot upload crash data since minidump is absent.");
@@ -223,10 +152,6 @@ public class MinidumpUploadService extends IntentService {
             return;
         }
         int tries = CrashFileManager.readAttemptNumber(minidumpFileName);
-        // -1 means no attempt number was read.
-        if (tries == -1) {
-            tries = 0;
-        }
 
         // Since we do not rename a file after reaching max number of tries,
         // files that have maxed out tries will NOT reach this.
@@ -249,21 +174,23 @@ public class MinidumpUploadService extends IntentService {
 
         if (uploadStatus == MinidumpUploadCallable.UPLOAD_SUCCESS) {
             // Only update UMA stats if an intended and successful upload.
-            incrementCrashSuccessUploadCount(getNewNameAfterSuccessfulUpload(minidumpFileName));
+            incrementCrashSuccessUploadCount(minidumpFileName);
         } else if (uploadStatus == MinidumpUploadCallable.UPLOAD_FAILURE) {
             // Unable to upload minidump. Incrementing try number and restarting.
+            ++tries;
+            if (tries == MAX_TRIES_ALLOWED) {
+                // Only record failure to UMA after we have maxed out the allotted tries.
+                incrementCrashFailureUploadCount(minidumpFileName);
+            }
 
-            // Only create another attempt if we have successfully renamed
-            // the file.
+            // Only create another attempt if we have successfully renamed the file.
             String newName = CrashFileManager.tryIncrementAttemptNumber(minidumpFile);
             if (newName != null) {
-                if (++tries < MAX_TRIES_ALLOWED) {
+                if (tries < MAX_TRIES_ALLOWED) {
                     // TODO(nyquist): Do this as an exponential backoff.
                     MinidumpUploadRetry.scheduleRetry(
                             getApplicationContext(), getCrashReportingPermissionManager());
                 } else {
-                    // Only record failure to UMA after we have maxed out the allotted tries.
-                    incrementCrashFailureUploadCount(newName);
                     Log.d(TAG, "Giving up on trying to upload " + minidumpFileName + "after "
                             + tries + " number of tries.");
                 }
@@ -325,18 +252,30 @@ public class MinidumpUploadService extends IntentService {
     }
 
     /**
-     * Increment the count of success/failure by 1 and distinguish between different types of
-     * crashes by looking into the file.
-     * @param fileName is the name of a minidump file that contains the type of crash.
+     * Increments the count of successful uploads by 1. Distinguishes between different types of
+     * crashes by looking into the file contents. Because this code can execute in a context when
+     * the main Chrome activity is no longer running, the counts are stored in shared preferences;
+     * they are later read and recorded as metrics by the main Chrome activity.
+     * NOTE: This method should be called *after* renaming the file, since renaming occurs as a
+     * side-effect of a successful upload.
+     * @param originalFilename The name of the successfully uploaded minidump, *prior* to uploading.
      */
-    private void incrementCrashSuccessUploadCount(String fileName) {
-        ChromePreferenceManager.getInstance(this)
-            .incrementCrashSuccessUploadCount(getCrashType(fileName));
+    public static void incrementCrashSuccessUploadCount(String originalFilename) {
+        ChromePreferenceManager.getInstance().incrementCrashSuccessUploadCount(
+                getCrashType(getNewNameAfterSuccessfulUpload(originalFilename)));
     }
 
-    private void incrementCrashFailureUploadCount(String fileName) {
-        ChromePreferenceManager.getInstance(this)
-            .incrementCrashFailureUploadCount(getCrashType(fileName));
+    /**
+     * Increments the count of failed uploads by 1. Distinguishes between different types of crashes
+     * by looking into the file contents. Because this code can execute in a context when the main
+     * Chrome activity is no longer running, the counts are stored in shared preferences; they are
+     * later read and recorded as metrics by the main Chrome activity.
+     * NOTE: This method should be called *prior* to renaming the file.
+     * @param originalFilename The name of the successfully uploaded minidump, *prior* to uploading.
+     */
+    public static void incrementCrashFailureUploadCount(String originalFilename) {
+        ChromePreferenceManager.getInstance().incrementCrashFailureUploadCount(
+                getCrashType(originalFilename));
     }
 
     /**
@@ -355,6 +294,27 @@ public class MinidumpUploadService extends IntentService {
     }
 
     /**
+     * Attempts to upload the specified {@param minidumpFile}.
+     *
+     * Note that this method is asynchronous. All that is guaranteed is that an upload attempt will
+     * be enqueued.
+     *
+     * @param context The application context, in which to initiate the crash report upload.
+     * @throws A security excpetion if the caller doesn't have permission to start the upload
+     *         service. This can only happen on KitKat and below, due to a framework bug.
+     */
+    public static void tryUploadCrashDump(Context context, File minidumpFile)
+            throws SecurityException {
+        assert !shouldUseJobSchedulerForUploads();
+        CrashFileManager fileManager = new CrashFileManager(context.getCacheDir());
+        Intent intent = new Intent(context, MinidumpUploadService.class);
+        intent.setAction(ACTION_UPLOAD);
+        intent.putExtra(FILE_TO_UPLOAD_KEY, minidumpFile.getAbsolutePath());
+        intent.putExtra(UPLOAD_LOG_KEY, fileManager.getCrashUploadLogFile().getAbsolutePath());
+        context.startService(intent);
+    }
+
+    /**
      * Attempts to upload all minidump files using the given {@link android.content.Context}.
      *
      * Note that this method is asynchronous. All that is guaranteed is that
@@ -365,8 +325,13 @@ public class MinidumpUploadService extends IntentService {
      * @param context Context of the application.
      */
     public static void tryUploadAllCrashDumps(Context context) {
-        Intent findAndUploadAllCrashesIntent = createFindAndUploadAllCrashesIntent(context);
-        context.startService(findAndUploadAllCrashesIntent);
+        assert !shouldUseJobSchedulerForUploads();
+        CrashFileManager fileManager = new CrashFileManager(context.getCacheDir());
+        File[] minidumps = fileManager.getAllMinidumpFiles(MAX_TRIES_ALLOWED);
+        Log.i(TAG, "Attempting to upload accumulated crash dumps.");
+        for (File minidump : minidumps) {
+            tryUploadCrashDump(context, minidump);
+        }
     }
 
     /**
@@ -382,40 +347,27 @@ public class MinidumpUploadService extends IntentService {
      */
     @CalledByNative
     public static void tryUploadCrashDumpWithLocalId(Context context, String localId) {
-        Intent intent = new Intent(context, MinidumpUploadService.class);
-        intent.setAction(ACTION_FORCE_UPLOAD);
-        intent.putExtra(LOCAL_CRASH_ID_KEY, localId);
-        context.startService(intent);
-    }
-
-    private void handleForceUploadCrash(Intent intent) {
-        String localId = intent.getStringExtra(LOCAL_CRASH_ID_KEY);
         if (localId == null || localId.isEmpty()) {
             Log.w(TAG, "Cannot force crash upload since local crash id is absent.");
             return;
         }
 
-        Context context = getApplicationContext();
         CrashFileManager fileManager = new CrashFileManager(context.getCacheDir());
         File minidumpFile = fileManager.getCrashFileWithLocalId(localId);
         if (minidumpFile == null) {
             Log.w(TAG, "Could not find a crash dump with local ID " + localId);
             return;
         }
-        File renamedMinidumpFile = fileManager.trySetForcedUpload(minidumpFile);
+        File renamedMinidumpFile = CrashFileManager.trySetForcedUpload(minidumpFile);
         if (renamedMinidumpFile == null) {
             Log.w(TAG, "Could not rename the file " + minidumpFile.getName() + " for re-upload");
             return;
         }
-        File logfile = fileManager.getCrashUploadLogFile();
-        Intent uploadIntent = createUploadIntent(context, renamedMinidumpFile, logfile);
 
-        // This method is intended to be used for manually triggering an attempt to upload an
-        // already existing crash dump. Such a crash dump should already have had a chance to attach
-        // the logcat to the minidump. Moreover, it's almost certainly too late to try to extract
-        // the logcat now, since typically some time has passed between the crash and the user's
-        // manual upload attempt.
-        uploadIntent.putExtra(FINISHED_LOGCAT_EXTRACTION_KEY, true);
-        startService(uploadIntent);
+        if (shouldUseJobSchedulerForUploads()) {
+            scheduleUploadJob(context);
+        } else {
+            tryUploadCrashDump(context, renamedMinidumpFile);
+        }
     }
 }

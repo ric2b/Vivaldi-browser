@@ -41,8 +41,14 @@ void ColumnBalancer::traverseLines(const LayoutBlockFlow& blockFlow) {
        line = line->nextRootBox()) {
     LayoutUnit lineTopInFlowThread =
         m_flowThreadOffset + line->lineTopWithLeading();
-    if (lineTopInFlowThread < logicalTopInFlowThread())
-      continue;
+    if (lineTopInFlowThread < logicalTopInFlowThread()) {
+      // If the line is fully about the flow thread portion range we're working
+      // with, we can skip it. If its logical top is outside the range, but its
+      // logical bottom protrudes into the range, we need to examine it.
+      LayoutUnit lineBottom = line->lineBottomWithLeading();
+      if (m_flowThreadOffset + lineBottom <= logicalTopInFlowThread())
+        continue;
+    }
     if (lineTopInFlowThread >= logicalBottomInFlowThread())
       break;
     examineLine(*line);
@@ -52,7 +58,7 @@ void ColumnBalancer::traverseLines(const LayoutBlockFlow& blockFlow) {
 void ColumnBalancer::traverseChildren(const LayoutObject& object) {
   // The break-after value from the previous in-flow block-level object to be
   // joined with the break-before value of the next in-flow block-level sibling.
-  EBreak previousBreakAfterValue = BreakAuto;
+  EBreakBetween previousBreakAfterValue = EBreakBetween::kAuto;
 
   for (const LayoutObject* child = object.slowFirstChild(); child;
        child = child->nextSibling()) {
@@ -172,7 +178,7 @@ LayoutUnit InitialColumnHeightFinder::initialMinimalBalancedHeight() const {
 void InitialColumnHeightFinder::examineBoxAfterEntering(
     const LayoutBox& box,
     LayoutUnit childLogicalHeight,
-    EBreak previousBreakAfterValue) {
+    EBreakBetween previousBreakAfterValue) {
   if (m_lastBreakSeen > flowThreadOffset()) {
     // We have moved backwards. We're probably in a parallel flow, caused by
     // floats, sibling table cells, etc.
@@ -233,6 +239,8 @@ void InitialColumnHeightFinder::examineLine(const RootInlineBox& line) {
   LayoutUnit lineTopInFlowThread = flowThreadOffset() + lineTop;
   LayoutUnit minimumLogialHeight =
       columnLogicalHeightRequirementForLine(line.block().styleRef(), line);
+  if (lineTopInFlowThread < LayoutUnit())
+    minimumLogialHeight += lineTopInFlowThread;
   m_tallestUnbreakableLogicalHeight =
       std::max(m_tallestUnbreakableLogicalHeight, minimumLogialHeight);
   ASSERT(
@@ -361,7 +369,7 @@ MinimumSpaceShortageFinder::MinimumSpaceShortageFinder(
 void MinimumSpaceShortageFinder::examineBoxAfterEntering(
     const LayoutBox& box,
     LayoutUnit childLogicalHeight,
-    EBreak previousBreakAfterValue) {
+    EBreakBetween previousBreakAfterValue) {
   LayoutBox::PaginationBreakability breakability =
       box.getPaginationBreakability();
 

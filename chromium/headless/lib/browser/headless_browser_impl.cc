@@ -18,9 +18,8 @@
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
-#include "headless/lib/browser/headless_window_parenting_client.h"
-#include "headless/lib/browser/headless_window_tree_host.h"
 #include "headless/lib/headless_content_main_delegate.h"
+#include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/events/devices/device_data_manager.h"
@@ -121,17 +120,7 @@ void HeadlessBrowserImpl::set_browser_main_parts(
 }
 
 void HeadlessBrowserImpl::RunOnStartCallback() {
-  DCHECK(aura::Env::GetInstance());
-  ui::DeviceDataManager::CreateInstance();
-
-  window_tree_host_.reset(
-      new HeadlessWindowTreeHost(gfx::Rect(options()->window_size)));
-  window_tree_host_->InitHost();
-  window_tree_host_->window()->Show();
-
-  window_parenting_client_.reset(
-      new HeadlessWindowParentingClient(window_tree_host_->window()));
-
+  PlatformCreateWindow();
   on_start_callback_.Run(this);
   on_start_callback_ = base::Callback<void(HeadlessBrowser*)>();
 }
@@ -179,10 +168,6 @@ base::WeakPtr<HeadlessBrowserImpl> HeadlessBrowserImpl::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-aura::WindowTreeHost* HeadlessBrowserImpl::window_tree_host() const {
-  return window_tree_host_.get();
-}
-
 HeadlessWebContents* HeadlessBrowserImpl::GetWebContentsForDevToolsAgentHostId(
     const std::string& devtools_agent_host_id) {
   for (HeadlessBrowserContext* context : GetAllBrowserContexts()) {
@@ -203,8 +188,9 @@ HeadlessBrowserContext* HeadlessBrowserImpl::GetBrowserContextForId(
 }
 
 void RunChildProcessIfNeeded(int argc, const char** argv) {
-  base::CommandLine command_line(argc, argv);
-  if (!command_line.HasSwitch(switches::kProcessType))
+  base::CommandLine::Init(argc, argv);
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kProcessType))
     return;
 
   HeadlessBrowser::Options::Builder builder(argc, argv);
@@ -223,8 +209,8 @@ int HeadlessBrowserMain(
   browser_was_initialized = true;
 
   // Child processes should not end up here.
-  base::CommandLine command_line(options.argc, options.argv);
-  DCHECK(!command_line.HasSwitch(switches::kProcessType));
+  DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kProcessType));
 #endif
   return RunContentMain(std::move(options),
                         std::move(on_browser_start_callback));

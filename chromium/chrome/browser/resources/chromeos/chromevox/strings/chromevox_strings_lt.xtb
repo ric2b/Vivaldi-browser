@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Akučių grupė</translation>
 <translation id="2471138580042810658">6 antraštė</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{žvaigždutė}one{# žvaigždutė}few{# žvaigždutės}many{# asterisks}other{# žvaigždučių}}</translation>
+<translation id="2523609930580546572">„ChromeVox“ mokymo programa</translation>
 <translation id="2525706221823668172">„Chromebook“ spartieji klavišai</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> nustatytas iš naujo.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
@@ -222,7 +223,6 @@ Peržiūrėję visą mokymo programą, naudokite „ChromeVox“, kad pasiektum�
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">Nuoroda, kuria apsilankyta</translation>
 <translation id="3232388865800379423">Iššokantysis mygtukas</translation>
-<translation id="323731244387692321">Atidaryti „ChromeVox“ klaviatūros pagalbą</translation>
 <translation id="3241052487511142956">Ankstesnė aplankyta nuoroda</translation>
 <translation id="3286390186030710347">Šliaužiklis</translation>
 <translation id="3299925995433437805">Nėra kitos aplankytos nuorodos.</translation>
@@ -377,6 +377,7 @@ Peržiūrėję visą mokymo programą, naudokite „ChromeVox“, kad pasiektum�
 <translation id="4372435075475052704">min. <ph name="X" /></translation>
 <translation id="4372705107434148843">Sustabdyti kalbą</translation>
 <translation id="4373197658375206385">Nėra ankstesnio elemento, kuris nebūtų nuoroda.</translation>
+<translation id="4376316291247992553">Peržiūrėkite diagramą kaip brailio rašmenis</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">reset</translation>
 <translation id="4471074325120394300">Nėra nuorodų.</translation>
@@ -719,6 +720,7 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="7693840228159394336">Ankstesnė akutė</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, slaptažodžio teksto laukelis</translation>
+<translation id="7776293189010177726">Atidaryti „ChromeVox“ meniu</translation>
 <translation id="7805247615045262757">numatytasis naršymas</translation>
 <translation id="7805768142964895445">Būsena</translation>
 <translation id="7810781339813764006">Kita grupė</translation>

@@ -10,7 +10,7 @@
  * @param {!HTMLElement} content Content container element.
  * @param {!HTMLElement} topToolbar Top toolbar element.
  * @param {!HTMLElement} bottomToolbar Toolbar element.
- * @param {!ImageEditor.Prompt} prompt Prompt.
+ * @param {!ImageEditorPrompt} prompt Prompt.
  * @param {!ErrorBanner} errorBanner Error banner.
  * @param {!cr.ui.ArrayDataModel} dataModel Data model.
  * @param {!cr.ui.ListSelectionModel} selectionModel Selection model.
@@ -65,7 +65,7 @@ function SlideMode(container, content, topToolbar, bottomToolbar, prompt,
   this.bottomToolbar_ = bottomToolbar;
 
   /**
-   * @type {!ImageEditor.Prompt}
+   * @type {!ImageEditorPrompt}
    * @private
    * @const
    */
@@ -187,9 +187,9 @@ function SlideMode(container, content, topToolbar, bottomToolbar, prompt,
   this.active_ = false;
 
   /**
-   * @private {Gallery.SubMode}
+   * @private {GallerySubMode}
    */
-  this.subMode_ = Gallery.SubMode.BROWSE;
+  this.subMode_ = GallerySubMode.BROWSE;
 
   /**
    * @type {boolean}
@@ -1039,7 +1039,7 @@ SlideMode.prototype.itemLoaded_ = function(
     this.errorBanner_.show('GALLERY_IMAGE_OFFLINE');
   }
 
-  ImageUtil.metrics.recordUserAction(ImageUtil.getMetricName('View'));
+  metrics.recordUserAction(ImageUtil.getMetricName('View'));
 
   var toMillions = function(number) {
     return Math.round(number / (1000 * 1000));
@@ -1047,19 +1047,19 @@ SlideMode.prototype.itemLoaded_ = function(
 
   var metadata = item.getMetadataItem();
   if (metadata) {
-    ImageUtil.metrics.recordSmallCount(ImageUtil.getMetricName('Size.MB'),
+    metrics.recordSmallCount(ImageUtil.getMetricName('Size.MB'),
         toMillions(metadata.size));
   }
 
   var image = this.imageView_.getImage();
-  ImageUtil.metrics.recordSmallCount(ImageUtil.getMetricName('Size.MPix'),
+  metrics.recordSmallCount(ImageUtil.getMetricName('Size.MPix'),
       toMillions(image.width * image.height));
 
   var extIndex = entry.name.lastIndexOf('.');
   var ext = extIndex < 0 ? '' :
       entry.name.substr(extIndex + 1).toLowerCase();
   if (ext === 'jpeg') ext = 'jpg';
-  ImageUtil.metrics.recordEnum(
+  metrics.recordEnum(
       ImageUtil.getMetricName('FileType'), ext, ImageUtil.FILE_TYPES);
 
   // Enable or disable buttons for editing and printing.
@@ -1318,7 +1318,7 @@ SlideMode.prototype.saveCurrentImage_ = function(item, callback) {
 
     // Record UMA for the first edit.
     if (this.imageView_.getContentRevision() === 1)
-      ImageUtil.metrics.recordUserAction(ImageUtil.getMetricName('Edit'));
+      metrics.recordUserAction(ImageUtil.getMetricName('Edit'));
 
     // Users can change overwrite original setting only if there is no undo
     // stack and item is original and writable.
@@ -1466,7 +1466,7 @@ SlideMode.prototype.startSlideshow = function(opt_interval, opt_event) {
 
   this.resumeSlideshow_(opt_interval);
 
-  this.setSubMode_(Gallery.SubMode.SLIDESHOW);
+  this.setSubMode_(GallerySubMode.SLIDESHOW);
 };
 
 /**
@@ -1499,7 +1499,7 @@ SlideMode.prototype.stopSlideshow_ = function(opt_event) {
   // Re-enable touch operation.
   this.touchHandlers_.enabled = true;
 
-  this.setSubMode_(Gallery.SubMode.BROWSE);
+  this.setSubMode_(GallerySubMode.BROWSE);
 };
 
 /**
@@ -1579,7 +1579,7 @@ SlideMode.prototype.stopEditing_ = function() {
 
 /**
  * Sets current sub mode.
- * @param {Gallery.SubMode} subMode
+ * @param {GallerySubMode} subMode
  * @private
  */
 SlideMode.prototype.setSubMode_ = function(subMode) {
@@ -1595,7 +1595,7 @@ SlideMode.prototype.setSubMode_ = function(subMode) {
 
 /**
  * Returns current sub mode.
- * @return {Gallery.SubMode}
+ * @return {GallerySubMode}
  */
 SlideMode.prototype.getSubMode = function() {
   return this.subMode_;
@@ -1652,7 +1652,7 @@ SlideMode.prototype.toggleEditor = function(opt_event) {
       this.bubble_.hidden = false;
     }.bind(this));
 
-    this.setSubMode_(Gallery.SubMode.EDIT);
+    this.setSubMode_(GallerySubMode.EDIT);
     this.editor_.onStartEditing();
   } else {
     this.editor_.getPrompt().hide();
@@ -1666,7 +1666,7 @@ SlideMode.prototype.toggleEditor = function(opt_event) {
 
     this.touchHandlers_.enabled = true;
 
-    this.setSubMode_(Gallery.SubMode.BROWSE);
+    this.setSubMode_(GallerySubMode.BROWSE);
   }
 };
 

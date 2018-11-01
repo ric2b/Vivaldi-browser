@@ -21,9 +21,9 @@ class OSExchangeData;
 // and supplies the appropriate cursors.
 class UI_BASE_EXPORT CustomDragSourceWin : public ui::DragSourceWin {
  public:
-   CustomDragSourceWin() = default;
-   CustomDragSourceWin(bool dragging_in_progress);
-   ~CustomDragSourceWin() override {}
+  CustomDragSourceWin() = default;
+  explicit CustomDragSourceWin(bool dragging_in_progress);
+  ~CustomDragSourceWin() override {}
 
   // IDropSource implementation:
   HRESULT __stdcall GiveFeedback(DWORD effect) override;
@@ -34,6 +34,6 @@ class UI_BASE_EXPORT CustomDragSourceWin : public ui::DragSourceWin {
   DISALLOW_COPY_AND_ASSIGN(CustomDragSourceWin);
 };
 
-}  // namespace ui
+}  // namespace vivaldi
 
-#endif  // UI_BASE_DRAGDROP_DRAG_SOURCE_WIN_H_
+#endif  // UI_DRAGGING_CUSTOM_DRAG_SOURCE_WIN_H_

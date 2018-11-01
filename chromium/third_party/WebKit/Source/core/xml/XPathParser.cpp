@@ -37,7 +37,8 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringHash.h"
 
-using namespace blink;
+namespace blink {
+
 using namespace WTF;
 using namespace Unicode;
 using namespace XPath;
@@ -507,7 +508,7 @@ void Parser::registerString(String* s) {
     return;
 
   DCHECK(!m_strings.contains(s));
-  m_strings.add(WTF::wrapUnique(s));
+  m_strings.insert(WTF::wrapUnique(s));
 }
 
 void Parser::deleteString(String* s) {
@@ -515,5 +516,7 @@ void Parser::deleteString(String* s) {
     return;
 
   DCHECK(m_strings.contains(s));
-  m_strings.remove(s);
+  m_strings.erase(s);
 }
+
+}  // namespace blink

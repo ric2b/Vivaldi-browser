@@ -8,10 +8,10 @@
 
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/strings/grit/ash_strings.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/fullscreen.h"
@@ -50,7 +50,7 @@ LauncherContextMenu* LauncherContextMenu::Create(
   if (!item || item->id == 0)
     return new DesktopShellLauncherContextMenu(controller, item, wm_shelf);
 
-  // Create ArcLauncherContextMenu if the item is an Arc app.
+  // Create ArcLauncherContextMenu if the item is an ARC app.
   const std::string& app_id = controller->GetAppIDForShelfID(item->id);
   if (arc::IsArcItem(controller->profile(), app_id))
     return new ArcLauncherContextMenu(controller, item, wm_shelf);

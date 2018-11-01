@@ -142,9 +142,9 @@ class MediaDevicesManagerTest : public ::testing::Test {
     audio_manager_.reset(new MockAudioManager());
     video_capture_manager_ = new VideoCaptureManager(
         std::unique_ptr<media::VideoCaptureDeviceFactory>(
-            new MockVideoCaptureDeviceFactory()));
-    video_capture_manager_->Register(nullptr,
-                                     base::ThreadTaskRunnerHandle::Get());
+            new MockVideoCaptureDeviceFactory()),
+        base::ThreadTaskRunnerHandle::Get());
+    video_capture_manager_->RegisterListener(nullptr);
     video_capture_device_factory_ = static_cast<MockVideoCaptureDeviceFactory*>(
         video_capture_manager_->video_capture_device_factory());
     media_devices_manager_.reset(new MediaDevicesManager(
@@ -349,7 +349,8 @@ TEST_F(MediaDevicesManagerTest, EnumerateCacheVideoWithDeviceChanges) {
 
   // Simulate device change
   size_t num_video_input_devices = 5;
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   EnableCache(MEDIA_DEVICE_TYPE_VIDEO_INPUT);
   MediaDevicesManager::BoolDeviceTypes devices_to_enumerate;
   devices_to_enumerate[MEDIA_DEVICE_TYPE_VIDEO_INPUT] = true;
@@ -366,7 +367,8 @@ TEST_F(MediaDevicesManagerTest, EnumerateCacheVideoWithDeviceChanges) {
 
   // Simulate device change
   num_video_input_devices = 9;
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   media_devices_manager_->OnDevicesChanged(
       base::SystemMonitor::DEVTYPE_VIDEO_CAPTURE);
 
@@ -396,7 +398,8 @@ TEST_F(MediaDevicesManagerTest, EnumerateCacheAllWithDeviceChanges) {
   size_t num_video_input_devices = 4;
   size_t num_audio_output_devices = 3;
   audio_manager_->SetNumAudioInputDevices(num_audio_input_devices);
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   audio_manager_->SetNumAudioOutputDevices(num_audio_output_devices);
   EnableCache(MEDIA_DEVICE_TYPE_AUDIO_INPUT);
   EnableCache(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT);
@@ -425,7 +428,8 @@ TEST_F(MediaDevicesManagerTest, EnumerateCacheAllWithDeviceChanges) {
   num_video_input_devices = 2;
   num_audio_output_devices = 4;
   audio_manager_->SetNumAudioInputDevices(num_audio_input_devices);
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   audio_manager_->SetNumAudioOutputDevices(num_audio_output_devices);
   media_devices_manager_->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO);
   media_devices_manager_->OnDevicesChanged(
@@ -457,7 +461,8 @@ TEST_F(MediaDevicesManagerTest, SubscribeDeviceChanges) {
   size_t num_video_input_devices = 4;
   size_t num_audio_output_devices = 3;
   audio_manager_->SetNumAudioInputDevices(num_audio_input_devices);
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   audio_manager_->SetNumAudioOutputDevices(num_audio_output_devices);
 
   // Run an enumeration to make sure |media_devices_manager_| has the new
@@ -529,7 +534,8 @@ TEST_F(MediaDevicesManagerTest, SubscribeDeviceChanges) {
   num_video_input_devices = 2;
   num_audio_output_devices = 4;
   audio_manager_->SetNumAudioInputDevices(num_audio_input_devices);
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   audio_manager_->SetNumAudioOutputDevices(num_audio_output_devices);
   media_devices_manager_->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO);
   media_devices_manager_->OnDevicesChanged(
@@ -555,7 +561,8 @@ TEST_F(MediaDevicesManagerTest, SubscribeDeviceChanges) {
   num_video_input_devices = 1;
   num_audio_output_devices = 3;
   audio_manager_->SetNumAudioInputDevices(num_audio_input_devices);
-  video_capture_device_factory_->set_number_of_devices(num_video_input_devices);
+  video_capture_device_factory_->SetToDefaultDevicesConfig(
+      num_video_input_devices);
   audio_manager_->SetNumAudioOutputDevices(num_audio_output_devices);
   media_devices_manager_->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO);
   media_devices_manager_->OnDevicesChanged(

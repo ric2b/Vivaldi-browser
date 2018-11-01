@@ -153,8 +153,6 @@ void CoreOptionsHandler::GetStaticLocalizedValues(
                                chrome::kSettingsSearchHelpURL);
 
   // About
-  localized_strings->SetBoolean("showAbout",
-                                switches::AboutInSettingsEnabled());
   localized_strings->SetString("aboutButton",
                                l10n_util::GetStringUTF16(IDS_ABOUT_BUTTON));
 
@@ -558,7 +556,7 @@ void CoreOptionsHandler::HandleSetPref(const base::ListValue* args,
         return;
       }
       int int_value = static_cast<int>(double_value);
-      temp_value.reset(new base::FundamentalValue(int_value));
+      temp_value.reset(new base::Value(int_value));
       value = temp_value.get();
       break;
     }
@@ -646,15 +644,14 @@ void CoreOptionsHandler::HandleDisableExtension(const base::ListValue* args) {
 }
 
 void CoreOptionsHandler::UpdateClearPluginLSOData() {
-  base::FundamentalValue enabled(
-          plugin_status_pref_setter_.IsClearPluginLSODataEnabled());
+  base::Value enabled(plugin_status_pref_setter_.IsClearPluginLSODataEnabled());
   web_ui()->CallJavascriptFunctionUnsafe(
       "options.OptionsPage.setClearPluginLSODataEnabled", enabled);
 }
 
 void CoreOptionsHandler::UpdatePepperFlashSettingsEnabled() {
-  base::FundamentalValue enabled(
-          plugin_status_pref_setter_.IsPepperFlashSettingsEnabled());
+  base::Value enabled(
+      plugin_status_pref_setter_.IsPepperFlashSettingsEnabled());
   web_ui()->CallJavascriptFunctionUnsafe(
       "options.OptionsPage.setPepperFlashSettingsEnabled", enabled);
 }

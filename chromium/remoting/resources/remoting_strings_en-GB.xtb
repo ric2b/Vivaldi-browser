@@ -27,9 +27,6 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="1654128982815600832">Enabling remote connections for this computer…</translation>
 <translation id="170207782578677537">Failed to register this computer.</translation>
 <translation id="1704090719919187045">Chromoting Host Preferences</translation>
-<translation id="1730409684442507495">• Improved desktop image quality, responsiveness and battery consumption.
-• Improved responsiveness of click-drag operations.
-• Improved several UI animation effects.</translation>
 <translation id="174018511426417793">You have no computers registered. To enable remote connections to a computer, install Chrome Remote Desktop there and click “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Connecting…</translation>
 <translation id="1770394049404108959">I can't open the application.</translation>
@@ -44,6 +41,10 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="2013996867038862849">All paired clients have been deleted.</translation>
 <translation id="2038229918502634450">Host is restarting, to take into account a policy change.</translation>
 <translation id="2046651113449445291">The following clients have been paired with this computer and can connect without supplying a PIN. You can revoke this permission at any time, either individually, or for all clients.</translation>
+<translation id="2053901200959289492">• Added Multi-Window support for Android Nougat.
+• Improved desktop image quality, responsiveness and battery consumption.
+• Improved responsiveness of click-drag operations.
+• Improved several UI animation effects.</translation>
 <translation id="2078880767960296260">Host Process</translation>
 <translation id="20876857123010370">Trackpad mode</translation>
 <translation id="2089514346391228378">Remote connections for this computer have been enabled.</translation>

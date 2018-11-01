@@ -60,6 +60,7 @@ class MessageCenterNotificationManager
   bool CancelAllBySourceOrigin(const GURL& source_origin) override;
   bool CancelAllByProfile(ProfileID profile_id) override;
   void CancelAll() override;
+  void StartShutdown() override;
 
   // MessageCenterObserver
   void OnNotificationRemoved(const std::string& notification_id,
@@ -79,12 +80,6 @@ class MessageCenterNotificationManager
       const std::string& delegate_id, Profile* profile);
 
  private:
-  // Adds |profile_notification| to an alternative provider extension or app.
-  void AddNotificationToAlternateProvider(
-      const Notification& notification,
-      Profile* profile,
-      const std::string& extension_id) const;
-
   FRIEND_TEST_ALL_PREFIXES(message_center::WebNotificationTrayTest,
                            ManuallyCloseMessageCenter);
 
@@ -105,10 +100,6 @@ class MessageCenterNotificationManager
   // notification is found.
   ProfileNotification* FindProfileNotification(const std::string& id) const;
 
-  // Get the extension ID of the extension that the user chose to take over
-  // Chorme Notification Center.
-  std::string GetExtensionTakingOverNotifications(Profile* profile);
-
   std::unique_ptr<message_center::NotifierSettingsProvider> settings_provider_;
 
   // To own the blockers.
@@ -121,6 +112,9 @@ class MessageCenterNotificationManager
 
   // Keeps track of notifications specific to Google Now for UMA purposes.
   GoogleNowNotificationStatsCollector google_now_stats_collector_;
+
+  // Tracks if shutdown has started.
+  bool is_shutdown_started_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterNotificationManager);
 };

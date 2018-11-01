@@ -20,6 +20,11 @@
 
 namespace blink {
 
+// Tests that MixedContentChecker::isMixedContent correctly detects or ignores
+// many cases where there is or there is not mixed content, respectively.
+// Note: Renderer side version of
+// MixedContentNavigationThrottleTest.IsMixedContent. Must be kept in sync
+// manually!
 TEST(MixedContentCheckerTest, IsMixedContent) {
   struct TestCase {
     const char* origin;
@@ -98,9 +103,9 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
 
 namespace {
 
-class MockFrameLoaderClient : public EmptyFrameLoaderClient {
+class MockLocalFrameClient : public EmptyLocalFrameClient {
  public:
-  MockFrameLoaderClient() : EmptyFrameLoaderClient() {}
+  MockLocalFrameClient() : EmptyLocalFrameClient() {}
   MOCK_METHOD1(didDisplayContentWithCertificateErrors, void(const KURL&));
   MOCK_METHOD1(didRunContentWithCertificateErrors, void(const KURL&));
 };
@@ -108,7 +113,7 @@ class MockFrameLoaderClient : public EmptyFrameLoaderClient {
 }  // namespace
 
 TEST(MixedContentCheckerTest, HandleCertificateError) {
-  MockFrameLoaderClient* client = new MockFrameLoaderClient;
+  MockLocalFrameClient* client = new MockLocalFrameClient;
   std::unique_ptr<DummyPageHolder> dummyPageHolder =
       DummyPageHolder::create(IntSize(1, 1), nullptr, client);
 

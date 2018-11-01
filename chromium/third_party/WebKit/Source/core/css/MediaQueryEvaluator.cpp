@@ -51,6 +51,7 @@
 #include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/ColorSpace.h"
 #include "public/platform/PointerProperties.h"
 #include "public/platform/ShapeProperties.h"
 #include "public/platform/WebDisplayMode.h"
@@ -110,51 +111,50 @@ static bool applyRestrictor(MediaQuery::RestrictorType r, bool value) {
 }
 
 bool MediaQueryEvaluator::eval(
-    const MediaQuery* query,
+    const MediaQuery& query,
     MediaQueryResultList* viewportDependentMediaQueryResults,
     MediaQueryResultList* deviceDependentMediaQueryResults) const {
-  if (!mediaTypeMatch(query->mediaType()))
-    return applyRestrictor(query->restrictor(), false);
+  if (!mediaTypeMatch(query.mediaType()))
+    return applyRestrictor(query.restrictor(), false);
 
-  const ExpressionHeapVector& expressions = query->expressions();
+  const ExpressionHeapVector& expressions = query.expressions();
   // Iterate through expressions, stop if any of them eval to false (AND
   // semantics).
   size_t i = 0;
   for (; i < expressions.size(); ++i) {
-    bool exprResult = eval(expressions.at(i).get());
+    bool exprResult = eval(expressions.at(i));
     if (viewportDependentMediaQueryResults &&
-        expressions.at(i)->isViewportDependent())
+        expressions.at(i).isViewportDependent()) {
       viewportDependentMediaQueryResults->push_back(
-          new MediaQueryResult(*expressions.at(i), exprResult));
+          MediaQueryResult(expressions.at(i), exprResult));
+    }
     if (deviceDependentMediaQueryResults &&
-        expressions.at(i)->isDeviceDependent())
+        expressions.at(i).isDeviceDependent()) {
       deviceDependentMediaQueryResults->push_back(
-          new MediaQueryResult(*expressions.at(i), exprResult));
+          MediaQueryResult(expressions.at(i), exprResult));
+    }
     if (!exprResult)
       break;
   }
 
   // Assume true if we are at the end of the list, otherwise assume false.
-  return applyRestrictor(query->restrictor(), expressions.size() == i);
+  return applyRestrictor(query.restrictor(), expressions.size() == i);
 }
 
 bool MediaQueryEvaluator::eval(
-    const MediaQuerySet* querySet,
+    const MediaQuerySet& querySet,
     MediaQueryResultList* viewportDependentMediaQueryResults,
     MediaQueryResultList* deviceDependentMediaQueryResults) const {
-  if (!querySet)
-    return true;
-
-  const HeapVector<Member<MediaQuery>>& queries = querySet->queryVector();
+  const Vector<std::unique_ptr<MediaQuery>>& queries = querySet.queryVector();
   if (!queries.size())
     return true;  // Empty query list evaluates to true.
 
   // Iterate over queries, stop if any of them eval to true (OR semantics).
   bool result = false;
-  for (size_t i = 0; i < queries.size() && !result; ++i)
-    result = eval(queries[i].get(), viewportDependentMediaQueryResults,
+  for (size_t i = 0; i < queries.size() && !result; ++i) {
+    result = eval(*queries[i], viewportDependentMediaQueryResults,
                   deviceDependentMediaQueryResults);
-
+  }
   return result;
 }
 
@@ -757,6 +757,48 @@ static bool scanMediaFeatureEval(const MediaQueryExpValue& value,
   return (value.id == CSSValueProgressive);
 }
 
+static bool colorGamutMediaFeatureEval(const MediaQueryExpValue& value,
+                                       MediaFeaturePrefix,
+                                       const MediaValues& mediaValues) {
+  // isValid() is false if there is no parameter. Without parameter we should
+  // return true to indicate that colorGamutMediaFeature is enabled in the
+  // browser.
+  if (!value.isValid())
+    return true;
+
+  if (!value.isID)
+    return false;
+
+  DCHECK(value.id == CSSValueSRGB || value.id == CSSValueP3 ||
+         value.id == CSSValueRec2020);
+
+  ColorSpaceGamut gamut = mediaValues.colorGamut();
+  switch (gamut) {
+    case ColorSpaceGamut::Unknown:
+    case ColorSpaceGamut::LessThanNTSC:
+    case ColorSpaceGamut::NTSC:
+    case ColorSpaceGamut::SRGB:
+      return value.id == CSSValueSRGB;
+    case ColorSpaceGamut::AlmostP3:
+    case ColorSpaceGamut::P3:
+    case ColorSpaceGamut::AdobeRGB:
+    case ColorSpaceGamut::Wide:
+      return value.id == CSSValueSRGB || value.id == CSSValueP3;
+    case ColorSpaceGamut::BT2020:
+    case ColorSpaceGamut::ProPhoto:
+    case ColorSpaceGamut::UltraWide:
+      return value.id == CSSValueSRGB || value.id == CSSValueP3 ||
+             value.id == CSSValueRec2020;
+    case ColorSpaceGamut::End:
+      NOTREACHED();
+      return false;
+  }
+
+  // This is for some compilers that do not understand that it can't be reached.
+  NOTREACHED();
+  return false;
+}
+
 void MediaQueryEvaluator::init() {
   // Create the table.
   gFunctionMap = new FunctionMap;
@@ -766,7 +808,7 @@ void MediaQueryEvaluator::init() {
 #undef ADD_TO_FUNCTIONMAP
 }
 
-bool MediaQueryEvaluator::eval(const MediaQueryExp* expr) const {
+bool MediaQueryEvaluator::eval(const MediaQueryExp& expr) const {
   if (!m_mediaValues || !m_mediaValues->hasValues())
     return true;
 
@@ -774,9 +816,9 @@ bool MediaQueryEvaluator::eval(const MediaQueryExp* expr) const {
 
   // Call the media feature evaluation function. Assume no prefix and let
   // trampoline functions override the prefix if prefix is used.
-  EvalFunc func = gFunctionMap->get(expr->mediaFeature().impl());
+  EvalFunc func = gFunctionMap->at(expr.mediaFeature().impl());
   if (func)
-    return func(expr->expValue(), NoPrefix, *m_mediaValues);
+    return func(expr.expValue(), NoPrefix, *m_mediaValues);
 
   return false;
 }

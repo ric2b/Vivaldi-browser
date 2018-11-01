@@ -468,6 +468,9 @@ message ClientDownloadResponse {
 
   // An arbitrary token that should be sent along for further server requests.
   optional bytes token = 3;
+
+  // Whether the server requests that this binary be uploaded.
+  optional bool upload = 5;
 }
 
 // The following protocol buffer holds the feedback report gathered
@@ -647,7 +650,8 @@ message ClientIncidentReport {
       optional Channel chrome_update_channel = 5;
       optional int64 uptime_msec = 6;
       optional bool metrics_consent = 7;
-      optional bool extended_consent = 8;
+      // Obsolete: extended consent is now required for incident reporting.
+      optional bool OBSOLETE_extended_consent = 8;
       message Dll {
         enum Feature {
           UNKNOWN = 0;
@@ -681,7 +685,8 @@ message ClientIncidentReport {
         repeated Modification modification = 4;
       }
       repeated ModuleState module_state = 11;
-      optional bool field_trial_participant = 12;
+      // Obsolete: field trials no longer enable incident reporting.
+      optional bool OBSOLETE_field_trial_participant = 12;
     }
     optional Process process = 3;
   }
@@ -756,7 +761,7 @@ message DownloadMetadata {
 // A Detailed Safebrowsing Report from clients. Chrome safebrowsing reports are
 // only sent by Chrome users who have opted into extended Safe Browsing.
 // This proto is replacing ClientMalwareReportRequest.
-// Next tag: 16
+// Next tag: 17
 message ClientSafeBrowsingReportRequest {
   // Note: A lot of the "optional" fields would make sense to be
   // "required" instead.  However, having them as optional allows the
@@ -835,6 +840,10 @@ message ClientSafeBrowsingReportRequest {
 
   repeated Resource resources = 4;
 
+  // Contains the hierarchy of elements on the page (ie: the DOM). Some
+  // elements can be Resources and will refer to the resources list (above).
+  repeated HTMLElement dom = 16;
+
   // Whether the report is complete.
   optional bool complete = 5;
 
@@ -853,6 +862,30 @@ message ClientSafeBrowsingReportRequest {
   // report type is DANGEROUS_DOWNLOAD_RECOVERY, DANGEROUS_DOWNLOAD_WARNING or
   // DANGEROUS_DOWNLOAD_BY_API.
   optional bytes token = 15;
+}
+
+// An HTML Element on the page (eg: iframe, div, script, etc).
+message HTMLElement {
+  // Id of this element.
+  optional int32 id = 1;
+
+  // The tag type of this element (eg: iframe, div, script, etc).
+  optional string tag = 2;
+
+  // IDs of elements that are children of this element.
+  repeated int32 child_ids = 3;
+
+  // If this element represents a Resource then this is the id of the
+  // Resource, which contains additional data about the Resource. Otherwise
+  // unset.
+  optional int32 resource_id = 5;
+
+  // An Attribute of the element (eg: id, border, foo etc) and its value.
+  message Attribute {
+    optional string name = 1;
+    optional string value = 2;
+  }
+  repeated Attribute attribute = 6;
 }
 
 // Canonical representation of raster image data.

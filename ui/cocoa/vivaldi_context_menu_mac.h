@@ -9,8 +9,8 @@
 // the entire chain of render_view_context_menu which we do not want because
 // of limited support for accelerators and no support for icons.
 
-#ifndef VIVALDI_UI_COCOA_VIVALDI_CONTEXT_MENU_MAC_H_
-#define VIVALDI_UI_COCOA_VIVALDI_CONTEXT_MENU_MAC_H_
+#ifndef UI_COCOA_VIVALDI_CONTEXT_MENU_MAC_H_
+#define UI_COCOA_VIVALDI_CONTEXT_MENU_MAC_H_
 
 #import <Cocoa/Cocoa.h>
 
@@ -45,4 +45,4 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuMac);
 };
 
-#endif  // VIVALDI_UI_COCOA_VIVALDI_CONTEXT_MENU_MAC_H_
+#endif  // UI_COCOA_VIVALDI_CONTEXT_MENU_MAC_H_

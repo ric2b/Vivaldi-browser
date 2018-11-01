@@ -23,12 +23,12 @@ def FindChrome(src_dir, configs, verbose=False):
 
   for config in configs:
     chrome_locations.extend([
-        'build/%s/vivaldi.exe' % config,
-        'chrome/%s/vivaldi.exe' % config,
+        'build/%s/chrome.exe' % config,
+        'chrome/%s/chrome.exe' % config,
         # Windows Chromium ninja builder
-        'out/%s/vivaldi.exe' % config,
+        'out/%s/chrome.exe' % config,
         # Linux
-        'out/%s/vivaldi' % config,
+        'out/%s/chrome' % config,
         # Mac Chromium ninja builder
         'out/%s/Chromium.app/Contents/MacOS/Chromium' % config,
         # Mac release ninja builder

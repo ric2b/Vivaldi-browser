@@ -62,6 +62,7 @@ target(link_target_type, "gpu_sources") {
     "//media/gpu/ipc/service",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
+    "//services/ui/gpu",
     "//services/ui/gpu/interfaces",
     "//skia",
     "//ui/events/ipc",
@@ -101,10 +102,6 @@ target(link_target_type, "gpu_sources") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
-
-    if (ozone_platform_x11) {
-      defines = [ "OZONE_X11" ]
-    }
   }
 
   if (enable_vulkan) {

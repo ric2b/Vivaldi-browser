@@ -216,15 +216,16 @@ Network.RequestHeadersView = class extends UI.VBox {
      * @this {Network.RequestHeadersView}
      */
     function toggleViewSource(event) {
-      paramsTreeElement._viewSource = !paramsTreeElement._viewSource;
+      paramsTreeElement[Network.RequestHeadersView._viewSourceSymbol] =
+          !paramsTreeElement[Network.RequestHeadersView._viewSourceSymbol];
       this._refreshParams(title, params, sourceText, paramsTreeElement);
       event.consume();
     }
 
-    paramsTreeElement.listItemElement.appendChild(
-        this._createViewSourceToggle(paramsTreeElement._viewSource, toggleViewSource.bind(this)));
+    paramsTreeElement.listItemElement.appendChild(this._createViewSourceToggle(
+        paramsTreeElement[Network.RequestHeadersView._viewSourceSymbol], toggleViewSource.bind(this)));
 
-    if (paramsTreeElement._viewSource) {
+    if (paramsTreeElement[Network.RequestHeadersView._viewSourceSymbol]) {
       this._populateTreeElementWithSourceText(paramsTreeElement, sourceText);
       return;
     }
@@ -270,17 +271,19 @@ Network.RequestHeadersView = class extends UI.VBox {
      * @this {Network.RequestHeadersView}
      */
     function toggleViewSource(event) {
-      treeElement._viewSource = !treeElement._viewSource;
+      treeElement[Network.RequestHeadersView._viewSourceSymbol] =
+          !treeElement[Network.RequestHeadersView._viewSourceSymbol];
       this._refreshRequestJSONPayload(parsedObject, sourceText);
       event.consume();
     }
 
-    listItem.appendChild(this._createViewSourceToggle(treeElement._viewSource, toggleViewSource.bind(this)));
-    if (treeElement._viewSource) {
+    listItem.appendChild(this._createViewSourceToggle(
+        treeElement[Network.RequestHeadersView._viewSourceSymbol], toggleViewSource.bind(this)));
+    if (treeElement[Network.RequestHeadersView._viewSourceSymbol]) {
       this._populateTreeElementWithSourceText(this._requestPayloadCategory, sourceText);
     } else {
       var object = SDK.RemoteObject.fromLocalObject(parsedObject);
-      var section = new Components.ObjectPropertiesSection(object, object.description);
+      var section = new ObjectUI.ObjectPropertiesSection(object, object.description);
       section.expand();
       section.editable = false;
       treeElement.appendChild(new UI.TreeElement(section.element));
@@ -495,6 +498,8 @@ Network.RequestHeadersView = class extends UI.VBox {
     return this._createToggleButton(toggleTitle);
   }
 };
+
+Network.RequestHeadersView._viewSourceSymbol = Symbol('ViewSource');
 
 /**
  * @unrestricted

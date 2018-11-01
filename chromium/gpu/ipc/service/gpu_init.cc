@@ -213,6 +213,8 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   }
 #endif  // !defined(OS_MACOSX)
 
+  gpu_feature_info_ = gpu::GetGpuFeatureInfo(gpu_info_, command_line);
+
   base::TimeDelta collect_context_time =
       base::TimeTicks::Now() - before_collect_context_graphics_info;
   UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo", collect_context_time);
@@ -222,9 +224,9 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   UMA_HISTOGRAM_MEDIUM_TIMES("GPU.InitializeOneOffMediumTime",
                              initialize_one_off_time);
 
-  // OSMesa is expected to run very slowly, so disable the watchdog in that
-  // case.
-  if (gl::GetGLImplementation() == gl::kGLImplementationOSMesaGL) {
+  // Software GL is expected to run slowly, so disable the watchdog
+  // in that case.
+  if (gl::GetGLImplementation() == gl::GetSoftwareGLImplementation()) {
     if (watchdog_thread_)
       watchdog_thread_->Stop();
     watchdog_thread_ = nullptr;

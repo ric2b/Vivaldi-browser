@@ -9,9 +9,13 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/test/trace_event_analyzer.h"
+#include "base/trace_event/trace_buffer.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -20,8 +24,10 @@
 #include "third_party/WebKit/public/platform/WebFloatSize.h"
 #include "third_party/WebKit/public/platform/WebGestureCurve.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/compositor_thread_event_queue.h"
 #include "ui/events/blink/did_overscroll_params.h"
@@ -120,10 +126,10 @@ WebGestureEvent CreateFling(WebGestureDevice source_device,
                      modifiers);
 }
 
-blink::WebScopedInputEvent CreateGestureScrollOrPinch(WebInputEvent::Type type,
-                                                      float deltaYOrScale = 0,
-                                                      int x = 0,
-                                                      int y = 0) {
+WebScopedInputEvent CreateGestureScrollOrPinch(WebInputEvent::Type type,
+                                               float deltaYOrScale = 0,
+                                               int x = 0,
+                                               int y = 0) {
   WebGestureEvent gesture(type, WebInputEvent::NoModifiers,
                           WebInputEvent::TimeStampForTesting);
   gesture.sourceDevice = blink::WebGestureDeviceTouchpad;
@@ -135,6 +141,15 @@ blink::WebScopedInputEvent CreateGestureScrollOrPinch(WebInputEvent::Type type,
     gesture.y = y;
   }
   return WebInputEventTraits::Clone(gesture);
+}
+
+void OnTraceDataCollected(base::Closure quit_closure,
+                          base::trace_event::TraceResultBuffer* buffer,
+                          const scoped_refptr<base::RefCountedString>& json,
+                          bool has_more_events) {
+  buffer->AddFragment(json->data());
+  if (!has_more_events)
+    quit_closure.Run();
 }
 
 class MockInputHandler : public cc::InputHandler {
@@ -271,7 +286,7 @@ class MockInputHandlerProxyClient
                void(const WebInputEvent&));
 
   void DispatchNonBlockingEventToMainThread(
-      blink::WebScopedInputEvent event,
+      WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info) override {
     CHECK(event.get());
     DispatchNonBlockingEventToMainThread_(*event.get());
@@ -325,7 +340,7 @@ const cc::InputHandler::ScrollStatus kImplThreadScrollState(
 
 const cc::InputHandler::ScrollStatus kMainThreadScrollState(
     cc::InputHandler::SCROLL_ON_MAIN_THREAD,
-    cc::MainThreadScrollingReason::kNotScrollingOnMain);
+    cc::MainThreadScrollingReason::kHandlingScrollFromMainThread);
 
 const cc::InputHandler::ScrollStatus kScrollIgnoredScrollState(
     cc::InputHandler::SCROLL_IGNORED,
@@ -494,6 +509,32 @@ class InputHandlerProxyEventQueueTest : public testing::Test {
           base::MakeUnique<CompositorThreadEventQueue>();
   }
 
+  void StartTracing() {
+    base::trace_event::TraceLog::GetInstance()->SetEnabled(
+        base::trace_event::TraceConfig("*"),
+        base::trace_event::TraceLog::RECORDING_MODE);
+  }
+
+  void StopTracing() {
+    base::trace_event::TraceLog::GetInstance()->SetDisabled();
+  }
+
+  std::unique_ptr<trace_analyzer::TraceAnalyzer> CreateTraceAnalyzer() {
+    base::trace_event::TraceResultBuffer buffer;
+    base::trace_event::TraceResultBuffer::SimpleOutput trace_output;
+    buffer.SetOutputCallback(trace_output.GetCallback());
+    base::RunLoop run_loop;
+    buffer.Start();
+    base::trace_event::TraceLog::GetInstance()->Flush(
+        base::Bind(&OnTraceDataCollected, run_loop.QuitClosure(),
+                   base::Unretained(&buffer)));
+    run_loop.Run();
+    buffer.Finish();
+
+    return base::WrapUnique(
+        trace_analyzer::TraceAnalyzer::Create(trace_output.json_output));
+  }
+
   void HandleGestureEvent(WebInputEvent::Type type,
                           float deltay_or_scale = 0,
                           int x = 0,
@@ -508,7 +549,7 @@ class InputHandlerProxyEventQueueTest : public testing::Test {
 
   void DidHandleInputEventAndOverscroll(
       InputHandlerProxy::EventDisposition event_disposition,
-      blink::WebScopedInputEvent input_event,
+      WebScopedInputEvent input_event,
       const ui::LatencyInfo& latency_info,
       std::unique_ptr<ui::DidOverscrollParams> overscroll_params) {
     event_disposition_recorder_.push_back(event_disposition);
@@ -530,6 +571,7 @@ class InputHandlerProxyEventQueueTest : public testing::Test {
   testing::StrictMock<MockInputHandlerProxyClient> mock_client_;
   std::vector<InputHandlerProxy::EventDisposition> event_disposition_recorder_;
 
+  base::MessageLoop loop_;
   base::WeakPtrFactory<InputHandlerProxyEventQueueTest> weak_ptr_factory_;
 };
 
@@ -3009,6 +3051,186 @@ TEST_P(InputHandlerProxyTest, MainThreadScrollingMouseWheelHistograms) {
                            base::Bucket(5, 1), base::Bucket(14, 1)));
 }
 
+TEST_P(InputHandlerProxyTest, GestureScrollingThreadStatusHistogram) {
+  VERIFY_AND_RESET_MOCKS();
+
+  WebTouchEvent touch_start(WebInputEvent::TouchStart,
+                            WebInputEvent::NoModifiers,
+                            WebInputEvent::TimeStampForTesting);
+  touch_start.touchesLength = 1;
+  touch_start.touches[0] =
+      CreateWebTouchPoint(WebTouchPoint::StatePressed, 10, 10);
+
+  WebGestureEvent gesture_scroll_begin;
+  gesture_scroll_begin.setType(WebInputEvent::GestureScrollBegin);
+  gesture_scroll_begin.sourceDevice = blink::WebGestureDeviceTouchscreen;
+
+  WebGestureEvent gesture_scroll_end;
+  gesture_scroll_end.setType(WebInputEvent::GestureScrollEnd);
+  gesture_scroll_end.sourceDevice = blink::WebGestureDeviceTouchscreen;
+
+  // Touch start with passive event listener.
+  EXPECT_CALL(mock_input_handler_,
+              EventListenerTypeForTouchStartAt(
+                  testing::Property(&gfx::Point::x, testing::Gt(0))))
+      .WillOnce(testing::Return(
+          cc::InputHandler::TouchStartEventListenerType::NO_HANDLER));
+  EXPECT_CALL(
+      mock_input_handler_,
+      GetEventListenerProperties(cc::EventListenerClass::kTouchStartOrMove))
+      .WillOnce(testing::Return(cc::EventListenerProperties::kPassive));
+
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE_NON_BLOCKING;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(touch_start));
+
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillOnce(testing::Return(kImplThreadScrollState));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_begin));
+
+  EXPECT_THAT(histogram_tester().GetAllSamples(
+                  "Renderer4.GestureScrollingThreadStatus"),
+              testing::ElementsAre(base::Bucket(0, 1)));
+
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_end));
+
+  VERIFY_AND_RESET_MOCKS();
+
+  // Touch event with HANDLER_ON_SCROLLING_LAYER event listener.
+  EXPECT_CALL(mock_input_handler_,
+              EventListenerTypeForTouchStartAt(
+                  testing::Property(&gfx::Point::x, testing::Gt(0))))
+      .WillOnce(testing::Return(cc::InputHandler::TouchStartEventListenerType::
+                                    HANDLER_ON_SCROLLING_LAYER));
+
+  expected_disposition_ = InputHandlerProxy::DID_NOT_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(touch_start));
+
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillOnce(testing::Return(kImplThreadScrollState));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_begin));
+
+  EXPECT_THAT(histogram_tester().GetAllSamples(
+                  "Renderer4.GestureScrollingThreadStatus"),
+              testing::ElementsAre(base::Bucket(0, 1), base::Bucket(1, 1)));
+
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_end));
+
+  VERIFY_AND_RESET_MOCKS();
+
+  // Gesture scrolling on main thread.
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillOnce(testing::Return(kMainThreadScrollState));
+  expected_disposition_ = InputHandlerProxy::DID_NOT_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_begin));
+
+  EXPECT_THAT(histogram_tester().GetAllSamples(
+                  "Renderer4.GestureScrollingThreadStatus"),
+              testing::ElementsAre(base::Bucket(0, 1), base::Bucket(1, 1),
+                                   base::Bucket(2, 1)));
+
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_));
+  expected_disposition_ = InputHandlerProxy::DID_NOT_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_end));
+
+  VERIFY_AND_RESET_MOCKS();
+}
+
+TEST_P(InputHandlerProxyTest, WheelScrollingThreadStatusHistogram) {
+  VERIFY_AND_RESET_MOCKS();
+
+  WebMouseWheelEvent wheel(WebInputEvent::MouseWheel, WebInputEvent::ControlKey,
+                           WebInputEvent::TimeStampForTesting);
+
+  WebGestureEvent gesture_scroll_begin;
+  gesture_scroll_begin.setType(WebInputEvent::GestureScrollBegin);
+  gesture_scroll_begin.sourceDevice = blink::WebGestureDeviceTouchpad;
+
+  WebGestureEvent gesture_scroll_end;
+  gesture_scroll_end.setType(WebInputEvent::GestureScrollEnd);
+  gesture_scroll_end.sourceDevice = blink::WebGestureDeviceTouchpad;
+
+  // Wheel event with passive event listener.
+  EXPECT_CALL(mock_input_handler_,
+              GetEventListenerProperties(cc::EventListenerClass::kMouseWheel))
+      .WillOnce(testing::Return(cc::EventListenerProperties::kPassive));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE_NON_BLOCKING;
+  EXPECT_EQ(expected_disposition_, input_handler_->HandleInputEvent(wheel));
+
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillOnce(testing::Return(kImplThreadScrollState));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_begin));
+
+  EXPECT_THAT(
+      histogram_tester().GetAllSamples("Renderer4.WheelScrollingThreadStatus"),
+      testing::ElementsAre(base::Bucket(0, 1)));
+
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_end));
+
+  VERIFY_AND_RESET_MOCKS();
+
+  // Wheel event with blocking event listener.
+  EXPECT_CALL(mock_input_handler_,
+              GetEventListenerProperties(cc::EventListenerClass::kMouseWheel))
+      .WillOnce(testing::Return(cc::EventListenerProperties::kBlocking));
+  expected_disposition_ = InputHandlerProxy::DID_NOT_HANDLE;
+  EXPECT_EQ(expected_disposition_, input_handler_->HandleInputEvent(wheel));
+
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillOnce(testing::Return(kImplThreadScrollState));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_begin));
+
+  EXPECT_THAT(
+      histogram_tester().GetAllSamples("Renderer4.WheelScrollingThreadStatus"),
+      testing::ElementsAre(base::Bucket(0, 1), base::Bucket(1, 1)));
+
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_));
+  expected_disposition_ = InputHandlerProxy::DID_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_end));
+
+  VERIFY_AND_RESET_MOCKS();
+
+  // Wheel scrolling on main thread.
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillOnce(testing::Return(kMainThreadScrollState));
+  expected_disposition_ = InputHandlerProxy::DID_NOT_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_begin));
+
+  EXPECT_THAT(
+      histogram_tester().GetAllSamples("Renderer4.WheelScrollingThreadStatus"),
+      testing::ElementsAre(base::Bucket(0, 1), base::Bucket(1, 1),
+                           base::Bucket(2, 1)));
+
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_));
+  expected_disposition_ = InputHandlerProxy::DID_NOT_HANDLE;
+  EXPECT_EQ(expected_disposition_,
+            input_handler_->HandleInputEvent(gesture_scroll_end));
+
+  VERIFY_AND_RESET_MOCKS();
+}
+
 TEST_F(InputHandlerProxyEventQueueTest, VSyncAlignedGestureScroll) {
   base::HistogramTester histogram_tester;
 
@@ -3236,6 +3458,77 @@ TEST_F(InputHandlerProxyEventQueueTest, VSyncAlignedCoalesceScrollAndPinch) {
       0.5f,
       ToWebGestureEvent(event_queue()[5]->event()).data.pinchUpdate.scale);
   EXPECT_EQ(WebInputEvent::GesturePinchEnd, event_queue()[6]->event().type());
+  testing::Mock::VerifyAndClearExpectations(&mock_input_handler_);
+}
+
+TEST_F(InputHandlerProxyEventQueueTest, OriginalEventsTracing) {
+  // Handle scroll on compositor.
+  cc::InputHandlerScrollResult scroll_result_did_scroll_;
+  scroll_result_did_scroll_.did_scroll = true;
+
+  EXPECT_CALL(mock_input_handler_, ScrollBegin(testing::_, testing::_))
+      .WillRepeatedly(testing::Return(kImplThreadScrollState));
+  EXPECT_CALL(mock_input_handler_, SetNeedsAnimateInput())
+      .Times(::testing::AtLeast(1));
+  EXPECT_CALL(
+      mock_input_handler_,
+      ScrollBy(testing::Property(&cc::ScrollState::delta_y, testing::Gt(0))))
+      .WillRepeatedly(testing::Return(scroll_result_did_scroll_));
+  EXPECT_CALL(mock_input_handler_, ScrollEnd(testing::_))
+      .Times(::testing::AtLeast(1));
+
+  StartTracing();
+  // Simulate scroll.
+  HandleGestureEvent(WebInputEvent::GestureScrollBegin);
+  HandleGestureEvent(WebInputEvent::GestureScrollUpdate, -20);
+  HandleGestureEvent(WebInputEvent::GestureScrollUpdate, -40);
+  HandleGestureEvent(WebInputEvent::GestureScrollUpdate, -10);
+  HandleGestureEvent(WebInputEvent::GestureScrollEnd);
+
+  // Simulate scroll and pinch.
+  HandleGestureEvent(WebInputEvent::GestureScrollBegin);
+  HandleGestureEvent(WebInputEvent::GesturePinchUpdate, 10.0f, 1, 10);
+  HandleGestureEvent(WebInputEvent::GestureScrollUpdate, -10);
+  HandleGestureEvent(WebInputEvent::GesturePinchUpdate, 2.0f, 1, 10);
+  HandleGestureEvent(WebInputEvent::GestureScrollUpdate, -30);
+  HandleGestureEvent(WebInputEvent::GestureScrollEnd);
+
+  // Dispatch all events.
+  input_handler_proxy_->DeliverInputForBeginFrame();
+  StopTracing();
+
+  // Retrieve tracing data.
+  std::unique_ptr<trace_analyzer::TraceAnalyzer> analyzer =
+      CreateTraceAnalyzer();
+  trace_analyzer::TraceEventVector begin_events;
+  trace_analyzer::Query begin_query = trace_analyzer::Query::EventPhaseIs(
+      TRACE_EVENT_PHASE_NESTABLE_ASYNC_BEGIN);
+  analyzer->FindEvents(begin_query, &begin_events);
+
+  trace_analyzer::TraceEventVector end_events;
+  trace_analyzer::Query end_query =
+      trace_analyzer::Query::EventPhaseIs(TRACE_EVENT_PHASE_NESTABLE_ASYNC_END);
+  analyzer->FindEvents(end_query, &end_events);
+
+  EXPECT_EQ(5ul, begin_events.size());
+  EXPECT_EQ(5ul, end_events.size());
+  EXPECT_EQ(WebInputEvent::GestureScrollUpdate,
+            end_events[0]->GetKnownArgAsInt("type"));
+  EXPECT_EQ(3, end_events[0]->GetKnownArgAsInt("coalesced_count"));
+  EXPECT_EQ(WebInputEvent::GestureScrollEnd,
+            end_events[1]->GetKnownArgAsInt("type"));
+
+  EXPECT_EQ(WebInputEvent::GestureScrollBegin,
+            end_events[2]->GetKnownArgAsInt("type"));
+  // Original scroll and pinch updates will be stored in the coalesced
+  // PinchUpdate of the <ScrollUpdate, PinchUpdate> pair.
+  // The ScrollUpdate of the pair doesn't carry original events and won't be
+  // traced.
+  EXPECT_EQ(WebInputEvent::GesturePinchUpdate,
+            end_events[3]->GetKnownArgAsInt("type"));
+  EXPECT_EQ(4, end_events[3]->GetKnownArgAsInt("coalesced_count"));
+  EXPECT_EQ(WebInputEvent::GestureScrollEnd,
+            end_events[4]->GetKnownArgAsInt("type"));
   testing::Mock::VerifyAndClearExpectations(&mock_input_handler_);
 }
 

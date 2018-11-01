@@ -449,7 +449,7 @@ static void mapLoweredLocalNameToName(PrefixedNameToQualifiedNameMap* map,
     const AtomicString& localName = name.localName();
     AtomicString loweredLocalName = localName.lower();
     if (loweredLocalName != localName)
-      map->add(loweredLocalName, name);
+      map->insert(loweredLocalName, name);
   }
 }
 
@@ -462,7 +462,7 @@ static void adjustSVGTagNameCase(AtomicHTMLToken* token) {
     mapLoweredLocalNameToName(caseMap, svgTags.get(), SVGNames::SVGTagsCount);
   }
 
-  const QualifiedName& casedName = caseMap->get(token->name());
+  const QualifiedName& casedName = caseMap->at(token->name());
   if (casedName.localName().isNull())
     return;
   token->setName(casedName.localName());
@@ -478,7 +478,7 @@ static void adjustAttributes(AtomicHTMLToken* token) {
   }
 
   for (auto& tokenAttribute : token->attributes()) {
-    const QualifiedName& casedName = caseMap->get(tokenAttribute.localName());
+    const QualifiedName& casedName = caseMap->at(tokenAttribute.localName());
     if (!casedName.localName().isNull())
       tokenAttribute.parserSetName(casedName);
   }
@@ -502,7 +502,7 @@ static void addNamesWithPrefix(PrefixedNameToQualifiedNameMap* map,
     const AtomicString& localName = name->localName();
     AtomicString prefixColonLocalName = prefix + ':' + localName;
     QualifiedName nameWithPrefix(prefix, localName, name->namespaceURI());
-    map->add(prefixColonLocalName, nameWithPrefix);
+    map->insert(prefixColonLocalName, nameWithPrefix);
   }
 }
 
@@ -519,14 +519,14 @@ static void adjustForeignAttributes(AtomicHTMLToken* token) {
     std::unique_ptr<const QualifiedName* []> xmlAttrs = XMLNames::getXMLAttrs();
     addNamesWithPrefix(map, xmlAtom, xmlAttrs.get(), XMLNames::XMLAttrsCount);
 
-    map->add(WTF::xmlnsAtom, XMLNSNames::xmlnsAttr);
-    map->add("xmlns:xlink", QualifiedName(xmlnsAtom, xlinkAtom,
-                                          XMLNSNames::xmlnsNamespaceURI));
+    map->insert(WTF::xmlnsAtom, XMLNSNames::xmlnsAttr);
+    map->insert("xmlns:xlink", QualifiedName(xmlnsAtom, xlinkAtom,
+                                             XMLNSNames::xmlnsNamespaceURI));
   }
 
   for (unsigned i = 0; i < token->attributes().size(); ++i) {
     Attribute& tokenAttribute = token->attributes().at(i);
-    const QualifiedName& name = map->get(tokenAttribute.localName());
+    const QualifiedName& name = map->at(tokenAttribute.localName());
     if (!name.localName().isNull())
       tokenAttribute.parserSetName(name);
   }

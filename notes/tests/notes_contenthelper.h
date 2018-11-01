@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_TEST_NOTES_CONTENTHELPER_H_
-#define VIVALDI_TEST_NOTES_CONTENTHELPER_H_
+#ifndef NOTES_TESTS_NOTES_CONTENTHELPER_H_
+#define NOTES_TESTS_NOTES_CONTENTHELPER_H_
 
 #include <string>
 
@@ -29,4 +29,4 @@ std::string CreateAutoIndexedContent(int index = 0);
 
 }  // namespace notes_helper
 
-#endif  // VIVALDI_TEST_NOTES_CONTENTHELPER_H_
+#endif  // NOTES_TESTS_NOTES_CONTENTHELPER_H_

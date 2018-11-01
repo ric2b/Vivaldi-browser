@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/mojo_interface_factory.h"
 #include "ash/common/system/chromeos/power/power_status.h"
 #include "ash/common/wm_shell.h"
@@ -14,6 +13,7 @@
 #include "ash/mus/window_manager.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -27,9 +27,7 @@
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/tracing/public/cpp/provider.h"
 #include "services/ui/common/accelerator_util.h"
-#include "services/ui/public/cpp/gpu/gpu.h"
 #include "ui/aura/env.h"
-#include "ui/aura/mus/mus_context_factory.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/events/event.h"
 #include "ui/message_center/message_center.h"
@@ -54,7 +52,6 @@ WindowManagerApplication::~WindowManagerApplication() {
     blocking_pool_->Shutdown(kMaxNewShutdownBlockingTasks);
   }
 
-  gpu_.reset();
   statistics_provider_.reset();
   ShutdownComponents();
 }
@@ -114,14 +111,7 @@ void WindowManagerApplication::OnStart() {
       context()->connector(), context()->identity(), "ash_mus_resources.pak",
       "ash_mus_resources_200.pak", nullptr,
       views::AuraInit::Mode::AURA_MUS_WINDOW_MANAGER);
-  gpu_ = ui::Gpu::Create(context()->connector());
-  compositor_context_factory_ =
-      base::MakeUnique<aura::MusContextFactory>(gpu_.get());
-  aura::Env::GetInstance()->set_context_factory(
-      compositor_context_factory_.get());
   window_manager_.reset(new WindowManager(context()->connector()));
-
-  MaterialDesignController::Initialize();
 
   tracing_.Initialize(context()->connector(), context()->identity().name());
 

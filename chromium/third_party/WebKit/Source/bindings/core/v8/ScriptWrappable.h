@@ -31,13 +31,14 @@
 #ifndef ScriptWrappable_h
 #define ScriptWrappable_h
 
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
+#include "v8/include/v8.h"
 #include "wtf/Compiler.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/TypeTraits.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -46,6 +47,7 @@ class CORE_EXPORT TraceWrapperBase {
 
  public:
   TraceWrapperBase() = default;
+  virtual bool isScriptWrappable() const { return false; }
 
   DECLARE_VIRTUAL_TRACE_WRAPPERS(){};
 };
@@ -61,6 +63,8 @@ class CORE_EXPORT ScriptWrappable : public TraceWrapperBase {
 
  public:
   ScriptWrappable() {}
+
+  bool isScriptWrappable() const override { return true; }
 
   template <typename T>
   T* toImpl() {
@@ -122,6 +126,7 @@ class CORE_EXPORT ScriptWrappable : public TraceWrapperBase {
     wrapperTypeInfo->configureWrapper(&m_mainWorldWrapper);
     m_mainWorldWrapper.SetWeak();
     ASSERT(containsWrapper());
+    ScriptWrappableVisitor::writeBarrier(&m_mainWorldWrapper);
     return true;
   }
 
@@ -151,11 +156,6 @@ class CORE_EXPORT ScriptWrappable : public TraceWrapperBase {
     return containsWrapper();
   }
 
-  void setReference(const v8::Persistent<v8::Object>& parent,
-                    v8::Isolate* isolate) {
-    isolate->SetReference(parent, m_mainWorldWrapper);
-  }
-
   bool containsWrapper() const { return !m_mainWorldWrapper.IsEmpty(); }
 
   //  Mark wrapper of this ScriptWrappable as alive in V8. Only marks
@@ -166,12 +166,19 @@ class CORE_EXPORT ScriptWrappable : public TraceWrapperBase {
  private:
   // These classes are exceptionally allowed to use mainWorldWrapper().
   friend class DOMDataStore;
+  friend class HeapSnaphotWrapperVisitor;
   friend class V8HiddenValue;
   friend class V8PrivateProperty;
-  friend class WebGLRenderingContextBase;
 
   v8::Local<v8::Object> mainWorldWrapper(v8::Isolate* isolate) const {
     return v8::Local<v8::Object>::New(isolate, m_mainWorldWrapper);
+  }
+
+  // Only use when really necessary, i.e., when passing over this
+  // ScriptWrappable's reference to V8. Should only be needed by GC
+  // infrastructure.
+  const v8::Persistent<v8::Object>* rawMainWorldWrapper() const {
+    return &m_mainWorldWrapper;
   }
 
   v8::Persistent<v8::Object> m_mainWorldWrapper;

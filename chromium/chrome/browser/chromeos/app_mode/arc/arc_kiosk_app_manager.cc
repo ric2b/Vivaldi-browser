@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -21,7 +20,7 @@
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
-#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_util.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -35,7 +34,7 @@ namespace {
 
 // Preference for the dictionary of user ids for which cryptohomes have to be
 // removed upon browser restart.
-const char kArcKioskUsersToRemove[] = "arc-kiosk-users-to-remove";
+constexpr char kArcKioskUsersToRemove[] = "arc-kiosk-users-to-remove";
 
 void ScheduleDelayedCryptohomeRemoval(const cryptohome::Identification& id) {
   PrefService* const local_state = g_browser_process->local_state();
@@ -118,7 +117,7 @@ ArcKioskAppManager::ArcKioskApp::ArcKioskApp(
     const std::string& name)
     : app_info_(app_info), account_id_(account_id), name_(name) {}
 
-ArcKioskAppManager::ArcKioskApp::~ArcKioskApp() {}
+ArcKioskAppManager::ArcKioskApp::~ArcKioskApp() = default;
 
 bool ArcKioskAppManager::ArcKioskApp::operator==(
     const policy::ArcKioskAppBasicInfo& app_info) const {
@@ -175,8 +174,7 @@ void ArcKioskAppManager::UpdateApps() {
   // Do not populate ARC kiosk apps if ARC kiosk apps can't be run on the
   // device.
   // Apps won't be added to kiosk Apps menu and won't be auto-launched.
-  if (!arc::ArcBridgeService::GetKioskEnabled(
-          base::CommandLine::ForCurrentProcess())) {
+  if (!arc::IsArcKioskAvailable()) {
     VLOG(1) << "Device doesn't support ARC kiosk";
     return;
   }
@@ -186,6 +184,7 @@ void ArcKioskAppManager::UpdateApps() {
   ArcKioskApps old_apps(std::move(apps_));
 
   auto_launch_account_id_.clear();
+  auto_launched_with_zero_delay_ = false;
   std::string auto_login_account_id_from_settings;
   CrosSettings::Get()->GetString(kAccountsPrefDeviceLocalAccountAutoLoginId,
                                  &auto_login_account_id_from_settings);
@@ -193,25 +192,32 @@ void ArcKioskAppManager::UpdateApps() {
   // Re-populates |apps_| and reuses existing apps when possible.
   const std::vector<policy::DeviceLocalAccount> device_local_accounts =
       policy::GetDeviceLocalAccounts(CrosSettings::Get());
-  for (std::vector<policy::DeviceLocalAccount>::const_iterator it =
-           device_local_accounts.begin();
-       it != device_local_accounts.end(); ++it) {
-    if (it->type != policy::DeviceLocalAccount::TYPE_ARC_KIOSK_APP)
+  for (auto account : device_local_accounts) {
+    if (account.type != policy::DeviceLocalAccount::TYPE_ARC_KIOSK_APP)
       continue;
 
-    const AccountId account_id(AccountId::FromUserEmail(it->user_id));
+    const AccountId account_id(AccountId::FromUserEmail(account.user_id));
 
-    if (it->account_id == auto_login_account_id_from_settings)
+    if (account.account_id == auto_login_account_id_from_settings) {
       auto_launch_account_id_ = account_id;
+      int auto_launch_delay = 0;
+      CrosSettings::Get()->GetInteger(
+          kAccountsPrefDeviceLocalAccountAutoLoginDelay, &auto_launch_delay);
+      auto_launched_with_zero_delay_ = auto_launch_delay == 0;
+    }
 
     auto old_it =
-        std::find(old_apps.begin(), old_apps.end(), it->arc_kiosk_app_info);
+        std::find(old_apps.begin(), old_apps.end(), account.arc_kiosk_app_info);
     if (old_it != old_apps.end()) {
       apps_.push_back(std::move(*old_it));
       old_apps.erase(old_it);
     } else {
-      apps_.push_back(ArcKioskApp(it->arc_kiosk_app_info, account_id,
-                                  it->arc_kiosk_app_info.package_name()));
+      // Use package name when display name is not specified.
+      std::string name = account.arc_kiosk_app_info.package_name();
+      if (!account.arc_kiosk_app_info.display_name().empty())
+        name = account.arc_kiosk_app_info.display_name();
+      apps_.push_back(
+          ArcKioskApp(account.arc_kiosk_app_info, account_id, name));
     }
     CancelDelayedCryptohomeRemoval(cryptohome::Identification(account_id));
   }

@@ -111,7 +111,7 @@ Resources.ClearStorageView = class extends UI.VBox {
     var set = new Set(storageTypes);
     var hasAll = set.has(Protocol.Storage.StorageType.All);
     if (set.has(Protocol.Storage.StorageType.Cookies) || hasAll)
-      this._resourcesPanel.clearCookies(this._securityOrigin);
+      SDK.CookieModel.fromTarget(this._target).clear();
 
     if (set.has(Protocol.Storage.StorageType.Indexeddb) || hasAll) {
       for (var target of SDK.targetManager.targets()) {
@@ -143,7 +143,7 @@ Resources.ClearStorageView = class extends UI.VBox {
     }
 
     if (set.has(Protocol.Storage.StorageType.Appcache) || hasAll) {
-      var appcacheModel = SDK.ApplicationCacheModel.fromTarget(this._target);
+      var appcacheModel = Resources.ApplicationCacheModel.fromTarget(this._target);
       if (appcacheModel)
         appcacheModel.reset();
     }

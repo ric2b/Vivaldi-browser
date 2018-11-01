@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">Šiam plėtiniui nereikalingi jokie specialūs leidimai.</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Įdiegė jūsų prižiūrėtojas.</translation>
-<translation id="1652965563555864525">&amp;Nutildyti</translation>
 <translation id="1723824996674794290">&amp;Naujas langas</translation>
 <translation id="1729533290416704613">Ji taip pat kontroliuoja, koks puslapis rodomas, kai ieškote „Omnibox“.</translation>
 <translation id="1789575671122666129">Iššokantieji langai</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">Pasirinkti &amp;viską</translation>
 <translation id="1965328510789761112">Privati atmintis</translation>
 <translation id="1992397118740194946">Nenustatyta</translation>
-<translation id="2011110593081822050">Žiniatinklio elementas: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">Slėpti šį papildinį</translation>
 <translation id="2087822576218954668">Spausdinti: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Atnaujinti papildinį</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">Pranešimai</translation>
 <translation id="2501797496290880632">Paspauskite sparčiuosius klavišus</translation>
 <translation id="2509857212037838238">Įdiegti „<ph name="PLUGIN_NAME" />“</translation>
-<translation id="253434972992662860">&amp;Pristabdyti</translation>
 <translation id="2550212893339833758">Sukeista atmintis</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Iš naujo įgalinti</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">Uždrausti</translation>
 <translation id="3936390757709632190">&amp;Atidaryti garso įrašą naujame skirtuke</translation>
 <translation id="3943582379552582368">&amp;Grįžti</translation>
-<translation id="3954582159466790312">At&amp;šaukti nutildymą</translation>
 <translation id="3979395879372752341">Pridėtas naujas plėtinys (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">Sukurtas plėtinys:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968">&amp;Eiti į <ph name="URL" /></translation>
 <translation id="4595560905247879544">Programas ir plėtinius gali keisti tik valdytojas (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Plėtinys pakeitė puslapį, kuris rodomas atidarius naują skirtuko puslapį.</translation>
-<translation id="4623537843784569564">Šis plėtinys gali būti netinkamai atnaujintas. Pabandykite įdiegti iš naujo.</translation>
 <translation id="4677772697204437347">GPU atmintis</translation>
 <translation id="4711638718396952945">Atkurti nustatymus</translation>
 <translation id="4839303808932127586">Iš&amp;saugoti vaizdo įrašą kaip...</translation>
 <translation id="4851858059374029925">Įdiegti „<ph name="PLUGIN_NAME" />“? Įdiekite tik patikimus papildinius.</translation>
-<translation id="4861833787540810454">&amp;Paleisti</translation>
-<translation id="4883993111890464517">Šis plėtinys gali būti sugadintas. Pabandykite įdiegti iš naujo.</translation>
 <translation id="488785315393301722">Rodyti išsamią informaciją</translation>
 <translation id="4911714727432509308">Nėra plėtinių, kuriems priskirti spartieji klavišai.</translation>
-<translation id="4919987486109157213">Plėtinys sugadintas. Pabandykite įdiegti iš naujo.</translation>
 <translation id="4927301649992043040">Paketo plėtinys</translation>
 <translation id="49896407730300355">Sukti prieš l&amp;aikrodžio rodyklę</translation>
 <translation id="4989966318180235467">Tikrinti fono puslapį</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">Spartieji klavišai</translation>
 <translation id="6798954102094737107">Papildinys: „<ph name="PLUGIN_NAME" />“</translation>
 <translation id="6812841287760418429">Palikti pakeitimus</translation>
-<translation id="6844537474943985871">Šis plėtinys gali būti sugadintas. Pabandykite pašalinti ir vėl įdiegti.</translation>
 <translation id="6863910145616405334">Papildinys nerastas</translation>
 <translation id="6886871292305414135">Atidaryti nuorodą naujame &amp;skirtuke</translation>
 <translation id="6900284862687837908">Foninė programa: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">„JavaScript“</translation>
 <translation id="7554791636758816595">Naujas skirtukas</translation>
 <translation id="7564847347806291057">Baigti procesą</translation>
-<translation id="7618337809041914424">&amp;Spausdinti rėmelį...</translation>
 <translation id="7629827748548208700">Skirtukas: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Atšaukti</translation>
 <translation id="7663719505383602579">Gavėjas: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -260,7 +250,6 @@ Rakto failą laikykite saugioje vietoje. Jo reikės, kai norėsite sukurti nauja
 <translation id="8916476537757519021">Inkognito antrinis kadras: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Slėpti išsamią informaciją</translation>
 <translation id="9088234649737575428">„<ph name="PLUGIN_NAME" />“ užblokuotas taikant įmonės politiką</translation>
-<translation id="9101691533782776290">Paleisti programą</translation>
 <translation id="9170848237812810038">&amp;Atšaukti</translation>
 <translation id="9215293857209265904">Pridėtas „<ph name="EXTENSION_NAME" />“</translation>
 <translation id="9219103736887031265">Vaizdai</translation>

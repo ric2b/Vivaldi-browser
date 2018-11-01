@@ -11,8 +11,8 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
-<link rel="import" href="/prefs/prefs.html">
-<link rel="import" href="/route.html">
+<link rel="import" href="../prefs/prefs.html">
+<link rel="import" href="../route.html">
 <link rel="import" href="internet_shared_css.html">
 <link rel="import" href="network_apnlist.html">
 <link rel="import" href="network_ip_config.html">
@@ -72,10 +72,10 @@
       }
 
       #networkState {
+        -webkit-padding-start: 8px;
         /* TODO(stevenjb): Finalize font-size / style for this. */
         font-size: 125%;
         font-weight: 500;
-        padding-left: 8px;
       }
 
       #networkState[connected] {
@@ -138,7 +138,7 @@
     <!-- Disabled by policy / Shared messages. -->
     <div class="settings-box continuation"
         hidden$="[[!connectNotAllowed_(networkProperties, globalPolicy)]]">
-      <iron-icon class="policy" icon="cr:domain"></iron-icon>
+      <iron-icon class="policy" icon="cr20:domain"></iron-icon>
       <div>$i18n{networkConnectNotAllowed}</div>
     </div>
     <div class="settings-box continuation"
@@ -161,26 +161,32 @@
         <!-- Prefer this network. -->
         <template is="dom-if" if="[[showPreferNetwork_(networkProperties))]]">
           <div class="settings-box">
-            <div class="start">$i18n{networkPrefer}</div>
+            <div id="preferNetworkToggleLabel"class="start">
+              $i18n{networkPrefer}
+            </div>
             <cr-policy-network-indicator
                 property="[[networkProperties.Priority]]">
             </cr-policy-network-indicator>
             <paper-toggle-button checked="{{preferNetwork_}}"
                 disabled="[[isNetworkPolicyEnforced(
-                    networkProperties.Priority)]]">
+                    networkProperties.Priority)]]"
+                aria-labelledby="preferNetworkToggleLabel">
             </paper-toggle-button>
           </div>
         </template>
         <!-- Autoconnect. -->
         <template is="dom-if" if="[[showAutoConnect_(networkProperties)]]">
           <div class="settings-box">
-            <div class="start">$i18n{networkAutoConnect}</div>
+            <div id="autoConnectToggleLabel" class="start">
+              $i18n{networkAutoConnect}
+            </div>
             <cr-policy-network-indicator
                 property="[[getManagedAutoConnect_(networkProperties)]]">
             </cr-policy-network-indicator>
             <paper-toggle-button checked="{{autoConnect_}}"
                 disabled="[[!enableAutoConnect_(networkProperties,
-                          globalPolicy)]]">
+                          globalPolicy)]]"
+                aria-labelledby="autoConnectToggleLabel">
             </paper-toggle-button>
           </div>
         </template>
@@ -253,7 +259,7 @@
                 network-properties="[[networkProperties]]">
             </network-apnlist>
           </template>
-          
+
           <!-- IP Config, Nameservers, Proxy -->
           <template is="dom-if"
               if="[[isRememberedOrConnected_(networkProperties)]]">

@@ -26,11 +26,11 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/HttpEquiv.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/text/StringToNumber.h"
@@ -459,7 +459,7 @@ static bool inDocumentHead(HTMLMetaElement* element) {
 }
 
 void HTMLMetaElement::process() {
-  if (!isConnected())
+  if (!isInDocumentTree())
     return;
 
   // All below situations require a content attribute (which can be the empty

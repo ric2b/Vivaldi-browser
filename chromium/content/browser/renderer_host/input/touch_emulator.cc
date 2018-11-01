@@ -11,6 +11,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -460,7 +461,7 @@ void TouchEmulator::FillTouchEventAndPoint(const WebMouseEvent& mouse_event) {
   point.id = 0;
   point.radiusX = 0.5f * cursor_size_.width();
   point.radiusY = 0.5f * cursor_size_.height();
-  point.force = 1.f;
+  point.force = eventType == WebInputEvent::TouchEnd ? 0.f : 1.f;
   point.rotationAngle = 0.f;
   point.position.x = mouse_event.x;
   point.screenPosition.x = mouse_event.globalX;

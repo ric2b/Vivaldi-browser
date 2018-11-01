@@ -6,12 +6,15 @@
 #define CHROME_BROWSER_CONFLICTS_MODULE_DATABASE_WIN_H_
 
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
+#include "chrome/browser/conflicts/module_info_win.h"
 #include "content/public/common/process_type.h"
 
 // A class that keeps track of all modules loaded across Chrome processes.
@@ -22,6 +25,20 @@
 // be set as the process-wide singleton via SetInstance.
 class ModuleDatabase {
  public:
+  // Structures for maintaining information about modules.
+  using ModuleMap = std::map<ModuleInfoKey, ModuleInfoData>;
+  using ModuleInfo = ModuleMap::value_type;
+
+  // Used for maintaing a list of modules loaded in a process. Maps module IDs
+  // to load addresses.
+  using ModuleLoadAddresses = std::vector<std::pair<ModuleId, uintptr_t>>;
+
+  // Structures for maintaining information about running processes.
+  struct ProcessInfoKey;
+  struct ProcessInfoData;
+  using ProcessMap = std::map<ProcessInfoKey, ProcessInfoData>;
+  using ProcessInfo = ProcessMap::value_type;
+
   // A ModuleDatabase is by default bound to a provided sequenced task runner.
   // All calls must be made in the context of this task runner, unless
   // otherwise noted. For calls from other contexts this task runner is used to
@@ -78,25 +95,6 @@ class ModuleDatabase {
   // Used by the FindLoadAddress* functions to indicate a load address has not
   // been found.
   static constexpr size_t kInvalidIndex = ~0u;
-
-  // Used as a unique identifier for a module in a ModuleSet.
-  using ModuleId = int;
-
-  // Structures for maintaining information about modules.
-  struct ModuleInfoKey;
-  struct ModuleInfoData;
-  using ModuleMap = std::map<ModuleInfoKey, ModuleInfoData>;
-  using ModuleInfo = ModuleMap::value_type;
-
-  // Used for maintaing a list of modules loaded in a process. Maps module IDs
-  // to load addresses.
-  using ModuleLoadAddresses = std::vector<std::pair<ModuleId, uintptr_t>>;
-
-  // Structures for maintaining information about running processes.
-  struct ProcessInfoKey;
-  struct ProcessInfoData;
-  using ProcessMap = std::map<ProcessInfoKey, ProcessInfoData>;
-  using ProcessInfo = ProcessMap::value_type;
 
   // Converts a valid |process_type| to a bit for use in a bitmask of process
   // values. Exposed in the header for testing.
@@ -159,52 +157,6 @@ class ModuleDatabase {
   base::WeakPtrFactory<ModuleDatabase> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ModuleDatabase);
-};
-
-// Maintains information about a module. Modules are permanent once added to
-// the ModuleSet, so this structure grows monotonically. In practice this is
-// not an issue as the modules themselves are vastly bigger than the minor
-// amount of metadata tracked here.
-
-// This is the constant portion of the module information, and acts as the key
-// in a std::map.
-struct ModuleDatabase::ModuleInfoKey {
-  ModuleInfoKey(const base::FilePath& module_path,
-                uint32_t module_size,
-                uint32_t module_time_date_stamp,
-                uint32_t module_id);
-
-  // Less-than operator allowing this object to be used in std::map.
-  bool operator<(const ModuleInfoKey& mi) const;
-
-  // Full path to the module on disk. Part of the key for a ModuleInfo.
-  base::FilePath module_path;
-
-  // The module size. Part of the key for a ModuleInfo. This is taken from
-  // SizeOfImage from the module's IMAGE_OPTIONAL_HEADER.
-  uint32_t module_size;
-
-  // The module time date stamp. Part of the key for a ModuleInfo. Taken from
-  // TimeDateStamp from the module's IMAGE_FILE_HEADER.
-  uint32_t module_time_date_stamp;
-
-  // The ID of this module. This is a strictly incrementing value, and is used
-  // to tie a module to the list of running processes in which it is found.
-  // It is not part of the key for the module, but it is immutable. This is
-  // simply the index of the module in the insertion order.
-  ModuleId module_id;
-};
-
-// This is the mutable portion of the module information, and is the storage
-// type in a std::map.
-struct ModuleDatabase::ModuleInfoData {
-  ModuleInfoData();
-
-  // Set of all process types in which this module has been seen (may not be
-  // currently present in a process of that type). This is a conversion of
-  // ProcessType enumeration to a bitfield. See "ProcessTypeToBit" and
-  // "BitIndexToProcessType" for details.
-  uint32_t process_types;
 };
 
 // Information about a running process. This ties modules in a ModuleSet to

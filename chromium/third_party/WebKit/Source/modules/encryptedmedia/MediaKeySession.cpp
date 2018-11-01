@@ -33,6 +33,7 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
@@ -374,7 +375,10 @@ MediaKeySession::MediaKeySession(ScriptState* scriptState,
       m_closedPromise(new ClosedPromise(scriptState->getExecutionContext(),
                                         this,
                                         ClosedPromise::Closed)),
-      m_actionTimer(this, &MediaKeySession::actionTimerFired) {
+      m_actionTimer(
+          TaskRunnerHelper::get(TaskType::MiscPlatformAPI, scriptState),
+          this,
+          &MediaKeySession::actionTimerFired) {
   DVLOG(MEDIA_KEY_SESSION_LOG_LEVEL) << __func__ << "(" << this << ")";
   InstanceCounters::incrementCounter(InstanceCounters::MediaKeySessionCounter);
 
@@ -758,7 +762,7 @@ ScriptPromise MediaKeySession::close(ScriptState* scriptState) {
   // 1. Let session be the associated MediaKeySession object.
   // 2. If session is closed, return a resolved promise.
   if (m_isClosed)
-    return ScriptPromise::cast(scriptState, ScriptValue());
+    return ScriptPromise::castUndefined(scriptState);
 
   // 3. If session's callable value is false, return a promise rejected with
   //    an InvalidStateError.
@@ -955,9 +959,7 @@ void MediaKeySession::expirationChanged(double updatedExpiryTimeInMS) {
 
   // 3. If the new expiration time is not NaN, let expiration time be the
   //    new expiration time in milliseconds since 01 January 1970 UTC.
-  //    (Note that Chromium actually passes 0 to indicate no expiry.)
-  // FIXME: Get Chromium to pass NaN.
-  if (!std::isnan(updatedExpiryTimeInMS) && updatedExpiryTimeInMS != 0.0)
+  if (!std::isnan(updatedExpiryTimeInMS))
     expirationTime = updatedExpiryTimeInMS;
 
   // 4. Set the session's expiration attribute to expiration time.

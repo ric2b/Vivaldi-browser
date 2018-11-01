@@ -86,15 +86,15 @@ bool Path::contains(const FloatPoint& point, WindRule rule) const {
 // FIXME: this method ignores the CTM and may yield inaccurate results for large
 // scales.
 SkPath Path::strokePath(const StrokeData& strokeData) const {
-  SkPaint paint;
-  strokeData.setupPaint(&paint);
+  PaintFlags flags;
+  strokeData.setupPaint(&flags);
 
   // Skia stroke resolution scale. This is multiplied by 4 internally
   // (i.e. 1.0 corresponds to 1/4 pixel res).
   static const SkScalar kResScale = 0.3f;
 
   SkPath strokePath;
-  paint.getFillPath(m_path, &strokePath, nullptr, kResScale);
+  flags.getFillPath(m_path, &strokePath, nullptr, kResScale);
 
   return strokePath;
 }
@@ -109,14 +109,9 @@ bool Path::strokeContains(const FloatPoint& point,
 namespace {
 
 FloatRect pathBounds(const SkPath& path, Path::BoundsType boundsType) {
-  SkRect bounds;
-  if (boundsType == Path::BoundsType::Conservative ||
-      !TightBounds(path, &bounds)) {
-    return path.getBounds();
-  }
-
-  DCHECK_EQ(boundsType, Path::BoundsType::Exact);
-  return bounds;
+  return boundsType == Path::BoundsType::Conservative
+             ? path.getBounds()
+             : path.computeTightBounds();
 }
 
 }  // anonymous ns

@@ -81,7 +81,7 @@ void DefaultSearchPolicyHandlerTest::
   encodings->AppendString("UTF-8");
   policy->Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-              base::MakeUnique<base::FundamentalValue>(true), nullptr);
+              base::MakeUnique<base::Value>(true), nullptr);
   policy->Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
               base::MakeUnique<base::StringValue>(kSearchURL), nullptr);
@@ -167,7 +167,7 @@ TEST_F(DefaultSearchPolicyHandlerTest, InvalidType) {
   PolicyMap policy;
   BuildDefaultSearchPolicy(&policy);
 
-  for (auto policy_name : kPolicyNamesToCheck) {
+  for (auto* policy_name : kPolicyNamesToCheck) {
     // Check that policy can be successfully applied first.
     UpdateProviderPolicy(policy);
     const base::Value* temp = nullptr;
@@ -179,7 +179,8 @@ TEST_F(DefaultSearchPolicyHandlerTest, InvalidType) {
     // Try changing policy param to BinaryValue and check that policy becomes
     // invalid.
     policy.Set(policy_name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD, base::WrapUnique(new base::BinaryValue()),
+               POLICY_SOURCE_CLOUD,
+               base::MakeUnique<base::Value>(base::Value::Type::BINARY),
                nullptr);
     UpdateProviderPolicy(policy);
 
@@ -262,7 +263,7 @@ TEST_F(DefaultSearchPolicyHandlerTest, Disabled) {
   PolicyMap policy;
   policy.Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-             base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+             base::WrapUnique(new base::Value(false)), nullptr);
   UpdateProviderPolicy(policy);
   const base::Value* temp = NULL;
   const base::DictionaryValue* dictionary;
@@ -281,7 +282,7 @@ TEST_F(DefaultSearchPolicyHandlerTest, MinimallyDefined) {
   PolicyMap policy;
   policy.Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-             base::WrapUnique(new base::FundamentalValue(true)), nullptr);
+             base::WrapUnique(new base::Value(true)), nullptr);
   policy.Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
              base::WrapUnique(new base::StringValue(kSearchURL)), nullptr);
@@ -340,7 +341,7 @@ TEST_F(DefaultSearchPolicyHandlerTest, FileURL) {
   PolicyMap policy;
   policy.Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-             base::WrapUnique(new base::FundamentalValue(true)), nullptr);
+             base::WrapUnique(new base::Value(true)), nullptr);
   policy.Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
              base::WrapUnique(new base::StringValue(kFileSearchURL)), nullptr);

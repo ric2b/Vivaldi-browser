@@ -53,7 +53,7 @@ bool SizesAttributeParser::calculateLengthInPixels(CSSParserTokenRange range,
 }
 
 bool SizesAttributeParser::mediaConditionMatches(
-    MediaQuerySet* mediaCondition) {
+    const MediaQuerySet& mediaCondition) {
   // A Media Condition cannot have a media type other then screen.
   MediaQueryEvaluator mediaQueryEvaluator(*m_mediaValues);
   return mediaQueryEvaluator.eval(mediaCondition);
@@ -80,9 +80,10 @@ bool SizesAttributeParser::parse(CSSParserTokenRange range) {
     if (!calculateLengthInPixels(
             range.makeSubRange(lengthTokenStart, lengthTokenEnd), length))
       continue;
-    MediaQuerySet* mediaCondition = MediaQueryParser::parseMediaCondition(
-        range.makeSubRange(mediaConditionStart, lengthTokenStart));
-    if (!mediaCondition || !mediaConditionMatches(mediaCondition))
+    RefPtr<MediaQuerySet> mediaCondition =
+        MediaQueryParser::parseMediaCondition(
+            range.makeSubRange(mediaConditionStart, lengthTokenStart));
+    if (!mediaCondition || !mediaConditionMatches(*mediaCondition))
       continue;
     m_length = length;
     m_lengthWasSet = true;

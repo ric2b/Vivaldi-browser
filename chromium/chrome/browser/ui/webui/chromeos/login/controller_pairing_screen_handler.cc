@@ -30,13 +30,13 @@ bool IsBootstrappingMaster() {
 
 }  // namespace
 
-ControllerPairingScreenHandler::ControllerPairingScreenHandler()
-    : BaseScreenHandler(kJsScreenPath), delegate_(NULL), show_on_init_(false) {
+ControllerPairingScreenHandler::ControllerPairingScreenHandler() {
+  set_call_js_prefix(kJsScreenPath);
 }
 
 ControllerPairingScreenHandler::~ControllerPairingScreenHandler() {
   if (delegate_)
-    delegate_->OnActorDestroyed(this);
+    delegate_->OnViewDestroyed(this);
 }
 
 void ControllerPairingScreenHandler::HandleUserActed(

@@ -157,6 +157,13 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
 
   CustomFontData* customFontData() const { return m_customFontData.get(); }
 
+  unsigned VisualOverflowInflationForAscent() const {
+    return visual_overflow_inflation_for_ascent_;
+  }
+  unsigned VisualOverflowInflationForDescent() const {
+    return visual_overflow_inflation_for_descent_;
+  }
+
  protected:
   SimpleFontData(const FontPlatformData&,
                  PassRefPtr<CustomFontData> customData,
@@ -182,9 +189,7 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
   FontPlatformData m_platformData;
   SkPaint m_paint;
 
-  bool m_isTextOrientationFallback;
   RefPtr<OpenTypeVerticalData> m_verticalData;
-  bool m_hasVerticalGlyphs;
 
   Glyph m_spaceGlyph;
   float m_spaceWidth;
@@ -211,6 +216,15 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
   mutable std::unique_ptr<DerivedFontData> m_derivedFontData;
 
   RefPtr<CustomFontData> m_customFontData;
+
+  unsigned m_isTextOrientationFallback : 1;
+  unsigned m_hasVerticalGlyphs : 1;
+
+  // These are set to non-zero when ascent or descent is rounded or shifted
+  // to be smaller than the actual ascent or descent. When calculating visual
+  // overflows, we should add the inflations.
+  unsigned visual_overflow_inflation_for_ascent_ : 2;
+  unsigned visual_overflow_inflation_for_descent_ : 2;
 
 // See discussion on crbug.com/631032 and Skiaissue
 // https://bugs.chromium.org/p/skia/issues/detail?id=5328 :

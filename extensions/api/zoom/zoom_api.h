@@ -3,6 +3,9 @@
 #ifndef EXTENSIONS_API_ZOOM_ZOOM_API_H_
 #define EXTENSIONS_API_ZOOM_ZOOM_API_H_
 
+#include <memory>
+#include <string>
+
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -14,28 +17,28 @@ class ZoomAPI;
 
 class ZoomEventRouter : public content::NotificationObserver {
  public:
-   explicit ZoomEventRouter(content::BrowserContext* context);
-   ~ZoomEventRouter() override;
+  explicit ZoomEventRouter(content::BrowserContext* context);
+  ~ZoomEventRouter() override;
+
  private:
   void DefaultZoomChanged();
   // This method dispatches events to the extension message service.
-  void DispatchEvent(const std::string &event_name,
-    std::unique_ptr<base::ListValue> event_args);
+  void DispatchEvent(const std::string& event_name,
+                     std::unique_ptr<base::ListValue> event_args);
   // content::NotificationObserver implementation.
   void Observe(int type,
-   const content::NotificationSource& source,
-   const content::NotificationDetails& details) override;
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
 
   std::unique_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
-    default_zoom_level_subscription_;
+      default_zoom_level_subscription_;
 
-   Profile* profile_;
+  Profile* profile_;
 
-   DISALLOW_COPY_AND_ASSIGN(ZoomEventRouter);
+  DISALLOW_COPY_AND_ASSIGN(ZoomEventRouter);
 };
 
-class ZoomAPI : public BrowserContextKeyedAPI ,
-                public EventRouter::Observer {
+class ZoomAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
  public:
   explicit ZoomAPI(content::BrowserContext* context);
   ~ZoomAPI() override;
@@ -54,18 +57,13 @@ class ZoomAPI : public BrowserContextKeyedAPI ,
   content::BrowserContext* browser_context_;
 
   // BrowserContextKeyedAPI implementation.
-  static const char* service_name() {
-        return "ZoomAPI";
-  }
+  static const char* service_name() { return "ZoomAPI"; }
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<ZoomEventRouter> zoom_event_router_;
 };
 
-
-
-class ZoomSetVivaldiUIZoomFunction :
-  public ChromeAsyncExtensionFunction{
+class ZoomSetVivaldiUIZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.setVivaldiUIZoom", ZOOM_SET_VIVALDI_UI_ZOOM)
   ZoomSetVivaldiUIZoomFunction();
@@ -78,11 +76,11 @@ class ZoomSetVivaldiUIZoomFunction :
   DISALLOW_COPY_AND_ASSIGN(ZoomSetVivaldiUIZoomFunction);
 };
 
-class ZoomGetVivaldiUIZoomFunction :
-  public ChromeAsyncExtensionFunction {
+class ZoomGetVivaldiUIZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.getVivaldiUIZoom", ZOOM_GET_VIVALDI_UI_ZOOM)
   ZoomGetVivaldiUIZoomFunction();
+
  private:
   ~ZoomGetVivaldiUIZoomFunction() override;
   // ExtensionFunction:
@@ -91,11 +89,11 @@ class ZoomGetVivaldiUIZoomFunction :
   DISALLOW_COPY_AND_ASSIGN(ZoomGetVivaldiUIZoomFunction);
 };
 
-class ZoomSetDefaultZoomFunction :
-  public ChromeAsyncExtensionFunction {
+class ZoomSetDefaultZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.setDefaultZoom", ZOOM_SET_DEFAULT_ZOOM)
   ZoomSetDefaultZoomFunction();
+
  private:
   ~ZoomSetDefaultZoomFunction() override;
   // ExtensionFunction:
@@ -104,11 +102,11 @@ class ZoomSetDefaultZoomFunction :
   DISALLOW_COPY_AND_ASSIGN(ZoomSetDefaultZoomFunction);
 };
 
-class ZoomGetDefaultZoomFunction :
-  public ChromeAsyncExtensionFunction {
+class ZoomGetDefaultZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.getDefaultZoom", ZOOM_GET_DEFAULT_ZOOM)
   ZoomGetDefaultZoomFunction();
+
  private:
   ~ZoomGetDefaultZoomFunction() override;
   // ExtensionFunction:

@@ -28,6 +28,7 @@
 namespace content {
 class DownloadFile;
 class DownloadItemImplDelegate;
+class DownloadJob;
 
 // See download_item.h for usage.
 class CONTENT_EXPORT DownloadItemImpl
@@ -51,30 +52,32 @@ class CONTENT_EXPORT DownloadItemImpl
 
   // Constructing from persistent store:
   // |net_log| is constructed externally for our use.
-  DownloadItemImpl(DownloadItemImplDelegate* delegate,
-                   const std::string& guid,
-                   uint32_t id,
-                   const base::FilePath& current_path,
-                   const base::FilePath& target_path,
-                   const std::vector<GURL>& url_chain,
-                   const GURL& referrer_url,
-                   const GURL& site_url,
-                   const GURL& tab_url,
-                   const GURL& tab_referrer_url,
-                   const std::string& mime_type,
-                   const std::string& original_mime_type,
-                   const base::Time& start_time,
-                   const base::Time& end_time,
-                   const std::string& etag,
-                   const std::string& last_modified,
-                   int64_t received_bytes,
-                   int64_t total_bytes,
-                   const std::string& hash,
-                   DownloadItem::DownloadState state,
-                   DownloadDangerType danger_type,
-                   DownloadInterruptReason interrupt_reason,
-                   bool opened,
-                   const net::NetLogWithSource& net_log);
+  DownloadItemImpl(
+      DownloadItemImplDelegate* delegate,
+      const std::string& guid,
+      uint32_t id,
+      const base::FilePath& current_path,
+      const base::FilePath& target_path,
+      const std::vector<GURL>& url_chain,
+      const GURL& referrer_url,
+      const GURL& site_url,
+      const GURL& tab_url,
+      const GURL& tab_referrer_url,
+      const std::string& mime_type,
+      const std::string& original_mime_type,
+      const base::Time& start_time,
+      const base::Time& end_time,
+      const std::string& etag,
+      const std::string& last_modified,
+      int64_t received_bytes,
+      int64_t total_bytes,
+      const std::string& hash,
+      DownloadItem::DownloadState state,
+      DownloadDangerType danger_type,
+      DownloadInterruptReason interrupt_reason,
+      bool opened,
+      const std::vector<DownloadItem::ReceivedSlice>& received_slices,
+      const net::NetLogWithSource& net_log);
 
   // Constructing for a regular download.
   // |net_log| is constructed externally for our use.
@@ -150,6 +153,8 @@ class CONTENT_EXPORT DownloadItemImpl
   bool AllDataSaved() const override;
   int64_t GetTotalBytes() const override;
   int64_t GetReceivedBytes() const override;
+  const std::vector<DownloadItem::ReceivedSlice>& GetReceivedSlices()
+      const override;
   base::Time GetStartTime() const override;
   base::Time GetEndTime() const override;
   bool CanShowInFolder() override;
@@ -218,7 +223,10 @@ class CONTENT_EXPORT DownloadItemImpl
   virtual void MarkAsComplete();
 
   // DownloadDestinationObserver
-  void DestinationUpdate(int64_t bytes_so_far, int64_t bytes_per_sec) override;
+  void DestinationUpdate(
+      int64_t bytes_so_far,
+      int64_t bytes_per_sec,
+      const std::vector<DownloadItem::ReceivedSlice>& received_slices) override;
   void DestinationError(
       DownloadInterruptReason reason,
       int64_t bytes_so_far,
@@ -228,6 +236,8 @@ class CONTENT_EXPORT DownloadItemImpl
       std::unique_ptr<crypto::SecureHash> hash_state) override;
 
  private:
+  friend class DownloadJob;
+
   // Fine grained states of a download.
   //
   // New downloads can be created in the following states:
@@ -391,6 +401,9 @@ class CONTENT_EXPORT DownloadItemImpl
   // this is.
   void Init(bool active, DownloadType download_type);
 
+  // Start a series of events that result in the file being downloaded.
+  void StartDownload();
+
   // Callback from file thread when we initialize the DownloadFile.
   void OnDownloadFileInitialized(DownloadInterruptReason result);
 
@@ -501,10 +514,6 @@ class CONTENT_EXPORT DownloadItemImpl
   // TODO(rdsmith): Replace with a generalized enum for "download source".
   const bool is_save_package_download_ = false;
 
-  // The handle to the request information.  Used for operations outside the
-  // download system.
-  std::unique_ptr<DownloadRequestHandleInterface> request_handle_;
-
   std::string guid_;
 
   uint32_t download_id_ = kInvalidId;
@@ -594,9 +603,6 @@ class CONTENT_EXPORT DownloadItemImpl
   // Our delegate.
   DownloadItemImplDelegate* delegate_ = nullptr;
 
-  // In progress downloads may be paused by the user, we note it here.
-  bool is_paused_ = false;
-
   // A flag for indicating if the download should be opened at completion.
   bool open_when_complete_ = false;
 
@@ -674,8 +680,13 @@ class CONTENT_EXPORT DownloadItemImpl
   // Server's ETAG for the file.
   std::string etag_;
 
+  // The data slices that have been received so far.
+  std::vector<DownloadItem::ReceivedSlice> received_slices_;
+
   // Net log to use for this download.
   const net::NetLogWithSource net_log_;
+
+  std::unique_ptr<DownloadJob> job_;
 
   base::WeakPtrFactory<DownloadItemImpl> weak_ptr_factory_;
 

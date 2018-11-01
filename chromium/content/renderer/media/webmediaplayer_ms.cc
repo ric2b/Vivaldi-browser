@@ -143,7 +143,7 @@ class WebMediaPlayerMS::FrameDeliverer {
 WebMediaPlayerMS::WebMediaPlayerMS(
     blink::WebFrame* frame,
     blink::WebMediaPlayerClient* client,
-    base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
+    media::WebMediaPlayerDelegate* delegate,
     media::MediaLog* media_log,
     std::unique_ptr<MediaStreamRendererFactory> factory,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
@@ -178,8 +178,8 @@ WebMediaPlayerMS::WebMediaPlayerMS(
       should_play_upon_shown_(false) {
   DVLOG(1) << __func__;
   DCHECK(client);
-  if (delegate_)
-    delegate_id_ = delegate_->AddObserver(this);
+  DCHECK(delegate_);
+  delegate_id_ = delegate_->AddObserver(this);
 
   media_log_->AddEvent(
       media_log_->CreateEvent(media::MediaLogEvent::WEBMEDIAPLAYER_CREATED));
@@ -209,10 +209,8 @@ WebMediaPlayerMS::~WebMediaPlayerMS() {
   media_log_->AddEvent(
       media_log_->CreateEvent(media::MediaLogEvent::WEBMEDIAPLAYER_DESTROYED));
 
-  if (delegate_) {
-    delegate_->PlayerGone(delegate_id_);
-    delegate_->RemoveObserver(delegate_id_);
-  }
+  delegate_->PlayerGone(delegate_id_);
+  delegate_->RemoveObserver(delegate_id_);
 }
 
 void WebMediaPlayerMS::load(LoadType load_type,
@@ -291,14 +289,12 @@ void WebMediaPlayerMS::play() {
   if (audio_renderer_)
     audio_renderer_->Play();
 
-  if (delegate_) {
-    // TODO(perkj, magjed): We use OneShot focus type here so that it takes
-    // audio focus once it starts, and then will not respond to further audio
-    // focus changes. See http://crbug.com/596516 for more details.
-    delegate_->DidPlay(delegate_id_, hasVideo(), hasAudio(),
-                       media::MediaContentType::OneShot);
-    delegate_->SetIdle(delegate_id_, false);
-  }
+  // TODO(perkj, magjed): We use OneShot focus type here so that it takes
+  // audio focus once it starts, and then will not respond to further audio
+  // focus changes. See http://crbug.com/596516 for more details.
+  delegate_->DidPlay(delegate_id_, hasVideo(), hasAudio(),
+                     media::MediaContentType::OneShot);
+  delegate_->SetIdle(delegate_id_, false);
 
   paused_ = false;
 }
@@ -321,10 +317,8 @@ void WebMediaPlayerMS::pause() {
   if (audio_renderer_)
     audio_renderer_->Pause();
 
-  if (delegate_) {
-    delegate_->DidPause(delegate_id_);
-    delegate_->SetIdle(delegate_id_, true);
-  }
+  delegate_->DidPause(delegate_id_);
+  delegate_->SetIdle(delegate_id_, true);
 
   paused_ = true;
 }
@@ -448,7 +442,7 @@ bool WebMediaPlayerMS::didLoadingProgress() {
 
 void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
                              const blink::WebRect& rect,
-                             SkPaint& paint) {
+                             cc::PaintFlags& flags) {
   DVLOG(3) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -466,8 +460,8 @@ void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
     DCHECK(context_3d.gl);
   }
   const gfx::RectF dest_rect(rect.x, rect.y, rect.width, rect.height);
-  video_renderer_.Paint(frame, canvas, dest_rect, paint,
-                        video_rotation_, context_3d);
+  video_renderer_.Paint(frame, canvas, dest_rect, flags, video_rotation_,
+                        context_3d);
 }
 
 bool WebMediaPlayerMS::hasSingleSecurityOrigin() const {
@@ -534,8 +528,7 @@ void WebMediaPlayerMS::OnFrameClosed() {
     should_play_upon_shown_ = true;
   }
 
-  if (delegate_)
-    delegate_->PlayerGone(delegate_id_);
+  delegate_->PlayerGone(delegate_id_);
 
   if (frame_deliverer_) {
     io_task_runner_->PostTask(
@@ -577,9 +570,15 @@ void WebMediaPlayerMS::OnVolumeMultiplierUpdate(double multiplier) {
   // TODO(perkj, magjed): See TODO in OnPlay().
 }
 
+void WebMediaPlayerMS::OnBecamePersistentVideo(bool value) {
+  get_client()->onBecamePersistentVideo(value);
+}
+
 bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
     gpu::gles2::GLES2Interface* gl,
     unsigned int texture,
+    unsigned int internal_format,
+    unsigned int type,
     bool premultiply_alpha,
     bool flip_y) {
   TRACE_EVENT0("media", "WebMediaPlayerMS:copyVideoTextureToPlatformTexture");
@@ -600,7 +599,8 @@ bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
   context_3d = media::Context3D(provider->ContextGL(), provider->GrContext());
   DCHECK(context_3d.gl);
   return video_renderer_.CopyVideoFrameTexturesToGLTexture(
-      context_3d, gl, video_frame.get(), texture, premultiply_alpha, flip_y);
+      context_3d, gl, video_frame.get(), texture, internal_format, type,
+      premultiply_alpha, flip_y);
 }
 
 bool WebMediaPlayerMS::texImageImpl(TexImageFunctionID functionID,
@@ -663,11 +663,13 @@ void WebMediaPlayerMS::OnRotationChanged(media::VideoRotation video_rotation,
   DCHECK(thread_checker_.CalledOnValidThread());
   video_rotation_ = video_rotation;
 
-  video_weblayer_.reset(new cc_blink::WebLayerImpl(
-      cc::VideoLayer::Create(compositor_.get(), video_rotation)));
-  video_weblayer_->layer()->SetContentsOpaque(is_opaque);
-  video_weblayer_->SetContentsOpaqueIsFixed(true);
-  get_client()->setWebLayer(video_weblayer_.get());
+  std::unique_ptr<cc_blink::WebLayerImpl> rotated_weblayer =
+      base::WrapUnique(new cc_blink::WebLayerImpl(
+          cc::VideoLayer::Create(compositor_.get(), video_rotation)));
+  rotated_weblayer->layer()->SetContentsOpaque(is_opaque);
+  rotated_weblayer->SetContentsOpaqueIsFixed(true);
+  get_client()->setWebLayer(rotated_weblayer.get());
+  video_weblayer_ = std::move(rotated_weblayer);
 }
 
 void WebMediaPlayerMS::RepaintInternal() {

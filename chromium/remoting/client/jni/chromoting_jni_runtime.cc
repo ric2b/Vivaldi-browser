@@ -14,6 +14,7 @@
 #include "base/memory/singleton.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "jni/JniInterface_jni.h"
 #include "remoting/base/chromium_url_request.h"
 #include "remoting/base/url_request_context_getter.h"
@@ -42,6 +43,10 @@ bool RegisterChromotingJniRuntime(JNIEnv* env) {
 static void LoadNative(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   base::CommandLine::Init(0, nullptr);
 
+  // TODO(sergeyu): Consider adding separate pools for different task classes.
+  const int kMaxBackgroundThreads = 5;
+  base::TaskScheduler::CreateAndSetSimpleTaskScheduler(kMaxBackgroundThreads);
+
   // Create the singleton now so that the Chromoting threads will be set up.
   remoting::ChromotingJniRuntime::GetInstance();
 }
@@ -49,7 +54,7 @@ static void LoadNative(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
 static void HandleAuthTokenOnNetworkThread(const std::string& token) {
   ChromotingJniRuntime* runtime = remoting::ChromotingJniRuntime::GetInstance();
   DCHECK(runtime->network_task_runner()->BelongsToCurrentThread());
-  runtime->logger()->SetAuthToken(token);
+  runtime->GetLogWriter()->SetAuthToken(token);
 }
 
 static void OnAuthTokenFetched(JNIEnv* env,
@@ -106,8 +111,17 @@ ChromotingJniRuntime::~ChromotingJniRuntime() {
       FROM_HERE, base::Bind(&ChromotingJniRuntime::DetachFromVmAndSignal,
                             base::Unretained(this), &done_event));
   done_event.Wait();
+
+  // Block until tasks blocking shutdown have completed their execution.
+  base::TaskScheduler::GetInstance()->Shutdown();
+
   base::android::LibraryLoaderExitHook();
   base::android::DetachFromVM();
+}
+
+TelemetryLogWriter* ChromotingJniRuntime::GetLogWriter() {
+  DCHECK(runtime_->network_task_runner()->BelongsToCurrentThread());
+  return log_writer_.get();
 }
 
 void ChromotingJniRuntime::FetchAuthToken() {
@@ -129,11 +143,10 @@ void ChromotingJniRuntime::DetachFromVmAndSignal(base::WaitableEvent* waiter) {
 
 void ChromotingJniRuntime::StartLoggerOnNetworkThread() {
   DCHECK(network_task_runner()->BelongsToCurrentThread());
-  logger_.reset(new ClientTelemetryLogger(ChromotingEvent::Mode::ME2ME));
-  logger_->Start(
-      base::MakeUnique<ChromiumUrlRequestFactory>(runtime_->url_requester()),
-      kTelemetryBaseUrl);
-  logger_->SetAuthClosure(
+  log_writer_.reset(new TelemetryLogWriter(
+      kTelemetryBaseUrl,
+      base::MakeUnique<ChromiumUrlRequestFactory>(runtime_->url_requester())));
+  log_writer_->SetAuthClosure(
       base::Bind(&ChromotingJniRuntime::FetchAuthToken,
                  base::Unretained(this)));
 }

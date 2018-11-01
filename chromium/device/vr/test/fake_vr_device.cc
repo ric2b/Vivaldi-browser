@@ -8,7 +8,6 @@ namespace device {
 
 FakeVRDevice::FakeVRDevice() {
   device_ = mojom::VRDisplayInfo::New();
-  pose_ = mojom::VRPose::New();
 
   InitBasicDevice();
 }
@@ -55,17 +54,10 @@ void FakeVRDevice::SetVRDevice(const mojom::VRDisplayInfoPtr& device) {
   device_ = device.Clone();
 }
 
-void FakeVRDevice::SetPose(const mojom::VRPosePtr& pose) {
-  pose_ = pose.Clone();
-}
-
-mojom::VRDisplayInfoPtr FakeVRDevice::GetVRDevice() {
+void FakeVRDevice::GetVRDevice(
+    const base::Callback<void(mojom::VRDisplayInfoPtr)>& callback) {
   mojom::VRDisplayInfoPtr display = device_.Clone();
-  return display.Clone();
-}
-
-mojom::VRPosePtr FakeVRDevice::GetPose() {
-  return pose_.Clone();
+  callback.Run(std::move(display));
 }
 
 void FakeVRDevice::ResetPose() {}
@@ -82,7 +74,10 @@ void FakeVRDevice::ExitPresent() {
 
 void FakeVRDevice::SubmitFrame(mojom::VRPosePtr pose) {}
 
-void FakeVRDevice::UpdateLayerBounds(mojom::VRLayerBoundsPtr leftBounds,
+void FakeVRDevice::UpdateLayerBounds(int16_t frame_index,
+                                     mojom::VRLayerBoundsPtr leftBounds,
                                      mojom::VRLayerBoundsPtr rightBounds) {}
+
+void FakeVRDevice::GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) {}
 
 }  // namespace device

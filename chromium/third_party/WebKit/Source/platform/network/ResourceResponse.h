@@ -138,8 +138,7 @@ class PLATFORM_EXPORT ResourceResponse final {
   ResourceResponse(const KURL&,
                    const AtomicString& mimeType,
                    long long expectedLength,
-                   const AtomicString& textEncodingName,
-                   const String& filename);
+                   const AtomicString& textEncodingName);
   ResourceResponse(const ResourceResponse&);
   ResourceResponse& operator=(const ResourceResponse&);
 
@@ -173,13 +172,6 @@ class PLATFORM_EXPORT ResourceResponse final {
   const AtomicString& textEncodingName() const;
   void setTextEncodingName(const AtomicString&);
 
-  // FIXME: Should compute this on the fly.
-  // There should not be a setter exposed, as suggested file name is determined
-  // based on other headers in a manner that WebCore does not necessarily know
-  // about.
-  const String& suggestedFilename() const;
-  void setSuggestedFilename(const String&);
-
   int httpStatusCode() const;
   void setHTTPStatusCode(int);
 
@@ -196,11 +188,7 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   bool isAttachment() const;
 
-  // FIXME: These are used by PluginStream on some platforms. Calculations may
-  // differ from just returning plain Last-Modified header.
-  // Leaving it for now but this should go away in favor of generic solution.
-  void setLastModifiedDate(time_t);
-  time_t lastModifiedDate() const;
+  AtomicString httpContentType() const;
 
   // These functions return parsed values of the corresponding response headers.
   // NaN means that the header was not present or had invalid value.
@@ -267,16 +255,6 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   bool wasFetchedViaSPDY() const { return m_wasFetchedViaSPDY; }
   void setWasFetchedViaSPDY(bool value) { m_wasFetchedViaSPDY = value; }
-
-  bool wasNpnNegotiated() const { return m_wasNpnNegotiated; }
-  void setWasNpnNegotiated(bool value) { m_wasNpnNegotiated = value; }
-
-  bool wasAlternateProtocolAvailable() const {
-    return m_wasAlternateProtocolAvailable;
-  }
-  void setWasAlternateProtocolAvailable(bool value) {
-    m_wasAlternateProtocolAvailable = value;
-  }
 
   // See ServiceWorkerResponseInfo::was_fetched_via_service_worker.
   bool wasFetchedViaServiceWorker() const {
@@ -397,11 +375,9 @@ class PLATFORM_EXPORT ResourceResponse final {
   AtomicString m_mimeType;
   long long m_expectedContentLength;
   AtomicString m_textEncodingName;
-  String m_suggestedFilename;
   int m_httpStatusCode;
   AtomicString m_httpStatusText;
   HTTPHeaderMap m_httpHeaderFields;
-  time_t m_lastModifiedDate;
   bool m_wasCached : 1;
   unsigned m_connectionID;
   bool m_connectionReused : 1;
@@ -452,15 +428,6 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   // Was the resource fetched over SPDY.  See http://dev.chromium.org/spdy
   bool m_wasFetchedViaSPDY;
-
-  // Was the resource fetched over a channel which used
-  // TLS/Next-Protocol-Negotiation (also SPDY related).
-  bool m_wasNpnNegotiated;
-
-  // Was the resource fetched over a channel which specified
-  // "Alternate-Protocol"
-  // (e.g.: Alternate-Protocol: 443:npn-spdy/1).
-  bool m_wasAlternateProtocolAvailable;
 
   // Was the resource fetched over an explicit proxy (HTTP, SOCKS, etc).
   bool m_wasFetchedViaProxy;
@@ -545,11 +512,9 @@ struct CrossThreadResourceResponseData {
   String m_mimeType;
   long long m_expectedContentLength;
   String m_textEncodingName;
-  String m_suggestedFilename;
   int m_httpStatusCode;
   String m_httpStatusText;
   std::unique_ptr<CrossThreadHTTPHeaderMapData> m_httpHeaders;
-  time_t m_lastModifiedDate;
   RefPtr<ResourceLoadTiming> m_resourceLoadTiming;
   bool m_hasMajorCertificateErrors;
   ResourceResponse::SecurityStyle m_securityStyle;
@@ -562,8 +527,6 @@ struct CrossThreadResourceResponseData {
   KURL m_appCacheManifestURL;
   Vector<char> m_multipartBoundary;
   bool m_wasFetchedViaSPDY;
-  bool m_wasNpnNegotiated;
-  bool m_wasAlternateProtocolAvailable;
   bool m_wasFetchedViaProxy;
   bool m_wasFetchedViaServiceWorker;
   bool m_wasFetchedViaForeignFetch;

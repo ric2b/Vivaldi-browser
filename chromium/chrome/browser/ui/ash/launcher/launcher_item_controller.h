@@ -11,19 +11,14 @@
 #include "ash/common/shelf/shelf_item_types.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 #include "ui/events/event.h"
 
 class AppWindowLauncherItemController;
 class ChromeLauncherController;
-class ChromeLauncherAppMenuItem;
-
-using ChromeLauncherAppMenuItems =
-    std::vector<std::unique_ptr<ChromeLauncherAppMenuItem>>;
 
 // LauncherItemController is used by ChromeLauncherController to track one
 // or more windows associated with a shelf item.
-// TODO (khmel): Consider using ash::launcher::AppLauncherId instead of pair
+// TODO (khmel): Consider using ash::AppLauncherId instead of pair
 // |app_id| and |launch_id|.
 class LauncherItemController : public ash::ShelfItemDelegate {
  public:
@@ -52,17 +47,6 @@ class LauncherItemController : public ash::ShelfItemDelegate {
   void set_image_set_by_controller(bool image_set_by_controller) {
     image_set_by_controller_ = image_set_by_controller;
   }
-
-  // Launches a new instance of the app associated with this item.
-  virtual void Launch(ash::LaunchSource source, int event_flags) = 0;
-
-  // Shows and activates the most-recently-active window associated with the
-  // item, or launches the item if it is not currently open.
-  // Returns the action performed by activating the item.
-  virtual PerformedAction Activate(ash::LaunchSource source) = 0;
-
-  // Called to retrieve the list of running applications.
-  virtual ChromeLauncherAppMenuItems GetApplicationList(int event_flags) = 0;
 
   // Returns nullptr if class is not AppWindowLauncherItemController.
   virtual AppWindowLauncherItemController* AsAppWindowLauncherItemController();

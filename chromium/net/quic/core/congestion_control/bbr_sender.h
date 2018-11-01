@@ -87,6 +87,7 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
     QuicByteCount recovery_window;
 
     bool last_sample_is_app_limited;
+    QuicPacketNumber end_of_app_limited_phase;
   };
 
   BbrSender(const RttStats* rtt_stats,
@@ -235,6 +236,13 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // The gain currently applied to the congestion window.
   float congestion_window_gain_;
 
+  // The gain used for the congestion window during PROBE_BW.  Latched from
+  // quic_bbr_cwnd_gain flag.
+  const float congestion_window_gain_constant_;
+  // The coefficient by which mean RTT variance is added to the congestion
+  // window.  Latched from quic_bbr_rtt_variation_weight flag.
+  const float rtt_variance_weight_;
+
   // Number of round-trips in PROBE_BW mode, used for determining the current
   // pacing gain cycle.
   int cycle_current_offset_;
@@ -269,10 +277,6 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   QuicPacketNumber end_recovery_at_;
   // A window used to limit the number of bytes in flight during loss recovery.
   QuicByteCount recovery_window_;
-
-  // Indicates whether to always only increase the pacing rate during startup.
-  // Latches |FLAGS_quic_reloadable_flag_quic_bbr_faster_startup|.
-  bool enforce_startup_pacing_rate_increase_;
 
   DISALLOW_COPY_AND_ASSIGN(BbrSender);
 };

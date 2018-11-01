@@ -515,7 +515,7 @@ void EmbeddedWorkerInstance::StopIfIdle() {
       // Check ShouldNotifyWorkerStopIgnored not to show the same message
       // multiple times in DevTools.
       if (devtools_proxy_->ShouldNotifyWorkerStopIgnored()) {
-        AddMessageToConsole(blink::WebConsoleMessage::LevelDebug,
+        AddMessageToConsole(blink::WebConsoleMessage::LevelVerbose,
                             kServiceWorkerTerminationCanceledMesage);
         devtools_proxy_->WorkerStopIgnoredNotified();
       }
@@ -817,11 +817,6 @@ int EmbeddedWorkerInstance::worker_devtools_agent_route_id() const {
   return MSG_ROUTING_NONE;
 }
 
-MessagePortMessageFilter* EmbeddedWorkerInstance::message_port_message_filter()
-    const {
-  return registry_->MessagePortMessageFilterForProcess(process_id());
-}
-
 void EmbeddedWorkerInstance::AddListener(Listener* listener) {
   listener_list_.AddObserver(listener);
 }
@@ -871,10 +866,8 @@ base::TimeDelta EmbeddedWorkerInstance::UpdateStepTime() {
 void EmbeddedWorkerInstance::AddMessageToConsole(
     blink::WebConsoleMessage::Level level,
     const std::string& message) {
-  if (status_ != EmbeddedWorkerStatus::RUNNING &&
-      status_ != EmbeddedWorkerStatus::STARTING) {
+  if (process_id() == ChildProcessHost::kInvalidUniqueID)
     return;
-  }
   DCHECK(client_.is_bound());
   client_->AddMessageToConsole(level, message);
 }

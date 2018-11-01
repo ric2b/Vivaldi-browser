@@ -20,6 +20,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/chromeos/drive/debug_info_collector.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
@@ -591,7 +592,7 @@ void DriveInternalsWebUIHandler::ResetFinished(bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   web_ui()->CallJavascriptFunctionUnsafe("updateResetStatus",
-                                         base::FundamentalValue(success));
+                                         base::Value(success));
 }
 
 void DriveInternalsWebUIHandler::ListFileEntries(const base::ListValue* args) {
@@ -669,15 +670,13 @@ void DriveInternalsWebUIHandler::UpdateGCacheContentsSection() {
   const base::FilePath root_path = drive::util::GetCacheRootPath(profile);
   base::ListValue* gcache_contents = new base::ListValue;
   base::DictionaryValue* gcache_summary = new base::DictionaryValue;
-  BrowserThread::PostBlockingPoolTaskAndReply(
-      FROM_HERE,
-      base::Bind(&GetGCacheContents,
-                 root_path,
-                 gcache_contents,
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::USER_VISIBLE),
+      base::Bind(&GetGCacheContents, root_path, gcache_contents,
                  gcache_summary),
       base::Bind(&DriveInternalsWebUIHandler::OnGetGCacheContents,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Owned(gcache_contents),
+                 weak_ptr_factory_.GetWeakPtr(), base::Owned(gcache_contents),
                  base::Owned(gcache_summary)));
 }
 
@@ -711,8 +710,9 @@ void DriveInternalsWebUIHandler::UpdateLocalStorageUsageSection() {
   base::FilePath home_path;
   if (PathService::Get(base::DIR_HOME, &home_path)) {
     base::DictionaryValue* local_storage_summary = new base::DictionaryValue;
-    BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::USER_VISIBLE),
         base::Bind(&GetFreeDiskSpace, home_path, local_storage_summary),
         base::Bind(&DriveInternalsWebUIHandler::OnGetFreeDiskSpace,
                    weak_ptr_factory_.GetWeakPtr(),

@@ -16,7 +16,7 @@ class CSSImageListInterpolationType : public CSSInterpolationType {
       : CSSInterpolationType(property) {}
 
   InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
-      const StyleResolverState&) const final;
+      const ComputedStyle&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
@@ -35,7 +35,7 @@ class CSSImageListInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   InterpolationValue maybeConvertValue(const CSSValue&,
-                                       const StyleResolverState&,
+                                       const StyleResolverState*,
                                        ConversionCheckers&) const final;
 
   PairwiseInterpolationValue maybeMergeSingles(

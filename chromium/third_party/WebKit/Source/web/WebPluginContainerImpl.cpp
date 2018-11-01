@@ -112,7 +112,7 @@ namespace blink {
 // Public methods --------------------------------------------------------------
 
 void WebPluginContainerImpl::setFrameRect(const IntRect& frameRect) {
-  Widget::setFrameRect(frameRect);
+  FrameViewBase::setFrameRect(frameRect);
 }
 
 void WebPluginContainerImpl::updateAllLifecyclePhases() {
@@ -185,7 +185,7 @@ void WebPluginContainerImpl::invalidateRect(const IntRect& rect) {
 }
 
 void WebPluginContainerImpl::setFocused(bool focused, WebFocusType focusType) {
-  Widget::setFocused(focused, focusType);
+  FrameViewBase::setFocused(focused, focusType);
   m_webPlugin->updateFocus(focused, focusType);
 }
 
@@ -193,14 +193,14 @@ void WebPluginContainerImpl::show() {
   setSelfVisible(true);
   m_webPlugin->updateVisibility(true);
 
-  Widget::show();
+  FrameViewBase::show();
 }
 
 void WebPluginContainerImpl::hide() {
   setSelfVisible(false);
   m_webPlugin->updateVisibility(false);
 
-  Widget::hide();
+  FrameViewBase::hide();
 }
 
 void WebPluginContainerImpl::handleEvent(Event* event) {
@@ -221,19 +221,20 @@ void WebPluginContainerImpl::handleEvent(Event* event) {
   else if (event->isDragEvent() && m_webPlugin->canProcessDrag())
     handleDragEvent(toDragEvent(event));
 
-  // FIXME: it would be cleaner if Widget::handleEvent returned true/false and
-  // HTMLPluginElement called setDefaultHandled or defaultEventHandler.
+  // FIXME: it would be cleaner if FrameViewBase::handleEvent returned
+  // true/false and HTMLPluginElement called setDefaultHandled or
+  // defaultEventHandler.
   if (!event->defaultHandled())
     m_element->Node::defaultEventHandler(event);
 }
 
 void WebPluginContainerImpl::frameRectsChanged() {
-  Widget::frameRectsChanged();
+  FrameViewBase::frameRectsChanged();
   reportGeometry();
 }
 
 void WebPluginContainerImpl::widgetGeometryMayHaveChanged() {
-  Widget::widgetGeometryMayHaveChanged();
+  FrameViewBase::widgetGeometryMayHaveChanged();
   reportGeometry();
 }
 
@@ -253,7 +254,7 @@ void WebPluginContainerImpl::setParentVisible(bool parentVisible) {
   if (isParentVisible() == parentVisible)
     return;  // No change.
 
-  Widget::setParentVisible(parentVisible);
+  FrameViewBase::setParentVisible(parentVisible);
   if (!isSelfVisible())
     return;  // This widget has explicitely been marked as not visible.
 
@@ -274,7 +275,7 @@ float WebPluginContainerImpl::deviceScaleFactor() {
   Page* page = m_element->document().page();
   if (!page)
     return 1.0;
-  return page->deviceScaleFactor();
+  return page->deviceScaleFactorDeprecated();
 }
 
 float WebPluginContainerImpl::pageScaleFactor() {
@@ -346,6 +347,7 @@ void WebPluginContainerImpl::printPage(int pageNumber,
   LayoutObjectDrawingRecorder drawingRecorder(
       gc, *m_element->layoutObject(), DisplayItem::Type::kWebPlugin, printRect);
   gc.save();
+
   WebCanvas* canvas = gc.canvas();
   m_webPlugin->printPage(pageNumber, canvas);
   gc.restore();
@@ -410,7 +412,7 @@ void WebPluginContainerImpl::enqueueMessageEvent(
 }
 
 void WebPluginContainerImpl::invalidate() {
-  Widget::invalidate();
+  FrameViewBase::invalidate();
 }
 
 void WebPluginContainerImpl::invalidateRect(const WebRect& rect) {
@@ -443,7 +445,7 @@ v8::Local<v8::Object> WebPluginContainerImpl::v8ObjectForElement() {
   if (!frame)
     return v8::Local<v8::Object>();
 
-  if (!frame->script().canExecuteScripts(NotAboutToExecuteScript))
+  if (!m_element->document().canExecuteScripts(NotAboutToExecuteScript))
     return v8::Local<v8::Object>();
 
   ScriptState* scriptState = ScriptState::forMainWorld(frame);
@@ -466,16 +468,16 @@ WebString WebPluginContainerImpl::executeScriptURL(const WebURL& url,
   if (!frame)
     return WebString();
 
-  if (!m_element->document().contentSecurityPolicy()->allowJavaScriptURLs(
-          m_element, m_element->document().url(), OrdinalNumber())) {
-    return WebString();
-  }
-
   const KURL& kurl = url;
   DCHECK(kurl.protocolIs("javascript"));
 
   String script = decodeURLEscapeSequences(
       kurl.getString().substring(strlen("javascript:")));
+
+  if (!m_element->document().contentSecurityPolicy()->allowJavaScriptURLs(
+          m_element, script, m_element->document().url(), OrdinalNumber())) {
+    return WebString();
+  }
 
   UserGestureIndicator gestureIndicator(
       popupsAllowed ? DocumentUserGestureToken::create(
@@ -706,17 +708,18 @@ void WebPluginContainerImpl::handleMouseEvent(MouseEvent* event) {
   // in the call to HandleEvent. See http://b/issue?id=1362948
   FrameView* parentView = toFrameView(parent());
 
-  WebMouseEventBuilder webEvent(this, LayoutItem(m_element->layoutObject()),
-                                *event);
-  if (webEvent.type() == WebInputEvent::Undefined)
+  WebMouseEventBuilder transformedEvent(
+      this, LayoutItem(m_element->layoutObject()), *event);
+  if (transformedEvent.type() == WebInputEvent::Undefined)
     return;
 
   if (event->type() == EventTypeNames::mousedown)
     focusPlugin();
 
   WebCursorInfo cursorInfo;
-  if (m_webPlugin && m_webPlugin->handleInputEvent(webEvent, cursorInfo) !=
-                         WebInputEventResult::NotHandled)
+  if (m_webPlugin &&
+      m_webPlugin->handleInputEvent(transformedEvent, cursorInfo) !=
+          WebInputEventResult::NotHandled)
     event->setDefaultHandled();
 
   // A windowless plugin can change the cursor in response to a mouse move
@@ -758,11 +761,16 @@ void WebPluginContainerImpl::handleDragEvent(MouseEvent* event) {
 }
 
 void WebPluginContainerImpl::handleWheelEvent(WheelEvent* event) {
-  WebFloatPoint absoluteRootFrameLocation =
-      event->nativeEvent().positionInRootFrame();
+  WebFloatPoint absoluteLocation = event->nativeEvent().positionInRootFrame();
+  FrameView* view = toFrameView(parent());
+  // Translate the root frame position to content coordinates.
+  if (view) {
+    absoluteLocation = view->rootFrameToContents(absoluteLocation);
+  }
+
   IntPoint localPoint =
       roundedIntPoint(m_element->layoutObject()->absoluteToLocal(
-          absoluteRootFrameLocation, UseTransforms));
+          absoluteLocation, UseTransforms));
   WebMouseWheelEvent translatedEvent = event->nativeEvent().flattenTransform();
   translatedEvent.x = localPoint.x();
   translatedEvent.y = localPoint.y();
@@ -815,16 +823,31 @@ void WebPluginContainerImpl::handleTouchEvent(TouchEvent* event) {
     case TouchEventRequestTypeNone:
       return;
     case TouchEventRequestTypeRaw: {
-      WebTouchEventBuilder webEvent(LayoutItem(m_element->layoutObject()),
-                                    *event);
-      if (webEvent.type() == WebInputEvent::Undefined)
+      if (!event->nativeEvent())
         return;
 
       if (event->type() == EventTypeNames::touchstart)
         focusPlugin();
 
+      WebTouchEvent transformedEvent = event->nativeEvent()->flattenTransform();
+
+      FrameView* view = toFrameView(parent());
+
+      for (unsigned i = 0; i < transformedEvent.touchesLength; ++i) {
+        WebFloatPoint absoluteLocation = transformedEvent.touches[i].position;
+        // Translate the root frame position to content coordinates.
+        if (view) {
+          absoluteLocation = view->rootFrameToContents(absoluteLocation);
+        }
+        IntPoint localPoint =
+            roundedIntPoint(m_element->layoutObject()->absoluteToLocal(
+                absoluteLocation, UseTransforms));
+        transformedEvent.touches[i].position.x = localPoint.x();
+        transformedEvent.touches[i].position.y = localPoint.y();
+      }
+
       WebCursorInfo cursorInfo;
-      if (m_webPlugin->handleInputEvent(webEvent, cursorInfo) !=
+      if (m_webPlugin->handleInputEvent(transformedEvent, cursorInfo) !=
           WebInputEventResult::NotHandled)
         event->setDefaultHandled();
       // FIXME: Can a plugin change the cursor from a touch-event callback?

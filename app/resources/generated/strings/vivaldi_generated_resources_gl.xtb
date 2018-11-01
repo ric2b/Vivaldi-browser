@@ -10,7 +10,6 @@
 <translation id="119944043368869598">Limpar todo</translation>
 <translation id="1368832886055348810">De esquerda a dereita</translation>
 <translation id="1603914832182249871">(de incógnito)</translation>
-<translation id="1652965563555864525">&amp;Silencio</translation>
 <translation id="1682548588986054654">Nova xanela de incó&amp;gnito</translation>
 <translation id="1859234291848436338">Dirección de escritura</translation>
 <translation id="1901303067676059328">Seleccionar &amp;todo</translation>
@@ -24,7 +23,6 @@
 <translation id="2378982052244864789">Seleccione o directorio da extensión.</translation>
 <translation id="2423578206845792524">Gar&amp;dar imaxe como...</translation>
 <translation id="2445081178310039857">Requírese o directorio raíz da extensión.</translation>
-<translation id="253434972992662860">&amp;Pausa</translation>
 <translation id="2678063897982469759">Activar de novo</translation>
 <translation id="2861941300086904918">Administrador de seguranza do cliente nativo</translation>
 <translation id="2972581237482394796">&amp;Refacer</translation>
@@ -45,15 +43,12 @@
 <translation id="3927932062596804919">Denegar</translation>
 <translation id="3936390757709632190">&amp;Abrir son nunha nova lapela</translation>
 <translation id="3943582379552582368">Atrás</translation>
-<translation id="3954582159466790312">Activar &amp;son</translation>
 <translation id="3978267865113951599">(quebrou)</translation>
-<translation id="4059285154003114015">Imp&amp;rimir marco...</translation>
 <translation id="4176463684765177261">Desactivada</translation>
 <translation id="4394049700291259645">Desactivar</translation>
 <translation id="4481249487722541506">Cargar extensión desempaquetada...</translation>
 <translation id="4522570452068850558">Detalles</translation>
 <translation id="4839303808932127586">Gardar &amp;vídeo como...</translation>
-<translation id="4861833787540810454">&amp;Reproducir</translation>
 <translation id="4927301649992043040">Empaquetar extensión</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5154917547274118687">Memoria</translation>
@@ -88,7 +83,6 @@
 <translation id="7339898014177206373">Nova &amp;xanela</translation>
 <translation id="7554791636758816595">Nova lapela</translation>
 <translation id="7564847347806291057">Rematar proceso</translation>
-<translation id="7618337809041914424">Imp&amp;rimir marco...</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7685049629764448582">Memoria de JavaScript</translation>
 <translation id="7791543448312431591">Engadir</translation>

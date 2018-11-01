@@ -51,7 +51,10 @@ const size_t kSuspendedMaxItemsInCache = 0;
 // The second part that much be true is that we cache only the needed subrect if
 // the total size needed for the subrect is at most kMemoryRatioToSubrect *
 // (size needed for the full original image).
+// Note that at least one of the dimensions has to be at least
+// kMinDimensionToSubrect before an image can breach the threshold.
 const size_t kMemoryThresholdToSubrect = 64 * 1024 * 1024;
+const int kMinDimensionToSubrect = 4 * 1024;
 const float kMemoryRatioToSubrect = 0.5f;
 
 class AutoRemoveKeyFromTaskMap {
@@ -94,7 +97,7 @@ class ImageDecodeTaskImpl : public TileTask {
   ImageDecodeTaskImpl(SoftwareImageDecodeCache* cache,
                       const SoftwareImageDecodeCache::ImageKey& image_key,
                       const DrawImage& image,
-                      const SoftwareImageDecodeCache::DecodeTaskType task_type,
+                      SoftwareImageDecodeCache::DecodeTaskType task_type,
                       const ImageDecodeCache::TracingInfo& tracing_info)
       : TileTask(true),
         cache_(cache),
@@ -174,6 +177,17 @@ void RecordLockExistingCachedImageHistogram(TilePriority::PriorityBin bin,
       UMA_HISTOGRAM_BOOLEAN(
           "Renderer4.LockExistingCachedImage.Software.EVENTUALLY", success);
   }
+}
+
+gfx::Rect GetSrcRect(const DrawImage& image) {
+  const SkIRect& src_rect = image.src_rect();
+  int x = std::max(0, src_rect.x());
+  int y = std::max(0, src_rect.y());
+  int right = std::min(image.image()->width(), src_rect.right());
+  int bottom = std::min(image.image()->height(), src_rect.bottom());
+  if (x >= right || y >= bottom)
+    return gfx::Rect();
+  return gfx::Rect(x, y, right - x, bottom - y);
 }
 
 }  // namespace
@@ -632,7 +646,7 @@ SoftwareImageDecodeCache::GetSubrectImageDecode(const ImageKey& key,
   }
   {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
-                 "SoftwareImageDecodeCache::GetOriginalImageDecode - "
+                 "SoftwareImageDecodeCache::GetSubrectImageDecode - "
                  "read pixels");
     bool result = decoded_draw_image.image()->readPixels(
         subrect_info, subrect_pixels->data(), subrect_info.minRowBytes(),
@@ -783,12 +797,10 @@ void SoftwareImageDecodeCache::UnrefAtRasterImage(const ImageKey& key) {
   }
 }
 
-void SoftwareImageDecodeCache::ReduceCacheUsage() {
+void SoftwareImageDecodeCache::ReduceCacheUsageUntilWithinLimit(size_t limit) {
   TRACE_EVENT0("cc", "SoftwareImageDecodeCache::ReduceCacheUsage");
-  base::AutoLock lock(lock_);
-  size_t num_to_remove = (decoded_images_.size() > max_items_in_cache_)
-                             ? (decoded_images_.size() - max_items_in_cache_)
-                             : 0;
+  size_t num_to_remove =
+      (decoded_images_.size() > limit) ? (decoded_images_.size() - limit) : 0;
   for (auto it = decoded_images_.rbegin();
        num_to_remove != 0 && it != decoded_images_.rend();) {
     if (it->second->is_locked()) {
@@ -799,6 +811,11 @@ void SoftwareImageDecodeCache::ReduceCacheUsage() {
     it = decoded_images_.Erase(it);
     --num_to_remove;
   }
+}
+
+void SoftwareImageDecodeCache::ReduceCacheUsage() {
+  base::AutoLock lock(lock_);
+  ReduceCacheUsageUntilWithinLimit(max_items_in_cache_);
 }
 
 void SoftwareImageDecodeCache::RemovePendingTask(const ImageKey& key,
@@ -847,15 +864,15 @@ void SoftwareImageDecodeCache::DumpImageMemoryForCache(
         reinterpret_cast<uintptr_t>(this), cache_name,
         image_pair.second->tracing_id(), image_pair.first.image_id());
     // CreateMemoryAllocatorDump will automatically add tracking values for the
-    // total size. If locked, we also add a "locked_size" below.
+    // total size. We also add a "locked_size" below.
     MemoryAllocatorDump* dump =
         image_pair.second->memory()->CreateMemoryAllocatorDump(
             dump_name.c_str(), pmd);
     DCHECK(dump);
-    if (image_pair.second->is_locked()) {
-      dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
-                      image_pair.first.locked_bytes());
-    }
+    size_t locked_bytes =
+        image_pair.second->is_locked() ? image_pair.first.locked_bytes() : 0u;
+    dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
+                    locked_bytes);
   }
 }
 
@@ -898,10 +915,7 @@ ImageDecodeCacheKey ImageDecodeCacheKey::FromDrawImage(const DrawImage& image) {
   // otherwise we might end up with uninitialized memory in the decode process.
   // Note that the scale is still unchanged and the target size is now a
   // function of the new src_rect.
-  gfx::Rect src_rect = gfx::IntersectRects(
-      gfx::SkIRectToRect(image.src_rect()),
-      gfx::Rect(image.image()->width(), image.image()->height()));
-
+  const gfx::Rect& src_rect = GetSrcRect(image);
   gfx::Size target_size(
       SkScalarRoundToInt(std::abs(src_rect.width() * scale.width())),
       SkScalarRoundToInt(std::abs(src_rect.height() * scale.height())));
@@ -950,7 +964,9 @@ ImageDecodeCacheKey ImageDecodeCacheKey::FromDrawImage(const DrawImage& image) {
   bool can_use_original_decode =
       quality == kLow_SkFilterQuality || quality == kNone_SkFilterQuality;
   bool should_use_subrect = false;
-  if (can_use_original_decode) {
+  if (can_use_original_decode &&
+      (image.image()->width() >= kMinDimensionToSubrect ||
+       image.image()->height() >= kMinDimensionToSubrect)) {
     base::CheckedNumeric<size_t> checked_original_size = 4u;
     checked_original_size *= image.image()->width();
     checked_original_size *= image.image()->height();
@@ -1160,7 +1176,11 @@ void SoftwareImageDecodeCache::OnMemoryStateChange(base::MemoryState state) {
         return;
     }
   }
-  ReduceCacheUsage();
+}
+
+void SoftwareImageDecodeCache::OnPurgeMemory() {
+  base::AutoLock lock(lock_);
+  ReduceCacheUsageUntilWithinLimit(0);
 }
 
 }  // namespace cc

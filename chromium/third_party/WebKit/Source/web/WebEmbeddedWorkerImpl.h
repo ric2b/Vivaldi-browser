@@ -33,16 +33,17 @@
 
 #include "core/workers/WorkerLoaderProxy.h"
 
+#include <memory>
 #include "platform/heap/Handle.h"
-#include "public/web/WebContentSecurityPolicy.h"
+#include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebEmbeddedWorker.h"
 #include "public/web/WebEmbeddedWorkerStartData.h"
 #include "public/web/WebFrameClient.h"
-#include <memory>
 
 namespace blink {
 
+class ThreadableLoadingContext;
 class ParentFrameTaskRunners;
 class ServiceWorkerGlobalScopeProxy;
 class WebLocalFrameImpl;
@@ -102,10 +103,11 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
 
   // WorkerLoaderProxyProvider
   void postTaskToLoader(const WebTraceLocation&,
-                        std::unique_ptr<ExecutionContextTask>) override;
+                        std::unique_ptr<WTF::CrossThreadClosure>) override;
   void postTaskToWorkerGlobalScope(
       const WebTraceLocation&,
       std::unique_ptr<WTF::CrossThreadClosure>) override;
+  ThreadableLoadingContext* getThreadableLoadingContext() override;
 
   WebEmbeddedWorkerStartData m_workerStartData;
 
@@ -122,7 +124,9 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   // Kept around only while main script loading is ongoing.
   RefPtr<WorkerScriptLoader> m_mainScriptLoader;
 
-  Persistent<ParentFrameTaskRunners> m_mainThreadTaskRunners;
+  // Owned by the main thread, but will be accessed by the worker when
+  // posting tasks.
+  CrossThreadPersistent<ParentFrameTaskRunners> m_mainThreadTaskRunners;
 
   std::unique_ptr<WorkerThread> m_workerThread;
   RefPtr<WorkerLoaderProxy> m_loaderProxy;
@@ -134,7 +138,9 @@ class WebEmbeddedWorkerImpl final : public WebEmbeddedWorker,
   // deref'ed) when this EmbeddedWorkerImpl is destructed, therefore they
   // are guaranteed to exist while this object is around.
   WebView* m_webView;
+
   Persistent<WebLocalFrameImpl> m_mainFrame;
+  Persistent<ThreadableLoadingContext> m_loadingContext;
 
   bool m_loadingShadowPage;
   bool m_askedToTerminate;

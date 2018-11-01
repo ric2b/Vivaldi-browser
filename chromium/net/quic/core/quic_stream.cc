@@ -4,10 +4,8 @@
 
 #include "net/quic/core/quic_stream.h"
 
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_flow_controller.h"
 #include "net/quic/core/quic_session.h"
-#include "net/quic/core/quic_write_blocked_list.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_logging.h"
 
@@ -72,7 +70,10 @@ QuicStream::QuicStream(QuicStreamId id, QuicSession* session)
                        perspective_,
                        GetReceivedFlowControlWindow(session),
                        GetInitialStreamFlowControlWindowToSend(session),
-                       session_->flow_controller()->auto_tune_receive_window()),
+                       session_->flow_controller()->auto_tune_receive_window(),
+                       session_->flow_control_invariant()
+                           ? session_->flow_controller()
+                           : nullptr),
       connection_flow_controller_(session_->flow_controller()),
       stream_contributes_to_connection_flow_control_(true),
       busy_counter_(0) {
@@ -274,8 +275,8 @@ QuicConsumedData QuicStream::WritevData(
     bool fin,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   if (write_side_closed_) {
-    QUIC_DLOG(ERROR) << ENDPOINT
-                     << "Attempt to write when the write side is closed";
+    QUIC_DLOG(ERROR) << ENDPOINT << "Stream " << id()
+                     << "attempting to write when the write side is closed";
     return QuicConsumedData(0, false);
   }
 
@@ -347,6 +348,9 @@ QuicConsumedData QuicStream::WritevData(
   } else {
     session_->MarkConnectionLevelWriteBlocked(id());
   }
+  if (consumed_data.bytes_consumed > 0 || consumed_data.fin_consumed) {
+    busy_counter_ = 0;
+  }
   return consumed_data;
 }
 
@@ -369,7 +373,7 @@ void QuicStream::CloseReadSide() {
   sequencer_.ReleaseBuffer();
 
   if (write_side_closed_) {
-    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream: " << id();
+    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream " << id();
     session_->CloseStream(id());
   }
 }
@@ -382,7 +386,7 @@ void QuicStream::CloseWriteSide() {
 
   write_side_closed_ = true;
   if (read_side_closed_) {
-    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream: " << id();
+    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream " << id();
     session_->CloseStream(id());
   }
 }

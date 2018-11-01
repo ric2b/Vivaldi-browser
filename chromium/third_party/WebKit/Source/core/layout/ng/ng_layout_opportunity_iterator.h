@@ -18,33 +18,28 @@ namespace blink {
 typedef NGLogicalRect NGLayoutOpportunity;
 typedef Vector<NGLayoutOpportunity> NGLayoutOpportunities;
 
-class CORE_EXPORT NGLayoutOpportunityIterator final
-    : public GarbageCollectedFinalized<NGLayoutOpportunityIterator> {
+class CORE_EXPORT NGLayoutOpportunityIterator final {
+  STACK_ALLOCATED();
+
  public:
   // Default constructor.
   //
   // @param space Constraint space with exclusions for which this iterator needs
   //              to generate layout opportunities.
   // @param opt_origin_point Optional origin_point parameter that is used as a
-  //                     default start point for layout opportunities.
+  //                         default start point for layout opportunities.
   // @param opt_leader_point Optional 'leader' parameter that is used to specify
-  // the
-  //                     ending point of temporary excluded rectangle which
-  //                     starts from 'origin'. This rectangle may represent a
-  //                     text fragment for example.
+  //                         the ending point of temporary excluded rectangle
+  //                         which starts from 'origin'. This rectangle may
+  //                         represent a text fragment for example.
   NGLayoutOpportunityIterator(
-      NGConstraintSpace* space,
+      const NGConstraintSpace* space,
       const WTF::Optional<NGLogicalOffset>& opt_origin_point = WTF::nullopt,
       const WTF::Optional<NGLogicalOffset>& opt_leader_point = WTF::nullopt);
 
   // Gets the next Layout Opportunity or nullptr if the search is exhausted.
   // TODO(chrome-layout-team): Refactor with using C++ <iterator> library.
   const NGLayoutOpportunity Next();
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(constraint_space_);
-    visitor->trace(opportunity_tree_root_);
-  }
 
  private:
   // Mutable Getters.
@@ -57,11 +52,11 @@ class CORE_EXPORT NGLayoutOpportunityIterator final
     return opportunity_tree_root_.get();
   }
 
-  Member<NGConstraintSpace> constraint_space_;
+  const NGConstraintSpace* constraint_space_;
 
   NGLayoutOpportunities opportunities_;
   NGLayoutOpportunities::const_iterator opportunity_iter_;
-  Member<NGLayoutOpportunityTreeNode> opportunity_tree_root_;
+  Persistent<NGLayoutOpportunityTreeNode> opportunity_tree_root_;
 };
 
 }  // namespace blink

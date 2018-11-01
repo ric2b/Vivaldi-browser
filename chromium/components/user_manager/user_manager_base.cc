@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -191,9 +191,10 @@ void UserManagerBase::UserLoggedIn(const AccountId& account_id,
       SendGaiaUserLoginMetrics(account_id);
   } else if (primary_user_ != active_user_) {
     // This is only needed for tests where a new user session is created
-    // for non-existent user.
+    // for non-existent user. The new user is created and automatically set
+    // to active and there will be no pending user switch in such case.
     SetIsCurrentUserNew(true);
-    NotifyUserAddedToSession(active_user_, true /* user switch pending */);
+    NotifyUserAddedToSession(active_user_, false /* user switch pending */);
   }
 
   UMA_HISTOGRAM_ENUMERATION(
@@ -241,6 +242,7 @@ void UserManagerBase::SwitchActiveUser(const AccountId& account_id) {
 
   NotifyActiveUserHashChanged(active_user_->username_hash());
   NotifyActiveUserChanged(active_user_);
+  CallUpdateLoginState();
 }
 
 void UserManagerBase::SwitchToLastActiveUser() {
@@ -364,7 +366,7 @@ void UserManagerBase::SaveUserOAuthStatus(
                                              kUserOAuthTokenStatus);
     oauth_status_update->SetWithoutPathExpansion(
         account_id.GetUserEmail(),
-        new base::FundamentalValue(static_cast<int>(oauth_token_status)));
+        new base::Value(static_cast<int>(oauth_token_status)));
   }
   GetLocalState()->CommitPendingWrite();
 }
@@ -456,8 +458,7 @@ void UserManagerBase::SaveUserType(const AccountId& account_id,
 
   DictionaryPrefUpdate user_type_update(GetLocalState(), kUserType);
   user_type_update->SetWithoutPathExpansion(
-      account_id.GetUserEmail(),
-      new base::FundamentalValue(static_cast<int>(user_type)));
+      account_id.GetUserEmail(), new base::Value(static_cast<int>(user_type)));
   GetLocalState()->CommitPendingWrite();
 }
 
@@ -508,17 +509,8 @@ void UserManagerBase::ParseUserList(const base::ListValue& users_list,
 
 bool UserManagerBase::IsCurrentUserOwner() const {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
-  base::AutoLock lk(is_current_user_owner_lock_);
-  return is_current_user_owner_;
-}
-
-void UserManagerBase::SetCurrentUserIsOwner(bool is_current_user_owner) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
-  {
-    base::AutoLock lk(is_current_user_owner_lock_);
-    is_current_user_owner_ = is_current_user_owner;
-  }
-  CallUpdateLoginState();
+  return !owner_account_id_.empty() && active_user_ &&
+         active_user_->GetAccountId() == owner_account_id_;
 }
 
 bool UserManagerBase::IsCurrentUserNew() const {
@@ -739,6 +731,7 @@ bool UserManagerBase::HasPendingBootstrap(const AccountId& account_id) const {
 
 void UserManagerBase::SetOwnerId(const AccountId& owner_account_id) {
   owner_account_id_ = owner_account_id;
+  CallUpdateLoginState();
 }
 
 const AccountId& UserManagerBase::GetPendingUserSwitchID() const {
@@ -1028,7 +1021,7 @@ void UserManagerBase::Initialize() {
 }
 
 void UserManagerBase::CallUpdateLoginState() {
-  UpdateLoginState(active_user_, primary_user_, is_current_user_owner_);
+  UpdateLoginState(active_user_, primary_user_, IsCurrentUserOwner());
 }
 
 void UserManagerBase::SetLRUUser(User* user) {

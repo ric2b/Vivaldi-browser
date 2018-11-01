@@ -10,6 +10,7 @@
 
 #include <limits>
 #include <map>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -56,6 +57,7 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties_manager.h"
 #include "net/log/file_net_log_observer.h"
+#include "net/log/net_log_util.h"
 #include "net/log/write_to_file_net_log_observer.h"
 #include "net/nqe/external_estimate_provider.h"
 #include "net/nqe/network_qualities_prefs_manager.h"
@@ -204,15 +206,15 @@ class NetworkQualitiesPrefDelegateImpl
   }
   std::unique_ptr<base::DictionaryValue> GetDictionaryValue() override {
     DCHECK(thread_checker_.CalledOnValidThread());
-    // TODO(tbansal): Add logic to read prefs if the embedder has enabled cached
-    // estimates.
-    return base::WrapUnique(new base::DictionaryValue());
+    UMA_HISTOGRAM_EXACT_LINEAR("NQE.Prefs.ReadCount", 1, 2);
+    return pref_service_->GetDictionary(kNetworkQualities)->CreateDeepCopy();
   }
 
  private:
   // Schedules the writing of the lossy prefs.
   void SchedulePendingLossyWrites() {
     DCHECK(thread_checker_.CalledOnValidThread());
+    UMA_HISTOGRAM_EXACT_LINEAR("NQE.Prefs.WriteCount", 1, 2);
     pref_service_->SchedulePendingLossyWrites();
     lossy_prefs_writing_task_posted_ = false;
   }
@@ -703,7 +705,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
         "TransportRTTOrDownstreamThroughput";
     network_quality_estimator_ = base::MakeUnique<net::NetworkQualityEstimator>(
         std::unique_ptr<net::ExternalEstimateProvider>(), variation_params,
-        false, false);
+        false, false, g_net_log.Get().net_log());
     // Set the socket performance watcher factory so that network quality
     // estimator is notified of socket performance metrics from TCP and QUIC.
     context_builder.set_socket_performance_watcher_factory(
@@ -1021,22 +1023,24 @@ void CronetURLRequestContextAdapter::StartNetLogToBoundedFileOnNetworkThread(
   base::FilePath file_path(dir_path);
   DCHECK(base::PathIsWritable(file_path));
 
-  bounded_file_observer_.reset(
-      new net::FileNetLogObserver(GetFileThread()->task_runner()));
+  bounded_file_observer_ = net::FileNetLogObserver::CreateBounded(
+      GetFileThread()->task_runner(), file_path, size, kNumNetLogEventFiles,
+      /*constants=*/nullptr);
+
+  CreateNetLogEntriesForActiveObjects({context_.get()},
+                                      bounded_file_observer_.get());
 
   net::NetLogCaptureMode capture_mode =
       include_socket_bytes ? net::NetLogCaptureMode::IncludeSocketBytes()
                            : net::NetLogCaptureMode::Default();
-
-  bounded_file_observer_->StartObservingBounded(
-      g_net_log.Get().net_log(), capture_mode, file_path,
-      /*constants=*/nullptr, context_.get(), size, kNumNetLogEventFiles);
+  bounded_file_observer_->StartObserving(g_net_log.Get().net_log(),
+                                         capture_mode);
 }
 
 void CronetURLRequestContextAdapter::StopBoundedFileNetLogOnNetworkThread() {
   DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
   bounded_file_observer_->StopObserving(
-      context_.get(),
+      net::GetNetInfo(context_.get(), net::NET_INFO_ALL_SOURCES),
       base::Bind(&CronetURLRequestContextAdapter::StopNetLogCompleted,
                  base::Unretained(this)));
   bounded_file_observer_.reset();

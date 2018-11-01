@@ -17,15 +17,14 @@ namespace blink {
 
 namespace {
 
-inline void addIsSkipInkException(GlyphBuffer* glyphBuffer,
-                                  const TextRun& run,
-                                  unsigned characterIndex) {
+inline bool isSkipInkException(const GlyphBuffer& glyphBuffer,
+                               const TextRun& run,
+                               unsigned characterIndex) {
   // We want to skip descenders in general, but it is undesirable renderings for
   // CJK characters.
-  DCHECK(!run.is8Bit()) << "8Bit() is always false, better to avoid to call";
-  UChar32 baseCharacter = run.codepointAt(characterIndex);
-  glyphBuffer->addIsSkipInkException(
-      Character::isCJKIdeographOrSymbol(baseCharacter));
+  return glyphBuffer.type() == GlyphBuffer::Type::TextIntercepts &&
+         !run.is8Bit() &&
+         Character::isCJKIdeographOrSymbol(run.codepointAt(characterIndex));
 }
 
 inline void addGlyphToBuffer(GlyphBuffer* glyphBuffer,
@@ -38,9 +37,9 @@ inline void addGlyphToBuffer(GlyphBuffer* glyphBuffer,
   FloatPoint startOffset = HB_DIRECTION_IS_HORIZONTAL(direction)
                                ? FloatPoint(advance, 0)
                                : FloatPoint(0, advance);
-  glyphBuffer->add(glyphData.glyph, fontData, startOffset + glyphData.offset);
-  if (glyphBuffer->hasSkipInkExceptions())
-    addIsSkipInkException(glyphBuffer, run, characterIndex);
+  if (!isSkipInkException(*glyphBuffer, run, characterIndex)) {
+    glyphBuffer->add(glyphData.glyph, fontData, startOffset + glyphData.offset);
+  }
 }
 
 inline void addEmphasisMark(GlyphBuffer* buffer,
@@ -90,36 +89,29 @@ inline unsigned countGraphemesInCluster(const UChar* str,
 
 }  // anonymous namespace
 
-template <TextDirection direction>
-float ShapeResultBuffer::fillGlyphBufferForRun(GlyphBuffer* glyphBuffer,
-                                               const ShapeResult::RunInfo* run,
-                                               const TextRun& textRun,
-                                               float initialAdvance,
-                                               unsigned from,
-                                               unsigned to,
-                                               unsigned runOffset) {
-  if (!run)
-    return 0;
-  float advanceSoFar = initialAdvance;
-  const unsigned numGlyphs = run->m_glyphData.size();
-  for (unsigned i = 0; i < numGlyphs; ++i) {
-    const HarfBuzzRunGlyphData& glyphData = run->m_glyphData[i];
-    uint16_t currentCharacterIndex =
-        run->m_startIndex + glyphData.characterIndex + runOffset;
-    if ((direction == TextDirection::kRtl && currentCharacterIndex >= to) ||
-        (direction == TextDirection::kLtr && currentCharacterIndex < from)) {
-      advanceSoFar += glyphData.advance;
-    } else if ((direction == TextDirection::kRtl &&
-                currentCharacterIndex >= from) ||
-               (direction == TextDirection::kLtr &&
-                currentCharacterIndex < to)) {
-      addGlyphToBuffer(glyphBuffer, advanceSoFar, run->m_direction,
-                       run->m_fontData.get(), glyphData, textRun,
-                       currentCharacterIndex);
-      advanceSoFar += glyphData.advance;
-    }
+float ShapeResultBuffer::fillGlyphBufferForResult(GlyphBuffer* glyphBuffer,
+                                                  const ShapeResult& result,
+                                                  const TextRun& textRun,
+                                                  float initialAdvance,
+                                                  unsigned from,
+                                                  unsigned to,
+                                                  unsigned runOffset) {
+  auto totalAdvance = initialAdvance;
+
+  for (const auto& run : result.m_runs) {
+    totalAdvance = run->forEachGlyphInRange(
+        totalAdvance, from, to, runOffset,
+        [&](const HarfBuzzRunGlyphData& glyphData, float totalAdvance,
+            uint16_t characterIndex) -> bool {
+
+          addGlyphToBuffer(glyphBuffer, totalAdvance, run->m_direction,
+                           run->m_fontData.get(), glyphData, textRun,
+                           characterIndex);
+          return true;
+        });
   }
-  return advanceSoFar - initialAdvance;
+
+  return totalAdvance;
 }
 
 float ShapeResultBuffer::fillGlyphBufferForTextEmphasisRun(
@@ -215,35 +207,32 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasisRun(
 float ShapeResultBuffer::fillFastHorizontalGlyphBuffer(
     GlyphBuffer* glyphBuffer,
     const TextRun& textRun) const {
-  ASSERT(!hasVerticalOffsets());
+  DCHECK(!hasVerticalOffsets());
+  DCHECK_NE(glyphBuffer->type(), GlyphBuffer::Type::TextIntercepts);
 
   float advance = 0;
 
-  unsigned characterIndex = 0;
   for (unsigned i = 0; i < m_results.size(); ++i) {
     const auto& wordResult = isLeftToRightDirection(textRun.direction())
                                  ? m_results[i]
                                  : m_results[m_results.size() - 1 - i];
-    ASSERT(!wordResult->hasVerticalOffsets());
+    DCHECK(!wordResult->hasVerticalOffsets());
 
     for (const auto& run : wordResult->m_runs) {
-      ASSERT(run);
-      ASSERT(HB_DIRECTION_IS_HORIZONTAL(run->m_direction));
+      DCHECK(run);
+      DCHECK(HB_DIRECTION_IS_HORIZONTAL(run->m_direction));
 
-      for (const auto& glyphData : run->m_glyphData) {
-        ASSERT(!glyphData.offset.height());
+      advance = run->forEachGlyph(
+          advance,
+          [&](const HarfBuzzRunGlyphData& glyphData,
+              float totalAdvance) -> bool {
+            DCHECK(!glyphData.offset.height());
 
-        glyphBuffer->add(glyphData.glyph, run->m_fontData.get(),
-                         advance + glyphData.offset.width());
-        if (glyphBuffer->hasSkipInkExceptions()) {
-          addIsSkipInkException(glyphBuffer, textRun,
-                                characterIndex + glyphData.characterIndex);
-        }
-
-        advance += glyphData.advance;
-      }
+            glyphBuffer->add(glyphData.glyph, run->m_fontData.get(),
+                             totalAdvance + glyphData.offset.width());
+            return true;
+          });
     }
-    characterIndex += wordResult->m_numCharacters;
   }
 
   ASSERT(!glyphBuffer->hasVerticalOffsets());
@@ -255,8 +244,9 @@ float ShapeResultBuffer::fillGlyphBuffer(GlyphBuffer* glyphBuffer,
                                          const TextRun& textRun,
                                          unsigned from,
                                          unsigned to) const {
-  // Fast path: full run with no vertical offsets
-  if (!from && to == textRun.length() && !hasVerticalOffsets())
+  // Fast path: full run with no vertical offsets, no text intercepts.
+  if (!from && to == textRun.length() && !hasVerticalOffsets() &&
+      glyphBuffer->type() != GlyphBuffer::Type::TextIntercepts)
     return fillFastHorizontalGlyphBuffer(glyphBuffer, textRun);
 
   float advance = 0;
@@ -266,22 +256,15 @@ float ShapeResultBuffer::fillGlyphBuffer(GlyphBuffer* glyphBuffer,
     for (unsigned j = 0; j < m_results.size(); j++) {
       unsigned resolvedIndex = m_results.size() - 1 - j;
       const RefPtr<const ShapeResult>& wordResult = m_results[resolvedIndex];
-      for (unsigned i = 0; i < wordResult->m_runs.size(); i++) {
-        advance += fillGlyphBufferForRun<TextDirection::kRtl>(
-            glyphBuffer, wordResult->m_runs[i].get(), textRun, advance, from,
-            to, wordOffset - wordResult->numCharacters());
-      }
       wordOffset -= wordResult->numCharacters();
+      advance = fillGlyphBufferForResult(glyphBuffer, *wordResult, textRun,
+                                         advance, from, to, wordOffset);
     }
   } else {
     unsigned wordOffset = 0;
-    for (unsigned j = 0; j < m_results.size(); j++) {
-      const RefPtr<const ShapeResult>& wordResult = m_results[j];
-      for (unsigned i = 0; i < wordResult->m_runs.size(); i++) {
-        advance += fillGlyphBufferForRun<TextDirection::kLtr>(
-            glyphBuffer, wordResult->m_runs[i].get(), textRun, advance, from,
-            to, wordOffset);
-      }
+    for (const auto& wordResult : m_results) {
+      advance = fillGlyphBufferForResult(glyphBuffer, *wordResult, textRun,
+                                         advance, from, to, wordOffset);
       wordOffset += wordResult->numCharacters();
     }
   }
@@ -314,10 +297,27 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasis(
   return advance;
 }
 
-CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
-                                                    float totalWidth,
-                                                    unsigned absoluteFrom,
-                                                    unsigned absoluteTo) const {
+// TODO(eae): This is a bit of a hack to allow reuse of the implementation
+// for both ShapeResultBuffer and single ShapeResult use cases. Ideally the
+// logic should move into ShapeResult itself and then the ShapeResultBuffer
+// implementation may wrap that.
+CharacterRange ShapeResultBuffer::getCharacterRange(
+    RefPtr<const ShapeResult> result,
+    TextDirection direction,
+    float totalWidth,
+    unsigned from,
+    unsigned to) {
+  Vector<RefPtr<const ShapeResult>, 64> results;
+  results.push_back(result);
+  return getCharacterRangeInternal(results, direction, totalWidth, from, to);
+}
+
+CharacterRange ShapeResultBuffer::getCharacterRangeInternal(
+    const Vector<RefPtr<const ShapeResult>, 64>& results,
+    TextDirection direction,
+    float totalWidth,
+    unsigned absoluteFrom,
+    unsigned absoluteTo) {
   float currentX = 0;
   float fromX = 0;
   float toX = 0;
@@ -334,8 +334,8 @@ CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
   int to = absoluteTo;
 
   unsigned totalNumCharacters = 0;
-  for (unsigned j = 0; j < m_results.size(); j++) {
-    const RefPtr<const ShapeResult> result = m_results[j];
+  for (unsigned j = 0; j < results.size(); j++) {
+    const RefPtr<const ShapeResult> result = results[j];
     if (direction == TextDirection::kRtl) {
       // Convert logical offsets to visual offsets, because results are in
       // logical order while runs are in visual order.
@@ -398,6 +398,13 @@ CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
   if (fromX < toX)
     return CharacterRange(fromX, toX);
   return CharacterRange(toX, fromX);
+}
+
+CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
+                                                    float totalWidth,
+                                                    unsigned from,
+                                                    unsigned to) const {
+  return getCharacterRangeInternal(m_results, direction, totalWidth, from, to);
 }
 
 void ShapeResultBuffer::addRunInfoRanges(const ShapeResult::RunInfo& runInfo,
@@ -475,6 +482,19 @@ int ShapeResultBuffer::offsetForPosition(const TextRun& run,
     }
   }
   return totalOffset;
+}
+
+Vector<ShapeResultBuffer::RunFontData>
+ShapeResultBuffer::runFontData() const {
+  Vector<RunFontData> fontData;
+
+  for (const auto& result : m_results) {
+    for (const auto& run : result->m_runs) {
+      fontData.push_back(RunFontData({run->m_fontData.get(),
+                                      run->m_glyphData.size()}));
+    }
+  }
+  return fontData;
 }
 
 }  // namespace blink

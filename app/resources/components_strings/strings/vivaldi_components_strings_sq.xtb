@@ -9,7 +9,6 @@
 <translation id="1710259589646384581">Sistemi operativ</translation>
 <translation id="194030505837763158">Shkoj te <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Mos po kërkoni <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Më pak</translation>
 <translation id="2166378884831602661">Kjo faqe nuk ofron një lidhje të sigurt</translation>
 <translation id="2292556288342944218">Është bllokuar aksesi në internet</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> dërgoi një përgjigje të pavlefshme.</translation>
@@ -35,7 +34,6 @@
 <translation id="5675650730144413517">Nuk funksionon faqja</translation>
 <translation id="5869405914158311789">Nuk mund të arrihet faqja</translation>
 <translation id="5990559369517809815">Një shtesë bllokoi kërkesat që po i paraqiten serverit.</translation>
-<translation id="6042308850641462728">Më shumë</translation>
 <translation id="6146055958333702838">Kontrolloni kabllot dhe ndizni përsëri çdo ruter, modem apo aparat
 interneti që jeni duke përdorur.</translation>
 <translation id="6203231073485539293">Kontrolloni linjën e internetit</translation>
@@ -44,11 +42,9 @@ interneti që jeni duke përdorur.</translation>
 <translation id="6328639280570009161">Provoni të çaktivizoni parashikimin me rrjet</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> refuzoi lidhjen.</translation>
 <translation id="6711464428925977395">Serveri proxy ka një problem ose adresa është e pasaktë.</translation>
-<translation id="6830600606572693159">Faqja <ph name="URL" /> nuk mund të arrihet për momentin. Mund të jetë e mbingarkuar ose duke u mirëmbajtur.</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nuk respekton standardet e sigurisë.</translation>
 <translation id="7518003948725431193">Nuk u gjet asnjë faqe në adresën: <ph name="URL" /></translation>
 <translation id="7716424297397655342">Nuk mund të hapet faqja nga cache</translation>
-<translation id="778579833039460630">Nuk u morën të dhënat</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8134994873729925007">Nuk gjendet <ph name="BEGIN_ABBR" />adresa DNS<ph name="END_ABBR" /> e serverit <ph name="HOST_NAME" />.</translation>
 <translation id="8225771182978767009">Faqja është bllokuar nga personi që ka konfiguruar kompjuterin.</translation>

@@ -46,6 +46,7 @@ class HashSet {
 
  public:
   typedef typename ValueTraits::TraitType ValueType;
+  using value_type = ValueType;
 
  private:
   typedef HashTable<ValueType,
@@ -106,7 +107,7 @@ class HashSet {
   // The return value is a pair of an iterator to the new value's location,
   // and a bool that is true if an new entry was added.
   template <typename IncomingValueType>
-  AddResult add(IncomingValueType&&);
+  AddResult insert(IncomingValueType&&);
 
   // An alternate version of add() that finds the object by hashing and
   // comparing with some other type, to avoid the cost of type conversion if
@@ -118,8 +119,8 @@ class HashSet {
   template <typename HashTranslator, typename T>
   AddResult addWithTranslator(T&&);
 
-  void remove(ValuePeekInType);
-  void remove(iterator);
+  void erase(ValuePeekInType);
+  void erase(iterator);
   void clear();
   template <typename Collection>
   void removeAll(const Collection& toBeRemoved) {
@@ -173,7 +174,7 @@ HashSet<Value, HashFunctions, Traits, Allocator>::HashSet(
   if (elements.size())
     m_impl.reserveCapacityForSize(elements.size());
   for (const ValueType& element : elements)
-    add(element);
+    insert(element);
 }
 
 template <typename Value,
@@ -251,7 +252,7 @@ inline bool HashSet<Value, HashFunctions, Traits, Allocator>::contains(
 
 template <typename T, typename U, typename V, typename W>
 template <typename IncomingValueType>
-inline typename HashSet<T, U, V, W>::AddResult HashSet<T, U, V, W>::add(
+inline typename HashSet<T, U, V, W>::AddResult HashSet<T, U, V, W>::insert(
     IncomingValueType&& value) {
   return m_impl.add(std::forward<IncomingValueType>(value));
 }
@@ -271,13 +272,13 @@ HashSet<Value, HashFunctions, Traits, Allocator>::addWithTranslator(T&& value) {
 }
 
 template <typename T, typename U, typename V, typename W>
-inline void HashSet<T, U, V, W>::remove(iterator it) {
+inline void HashSet<T, U, V, W>::erase(iterator it) {
   m_impl.remove(it.m_impl);
 }
 
 template <typename T, typename U, typename V, typename W>
-inline void HashSet<T, U, V, W>::remove(ValuePeekInType value) {
-  remove(find(value));
+inline void HashSet<T, U, V, W>::erase(ValuePeekInType value) {
+  erase(find(value));
 }
 
 template <typename T, typename U, typename V, typename W>
@@ -291,7 +292,7 @@ inline auto HashSet<T, U, V, W>::take(iterator it) -> ValueType {
     return ValueTraits::emptyValue();
 
   ValueType result = std::move(const_cast<ValueType&>(*it));
-  remove(it);
+  erase(it);
 
   return result;
 }

@@ -4,6 +4,7 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
+#include "base/strings/string_split.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
@@ -75,6 +76,7 @@ GLES2DecoderPassthroughImpl::GLES2DecoderPassthroughImpl(ContextGroup* group)
       logger_(&debug_marker_manager_),
       surface_(),
       context_(),
+      offscreen_(false),
       group_(group),
       feature_info_(group->feature_info()) {
   DCHECK(group);
@@ -161,6 +163,7 @@ bool GLES2DecoderPassthroughImpl::Initialize(
   // with SetSurface.
   context_ = context;
   surface_ = surface;
+  offscreen_ = offscreen;
 
   if (!group_->Initialize(this, attrib_helper.context_type,
                           disallowed_features)) {
@@ -171,7 +174,10 @@ bool GLES2DecoderPassthroughImpl::Initialize(
 
   // Check for required extensions
   if (!feature_info_->feature_flags().angle_robust_client_memory ||
-      !feature_info_->feature_flags().chromium_bind_generates_resource) {
+      !feature_info_->feature_flags().chromium_bind_generates_resource ||
+      !feature_info_->feature_flags().chromium_copy_texture ||
+      !feature_info_->feature_flags().angle_client_arrays ||
+      glIsEnabled(GL_CLIENT_ARRAYS_ANGLE) != GL_FALSE) {
     // TODO(geofflang): Verify that ANGLE_webgl_compatibility is enabled if this
     // is a WebGL context (depends on crbug.com/671217).
     Destroy(true);
@@ -208,6 +214,10 @@ bool GLES2DecoderPassthroughImpl::Initialize(
 }
 
 void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
+  if (have_context) {
+    FlushErrors();
+  }
+
   image_manager_.reset();
 
   DeleteServiceObjects(
@@ -223,9 +233,18 @@ void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
       &vertex_array_id_map_, have_context,
       [](GLuint vertex_array) { glDeleteVertexArraysOES(1, &vertex_array); });
 
+  // Destroy the surface before the context, some surface destructors make GL
+  // calls.
+  surface_ = nullptr;
+
   if (group_) {
     group_->Destroy(this, have_context);
     group_ = nullptr;
+  }
+
+  if (context_.get()) {
+    context_->ReleaseCurrent(nullptr);
+    context_ = nullptr;
   }
 }
 
@@ -406,9 +425,9 @@ void GLES2DecoderPassthroughImpl::SetFenceSyncReleaseCallback(
   fence_sync_release_callback_ = callback;
 }
 
-void GLES2DecoderPassthroughImpl::SetWaitFenceSyncCallback(
-    const WaitFenceSyncCallback& callback) {
-  wait_fence_sync_callback_ = callback;
+void GLES2DecoderPassthroughImpl::SetWaitSyncTokenCallback(
+    const WaitSyncTokenCallback& callback) {
+  wait_sync_token_callback_ = callback;
 }
 
 void GLES2DecoderPassthroughImpl::SetDescheduleUntilFinishedCallback(

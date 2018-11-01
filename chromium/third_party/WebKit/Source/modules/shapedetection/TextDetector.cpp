@@ -6,19 +6,20 @@
 
 #include "core/dom/DOMException.h"
 #include "core/dom/DOMRect.h"
-#include "core/frame/LocalFrame.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "modules/shapedetection/DetectedText.h"
 #include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
 
 namespace blink {
 
-TextDetector* TextDetector::create(Document& document) {
-  return new TextDetector(*document.frame());
+TextDetector* TextDetector::create() {
+  return new TextDetector();
 }
 
-TextDetector::TextDetector(LocalFrame& frame) : ShapeDetector(frame) {
-  frame.interfaceProvider()->getInterface(mojo::MakeRequest(&m_textService));
+TextDetector::TextDetector() : ShapeDetector() {
+  Platform::current()->interfaceProvider()->getInterface(
+      mojo::MakeRequest(&m_textService));
   m_textService.set_connection_error_handler(convertToBaseCallback(WTF::bind(
       &TextDetector::onTextServiceConnectionError, wrapWeakPersistent(this))));
 }
@@ -34,7 +35,7 @@ ScriptPromise TextDetector::doDetect(
         NotSupportedError, "Text detection service unavailable."));
     return promise;
   }
-  m_textServiceRequests.add(resolver);
+  m_textServiceRequests.insert(resolver);
   m_textService->Detect(std::move(sharedBufferHandle), imageWidth, imageHeight,
                         convertToBaseCallback(WTF::bind(
                             &TextDetector::onDetectText, wrapPersistent(this),
@@ -47,7 +48,7 @@ void TextDetector::onDetectText(
     Vector<shape_detection::mojom::blink::TextDetectionResultPtr>
         textDetectionResults) {
   DCHECK(m_textServiceRequests.contains(resolver));
-  m_textServiceRequests.remove(resolver);
+  m_textServiceRequests.erase(resolver);
 
   HeapVector<Member<DetectedText>> detectedText;
   for (const auto& text : textDetectionResults) {

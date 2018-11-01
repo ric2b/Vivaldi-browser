@@ -41,11 +41,11 @@
 #include "ash/common/wm_window.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
-#include "grit/ash_strings.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
@@ -59,6 +59,11 @@ namespace ash {
 namespace {
 
 using base::UserMetricsAction;
+using message_center::Notification;
+
+// Identifier for the high contrast toggle accelerator notification.
+const char kHighContrastToggleAccelNotificationId[] =
+    "chrome://settings/accessibility/highcontrast";
 
 ui::Accelerator CreateAccelerator(ui::KeyboardCode keycode,
                                   int modifiers,
@@ -171,26 +176,6 @@ bool CanHandleCycleMru(const ui::Accelerator& accelerator) {
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
   return !(keyboard_controller && keyboard_controller->keyboard_visible());
-}
-
-// We must avoid showing the Deprecated NEXT_IME notification erronously.
-bool ShouldShowDeprecatedNextImeNotification(
-    const ui::Accelerator& previous_accelerator) {
-  // We only show the deprecation notification if the previous accelerator key
-  // is ONLY either Shift, or Alt.
-  const ui::KeyboardCode previous_key_code = previous_accelerator.key_code();
-  switch (previous_key_code) {
-    case ui::VKEY_SHIFT:
-    case ui::VKEY_LSHIFT:
-    case ui::VKEY_RSHIFT:
-    case ui::VKEY_MENU:
-    case ui::VKEY_LMENU:
-    case ui::VKEY_RMENU:
-      return true;
-
-    default:
-      return false;
-  }
 }
 
 void HandleNextIme(ImeControlDelegate* ime_control_delegate) {
@@ -341,14 +326,6 @@ void HandlePositionCenter() {
   wm::CenterWindow(WmShell::Get()->GetActiveWindow());
 }
 
-#if defined(OS_CHROMEOS)
-
-using message_center::Notification;
-
-// Identifier for the high contrast toggle accelerator notification.
-const char kHighContrastToggleAccelNotificationId[] =
-    "chrome://settings/accessibility/highcontrast";
-
 void HandleShowImeMenuBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
 
@@ -438,34 +415,53 @@ bool CanHandleCycleUser() {
          WmShell::Get()->GetSessionStateDelegate()->NumberOfLoggedInUsers() > 1;
 }
 
-void HandleCycleUser(SessionStateDelegate::CycleUser cycle_user) {
+void HandleCycleUser(CycleUserDirection direction) {
   MultiProfileUMA::RecordSwitchActiveUser(
       MultiProfileUMA::SWITCH_ACTIVE_USER_BY_ACCELERATOR);
-  switch (cycle_user) {
-    case SessionStateDelegate::CYCLE_TO_NEXT_USER:
+  switch (direction) {
+    case CycleUserDirection::NEXT:
       base::RecordAction(UserMetricsAction("Accel_Switch_To_Next_User"));
       break;
-    case SessionStateDelegate::CYCLE_TO_PREVIOUS_USER:
+    case CycleUserDirection::PREVIOUS:
       base::RecordAction(UserMetricsAction("Accel_Switch_To_Previous_User"));
       break;
   }
-  WmShell::Get()->GetSessionStateDelegate()->CycleActiveUser(cycle_user);
+  WmShell::Get()->GetSessionStateDelegate()->CycleActiveUser(direction);
 }
 
 bool CanHandleToggleCapsLock(const ui::Accelerator& accelerator,
                              const ui::Accelerator& previous_accelerator) {
-  if (accelerator.key_code() == ui::VKEY_LWIN) {
-    // If something else was pressed between the Search key (LWIN)
-    // being pressed and released, then ignore the release of the
-    // Search key.
-    // TODO(danakj): Releasing Alt first breaks this: crbug.com/166495
-    if (previous_accelerator.type() == ui::ET_KEY_RELEASED ||
-        previous_accelerator.key_code() != ui::VKEY_LWIN)
-      return false;
-  }
   chromeos::input_method::InputMethodManager* ime =
       chromeos::input_method::InputMethodManager::Get();
-  return ime && ime->GetImeKeyboard();
+
+  // This shortcust is set to be trigger on release. Either the current
+  // accelerator is a Search release or Alt release.
+  if (accelerator.key_code() == ui::VKEY_LWIN &&
+      accelerator.type() == ui::ET_KEY_RELEASED) {
+    // The previous must be either an Alt press or Search press:
+    // 1. Press Alt, Press Search, Release Search, Release Alt.
+    // 2. Press Search, Press Alt, Release Search, Release Alt.
+    if (previous_accelerator.type() == ui::ET_KEY_PRESSED &&
+        (previous_accelerator.key_code() == ui::VKEY_LWIN ||
+         previous_accelerator.key_code() == ui::VKEY_MENU)) {
+      return ime && ime->GetImeKeyboard();
+    }
+  }
+
+  // Alt release.
+  if (accelerator.key_code() == ui::VKEY_MENU &&
+      accelerator.type() == ui::ET_KEY_RELEASED) {
+    // The previous must be either an Alt press or Search press:
+    // 3. Press Alt, Press Search, Release Alt, Release Search.
+    // 4. Press Search, Press Alt, Release Alt, Release Search.
+    if (previous_accelerator.type() == ui::ET_KEY_PRESSED &&
+        (previous_accelerator.key_code() == ui::VKEY_LWIN ||
+         previous_accelerator.key_code() == ui::VKEY_MENU)) {
+      return ime && ime->GetImeKeyboard();
+    }
+  }
+
+  return false;
 }
 
 void HandleToggleCapsLock() {
@@ -531,8 +527,6 @@ void HandleVolumeUp(mojom::VolumeController* volume_controller,
     volume_controller->VolumeUp();
 }
 
-#endif  // defined(OS_CHROMEOS)
-
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -549,10 +543,11 @@ AcceleratorController::AcceleratorController(
 
 AcceleratorController::~AcceleratorController() {}
 
-void AcceleratorController::Register(const ui::Accelerator& accelerator,
-                                     ui::AcceleratorTarget* target) {
+void AcceleratorController::Register(
+    const std::vector<ui::Accelerator>& accelerators,
+    ui::AcceleratorTarget* target) {
   accelerator_manager_->Register(
-      accelerator, ui::AcceleratorManager::kNormalPriority, target);
+      accelerators, ui::AcceleratorManager::kNormalPriority, target);
 }
 
 void AcceleratorController::Unregister(const ui::Accelerator& accelerator,
@@ -635,45 +630,18 @@ bool AcceleratorController::AcceleratorPressed(
       accelerators_.find(accelerator);
   DCHECK(it != accelerators_.end());
   AcceleratorAction action = it->second;
-  if (CanPerformAction(action, accelerator)) {
-    // Handling the deprecated accelerators (if any) only if action can be
-    // performed.
-    auto itr = actions_with_deprecations_.find(action);
-    if (itr != actions_with_deprecations_.end()) {
-      const DeprecatedAcceleratorData* data = itr->second;
-      if (deprecated_accelerators_.count(accelerator)) {
-        // This accelerator has been deprecated and should be treated according
-        // to its |DeprecatedAcceleratorData|.
+  if (!CanPerformAction(action, accelerator))
+    return false;
 
-        // Record UMA stats.
-        RecordUmaHistogram(data->uma_histogram_name, DEPRECATED_USED);
-
-        // We always display the notification as long as this entry exists,
-        // except for NEXT_IME, we must check to avoid showing it for the wrong
-        // shortcut, as Alt+Shift is tricky and trigger the action on release.
-        if (delegate_ &&
-            (action != NEXT_IME ||
-             (action == NEXT_IME &&
-              ShouldShowDeprecatedNextImeNotification(
-                  accelerator_history_->previous_accelerator())))) {
-          delegate_->ShowDeprecatedAcceleratorNotification(
-              data->uma_histogram_name, data->notification_message_id,
-              data->old_shortcut_id, data->new_shortcut_id);
-        }
-
-        if (!data->deprecated_enabled)
-          return false;
-      } else {
-        // This is a new accelerator replacing the old deprecated one.
-        // Record UMA stats and proceed normally.
-        RecordUmaHistogram(data->uma_histogram_name, NEW_USED);
-      }
-    }
-
-    PerformAction(action, accelerator);
-    return ShouldActionConsumeKeyEvent(action);
+  // Handling the deprecated accelerators (if any) only if action can be
+  // performed.
+  if (MaybeDeprecatedAcceleratorPressed(action, accelerator) ==
+      AcceleratorProcessingStatus::STOP) {
+    return false;
   }
-  return false;
+
+  PerformAction(action, accelerator);
+  return ShouldActionConsumeKeyEvent(action);
 }
 
 bool AcceleratorController::CanHandleAccelerators() const {
@@ -746,33 +714,35 @@ void AcceleratorController::Init() {
 void AcceleratorController::RegisterAccelerators(
     const AcceleratorData accelerators[],
     size_t accelerators_length) {
+  std::vector<ui::Accelerator> ui_accelerators;
   for (size_t i = 0; i < accelerators_length; ++i) {
     ui::Accelerator accelerator =
         CreateAccelerator(accelerators[i].keycode, accelerators[i].modifiers,
                           accelerators[i].trigger_on_press);
-    Register(accelerator, this);
+    ui_accelerators.push_back(accelerator);
     accelerators_.insert(std::make_pair(accelerator, accelerators[i].action));
   }
+  Register(ui_accelerators, this);
 }
 
 void AcceleratorController::RegisterDeprecatedAccelerators() {
-#if defined(OS_CHROMEOS)
   for (size_t i = 0; i < kDeprecatedAcceleratorsDataLength; ++i) {
     const DeprecatedAcceleratorData* data = &kDeprecatedAcceleratorsData[i];
     actions_with_deprecations_[data->action] = data;
   }
 
+  std::vector<ui::Accelerator> ui_accelerators;
   for (size_t i = 0; i < kDeprecatedAcceleratorsLength; ++i) {
     const AcceleratorData& accelerator_data = kDeprecatedAccelerators[i];
     const ui::Accelerator deprecated_accelerator =
         CreateAccelerator(accelerator_data.keycode, accelerator_data.modifiers,
                           accelerator_data.trigger_on_press);
 
-    Register(deprecated_accelerator, this);
+    ui_accelerators.push_back(deprecated_accelerator);
     accelerators_[deprecated_accelerator] = accelerator_data.action;
     deprecated_accelerators_.insert(deprecated_accelerator);
   }
-#endif  // defined(OS_CHROMEOS)
+  Register(ui_accelerators, this);
 }
 
 bool AcceleratorController::CanPerformAction(
@@ -799,9 +769,17 @@ bool AcceleratorController::CanPerformAction(
     case DEBUG_PRINT_LAYER_HIERARCHY:
     case DEBUG_PRINT_VIEW_HIERARCHY:
     case DEBUG_PRINT_WINDOW_HIERARCHY:
+    case DEBUG_SHOW_TOAST:
+    case DEBUG_TOGGLE_TOUCH_PAD:
+    case DEBUG_TOGGLE_TOUCH_SCREEN:
+    case DEBUG_TOGGLE_TOUCH_VIEW:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
     case DEBUG_TRIGGER_CRASH:
       return debug::DebugAcceleratorsEnabled();
+    case DISABLE_CAPS_LOCK:
+      return CanHandleDisableCapsLock(previous_accelerator);
+    case LOCK_SCREEN:
+      return CanHandleLock();
     case NEW_INCOGNITO_WINDOW:
       return CanHandleNewIncognitoWindow();
     case NEXT_IME:
@@ -810,37 +788,32 @@ bool AcceleratorController::CanPerformAction(
       return CanHandlePreviousIme(ime_control_delegate_.get());
     case SHOW_MESSAGE_CENTER_BUBBLE:
       return CanHandleShowMessageCenterBubble();
+    case SHOW_STYLUS_TOOLS:
+      return CanHandleShowStylusTools();
     case SWITCH_IME:
       return CanHandleSwitchIme(ime_control_delegate_.get(), accelerator);
+    case SWITCH_TO_PREVIOUS_USER:
+    case SWITCH_TO_NEXT_USER:
+      return CanHandleCycleUser();
     case TOGGLE_APP_LIST:
       return CanHandleToggleAppList(accelerator, previous_accelerator);
+    case TOGGLE_CAPS_LOCK:
+      return CanHandleToggleCapsLock(accelerator, previous_accelerator);
     case WINDOW_CYCLE_SNAP_DOCK_LEFT:
     case WINDOW_CYCLE_SNAP_DOCK_RIGHT:
       return CanHandleWindowSnapOrDock();
     case WINDOW_POSITION_CENTER:
       return CanHandlePositionCenter();
-#if defined(OS_CHROMEOS)
-    case DEBUG_SHOW_TOAST:
-    case DEBUG_TOGGLE_TOUCH_PAD:
-    case DEBUG_TOGGLE_TOUCH_SCREEN:
-    case DEBUG_TOGGLE_TOUCH_VIEW:
-      return debug::DebugAcceleratorsEnabled();
-    case DISABLE_CAPS_LOCK:
-      return CanHandleDisableCapsLock(previous_accelerator);
-    case LOCK_SCREEN:
-      return CanHandleLock();
-    case SHOW_STYLUS_TOOLS:
-      return CanHandleShowStylusTools();
-    case SWITCH_TO_PREVIOUS_USER:
-    case SWITCH_TO_NEXT_USER:
-      return CanHandleCycleUser();
-    case TOGGLE_CAPS_LOCK:
-      return CanHandleToggleCapsLock(accelerator, previous_accelerator);
-#endif
+
+    // The following are always enabled.
+    case BRIGHTNESS_DOWN:
+    case BRIGHTNESS_UP:
     case EXIT:
     case FOCUS_NEXT_PANE:
     case FOCUS_PREVIOUS_PANE:
     case FOCUS_SHELF:
+    case KEYBOARD_BRIGHTNESS_DOWN:
+    case KEYBOARD_BRIGHTNESS_UP:
     case LAUNCH_APP_0:
     case LAUNCH_APP_1:
     case LAUNCH_APP_2:
@@ -855,34 +828,26 @@ bool AcceleratorController::CanPerformAction(
     case MEDIA_PREV_TRACK:
     case NEW_TAB:
     case NEW_WINDOW:
-    case OPEN_FEEDBACK_PAGE:
-    case PRINT_UI_HIERARCHIES:
-    case RESTORE_TAB:
-    case SHOW_KEYBOARD_OVERLAY:
-    case SHOW_TASK_MANAGER:
-    case TOGGLE_FULLSCREEN:
-    case TOGGLE_MAXIMIZED:
-    case TOGGLE_OVERVIEW:
-    case WINDOW_MINIMIZE:
-#if defined(OS_CHROMEOS)
-    case BRIGHTNESS_DOWN:
-    case BRIGHTNESS_UP:
-    case KEYBOARD_BRIGHTNESS_DOWN:
-    case KEYBOARD_BRIGHTNESS_UP:
     case OPEN_CROSH:
+    case OPEN_FEEDBACK_PAGE:
     case OPEN_FILE_MANAGER:
     case OPEN_GET_HELP:
+    case PRINT_UI_HIERARCHIES:
+    case RESTORE_TAB:
     case SHOW_IME_MENU_BUBBLE:
+    case SHOW_KEYBOARD_OVERLAY:
+    case SHOW_TASK_MANAGER:
     case SUSPEND:
+    case TOGGLE_FULLSCREEN:
     case TOGGLE_HIGH_CONTRAST:
+    case TOGGLE_MAXIMIZED:
+    case TOGGLE_OVERVIEW:
     case TOGGLE_SPOKEN_FEEDBACK:
     case TOGGLE_WIFI:
     case VOLUME_DOWN:
     case VOLUME_MUTE:
     case VOLUME_UP:
-#else
-    case DUMMY_FOR_RESERVED:
-#endif
+    case WINDOW_MINIMIZE:
       return true;
 
     default:
@@ -905,6 +870,20 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
   // implement it in your module's controller code or pull it into a HandleFoo()
   // function above.
   switch (action) {
+    case BRIGHTNESS_DOWN: {
+      BrightnessControlDelegate* delegate =
+          WmShell::Get()->brightness_control_delegate();
+      if (delegate)
+        delegate->HandleBrightnessDown(accelerator);
+      break;
+    }
+    case BRIGHTNESS_UP: {
+      BrightnessControlDelegate* delegate =
+          WmShell::Get()->brightness_control_delegate();
+      if (delegate)
+        delegate->HandleBrightnessUp(accelerator);
+      break;
+    }
     case CYCLE_BACKWARD_MRU:
       HandleCycleBackwardMRU(accelerator);
       break;
@@ -914,9 +893,16 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case DEBUG_PRINT_LAYER_HIERARCHY:
     case DEBUG_PRINT_VIEW_HIERARCHY:
     case DEBUG_PRINT_WINDOW_HIERARCHY:
+    case DEBUG_SHOW_TOAST:
+    case DEBUG_TOGGLE_TOUCH_PAD:
+    case DEBUG_TOGGLE_TOUCH_SCREEN:
+    case DEBUG_TOGGLE_TOUCH_VIEW:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
     case DEBUG_TRIGGER_CRASH:
       debug::PerformDebugActionIfEnabled(action);
+      break;
+    case DISABLE_CAPS_LOCK:
+      HandleDisableCapsLock();
       break;
     case EXIT:
       // UMA metrics are recorded in the handler.
@@ -931,6 +917,20 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case FOCUS_SHELF:
       HandleFocusShelf();
       break;
+    case KEYBOARD_BRIGHTNESS_DOWN: {
+      KeyboardBrightnessControlDelegate* delegate =
+          WmShell::Get()->keyboard_brightness_control_delegate();
+      if (delegate)
+        delegate->HandleKeyboardBrightnessDown(accelerator);
+      break;
+    }
+    case KEYBOARD_BRIGHTNESS_UP: {
+      KeyboardBrightnessControlDelegate* delegate =
+          WmShell::Get()->keyboard_brightness_control_delegate();
+      if (delegate)
+        delegate->HandleKeyboardBrightnessUp(accelerator);
+      break;
+    }
     case LAUNCH_APP_0:
       HandleLaunchAppN(0);
       break;
@@ -958,6 +958,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case LAUNCH_LAST_APP:
       HandleLaunchLastApp();
       break;
+    case LOCK_SCREEN:
+      HandleLock();
+      break;
     case MEDIA_NEXT_TRACK:
       HandleMediaNextTrack();
       break;
@@ -979,8 +982,17 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case NEXT_IME:
       HandleNextIme(ime_control_delegate_.get());
       break;
+    case OPEN_CROSH:
+      HandleCrosh();
+      break;
     case OPEN_FEEDBACK_PAGE:
       HandleOpenFeedbackPage();
+      break;
+    case OPEN_FILE_MANAGER:
+      HandleFileManager();
+      break;
+    case OPEN_GET_HELP:
+      HandleGetHelp();
       break;
     case PREVIOUS_IME:
       HandlePreviousIme(ime_control_delegate_.get(), accelerator);
@@ -991,110 +1003,50 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case RESTORE_TAB:
       HandleRestoreTab();
       break;
+    case SHOW_IME_MENU_BUBBLE:
+      HandleShowImeMenuBubble();
+      break;
     case SHOW_KEYBOARD_OVERLAY:
       HandleShowKeyboardOverlay();
       break;
     case SHOW_MESSAGE_CENTER_BUBBLE:
       HandleShowMessageCenterBubble();
       break;
+    case SHOW_STYLUS_TOOLS:
+      HandleShowStylusTools();
+      break;
     case SHOW_TASK_MANAGER:
       HandleShowTaskManager();
+      break;
+    case SUSPEND:
+      HandleSuspend();
       break;
     case SWITCH_IME:
       HandleSwitchIme(ime_control_delegate_.get(), accelerator);
       break;
+    case SWITCH_TO_NEXT_USER:
+      HandleCycleUser(CycleUserDirection::NEXT);
+      break;
+    case SWITCH_TO_PREVIOUS_USER:
+      HandleCycleUser(CycleUserDirection::PREVIOUS);
+      break;
     case TOGGLE_APP_LIST:
       HandleToggleAppList(accelerator);
       break;
+    case TOGGLE_CAPS_LOCK:
+      HandleToggleCapsLock();
+      break;
     case TOGGLE_FULLSCREEN:
       HandleToggleFullscreen(accelerator);
+      break;
+    case TOGGLE_HIGH_CONTRAST:
+      HandleToggleHighContrast();
       break;
     case TOGGLE_MAXIMIZED:
       accelerators::ToggleMaximized();
       break;
     case TOGGLE_OVERVIEW:
       HandleToggleOverview();
-      break;
-    case WINDOW_CYCLE_SNAP_DOCK_LEFT:
-    case WINDOW_CYCLE_SNAP_DOCK_RIGHT:
-      HandleWindowSnapOrDock(action);
-      break;
-    case WINDOW_MINIMIZE:
-      HandleWindowMinimize();
-      break;
-    case WINDOW_POSITION_CENTER:
-      HandlePositionCenter();
-      break;
-#if defined(OS_CHROMEOS)
-    case BRIGHTNESS_DOWN: {
-      BrightnessControlDelegate* delegate =
-          WmShell::Get()->brightness_control_delegate();
-      if (delegate)
-        delegate->HandleBrightnessDown(accelerator);
-      break;
-    }
-    case BRIGHTNESS_UP: {
-      BrightnessControlDelegate* delegate =
-          WmShell::Get()->brightness_control_delegate();
-      if (delegate)
-        delegate->HandleBrightnessUp(accelerator);
-      break;
-    }
-    case DEBUG_SHOW_TOAST:
-    case DEBUG_TOGGLE_TOUCH_PAD:
-    case DEBUG_TOGGLE_TOUCH_SCREEN:
-    case DEBUG_TOGGLE_TOUCH_VIEW:
-      debug::PerformDebugActionIfEnabled(action);
-      break;
-    case DISABLE_CAPS_LOCK:
-      HandleDisableCapsLock();
-      break;
-    case KEYBOARD_BRIGHTNESS_DOWN: {
-      KeyboardBrightnessControlDelegate* delegate =
-          WmShell::Get()->keyboard_brightness_control_delegate();
-      if (delegate)
-        delegate->HandleKeyboardBrightnessDown(accelerator);
-      break;
-    }
-    case KEYBOARD_BRIGHTNESS_UP: {
-      KeyboardBrightnessControlDelegate* delegate =
-          WmShell::Get()->keyboard_brightness_control_delegate();
-      if (delegate)
-        delegate->HandleKeyboardBrightnessUp(accelerator);
-      break;
-    }
-    case LOCK_SCREEN:
-      HandleLock();
-      break;
-    case SHOW_IME_MENU_BUBBLE:
-      HandleShowImeMenuBubble();
-      break;
-    case OPEN_CROSH:
-      HandleCrosh();
-      break;
-    case OPEN_FILE_MANAGER:
-      HandleFileManager();
-      break;
-    case OPEN_GET_HELP:
-      HandleGetHelp();
-      break;
-    case SHOW_STYLUS_TOOLS:
-      HandleShowStylusTools();
-      break;
-    case SUSPEND:
-      HandleSuspend();
-      break;
-    case SWITCH_TO_NEXT_USER:
-      HandleCycleUser(SessionStateDelegate::CYCLE_TO_NEXT_USER);
-      break;
-    case SWITCH_TO_PREVIOUS_USER:
-      HandleCycleUser(SessionStateDelegate::CYCLE_TO_PREVIOUS_USER);
-      break;
-    case TOGGLE_CAPS_LOCK:
-      HandleToggleCapsLock();
-      break;
-    case TOGGLE_HIGH_CONTRAST:
-      HandleToggleHighContrast();
       break;
     case TOGGLE_SPOKEN_FEEDBACK:
       HandleToggleSpokenFeedback();
@@ -1111,11 +1063,16 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case VOLUME_UP:
       HandleVolumeUp(volume_controller_.get(), accelerator);
       break;
-#else
-    case DUMMY_FOR_RESERVED:
-      NOTREACHED();
+    case WINDOW_CYCLE_SNAP_DOCK_LEFT:
+    case WINDOW_CYCLE_SNAP_DOCK_RIGHT:
+      HandleWindowSnapOrDock(action);
       break;
-#endif
+    case WINDOW_MINIMIZE:
+      HandleWindowMinimize();
+      break;
+    case WINDOW_POSITION_CENTER:
+      HandlePositionCenter();
+      break;
     default:
       // Temporary until mash transition complete. Needed as some actions
       // don't yet work with mash.
@@ -1171,6 +1128,46 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
   return RESTRICTION_NONE;
+}
+
+AcceleratorController::AcceleratorProcessingStatus
+AcceleratorController::MaybeDeprecatedAcceleratorPressed(
+    AcceleratorAction action,
+    const ui::Accelerator& accelerator) const {
+  auto itr = actions_with_deprecations_.find(action);
+  if (itr == actions_with_deprecations_.end()) {
+    // The action is not associated with any deprecated accelerators, and hence
+    // should be performed normally.
+    return AcceleratorProcessingStatus::PROCEED;
+  }
+
+  // This action is associated with new and deprecated accelerators, find which
+  // one is |accelerator|.
+  const DeprecatedAcceleratorData* data = itr->second;
+  if (!deprecated_accelerators_.count(accelerator)) {
+    // This is a new accelerator replacing the old deprecated one.
+    // Record UMA stats and proceed normally to perform it.
+    RecordUmaHistogram(data->uma_histogram_name, NEW_USED);
+    return AcceleratorProcessingStatus::PROCEED;
+  }
+
+  // This accelerator has been deprecated and should be treated according
+  // to its |DeprecatedAcceleratorData|.
+
+  // Record UMA stats.
+  RecordUmaHistogram(data->uma_histogram_name, DEPRECATED_USED);
+
+  if (delegate_) {
+    // We always display the notification as long as this |data| entry exists.
+    delegate_->ShowDeprecatedAcceleratorNotification(
+        data->uma_histogram_name, data->notification_message_id,
+        data->old_shortcut_id, data->new_shortcut_id);
+  }
+
+  if (!data->deprecated_enabled)
+    return AcceleratorProcessingStatus::STOP;
+
+  return AcceleratorProcessingStatus::PROCEED;
 }
 
 }  // namespace ash

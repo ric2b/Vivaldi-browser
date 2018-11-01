@@ -5,7 +5,6 @@
 #include "ash/common/system/chromeos/tray_caps_lock.h"
 
 #include "ash/common/accessibility_delegate.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/tray/actionable_view.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
@@ -13,13 +12,14 @@
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/sys_info.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -49,7 +49,6 @@ class CapsLockDefaultView : public ActionableView {
  public:
   CapsLockDefaultView()
       : ActionableView(nullptr, TrayPopupInkDropStyle::FILL_BOUNDS),
-        image_(TrayPopupUtils::CreateMainImageView()),
         text_label_(TrayPopupUtils::CreateDefaultLabel()),
         shortcut_label_(TrayPopupUtils::CreateDefaultLabel()) {
     shortcut_label_->SetEnabled(false);
@@ -58,16 +57,20 @@ class CapsLockDefaultView : public ActionableView {
     SetLayoutManager(new views::FillLayout);
     AddChildView(tri_view);
 
-    if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
-      image_->SetEnabled(enabled());
-      UpdateStyle();
-      SetInkDropMode(InkDropHostView::InkDropMode::ON);
-    } else {
-      ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-      image_->SetImage(bundle.GetImageNamed(IDR_AURA_UBER_TRAY_CAPS_LOCK_DARK)
-                           .ToImageSkia());
-    }
-    tri_view->AddView(TriView::Container::START, image_);
+    auto* image = TrayPopupUtils::CreateMainImageView();
+    image->SetEnabled(enabled());
+    TrayPopupItemStyle default_view_style(
+        TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
+    image->SetImage(gfx::CreateVectorIcon(kSystemMenuCapsLockIcon,
+                                          default_view_style.GetIconColor()));
+    default_view_style.SetupLabel(text_label_);
+
+    TrayPopupItemStyle caption_style(TrayPopupItemStyle::FontStyle::CAPTION);
+    caption_style.SetupLabel(shortcut_label_);
+
+    SetInkDropMode(InkDropHostView::InkDropMode::ON);
+
+    tri_view->AddView(TriView::Container::START, image);
     tri_view->AddView(TriView::Container::CENTER, text_label_);
     tri_view->AddView(TriView::Container::END, shortcut_label_);
     tri_view->SetContainerBorder(
@@ -79,11 +82,10 @@ class CapsLockDefaultView : public ActionableView {
 
   // Updates the label text and the shortcut text.
   void Update(bool caps_lock_enabled) {
-    ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     const int text_string_id = caps_lock_enabled
                                    ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED
                                    : IDS_ASH_STATUS_TRAY_CAPS_LOCK_DISABLED;
-    text_label_->SetText(bundle.GetLocalizedString(text_string_id));
+    text_label_->SetText(l10n_util::GetStringUTF16(text_string_id));
 
     int shortcut_string_id = 0;
     bool search_mapped_to_caps_lock =
@@ -99,35 +101,15 @@ class CapsLockDefaultView : public ActionableView {
               ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_SHORTCUT_SEARCH
               : IDS_ASH_STATUS_TRAY_CAPS_LOCK_SHORTCUT_ALT_SEARCH;
     }
-    shortcut_label_->SetText(bundle.GetLocalizedString(shortcut_string_id));
+    shortcut_label_->SetText(l10n_util::GetStringUTF16(shortcut_string_id));
 
-    UpdateStyle();
     Layout();
-  }
-
-  // ActionableView:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    ActionableView::OnNativeThemeChanged(theme);
-    UpdateStyle();
   }
 
  private:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->role = ui::AX_ROLE_BUTTON;
     node_data->SetName(text_label_->text());
-  }
-
-  // Update the Text theme and style based on the current theme.
-  void UpdateStyle() {
-    TrayPopupItemStyle default_view_style(
-        GetNativeTheme(), TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
-    // Set image and label styles for Material Design Caps Lock default view.
-    image_->SetImage(gfx::CreateVectorIcon(kSystemMenuCapsLockIcon,
-                                           default_view_style.GetIconColor()));
-    default_view_style.SetupLabel(text_label_);
-    TrayPopupItemStyle caption_style(GetNativeTheme(),
-                                     TrayPopupItemStyle::FontStyle::CAPTION);
-    caption_style.SetupLabel(shortcut_label_);
   }
 
   // ActionableView:
@@ -144,9 +126,6 @@ class CapsLockDefaultView : public ActionableView {
     return true;
   }
 
-  // It contains the image represents the Caps Lock.
-  views::ImageView* image_;
-
   // It indicates whether the Caps Lock is on or off.
   views::Label* text_label_;
 
@@ -157,9 +136,9 @@ class CapsLockDefaultView : public ActionableView {
 };
 
 TrayCapsLock::TrayCapsLock(SystemTray* system_tray)
-    : TrayImageItem(system_tray, IDR_AURA_UBER_TRAY_CAPS_LOCK, UMA_CAPS_LOCK),
-      default_(NULL),
-      detailed_(NULL),
+    : TrayImageItem(system_tray, kSystemTrayCapsLockIcon, UMA_CAPS_LOCK),
+      default_(nullptr),
+      detailed_(nullptr),
       caps_lock_enabled_(CapsLockIsEnabled()),
       message_shown_(false) {
   chromeos::input_method::InputMethodManager* ime =
@@ -207,15 +186,15 @@ bool TrayCapsLock::GetInitialVisibility() {
 
 views::View* TrayCapsLock::CreateDefaultView(LoginStatus status) {
   if (!caps_lock_enabled_)
-    return NULL;
-  DCHECK(default_ == NULL);
+    return nullptr;
+  DCHECK(!default_);
   default_ = new CapsLockDefaultView;
   default_->Update(caps_lock_enabled_);
   return default_;
 }
 
 views::View* TrayCapsLock::CreateDetailedView(LoginStatus status) {
-  DCHECK(detailed_ == NULL);
+  DCHECK(!detailed_);
   detailed_ = new views::View;
 
   detailed_->SetLayoutManager(new views::BoxLayout(
@@ -224,14 +203,8 @@ views::View* TrayCapsLock::CreateDetailedView(LoginStatus status) {
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   views::ImageView* image = new views::ImageView;
-  if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
-    image->SetImage(CreateVectorIcon(kSystemMenuCapsLockIcon, kMenuIconSize,
-                                     kMenuIconColor));
-  } else {
-    image->SetImage(
-        bundle.GetImageNamed(IDR_AURA_UBER_TRAY_CAPS_LOCK_DARK).ToImageSkia());
-  }
-
+  image->SetImage(
+      CreateVectorIcon(kSystemMenuCapsLockIcon, kMenuIconSize, kMenuIconColor));
   detailed_->AddChildView(image);
 
   const int string_id =
@@ -249,11 +222,11 @@ views::View* TrayCapsLock::CreateDetailedView(LoginStatus status) {
 }
 
 void TrayCapsLock::DestroyDefaultView() {
-  default_ = NULL;
+  default_ = nullptr;
 }
 
 void TrayCapsLock::DestroyDetailedView() {
-  detailed_ = NULL;
+  detailed_ = nullptr;
 }
 
 }  // namespace ash

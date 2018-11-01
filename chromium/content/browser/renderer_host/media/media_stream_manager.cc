@@ -207,17 +207,6 @@ MediaDeviceType ConvertToMediaDeviceType(MediaStreamType stream_type) {
   return NUM_MEDIA_DEVICE_TYPES;
 }
 
-MediaStreamDevices ConvertToMediaStreamDevices(
-    MediaStreamType stream_type,
-    const MediaDeviceInfoArray& device_infos) {
-  MediaStreamDevices devices;
-  for (const auto& info : device_infos) {
-    devices.emplace_back(stream_type, info.device_id, info.label);
-  }
-
-  return devices;
-}
-
 }  // namespace
 
 
@@ -459,6 +448,21 @@ MediaDevicesManager* MediaStreamManager::media_devices_manager() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // nullptr might be returned during shutdown.
   return media_devices_manager_.get();
+}
+
+void MediaStreamManager::AddVideoCaptureObserver(
+    media::VideoCaptureObserver* capture_observer) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (video_capture_manager_) {
+    video_capture_manager_->AddVideoCaptureObserver(capture_observer);
+  }
+}
+
+void MediaStreamManager::RemoveAllVideoCaptureObservers() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (video_capture_manager_) {
+    video_capture_manager_->RemoveAllVideoCaptureObservers();
+  }
 }
 
 std::string MediaStreamManager::MakeMediaAccessRequest(
@@ -945,13 +949,12 @@ void MediaStreamManager::PostRequestToUI(
     if (!fake_ui_)
       fake_ui_.reset(new FakeMediaStreamUIProxy());
 
-    MediaStreamDevices devices;
-    for (const auto& info : enumeration[MEDIA_DEVICE_TYPE_AUDIO_INPUT]) {
-      devices.emplace_back(audio_type, info.device_id, info.label);
-    }
-    for (const auto& info : enumeration[MEDIA_DEVICE_TYPE_VIDEO_INPUT]) {
-      devices.emplace_back(video_type, info.device_id, info.label);
-    }
+    MediaStreamDevices devices = ConvertToMediaStreamDevices(
+        request->audio_type(), enumeration[MEDIA_DEVICE_TYPE_AUDIO_INPUT]);
+    MediaStreamDevices video_devices = ConvertToMediaStreamDevices(
+        request->video_type(), enumeration[MEDIA_DEVICE_TYPE_VIDEO_INPUT]);
+    devices.reserve(devices.size() + video_devices.size());
+    devices.insert(devices.end(), video_devices.begin(), video_devices.end());
 
     fake_ui_->SetAvailableDevices(devices);
 
@@ -1239,7 +1242,7 @@ void MediaStreamManager::InitializeDeviceManagersOnIOThread() {
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "457525 MediaStreamManager::InitializeDeviceManagersOnIOThread 2"));
   audio_input_device_manager_ = new AudioInputDeviceManager(audio_manager_);
-  audio_input_device_manager_->Register(this, device_task_runner_);
+  audio_input_device_manager_->RegisterListener(this);
 
   // TODO(dalecurtis): Remove ScopedTracker below once crbug.com/457525 is
   // fixed.
@@ -1255,18 +1258,23 @@ void MediaStreamManager::InitializeDeviceManagersOnIOThread() {
   tracked_objects::ScopedTracker tracking_profile4(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "457525 MediaStreamManager::InitializeDeviceManagersOnIOThread 4"));
-  video_capture_manager_ =
-      new VideoCaptureManager(media::VideoCaptureDeviceFactory::CreateFactory(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
 #if defined(OS_WIN)
   // Use an STA Video Capture Thread to try to avoid crashes on enumeration of
   // buggy third party Direct Show modules, http://crbug.com/428958.
   video_capture_thread_.init_com_with_mta(false);
   CHECK(video_capture_thread_.Start());
-  video_capture_manager_->Register(this, video_capture_thread_.task_runner());
+  video_capture_manager_ = new VideoCaptureManager(
+      media::VideoCaptureDeviceFactory::CreateFactory(
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
+      video_capture_thread_.task_runner());
 #else
-  video_capture_manager_->Register(this, device_task_runner_);
+  video_capture_manager_ = new VideoCaptureManager(
+      media::VideoCaptureDeviceFactory::CreateFactory(
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
+      device_task_runner_);
 #endif
+
+  video_capture_manager_->RegisterListener(this);
 
   media_devices_manager_.reset(
       new MediaDevicesManager(audio_manager_, video_capture_manager_, this));
@@ -1555,18 +1563,18 @@ void MediaStreamManager::WillDestroyCurrentMessageLoop() {
   DVLOG(3) << "MediaStreamManager::WillDestroyCurrentMessageLoop()";
   DCHECK(CalledOnIOThread());
   DCHECK(requests_.empty());
-  if (device_task_runner_.get()) {
+  if (media_devices_manager_)
     media_devices_manager_->StopMonitoring();
+  if (video_capture_manager_)
+    video_capture_manager_->UnregisterListener();
+  if (audio_input_device_manager_)
+    audio_input_device_manager_->UnregisterListener();
 
-    video_capture_manager_->Unregister();
-    audio_input_device_manager_->Unregister();
-    device_task_runner_ = NULL;
-  }
-
-  audio_input_device_manager_ = NULL;
-  video_capture_manager_ = NULL;
-  media_devices_manager_ = NULL;
-  g_media_stream_manager_tls_ptr.Pointer()->Set(NULL);
+  device_task_runner_ = nullptr;
+  audio_input_device_manager_ = nullptr;
+  video_capture_manager_ = nullptr;
+  media_devices_manager_ = nullptr;
+  g_media_stream_manager_tls_ptr.Pointer()->Set(nullptr);
 }
 
 void MediaStreamManager::NotifyDevicesChanged(
@@ -1625,7 +1633,7 @@ MediaStreamProvider* MediaStreamManager::GetDeviceManager(
   else if (IsAudioInputMediaType(stream_type))
     return audio_input_device_manager();
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 void MediaStreamManager::OnMediaStreamUIWindowId(MediaStreamType video_type,
@@ -1748,5 +1756,22 @@ void MediaStreamManager::FlushVideoCaptureThreadForTesting() {
   video_capture_thread_.FlushForTesting();
 }
 #endif
+
+MediaStreamDevices MediaStreamManager::ConvertToMediaStreamDevices(
+    MediaStreamType stream_type,
+    const MediaDeviceInfoArray& device_infos) {
+  MediaStreamDevices devices;
+  for (const auto& info : device_infos)
+    devices.emplace_back(stream_type, info.device_id, info.label);
+
+  if (stream_type != MEDIA_DEVICE_VIDEO_CAPTURE)
+    return devices;
+
+  for (auto& device : devices) {
+    device.camera_calibration =
+        video_capture_manager()->GetCameraCalibration(device.id);
+  }
+  return devices;
+}
 
 }  // namespace content

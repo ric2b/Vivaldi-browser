@@ -5,7 +5,7 @@
 #include "extensions/vivaldi_extensions_client.h"
 
 VivaldiChromeUnitTestSuite::VivaldiChromeUnitTestSuite(int argc, char** argv)
- : ChromeUnitTestSuite(argc, argv){
+    : ChromeUnitTestSuite(argc, argv) {
   extensions::VivaldiExtensionsClient::RegisterVivaldiExtensionsClient();
 }
 

@@ -24,14 +24,16 @@
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_info.h"
 #include "content/public/common/socket_permission_request.h"
-#include "content/public/common/window_container_type.h"
+#include "content/public/common/window_container_type.mojom.h"
 #include "media/audio/audio_manager.h"
 #include "media/media_features.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "storage/browser/fileapi/file_system_context.h"
+#include "storage/browser/quota/quota_manager.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/public/web/window_features.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -49,10 +51,6 @@ namespace base {
 class CommandLine;
 class FilePath;
 class SchedulerWorkerPoolParams;
-}
-
-namespace blink {
-struct WebWindowFeatures;
 }
 
 namespace gfx {
@@ -99,7 +97,6 @@ class Origin;
 
 namespace storage {
 class FileSystemBackend;
-class QuotaEvictionPolicy;
 }
 
 namespace content {
@@ -127,6 +124,7 @@ class RenderViewHost;
 class ResourceContext;
 class SiteInstance;
 class SpeechRecognitionManagerDelegate;
+class StoragePartition;
 class TracingDelegate;
 class VpnServiceProxy;
 class WebContents;
@@ -218,10 +216,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns a list additional WebUI schemes, if any.  These additional schemes
   // act as aliases to the chrome: scheme.  The additional schemes may or may
   // not serve specific WebUI pages depending on the particular URLDataSource
-  // and its override of URLDataSource::ShouldServiceRequest. For all schemes
-  // returned here, view-source is allowed.
+  // and its override of URLDataSource::ShouldServiceRequest.
   virtual void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) {}
+
+  // Returns a list of additional schemes allowed for view-source.  Defaults to
+  // the list of WebUI schemes returned by GetAdditionalWebUISchemes.
+  virtual void GetAdditionalViewSourceSchemes(
+      std::vector<std::string>* additional_schemes);
 
   // Called when WebUI objects are created to get aggregate usage data (i.e. is
   // chrome://downloads used more than chrome://bookmarks?). Only internal (e.g.
@@ -455,10 +457,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Create and return a new quota permission context.
   virtual QuotaPermissionContext* CreateQuotaPermissionContext();
 
-  // Gives the embedder a chance to register a custom QuotaEvictionPolicy for
-  // temporary storage.
-  virtual std::unique_ptr<storage::QuotaEvictionPolicy>
-  GetTemporaryStorageEvictionPolicy(BrowserContext* context);
+  // Allows the embedder to provide settings that determine the amount
+  // of disk space that may be used by content facing storage apis like
+  // IndexedDatabase and ServiceWorker::CacheStorage and others.
+  virtual void GetQuotaSettings(
+      content::BrowserContext* context,
+      content::StoragePartition* partition,
+      const storage::OptionalQuotaSettingsCallback& callback);
 
   // Informs the embedder that a certificate error has occured.  If
   // |overridable| is true and if |strict_enforcement| is false, the user
@@ -497,21 +502,22 @@ class CONTENT_EXPORT ContentBrowserClient {
   // type. If true is returned, |no_javascript_access| will indicate whether
   // the window that is created should be scriptable/in the same process.
   // This is called on the IO thread.
-  virtual bool CanCreateWindow(int opener_render_process_id,
-                               int opener_render_frame_id,
-                               const GURL& opener_url,
-                               const GURL& opener_top_level_frame_url,
-                               const GURL& source_origin,
-                               WindowContainerType container_type,
-                               const GURL& target_url,
-                               const Referrer& referrer,
-                               const std::string& frame_name,
-                               WindowOpenDisposition disposition,
-                               const blink::WebWindowFeatures& features,
-                               bool user_gesture,
-                               bool opener_suppressed,
-                               ResourceContext* context,
-                               bool* no_javascript_access);
+  virtual bool CanCreateWindow(
+      int opener_render_process_id,
+      int opener_render_frame_id,
+      const GURL& opener_url,
+      const GURL& opener_top_level_frame_url,
+      const GURL& source_origin,
+      content::mojom::WindowContainerType container_type,
+      const GURL& target_url,
+      const Referrer& referrer,
+      const std::string& frame_name,
+      WindowOpenDisposition disposition,
+      const blink::mojom::WindowFeatures& features,
+      bool user_gesture,
+      bool opener_suppressed,
+      ResourceContext* context,
+      bool* no_javascript_access);
 
   // Notifies the embedder that the ResourceDispatcherHost has been created.
   // This is when it can optionally add a delegate.

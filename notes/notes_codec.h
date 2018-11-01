@@ -3,16 +3,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_NOTES_NOTES_CODEC_H_
-#define VIVALDI_NOTES_NOTES_CODEC_H_
+#ifndef NOTES_NOTES_CODEC_H_
+#define NOTES_NOTES_CODEC_H_
 
 #include <set>
 #include <string>
 
 #include "base/md5.h"
 #include "base/strings/string16.h"
-#include "notes/notesnode.h"
 #include "notes/notes_model.h"
+#include "notes/notesnode.h"
 
 namespace base {
 class DictionaryValue;
@@ -151,4 +151,4 @@ class NotesCodec {
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_NOTES_NOTES_CODEC_H_
+#endif  // NOTES_NOTES_CODEC_H_

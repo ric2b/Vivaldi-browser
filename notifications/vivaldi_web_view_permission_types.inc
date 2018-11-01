@@ -6,4 +6,4 @@
     // NOTE: Included verbatim in chromium/extensions/browser/guest_view/web_view/web_view_permission_types.h
     WEB_VIEW_PERMISSION_TYPE_NOTIFICATION,
 
-#endif // NOTIFICATIONS_VIVALDI_WEB_VIEW_PERMISSION_TYPES_H_
+#endif  // NOTIFICATIONS_VIVALDI_WEB_VIEW_PERMISSION_TYPES_H_

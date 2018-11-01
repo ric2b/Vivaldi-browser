@@ -636,7 +636,7 @@ ScriptPromise NFC::push(ScriptState* scriptState,
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  m_requests.add(resolver);
+  m_requests.insert(resolver);
   auto callback = convertToBaseCallback(WTF::bind(&NFC::OnRequestCompleted,
                                                   wrapPersistent(this),
                                                   wrapPersistent(resolver)));
@@ -654,7 +654,7 @@ ScriptPromise NFC::cancelPush(ScriptState* scriptState, const String& target) {
     return promise;
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  m_requests.add(resolver);
+  m_requests.insert(resolver);
   auto callback = convertToBaseCallback(WTF::bind(&NFC::OnRequestCompleted,
                                                   wrapPersistent(this),
                                                   wrapPersistent(resolver)));
@@ -674,7 +674,7 @@ ScriptPromise NFC::watch(ScriptState* scriptState,
 
   callback->setScriptState(scriptState);
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  m_requests.add(resolver);
+  m_requests.insert(resolver);
   auto watchCallback = convertToBaseCallback(
       WTF::bind(&NFC::OnWatchRegistered, wrapPersistent(this),
                 wrapPersistent(callback), wrapPersistent(resolver)));
@@ -690,14 +690,14 @@ ScriptPromise NFC::cancelWatch(ScriptState* scriptState, long id) {
     return promise;
 
   if (id) {
-    m_callbacks.remove(id);
+    m_callbacks.erase(id);
   } else {
     return ScriptPromise::rejectWithDOMException(
         scriptState, DOMException::create(NotFoundError));
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  m_requests.add(resolver);
+  m_requests.insert(resolver);
   m_nfc->CancelWatch(id, convertToBaseCallback(WTF::bind(
                              &NFC::OnRequestCompleted, wrapPersistent(this),
                              wrapPersistent(resolver))));
@@ -713,7 +713,7 @@ ScriptPromise NFC::cancelWatch(ScriptState* scriptState) {
 
   m_callbacks.clear();
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-  m_requests.add(resolver);
+  m_requests.insert(resolver);
   m_nfc->CancelAllWatches(convertToBaseCallback(
       WTF::bind(&NFC::OnRequestCompleted, wrapPersistent(this),
                 wrapPersistent(resolver))));
@@ -738,7 +738,7 @@ void NFC::OnRequestCompleted(ScriptPromiseResolver* resolver,
   if (!m_requests.contains(resolver))
     return;
 
-  m_requests.remove(resolver);
+  m_requests.erase(resolver);
   if (error.is_null())
     resolver->resolve();
   else
@@ -746,11 +746,6 @@ void NFC::OnRequestCompleted(ScriptPromiseResolver* resolver,
 }
 
 void NFC::OnConnectionError() {
-  if (!Platform::current()) {
-    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
-    return;
-  }
-
   m_nfc.reset();
   m_callbacks.clear();
 
@@ -780,9 +775,20 @@ void NFC::OnWatch(const WTF::Vector<uint32_t>& ids,
 
 ScriptPromise NFC::rejectIfNotSupported(ScriptState* scriptState) {
   String errorMessage;
-  if (!scriptState->getExecutionContext()->isSecureContext(errorMessage)) {
+  ExecutionContext* context = scriptState->getExecutionContext();
+  if (!context->isSecureContext(errorMessage)) {
     return ScriptPromise::rejectWithDOMException(
         scriptState, DOMException::create(SecurityError, errorMessage));
+  }
+
+  // https://w3c.github.io/web-nfc/#security-policies
+  // WebNFC API must be only accessible from top level browsing context.
+  if (!toDocument(context)->domWindow()->frame() ||
+      !toDocument(context)->frame()->isMainFrame()) {
+    return ScriptPromise::rejectWithDOMException(
+        scriptState,
+        DOMException::create(SecurityError,
+                             "Must be in a top-level browsing context."));
   }
 
   if (!m_nfc) {
@@ -797,7 +803,7 @@ void NFC::OnWatchRegistered(MessageCallback* callback,
                             ScriptPromiseResolver* resolver,
                             uint32_t id,
                             device::nfc::mojom::blink::NFCErrorPtr error) {
-  m_requests.remove(resolver);
+  m_requests.erase(resolver);
 
   // Invalid id was returned.
   // https://w3c.github.io/web-nfc/#dom-nfc-watch
@@ -810,7 +816,7 @@ void NFC::OnWatchRegistered(MessageCallback* callback,
   }
 
   if (error.is_null()) {
-    m_callbacks.add(id, callback);
+    m_callbacks.insert(id, callback);
     resolver->resolve(id);
   } else {
     resolver->reject(NFCError::take(resolver, error->error_type));

@@ -12,6 +12,7 @@
 
 namespace media {
 
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.media
 enum VideoCodec {
   // These values are histogrammed over time; do not change their ordinal
   // values.  When deleting a codec replace it with a dummy value; when adding a
@@ -25,20 +26,23 @@ enum VideoCodec {
   kCodecVP8,
   kCodecVP9,
   kCodecHEVC,
+  kCodecDolbyVision,
   // DO NOT ADD RANDOM VIDEO CODECS!
   //
   // The only acceptable time to add a new codec is if there is production code
   // that uses said codec in the same CL.
 
-  kVideoCodecMax = kCodecHEVC  // Must equal the last "real" codec above.
+  kVideoCodecMax =
+      kCodecDolbyVision,  // Must equal the last "real" codec above.
 };
 
 // Video codec profiles. Keep in sync with mojo::VideoCodecProfile (see
-// media/mojo/interfaces/media_types.mojom) and gpu::VideoCodecProfile (see
-// gpu/config/gpu_info.h), as well as PP_VideoDecoder_Profile (translation is
-// performed in content/renderer/pepper/ppb_video_decoder_impl.cc).
-// NOTE: These values are histogrammed over time in UMA so the values must
-// never ever change (add new values to tools/metrics/histograms/histograms.xml)
+// media/mojo/interfaces/media_types.mojom), gpu::VideoCodecProfile (see
+// gpu/config/gpu_info.h), and PP_VideoDecoder_Profile (translation is performed
+// in content/renderer/pepper/ppb_video_decoder_impl.cc).
+// NOTE: These values are histogrammed over time in UMA so the values must never
+// ever change (add new values to tools/metrics/histograms/histograms.xml)
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.media
 enum VideoCodecProfile {
   // Keep the values in this enum unique, as they imply format (h.264 vs. VP8,
   // for example), and keep the values for a particular format grouped
@@ -72,7 +76,19 @@ enum VideoCodecProfile {
   HEVCPROFILE_MAIN10 = 17,
   HEVCPROFILE_MAIN_STILL_PICTURE = 18,
   HEVCPROFILE_MAX = HEVCPROFILE_MAIN_STILL_PICTURE,
-  VIDEO_CODEC_PROFILE_MAX = HEVCPROFILE_MAX,
+  DOLBYVISION_MIN = 19,
+  DOLBYVISION_PROFILE0 = DOLBYVISION_MIN,
+  DOLBYVISION_PROFILE4 = 20,
+  DOLBYVISION_PROFILE5 = 21,
+  DOLBYVISION_PROFILE7 = 22,
+  DOLBYVISION_MAX = DOLBYVISION_PROFILE7,
+  VIDEO_CODEC_PROFILE_MAX = DOLBYVISION_MAX,
+};
+
+struct CodecProfileLevel {
+  VideoCodec codec;
+  VideoCodecProfile profile;
+  int level;
 };
 
 std::string MEDIA_EXPORT GetCodecName(VideoCodec codec);
@@ -102,7 +118,20 @@ MEDIA_EXPORT bool ParseHEVCCodecId(const std::string& codec_id,
                                    uint8_t* level_idc);
 #endif
 
+#if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
+MEDIA_EXPORT bool ParseDolbyVisionCodecId(const std::string& codec_id,
+                                          VideoCodecProfile* profile,
+                                          uint8_t* level_id);
+#endif
+
 MEDIA_EXPORT VideoCodec StringToVideoCodec(const std::string& codec_id);
+
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+// Translate legacy avc1 codec ids (like avc1.66.30 or avc1.77.31) into a new
+// style standard avc1 codec ids like avc1.4D002F. If the input codec is not
+// recognized as a legacy codec id, then returns the input string unchanged.
+std::string TranslateLegacyAvc1CodecIds(const std::string& codec_id);
+#endif
 
 }  // namespace media
 

@@ -22,12 +22,12 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -124,7 +124,7 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
   WebNotificationItem(gfx::AnimationContainer* container,
                       WebNotificationTray* tray)
       : tray_(tray) {
-    SetPaintToLayer(true);
+    SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
     views::View::SetVisible(false);
     set_owned_by_client();
@@ -357,18 +357,13 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings) {
       new message_center::MessageCenterBubble(message_center(),
                                               message_center_tray_.get());
 
-  int max_height;
-  if (IsHorizontalAlignment(shelf_alignment())) {
-    max_height = shelf()->GetIdealBounds().y();
-  } else {
-    // Assume the status area and bubble bottoms are aligned when vertical.
-    gfx::Rect bounds_in_root =
-        status_area_window_->GetRootWindow()->ConvertRectFromScreen(
-            status_area_window_->GetBoundsInScreen());
-    max_height = bounds_in_root.bottom();
-  }
-  message_center_bubble->SetMaxHeight(
-      std::max(0, max_height - GetTrayConstant(TRAY_SPACING)));
+  // In the horizontal case, message center starts from the top of the shelf.
+  // In the vertical case, it starts from the bottom of WebNotificationTray.
+  const int max_height = IsHorizontalAlignment(shelf_alignment())
+                             ? shelf()->GetIdealBounds().y()
+                             : GetBoundsInScreen().bottom();
+  message_center_bubble->SetMaxHeight(max_height);
+
   if (show_settings)
     message_center_bubble->SetSettingsVisible();
 
@@ -384,7 +379,6 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings) {
   message_center_bubble_.reset(new WebNotificationBubbleWrapper(
       this, anchor_tray, message_center_bubble));
 
-  system_tray_->SetHideNotifications(true);
   shelf()->UpdateAutoHideState();
   SetIsActive(true);
   return true;
@@ -401,7 +395,6 @@ void WebNotificationTray::HideMessageCenter() {
   message_center_bubble_.reset();
   should_block_shelf_auto_hide_ = false;
   show_message_center_on_unlock_ = false;
-  system_tray_->SetHideNotifications(false);
   shelf()->UpdateAutoHideState();
 }
 
@@ -429,8 +422,7 @@ void WebNotificationTray::HidePopups() {
 // Private methods.
 
 bool WebNotificationTray::ShouldShowMessageCenter() {
-  return WmShell::Get()->system_tray_delegate()->ShouldShowNotificationTray() &&
-         !system_tray_->HasNotificationBubble();
+  return WmShell::Get()->system_tray_delegate()->ShouldShowNotificationTray();
 }
 
 bool WebNotificationTray::ShouldBlockShelfAutoHide() const {
@@ -440,10 +432,6 @@ bool WebNotificationTray::ShouldBlockShelfAutoHide() const {
 bool WebNotificationTray::IsMessageCenterBubbleVisible() const {
   return (message_center_bubble() &&
           message_center_bubble()->bubble()->IsVisible());
-}
-
-bool WebNotificationTray::IsMouseInNotificationBubble() const {
-  return false;
 }
 
 void WebNotificationTray::ShowMessageCenterBubble() {

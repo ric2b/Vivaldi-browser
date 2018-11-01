@@ -148,6 +148,19 @@ class CopyExistingBaselinesInternal(AbstractRebaseliningCommand):
 
     @memoized
     def _immediate_predecessors_in_fallback(self, path_to_rebaseline):
+        """Returns the predecessor directories in the baseline fall-back graph.
+
+        The platform-specific fall-back baseline directories form a tree; the
+        "immediate predecessors" are the children nodes For example, if the
+        baseline fall-back graph includes:
+            "mac10.9" -> "mac10.10/"
+            "mac10.10/" -> "mac/"
+            "retina/" -> "mac/"
+        Then, the "immediate predecessors" are:
+            "mac/": ["mac10.10/", "retina/"]
+            "mac10.10/": ["mac10.9/"]
+            "mac10.9/", "retina/": []
+        """
         port_names = self._tool.port_factory.all_port_names()
         immediate_predecessors = []
         for port_name in port_names:
@@ -165,12 +178,14 @@ class CopyExistingBaselinesInternal(AbstractRebaseliningCommand):
         return immediate_predecessors
 
     def _port_for_primary_baseline(self, baseline):
+        """Returns a Port object for the given baseline directory base name."""
         for port in [self._tool.port_factory.get(port_name) for port_name in self._tool.port_factory.all_port_names()]:
             if self._tool.filesystem.basename(port.baseline_version_dir()) == baseline:
                 return port
         raise Exception("Failed to find port for primary baseline %s." % baseline)
 
     def _copy_existing_baseline(self, builder_name, test_name, suffix):
+        """Copies the baseline for the given builder to all "predecessor" directories."""
         baseline_directory = self._baseline_directory(builder_name)
         ports = [self._port_for_primary_baseline(baseline)
                  for baseline in self._immediate_predecessors_in_fallback(baseline_directory)]
@@ -300,7 +315,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         try:
             verbose_args = ['--verbose'] if verbose else []
             stderr = self._tool.executive.run_command([self._tool.path()] + verbose_args +
-                                                      args, cwd=self._tool.scm().checkout_root, return_stderr=True)
+                                                      args, cwd=self._tool.git().checkout_root, return_stderr=True)
             for line in stderr.splitlines():
                 _log.warning(line)
         except ScriptError:
@@ -341,7 +356,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
 
     def _rebaseline_commands(self, test_prefix_list, options):
         path_to_webkit_patch = self._tool.path()
-        cwd = self._tool.scm().checkout_root
+        cwd = self._tool.git().checkout_root
         copy_baseline_commands = []
         rebaseline_commands = []
         lines_to_remove = {}
@@ -421,7 +436,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 cmd_line.append('--verbose')
 
             path_to_webkit_patch = self._tool.path()
-            cwd = self._tool.scm().checkout_root
+            cwd = self._tool.git().checkout_root
             optimize_commands.append(tuple([[self._tool.executable, path_to_webkit_patch, 'optimize-baselines'] + cmd_line, cwd]))
         return optimize_commands
 
@@ -491,7 +506,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 TODO(qyearsley): Replace test_prefix_list everywhere with some
                 sort of class that contains the same data.
         """
-        if self._tool.scm().has_working_directory_changes(pathspec=self._layout_tests_dir()):
+        if self._tool.git().has_working_directory_changes(pathspec=self._layout_tests_dir()):
             _log.error('There are uncommitted changes in the layout tests directory; aborting.')
             return
 
@@ -524,13 +539,13 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
 
         self._remove_all_pass_testharness_baselines(test_prefix_list)
 
-        self._tool.scm().add_list(self.unstaged_baselines())
+        self._tool.git().add_list(self.unstaged_baselines())
 
     def unstaged_baselines(self):
         """Returns absolute paths for unstaged (including untracked) baselines."""
         baseline_re = re.compile(r'.*[\\/]LayoutTests[\\/].*-expected\.(txt|png|wav)$')
-        unstaged_changes = self._tool.scm().unstaged_changes()
-        return sorted(self._tool.scm().absolute_path(path) for path in unstaged_changes if re.match(baseline_re, path))
+        unstaged_changes = self._tool.git().unstaged_changes()
+        return sorted(self._tool.git().absolute_path(path) for path in unstaged_changes if re.match(baseline_re, path))
 
     def _remove_all_pass_testharness_baselines(self, test_prefix_list):
         """Removes all of the all-PASS baselines for the given builders and tests.

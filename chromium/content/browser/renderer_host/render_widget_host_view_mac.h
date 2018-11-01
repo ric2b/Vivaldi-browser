@@ -171,6 +171,11 @@ struct TextInputState;
   // key down event.
   BOOL suppressNextEscapeKeyUp_;
 
+  // This is used to indicate if a stylus is currently in the proximity of the
+  // tablet.
+  bool isStylusEnteringProximity_;
+  blink::WebPointerProperties::PointerType pointerType_;
+
   // The set of key codes from key down events that we haven't seen the matching
   // key up events yet.
   // Used for filtering out non-matching NSKeyUp events.
@@ -260,7 +265,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   bool HasFocus() const override;
-  bool IsSurfaceAvailableForCopy() const override;
   void Show() override;
   void Hide() override;
   bool IsShowing() override;
@@ -288,15 +292,15 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
                          int error_code) override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override;
-  void CopyFromCompositingSurface(const gfx::Rect& src_subrect,
-                                  const gfx::Size& dst_size,
-                                  const ReadbackRequestCallback& callback,
-                                  SkColorType preferred_color_type) override;
-  void CopyFromCompositingSurfaceToVideoFrame(
-      const gfx::Rect& src_subrect,
-      const scoped_refptr<media::VideoFrame>& target,
+  bool IsSurfaceAvailableForCopy() const override;
+  void CopyFromSurface(const gfx::Rect& src_rect,
+                       const gfx::Size& output_size,
+                       const ReadbackRequestCallback& callback,
+                       const SkColorType color_type) override;
+  void CopyFromSurfaceToVideoFrame(
+      const gfx::Rect& src_rect,
+      scoped_refptr<media::VideoFrame> target,
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
-  bool CanCopyToVideoFrame() const override;
   void BeginFrameSubscription(
       std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
@@ -313,8 +317,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   gfx::Rect GetBoundsInRootWindow() override;
-  void LockCompositingSurface() override;
-  void UnlockCompositingSurface() override;
 
   bool LockMouse() override;
   void UnlockMouse() override;
@@ -376,11 +378,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void KillSelf();
 
   void SetTextInputActive(bool active);
-
-  const std::string& selected_text() const { return selected_text_; }
-  const gfx::Range& composition_range() const { return composition_range_; }
-  const base::string16& selection_text() const { return selection_text_; }
-  size_t selection_text_offset() const { return selection_text_offset_; }
 
   // Returns true and stores first rectangle for character range if the
   // requested |range| is already cached, otherwise returns false.
@@ -477,6 +474,16 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // |TextInputState.type| which is not ui::TEXT_INPUT_TYPE_NONE.
   RenderWidgetHostImpl* GetActiveWidget();
 
+  // Returns the composition range information for the active RenderWidgetHost
+  // (accepting IME and keyboard input).
+  const TextInputManager::CompositionRangeInfo* GetCompositionRangeInfo();
+
+  // Returns the TextSelection information for the active widget. If
+  // |is_guest_view_hack_| is true, then it will return the TextSelection
+  // information for this RenderWidgetHostViewMac (which is serving as a
+  // platform view for a guest).
+  const TextInputManager::TextSelection* GetTextSelection();
+
  private:
   friend class RenderWidgetHostViewMacTest;
 
@@ -542,10 +549,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // to SendVSyncParametersToRenderer(), and refreshed regularly thereafter.
   base::TimeTicks vsync_timebase_;
   base::TimeDelta vsync_interval_;
-
-  // The current composition character range and its bounds.
-  gfx::Range composition_range_;
-  std::vector<gfx::Rect> composition_bounds_;
 
   // Whether a request for begin frames has been issued.
   bool needs_begin_frames_;

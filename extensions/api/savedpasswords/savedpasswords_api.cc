@@ -2,12 +2,17 @@
 
 #include "extensions/api/savedpasswords/savedpasswords_api.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "components/url_formatter/url_formatter.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/schema/savedpasswords.h"
 
@@ -16,9 +21,7 @@ namespace passwords = vivaldi::savedpasswords;
 using passwords::SavedPasswordItem;
 
 SavedpasswordsGetListFunction::SavedpasswordsGetListFunction()
-  : password_manager_presenter_(this)
-{
-}
+    : password_manager_presenter_(this) {}
 
 bool SavedpasswordsGetListFunction::RunAsync() {
   AddRef();
@@ -32,7 +35,7 @@ SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {
 }
 
 Profile* SavedpasswordsGetListFunction::GetProfile() {
- return ChromeUIThreadExtensionFunction::GetProfile();
+  return ChromeUIThreadExtensionFunction::GetProfile();
 }
 
 #if !defined(OS_ANDROID)
@@ -43,14 +46,13 @@ gfx::NativeWindow SavedpasswordsGetListFunction::GetNativeWindow() const {
 
 void SavedpasswordsGetListFunction::SetPasswordList(
     const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
-
   std::vector<SavedPasswordItem> svd_pwd_entries;
   base::ListValue entries;
   languages_ = GetProfile()->GetPrefs()->GetString(prefs::kAcceptLanguages);
 
   for (size_t i = 0; i < password_list.size(); ++i) {
     std::unique_ptr<SavedPasswordItem> new_node(
-          GetSavedPasswordItem(password_list[i], i));
+        GetSavedPasswordItem(password_list[i], i));
     svd_pwd_entries.push_back(std::move(*new_node));
   }
 
@@ -59,12 +61,12 @@ void SavedpasswordsGetListFunction::SetPasswordList(
 }
 
 SavedPasswordItem* SavedpasswordsGetListFunction::GetSavedPasswordItem(
-        const std::unique_ptr<autofill::PasswordForm> &form, int id
-      ){
+    const std::unique_ptr<autofill::PasswordForm>& form,
+    int id) {
   SavedPasswordItem* notes_tree_node = new SavedPasswordItem();
-  notes_tree_node->username =  base::UTF16ToUTF8(form->username_value);
-  notes_tree_node->origin = base::UTF16ToUTF8(
-        url_formatter::FormatUrl(form->origin));
+  notes_tree_node->username = base::UTF16ToUTF8(form->username_value);
+  notes_tree_node->origin =
+      base::UTF16ToUTF8(url_formatter::FormatUrl(form->origin));
   notes_tree_node->id = base::Int64ToString(id);
 
   return notes_tree_node;
@@ -72,70 +74,61 @@ SavedPasswordItem* SavedpasswordsGetListFunction::GetSavedPasswordItem(
 
 void SavedpasswordsGetListFunction::SendAsyncResponse() {
   base::MessageLoop::current()->task_runner()->PostTask(
-    FROM_HERE,
-    base::Bind(&SavedpasswordsGetListFunction::SendResponseToCallback, this));
+      FROM_HERE,
+      base::Bind(&SavedpasswordsGetListFunction::SendResponseToCallback, this));
 }
 
 void SavedpasswordsGetListFunction::SendResponseToCallback() {
   Release();  // Balanced in RunAsync().
 }
 
-
 void SavedpasswordsGetListFunction::SetPasswordExceptionList(
-  const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-          password_exception_list) {
-}
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+        password_exception_list) {}
 
 void SavedpasswordsGetListFunction::ShowPassword(
-  size_t index,
-  const std::string& origin_url,
-  const std::string& username,
-  const base::string16& password_value) {
-}
+    size_t index,
+    const std::string& origin_url,
+    const std::string& username,
+    const base::string16& password_value) {}
 
+SavedpasswordsRemoveFunction::SavedpasswordsRemoveFunction()
+    : password_manager_presenter_(this) {}
 
-SavedpasswordsRemoveFunction::SavedpasswordsRemoveFunction():
-password_manager_presenter_(this)
-{
-}
+SavedpasswordsRemoveFunction::~SavedpasswordsRemoveFunction() {}
 
-
-SavedpasswordsRemoveFunction::~SavedpasswordsRemoveFunction(){
-}
-
-bool SavedpasswordsRemoveFunction::RunAsync(){
-  AddRef(); //Balanced in SendResponseToCallback
+bool SavedpasswordsRemoveFunction::RunAsync() {
+  AddRef();  // Balanced in SendResponseToCallback
   password_manager_presenter_.Initialize();
   password_manager_presenter_.UpdatePasswordLists();
 
   std::unique_ptr<passwords::Remove::Params> params(
-    passwords::Remove::Params::Create(*args_));
-    EXTENSION_FUNCTION_VALIDATE(params.get());
-    base::StringToInt64(params->id, &idToRemove);
+      passwords::Remove::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  base::StringToInt64(params->id, &idToRemove);
   return true;
 }
 
-Profile* SavedpasswordsRemoveFunction::GetProfile(){
+Profile* SavedpasswordsRemoveFunction::GetProfile() {
   return ChromeUIThreadExtensionFunction::GetProfile();
 }
-void SavedpasswordsRemoveFunction::ShowPassword(size_t index,
-      const std::string& origin_url,
-      const std::string& username,
-      const base::string16& password_value){
-}
+void SavedpasswordsRemoveFunction::ShowPassword(
+    size_t index,
+    const std::string& origin_url,
+    const std::string& username,
+    const base::string16& password_value) {}
 
 void SavedpasswordsRemoveFunction::SetPasswordList(
-  const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list){
-
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
   password_manager_presenter_.RemoveSavedPassword(
-          static_cast<size_t>(idToRemove));
+      static_cast<size_t>(idToRemove));
 
   results_ = passwords::Remove::Results::Create();
   SendAsyncResponse();
 }
 void SavedpasswordsRemoveFunction::SetPasswordExceptionList(
-  const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-            password_exception_list){}
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+        password_exception_list) {}
 
 #if !defined(OS_ANDROID)
 gfx::NativeWindow SavedpasswordsRemoveFunction::GetNativeWindow() const {
@@ -150,8 +143,8 @@ void SavedpasswordsRemoveFunction::SendResponseToCallback() {
 
 void SavedpasswordsRemoveFunction::SendAsyncResponse() {
   base::MessageLoop::current()->task_runner()->PostTask(
-    FROM_HERE,
-    base::Bind(&SavedpasswordsRemoveFunction::SendResponseToCallback, this));
+      FROM_HERE,
+      base::Bind(&SavedpasswordsRemoveFunction::SendResponseToCallback, this));
 }
 
 }  // namespace extensions

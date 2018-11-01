@@ -35,56 +35,31 @@ public class ContextualSearchFieldTrial {
     private static final String ENABLE_BLACKLIST = "enable_blacklist";
 
     // Translation.  All these members are private, except for usage by testing.
-    // Master switch, needed to enable any translate code for Contextual Search.
+    // Master switch, needed to disable all translate code for Contextual Search in case of an
+    // emergency.
     @VisibleForTesting
-    static final String ENABLE_TRANSLATION = "enable_translation";
-    // Switch to disable translation, but not logging, used for experiment comparison.
-    @VisibleForTesting
-    static final String DISABLE_FORCE_TRANSLATION_ONEBOX = "disable_force_translation_onebox";
-    // Disables translation when we need to auto-detect the source language (when we don't resolve).
-    @VisibleForTesting
-    static final String DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX =
-            "disable_auto_detect_translation_onebox";
-    // Disables using the keyboard languages to determine the target language.
-    private static final String DISABLE_KEYBOARD_LANGUAGES_FOR_TRANSLATION =
-            "disable_keyboard_languages_for_translation";
-    // Disables using the accept-languages list to determine the target language.
-    private static final String DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION =
-            "disable_accept_languages_for_translation";
+    static final String DISABLE_TRANSLATION = "disable_translation";
     // Enables usage of English as the target language even when it's the primary UI language.
     @VisibleForTesting
     static final String ENABLE_ENGLISH_TARGET_TRANSLATION =
             "enable_english_target_translation";
-    // Enables relying on the server to control whether the onebox is actually shown, rather
-    // than checking if translation is needed client-side based on source/target languages.
-    @VisibleForTesting
-    static final String ENABLE_SERVER_CONTROLLED_ONEBOX = "enable_server_controlled_onebox";
 
-    /** Hide Contextual Cards data.*/
-    private static final String HIDE_CONTEXTUAL_CARDS_DATA = "hide_contextual_cards_data";
-
-    // Quick Answers.
-    private static final String ENABLE_QUICK_ANSWERS = "enable_quick_answers";
-
-    // Enables collection of recent scroll seen/unseen histograms.
-    // TODO(donnd): remove all supporting code once short-lived data collection is done.
-    private static final String ENABLE_RECENT_SCROLL_COLLECTION = "enable_recent_scroll_collection";
-    // Set non-zero to establish an recent scroll suppression threshold for taps.
-    private static final String RECENT_SCROLL_DURATION_MS = "recent_scroll_duration_ms";
     // TODO(donnd): remove all supporting code once short-lived data collection is done.
     private static final String SCREEN_TOP_SUPPRESSION_DPS = "screen_top_suppression_dps";
     private static final String ENABLE_BAR_OVERLAP_COLLECTION = "enable_bar_overlap_collection";
     private static final String BAR_OVERLAP_SUPPRESSION_ENABLED = "enable_bar_overlap_suppression";
+
+    private static final String MINIMUM_SELECTION_LENGTH = "minimum_selection_length";
 
     // Safety switch for disabling online-detection.  Also used to disable detection when running
     // tests.
     @VisibleForTesting
     static final String ONLINE_DETECTION_DISABLED = "disable_online_detection";
 
-    private static final String ENABLE_AMP_AS_SEPARATE_TAB = "enable_amp_as_separate_tab";
+    private static final String DISABLE_AMP_AS_SEPARATE_TAB = "disable_amp_as_separate_tab";
 
     // Privacy-related flags
-    private static final String ENABLE_SEND_HOME_COUNTRY = "enable_send_home_country";
+    private static final String DISABLE_SEND_HOME_COUNTRY = "disable_send_home_country";
 
     // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
@@ -93,25 +68,17 @@ public class ContextualSearchFieldTrial {
     private static Integer sMandatoryPromoLimit;
     private static Boolean sIsPeekPromoEnabled;
     private static Integer sPeekPromoMaxCount;
-    private static Boolean sIsTranslationEnabled;
-    private static Boolean sIsForceTranslationOneboxDisabled;
-    private static Boolean sIsAutoDetectTranslationOneboxDisabled;
-    private static Boolean sIsAcceptLanguagesForTranslationDisabled;
-    private static Boolean sIsKeyboardLanguagesForTranslationDisabled;
+    private static Boolean sIsTranslationDisabled;
     private static Boolean sIsEnglishTargetTranslationEnabled;
-    private static Boolean sIsServerControlledOneboxEnabled;
-    private static Boolean sIsQuickAnswersEnabled;
-    private static Boolean sIsRecentScrollCollectionEnabled;
-    private static Integer sRecentScrollDurationMs;
     private static Integer sScreenTopSuppressionDps;
     private static Boolean sIsBarOverlapCollectionEnabled;
     private static Boolean sIsBarOverlapSuppressionEnabled;
-    private static Boolean sShouldHideContextualCardsData;
-    private static Boolean sIsContextualCardsBarIntegrationEnabled;
+    private static Integer sMinimumSelectionLength;
     private static Boolean sIsOnlineDetectionDisabled;
-    private static Boolean sIsAmpAsSeparateTabEnabled;
+    private static Boolean sIsAmpAsSeparateTabDisabled;
     private static Boolean sContextualSearchSingleActionsEnabled;
-    private static Boolean sCanSendHomeCountry;
+    private static Boolean sIsSendHomeCountryDisabled;
+    private static Boolean sContextualSearchUrlActionsEnabled;
 
     /**
      * Don't instantiate.
@@ -227,57 +194,13 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether any translate code is enabled.
+     * @return Whether all translate code is disabled.
      */
-    static boolean isTranslationEnabled() {
-        if (sIsTranslationEnabled == null) {
-            sIsTranslationEnabled = getBooleanParam(ENABLE_TRANSLATION);
+    static boolean isTranslationDisabled() {
+        if (sIsTranslationDisabled == null) {
+            sIsTranslationDisabled = getBooleanParam(DISABLE_TRANSLATION);
         }
-        return sIsTranslationEnabled.booleanValue();
-    }
-
-    /**
-     * @return Whether forcing a translation Onebox is disabled.
-     */
-    static boolean isForceTranslationOneboxDisabled() {
-        if (sIsForceTranslationOneboxDisabled == null) {
-            sIsForceTranslationOneboxDisabled = getBooleanParam(DISABLE_FORCE_TRANSLATION_ONEBOX);
-        }
-        return sIsForceTranslationOneboxDisabled.booleanValue();
-    }
-
-    /**
-     * @return Whether forcing a translation Onebox based on auto-detection of the source language
-     *         is disabled.
-     */
-    static boolean isAutoDetectTranslationOneboxDisabled() {
-        if (sIsAutoDetectTranslationOneboxDisabled == null) {
-            sIsAutoDetectTranslationOneboxDisabled = getBooleanParam(
-                    DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX);
-        }
-        return sIsAutoDetectTranslationOneboxDisabled.booleanValue();
-    }
-
-    /**
-     * @return Whether considering accept-languages for translation is disabled.
-     */
-    static boolean isAcceptLanguagesForTranslationDisabled() {
-        if (sIsAcceptLanguagesForTranslationDisabled == null) {
-            sIsAcceptLanguagesForTranslationDisabled = getBooleanParam(
-                    DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION);
-        }
-        return sIsAcceptLanguagesForTranslationDisabled.booleanValue();
-    }
-
-    /**
-     * @return Whether considering keyboards for translation is disabled.
-     */
-    static boolean isKeyboardLanguagesForTranslationDisabled() {
-        if (sIsKeyboardLanguagesForTranslationDisabled == null) {
-            sIsKeyboardLanguagesForTranslationDisabled =
-                    getBooleanParam(DISABLE_KEYBOARD_LANGUAGES_FOR_TRANSLATION);
-        }
-        return sIsKeyboardLanguagesForTranslationDisabled.booleanValue();
+        return sIsTranslationDisabled.booleanValue();
     }
 
     /**
@@ -288,48 +211,6 @@ public class ContextualSearchFieldTrial {
             sIsEnglishTargetTranslationEnabled = getBooleanParam(ENABLE_ENGLISH_TARGET_TRANSLATION);
         }
         return sIsEnglishTargetTranslationEnabled.booleanValue();
-    }
-
-    /**
-     * @return Whether relying on server-control of showing the translation one-box is enabled.
-     */
-    static boolean isServerControlledOneboxEnabled() {
-        if (sIsServerControlledOneboxEnabled == null) {
-            sIsServerControlledOneboxEnabled = getBooleanParam(ENABLE_SERVER_CONTROLLED_ONEBOX);
-        }
-        return sIsServerControlledOneboxEnabled.booleanValue();
-    }
-
-    /**
-     * @return Whether showing "quick answers" in the Bar is enabled.
-     */
-    static boolean isQuickAnswersEnabled() {
-        if (sIsQuickAnswersEnabled == null) {
-            sIsQuickAnswersEnabled = getBooleanParam(ENABLE_QUICK_ANSWERS);
-        }
-        return sIsQuickAnswersEnabled.booleanValue();
-    }
-
-    /**
-     * @return Whether collecting metrics for tap triggering after a scroll is enabled.
-     */
-    static boolean isRecentScrollCollectionEnabled() {
-        if (sIsRecentScrollCollectionEnabled == null) {
-            sIsRecentScrollCollectionEnabled = getBooleanParam(ENABLE_RECENT_SCROLL_COLLECTION);
-        }
-        return sIsRecentScrollCollectionEnabled.booleanValue();
-    }
-
-    /**
-     * Gets the duration to use for suppressing Taps after a recent scroll, or {@code 0} if no
-     * suppression is configured.
-     * @return The period of time after a scroll when tap triggering is suppressed.
-     */
-    static int getRecentScrollSuppressionDurationMs() {
-        if (sRecentScrollDurationMs == null) {
-            sRecentScrollDurationMs = getIntParamValueOrDefault(RECENT_SCROLL_DURATION_MS, 0);
-        }
-        return sRecentScrollDurationMs.intValue();
     }
 
     /**
@@ -366,29 +247,23 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether to auto-promote clicks in the AMP carousel into a separate Tab.
+     * @return The minimum valid selection length.
      */
-    static boolean isAmpAsSeparateTabEnabled() {
-        if (sIsAmpAsSeparateTabEnabled == null) {
-            sIsAmpAsSeparateTabEnabled = getBooleanParam(ENABLE_AMP_AS_SEPARATE_TAB);
+    static int getMinimumSelectionLength() {
+        if (sMinimumSelectionLength == null) {
+            sMinimumSelectionLength = getIntParamValueOrDefault(MINIMUM_SELECTION_LENGTH, 0);
         }
-        return sIsAmpAsSeparateTabEnabled;
+        return sMinimumSelectionLength.intValue();
     }
 
-    // TODO(donnd): Remove once bar-integration is fully landed if still unused (native only).
-    static boolean isContextualCardsBarIntegrationEnabled() {
-        if (sIsContextualCardsBarIntegrationEnabled == null) {
-            sIsContextualCardsBarIntegrationEnabled = getBooleanParam(
-                    ChromeSwitches.CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION);
+    /**
+     * @return Whether to disable auto-promotion of clicks in the AMP carousel into a separate Tab.
+     */
+    static boolean isAmpAsSeparateTabDisabled() {
+        if (sIsAmpAsSeparateTabDisabled == null) {
+            sIsAmpAsSeparateTabDisabled = getBooleanParam(DISABLE_AMP_AS_SEPARATE_TAB);
         }
-        return sIsContextualCardsBarIntegrationEnabled;
-    }
-
-    static boolean shouldHideContextualCardsData() {
-        if (sShouldHideContextualCardsData == null) {
-            sShouldHideContextualCardsData = getBooleanParam(HIDE_CONTEXTUAL_CARDS_DATA);
-        }
-        return sShouldHideContextualCardsData;
+        return sIsAmpAsSeparateTabDisabled;
     }
 
     /**
@@ -403,13 +278,13 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether sending the "home country" to Google is enabled.
+     * @return Whether sending the "home country" to Google is disabled.
      */
-    static boolean isSendHomeCountryEnabled() {
-        if (sCanSendHomeCountry == null) {
-            sCanSendHomeCountry = getBooleanParam(ENABLE_SEND_HOME_COUNTRY);
+    static boolean isSendHomeCountryDisabled() {
+        if (sIsSendHomeCountryDisabled == null) {
+            sIsSendHomeCountryDisabled = getBooleanParam(DISABLE_SEND_HOME_COUNTRY);
         }
-        return sCanSendHomeCountry.booleanValue();
+        return sIsSendHomeCountryDisabled.booleanValue();
     }
 
     // ---------------
@@ -426,6 +301,18 @@ public class ContextualSearchFieldTrial {
         }
 
         return sContextualSearchSingleActionsEnabled;
+    }
+
+    /**
+     * @return Whether or not URL actions based on Contextual Cards is enabled.
+     */
+    static boolean isContextualSearchUrlActionsEnabled() {
+        if (sContextualSearchUrlActionsEnabled == null) {
+            sContextualSearchUrlActionsEnabled =
+                    ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SEARCH_URL_ACTIONS);
+        }
+
+        return sContextualSearchUrlActionsEnabled;
     }
 
     // --------------------------------------------------------------------------------------------

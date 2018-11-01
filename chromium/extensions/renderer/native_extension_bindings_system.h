@@ -58,7 +58,7 @@ class NativeExtensionBindingsSystem : public ExtensionBindingsSystem {
  private:
   // Handles sending a given |request|, forwarding it on to the send_ipc_ after
   // adding additional info.
-  void SendRequest(std::unique_ptr<APIBinding::Request> request,
+  void SendRequest(std::unique_ptr<APIRequestHandler::Request> request,
                    v8::Local<v8::Context> context);
 
   // Called when listeners for a given event have changed, and forwards it along
@@ -68,8 +68,18 @@ class NativeExtensionBindingsSystem : public ExtensionBindingsSystem {
                               v8::Local<v8::Context> context);
 
   // Getter callback for an extension API, since APIs are constructed lazily.
-  static void GetAPIHelper(v8::Local<v8::Name> name,
-                           const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void BindingAccessor(v8::Local<v8::Name> name,
+                              const v8::PropertyCallbackInfo<v8::Value>& info);
+
+  // Creates and returns the API binding for the given |name|.
+  static v8::Local<v8::Object> GetAPIHelper(v8::Local<v8::Context> context,
+                                            v8::Local<v8::String> name);
+
+  // Gets the chrome.runtime API binding.
+  static v8::Local<v8::Object> GetRuntime(v8::Local<v8::Context> context);
+
+  // Callback to get an API binding for an internal API.
+  static void GetInternalAPI(const v8::FunctionCallbackInfo<v8::Value>& info);
 
   // Handler to send request IPCs. Abstracted out for testing purposes.
   SendRequestIPCMethod send_request_ipc_;
@@ -80,6 +90,9 @@ class NativeExtensionBindingsSystem : public ExtensionBindingsSystem {
 
   // The APIBindingsSystem associated with this class.
   APIBindingsSystem api_system_;
+
+  // A function to acquire an internal API.
+  v8::Eternal<v8::FunctionTemplate> get_internal_api_;
 
   base::WeakPtrFactory<NativeExtensionBindingsSystem> weak_factory_;
 

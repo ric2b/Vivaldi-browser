@@ -98,8 +98,11 @@ Browser* GetBrowserInProfileWithId(Profile* profile,
   return NULL;
 }
 
-Browser* CreateBrowser(Profile* profile, int window_id, std::string* error) {
-  Browser::CreateParams params(Browser::TYPE_TABBED, profile);
+Browser* CreateBrowser(Profile* profile,
+                       int window_id,
+                       bool user_gesture,
+                       std::string* error) {
+  Browser::CreateParams params(Browser::TYPE_TABBED, profile, user_gesture);
   Browser* browser = new Browser(params);
   browser->window()->Show();
   return browser;
@@ -129,6 +132,7 @@ ExtensionTabUtil::OpenTabParams::~OpenTabParams() {
 base::DictionaryValue* ExtensionTabUtil::OpenTab(
     UIThreadExtensionFunction* function,
     const OpenTabParams& params,
+    bool user_gesture,
     std::string* error) {
   ChromeExtensionFunctionDetails chrome_details(function);
   Profile* profile = chrome_details.GetProfile();
@@ -142,7 +146,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
     if (!params.create_browser_if_needed) {
       return NULL;
     }
-    browser = CreateBrowser(profile, window_id, error);
+    browser = CreateBrowser(profile, window_id, user_gesture, error);
     if (!browser)
       return NULL;
   }
@@ -222,8 +226,9 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
 
     browser = chrome::FindTabbedBrowser(profile, false);
     if (!browser) {
-      browser =
-          new Browser(Browser::CreateParams(Browser::TYPE_TABBED, profile));
+      Browser::CreateParams params =
+          Browser::CreateParams(Browser::TYPE_TABBED, profile, user_gesture);
+      browser = new Browser(params);
       browser->window()->Show();
     }
   }
@@ -480,23 +485,24 @@ std::unique_ptr<api::tabs::MutedInfo> ExtensionTabUtil::CreateMutedInfo(
 void ExtensionTabUtil::ScrubTabForExtension(const Extension* extension,
                                             content::WebContents* contents,
                                             api::tabs::Tab* tab) {
-  DCHECK(extension);
-
-  bool api_permission = false;
-  std::string url;
-  if (contents) {
-    api_permission = extension->permissions_data()->HasAPIPermissionForTab(
-        GetTabId(contents), APIPermission::kTab);
-    url = contents->GetURL().spec();
-  } else {
-    api_permission =
-        extension->permissions_data()->HasAPIPermission(APIPermission::kTab);
-    url = *tab->url;
+  bool has_permission = false;
+  if (extension) {
+    bool api_permission = false;
+    std::string url;
+    if (contents) {
+      api_permission = extension->permissions_data()->HasAPIPermissionForTab(
+          GetTabId(contents), APIPermission::kTab);
+      url = contents->GetURL().spec();
+    } else {
+      api_permission =
+          extension->permissions_data()->HasAPIPermission(APIPermission::kTab);
+      url = *tab->url;
+    }
+    bool host_permission = extension->permissions_data()
+                               ->active_permissions()
+                               .HasExplicitAccessToOrigin(GURL(url));
+    has_permission = api_permission || host_permission;
   }
-  bool host_permission = extension->permissions_data()
-                             ->active_permissions()
-                             .HasExplicitAccessToOrigin(GURL(url));
-  bool has_permission = api_permission || host_permission;
   if (!has_permission) {
     tab->url.reset();
     tab->title.reset();
@@ -621,8 +627,10 @@ void ExtensionTabUtil::CreateTab(WebContents* web_contents,
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   Browser* browser = chrome::FindTabbedBrowser(profile, false);
   const bool browser_created = !browser;
-  if (!browser)
-    browser = new Browser(Browser::CreateParams(profile));
+  if (!browser) {
+    Browser::CreateParams params = Browser::CreateParams(profile, user_gesture);
+    browser = new Browser(params);
+  }
   chrome::NavigateParams params(browser, web_contents);
 
   // The extension_app_id parameter ends up as app_name in the Browser
@@ -661,15 +669,35 @@ WindowController* ExtensionTabUtil::GetWindowControllerOfTab(
   return NULL;
 }
 
+bool ExtensionTabUtil::OpenOptionsPageFromAPI(
+    const Extension* extension,
+    content::BrowserContext* browser_context) {
+  if (!OptionsPageInfo::HasOptionsPage(extension))
+    return false;
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  // This version of OpenOptionsPage() is only called when the extension
+  // initiated the command via chrome.runtime.openOptionsPage. For a spanning
+  // mode extension, this API could only be called from a regular profile, since
+  // that's the only place it's running.
+  DCHECK(!profile->IsOffTheRecord() || IncognitoInfo::IsSplitMode(extension));
+  Browser* browser = chrome::FindBrowserWithProfile(profile);
+  if (!browser)
+    browser = new Browser(Browser::CreateParams(profile, true));
+  return extensions::ExtensionTabUtil::OpenOptionsPage(extension, browser);
+}
+
 bool ExtensionTabUtil::OpenOptionsPage(const Extension* extension,
                                        Browser* browser) {
   if (!OptionsPageInfo::HasOptionsPage(extension))
     return false;
 
-  // Force the options page to open in non-OTR window, because it won't be
-  // able to save settings from OTR.
+  // Force the options page to open in non-OTR window if the extension is not
+  // running in split mode, because it won't be able to save settings from OTR.
+  // This version of OpenOptionsPage() can be called from an OTR window via e.g.
+  // the action menu, since that's not initiated by the extension.
   std::unique_ptr<chrome::ScopedTabbedBrowserDisplayer> displayer;
-  if (browser->profile()->IsOffTheRecord()) {
+  if (browser->profile()->IsOffTheRecord() &&
+      !IncognitoInfo::IsSplitMode(extension)) {
     displayer.reset(new chrome::ScopedTabbedBrowserDisplayer(
         browser->profile()->GetOriginalProfile()));
     browser = displayer->browser();

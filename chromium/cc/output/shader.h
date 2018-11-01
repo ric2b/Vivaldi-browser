@@ -12,6 +12,7 @@
 #include "cc/base/cc_export.h"
 
 namespace gfx {
+class ColorTransform;
 class Point;
 class Size;
 }
@@ -87,6 +88,7 @@ enum SamplerType {
 enum BlendMode {
   BLEND_MODE_NONE,
   BLEND_MODE_NORMAL,
+  BLEND_MODE_DESTINATION_IN,
   BLEND_MODE_SCREEN,
   BLEND_MODE_OVERLAY,
   BLEND_MODE_DARKEN,
@@ -132,9 +134,12 @@ enum YUVAlphaTextureMode {
 enum ColorConversionMode {
   // No color conversion is performed.
   COLOR_CONVERSION_MODE_NONE,
-  // Conversion is done directly from YUV to output RGB space, via a 3D texture
-  // represented as a 2D texture.
-  COLOR_CONVERSION_MODE_LUT_FROM_YUV,
+  // Conversion is done directly from input RGB space (or YUV space if
+  // applicable) to output RGB space, via a 3D texture represented as a 2D
+  // texture.
+  COLOR_CONVERSION_MODE_LUT,
+  // Conversion is done analytically in the shader.
+  COLOR_CONVERSION_MODE_SHADER,
 };
 
 // TODO(ccameron): Merge this with BlendMode.
@@ -283,6 +288,7 @@ class FragmentShader {
   UVTextureMode uv_texture_mode_ = UV_TEXTURE_MODE_UV;
 
   ColorConversionMode color_conversion_mode_ = COLOR_CONVERSION_MODE_NONE;
+  const gfx::ColorTransform* color_transform_ = nullptr;
 
   // YUV uniform locations.
   int y_texture_location_ = -1;
@@ -293,21 +299,20 @@ class FragmentShader {
   int ya_clamp_rect_location_ = -1;
   int uv_clamp_rect_location_ = -1;
 
-  // Analytic YUV to RGB convertion.
-  int yuv_matrix_location_ = -1;
-  int yuv_adj_location_ = -1;
+  // The resource offset and multiplier to adjust for bit depth.
+  int resource_multiplier_location_ = -1;
+  int resource_offset_location_ = -1;
 
   // LUT YUV to color-converted RGB.
   int lut_texture_location_ = -1;
   int lut_size_location_ = -1;
-  int resource_multiplier_location_ = -1;
-  int resource_offset_location_ = -1;
 
  private:
   friend class Program;
 
   std::string GetHelperFunctions() const;
   std::string GetBlendFunction() const;
+  std::string GetBlendFunctionBodyForAlpha() const;
   std::string GetBlendFunctionBodyForRGB() const;
 
   DISALLOW_COPY_AND_ASSIGN(FragmentShader);

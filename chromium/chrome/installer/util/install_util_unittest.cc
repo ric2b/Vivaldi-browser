@@ -47,15 +47,15 @@ class InstallUtilTest : public testing::Test {
  protected:
   InstallUtilTest() {}
 
-  void SetUp() override {
-    ResetRegistryOverrides();
-  }
+  void SetUp() override { ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides()); }
 
   void ResetRegistryOverrides() {
     registry_override_manager_.reset(
         new registry_util::RegistryOverrideManager);
-    registry_override_manager_->OverrideRegistry(HKEY_CURRENT_USER);
-    registry_override_manager_->OverrideRegistry(HKEY_LOCAL_MACHINE);
+    ASSERT_NO_FATAL_FAILURE(
+        registry_override_manager_->OverrideRegistry(HKEY_CURRENT_USER));
+    ASSERT_NO_FATAL_FAILURE(
+        registry_override_manager_->OverrideRegistry(HKEY_LOCAL_MACHINE));
   }
 
  private:
@@ -207,7 +207,7 @@ TEST_F(InstallUtilTest, DeleteRegistryValueIf) {
   const wchar_t value[] = L"hi mom";
 
   {
-    ResetRegistryOverrides();
+    ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides());
     // Nothing to delete if the key isn't even there.
     {
       MockRegistryValuePredicate pred;
@@ -270,7 +270,7 @@ TEST_F(InstallUtilTest, DeleteRegistryValueIf) {
   }
 
   {
-    ResetRegistryOverrides();
+    ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides());
     // Default value matches: delete using empty string.
     {
       MockRegistryValuePredicate pred;
@@ -290,7 +290,7 @@ TEST_F(InstallUtilTest, DeleteRegistryValueIf) {
   }
 
   {
-    ResetRegistryOverrides();
+    ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides());
     // Default value matches: delete using NULL.
     {
       MockRegistryValuePredicate pred;
@@ -367,39 +367,6 @@ TEST_F(InstallUtilTest, ProgramCompare) {
                                                       short_expect));
   EXPECT_TRUE(InstallUtil::ProgramCompare(expect).Evaluate(
       L"\"" + short_expect + L"\""));
-}
-
-// Win64 Chrome is always installed in the 32-bit Program Files directory. Test
-// that IsPerUserInstall returns false for an arbitrary path with
-// DIR_PROGRAM_FILESX86 as a suffix but not DIR_PROGRAM_FILES when the two are
-// unrelated.
-TEST_F(InstallUtilTest, IsPerUserInstall) {
-  InstallUtil::ResetIsPerUserInstallForTest();
-
-#if defined(_WIN64)
-  const int kChromeProgramFilesKey = base::DIR_PROGRAM_FILESX86;
-#else
-  const int kChromeProgramFilesKey = base::DIR_PROGRAM_FILES;
-#endif
-  base::ScopedPathOverride program_files_override(kChromeProgramFilesKey);
-  base::FilePath some_exe;
-  ASSERT_TRUE(PathService::Get(kChromeProgramFilesKey, &some_exe));
-  some_exe = some_exe.AppendASCII("Company")
-      .AppendASCII("Product")
-      .AppendASCII("product.exe");
-  EXPECT_FALSE(InstallUtil::IsPerUserInstall(some_exe));
-  InstallUtil::ResetIsPerUserInstallForTest();
-
-#if defined(_WIN64)
-  const int kOtherProgramFilesKey = base::DIR_PROGRAM_FILES;
-  base::ScopedPathOverride other_program_files_override(kOtherProgramFilesKey);
-  ASSERT_TRUE(PathService::Get(kOtherProgramFilesKey, &some_exe));
-  some_exe = some_exe.AppendASCII("Company")
-      .AppendASCII("Product")
-      .AppendASCII("product.exe");
-  EXPECT_TRUE(InstallUtil::IsPerUserInstall(some_exe));
-  InstallUtil::ResetIsPerUserInstallForTest();
-#endif  // defined(_WIN64)
 }
 
 TEST_F(InstallUtilTest, AddDowngradeVersion) {

@@ -14,8 +14,10 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -1010,25 +1012,29 @@ class SSLClientSocketFalseStartTest : public SSLClientSocketTest {
 
 class SSLClientSocketChannelIDTest : public SSLClientSocketTest {
  protected:
+  SSLClientSocketChannelIDTest()
+      : scoped_task_scheduler_(base::MessageLoop::current()) {}
+
   void EnableChannelID() {
-    channel_id_service_.reset(new ChannelIDService(
-        new DefaultChannelIDStore(NULL), base::ThreadTaskRunnerHandle::Get()));
+    channel_id_service_.reset(
+        new ChannelIDService(new DefaultChannelIDStore(NULL)));
     context_.channel_id_service = channel_id_service_.get();
   }
 
   void EnableFailingChannelID() {
-    channel_id_service_.reset(new ChannelIDService(
-        new FailingChannelIDStore(), base::ThreadTaskRunnerHandle::Get()));
+    channel_id_service_.reset(
+        new ChannelIDService(new FailingChannelIDStore()));
     context_.channel_id_service = channel_id_service_.get();
   }
 
   void EnableAsyncFailingChannelID() {
-    channel_id_service_.reset(new ChannelIDService(
-        new AsyncFailingChannelIDStore(), base::ThreadTaskRunnerHandle::Get()));
+    channel_id_service_.reset(
+        new ChannelIDService(new AsyncFailingChannelIDStore()));
     context_.channel_id_service = channel_id_service_.get();
   }
 
  private:
+  base::test::ScopedTaskScheduler scoped_task_scheduler_;
   std::unique_ptr<ChannelIDService> channel_id_service_;
 };
 
@@ -2596,34 +2602,17 @@ TEST_F(SSLClientSocketTest, CertificateErrorNoResume) {
   EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, ssl_info.handshake_type);
 }
 
-// Test that DHE is removed but gives a dedicated error. Also test that the
-// dhe_enabled option can restore it.
-TEST_F(SSLClientSocketTest, DHE) {
+// Test that DHE is removed.
+TEST_F(SSLClientSocketTest, NoDHE) {
   SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.key_exchanges =
       SpawnedTestServer::SSLOptions::KEY_EXCHANGE_DHE_RSA;
   ASSERT_TRUE(StartTestServer(ssl_options));
 
-  // Normal handshakes with DHE do not work, with or without DHE enabled.
   SSLConfig ssl_config;
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
-
-  ssl_config.dhe_enabled = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_THAT(rv, IsError(ERR_SSL_VERSION_OR_CIPHER_MISMATCH));
-
-  // Enabling deprecated ciphers gives DHE a dedicated error code.
-  ssl_config.dhe_enabled = false;
-  ssl_config.deprecated_cipher_suites_enabled = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_THAT(rv, IsError(ERR_SSL_OBSOLETE_CIPHER));
-
-  // Enabling both deprecated ciphers and DHE restores it.
-  ssl_config.dhe_enabled = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_THAT(rv, IsOk());
 }
 
 // Tests that enabling deprecated ciphers shards the session cache.
@@ -2774,21 +2763,6 @@ TEST_F(SSLClientSocketFalseStartTest, RSA) {
   client_config.alpn_protos.push_back(kProtoHTTP11);
   ASSERT_NO_FATAL_FAILURE(
       TestFalseStart(server_options, client_config, false));
-}
-
-// Test that False Start is disabled with DHE_RSA ciphers.
-TEST_F(SSLClientSocketFalseStartTest, DHE_RSA) {
-  SpawnedTestServer::SSLOptions server_options;
-  server_options.key_exchanges =
-      SpawnedTestServer::SSLOptions::KEY_EXCHANGE_DHE_RSA;
-  server_options.bulk_ciphers =
-      SpawnedTestServer::SSLOptions::BULK_CIPHER_AES128GCM;
-  server_options.alpn_protocols.push_back("http/1.1");
-  SSLConfig client_config;
-  client_config.alpn_protos.push_back(kProtoHTTP11);
-  // DHE is only advertised when deprecated ciphers are enabled.
-  client_config.deprecated_cipher_suites_enabled = true;
-  ASSERT_NO_FATAL_FAILURE(TestFalseStart(server_options, client_config, false));
 }
 
 // Test that False Start is disabled without an AEAD.
@@ -3629,8 +3603,8 @@ TEST_F(SSLClientSocketTest, DumpMemoryStats) {
   sock_->DumpMemoryStats(&stats);
   EXPECT_EQ(0u, stats.buffer_size);
   EXPECT_EQ(1u, stats.cert_count);
-  EXPECT_LT(0u, stats.serialized_cert_size);
-  EXPECT_EQ(stats.serialized_cert_size, stats.total_size);
+  EXPECT_LT(0u, stats.cert_size);
+  EXPECT_EQ(stats.cert_size, stats.total_size);
 
   // Read the response without writing a request, so the read will be pending.
   TestCompletionCallback read_callback;
@@ -3643,7 +3617,7 @@ TEST_F(SSLClientSocketTest, DumpMemoryStats) {
   sock_->DumpMemoryStats(&stats2);
   EXPECT_EQ(17 * 1024u, stats2.buffer_size);
   EXPECT_EQ(1u, stats2.cert_count);
-  EXPECT_LT(0u, stats2.serialized_cert_size);
+  EXPECT_LT(0u, stats2.cert_size);
   EXPECT_LT(17 * 1024u, stats2.total_size);
 }
 

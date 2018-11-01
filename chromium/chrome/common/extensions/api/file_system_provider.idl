@@ -518,6 +518,7 @@ namespace fileSystemProvider {
   [nocompile] callback ProviderSuccessCallback = void();
 
   // Callback to be called by the providing extension in case of an error.
+  // Any error code is allowed except <code>OK</code>.
   [nocompile] callback ProviderErrorCallback = void(ProviderError error);
 
   // Success callback for the $(ref:onGetMetadataRequested) event.
@@ -546,7 +547,7 @@ namespace fileSystemProvider {
   interface Functions {
     // Mounts a file system with the given <code>fileSystemId</code> and
     // <code>displayName</code>. <code>displayName</code> will be shown in the
-    // left panel of Files.app. <code>displayName</code> can contain any
+    // left panel of the Files app. <code>displayName</code> can contain any
     // characters including '/', but cannot be an empty string.
     // <code>displayName</code> must be descriptive but doesn't have to be
     // unique. The <code>fileSystemId</code> must not be an empty string.

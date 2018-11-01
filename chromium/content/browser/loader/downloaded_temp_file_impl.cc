@@ -11,11 +11,10 @@
 namespace content {
 
 // static
-mojo::InterfacePtr<mojom::DownloadedTempFile> DownloadedTempFileImpl::Create(
-    int child_id,
-    int request_id) {
+mojom::DownloadedTempFilePtr DownloadedTempFileImpl::Create(int child_id,
+                                                            int request_id) {
   mojo::InterfacePtr<mojom::DownloadedTempFile> ptr;
-  auto binding = mojo::MakeStrongBinding(
+  mojo::MakeStrongBinding(
       base::MakeUnique<DownloadedTempFileImpl>(child_id, request_id),
       mojo::MakeRequest(&ptr));
   return ptr;

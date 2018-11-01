@@ -30,6 +30,7 @@
 #import "platform/graphics/GraphicsContextStateSaver.h"
 #import "platform/graphics/Image.h"
 #import "platform/graphics/ImageBuffer.h"
+#import "platform/graphics/paint/PaintCanvas.h"
 #import "platform/mac/BlockExceptions.h"
 #import "platform/mac/ColorMac.h"
 #import "platform/mac/LocalCurrentGraphicsContext.h"
@@ -292,9 +293,9 @@ bool ThemePainterMac::paintMenuListButton(const LayoutObject& o,
     return false;
 
   Color color = o.styleRef().visitedDependentColor(CSSPropertyColor);
-  SkPaint paint = paintInfo.context.fillPaint();
-  paint.setAntiAlias(true);
-  paint.setColor(color.rgb());
+  PaintFlags flags = paintInfo.context.fillFlags();
+  flags.setAntiAlias(true);
+  flags.setColor(color.rgb());
 
   SkPath arrow1;
   arrow1.moveTo(leftEdge, centerY - spaceBetweenArrows / 2.0f);
@@ -303,7 +304,7 @@ bool ThemePainterMac::paintMenuListButton(const LayoutObject& o,
                 centerY - spaceBetweenArrows / 2.0f - arrowHeight);
 
   // Draw the top arrow.
-  paintInfo.context.drawPath(arrow1, paint);
+  paintInfo.context.drawPath(arrow1, flags);
 
   SkPath arrow2;
   arrow2.moveTo(leftEdge, centerY + spaceBetweenArrows / 2.0f);
@@ -312,7 +313,7 @@ bool ThemePainterMac::paintMenuListButton(const LayoutObject& o,
                 centerY + spaceBetweenArrows / 2.0f + arrowHeight);
 
   // Draw the bottom arrow.
-  paintInfo.context.drawPath(arrow2, paint);
+  paintInfo.context.drawPath(arrow2, flags);
   return false;
 }
 
@@ -398,9 +399,9 @@ bool ThemePainterMac::paintSliderTrack(const LayoutObject& o,
   FloatRoundedRect borderRRect(borderRect, borderRadius, borderRadius,
                                borderRadius, borderRadius);
   paintInfo.context.setStrokeThickness(LayoutThemeMac::sliderTrackBorderWidth);
-  SkPaint borderPaint(paintInfo.context.strokePaint());
-  borderGradient->applyToPaint(borderPaint, SkMatrix::I());
-  paintInfo.context.drawRRect(borderRRect, borderPaint);
+  PaintFlags borderFlags(paintInfo.context.strokeFlags());
+  borderGradient->applyToFlags(borderFlags, SkMatrix::I());
+  paintInfo.context.drawRRect(borderRRect, borderFlags);
 
   return false;
 }
@@ -469,18 +470,18 @@ bool ThemePainterMac::paintSliderThumb(const LayoutObject& o,
   fillGradient->addColorStop(0.52, fillGradientUpperMiddleColor);
   fillGradient->addColorStop(0.52, fillGradientLowerMiddleColor);
   fillGradient->addColorStop(1.0, fillGradientBottomColor);
-  SkPaint fillPaint(paintInfo.context.fillPaint());
-  fillGradient->applyToPaint(fillPaint, SkMatrix::I());
-  paintInfo.context.drawOval(borderBounds, fillPaint);
+  PaintFlags fillFlags(paintInfo.context.fillFlags());
+  fillGradient->applyToFlags(fillFlags, SkMatrix::I());
+  paintInfo.context.drawOval(borderBounds, fillFlags);
 
   RefPtr<Gradient> borderGradient = Gradient::create(
       fillBounds.minXMinYCorner(), fillBounds.minXMaxYCorner());
   borderGradient->addColorStop(0.0, borderGradientTopColor);
   borderGradient->addColorStop(1.0, borderGradientBottomColor);
   paintInfo.context.setStrokeThickness(LayoutThemeMac::sliderThumbBorderWidth);
-  SkPaint borderPaint(paintInfo.context.strokePaint());
-  borderGradient->applyToPaint(borderPaint, SkMatrix::I());
-  paintInfo.context.drawOval(borderBounds, borderPaint);
+  PaintFlags borderFlags(paintInfo.context.strokeFlags());
+  borderGradient->applyToFlags(borderFlags, SkMatrix::I());
+  paintInfo.context.drawOval(borderBounds, borderFlags);
 
   if (LayoutTheme::isFocused(o)) {
     Path borderPath;

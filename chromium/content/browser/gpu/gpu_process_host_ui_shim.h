@@ -31,10 +31,6 @@ namespace IPC {
 class Message;
 }
 
-namespace gpu {
-struct VideoMemoryUsageStats;
-}
-
 namespace content {
 void RouteToGpuProcessHostUIShimTask(int host_id, const IPC::Message& msg);
 
@@ -75,6 +71,9 @@ class GpuProcessHostUIShim : public IPC::Listener,
   CONTENT_EXPORT void SimulateRemoveAllContext();
   CONTENT_EXPORT void SimulateCrash();
   CONTENT_EXPORT void SimulateHang();
+#if defined(OS_ANDROID)
+  CONTENT_EXPORT void SimulateJavaCrash();
+#endif
 
  private:
   explicit GpuProcessHostUIShim(int host_id);
@@ -85,8 +84,6 @@ class GpuProcessHostUIShim : public IPC::Listener,
   void OnLogMessage(int level, const std::string& header,
       const std::string& message);
   void OnGraphicsInfoCollected(const gpu::GPUInfo& gpu_info);
-  void OnVideoMemoryUsageStatsReceived(
-      const gpu::VideoMemoryUsageStats& video_memory_usage_stats);
 
   // The serial number of the GpuProcessHost / GpuProcessHostUIShim pair.
   int host_id_;

@@ -9,8 +9,9 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "chrome/browser/chromeos/arc/optin/arc_optin_preference_handler_observer.h"
-#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen_actor.h"
+#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen_view.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chromeos/settings/timezone_settings.h"
 
@@ -20,12 +21,12 @@ class ArcOptInPreferenceHandler;
 
 namespace chromeos {
 
-// The sole implementation of the ArcTermsOfServiceScreenActor, using WebUI.
-class ArcTermsOfServiceScreenHandler :
-    public BaseScreenHandler,
-    public ArcTermsOfServiceScreenActor,
-    public arc::ArcOptInPreferenceHandlerObserver,
-    public system::TimezoneSettings::Observer {
+// The sole implementation of the ArcTermsOfServiceScreenView, using WebUI.
+class ArcTermsOfServiceScreenHandler
+    : public BaseScreenHandler,
+      public ArcTermsOfServiceScreenView,
+      public arc::ArcOptInPreferenceHandlerObserver,
+      public system::TimezoneSettings::Observer {
  public:
   ArcTermsOfServiceScreenHandler();
   ~ArcTermsOfServiceScreenHandler() override;
@@ -37,8 +38,9 @@ class ArcTermsOfServiceScreenHandler :
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
 
-  // ArcTermsOfServiceScreenActor:
-  void SetDelegate(Delegate* screen) override;
+  // ArcTermsOfServiceScreenView:
+  void AddObserver(ArcTermsOfServiceScreenViewObserver* observer) override;
+  void RemoveObserver(ArcTermsOfServiceScreenViewObserver* observer) override;
   void Show() override;
   void Hide() override;
 
@@ -60,7 +62,7 @@ class ArcTermsOfServiceScreenHandler :
   void OnBackupAndRestoreModeChanged(bool enabled, bool managed) override;
   void OnLocationServicesModeChanged(bool enabled, bool managed) override;
 
-  Delegate* screen_ = nullptr;
+  base::ObserverList<ArcTermsOfServiceScreenViewObserver, true> observer_list_;
 
   // Whether the screen should be shown right after initialization.
   bool show_on_init_ = false;

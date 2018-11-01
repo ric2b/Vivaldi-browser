@@ -24,6 +24,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -51,6 +52,7 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
@@ -87,12 +89,17 @@
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
+#include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
 
 #if defined(OS_ANDROID)
 #include "ui/android/view_android.h"
+#else
+#include "content/browser/compositor/image_transport_factory.h"
+// nogncheck as dependency of "ui/compositor" is on non-Android platforms only.
+#include "ui/compositor/compositor.h"  // nogncheck
 #endif
 
 #if defined(OS_MACOSX)
@@ -288,6 +295,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       last_event_type_(blink::WebInputEvent::Undefined),
       new_content_rendering_delay_(
           base::TimeDelta::FromMilliseconds(kNewContentRenderingDelayMs)),
+      current_content_source_id_(0),
       weak_factory_(this) {
   CHECK(delegate_);
   CHECK_NE(MSG_ROUTING_NONE, routing_id_);
@@ -297,8 +305,9 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   // Update the display color profile cache so that it is likely to be up to
   // date when the renderer process requests the color profile.
   if (gfx::ICCProfile::CachedProfilesNeedUpdate()) {
-    BrowserThread::PostBlockingPoolTask(
-        FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::BACKGROUND),
         base::Bind(&gfx::ICCProfile::UpdateCachedProfilesOnBackgroundThread));
   }
 #endif
@@ -420,6 +429,23 @@ int RenderWidgetHostImpl::GetRoutingID() const {
 
 RenderWidgetHostViewBase* RenderWidgetHostImpl::GetView() const {
   return view_.get();
+}
+
+cc::FrameSinkId RenderWidgetHostImpl::AllocateFrameSinkId(
+    bool is_guest_view_hack) {
+// GuestViews have two RenderWidgetHostViews and so we need to make sure
+// we don't have FrameSinkId collisions.
+// The FrameSinkId generated here must not conflict with FrameSinkId allocated
+// in cc::FrameSinkIdAllocator.
+#if !defined(OS_ANDROID)
+  if (is_guest_view_hack) {
+    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+    return factory->GetContextFactoryPrivate()->AllocateFrameSinkId();
+  }
+#endif
+  return cc::FrameSinkId(
+      base::checked_cast<uint32_t>(this->GetProcess()->GetID()),
+      base::checked_cast<uint32_t>(this->GetRoutingID()));
 }
 
 void RenderWidgetHostImpl::ResetSizeAndRepaintPendingFlags() {
@@ -807,41 +833,6 @@ void RenderWidgetHostImpl::ViewDestroyed() {
   SetView(NULL);
 }
 
-void RenderWidgetHostImpl::CopyFromBackingStore(
-    const gfx::Rect& src_subrect,
-    const gfx::Size& accelerated_dst_size,
-    const ReadbackRequestCallback& callback,
-    const SkColorType preferred_color_type) {
-  if (view_) {
-    TRACE_EVENT0("browser",
-        "RenderWidgetHostImpl::CopyFromBackingStore::FromCompositingSurface");
-    gfx::Rect accelerated_copy_rect = src_subrect.IsEmpty() ?
-        gfx::Rect(view_->GetViewBounds().size()) : src_subrect;
-    view_->CopyFromCompositingSurface(accelerated_copy_rect,
-                                      accelerated_dst_size, callback,
-                                      preferred_color_type);
-    return;
-  }
-
-  callback.Run(SkBitmap(), content::READBACK_FAILED);
-}
-
-bool RenderWidgetHostImpl::CanCopyFromBackingStore() {
-  if (view_)
-    return view_->IsSurfaceAvailableForCopy();
-  return false;
-}
-
-void RenderWidgetHostImpl::LockBackingStore() {
-  if (view_)
-    view_->LockCompositingSurface();
-}
-
-void RenderWidgetHostImpl::UnlockBackingStore() {
-  if (view_)
-    view_->UnlockCompositingSurface();
-}
-
 #if defined(OS_MACOSX)
 void RenderWidgetHostImpl::PauseForPendingResizeOrRepaints() {
   TRACE_EVENT0("browser",
@@ -996,7 +987,9 @@ void RenderWidgetHostImpl::StopHangMonitorTimeout() {
   RendererIsResponsive();
 }
 
-void RenderWidgetHostImpl::StartNewContentRenderingTimeout() {
+void RenderWidgetHostImpl::StartNewContentRenderingTimeout(
+    uint32_t next_source_id) {
+  current_content_source_id_ = next_source_id;
   // It is possible for a compositor frame to arrive before the browser is
   // notified about the page being committed, in which case no timer is
   // necessary.
@@ -1382,8 +1375,9 @@ void RenderWidgetHostImpl::DragTargetDragOver(
                                   operations_allowed, key_modifiers));
 }
 
-void RenderWidgetHostImpl::DragTargetDragLeave() {
-  Send(new DragMsg_TargetDragLeave(GetRoutingID()));
+void RenderWidgetHostImpl::DragTargetDragLeave(const gfx::Point& client_point,
+                                               const gfx::Point& screen_point) {
+  Send(new DragMsg_TargetDragLeave(GetRoutingID(), client_point, screen_point));
 }
 
 void RenderWidgetHostImpl::DragTargetDrop(const DropData& drop_data,
@@ -1500,7 +1494,7 @@ void RenderWidgetHostImpl::OnStartDragging(
     const gfx::Vector2d& bitmap_offset_in_dip,
     const DragEventSourceInfo& event_info) {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
-  if (!view) {
+  if (!view || !GetView()) {
     // Need to clear drag and drop state in blink.
     DragSourceSystemDragEnded();
     return;
@@ -1839,7 +1833,13 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
   if (touch_emulator_)
     touch_emulator_->SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
 
-  if (view_) {
+  // Ignore this frame if its content has already been unloaded. Source ID
+  // is always zero for an OOPIF because we are only concerned with displaying
+  // stale graphics on top-level frames. We accept frames that have a source ID
+  // greater than |current_content_source_id_| because in some cases the first
+  // compositor frame can arrive before the navigation commit message that
+  // updates that value.
+  if (view_ && frame.metadata.content_source_id >= current_content_source_id_) {
     view_->OnSwapCompositorFrame(compositor_frame_sink_id, std::move(frame));
     view_->DidReceiveRendererFrame();
   } else {
@@ -1980,6 +1980,23 @@ void RenderWidgetHostImpl::SetTouchEventEmulationEnabled(
 
 void RenderWidgetHostImpl::OnTextInputStateChanged(
     const TextInputState& params) {
+  // TODO(ekaramad): Remove this with BrowserPlugin (https://crbug.com/533069).
+  if (delegate_ && delegate_->GetTextInputManager() &&
+      delegate_->GetTextInputManager()->GetTextInputState() &&
+      delegate_->GetTextInputManager()->GetTextInputState()->type !=
+          ui::TEXT_INPUT_TYPE_NONE &&
+      delegate_->HasFocusedGuests()) {
+    // There is a focused BrowserPlugin-based guest on the page, therefore do
+    // not forward any update to the |view_|. We reach here because focus has
+    // recently been passed on BrowserPlugin but at the same time, RenderWidget
+    // needed to update TextInputState (e.g., an <input> blurred before the
+    // plugin received focus). Since there is no guarantee on the order of the
+    // update IPCs received from the guest process and the embedder process,
+    // this update may be overwriting the correct update from the guest (
+    // https://crbug.com/546645).
+    return;
+  }
+
   if (view_)
     view_->TextInputStateChanged(params);
 }
@@ -2256,11 +2273,6 @@ void RenderWidgetHostImpl::SetBackgroundOpaque(bool opaque) {
   Send(new ViewMsg_SetBackgroundOpaque(GetRoutingID(), opaque));
 }
 
-void RenderWidgetHostImpl::SetEditCommandsForNextKeyEvent(
-    const std::vector<EditCommand>& commands) {
-  Send(new InputMsg_SetEditCommandsForNextKeyEvent(GetRoutingID(), commands));
-}
-
 void RenderWidgetHostImpl::ExecuteEditCommand(const std::string& command,
                                               const std::string& value) {
   Send(new InputMsg_ExecuteEditCommand(GetRoutingID(), command, value));
@@ -2375,49 +2387,36 @@ void RenderWidgetHostImpl::WindowSnapshotReachedScreen(int snapshot_id) {
   gfx::Rect snapshot_bounds(GetView()->GetViewBounds().size());
 #endif
 
-  std::vector<unsigned char> png;
-  if (ui::GrabViewSnapshot(
-      GetView()->GetNativeView(), &png, snapshot_bounds)) {
-    OnSnapshotDataReceived(snapshot_id, &png.front(), png.size());
+  gfx::Image image;
+  if (ui::GrabViewSnapshot(GetView()->GetNativeView(), snapshot_bounds,
+                           &image)) {
+    OnSnapshotReceived(snapshot_id, image);
     return;
   }
 
   ui::GrabViewSnapshotAsync(
-      GetView()->GetNativeView(),
-      snapshot_bounds,
-      base::ThreadTaskRunnerHandle::Get(),
-      base::Bind(&RenderWidgetHostImpl::OnSnapshotDataReceivedAsync,
-                 weak_factory_.GetWeakPtr(),
-                 snapshot_id));
+      GetView()->GetNativeView(), snapshot_bounds,
+      base::Bind(&RenderWidgetHostImpl::OnSnapshotReceived,
+                 weak_factory_.GetWeakPtr(), snapshot_id));
 }
 
-void RenderWidgetHostImpl::OnSnapshotDataReceived(int snapshot_id,
-                                                  const unsigned char* data,
-                                                  size_t size) {
+void RenderWidgetHostImpl::OnSnapshotReceived(int snapshot_id,
+                                              const gfx::Image& image) {
   // Any pending snapshots with a lower ID than the one received are considered
   // to be implicitly complete, and returned the same snapshot data.
   PendingSnapshotMap::iterator it = pending_browser_snapshots_.begin();
   while (it != pending_browser_snapshots_.end()) {
-      if (it->first <= snapshot_id) {
-        it->second.Run(data, size);
-        pending_browser_snapshots_.erase(it++);
-      } else {
-        ++it;
-      }
+    if (it->first <= snapshot_id) {
+      it->second.Run(image);
+      pending_browser_snapshots_.erase(it++);
+    } else {
+      ++it;
+    }
   }
 #if defined(OS_MACOSX)
   if (pending_browser_snapshots_.empty())
     power_save_blocker_.reset();
 #endif
-}
-
-void RenderWidgetHostImpl::OnSnapshotDataReceivedAsync(
-    int snapshot_id,
-    scoped_refptr<base::RefCountedBytes> png_data) {
-  if (png_data.get())
-    OnSnapshotDataReceived(snapshot_id, png_data->front(), png_data->size());
-  else
-    OnSnapshotDataReceived(snapshot_id, NULL, 0);
 }
 
 // static

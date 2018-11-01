@@ -44,6 +44,9 @@ const int kFadeInOutDuration = 200;
 }  // namespace.
 
 // static
+const char ToastContentsView::kViewClassName[] = "ToastContentsView";
+
+// static
 gfx::Size ToastContentsView::GetToastSizeForView(const views::View* view) {
   int width = kNotificationWidth + view->GetInsets().width();
   return gfx::Size(width, view->GetHeightForWidth(width));
@@ -168,6 +171,12 @@ void ToastContentsView::SetBoundsWithAnimation(gfx::Rect new_bounds) {
   bounds_animation_->Show();
 }
 
+void ToastContentsView::ActivateToast() {
+  set_can_activate(true);
+  if (GetWidget())
+    GetWidget()->Activate();
+}
+
 void ToastContentsView::StartFadeIn() {
   // The decrement is done in OnBoundsAnimationEndedOrCancelled callback.
   if (collection_)
@@ -269,6 +278,14 @@ void ToastContentsView::OnWorkAreaChanged() {
       Screen::GetScreen()->GetDisplayNearestWindow(native_view));
 }
 
+void ToastContentsView::OnWidgetActivationChanged(views::Widget* widget,
+                                                  bool active) {
+  if (active)
+    collection_->PausePopupTimers();
+  else
+    collection_->RestartPopupTimers();
+}
+
 // views::View
 void ToastContentsView::OnMouseEntered(const ui::MouseEvent& event) {
   if (collection_)
@@ -315,6 +332,10 @@ void ToastContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_WINDOW;
 }
 
+const char* ToastContentsView::GetClassName() const {
+  return kViewClassName;
+}
+
 void ToastContentsView::ClickOnNotification(
     const std::string& notification_id) {
   if (collection_)
@@ -325,6 +346,12 @@ void ToastContentsView::ClickOnSettingsButton(
     const std::string& notification_id) {
   if (collection_)
     collection_->ClickOnSettingsButton(notification_id);
+}
+
+void ToastContentsView::UpdateNotificationSize(
+    const std::string& notification_id) {
+  if (collection_)
+    collection_->UpdateNotificationSize(notification_id);
 }
 
 void ToastContentsView::RemoveNotification(
@@ -370,6 +397,7 @@ void ToastContentsView::CreateWidget(
   views::Widget* widget = new views::Widget();
   alignment_delegate->ConfigureWidgetInitParamsForContainer(widget, &params);
   widget->set_focus_on_creation(false);
+  widget->AddObserver(this);
 
 #if defined(OS_WIN)
   // We want to ensure that this toast always goes to the native desktop,

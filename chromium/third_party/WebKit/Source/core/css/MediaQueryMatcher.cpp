@@ -66,7 +66,7 @@ bool MediaQueryMatcher::evaluate(const MediaQuerySet* media) {
     m_evaluator = createEvaluator();
 
   if (m_evaluator)
-    return m_evaluator->eval(media);
+    return m_evaluator->eval(*media);
 
   return false;
 }
@@ -75,14 +75,14 @@ MediaQueryList* MediaQueryMatcher::matchMedia(const String& query) {
   if (!m_document)
     return nullptr;
 
-  MediaQuerySet* media = MediaQuerySet::create(query);
+  RefPtr<MediaQuerySet> media = MediaQuerySet::create(query);
   return MediaQueryList::create(m_document, this, media);
 }
 
 void MediaQueryMatcher::addMediaQueryList(MediaQueryList* query) {
   if (!m_document)
     return;
-  m_mediaLists.add(query);
+  m_mediaLists.insert(query);
 }
 
 void MediaQueryMatcher::removeMediaQueryList(MediaQueryList* query) {
@@ -94,7 +94,7 @@ void MediaQueryMatcher::removeMediaQueryList(MediaQueryList* query) {
 void MediaQueryMatcher::addViewportListener(MediaQueryListListener* listener) {
   if (!m_document)
     return;
-  m_viewportListeners.add(listener);
+  m_viewportListeners.insert(listener);
 }
 
 void MediaQueryMatcher::removeViewportListener(

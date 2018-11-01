@@ -33,14 +33,14 @@
 #define LinkLoader_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourceClient.h"
-#include "core/fetch/ResourceOwner.h"
 #include "core/loader/LinkLoaderClient.h"
 #include "core/loader/resource/LinkPreloadResourceClients.h"
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/PrerenderClient.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/ResourceClient.h"
+#include "platform/loader/fetch/ResourceOwner.h"
 #include "wtf/Optional.h"
 
 namespace blink {
@@ -61,7 +61,7 @@ class CORE_EXPORT LinkLoader final
 
  public:
   static LinkLoader* create(LinkLoaderClient* client) {
-    return new LinkLoader(client);
+    return new LinkLoader(client, client->getLoadingTaskRunner());
   }
   ~LinkLoader() override;
 
@@ -108,7 +108,7 @@ class CORE_EXPORT LinkLoader final
   DECLARE_TRACE();
 
  private:
-  explicit LinkLoader(LinkLoaderClient*);
+  LinkLoader(LinkLoaderClient*, RefPtr<WebTaskRunner>);
 
   void linkLoadTimerFired(TimerBase*);
   void linkLoadingErrorTimerFired(TimerBase*);
@@ -116,8 +116,8 @@ class CORE_EXPORT LinkLoader final
 
   Member<LinkLoaderClient> m_client;
 
-  Timer<LinkLoader> m_linkLoadTimer;
-  Timer<LinkLoader> m_linkLoadingErrorTimer;
+  TaskRunnerTimer<LinkLoader> m_linkLoadTimer;
+  TaskRunnerTimer<LinkLoader> m_linkLoadingErrorTimer;
 
   Member<PrerenderHandle> m_prerender;
   Member<LinkPreloadResourceClient> m_linkPreloadResourceClient;

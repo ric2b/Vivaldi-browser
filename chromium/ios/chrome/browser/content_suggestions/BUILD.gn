@@ -1,0 +1,43 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("content_suggestions") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "content_suggestions_category_wrapper.h",
+    "content_suggestions_category_wrapper.mm",
+    "content_suggestions_coordinator.h",
+    "content_suggestions_coordinator.mm",
+    "content_suggestions_mediator.h",
+    "content_suggestions_mediator.mm",
+    "content_suggestions_service_bridge_observer.h",
+    "content_suggestions_service_bridge_observer.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/ntp_snippets",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/ntp_snippets",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/content_suggestions",
+    "//ios/web",
+    "//ui/base",
+    "//ui/strings",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "content_suggestions_category_wrapper_unittest.mm",
+  ]
+  deps = [
+    ":content_suggestions",
+    "//components/ntp_snippets",
+    "//testing/gtest",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

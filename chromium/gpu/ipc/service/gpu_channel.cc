@@ -30,7 +30,6 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/command_executor.h"
 #include "gpu/command_buffer/service/image_factory.h"
@@ -570,6 +569,12 @@ bool GpuChannelMessageFilter::MessageErrorHandler(const IPC::Message& message,
   }
   return true;
 }
+
+// Definitions for constructor and destructor of this interface are needed to
+// avoid MSVC LNK2019.
+FilteredSender::FilteredSender() = default;
+
+FilteredSender::~FilteredSender() = default;
 
 GpuChannel::GpuChannel(GpuChannelManager* gpu_channel_manager,
                        SyncPointManager* sync_point_manager,

@@ -9,10 +9,14 @@
 #include "platform/heap/Handle.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/scheduler/base/task_time_observer.h"
+#include "v8/include/v8.h"
 #include "wtf/text/AtomicString.h"
-#include <v8.h>
 
 namespace blink {
+
+namespace probe {
+class RecalculateStyle;
+}
 
 class DOMWindow;
 class Document;
@@ -37,6 +41,7 @@ class CORE_EXPORT PerformanceMonitor final
     kLongLayout,
     kBlockedEvent,
     kBlockedParser,
+    kDiscouragedAPIUse,
     kHandler,
     kRecurringHandler,
     kAfterLast
@@ -68,22 +73,23 @@ class CORE_EXPORT PerformanceMonitor final
     DEFINE_INLINE_VIRTUAL_TRACE() {}
   };
 
-  // Instrumenting methods.
-  static void willExecuteScript(ExecutionContext*);
-  static void didExecuteScript(ExecutionContext*);
-  static void willCallFunction(ExecutionContext*);
-  static void didCallFunction(ExecutionContext*, v8::Local<v8::Function>);
-  static void willUpdateLayout(Document*);
-  static void didUpdateLayout(Document*);
-  static void willRecalculateStyle(Document*);
-  static void didRecalculateStyle(Document*);
-  static void documentWriteFetchScript(Document*);
   static void reportGenericViolation(ExecutionContext*,
                                      Violation,
                                      const String& text,
                                      double time,
-                                     SourceLocation*);
+                                     std::unique_ptr<SourceLocation>);
   static double threshold(ExecutionContext*, Violation);
+
+  // Instrumenting methods.
+  void willExecuteScript(ExecutionContext*);
+  void didExecuteScript();
+  void willCallFunction(ExecutionContext*);
+  void didCallFunction(ExecutionContext*, v8::Local<v8::Function>);
+  void willUpdateLayout();
+  void didUpdateLayout();
+  void will(const probe::RecalculateStyle&);
+  void did(const probe::RecalculateStyle&);
+  void documentWriteFetchScript(Document*);
 
   // Direct API for core.
   void subscribe(Violation, double threshold, Client*);
@@ -104,18 +110,11 @@ class CORE_EXPORT PerformanceMonitor final
 
   void updateInstrumentation();
 
-  void alwaysWillExecuteScript(ExecutionContext*);
-  void alwaysDidExecuteScript();
-  void alwaysWillCallFunction(ExecutionContext*);
-  void alwaysDidCallFunction(v8::Local<v8::Function>);
-  void willUpdateLayout();
-  void didUpdateLayout();
-  void willRecalculateStyle();
-  void didRecalculateStyle();
-  void reportGenericViolation(Violation,
-                              const String& text,
-                              double time,
-                              SourceLocation*);
+  void innerReportGenericViolation(ExecutionContext*,
+                                   Violation,
+                                   const String& text,
+                                   double time,
+                                   std::unique_ptr<SourceLocation>);
 
   // scheduler::TaskTimeObserver implementation
   void willProcessTask(scheduler::TaskQueue*, double startTime) override;

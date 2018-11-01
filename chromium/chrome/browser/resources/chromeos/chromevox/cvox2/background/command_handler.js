@@ -9,10 +9,12 @@
 goog.provide('CommandHandler');
 
 goog.require('ChromeVoxState');
+goog.require('CustomAutomationEvent');
 goog.require('Output');
 goog.require('cvox.ChromeVoxBackground');
 
 goog.scope(function() {
+var AutomationEvent = chrome.automation.AutomationEvent;
 var AutomationNode = chrome.automation.AutomationNode;
 var Dir = constants.Dir;
 var EventType = chrome.automation.EventType;
@@ -42,8 +44,8 @@ CommandHandler.onCommand = function(command) {
     case 'speakTimeAndDate':
       chrome.automation.getDesktop(function(d) {
         // First, try speaking the on-screen time.
-        var allTime = d.findAll({role: RoleType.time});
-        allTime.filter(function(t) { return t.root.role == RoleType.desktop; });
+        var allTime = d.findAll({role: RoleType.TIME});
+        allTime.filter(function(t) { return t.root.role == RoleType.DESKTOP; });
 
         var timeString = '';
         allTime.forEach(function(t) {
@@ -445,7 +447,7 @@ CommandHandler.onCommand = function(command) {
     case 'forceClickOnCurrentItem':
       if (ChromeVoxState.instance.currentRange_) {
         var actionNode = ChromeVoxState.instance.currentRange_.start.node;
-        if (actionNode.role == RoleType.inlineTextBox)
+        if (actionNode.role == RoleType.INLINE_TEXT_BOX)
           actionNode = actionNode.parent;
         actionNode.doDefault();
       }
@@ -466,8 +468,8 @@ CommandHandler.onCommand = function(command) {
 
         // Stop if we've wrapped back to the document.
         var maybeDoc = newRange.start.node;
-        if (maybeDoc.role == RoleType.rootWebArea &&
-            maybeDoc.parent.root.role == RoleType.desktop) {
+        if (maybeDoc.role == RoleType.ROOT_WEB_AREA &&
+            maybeDoc.parent.root.role == RoleType.DESKTOP) {
           ChromeVoxState.isReadingContinuously = false;
           return;
         }
@@ -493,7 +495,7 @@ CommandHandler.onCommand = function(command) {
     case 'contextMenu':
       if (ChromeVoxState.instance.currentRange_) {
         var actionNode = ChromeVoxState.instance.currentRange_.start.node;
-        if (actionNode.role == RoleType.inlineTextBox)
+        if (actionNode.role == RoleType.INLINE_TEXT_BOX)
           actionNode = actionNode.parent;
         actionNode.showContextMenu();
         return false;
@@ -524,13 +526,13 @@ CommandHandler.onCommand = function(command) {
       var target = ChromeVoxState.instance.currentRange_.start.node;
       var output = new Output();
 
-      if (target.root.role == RoleType.rootWebArea) {
+      if (target.root.role == RoleType.ROOT_WEB_AREA) {
         // Web.
         target = target.root;
         output.withString(target.name || target.docUrl);
       } else {
         // Views.
-        while (target.role != RoleType.window) target = target.parent;
+        while (target.role != RoleType.WINDOW) target = target.parent;
         if (target)
           output.withString(target.name || '');
       }
@@ -578,7 +580,9 @@ CommandHandler.onCommand = function(command) {
           .withRichSpeechAndBraille(current, null, Output.EventType.NAVIGATE)
           .go();
       return false;
-
+    case 'viewGraphicAsBraille':
+      CommandHandler.viewGraphicAsBraille_(current);
+      return false;
     // Table commands.
     case 'previousRow':
       dir = Dir.BACKWARD;
@@ -615,7 +619,7 @@ CommandHandler.onCommand = function(command) {
     case 'goToRowFirstCell':
     case 'goToRowLastCell':
       var node = current.start.node;
-      while (node && node.role != RoleType.row)
+      while (node && node.role != RoleType.ROW)
         node = node.parent;
       if (!node)
         break;
@@ -628,7 +632,7 @@ CommandHandler.onCommand = function(command) {
     case 'goToColFirstCell':
       dir = Dir.FORWARD;
       var node = current.start.node;
-      while (node && node.role != RoleType.table)
+      while (node && node.role != RoleType.TABLE)
         node = node.parent;
       if (!node || !node.firstChild)
         return false;
@@ -643,7 +647,7 @@ CommandHandler.onCommand = function(command) {
     case 'goToColLastCell':
       dir = Dir.BACKWARD;
       var node = current.start.node;
-      while (node && node.role != RoleType.table)
+      while (node && node.role != RoleType.TABLE)
         node = node.parent;
       if (!node || !node.lastChild)
         return false;
@@ -658,7 +662,7 @@ CommandHandler.onCommand = function(command) {
     case 'goToFirstCell':
     case 'goToLastCell':
       node = current.start.node;
-      while (node && node.role != RoleType.table)
+      while (node && node.role != RoleType.TABLE)
         node = node.parent;
       if (!node)
         break;
@@ -771,6 +775,71 @@ CommandHandler.increaseOrDecreaseSpeechProperty_ =
     cvox.ChromeVox.tts.speak(
         announcement, cvox.QueueMode.FLUSH,
         cvox.AbstractTts.PERSONALITY_ANNOTATION);
+  }
+};
+
+/**
+ * To support viewGraphicAsBraille_(), the current image node.
+ * @type {AutomationNode?};
+ */
+CommandHandler.imageNode_;
+
+/**
+ * Called when an image frame is received on a node.
+ * @param {!(AutomationEvent|CustomAutomationEvent)} event The event.
+ * @private
+ */
+CommandHandler.onImageFrameUpdated_ = function(event) {
+  var target = event.target;
+  if (target != CommandHandler.imageNode_)
+    return;
+
+  if (!AutomationUtil.isDescendantOf(
+      ChromeVoxState.instance.currentRange.start.node,
+      CommandHandler.imageNode_)) {
+    CommandHandler.imageNode_.removeEventListener(
+        EventType.IMAGE_FRAME_UPDATED,
+        CommandHandler.onImageFrameUpdated_, false);
+    CommandHandler.imageNode_ = null;
+    return;
+  }
+
+  if (target.imageDataUrl) {
+    cvox.ChromeVox.braille.writeRawImage(target.imageDataUrl);
+    cvox.ChromeVox.braille.freeze();
+  }
+};
+
+/**
+ * Handle the command to view the first graphic within the current range
+ * as braille.
+ * @param {!AutomationNode} current The current range.
+ * @private
+ */
+CommandHandler.viewGraphicAsBraille_ = function(current) {
+  if (CommandHandler.imageNode_) {
+    CommandHandler.imageNode_.removeEventListener(
+        EventType.IMAGE_FRAME_UPDATED,
+        CommandHandler.onImageFrameUpdated_, false);
+    CommandHandler.imageNode_ = null;
+  }
+
+  // Find the first node within the current range that supports image data.
+  var imageNode = AutomationUtil.findNodePost(
+      current.start.node, Dir.FORWARD,
+      AutomationPredicate.supportsImageData);
+  if (!imageNode)
+    return;
+
+  imageNode.addEventListener(EventType.IMAGE_FRAME_UPDATED,
+                             this.onImageFrameUpdated_, false);
+  CommandHandler.imageNode_ = imageNode;
+  if (imageNode.imageDataUrl) {
+    var event = new CustomAutomationEvent(
+        EventType.IMAGE_FRAME_UPDATED, imageNode, 'page');
+    CommandHandler.onImageFrameUpdated_(event);
+  } else {
+    imageNode.getImageData(0, 0);
   }
 };
 

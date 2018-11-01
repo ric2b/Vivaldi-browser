@@ -7,9 +7,9 @@
 #include <algorithm>
 
 #include "base/macros.h"
+#include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -113,11 +113,11 @@ TrayBubbleContentMask::~TrayBubbleContentMask() {
 
 void TrayBubbleContentMask::OnPaintLayer(const ui::PaintContext& context) {
   ui::PaintRecorder recorder(context, layer()->size());
-  SkPaint paint;
-  paint.setAlpha(255);
-  paint.setStyle(SkPaint::kFill_Style);
+  cc::PaintFlags flags;
+  flags.setAlpha(255);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
   gfx::Rect rect(layer()->bounds().size());
-  recorder.canvas()->DrawRoundRect(rect, corner_radius_, paint);
+  recorder.canvas()->DrawRoundRect(rect, corner_radius_, flags);
 }
 
 void TrayBubbleContentMask::OnDeviceScaleFactorChanged(
@@ -209,7 +209,7 @@ TrayBubbleView::TrayBubbleView(View* anchor,
   set_notify_enter_exit_on_child(true);
   set_close_on_deactivate(init_params.close_on_deactivate);
   set_margins(gfx::Insets());
-  SetPaintToLayer(true);
+  SetPaintToLayer();
 
   bubble_content_mask_.reset(
       new TrayBubbleContentMask(bubble_border_->GetBorderCornerRadius()));
@@ -378,7 +378,7 @@ void TrayBubbleView::ChildPreferredSizeChanged(View* child) {
 void TrayBubbleView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   if (details.is_add && details.child == this) {
-    details.parent->SetPaintToLayer(true);
+    details.parent->SetPaintToLayer();
     details.parent->layer()->SetMasksToBounds(true);
   }
 }

@@ -8,7 +8,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/path_service.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/strings/string16.h"
@@ -16,7 +15,6 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/install_util.h"
@@ -146,13 +144,8 @@ bool UninstallGoogleUpdate(bool system_install) {
 }
 
 void ElevateIfNeededToReenableUpdates() {
-  base::FilePath chrome_exe;
-  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
-    NOTREACHED();
-    return;
-  }
   installer::ProductState product_state;
-  const bool system_install = !InstallUtil::IsPerUserInstall(chrome_exe);
+  const bool system_install = !InstallUtil::IsPerUserInstall();
   if (!product_state.Initialize(system_install))
     return;
   base::FilePath exe_path(product_state.GetSetupPath());
@@ -163,8 +156,7 @@ void ElevateIfNeededToReenableUpdates() {
 
   base::CommandLine cmd(exe_path);
   cmd.AppendSwitch(installer::switches::kReenableAutoupdates);
-  installer::Product product(BrowserDistribution::GetDistribution());
-  product.AppendProductFlags(&cmd);
+  InstallUtil::AppendModeSwitch(&cmd);
   if (system_install)
     cmd.AppendSwitch(installer::switches::kSystemLevel);
   if (product_state.uninstall_command().HasSwitch(

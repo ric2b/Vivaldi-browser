@@ -13,7 +13,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/spellchecker/spellcheck_custom_dictionary.h"
@@ -35,10 +34,6 @@ class RenderProcessHost;
 class BrowserContext;
 class NotificationDetails;
 class NotificationSource;
-}
-
-namespace spellcheck {
-class FeedbackSender;
 }
 
 // Encapsulates the browser side spellcheck service. There is one of these per
@@ -113,10 +108,8 @@ class SpellcheckService : public KeyedService,
   void LoadHunspellDictionaries();
 
   // Returns the instance of the vector of Hunspell dictionaries.
-  const ScopedVector<SpellcheckHunspellDictionary>& GetHunspellDictionaries();
-
-  // Returns the instance of the spelling service feedback sender.
-  spellcheck::FeedbackSender* GetFeedbackSender();
+  const std::vector<std::unique_ptr<SpellcheckHunspellDictionary>>&
+  GetHunspellDictionaries();
 
   // Load a dictionary from a given path. Format specifies how the dictionary
   // is stored. Return value is true if successful.
@@ -171,10 +164,6 @@ class SpellcheckService : public KeyedService,
   // prefs::kAcceptLanguages.
   void OnAcceptLanguagesChanged();
 
-  // Enables the feedback sender if spelling server is available and enabled.
-  // Otherwise disables the feedback sender.
-  void UpdateFeedbackSenderState();
-
   PrefChangeRegistrar pref_change_registrar_;
   content::NotificationRegistrar registrar_;
 
@@ -185,9 +174,8 @@ class SpellcheckService : public KeyedService,
 
   std::unique_ptr<SpellcheckCustomDictionary> custom_dictionary_;
 
-  ScopedVector<SpellcheckHunspellDictionary> hunspell_dictionaries_;
-
-  std::unique_ptr<spellcheck::FeedbackSender> feedback_sender_;
+  std::vector<std::unique_ptr<SpellcheckHunspellDictionary>>
+      hunspell_dictionaries_;
 
   base::WeakPtrFactory<SpellcheckService> weak_ptr_factory_;
 

@@ -8,11 +8,10 @@
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/views/painter.h"
 
 namespace views {
 
@@ -35,14 +34,10 @@ ImageView::ImageView()
     : image_size_set_(false),
       horiz_alignment_(CENTER),
       vert_alignment_(CENTER),
-      interactive_(true),
       last_paint_scale_(0.f),
-      last_painted_bitmap_pixels_(NULL),
-      focus_painter_(Painter::CreateDashedFocusPainter()) {
-}
+      last_painted_bitmap_pixels_(NULL) {}
 
-ImageView::~ImageView() {
-}
+ImageView::~ImageView() {}
 
 void ImageView::SetImage(const gfx::ImageSkia& img) {
   if (IsImageEqual(img))
@@ -82,10 +77,6 @@ gfx::Rect ImageView::GetImageBounds() const {
 
 void ImageView::ResetImageSize() {
   image_size_set_ = false;
-}
-
-void ImageView::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
-  focus_painter_ = std::move(focus_painter);
 }
 
 gfx::Size ImageView::GetPreferredSize() const {
@@ -138,22 +129,9 @@ gfx::Point ImageView::ComputeImageOrigin(const gfx::Size& image_size) const {
   return gfx::Point(x, y);
 }
 
-void ImageView::OnFocus() {
-  View::OnFocus();
-  if (focus_painter_.get())
-    SchedulePaint();
-}
-
-void ImageView::OnBlur() {
-  View::OnBlur();
-  if (focus_painter_.get())
-    SchedulePaint();
-}
-
 void ImageView::OnPaint(gfx::Canvas* canvas) {
   View::OnPaint(canvas);
   OnPaintImage(canvas);
-  Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
 }
 
 void ImageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -204,10 +182,6 @@ bool ImageView::GetTooltipText(const gfx::Point& p,
   return true;
 }
 
-bool ImageView::CanProcessEventsWithinSubtree() const {
-  return interactive_;
-}
-
 void ImageView::OnPaintImage(gfx::Canvas* canvas) {
   last_paint_scale_ = canvas->image_scale();
   last_painted_bitmap_pixels_ = NULL;
@@ -221,11 +195,12 @@ void ImageView::OnPaintImage(gfx::Canvas* canvas) {
 
   if (image_bounds.size() != gfx::Size(image_.width(), image_.height())) {
     // Resize case
-    SkPaint paint;
-    paint.setFilterQuality(kLow_SkFilterQuality);
+    cc::PaintFlags flags;
+    flags.setFilterQuality(kLow_SkFilterQuality);
     canvas->DrawImageInt(image_, 0, 0, image_.width(), image_.height(),
-        image_bounds.x(), image_bounds.y(), image_bounds.width(),
-        image_bounds.height(), true, paint);
+                         image_bounds.x(), image_bounds.y(),
+                         image_bounds.width(), image_bounds.height(), true,
+                         flags);
   } else {
     canvas->DrawImageInt(image_, image_bounds.x(), image_bounds.y());
   }

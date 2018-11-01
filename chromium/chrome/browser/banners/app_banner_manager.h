@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/engagement/site_engagement_observer.h"
@@ -94,12 +93,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // desktop platforms.
   virtual void OnAppIconFetched(const SkBitmap& bitmap) {}
 
-  // Overridden and passed through base::Bind on Android. Called after a web app
-  // banner was successfully used to add a web app to homescreen to kick off an
-  // asynchronous fetch of a splash screen icon. Not used on desktop platforms.
-  virtual base::Closure FetchWebappSplashScreenImageCallback(
-      const std::string& webapp_id);
-
  protected:
   explicit AppBannerManager(content::WebContents* web_contents);
   ~AppBannerManager() override;
@@ -120,9 +113,9 @@ class AppBannerManager : public content::WebContentsObserver,
   // |code|. Returns the empty string if |code| requires no parameter.
   std::string GetStatusParam(InstallableStatusCode code);
 
-  // Returns the ideal and minimum icon sizes required for being installable.
-  virtual int GetIdealIconSizeInPx();
-  virtual int GetMinimumIconSizeInPx();
+  // Returns the ideal and minimum primary icon size requirements.
+  virtual int GetIdealPrimaryIconSizeInPx();
+  virtual int GetMinimumPrimaryIconSizeInPx();
 
   // Returns a WeakPtr to this object. Exposed so subclasses/infobars may
   // may bind callbacks without needing their own WeakPtrFactory.
@@ -141,6 +134,10 @@ class AppBannerManager : public content::WebContentsObserver,
   // manifest.
   void OnDidGetManifest(const InstallableData& result);
 
+  // Returns an InstallableParams object that requests all checks necessary for
+  // a web app banner.
+  virtual InstallableParams ParamsToPerformInstallableCheck();
+
   // Run at the conclusion of OnDidGetManifest. For web app banners, this calls
   // back to the InstallableManager to continue checking criteria. For native
   // app banners, this checks whether native apps are preferred in the manifest,
@@ -150,7 +147,7 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Callback invoked by the InstallableManager once it has finished checking
   // all other installable properties.
-  void OnDidPerformInstallableCheck(const InstallableData& result);
+  virtual void OnDidPerformInstallableCheck(const InstallableData& result);
 
   // Records that a banner was shown. The |event_name| corresponds to the RAPPOR
   // metric being recorded.
@@ -208,11 +205,11 @@ class AppBannerManager : public content::WebContentsObserver,
   // The manifest object.
   content::Manifest manifest_;
 
-  // The URL of the icon.
-  GURL icon_url_;
+  // The URL of the primary icon.
+  GURL primary_icon_url_;
 
-  // The icon object.
-  std::unique_ptr<SkBitmap> icon_;
+  // The primary icon object.
+  std::unique_ptr<SkBitmap> primary_icon_;
 
   // The referrer string (if any) specified in the app URL. Used only for native
   // app banners.

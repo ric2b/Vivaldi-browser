@@ -1,7 +1,8 @@
+<link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-internet-known-networks-page">
   <template>
@@ -14,13 +15,15 @@
         <div class="secondary">$i18n{knownNetworksPreferred}</div>
         <div class="settings-box self-stretch start"
             hidden$="[[havePreferred_(networkStateList_)]]">
-          $i18n{knownNetworksNoPreferred}
+          $i18n{internetNoNetworks}
         </div>
         <template is="dom-repeat" items="[[networkStateList_]]"
             filter="networkIsPreferred_">
           <div class="settings-box self-stretch">
             <div class="start">[[item.Name]]</div>
-            <paper-icon-button icon="cr:clear" on-tap="onRemoveTap_">
+            <paper-icon-button preferred icon="cr:more-vert"
+                tabindex$="[[tabindex]]" on-tap="onMenuButtonTap_"
+                title="$i18n{moreActions}">
             </paper-icon-button>
           </div>
         </template>
@@ -32,12 +35,28 @@
             filter="networkIsNotPreferred_">
           <div class="settings-box self-stretch">
             <div class="start">[[item.Name]]</div>
-            <paper-icon-button icon="cr:add" on-tap="onAddTap_">
+            <paper-icon-button icon="cr:more-vert"  tabindex$="[[tabindex]]"
+                on-tap="onMenuButtonTap_" title="$i18n{moreActions}">
             </paper-icon-button>
           </div>
         </template>
       </div>
     </div>
+
+    <dialog id="dotsMenu" is="cr-action-menu">
+      <button class="dropdown-item" role="option"
+          hidden="[[selectedIsPreferred_]]" on-tap="onAddPreferredTap_">
+        $i18n{knownNetworksMenuAddPreferred}
+      </button>
+      <button class="dropdown-item" role="option"
+          hidden="[[!selectedIsPreferred_]]" on-tap="onRemovePreferredTap_">
+        $i18n{knownNetworksMenuRemovePreferred}
+      </button>
+      <button class="dropdown-item" role="option" on-tap="onForgetTap_">
+        $i18n{knownNetworksMenuForget}
+      </button>
+    </dialog>
+
   </template>
   <script src="internet_known_networks_page.js"></script>
 </dom-module>

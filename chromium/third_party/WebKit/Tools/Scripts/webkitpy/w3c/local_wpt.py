@@ -8,19 +8,15 @@ import logging
 
 from webkitpy.common.system.executive import ScriptError
 from webkitpy.w3c.chromium_commit import ChromiumCommit
+from webkitpy.w3c.common import WPT_GH_REPO_URL_TEMPLATE, CHROMIUM_WPT_DIR
 
-WPT_REPO_URL = 'https://chromium.googlesource.com/external/w3c/web-platform-tests.git'
-WPT_TEMP_DIR = '/tmp/wpt'
-WPT_SSH_URL = 'git@github.com:w3c/web-platform-tests.git'
-REMOTE_NAME = 'github'
-CHROMIUM_WPT_DIR = 'third_party/WebKit/LayoutTests/external/wpt/'
 
 _log = logging.getLogger(__name__)
 
 
 class LocalWPT(object):
 
-    def __init__(self, host, path=WPT_TEMP_DIR):
+    def __init__(self, host, gh_token=None, path='/tmp/wpt'):
         """
         Args:
             host: A Host object.
@@ -30,19 +26,19 @@ class LocalWPT(object):
         """
         self.host = host
         self.path = path
+        self.gh_token = gh_token
         self.branch_name = 'chromium-export-try'
 
     def fetch(self):
+        assert self.gh_token, 'LocalWPT.gh_token required for fetch'
         if self.host.filesystem.exists(self.path):
             _log.info('WPT checkout exists at %s, fetching latest', self.path)
-            self.run(['git', 'fetch', '--all'])
+            self.run(['git', 'fetch', 'origin'])
             self.run(['git', 'checkout', 'origin/master'])
         else:
-            _log.info('Cloning %s into %s', WPT_REPO_URL, self.path)
-            self.host.executive.run_command(['git', 'clone', WPT_REPO_URL, self.path])
-
-        if REMOTE_NAME not in self.run(['git', 'remote']):
-            self.run(['git', 'remote', 'add', REMOTE_NAME, WPT_SSH_URL])
+            _log.info('Cloning GitHub w3c/web-platform-tests into %s', self.path)
+            remote_url = WPT_GH_REPO_URL_TEMPLATE.format(self.gh_token)
+            self.host.executive.run_command(['git', 'clone', remote_url, self.path])
 
     def run(self, command, **kwargs):
         """Runs a command in the local WPT directory."""
@@ -50,17 +46,17 @@ class LocalWPT(object):
 
     def most_recent_chromium_commit(self):
         """Finds the most recent commit in WPT with a Chromium commit position."""
-        sha = self.run(['git', 'rev-list', 'HEAD', '-n', '1', '--grep=Cr-Commit-Position'])
-        if not sha:
+        wpt_commit_hash = self.run(['git', 'rev-list', 'HEAD', '-n', '1', '--grep=Cr-Commit-Position'])
+        if not wpt_commit_hash:
             return None, None
 
-        sha = sha.strip()
-        position = self.run(['git', 'footers', '--position', sha])
+        wpt_commit_hash = wpt_commit_hash.strip()
+        position = self.run(['git', 'footers', '--position', wpt_commit_hash])
         position = position.strip()
         assert position
 
         chromium_commit = ChromiumCommit(self.host, position=position)
-        return sha, chromium_commit
+        return wpt_commit_hash, chromium_commit
 
     def clean(self):
         self.run(['git', 'reset', '--hard', 'HEAD'])
@@ -71,7 +67,7 @@ class LocalWPT(object):
 
     def all_branches(self):
         """Returns a list of local and remote branches."""
-        return self.run(['git', 'branch', '-a']).splitlines()
+        return [s.strip() for s in self.run(['git', 'branch', '-a']).splitlines()]
 
     def create_branch_with_patch(self, message, patch, author):
         """Commits the given patch and pushes to the upstream repo.
@@ -96,12 +92,13 @@ class LocalWPT(object):
         # TODO(jeffcarp): Use git am -p<n> where n is len(CHROMIUM_WPT_DIR.split(/'))
         # or something not off-by-one.
         self.run(['git', 'apply', '-'], input=patch)
+        self.run(['git', 'add', '.'])
         self.run(['git', 'commit', '--author', author, '-am', message])
-        self.run(['git', 'push', REMOTE_NAME, self.branch_name])
+        self.run(['git', 'push', '-f', 'origin', self.branch_name])
 
         return self.branch_name
 
-    def test_patch(self, patch):
+    def test_patch(self, patch, chromium_commit=None):
         """Returns the expected output of a patch against origin/master.
 
         Args:
@@ -120,7 +117,10 @@ class LocalWPT(object):
             self.run(['git', 'add', '.'])
             output = self.run(['git', 'diff', 'origin/master'])
         except ScriptError:
-            _log.warning('Patch did not apply cleanly, skipping...')
+            _log.warning('Patch did not apply cleanly, skipping.')
+            if chromium_commit:
+                _log.warning('Commit details:\n%s\n%s', chromium_commit.sha,
+                             chromium_commit.subject())
             output = ''
 
         self.clean()

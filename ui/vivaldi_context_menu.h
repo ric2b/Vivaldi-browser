@@ -36,6 +36,6 @@ class VivaldiContextMenu {
   virtual void SetSelectedItem(int id) {}
 };
 
-}  // vivaldi
+}  // namespace vivaldi
 
 #endif  // UI_VIVALDI_CONTEXT_MENU_H_

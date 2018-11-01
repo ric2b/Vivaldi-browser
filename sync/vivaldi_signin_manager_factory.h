@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SIGNIN_MANAGER_FACTORY_H_
-#define VIVALDI_SIGNIN_MANAGER_FACTORY_H_
+#ifndef SYNC_VIVALDI_SIGNIN_MANAGER_FACTORY_H_
+#define SYNC_VIVALDI_SIGNIN_MANAGER_FACTORY_H_
 
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
@@ -54,4 +54,4 @@ class VivaldiSigninManagerFactory : public SigninManagerFactory {
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_SIGNIN_MANAGER_FACTORY_H_
+#endif  // SYNC_VIVALDI_SIGNIN_MANAGER_FACTORY_H_

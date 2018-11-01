@@ -18,7 +18,7 @@
 #include "components/prefs/pref_value_map.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 
 namespace {
 
@@ -56,8 +56,7 @@ namespace policy {
 
 // The proxy policies have the peculiarity that they are loaded from individual
 // policies, but the providers then expose them through a unified
-// DictionaryValue. Once Dictionary policies are fully supported, the individual
-// proxy policies will be deprecated. http://crbug.com/108996
+// DictionaryValue.
 
 ProxyPolicyHandler::ProxyPolicyHandler() {}
 

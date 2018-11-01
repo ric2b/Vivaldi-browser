@@ -20,6 +20,8 @@ Polymer({
   properties: {
     pageTitle: String,
 
+    learnMoreUrl: String,
+
     /** Setting a |searchLabel| will enable search. */
     searchLabel: String,
 
@@ -27,6 +29,12 @@ Polymer({
       type: String,
       notify: true,
       value: '',
+    },
+
+    /** If true shows an active spinner at the end of the subpage header. */
+    showSpinner: {
+      type: Boolean,
+      value: false,
     },
 
     /**

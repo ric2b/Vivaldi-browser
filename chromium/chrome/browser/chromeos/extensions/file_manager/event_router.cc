@@ -18,7 +18,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
@@ -39,6 +39,7 @@
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
+#include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/drive_pref_names.h"
 #include "components/drive/file_change.h"
@@ -256,7 +257,7 @@ bool ShouldSendProgressEvent(bool always, base::Time* last_time) {
   }
 }
 
-// Obtains whether the Files.app should handle the volume or not.
+// Obtains whether the Files app should handle the volume or not.
 bool ShouldShowNotificationForVolume(
     Profile* profile,
     const DeviceEventRouter& device_event_router,
@@ -283,7 +284,7 @@ bool ShouldShowNotificationForVolume(
   if (IsRecoveryToolRunning(profile))
     return false;
 
-  // If the disable-default-apps flag is on, Files.app is not opened
+  // If the disable-default-apps flag is on, the Files app is not opened
   // automatically on device mount not to obstruct the manual test.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableDefaultApps)) {
@@ -421,7 +422,7 @@ void EventRouter::Shutdown() {
 
   DLOG_IF(WARNING, !file_watchers_.empty())
       << "Not all file watchers are "
-      << "removed. This can happen when Files.app is open during shutdown.";
+      << "removed. This can happen when the Files app is open during shutdown.";
   file_watchers_.clear();
   if (!profile_) {
     NOTREACHED();
@@ -508,7 +509,7 @@ void EventRouter::ObserveEvents() {
 
   chromeos::system::TimezoneSettings::GetInstance()->AddObserver(this);
 
-  if (arc::ArcSessionManager::IsAllowedForProfile(profile_)) {
+  if (arc::IsArcAllowedForProfile(profile_)) {
     auto* intent_helper =
         arc::ArcServiceManager::GetGlobalService<arc::ArcIntentHelperBridge>();
     if (intent_helper)
@@ -721,7 +722,7 @@ void EventRouter::OnFileChanged(const drive::FileChange& changed_files) {
     // 1. /a/b DELETE:DIRECTORY
     // 2. /a DELETE:DIRECTORY
     //
-    // /a/b is watched, and /a is deleted from Files.app.
+    // /a/b is watched, and /a is deleted from the Files app.
     // 1. /a DELETE:DIRECTORY
     if (contains_directory_deletion) {
       // Expand the deleted directory path with watched paths.
@@ -808,7 +809,7 @@ void EventRouter::HandleFileWatchNotification(const drive::FileChange* list,
     // Removes the detailed information, if the list size is more than
     // kDirectoryChangeEventMaxDetailInfoSize, since passing large list
     // and processing it may cause more itme.
-    // This will be invoked full-refresh in Files.app.
+    // This will be invoked full-refresh in the Files app.
     list = NULL;
   }
 

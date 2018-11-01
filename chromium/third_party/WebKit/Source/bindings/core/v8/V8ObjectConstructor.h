@@ -33,13 +33,10 @@
 
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/CoreExport.h"
+#include "v8/include/v8.h"
 #include "wtf/Allocator.h"
 
-#include <v8.h>
-
 namespace blink {
-
-class Document;
 
 class ConstructorMode {
   STACK_ALLOCATED();
@@ -71,18 +68,11 @@ class CORE_EXPORT V8ObjectConstructor {
   STATIC_ONLY(V8ObjectConstructor);
 
  public:
-  static v8::MaybeLocal<v8::Object> newInstance(v8::Isolate*,
-                                                v8::Local<v8::Function>);
-  static v8::MaybeLocal<v8::Object> newInstance(v8::Isolate*,
-                                                v8::Local<v8::Function>,
-                                                int,
-                                                v8::Local<v8::Value> argv[]);
-  static v8::MaybeLocal<v8::Object> newInstanceInDocument(
+  static v8::MaybeLocal<v8::Object> newInstance(
       v8::Isolate*,
       v8::Local<v8::Function>,
-      int,
-      v8::Local<v8::Value> argv[],
-      Document*);
+      int argc = 0,
+      v8::Local<v8::Value> argv[] = nullptr);
 
   static void isValidConstructorMode(
       const v8::FunctionCallbackInfo<v8::Value>&);

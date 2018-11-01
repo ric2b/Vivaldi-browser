@@ -28,7 +28,7 @@ namespace options {
 
 PowerHandler::PowerHandler() {
   // TODO(mash): Support Chrome power settings in Mash. crbug.com/644348
-  this->show_power_status_ = !chrome::IsRunningInMash() &&
+  this->show_power_status_ = !ash_util::IsRunningInMash() &&
                              (switches::PowerOverlayEnabled() ||
                               (PowerStatus::Get()->IsBatteryPresent() &&
                                PowerStatus::Get()->SupportsDualRoleDevices()));
@@ -166,8 +166,8 @@ void PowerHandler::UpdatePowerSources() {
   web_ui()->CallJavascriptFunctionUnsafe(
       "options.PowerOverlay.setPowerSources", sources_list,
       base::StringValue(status->GetCurrentPowerSourceID()),
-      base::FundamentalValue(status->IsUsbChargerConnected()),
-      base::FundamentalValue(status->IsBatteryTimeBeingCalculated()));
+      base::Value(status->IsUsbChargerConnected()),
+      base::Value(status->IsBatteryTimeBeingCalculated()));
 }
 
 }  // namespace options

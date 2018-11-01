@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
-#define VIVALDI_NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
+#ifndef NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
+#define NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
 
 #include "base/macros.h"
 
@@ -23,6 +23,6 @@ class ScopedGroupNotesActions {
 
   DISALLOW_COPY_AND_ASSIGN(ScopedGroupNotesActions);
 };
-}
+}  // namespace vivaldi
 
-#endif  // VIVALDI_NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
+#endif  // NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_

@@ -30,7 +30,6 @@
 
 #include "web/ExternalPopupMenu.h"
 
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/FrameHost.h"
@@ -62,7 +61,10 @@ ExternalPopupMenu::ExternalPopupMenu(LocalFrame& frame,
     : m_ownerElement(ownerElement),
       m_localFrame(frame),
       m_webView(webView),
-      m_dispatchEventTimer(this, &ExternalPopupMenu::dispatchEvent),
+      m_dispatchEventTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &frame),
+          this,
+          &ExternalPopupMenu::dispatchEvent),
       m_webExternalPopupMenu(0) {}
 
 ExternalPopupMenu::~ExternalPopupMenu() {}
@@ -127,7 +129,7 @@ void ExternalPopupMenu::show() {
 }
 
 void ExternalPopupMenu::dispatchEvent(TimerBase*) {
-  m_webView.handleInputEvent(*m_syntheticEvent);
+  m_webView.handleInputEvent(blink::WebCoalescedInputEvent(*m_syntheticEvent));
   m_syntheticEvent.reset();
 }
 
@@ -147,10 +149,10 @@ void ExternalPopupMenu::updateFromElement(UpdateReason reason) {
       if (m_needsUpdate)
         return;
       m_needsUpdate = true;
-      m_ownerElement->document().postTask(
-          TaskType::UserInteraction, BLINK_FROM_HERE,
-          createSameThreadTask(&ExternalPopupMenu::update,
-                               wrapPersistent(this)));
+      TaskRunnerHelper::get(TaskType::UserInteraction,
+                            &m_ownerElement->document())
+          ->postTask(BLINK_FROM_HERE, WTF::bind(&ExternalPopupMenu::update,
+                                                wrapPersistent(this)));
       break;
 
     case ByStyleChange:

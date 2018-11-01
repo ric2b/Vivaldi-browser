@@ -27,8 +27,8 @@
 #define CSSFontFaceSrcValue_h
 
 #include "core/css/CSSValue.h"
-#include "core/fetch/ResourceOwner.h"
 #include "core/loader/resource/FontResource.h"
+#include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/weborigin/Referrer.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
@@ -49,7 +49,7 @@ class CSSFontFaceSrcValue : public CSSValue {
   static CSSFontFaceSrcValue* createLocal(
       const String& absoluteResource,
       ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy) {
-    return new CSSFontFaceSrcValue(emptyString(), absoluteResource, true,
+    return new CSSFontFaceSrcValue(emptyString, absoluteResource, true,
                                    shouldCheckContentSecurityPolicy);
   }
 

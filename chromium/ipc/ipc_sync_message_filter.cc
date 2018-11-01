@@ -172,10 +172,6 @@ void SyncMessageFilter::OnFilterAdded(Channel* channel) {
   {
     base::AutoLock auto_lock(lock_);
     channel_ = channel;
-    Channel::AssociatedInterfaceSupport* support =
-        channel_->GetAssociatedInterfaceSupport();
-    if (support)
-      channel_associated_group_ = *support->GetAssociatedGroup();
 
     io_task_runner_ = base::ThreadTaskRunnerHandle::Get();
     shutdown_watcher_.StartWatching(
@@ -280,8 +276,13 @@ void SyncMessageFilter::GetGenericRemoteAssociatedInterface(
     mojo::ScopedInterfaceEndpointHandle handle) {
   base::AutoLock auto_lock(lock_);
   DCHECK(io_task_runner_ && io_task_runner_->BelongsToCurrentThread());
-  if (!channel_)
+  if (!channel_) {
+    // Attach the associated interface to a disconnected pipe, so that the
+    // associated interface pointer can be used to make calls (which are
+    // dropped).
+    mojo::GetIsolatedInterface(std::move(handle));
     return;
+  }
 
   Channel::AssociatedInterfaceSupport* support =
       channel_->GetAssociatedInterfaceSupport();

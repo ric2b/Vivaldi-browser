@@ -14,7 +14,9 @@ import com.google.ipc.invalidation.ticl.android2.channel.AndroidGcmController;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.FieldTrialList;
+import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
@@ -31,6 +33,8 @@ import java.util.HashSet;
  * client library used by Sync.
  */
 public class InvalidationController implements ApplicationStatus.ApplicationStateListener {
+    private static final String TAG = "cr_invalidation";
+
     /**
      * Timer which can be paused. When the timer is paused, the execution of its scheduled task is
      * delayed till the timer is resumed.
@@ -155,11 +159,6 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
     private int mNumRecentTabPages;
 
     /**
-     * Whether GCM Upstream should be used for sending upstream messages.
-     */
-    private boolean mUseGcmUpstream;
-
-    /**
      * Whether GCM has been initialized for Invalidations.
      */
     private boolean mGcmInitialized;
@@ -194,7 +193,7 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
                 typesToRegister);
         registerIntent.setClass(
                 mContext, InvalidationClientService.getRegisteredClass());
-        mContext.startService(registerIntent);
+        startServiceIfPossible(registerIntent);
     }
 
     /**
@@ -206,7 +205,8 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... arg0) {
-                AndroidGcmController.get(mContext).initializeGcm(mUseGcmUpstream);
+                boolean useGcmUpstream = true;
+                AndroidGcmController.get(mContext).initializeGcm(useGcmUpstream);
                 return null;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -225,7 +225,7 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
         mEnableSessionInvalidationsTimer.resume();
         Intent intent = new Intent(
                 mContext, InvalidationClientService.getRegisteredClass());
-        mContext.startService(intent);
+        startServiceIfPossible(intent);
     }
 
     /**
@@ -237,7 +237,21 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
         Intent intent = new Intent(
                 mContext, InvalidationClientService.getRegisteredClass());
         intent.putExtra(InvalidationIntentProtocol.EXTRA_STOP, true);
-        mContext.startService(intent);
+        startServiceIfPossible(intent);
+    }
+
+    private void startServiceIfPossible(Intent intent) {
+        // The use of background services is restricted when the application is not in foreground
+        // for O. See crbug.com/680812.
+        if (BuildInfo.isAtLeastO()) {
+            try {
+                mContext.startService(intent);
+            } catch (IllegalStateException exception) {
+                Log.e(TAG, "Failed to start service from exception: ", exception);
+            }
+        } else {
+            mContext.startService(intent);
+        }
     }
 
     /**
@@ -291,10 +305,7 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
                 boolean canDisableSessionInvalidations = !requireInvalidationsForInstrumentation
                         && !requireInvalidationsForSuggestions;
 
-                boolean canUseGcmUpstream =
-                        FieldTrialList.findFullName("InvalidationsGCMUpstream").equals("Enabled");
-                sInstance = new InvalidationController(
-                        context, canDisableSessionInvalidations, canUseGcmUpstream);
+                sInstance = new InvalidationController(context, canDisableSessionInvalidations);
             }
             return sInstance;
         }
@@ -326,12 +337,10 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
      * Creates an instance using {@code context} to send intents.
      */
     @VisibleForTesting
-    InvalidationController(
-            Context context, boolean canDisableSessionInvalidations, boolean canUseGcmUpstream) {
+    InvalidationController(Context context, boolean canDisableSessionInvalidations) {
         Context appContext = context.getApplicationContext();
         if (appContext == null) throw new NullPointerException("Unable to get application context");
         mContext = appContext;
-        mUseGcmUpstream = canUseGcmUpstream;
         mCanDisableSessionInvalidations = canDisableSessionInvalidations;
         mSessionInvalidationsEnabled = !mCanDisableSessionInvalidations;
         mEnableSessionInvalidationsTimer = new Timer();

@@ -58,6 +58,7 @@ class ExtensionTabUtil {
   // optionally sets |error| if an error occurs.
   static base::DictionaryValue* OpenTab(UIThreadExtensionFunction* function,
                                         const OpenTabParams& params,
+                                        bool user_gesture,
                                         std::string* error);
 
   static int GetWindowId(const Browser* browser);
@@ -169,6 +170,13 @@ class ExtensionTabUtil {
 
   static WindowController* GetWindowControllerOfTab(
       const content::WebContents* web_contents);
+
+  // Open the extension's options page. Returns true if an options page was
+  // successfully opened (though it may not necessarily *load*, e.g. if the
+  // URL does not exist). This call to open the options page is iniatiated by
+  // the extension via chrome.runtime.openOptionsPage.
+  static bool OpenOptionsPageFromAPI(const Extension* extension,
+                                     content::BrowserContext* browser_context);
 
   // Open the extension's options page. Returns true if an options page was
   // successfully opened (though it may not necessarily *load*, e.g. if the

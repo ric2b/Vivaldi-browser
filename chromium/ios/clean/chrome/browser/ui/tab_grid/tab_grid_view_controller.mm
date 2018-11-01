@@ -9,28 +9,35 @@
 #import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_view_controller.h"
 
 #include "base/mac/foundation_util.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_collection_view_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_overlay_view.h"
 #import "ios/clean/chrome/browser/ui/actions/settings_actions.h"
 #import "ios/clean/chrome/browser/ui/actions/tab_grid_actions.h"
 #import "ios/clean/chrome/browser/ui/commands/settings_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
+#import "ios/clean/chrome/browser/ui/tab_grid/mdc_floating_button+cr_tab_grid.h"
+#import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_collection_view_layout.h"
 #import "ios/clean/chrome/browser/ui/tab_grid/tab_grid_tab_cell.h"
+#import "ios/clean/chrome/browser/ui/tab_grid/ui_stack_view+cr_tab_grid.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
-NSString* const kTabGridCellIdentifier = @"tabGridCell";
-const CGFloat kSpace = 20;
-const CGFloat kTabSize = 150;
+// Height of toolbar in tab grid.
+const CGFloat kToolbarHeight = 64.0f;
 }
 
 @interface TabGridViewController ()<SettingsActions,
                                     TabGridActions,
                                     UICollectionViewDataSource,
-                                    UICollectionViewDelegate>
+                                    UICollectionViewDelegate,
+                                    SessionCellDelegate>
 @property(nonatomic, weak) UICollectionView* grid;
+@property(nonatomic, weak) UIView* noTabsOverlay;
+@property(nonatomic, strong) MDCFloatingButton* floatingNewTabButton;
 @end
 
 @implementation TabGridViewController
@@ -40,41 +47,23 @@ const CGFloat kTabSize = 150;
 @synthesize tabGridCommandHandler = _tabGridCommandHandler;
 @synthesize tabCommandHandler = _tabCommandHandler;
 @synthesize grid = _grid;
+@synthesize noTabsOverlay = _noTabsOverlay;
+@synthesize floatingNewTabButton = _floatingNewTabButton;
 
 - (void)viewDidLoad {
-  // Placeholder dark grey stripe at the top of the view.
-  UIView* stripe = [[UIView alloc] initWithFrame:CGRectZero];
-  stripe.translatesAutoresizingMaskIntoConstraints = NO;
-  stripe.backgroundColor = [UIColor darkGrayColor];
-  [self.view addSubview:stripe];
+  UIView* toolbar = [UIStackView cr_tabGridToolbarStackView];
+  [self.view addSubview:toolbar];
 
-  // Placeholder settings button at in the stripe.
-  UIButton* settings = [UIButton buttonWithType:UIButtonTypeSystem];
-  settings.translatesAutoresizingMaskIntoConstraints = NO;
-  [settings setTitle:@"⚙" forState:UIControlStateNormal];
-  settings.titleLabel.font = [UIFont systemFontOfSize:24.0];
-  [settings addTarget:nil
-                action:@selector(showSettings:)
-      forControlEvents:UIControlEventTouchUpInside];
-  [stripe addSubview:settings];
-
+  toolbar.translatesAutoresizingMaskIntoConstraints = NO;
   [NSLayoutConstraint activateConstraints:@[
-    [stripe.heightAnchor constraintEqualToConstant:64.0],
-    [stripe.widthAnchor constraintEqualToAnchor:self.view.widthAnchor],
-    [stripe.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-    [stripe.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-    [settings.leadingAnchor
-        constraintEqualToAnchor:stripe.layoutMarginsGuide.leadingAnchor],
-    [settings.centerYAnchor constraintEqualToAnchor:stripe.centerYAnchor]
+    [toolbar.heightAnchor constraintEqualToConstant:kToolbarHeight],
+    [toolbar.widthAnchor constraintEqualToAnchor:self.view.widthAnchor],
+    [toolbar.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+    [toolbar.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor]
   ]];
 
-  UICollectionViewFlowLayout* layout =
-      [[UICollectionViewFlowLayout alloc] init];
-  layout.minimumLineSpacing = kSpace;
-  layout.minimumInteritemSpacing = kSpace;
-  layout.sectionInset = UIEdgeInsetsMake(kSpace, kSpace, kSpace, kSpace);
-  layout.itemSize = CGSizeMake(kTabSize, kTabSize);
-
+  TabGridCollectionViewLayout* layout =
+      [[TabGridCollectionViewLayout alloc] init];
   UICollectionView* grid = [[UICollectionView alloc] initWithFrame:CGRectZero
                                               collectionViewLayout:layout];
   grid.translatesAutoresizingMaskIntoConstraints = NO;
@@ -85,10 +74,10 @@ const CGFloat kTabSize = 150;
   self.grid.dataSource = self;
   self.grid.delegate = self;
   [self.grid registerClass:[TabGridTabCell class]
-      forCellWithReuseIdentifier:kTabGridCellIdentifier];
+      forCellWithReuseIdentifier:[TabGridTabCell identifier]];
 
   [NSLayoutConstraint activateConstraints:@[
-    [self.grid.topAnchor constraintEqualToAnchor:stripe.bottomAnchor],
+    [self.grid.topAnchor constraintEqualToAnchor:toolbar.bottomAnchor],
     [self.grid.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     [self.grid.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
     [self.grid.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -96,7 +85,15 @@ const CGFloat kTabSize = 150;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
-  [self.grid reloadData];
+  self.floatingNewTabButton = [MDCFloatingButton cr_tabGridNewTabButton];
+  [self.floatingNewTabButton
+      setFrame:[MDCFloatingButton
+                   cr_frameForTabGridNewTabButtonInRect:self.view.bounds]];
+  [self.view addSubview:self.floatingNewTabButton];
+}
+
+- (UIStatusBarStyle)preferredStatusBarStyle {
+  return UIStatusBarStyleLightContent;
 }
 
 #pragma mark - UICollectionViewDataSource methods
@@ -108,26 +105,38 @@ const CGFloat kTabSize = 150;
 
 - (NSInteger)collectionView:(UICollectionView*)collectionView
      numberOfItemsInSection:(NSInteger)section {
-  return [self.dataSource numberOfTabsInTabGrid];
+  NSInteger items = [self.dataSource numberOfTabsInTabGrid];
+  // HACK: Do not make showing noTabsOverlay a side effect of the dataSource
+  // callback.
+  if (items) {
+    [self removeNoTabsOverlay];
+  } else {
+    [self showNoTabsOverlay];
+  }
+  return items;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
                  cellForItemAtIndexPath:(nonnull NSIndexPath*)indexPath {
   TabGridTabCell* cell =
       base::mac::ObjCCastStrict<TabGridTabCell>([collectionView
-          dequeueReusableCellWithReuseIdentifier:kTabGridCellIdentifier
+          dequeueReusableCellWithReuseIdentifier:[TabGridTabCell identifier]
                                     forIndexPath:indexPath]);
-  cell.contentView.backgroundColor = [UIColor purpleColor];
-  cell.selected = YES;
-  cell.label.text = [self.dataSource titleAtIndex:indexPath.item];
+  cell.delegate = self;
+  [cell setSessionType:TabSwitcherSessionType::REGULAR_SESSION];
+  [cell setAppearanceForTabTitle:[self.dataSource titleAtIndex:indexPath.item]
+                         favicon:nil
+                        cellSize:CGSizeZero];
+  [cell setSelected:(indexPath.item == [self.dataSource indexOfActiveTab])];
   return cell;
 }
 
 #pragma mark - UICollectionViewDelegate methods
 
-- (void)collectionView:(UICollectionView*)collectionView
-    didSelectItemAtIndexPath:(NSIndexPath*)indexPath {
-  [self.tabCommandHandler showTabAtIndexPath:indexPath];
+- (BOOL)collectionView:(UICollectionView*)collectionView
+    shouldSelectItemAtIndexPath:(NSIndexPath*)indexPath {
+  // Prevent user selection of items.
+  return NO;
 }
 
 #pragma mark - ZoomTransitionDelegate methods
@@ -150,6 +159,78 @@ const CGFloat kTabSize = 150;
 
 - (void)showTabGrid:(id)sender {
   [self.tabGridCommandHandler showTabGrid];
+}
+
+- (void)createNewTab:(id)sender {
+  // PLACEHOLDER: The new WebStateList data structure will have implications
+  // on how new tabs are created.
+  NSInteger index = [self.grid numberOfItemsInSection:0];
+  NSIndexPath* indexPath = [NSIndexPath indexPathForItem:index inSection:0];
+  auto updateBlock = ^{
+    // Unselect current selected item.
+    NSInteger selectedIndex = [self.dataSource indexOfActiveTab];
+    NSIndexPath* selectedIndexPath =
+        [NSIndexPath indexPathForItem:selectedIndex inSection:0];
+    [self.grid reloadItemsAtIndexPaths:@[ selectedIndexPath ]];
+
+    // Create and show new tab.
+    [self.tabCommandHandler createNewTabAtIndexPath:indexPath];
+    [self.tabCommandHandler showTabAtIndexPath:indexPath];
+    [self.grid insertItemsAtIndexPaths:@[ indexPath ]];
+  };
+  [self.grid performBatchUpdates:updateBlock completion:nil];
+}
+
+#pragma mark - SessionCellDelegate
+
+- (TabSwitcherCache*)tabSwitcherCache {
+  // PLACEHOLDER: return image cache.
+  return nil;
+}
+
+- (void)cellPressed:(UICollectionViewCell*)cell {
+  NSInteger selectedIndex = [self.dataSource indexOfActiveTab];
+  NSIndexPath* newSelectedIndexPath = [self.grid indexPathForCell:cell];
+  [self.tabCommandHandler showTabAtIndexPath:newSelectedIndexPath];
+  if (newSelectedIndexPath.item != selectedIndex) {
+    NSIndexPath* selectedIndexPath =
+        [NSIndexPath indexPathForItem:selectedIndex inSection:0];
+    [self.grid
+        reloadItemsAtIndexPaths:@[ selectedIndexPath, newSelectedIndexPath ]];
+  }
+}
+
+- (void)deleteButtonPressedForCell:(UICollectionViewCell*)cell {
+  auto updateBlock = ^{
+    NSIndexPath* indexPath = [self.grid indexPathForCell:cell];
+    [self.tabCommandHandler closeTabAtIndexPath:indexPath];
+    [self.grid deleteItemsAtIndexPaths:@[ indexPath ]];
+  };
+  [self.grid performBatchUpdates:updateBlock completion:nil];
+}
+
+#pragma mark - Private
+
+// Shows an overlay covering the entire tab grid that informs the user that
+// there are no tabs.
+- (void)showNoTabsOverlay {
+  // PLACEHOLDER: The new tab grid will have a completely different zero tab
+  // overlay from the tab switcher. Also, the overlay will be above the recent
+  // tabs section.
+  TabSwitcherPanelOverlayView* overlayView =
+      [[TabSwitcherPanelOverlayView alloc] initWithFrame:self.grid.bounds
+                                            browserState:nil];
+  overlayView.overlayType =
+      TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_NO_OPEN_TABS;
+  overlayView.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  [self.grid addSubview:overlayView];
+  self.noTabsOverlay = overlayView;
+}
+
+// Removes the noTabsOverlay covering the entire tab grid.
+- (void)removeNoTabsOverlay {
+  [self.noTabsOverlay removeFromSuperview];
 }
 
 @end

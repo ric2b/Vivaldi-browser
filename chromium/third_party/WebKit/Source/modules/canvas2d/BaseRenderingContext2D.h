@@ -15,7 +15,7 @@
 #include "modules/canvas2d/CanvasStyle.h"
 #include "platform/graphics/ColorBehavior.h"
 #include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
-#include "third_party/skia/include/core/SkCanvas.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include "third_party/skia/include/effects/SkComposeImageFilter.h"
 
 namespace blink {
@@ -130,19 +130,19 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   void fillRect(double x, double y, double width, double height);
   void strokeRect(double x, double y, double width, double height);
 
-  void drawImage(ExecutionContext*,
+  void drawImage(ScriptState*,
                  const CanvasImageSourceUnion&,
                  double x,
                  double y,
                  ExceptionState&);
-  void drawImage(ExecutionContext*,
+  void drawImage(ScriptState*,
                  const CanvasImageSourceUnion&,
                  double x,
                  double y,
                  double width,
                  double height,
                  ExceptionState&);
-  void drawImage(ExecutionContext*,
+  void drawImage(ScriptState*,
                  const CanvasImageSourceUnion&,
                  double sx,
                  double sy,
@@ -153,7 +153,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                  double dw,
                  double dh,
                  ExceptionState&);
-  void drawImage(ExecutionContext*,
+  void drawImage(ScriptState*,
                  CanvasImageSource*,
                  double sx,
                  double sy,
@@ -176,11 +176,11 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                                        double y1,
                                        double r1,
                                        ExceptionState&);
-  CanvasPattern* createPattern(ExecutionContext*,
+  CanvasPattern* createPattern(ScriptState*,
                                const CanvasImageSourceUnion&,
                                const String& repetitionType,
                                ExceptionState&);
-  CanvasPattern* createPattern(ExecutionContext*,
+  CanvasPattern* createPattern(ScriptState*,
                                CanvasImageSource*,
                                const String& repetitionType,
                                ExceptionState&);
@@ -222,8 +222,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   virtual bool parseColorOrCurrentColor(Color&,
                                         const String& colorString) const = 0;
 
-  virtual SkCanvas* drawingCanvas() const = 0;
-  virtual SkCanvas* existingDrawingCanvas() const = 0;
+  virtual PaintCanvas* drawingCanvas() const = 0;
+  virtual PaintCanvas* existingDrawingCanvas() const = 0;
   virtual void disableDeferral(DisableDeferralReason) = 0;
 
   virtual AffineTransform baseTransform() const = 0;
@@ -244,7 +244,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual void willDrawImage(CanvasImageSource*) const {}
 
-  void restoreMatrixClipStack(SkCanvas*) const;
+  void restoreMatrixClipStack(PaintCanvas*) const;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -327,7 +327,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   };
 
   void checkOverdraw(const SkRect&,
-                     const SkPaint*,
+                     const PaintFlags*,
                      CanvasRenderingContext2DState::ImageType,
                      DrawType);
 
@@ -352,12 +352,12 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   void drawPathInternal(const Path&,
                         CanvasRenderingContext2DState::PaintType,
                         SkPath::FillType = SkPath::kWinding_FillType);
-  void drawImageInternal(SkCanvas*,
+  void drawImageInternal(PaintCanvas*,
                          CanvasImageSource*,
                          Image*,
                          const FloatRect& srcRect,
                          const FloatRect& dstRect,
-                         const SkPaint*);
+                         const PaintFlags*);
   void clipInternal(const Path&, const String& windingRuleString);
 
   bool isPointInPathInternal(const Path&,
@@ -370,7 +370,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   template <typename DrawFunc>
   void compositedDraw(const DrawFunc&,
-                      SkCanvas*,
+                      PaintCanvas*,
                       CanvasRenderingContext2DState::PaintType,
                       CanvasRenderingContext2DState::ImageType);
 
@@ -389,7 +389,7 @@ bool BaseRenderingContext2D::draw(
     return false;
 
   SkIRect clipBounds;
-  if (!drawingCanvas() || !drawingCanvas()->getClipDeviceBounds(&clipBounds))
+  if (!drawingCanvas() || !drawingCanvas()->getDeviceClipBounds(&clipBounds))
     return false;
 
   // If gradient size is zero, then paint nothing.
@@ -406,19 +406,19 @@ bool BaseRenderingContext2D::draw(
     didDraw(clipBounds);
   } else if (state().globalComposite() == SkBlendMode::kSrc) {
     clearCanvas();  // takes care of checkOverdraw()
-    const SkPaint* paint =
-        state().getPaint(paintType, DrawForegroundOnly, imageType);
-    drawFunc(drawingCanvas(), paint);
+    const PaintFlags* flags =
+        state().getFlags(paintType, DrawForegroundOnly, imageType);
+    drawFunc(drawingCanvas(), flags);
     didDraw(clipBounds);
   } else {
     SkIRect dirtyRect;
     if (computeDirtyRect(bounds, clipBounds, &dirtyRect)) {
-      const SkPaint* paint =
-          state().getPaint(paintType, DrawShadowAndForeground, imageType);
+      const PaintFlags* flags =
+          state().getFlags(paintType, DrawShadowAndForeground, imageType);
       if (paintType != CanvasRenderingContext2DState::StrokePaintType &&
           drawCoversClipBounds(clipBounds))
-        checkOverdraw(bounds, paint, imageType, ClipFill);
-      drawFunc(drawingCanvas(), paint);
+        checkOverdraw(bounds, flags, imageType, ClipFill);
+      drawFunc(drawingCanvas(), flags);
       didDraw(dirtyRect);
     }
   }
@@ -428,46 +428,46 @@ bool BaseRenderingContext2D::draw(
 template <typename DrawFunc>
 void BaseRenderingContext2D::compositedDraw(
     const DrawFunc& drawFunc,
-    SkCanvas* c,
+    PaintCanvas* c,
     CanvasRenderingContext2DState::PaintType paintType,
     CanvasRenderingContext2DState::ImageType imageType) {
   sk_sp<SkImageFilter> filter = stateGetFilter();
   ASSERT(isFullCanvasCompositeMode(state().globalComposite()) || filter);
   SkMatrix ctm = c->getTotalMatrix();
   c->resetMatrix();
-  SkPaint compositePaint;
-  compositePaint.setBlendMode((SkBlendMode)state().globalComposite());
+  PaintFlags compositeFlags;
+  compositeFlags.setBlendMode((SkBlendMode)state().globalComposite());
   if (state().shouldDrawShadows()) {
     // unroll into two independently composited passes if drawing shadows
-    SkPaint shadowPaint =
-        *state().getPaint(paintType, DrawShadowOnly, imageType);
+    PaintFlags shadowFlags =
+        *state().getFlags(paintType, DrawShadowOnly, imageType);
     int saveCount = c->getSaveCount();
     if (filter) {
-      SkPaint foregroundPaint =
-          *state().getPaint(paintType, DrawForegroundOnly, imageType);
-      foregroundPaint.setImageFilter(SkComposeImageFilter::Make(
-          SkComposeImageFilter::Make(foregroundPaint.refImageFilter(),
-                                     shadowPaint.refImageFilter()),
+      PaintFlags foregroundFlags =
+          *state().getFlags(paintType, DrawForegroundOnly, imageType);
+      foregroundFlags.setImageFilter(SkComposeImageFilter::Make(
+          SkComposeImageFilter::Make(foregroundFlags.refImageFilter(),
+                                     shadowFlags.refImageFilter()),
           filter));
       c->setMatrix(ctm);
-      drawFunc(c, &foregroundPaint);
+      drawFunc(c, &foregroundFlags);
     } else {
       ASSERT(isFullCanvasCompositeMode(state().globalComposite()));
-      c->saveLayer(nullptr, &compositePaint);
-      shadowPaint.setBlendMode(SkBlendMode::kSrcOver);
+      c->saveLayer(nullptr, &compositeFlags);
+      shadowFlags.setBlendMode(SkBlendMode::kSrcOver);
       c->setMatrix(ctm);
-      drawFunc(c, &shadowPaint);
+      drawFunc(c, &shadowFlags);
     }
     c->restoreToCount(saveCount);
   }
 
-  compositePaint.setImageFilter(std::move(filter));
-  c->saveLayer(nullptr, &compositePaint);
-  SkPaint foregroundPaint =
-      *state().getPaint(paintType, DrawForegroundOnly, imageType);
-  foregroundPaint.setBlendMode(SkBlendMode::kSrcOver);
+  compositeFlags.setImageFilter(std::move(filter));
+  c->saveLayer(nullptr, &compositeFlags);
+  PaintFlags foregroundFlags =
+      *state().getFlags(paintType, DrawForegroundOnly, imageType);
+  foregroundFlags.setBlendMode(SkBlendMode::kSrcOver);
   c->setMatrix(ctm);
-  drawFunc(c, &foregroundPaint);
+  drawFunc(c, &foregroundFlags);
   c->restore();
   c->setMatrix(ctm);
 }

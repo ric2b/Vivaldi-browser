@@ -10,6 +10,7 @@
 #include <shobjidl.h>  // Must be before propkey.
 #include <initguid.h>
 #include <inspectable.h>
+#include <mdmregistration.h>
 #include <propkey.h>
 #include <propvarutil.h>
 #include <psapi.h>
@@ -32,7 +33,6 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
@@ -66,44 +66,6 @@ bool SetPropVariantValueForPropertyStore(
 void __cdecl ForceCrashOnSigAbort(int) {
   *((volatile int*)0) = 0x1337;
 }
-
-typedef decltype(GetProcessMitigationPolicy)* GetProcessMitigationPolicyType;
-
-class LazyIsUser32AndGdi32Available {
- public:
-  LazyIsUser32AndGdi32Available() : value_(!IsWin32kSyscallsDisabled()) {}
-
-  ~LazyIsUser32AndGdi32Available() {}
-
-  bool value() { return value_; }
-
- private:
-  static bool IsWin32kSyscallsDisabled() {
-    // Can't disable win32k prior to windows 8.
-    if (base::win::GetVersion() < base::win::VERSION_WIN8)
-      return false;
-
-    GetProcessMitigationPolicyType get_process_mitigation_policy_func =
-        reinterpret_cast<GetProcessMitigationPolicyType>(GetProcAddress(
-            GetModuleHandle(L"kernel32.dll"), "GetProcessMitigationPolicy"));
-
-    if (!get_process_mitigation_policy_func)
-      return false;
-
-    PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY policy = {};
-    if (get_process_mitigation_policy_func(GetCurrentProcess(),
-                                           ProcessSystemCallDisablePolicy,
-                                           &policy, sizeof(policy))) {
-      return policy.DisallowWin32kSystemCalls != 0;
-    }
-
-    return false;
-  }
-
-  const bool value_;
-
-  DISALLOW_COPY_AND_ASSIGN(LazyIsUser32AndGdi32Available);
-};
 
 // Returns the current platform role. We use the PowerDeterminePlatformRoleEx
 // API for that.
@@ -535,14 +497,70 @@ bool IsEnrolledToDomain() {
   return g_domain_state == ENROLLED;
 }
 
+bool IsDeviceRegisteredWithManagement() {
+  static bool is_device_registered_with_management = []() {
+    HMODULE mdm_dll = ::LoadLibrary(L"MDMRegistration.dll");
+    if (!mdm_dll)
+      return false;
+
+    using IsDeviceRegisteredWithManagementFunction =
+        decltype(&::IsDeviceRegisteredWithManagement);
+    IsDeviceRegisteredWithManagementFunction
+        is_device_registered_with_management_function =
+            reinterpret_cast<IsDeviceRegisteredWithManagementFunction>(
+                ::GetProcAddress(mdm_dll, "IsDeviceRegisteredWithManagement"));
+    if (!is_device_registered_with_management_function)
+      return false;
+
+    BOOL is_managed = false;
+    HRESULT hr =
+        is_device_registered_with_management_function(&is_managed, 0, nullptr);
+    return SUCCEEDED(hr) && is_managed;
+  }();
+  return is_device_registered_with_management;
+}
+
+bool IsEnterpriseManaged() {
+  // TODO(rogerta): this function should really be:
+  //
+  //    return IsEnrolledToDomain() || IsDeviceRegisteredWithManagement();
+  //
+  // However, for now it is decided to collect some UMA metrics about
+  // IsDeviceRegisteredWithMdm() before changing chrome's behavior.
+  return IsEnrolledToDomain();
+}
+
 void SetDomainStateForTesting(bool state) {
   g_domain_state = state ? ENROLLED : NOT_ENROLLED;
 }
 
 bool IsUser32AndGdi32Available() {
-  static base::LazyInstance<LazyIsUser32AndGdi32Available>::Leaky available =
-      LAZY_INSTANCE_INITIALIZER;
-  return available.Get().value();
+  static auto is_user32_and_gdi32_available = []() {
+    // If win32k syscalls aren't disabled, then user32 and gdi32 are available.
+
+    // Can't disable win32k prior to windows 8.
+    if (base::win::GetVersion() < base::win::VERSION_WIN8)
+      return true;
+
+    typedef decltype(
+        GetProcessMitigationPolicy)* GetProcessMitigationPolicyType;
+    GetProcessMitigationPolicyType get_process_mitigation_policy_func =
+        reinterpret_cast<GetProcessMitigationPolicyType>(GetProcAddress(
+            GetModuleHandle(L"kernel32.dll"), "GetProcessMitigationPolicy"));
+
+    if (!get_process_mitigation_policy_func)
+      return true;
+
+    PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY policy = {};
+    if (get_process_mitigation_policy_func(GetCurrentProcess(),
+                                           ProcessSystemCallDisablePolicy,
+                                           &policy, sizeof(policy))) {
+      return policy.DisallowWin32kSystemCalls == 0;
+    }
+
+    return true;
+  }();
+  return is_user32_and_gdi32_available;
 }
 
 bool GetLoadedModulesSnapshot(HANDLE process, std::vector<HMODULE>* snapshot) {

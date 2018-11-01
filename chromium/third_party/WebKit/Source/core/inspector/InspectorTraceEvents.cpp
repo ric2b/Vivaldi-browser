@@ -4,6 +4,10 @@
 
 #include "core/inspector/InspectorTraceEvents.h"
 
+#include <inttypes.h>
+
+#include <memory>
+
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/animation/Animation.h"
@@ -32,12 +36,10 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
+#include "v8/include/v8-profiler.h"
+#include "v8/include/v8.h"
 #include "wtf/Vector.h"
 #include "wtf/text/TextPosition.h"
-#include <inttypes.h>
-#include <memory>
-#include <v8-profiler.h>
-#include <v8.h>
 
 namespace blink {
 
@@ -163,6 +165,8 @@ const char* pseudoTypeToString(CSSSelector::PseudoType pseudoType) {
     DEFINE_STRING_MAPPING(PseudoSpatialNavigationFocus)
     DEFINE_STRING_MAPPING(PseudoListBox)
     DEFINE_STRING_MAPPING(PseudoHostHasAppearance)
+    DEFINE_STRING_MAPPING(PseudoVideoPersistent)
+    DEFINE_STRING_MAPPING(PseudoVideoPersistentAncestor)
 #undef DEFINE_STRING_MAPPING
   }
 
@@ -180,12 +184,12 @@ String urlForFrame(LocalFrame* frame) {
 
 namespace InspectorScheduleStyleInvalidationTrackingEvent {
 std::unique_ptr<TracedValue> fillCommonPart(
-    Element& element,
+    ContainerNode& node,
     const InvalidationSet& invalidationSet,
     const char* invalidatedSelector) {
   std::unique_ptr<TracedValue> value = TracedValue::create();
-  value->setString("frame", toHexString(element.document().frame()));
-  setNodeInfo(value.get(), &element, "nodeId", "nodeName");
+  value->setString("frame", toHexString(node.document().frame()));
+  setNodeInfo(value.get(), &node, "nodeId", "nodeName");
   value->setString("invalidationSet",
                    descendantInvalidationSetToIdString(invalidationSet));
   value->setString("invalidatedSelectorId", invalidatedSelector);
@@ -199,6 +203,8 @@ const char InspectorScheduleStyleInvalidationTrackingEvent::Attribute[] =
 const char InspectorScheduleStyleInvalidationTrackingEvent::Class[] = "class";
 const char InspectorScheduleStyleInvalidationTrackingEvent::Id[] = "id";
 const char InspectorScheduleStyleInvalidationTrackingEvent::Pseudo[] = "pseudo";
+const char InspectorScheduleStyleInvalidationTrackingEvent::RuleSet[] =
+    "ruleset";
 
 const char* resourcePriorityString(ResourceLoadPriority priority) {
   const char* priorityString = 0;
@@ -265,6 +271,15 @@ InspectorScheduleStyleInvalidationTrackingEvent::pseudoChange(
   std::unique_ptr<TracedValue> value =
       fillCommonPart(element, invalidationSet, Attribute);
   value->setString("changedPseudo", pseudoTypeToString(pseudoType));
+  return value;
+}
+
+std::unique_ptr<TracedValue>
+InspectorScheduleStyleInvalidationTrackingEvent::ruleSetInvalidation(
+    ContainerNode& rootNode,
+    const InvalidationSet& invalidationSet) {
+  std::unique_ptr<TracedValue> value =
+      fillCommonPart(rootNode, invalidationSet, RuleSet);
   return value;
 }
 
@@ -585,13 +600,15 @@ std::unique_ptr<TracedValue> InspectorResourceFinishEvent::data(
     unsigned long identifier,
     double finishTime,
     bool didFail,
-    int64_t encodedDataLength) {
+    int64_t encodedDataLength,
+    int64_t decodedBodyLength) {
   String requestId = IdentifiersFactory::requestId(identifier);
 
   std::unique_ptr<TracedValue> value = TracedValue::create();
   value->setString("requestId", requestId);
   value->setBoolean("didFail", didFail);
   value->setDouble("encodedDataLength", encodedDataLength);
+  value->setDouble("decodedBodyLength", decodedBodyLength);
   if (finishTime)
     value->setDouble("finishTime", finishTime);
   return value;
@@ -765,7 +782,7 @@ std::unique_ptr<TracedValue> InspectorLayerInvalidationTrackingEvent::data(
     const PaintLayer* layer,
     const char* reason) {
   const LayoutObject& paintInvalidationContainer =
-      layer->layoutObject()->containerForPaintInvalidation();
+      layer->layoutObject().containerForPaintInvalidation();
 
   std::unique_ptr<TracedValue> value = TracedValue::create();
   value->setString("frame", toHexString(paintInvalidationContainer.frame()));

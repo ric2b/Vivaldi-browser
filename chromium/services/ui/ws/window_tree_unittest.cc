@@ -23,7 +23,6 @@
 #include "services/ui/ws/platform_display_factory.h"
 #include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_compositor_frame_sink_manager_test_api.h"
 #include "services/ui/ws/test_change_tracker.h"
 #include "services/ui/ws/test_server_window_delegate.h"
 #include "services/ui/ws/test_utils.h"
@@ -133,9 +132,6 @@ class WindowTreeTest : public testing::Test {
     return window_event_targeting_helper_.cursor();
   }
   Display* display() { return window_event_targeting_helper_.display(); }
-  TestWindowTreeBinding* last_binding() {
-    return window_event_targeting_helper_.last_binding();
-  }
   TestWindowTreeClient* last_window_tree_client() {
     return window_event_targeting_helper_.last_window_tree_client();
   }
@@ -223,7 +219,9 @@ TEST_F(WindowTreeTest, FocusOnPointer) {
   ServerWindow* wm_root = FirstRoot(wm_tree());
   ASSERT_TRUE(wm_root);
   wm_root->SetBounds(gfx::Rect(0, 0, 100, 100));
-  EnableHitTest(wm_root);
+  // This tests expects |wm_root| to be a possible target.
+  wm_root->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
   display()->root_window()->SetBounds(gfx::Rect(0, 0, 100, 100));
   mojom::WindowTreeClientPtr client;
   mojom::WindowTreeClientRequest client_request(&client);
@@ -244,7 +242,6 @@ TEST_F(WindowTreeTest, FocusOnPointer) {
   ASSERT_TRUE(child1);
   child1->SetVisible(true);
   child1->SetBounds(gfx::Rect(20, 20, 20, 20));
-  EnableHitTest(child1);
 
   TestWindowTreeClient* tree1_client = last_window_tree_client();
   tree1_client->tracker()->changes()->clear();
@@ -475,7 +472,8 @@ TEST_F(WindowTreeTest, CursorChangesWhenMouseOverWindowAndWindowSetsCursor) {
   // dispatched. This is only to place the mouse cursor over that window though.
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(21, 22));
 
-  window->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  // Set the cursor on the parent as that is where the cursor is picked up from.
+  window->parent()->SetPredefinedCursor(mojom::Cursor::IBEAM);
 
   // Because the cursor is over the window when SetCursor was called, we should
   // have immediately changed the cursor.
@@ -491,8 +489,9 @@ TEST_F(WindowTreeTest, CursorChangesWhenEnteringWindowWithDifferentCursor) {
   // Let's create a pointer event outside the window and then move the pointer
   // inside.
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(5, 5));
-  window->SetPredefinedCursor(mojom::Cursor::IBEAM);
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  // Set the cursor on the parent as that is where the cursor is picked up from.
+  window->parent()->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(21, 22));
   EXPECT_EQ(mojom::Cursor::IBEAM, cursor_id());
@@ -508,11 +507,11 @@ TEST_F(WindowTreeTest, TouchesDontChangeCursor) {
   // inside.
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(5, 5));
   window->SetPredefinedCursor(mojom::Cursor::IBEAM);
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 
   // With a touch event, we shouldn't update the cursor.
   DispatchEventAndAckImmediately(CreatePointerDownEvent(21, 22));
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 }
 
 TEST_F(WindowTreeTest, DragOutsideWindow) {
@@ -524,8 +523,9 @@ TEST_F(WindowTreeTest, DragOutsideWindow) {
   // Start with the cursor outside the window. Setting the cursor shouldn't
   // change the cursor.
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(5, 5));
-  window->SetPredefinedCursor(mojom::Cursor::IBEAM);
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  // Set the cursor on the parent as that is where the cursor is picked up from.
+  window->parent()->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 
   // Move the pointer to the inside of the window
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(21, 22));
@@ -542,7 +542,7 @@ TEST_F(WindowTreeTest, DragOutsideWindow) {
   // Release the cursor. We should now adapt the cursor of the window
   // underneath the pointer.
   DispatchEventAndAckImmediately(CreateMouseUpEvent(5, 5));
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 }
 
 TEST_F(WindowTreeTest, ChangingWindowBoundsChangesCursor) {
@@ -553,8 +553,9 @@ TEST_F(WindowTreeTest, ChangingWindowBoundsChangesCursor) {
 
   // Put the cursor just outside the bounds of the window.
   DispatchEventAndAckImmediately(CreateMouseMoveEvent(41, 41));
-  window->SetPredefinedCursor(mojom::Cursor::IBEAM);
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  // Sets the cursor on the root as that is where the cursor is picked up from.
+  window->parent()->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 
   // Expand the bounds of the window so they now include where the cursor now
   // is.
@@ -563,37 +564,70 @@ TEST_F(WindowTreeTest, ChangingWindowBoundsChangesCursor) {
 
   // Contract the bounds again.
   window->SetBounds(gfx::Rect(20, 20, 20, 20));
-  EXPECT_EQ(mojom::Cursor::CURSOR_NULL, cursor_id());
+  EXPECT_EQ(mojom::Cursor::POINTER, cursor_id());
 }
 
 TEST_F(WindowTreeTest, WindowReorderingChangesCursor) {
-  TestWindowTreeClient* embed_client = nullptr;
-  WindowTree* tree = nullptr;
-  ServerWindow* window1 = nullptr;
-  EXPECT_NO_FATAL_FAILURE(SetupEventTargeting(&embed_client, &tree, &window1));
+  // Setup two trees parented to the root with the same bounds.
+  ServerWindow* embed_window1 =
+      window_event_targeting_helper_.CreatePrimaryTree(
+          gfx::Rect(0, 0, 200, 200), gfx::Rect(0, 0, 50, 50));
+  ServerWindow* embed_window2 =
+      window_event_targeting_helper_.CreatePrimaryTree(
+          gfx::Rect(0, 0, 200, 200), gfx::Rect(0, 0, 50, 50));
 
-  // Create a second window right over the first.
-  const ClientWindowId embed_window_id(FirstRootId(tree));
-  const ClientWindowId child2_id(BuildClientWindowId(tree, 2));
-  EXPECT_TRUE(tree->NewWindow(child2_id, ServerWindow::Properties()));
-  ServerWindow* child2 = tree->GetWindowByClientId(child2_id);
-  ASSERT_TRUE(child2);
-  EXPECT_TRUE(tree->AddWindow(embed_window_id, child2_id));
-  child2->SetVisible(true);
-  child2->SetBounds(gfx::Rect(20, 20, 20, 20));
-  EnableHitTest(child2);
-
-  // Give each window a different cursor.
-  window1->SetPredefinedCursor(mojom::Cursor::IBEAM);
-  child2->SetPredefinedCursor(mojom::Cursor::HAND);
-
-  // We expect window2 to be over window1 now.
-  DispatchEventAndAckImmediately(CreateMouseMoveEvent(22, 22));
-  EXPECT_EQ(mojom::Cursor::HAND, cursor_id());
-
-  // But when we put window2 at the bottom, we should adapt window1's cursor.
-  child2->parent()->StackChildAtBottom(child2);
+  ASSERT_EQ(embed_window1->parent(), embed_window2->parent());
+  embed_window1->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+  embed_window2->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+  embed_window1->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  embed_window2->SetPredefinedCursor(mojom::Cursor::CROSS);
+  DispatchEventAndAckImmediately(CreateMouseMoveEvent(5, 5));
+  // Cursor should match that of top-most window, which is |embed_window2|.
+  EXPECT_EQ(mojom::Cursor::CROSS, cursor_id());
+  // Move |embed_window1| on top, cursor should now match it.
+  embed_window1->parent()->StackChildAtTop(embed_window1);
   EXPECT_EQ(mojom::Cursor::IBEAM, cursor_id());
+}
+
+// Assertions around moving cursor between trees with roots.
+TEST_F(WindowTreeTest, CursorMultipleTrees) {
+  // Setup two trees parented to the root with the same bounds.
+  ServerWindow* embed_window1 =
+      window_event_targeting_helper_.CreatePrimaryTree(
+          gfx::Rect(0, 0, 200, 200), gfx::Rect(0, 0, 10, 10));
+  ServerWindow* embed_window2 =
+      window_event_targeting_helper_.CreatePrimaryTree(
+          gfx::Rect(0, 0, 200, 200), gfx::Rect(20, 20, 20, 20));
+  embed_window1->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+  embed_window2->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+  embed_window2->parent()->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+  embed_window1->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  embed_window2->SetPredefinedCursor(mojom::Cursor::CROSS);
+  embed_window1->parent()->SetPredefinedCursor(mojom::Cursor::COPY);
+
+  // Create a child of |embed_window1|.
+  ServerWindow* embed_window1_child = NewWindowInTreeWithParent(
+      window_server()->GetTreeWithRoot(embed_window1), embed_window1);
+  ASSERT_TRUE(embed_window1_child);
+  embed_window1_child->SetBounds(gfx::Rect(0, 0, 10, 10));
+  embed_window1_child->SetVisible(true);
+
+  // Move mouse into |embed_window1|.
+  DispatchEventAndAckImmediately(CreateMouseMoveEvent(5, 5));
+  EXPECT_EQ(mojom::Cursor::IBEAM, cursor_id());
+
+  // Move mouse into |embed_window2|.
+  DispatchEventAndAckImmediately(CreateMouseMoveEvent(25, 25));
+  EXPECT_EQ(mojom::Cursor::CROSS, cursor_id());
+
+  // Move mouse into area between, which should use cursor set on parent.
+  DispatchEventAndAckImmediately(CreateMouseMoveEvent(15, 15));
+  EXPECT_EQ(mojom::Cursor::COPY, cursor_id());
 }
 
 TEST_F(WindowTreeTest, EventAck) {
@@ -607,7 +641,9 @@ TEST_F(WindowTreeTest, EventAck) {
   ServerWindow* wm_root = FirstRoot(wm_tree());
   ASSERT_TRUE(wm_root);
   wm_root->SetBounds(gfx::Rect(0, 0, 100, 100));
-  EnableHitTest(wm_root);
+  // This tests expects |wm_root| to be a possible target.
+  wm_root->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
 
   wm_client()->tracker()->changes()->clear();
   DispatchEventWithoutAck(CreateMouseMoveEvent(21, 22));
@@ -1305,10 +1341,13 @@ TEST_F(WindowTreeTest, SetCanAcceptEvents) {
   ServerWindow* window = nullptr;
   EXPECT_NO_FATAL_FAILURE(SetupEventTargeting(&embed_client, &tree, &window));
 
-  EXPECT_TRUE(window->can_accept_events());
-  WindowTreeTestApi(tree).SetCanAcceptEvents(
-      ClientWindowIdForWindow(tree, window).id, false);
-  EXPECT_FALSE(window->can_accept_events());
+  EXPECT_EQ(mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS,
+            window->event_targeting_policy());
+  WindowTreeTestApi(tree).SetEventTargetingPolicy(
+      ClientWindowIdForWindow(tree, window).id,
+      mojom::EventTargetingPolicy::NONE);
+  EXPECT_EQ(mojom::EventTargetingPolicy::NONE,
+            window->event_targeting_policy());
 }
 
 // Verifies wm observers capture changes in client.

@@ -53,8 +53,20 @@ class AudioService {
   // Start to query audio device information. Should be called on UI thread.
   // Populates |output_info_out| and |input_info_out| with the results.
   // Returns true on success.
+  // DEPRECATED: Use |GetDevices| instead.
   virtual bool GetInfo(OutputInfo* output_info_out,
                        InputInfo* input_info_out) = 0;
+
+  // Retrieves list of audio devices that satisfy |filter|. Populates
+  // |devices_out| with retrieved devices.
+  // If |filter->is_active| is set, |devices_out| will contain only devices
+  // whose is-active state matches |filter->is_active| value.
+  // If |filter->stream_types| is set, |devices_out| will contain only devices
+  // whose stream type (INPUT for input devices, OUTPUT for output devices) is
+  // contained in |filter->stream_types|.
+  // Returns whether the list of devices was successfully retrieved.
+  virtual bool GetDevices(const api::audio::DeviceFilter* filter,
+                          DeviceInfoList* devices_out) = 0;
 
   // Sets set of active inputs to devices defined by IDs in |input_devices|,
   // and set of active outputs to devices defined by IDs in |output_devices|.
@@ -80,11 +92,23 @@ class AudioService {
   // before we activate the new devices with the same type(input/output).
   virtual void SetActiveDevices(const DeviceIdList& device_list) = 0;
 
-  // Set the muted and volume/gain properties of a device.
-  virtual bool SetDeviceProperties(const std::string& device_id,
-                                   bool muted,
+  // Set the sound level properties (volume or gain) of a device.
+  virtual bool SetDeviceSoundLevel(const std::string& device_id,
                                    int volume,
                                    int gain) = 0;
+
+  // Sets the mute property of a device.
+  virtual bool SetMuteForDevice(const std::string& device_id, bool value) = 0;
+
+  // Sets mute property for audio input (if |is_input| is true) or output (if
+  // |is_input| is false).
+  virtual bool SetMute(bool is_input, bool value) = 0;
+
+  // Gets mute property for audio input (if |is_input| is true) or output (if
+  // |is_input| is false).
+  // The mute value is returned via |mute| argument.
+  // The method returns whether the value was successfully fetched.
+  virtual bool GetMute(bool is_input, bool* mute) = 0;
 
  protected:
   AudioService() {}

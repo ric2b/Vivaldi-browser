@@ -54,22 +54,22 @@ class CalculationValueHandleMap {
 
   void remove(int index) {
     ASSERT(m_map.contains(index));
-    m_map.remove(index);
+    m_map.erase(index);
   }
 
   CalculationValue& get(int index) {
     ASSERT(m_map.contains(index));
-    return *m_map.get(index);
+    return *m_map.at(index);
   }
 
   void decrementRef(int index) {
     ASSERT(m_map.contains(index));
-    CalculationValue* value = m_map.get(index);
+    CalculationValue* value = m_map.at(index);
     if (value->hasOneRef()) {
       // Force the CalculationValue destructor early to avoid a potential
       // recursive call inside HashMap remove().
       m_map.set(index, nullptr);
-      m_map.remove(index);
+      m_map.erase(index);
     } else {
       value->deref();
     }

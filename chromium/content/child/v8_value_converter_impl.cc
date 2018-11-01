@@ -11,15 +11,13 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "third_party/WebKit/public/web/WebArrayBuffer.h"
-#include "third_party/WebKit/public/web/WebArrayBufferConverter.h"
-#include "third_party/WebKit/public/web/WebArrayBufferView.h"
 #include "v8/include/v8.h"
 
 namespace content {
@@ -186,6 +184,7 @@ V8ValueConverterImpl::V8ValueConverterImpl()
       reg_exp_allowed_(false),
       function_allowed_(false),
       strip_null_from_objects_(false),
+      convert_negative_zero_to_int_(false),
       avoid_identity_hash_for_testing_(false),
       strategy_(NULL) {}
 
@@ -203,6 +202,10 @@ void V8ValueConverterImpl::SetFunctionAllowed(bool val) {
 
 void V8ValueConverterImpl::SetStripNullFromObjects(bool val) {
   strip_null_from_objects_ = val;
+}
+
+void V8ValueConverterImpl::SetConvertNegativeZeroToInt(bool val) {
+  convert_negative_zero_to_int_ = val;
 }
 
 void V8ValueConverterImpl::SetStrategy(Strategy* strategy) {
@@ -271,9 +274,7 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8ValueImpl(
                         static_cast<const base::DictionaryValue*>(value));
 
     case base::Value::Type::BINARY:
-      return ToArrayBuffer(isolate,
-                           creation_context,
-                           static_cast<const base::BinaryValue*>(value));
+      return ToArrayBuffer(isolate, creation_context, value);
 
     default:
       LOG(ERROR) << "Unexpected value type: " << value->GetType();
@@ -339,11 +340,11 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToArrayBuffer(
     v8::Isolate* isolate,
     v8::Local<v8::Object> creation_context,
     const base::BinaryValue* value) const {
-  blink::WebArrayBuffer buffer =
-      blink::WebArrayBuffer::create(value->GetSize(), 1);
-  memcpy(buffer.data(), value->GetBuffer(), value->GetSize());
-  return blink::WebArrayBufferConverter::toV8Value(
-      &buffer, creation_context, isolate);
+  DCHECK(creation_context->CreationContext() == isolate->GetCurrentContext());
+  v8::Local<v8::ArrayBuffer> buffer =
+      v8::ArrayBuffer::New(isolate, value->GetSize());
+  memcpy(buffer->GetContents().Data(), value->GetBuffer(), value->GetSize());
+  return buffer;
 }
 
 std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
@@ -360,8 +361,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
     return base::Value::CreateNullValue();
 
   if (val->IsBoolean())
-    return base::MakeUnique<base::FundamentalValue>(
-        val->ToBoolean(isolate)->Value());
+    return base::MakeUnique<base::Value>(val->ToBoolean(isolate)->Value());
 
   if (val->IsNumber() && strategy_) {
     std::unique_ptr<base::Value> out;
@@ -370,14 +370,18 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
   }
 
   if (val->IsInt32())
-    return base::MakeUnique<base::FundamentalValue>(
-        val->ToInt32(isolate)->Value());
+    return base::MakeUnique<base::Value>(val->ToInt32(isolate)->Value());
 
   if (val->IsNumber()) {
     double val_as_double = val.As<v8::Number>()->Value();
     if (!std::isfinite(val_as_double))
       return nullptr;
-    return base::MakeUnique<base::FundamentalValue>(val_as_double);
+    // Normally, this would be an integer, and fall into IsInt32(). But if the
+    // value is -0, it's treated internally as a double. Consumers are allowed
+    // to ignore this esoterica and treat it as an integer.
+    if (convert_negative_zero_to_int_ && val_as_double == 0.0)
+      return base::MakeUnique<base::Value>(0);
+    return base::MakeUnique<base::Value>(val_as_double);
   }
 
   if (val->IsString()) {
@@ -402,7 +406,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
       // consistent within this class.
       return FromV8Object(val->ToObject(isolate), state, isolate);
     v8::Date* date = v8::Date::Cast(*val);
-    return base::MakeUnique<base::FundamentalValue>(date->ValueOf() / 1000.0);
+    return base::MakeUnique<base::Value>(date->ValueOf() / 1000.0);
   }
 
   if (val->IsRegExp()) {
@@ -497,27 +501,20 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ArrayBuffer(
       return out;
   }
 
-  char* data = NULL;
-  size_t length = 0;
-
-  std::unique_ptr<blink::WebArrayBuffer> array_buffer(
-      blink::WebArrayBufferConverter::createFromV8Value(val, isolate));
-  std::unique_ptr<blink::WebArrayBufferView> view;
-  if (array_buffer) {
-    data = reinterpret_cast<char*>(array_buffer->data());
-    length = array_buffer->byteLength();
+  if (val->IsArrayBuffer()) {
+    auto contents = val.As<v8::ArrayBuffer>()->GetContents();
+    return base::BinaryValue::CreateWithCopiedBuffer(
+        static_cast<const char*>(contents.Data()), contents.ByteLength());
+  } else if (val->IsArrayBufferView()) {
+    v8::Local<v8::ArrayBufferView> view = val.As<v8::ArrayBufferView>();
+    size_t byte_length = view->ByteLength();
+    std::vector<char> buffer(byte_length);
+    view->CopyContents(buffer.data(), buffer.size());
+    return base::MakeUnique<base::BinaryValue>(std::move(buffer));
   } else {
-    view.reset(blink::WebArrayBufferView::createFromV8Value(val));
-    if (view) {
-      data = reinterpret_cast<char*>(view->baseAddress()) + view->byteOffset();
-      length = view->byteLength();
-    }
-  }
-
-  if (data)
-    return base::BinaryValue::CreateWithCopiedBuffer(data, length);
-  else
+    NOTREACHED() << "Only ArrayBuffer and ArrayBufferView should get here.";
     return nullptr;
+  }
 }
 
 std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(

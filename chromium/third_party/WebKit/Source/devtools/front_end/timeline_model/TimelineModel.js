@@ -32,27 +32,25 @@
  * @unrestricted
  */
 TimelineModel.TimelineModel = class {
-  /**
-   * @param {!TimelineModel.TimelineModel.Filter} eventFilter
-   */
-  constructor(eventFilter) {
-    this._eventFilter = eventFilter;
+  constructor() {
     this.reset();
   }
 
   /**
-   * @param {!Array.<!SDK.TracingModel.Event>} events
+   * @param {!Array<!SDK.TracingModel.Event>} events
    * @param {function(!SDK.TracingModel.Event)} onStartEvent
    * @param {function(!SDK.TracingModel.Event)} onEndEvent
    * @param {function(!SDK.TracingModel.Event,?SDK.TracingModel.Event)|undefined=} onInstantEvent
    * @param {number=} startTime
    * @param {number=} endTime
+   * @param {function(!SDK.TracingModel.Event):boolean=} filter
    */
-  static forEachEvent(events, onStartEvent, onEndEvent, onInstantEvent, startTime, endTime) {
+  static forEachEvent(events, onStartEvent, onEndEvent, onInstantEvent, startTime, endTime, filter) {
     startTime = startTime || 0;
     endTime = endTime || Infinity;
     var stack = [];
-    for (var i = 0; i < events.length; ++i) {
+    var startEvent = TimelineModel.TimelineModel._topLevelEventEndingAfter(events, startTime);
+    for (var i = startEvent; i < events.length; ++i) {
       var e = events[i];
       if ((e.endTime || e.startTime) < startTime)
         continue;
@@ -62,6 +60,8 @@ TimelineModel.TimelineModel = class {
         continue;
       while (stack.length && stack.peekLast().endTime <= e.startTime)
         onEndEvent(stack.pop());
+      if (filter && !filter(e))
+        continue;
       if (e.duration) {
         onStartEvent(e);
         stack.push(e);
@@ -74,20 +74,18 @@ TimelineModel.TimelineModel = class {
   }
 
   /**
-   * @return {!TimelineModel.TimelineModel.RecordType}
+   * @param {!Array<!SDK.TracingModel.Event>} events
+   * @param {number} time
    */
-  static _eventType(event) {
-    if (event.hasCategory(TimelineModel.TimelineModel.Category.Console))
-      return TimelineModel.TimelineModel.RecordType.ConsoleTime;
-    if (event.hasCategory(TimelineModel.TimelineModel.Category.UserTiming))
-      return TimelineModel.TimelineModel.RecordType.UserTiming;
-    if (event.hasCategory(TimelineModel.TimelineModel.Category.LatencyInfo))
-      return TimelineModel.TimelineModel.RecordType.LatencyInfo;
-    return /** @type !TimelineModel.TimelineModel.RecordType */ (event.name);
+  static _topLevelEventEndingAfter(events, time) {
+    var index = events.upperBound(time, (time, event) => time - event.startTime) - 1;
+    while (index > 0 && !SDK.TracingModel.isTopLevelEvent(events[index]))
+      index--;
+    return Math.max(index, 0);
   }
 
   /**
-   * @param {!Array<!TimelineModel.TimelineModel.Filter>} filters
+   * @param {!Array<!TimelineModel.TimelineModelFilter>} filters
    * @param {!SDK.TracingModel.Event} event
    * @return {boolean}
    */
@@ -124,76 +122,23 @@ TimelineModel.TimelineModel = class {
 
   /**
    * @param {!SDK.TracingModel.Event} event
+   * @param {string} field
+   * @return {string}
+   */
+  static globalEventId(event, field) {
+    var data = event.args['data'] || event.args['beginData'];
+    var id = data && data[field];
+    if (!id)
+      return '';
+    return `${event.thread.process().id()}.${id}`;
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
    * @return {string}
    */
   static eventFrameId(event) {
-    var data = event.args['data'] || event.args['beginData'];
-    var frame = data && data['frame'];
-    if (!frame)
-      return '';
-    var processId = event.thread.process().id();
-    return `${processId}.${frame}`;
-  }
-
-  /**
-   * @deprecated Test use only!
-   * @param {?function(!TimelineModel.TimelineModel.Record)|?function(!TimelineModel.TimelineModel.Record,number)} preOrderCallback
-   * @param {function(!TimelineModel.TimelineModel.Record)|function(!TimelineModel.TimelineModel.Record,number)=} postOrderCallback
-   * @return {boolean}
-   */
-  forAllRecords(preOrderCallback, postOrderCallback) {
-    /**
-     * @param {!Array.<!TimelineModel.TimelineModel.Record>} records
-     * @param {number} depth
-     * @return {boolean}
-     */
-    function processRecords(records, depth) {
-      for (var i = 0; i < records.length; ++i) {
-        var record = records[i];
-        if (preOrderCallback && preOrderCallback(record, depth))
-          return true;
-        if (processRecords(record.children(), depth + 1))
-          return true;
-        if (postOrderCallback && postOrderCallback(record, depth))
-          return true;
-      }
-      return false;
-    }
-    return processRecords(this._records, 0);
-  }
-
-  /**
-   * @param {!Array<!TimelineModel.TimelineModel.Filter>} filters
-   * @param {function(!TimelineModel.TimelineModel.Record)|function(!TimelineModel.TimelineModel.Record,number)} callback
-   */
-  forAllFilteredRecords(filters, callback) {
-    /**
-     * @param {!TimelineModel.TimelineModel.Record} record
-     * @param {number} depth
-     * @this {TimelineModel.TimelineModel}
-     * @return {boolean}
-     */
-    function processRecord(record, depth) {
-      var visible = TimelineModel.TimelineModel.isVisible(filters, record.traceEvent());
-      if (visible && callback(record, depth))
-        return true;
-
-      for (var i = 0; i < record.children().length; ++i) {
-        if (processRecord.call(this, record.children()[i], visible ? depth + 1 : depth))
-          return true;
-      }
-      return false;
-    }
-
-    for (var i = 0; i < this._records.length; ++i)
-      processRecord.call(this, this._records[i], 0);
-  }
-
-  /**
-   * @return {!Array.<!TimelineModel.TimelineModel.Record>}
-   */
-  records() {
-    return this._records;
+    return TimelineModel.TimelineModel.globalEventId(event, 'frame');
   }
 
   /**
@@ -218,7 +163,7 @@ TimelineModel.TimelineModel = class {
     // FIXME: Consider returning null for loaded traces.
     var workerId = this._workerIdByThread.get(event.thread);
     var mainTarget = SDK.targetManager.mainTarget();
-    return workerId ? mainTarget.subTargetsManager.targetForId(workerId) : mainTarget;
+    return workerId ? SDK.targetManager.targetById(workerId) : mainTarget;
   }
 
   /**
@@ -263,7 +208,6 @@ TimelineModel.TimelineModel = class {
     this._inspectedTargetEvents.sort(SDK.TracingModel.Event.compareStartTime);
 
     this._processBrowserEvents(tracingModel);
-    this._buildTimelineRecords();
     this._buildGPUEvents(tracingModel);
     this._insertFirstPaintEvent();
     this._resetProcessingState();
@@ -372,10 +316,8 @@ TimelineModel.TimelineModel = class {
     this._mainThreadEvents.splice(
         this._mainThreadEvents.lowerBound(firstPaintEvent, SDK.TracingModel.Event.compareStartTime), 0,
         firstPaintEvent);
-    var firstPaintRecord = new TimelineModel.TimelineModel.Record(firstPaintEvent);
-    this._eventDividerRecords.splice(
-        this._eventDividerRecords.lowerBound(firstPaintRecord, TimelineModel.TimelineModel.Record._compareStartTime), 0,
-        firstPaintRecord);
+    this._eventDividers.splice(
+        this._eventDividers.lowerBound(firstPaintEvent, SDK.TracingModel.Event.compareStartTime), 0, firstPaintEvent);
   }
 
   /**
@@ -394,27 +336,6 @@ TimelineModel.TimelineModel = class {
     this._mergeAsyncEvents(this._mainThreadAsyncEventsByGroup, asyncEventsByGroup);
   }
 
-  _buildTimelineRecords() {
-    var topLevelRecords = this._buildTimelineRecordsForThread(this.mainThreadEvents());
-    for (var i = 0; i < topLevelRecords.length; i++) {
-      var record = topLevelRecords[i];
-      if (SDK.TracingModel.isTopLevelEvent(record.traceEvent()))
-        this._mainThreadTasks.push(record);
-    }
-
-    /**
-     * @param {!TimelineModel.TimelineModel.VirtualThread} virtualThread
-     * @this {!TimelineModel.TimelineModel}
-     */
-    function processVirtualThreadEvents(virtualThread) {
-      var threadRecords = this._buildTimelineRecordsForThread(virtualThread.events);
-      topLevelRecords =
-          topLevelRecords.mergeOrdered(threadRecords, TimelineModel.TimelineModel.Record._compareStartTime);
-    }
-    this.virtualThreads().forEach(processVirtualThreadEvents.bind(this));
-    this._records = topLevelRecords;
-  }
-
   /**
    * @param {!SDK.TracingModel} tracingModel
    */
@@ -424,41 +345,6 @@ TimelineModel.TimelineModel = class {
       return;
     var gpuEventName = TimelineModel.TimelineModel.RecordType.GPUTask;
     this._gpuEvents = thread.events().filter(event => event.name === gpuEventName);
-  }
-
-  /**
-   * @param {!Array.<!SDK.TracingModel.Event>} threadEvents
-   * @return {!Array.<!TimelineModel.TimelineModel.Record>}
-   */
-  _buildTimelineRecordsForThread(threadEvents) {
-    var recordStack = [];
-    var topLevelRecords = [];
-
-    for (var i = 0, size = threadEvents.length; i < size; ++i) {
-      var event = threadEvents[i];
-      for (var top = recordStack.peekLast(); top && top._event.endTime <= event.startTime; top = recordStack.peekLast())
-        recordStack.pop();
-      if (event.phase === SDK.TracingModel.Phase.AsyncEnd || event.phase === SDK.TracingModel.Phase.NestableAsyncEnd)
-        continue;
-      var parentRecord = recordStack.peekLast();
-      // Maintain the back-end logic of old timeline, skip console.time() / console.timeEnd() that are not properly nested.
-      if (SDK.TracingModel.isAsyncBeginPhase(event.phase) && parentRecord &&
-          event.endTime > parentRecord._event.endTime)
-        continue;
-      var record = new TimelineModel.TimelineModel.Record(event);
-      if (TimelineModel.TimelineModel.isMarkerEvent(event))
-        this._eventDividerRecords.push(record);
-      if (!this._eventFilter.accept(event) && !SDK.TracingModel.isTopLevelEvent(event))
-        continue;
-      if (parentRecord)
-        parentRecord._addChild(record);
-      else
-        topLevelRecords.push(record);
-      if (event.endTime)
-        recordStack.push(record);
-    }
-
-    return topLevelRecords;
   }
 
   _resetProcessingState() {
@@ -580,14 +466,34 @@ TimelineModel.TimelineModel = class {
     }
 
     this._eventStack = [];
+    var eventStack = this._eventStack;
     var i = events.lowerBound(startTime, (time, event) => time - event.startTime);
     var length = events.length;
     for (; i < length; i++) {
       var event = events[i];
       if (endTime && event.startTime >= endTime)
         break;
+      while (eventStack.length && eventStack.peekLast().endTime <= event.startTime)
+        eventStack.pop();
       if (!this._processEvent(event))
         continue;
+      if (!SDK.TracingModel.isAsyncPhase(event.phase) && event.duration) {
+        if (eventStack.length) {
+          var parent = eventStack.peekLast();
+          parent.selfTime -= event.duration;
+          if (parent.selfTime < 0)
+            this._fixNegativeDuration(parent, event);
+        }
+        event.selfTime = event.duration;
+        if (isMainThread) {
+          if (!eventStack.length)
+            this._mainThreadTasks.push(event);
+        }
+        eventStack.push(event);
+      }
+      if (isMainThread && TimelineModel.TimelineModel.isMarkerEvent(event))
+        this._eventDividers.push(event);
+
       if (groupByFrame) {
         var frameId = TimelineModel.TimelineData.forEvent(event).frameId;
         var pageFrame = frameId && this._pageFrames.get(frameId);
@@ -610,6 +516,20 @@ TimelineModel.TimelineModel = class {
       this._mergeAsyncEvents(this._mainThreadAsyncEventsByGroup, threadAsyncEventsByGroup);
       threadAsyncEventsByGroup.clear();
     }
+  }
+
+  /**
+   * @param {!SDK.TracingModel.Event} event
+   * @param {!SDK.TracingModel.Event} child
+   */
+  _fixNegativeDuration(event, child) {
+    var epsilon = 1e-3;
+    if (event.selfTime < -epsilon) {
+      console.error(
+          `Children are longer than parent at ${event.startTime} ` +
+          `(${(child.startTime - this.minimumRecordTime()).toFixed(3)} by ${(-event.selfTime).toFixed(3)}`);
+    }
+    event.selfTime = 0;
   }
 
   /**
@@ -643,11 +563,8 @@ TimelineModel.TimelineModel = class {
    * @return {boolean}
    */
   _processEvent(event) {
-    var eventStack = this._eventStack;
-    while (eventStack.length && eventStack.peekLast().endTime <= event.startTime)
-      eventStack.pop();
-
     var recordTypes = TimelineModel.TimelineModel.RecordType;
+    var eventStack = this._eventStack;
 
     if (!eventStack.length) {
       if (this._currentTaskLayoutAndRecalcEvents && this._currentTaskLayoutAndRecalcEvents.length) {
@@ -868,26 +785,6 @@ TimelineModel.TimelineModel = class {
           timelineData.warning = TimelineModel.TimelineModel.WarningType.IdleDeadlineExceeded;
         break;
     }
-    if (SDK.TracingModel.isAsyncPhase(event.phase))
-      return true;
-    var duration = event.duration;
-    if (!duration)
-      return true;
-    if (eventStack.length) {
-      var parent = eventStack.peekLast();
-      parent.selfTime -= duration;
-      if (parent.selfTime < 0) {
-        var epsilon = 1e-3;
-        if (parent.selfTime < -epsilon) {
-          console.error(
-              'Children are longer than parent at ' + event.startTime + ' (' +
-              (event.startTime - this.minimumRecordTime()).toFixed(3) + ') by ' + parent.selfTime.toFixed(3));
-        }
-        parent.selfTime = 0;
-      }
-    }
-    event.selfTime = duration;
-    eventStack.push(event);
     return true;
   }
 
@@ -985,14 +882,12 @@ TimelineModel.TimelineModel = class {
     this._mainThreadAsyncEventsByGroup = new Map();
     /** @type {!Array<!SDK.TracingModel.Event>} */
     this._inspectedTargetEvents = [];
-    /** @type {!Array<!TimelineModel.TimelineModel.Record>} */
-    this._records = [];
-    /** @type {!Array<!TimelineModel.TimelineModel.Record>} */
+    /** @type {!Array<!SDK.TracingModel.Event>} */
     this._mainThreadTasks = [];
     /** @type {!Array<!SDK.TracingModel.Event>} */
     this._gpuEvents = [];
-    /** @type {!Array<!TimelineModel.TimelineModel.Record>} */
-    this._eventDividerRecords = [];
+    /** @type {!Array<!SDK.TracingModel.Event>} */
+    this._eventDividers = [];
     /** @type {?string} */
     this._sessionId = null;
     /** @type {?number} */
@@ -1039,13 +934,6 @@ TimelineModel.TimelineModel = class {
   }
 
   /**
-   * @param {!Array<!SDK.TracingModel.Event>} events
-   */
-  _setMainThreadEvents(events) {
-    this._mainThreadEvents = events;
-  }
-
-  /**
    * @return {!Map<!TimelineModel.TimelineModel.AsyncEventGroup, !Array.<!SDK.TracingModel.AsyncEvent>>}
    */
   mainThreadAsyncEvents() {
@@ -1067,7 +955,7 @@ TimelineModel.TimelineModel = class {
   }
 
   /**
-   * @return {!Array.<!TimelineModel.TimelineModel.Record>}
+   * @return {!Array<!SDK.TracingModel.Event>}
    */
   mainThreadTasks() {
     return this._mainThreadTasks;
@@ -1081,10 +969,10 @@ TimelineModel.TimelineModel = class {
   }
 
   /**
-   * @return {!Array.<!TimelineModel.TimelineModel.Record>}
+   * @return {!Array<!SDK.TracingModel.Event>}
    */
-  eventDividerRecords() {
-    return this._eventDividerRecords;
+  eventDividers() {
+    return this._eventDividers;
   }
 
   /**
@@ -1128,7 +1016,7 @@ TimelineModel.TimelineModel = class {
       var e = events[i];
       if (!resourceTypes.has(e.name))
         continue;
-      var id = e.args['data']['requestId'];
+      var id = TimelineModel.TimelineModel.globalEventId(e, 'requestId');
       var request = requests.get(id);
       if (request) {
         request.addEvent(e);
@@ -1347,92 +1235,6 @@ TimelineModel.TimelineModel.VirtualThread = class {
   }
 };
 
-/**
- * @unrestricted
- */
-TimelineModel.TimelineModel.Record = class {
-  /**
-   * @param {!SDK.TracingModel.Event} traceEvent
-   */
-  constructor(traceEvent) {
-    this._event = traceEvent;
-    this._children = [];
-  }
-
-  /**
-   * @param {!TimelineModel.TimelineModel.Record} a
-   * @param {!TimelineModel.TimelineModel.Record} b
-   * @return {number}
-   */
-  static _compareStartTime(a, b) {
-    // Never return 0 as otherwise equal records would be merged.
-    return a.startTime() <= b.startTime() ? -1 : 1;
-  }
-
-  /**
-   * @return {?SDK.Target}
-   */
-  target() {
-    var threadName = this._event.thread.name();
-    // FIXME: correctly specify target
-    return threadName === TimelineModel.TimelineModel.RendererMainThreadName ? SDK.targetManager.targets()[0] || null :
-                                                                               null;
-  }
-
-  /**
-   * @return {!Array.<!TimelineModel.TimelineModel.Record>}
-   */
-  children() {
-    return this._children;
-  }
-
-  /**
-   * @return {number}
-   */
-  startTime() {
-    return this._event.startTime;
-  }
-
-  /**
-   * @return {number}
-   */
-  endTime() {
-    return this._event.endTime || this._event.startTime;
-  }
-
-  /**
-   * @return {string}
-   */
-  thread() {
-    if (this._event.thread.name() === TimelineModel.TimelineModel.RendererMainThreadName)
-      return TimelineModel.TimelineModel.MainThreadName;
-    return this._event.thread.name();
-  }
-
-  /**
-   * @return {!TimelineModel.TimelineModel.RecordType}
-   */
-  type() {
-    return TimelineModel.TimelineModel._eventType(this._event);
-  }
-
-  /**
-   * @return {!SDK.TracingModel.Event}
-   */
-  traceEvent() {
-    return this._event;
-  }
-
-  /**
-   * @param {!TimelineModel.TimelineModel.Record} child
-   */
-  _addChild(child) {
-    this._children.push(child);
-    child.parent = this;
-  }
-};
-
-
 /** @typedef {!{page: !Array<!SDK.TracingModel.Event>, workers: !Array<!SDK.TracingModel.Event>}} */
 TimelineModel.TimelineModel.MetadataEvents;
 
@@ -1487,6 +1289,7 @@ TimelineModel.TimelineModel.NetworkRequest = class {
     this.startTime = event.name === TimelineModel.TimelineModel.RecordType.ResourceSendRequest ? event.startTime : 0;
     this.endTime = Infinity;
     this.encodedDataLength = 0;
+    this.decodedBodyLength = 0;
     /** @type {!Array<!SDK.TracingModel.Event>} */
     this.children = [];
     /** @type {?Object} */
@@ -1519,7 +1322,7 @@ TimelineModel.TimelineModel.NetworkRequest = class {
     if (!this.responseTime &&
         (event.name === recordType.ResourceReceiveResponse || event.name === recordType.ResourceReceivedData))
       this.responseTime = event.startTime;
-    const encodedDataLength = eventData['encodedDataLength'] || 0;
+    var encodedDataLength = eventData['encodedDataLength'] || 0;
     if (event.name === recordType.ResourceReceiveResponse) {
       if (eventData['fromCache'])
         this.fromCache = true;
@@ -1531,6 +1334,9 @@ TimelineModel.TimelineModel.NetworkRequest = class {
       this.encodedDataLength += encodedDataLength;
     if (event.name === recordType.ResourceFinish && encodedDataLength)
       this.encodedDataLength = encodedDataLength;
+    var decodedBodyLength = eventData['decodedBodyLength'];
+    if (event.name === recordType.ResourceFinish && decodedBodyLength)
+      this.decodedBodyLength = decodedBodyLength;
     if (!this.url)
       this.url = eventData['url'];
     if (!this.requestMethod)
@@ -1542,68 +1348,6 @@ TimelineModel.TimelineModel.NetworkRequest = class {
   }
 };
 
-TimelineModel.TimelineModel.Filter = class {
-  /**
-   * @param {!SDK.TracingModel.Event} event
-   * @return {boolean}
-   */
-  accept(event) {
-    return true;
-  }
-};
-
-TimelineModel.TimelineVisibleEventsFilter = class extends TimelineModel.TimelineModel.Filter {
-  /**
-   * @param {!Array.<string>} visibleTypes
-   */
-  constructor(visibleTypes) {
-    super();
-    this._visibleTypes = new Set(visibleTypes);
-  }
-
-  /**
-   * @override
-   * @param {!SDK.TracingModel.Event} event
-   * @return {boolean}
-   */
-  accept(event) {
-    return this._visibleTypes.has(TimelineModel.TimelineModel._eventType(event));
-  }
-};
-
-TimelineModel.ExclusiveNameFilter = class extends TimelineModel.TimelineModel.Filter {
-  /**
-   * @param {!Array<string>} excludeNames
-   */
-  constructor(excludeNames) {
-    super();
-    this._excludeNames = new Set(excludeNames);
-  }
-
-  /**
-   * @override
-   * @param {!SDK.TracingModel.Event} event
-   * @return {boolean}
-   */
-  accept(event) {
-    return !this._excludeNames.has(event.name);
-  }
-};
-
-TimelineModel.ExcludeTopLevelFilter = class extends TimelineModel.TimelineModel.Filter {
-  constructor() {
-    super();
-  }
-
-  /**
-   * @override
-   * @param {!SDK.TracingModel.Event} event
-   * @return {boolean}
-   */
-  accept(event) {
-    return !SDK.TracingModel.isTopLevelEvent(event);
-  }
-};
 
 /**
  * @unrestricted
@@ -1977,15 +1721,20 @@ TimelineModel.TimelineAsyncEventTracker = class {
     var initiatorInfo = TimelineModel.TimelineAsyncEventTracker._asyncEvents.get(initiatorType);
     if (!initiatorInfo)
       return;
-    var id = event.args['data'][initiatorInfo.joinBy];
+    var id = TimelineModel.TimelineModel.globalEventId(event, initiatorInfo.joinBy);
     if (!id)
       return;
     /** @type {!Map<string, !SDK.TracingModel.Event>|undefined} */
     var initiatorMap = this._initiatorByType.get(initiatorType);
-    if (isInitiator)
+    if (isInitiator) {
       initiatorMap.set(id, event);
-    else
-      TimelineModel.TimelineData.forEvent(event).setInitiator(initiatorMap.get(id) || null);
+      return;
+    }
+    var initiator = initiatorMap.get(id) || null;
+    var timelineData = TimelineModel.TimelineData.forEvent(event);
+    timelineData.setInitiator(initiator);
+    if (!timelineData.frameId && initiator)
+      timelineData.frameId = TimelineModel.TimelineModel.eventFrameId(initiator);
   }
 };
 

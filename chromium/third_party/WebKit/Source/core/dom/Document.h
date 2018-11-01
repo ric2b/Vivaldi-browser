@@ -50,7 +50,6 @@
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/custom/V0CustomElement.h"
-#include "core/fetch/ClientHintsPreferences.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/html/parser/ParserSynchronizationPolicy.h"
@@ -58,6 +57,7 @@
 #include "platform/Length.h"
 #include "platform/Timer.h"
 #include "platform/WebTaskRunner.h"
+#include "platform/loader/fetch/ClientHintsPreferences.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
@@ -81,7 +81,6 @@ class Attr;
 class CDATASection;
 class CSSStyleSheet;
 class CanvasFontCache;
-class CharacterData;
 class ChromeClient;
 class CompositorPendingAnimations;
 class Comment;
@@ -144,7 +143,6 @@ class NodeIterator;
 class NthIndexCache;
 class OriginAccessEntry;
 class Page;
-class PlatformMouseEvent;
 class ProcessingInstruction;
 class PropertyRegistry;
 class QualifiedName;
@@ -175,12 +173,12 @@ class TouchList;
 class TransformSource;
 class TreeWalker;
 class VisitedLinkState;
+class WebMouseEvent;
 struct AnnotatedRegionValue;
 struct FocusParams;
 struct IconURL;
 
-using MouseEventWithHitTestResults =
-    EventWithHitTestResults<PlatformMouseEvent>;
+using MouseEventWithHitTestResults = EventWithHitTestResults<WebMouseEvent>;
 using ExceptionCode = int;
 
 enum NodeListInvalidationType {
@@ -233,20 +231,16 @@ enum CreateElementFlags {
 // See https://crbug.com/635105.
 // Logged to UMA, don't re-arrange entries without creating a new histogram.
 enum WouldLoadReason {
+  Invalid,
   Created,
+  WouldLoad3ScreensAway,
+  WouldLoad2ScreensAway,
+  WouldLoad1ScreenAway,
+  WouldLoadVisible,
   // If outer and inner frames aren't in the same process we can't determine
   // if the inner frame is visible, so just load it.
   // TODO(dgrogan): Revisit after https://crbug.com/650433 is fixed.
-  WouldLoadOutOfProcess,
-  // The next five indicate frames that are probably used for cross-origin
-  // communication.
-  WouldLoadDisplayNone,
-  WouldLoadZeroByZero,
-  WouldLoadAboveAndLeft,
-  WouldLoadAbove,
-  WouldLoadLeft,
-  // We have to load documents in visible frames.
-  WouldLoadVisible,
+  WouldLoadNoParent,
 
   WouldLoadReasonEnd
 };
@@ -450,6 +444,7 @@ class CORE_EXPORT Document : public ContainerNode,
     return m_sawElementsInKnownNamespaces;
   }
 
+  bool canExecuteScripts(ReasonForCallingCanExecuteScripts) override;
   bool isRenderingReady() const {
     return haveImportsLoaded() && haveRenderBlockingStylesheetsLoaded();
   }
@@ -690,10 +685,9 @@ class CORE_EXPORT Document : public ContainerNode,
   TextLinkColors& textLinkColors() { return m_textLinkColors; }
   VisitedLinkState& visitedLinkState() const { return *m_visitedLinkState; }
 
-  MouseEventWithHitTestResults performMouseEventHitTest(
-      const HitTestRequest&,
-      const LayoutPoint&,
-      const PlatformMouseEvent&);
+  MouseEventWithHitTestResults performMouseEventHitTest(const HitTestRequest&,
+                                                        const LayoutPoint&,
+                                                        const WebMouseEvent&);
 
   /* Newly proposed CSS3 mechanism for selecting alternate
        stylesheets using the DOM. May be subject to change as
@@ -753,8 +747,6 @@ class CORE_EXPORT Document : public ContainerNode,
   void nodeChildrenWillBeRemoved(ContainerNode&);
   // nodeWillBeRemoved is only safe when removing one node at a time.
   void nodeWillBeRemoved(Node&);
-  // Called just before a destructive update to some CharacterData.
-  void dataWillChange(const CharacterData&);
   bool canAcceptChild(const Node& newChild,
                       const Node* oldChild,
                       ExceptionState&) const;
@@ -776,7 +768,7 @@ class CORE_EXPORT Document : public ContainerNode,
   EventListener* getWindowAttributeEventListener(const AtomicString& eventType);
 
   static void registerEventFactory(std::unique_ptr<EventFactoryBase>);
-  static Event* createEvent(ExecutionContext*,
+  static Event* createEvent(ScriptState*,
                             const String& eventType,
                             ExceptionState&);
 
@@ -992,7 +984,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void postTask(TaskType,
                 const WebTraceLocation&,
                 std::unique_ptr<ExecutionContextTask>,
-                const String& taskNameForInstrumentation = emptyString())
+                const String& taskNameForInstrumentation = emptyString)
       override;  // Executes the task on context's thread asynchronously.
 
   void tasksWereSuspended() final;
@@ -1175,7 +1167,9 @@ class CORE_EXPORT Document : public ContainerNode,
   ElementDataCache* elementDataCache() { return m_elementDataCache.get(); }
 
   void didLoadAllScriptBlockingResources();
+  void didAddPendingStylesheetInBody();
   void didRemoveAllPendingStylesheet();
+  void didRemoveAllPendingBodyStylesheets();
 
   bool inStyleRecalc() const {
     return m_lifecycle.state() == DocumentLifecycle::InStyleRecalc;
@@ -1302,8 +1296,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool isInMainFrame() const;
 
-  void maybeRecordLoadReason(WouldLoadReason);
-  WouldLoadReason wouldLoadReason() { return m_wouldLoadReason; }
+  void recordDeferredLoadReason(WouldLoadReason);
+  WouldLoadReason deferredLoadReason() { return m_wouldLoadReason; }
 
   const PropertyRegistry* propertyRegistry() const;
   PropertyRegistry* propertyRegistry();
@@ -1335,6 +1329,7 @@ class CORE_EXPORT Document : public ContainerNode,
   friend class IgnoreDestructiveWriteCountIncrementer;
   friend class ThrowOnDynamicMarkupInsertionCountIncrementer;
   friend class NthIndexCache;
+  class NetworkStateObserver;
 
   bool isDocumentFragment() const =
       delete;  // This will catch anyone doing an unnecessary check.
@@ -1378,7 +1373,7 @@ class CORE_EXPORT Document : public ContainerNode,
   String nodeName() const final;
   NodeType getNodeType() const final;
   bool childTypeAllowed(NodeType) const final;
-  Node* cloneNode(bool deep) final;
+  Node* cloneNode(bool deep, ExceptionState&) final;
   void cloneDataFromDocument(const Document&);
   bool isSecureContextImpl(
       const SecureContextCheck priviligeContextCheck) const;
@@ -1676,6 +1671,8 @@ class CORE_EXPORT Document : public ContainerNode,
   TaskHandle m_sensitiveInputVisibilityTask;
 
   mojom::EngagementLevel m_engagementLevel;
+
+  Member<NetworkStateObserver> m_networkStateObserver;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

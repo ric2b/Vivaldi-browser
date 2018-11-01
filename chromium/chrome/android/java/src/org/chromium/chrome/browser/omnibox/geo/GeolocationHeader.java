@@ -23,6 +23,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
 import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
@@ -182,8 +183,6 @@ public class GeolocationHeader {
     /** The maximum age in milliseconds of a location before we'll request a refresh. */
     private static final int REFRESH_LOCATION_AGE = 5 * 60 * 1000;  // 5 minutes
 
-    private static final String HTTPS_SCHEME = "https";
-
     /** The time of the first location refresh. Contains Long.MAX_VALUE if not set. */
     private static long sFirstLocationTime = Long.MAX_VALUE;
 
@@ -220,7 +219,7 @@ public class GeolocationHeader {
         if (!UrlUtilities.nativeIsGoogleSearchUrl(url)) return UNSUITABLE_URL;
 
         Uri uri = Uri.parse(url);
-        if (!HTTPS_SCHEME.equals(uri.getScheme())) return NOT_HTTPS;
+        if (!UrlConstants.HTTPS_SCHEME.equals(uri.getScheme())) return NOT_HTTPS;
 
         if (!hasGeolocationPermission()) {
             if (recordUma) recordHistogram(UMA_LOCATION_DISABLED_FOR_CHROME_APP);
@@ -356,8 +355,7 @@ public class GeolocationHeader {
 
     /**
      * Returns true if the user has disabled sharing their location with url (e.g. via the
-     * geolocation infobar). If the user has not chosen a preference for url and url uses the https
-     * scheme, this considers the user's preference for url with the http scheme instead.
+     * geolocation infobar).
      */
     static boolean isLocationDisabledForUrl(Uri uri, boolean isIncognito) {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.CONSISTENT_OMNIBOX_GEOLOCATION)) {
@@ -372,25 +370,11 @@ public class GeolocationHeader {
 
     /**
      * Returns the location permission for sharing their location with url (e.g. via the
-     * geolocation infobar). If the user has not chosen a preference for url and url uses the https
-     * scheme, this returns the user's preference for url with the http scheme instead.
+     * geolocation infobar).
      */
     static ContentSetting locationContentSettingForUrl(Uri uri, boolean isIncognito) {
         GeolocationInfo locationSettings = new GeolocationInfo(uri.toString(), null, isIncognito);
         ContentSetting locationPermission = locationSettings.getContentSetting();
-
-        // If no preference has been chosen and the scheme is https, fall back to the preference for
-        // this same host over http with no explicit port number.
-        if (locationPermission == null || locationPermission == ContentSetting.ASK) {
-            String scheme = uri.getScheme();
-            if (scheme != null && scheme.toLowerCase(Locale.US).equals("https")
-                    && uri.getAuthority() != null && uri.getUserInfo() == null) {
-                String urlWithHttp = "http://" + uri.getHost();
-                locationSettings = new GeolocationInfo(urlWithHttp, null, isIncognito);
-                locationPermission = locationSettings.getContentSetting();
-            }
-        }
-
         return locationPermission;
     }
 
@@ -401,6 +385,8 @@ public class GeolocationHeader {
 
     /** Returns the location source. */
     @LocationSource
+    // We should replace our usage of LOCATION_PROVIDERS_ALLOWED when the min API is 19.
+    @SuppressWarnings("deprecation")
     private static int getLocationSource() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             int locationMode;
@@ -441,8 +427,7 @@ public class GeolocationHeader {
     /**
      * Returns the domain permission as either granted, blocked or prompt.
      * This is based upon the location permission for sharing their location with url (e.g. via the
-     * geolocation infobar). If the user has not chosen a preference for url and url uses the https
-     * scheme, this returns the user's preference for url with the http scheme instead.
+     * geolocation infobar).
      */
     @Permission
     private static int getDomainPermission(String url, boolean isIncognito) {

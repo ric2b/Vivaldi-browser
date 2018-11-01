@@ -84,7 +84,7 @@ void HTMLImport::recalcTreeState(HTMLImport* root) {
   HeapVector<Member<HTMLImport>> updated;
 
   for (HTMLImport* i = root; i; i = traverseNext(i)) {
-    snapshot.add(i, i->state());
+    snapshot.insert(i, i->state());
     i->m_state = HTMLImportState::invalidState();
   }
 
@@ -99,7 +99,7 @@ void HTMLImport::recalcTreeState(HTMLImport* root) {
     i->m_state = HTMLImportStateResolver(i).resolve();
 
     HTMLImportState newState = i->state();
-    HTMLImportState oldState = snapshot.get(i);
+    HTMLImportState oldState = snapshot.at(i);
     // Once the state reaches Ready, it shouldn't go back.
     DCHECK(!oldState.isReady() || oldState <= newState);
     if (newState != oldState)

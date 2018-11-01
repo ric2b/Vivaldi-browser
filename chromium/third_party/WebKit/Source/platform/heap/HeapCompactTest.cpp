@@ -235,7 +235,7 @@ TEST(HeapCompactTest, CompactHashMap) {
   Persistent<IntMap> intMap = new IntMap();
   for (size_t i = 0; i < 100; ++i) {
     IntWrapper* val = IntWrapper::create(i);
-    intMap->add(val, 100 - i);
+    intMap->insert(val, 100 - i);
   }
 
   EXPECT_EQ(100u, intMap->size());
@@ -258,7 +258,7 @@ TEST(HeapCompactTest, CompactVectorPartHashMap) {
     IntMap map;
     for (size_t j = 0; j < 10; ++j) {
       IntWrapper* val = IntWrapper::create(j);
-      map.add(val, 10 - j);
+      map.insert(val, 10 - j);
     }
     intMapVector->push_back(map);
   }
@@ -293,7 +293,7 @@ TEST(HeapCompactTest, CompactHashPartVector) {
     for (size_t j = 0; j < 10; ++j) {
       vector.push_back(IntWrapper::create(j));
     }
-    intVectorMap->add(1 + i, vector);
+    intVectorMap->insert(1 + i, vector);
   }
 
   EXPECT_EQ(10u, intVectorMap->size());
@@ -354,7 +354,7 @@ TEST(HeapCompactTest, CompactLinkedHashSet) {
   Persistent<OrderedHashSet> set = new OrderedHashSet;
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::create(i);
-    set->add(value);
+    set->insert(value);
   }
   EXPECT_EQ(13u, set->size());
 
@@ -379,7 +379,7 @@ TEST(HeapCompactTest, CompactLinkedHashSetVector) {
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::create(i);
     IntVector* vector = new IntVector(19, value);
-    set->add(vector);
+    set->insert(vector);
   }
   EXPECT_EQ(13u, set->size());
 
@@ -406,8 +406,8 @@ TEST(HeapCompactTest, CompactLinkedHashSetMap) {
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::create(i);
     Inner* inner = new Inner;
-    inner->add(value);
-    set->add(inner);
+    inner->insert(value);
+    set->insert(inner);
   }
   EXPECT_EQ(13u, set->size());
 
@@ -436,8 +436,8 @@ TEST(HeapCompactTest, CompactLinkedHashSetNested) {
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::create(i);
     Inner* inner = new Inner;
-    inner->add(value);
-    set->add(inner);
+    inner->insert(value);
+    set->insert(inner);
   }
   EXPECT_EQ(13u, set->size());
 

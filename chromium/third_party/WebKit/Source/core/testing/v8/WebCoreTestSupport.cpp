@@ -37,8 +37,6 @@
 #include "core/testing/Internals.h"
 #include "core/testing/WorkerInternals.h"
 
-using namespace blink;
-
 namespace WebCoreTestSupport {
 
 namespace {
@@ -49,15 +47,18 @@ blink::InstallPendingConditionalFeatureFunction
     s_originalInstallPendingConditionalFeatureFunction = nullptr;
 
 v8::Local<v8::Value> createInternalsObject(v8::Local<v8::Context> context) {
-  ScriptState* scriptState = ScriptState::from(context);
+  blink::ScriptState* scriptState = blink::ScriptState::from(context);
   v8::Local<v8::Object> global = scriptState->context()->Global();
-  ExecutionContext* executionContext = scriptState->getExecutionContext();
+  blink::ExecutionContext* executionContext =
+      scriptState->getExecutionContext();
   if (executionContext->isDocument()) {
-    return ToV8(Internals::create(executionContext), global,
-                scriptState->isolate());
+    return blink::ToV8(blink::Internals::create(executionContext), global,
+                       scriptState->isolate());
   }
-  if (executionContext->isWorkerGlobalScope())
-    return ToV8(WorkerInternals::create(), global, scriptState->isolate());
+  if (executionContext->isWorkerGlobalScope()) {
+    return blink::ToV8(blink::WorkerInternals::create(), global,
+                       scriptState->isolate());
+  }
   return v8::Local<v8::Value>();
 }
 }
@@ -65,8 +66,8 @@ v8::Local<v8::Value> createInternalsObject(v8::Local<v8::Context> context) {
 void injectInternalsObject(v8::Local<v8::Context> context) {
   registerInstallConditionalFeaturesForTesting();
 
-  ScriptState* scriptState = ScriptState::from(context);
-  ScriptState::Scope scope(scriptState);
+  blink::ScriptState* scriptState = blink::ScriptState::from(context);
+  blink::ScriptState::Scope scope(scriptState);
   v8::Local<v8::Object> global = scriptState->context()->Global();
   v8::Local<v8::Value> internals = createInternalsObject(context);
   if (internals.IsEmpty())
@@ -74,7 +75,8 @@ void injectInternalsObject(v8::Local<v8::Context> context) {
 
   global
       ->Set(scriptState->context(),
-            v8AtomicString(scriptState->isolate(), "internals"), internals)
+            blink::v8AtomicString(scriptState->isolate(), "internals"),
+            internals)
       .ToChecked();
 }
 
@@ -86,13 +88,15 @@ void installConditionalFeaturesForTesting(
   (*s_originalInstallConditionalFeaturesFunction)(
       type, scriptState, prototypeObject, interfaceObject);
 
-  ExecutionContext* executionContext = scriptState->getExecutionContext();
-  OriginTrialContext* originTrialContext = OriginTrialContext::from(
-      executionContext, OriginTrialContext::DontCreateIfNotExists);
+  blink::ExecutionContext* executionContext =
+      scriptState->getExecutionContext();
+  blink::OriginTrialContext* originTrialContext =
+      blink::OriginTrialContext::from(
+          executionContext, blink::OriginTrialContext::DontCreateIfNotExists);
 
-  if (type == &V8OriginTrialsTest::wrapperTypeInfo) {
+  if (type == &blink::V8OriginTrialsTest::wrapperTypeInfo) {
     if (originTrialContext && originTrialContext->isTrialEnabled("Frobulate")) {
-      V8OriginTrialsTest::installOriginTrialsSampleAPI(
+      blink::V8OriginTrialsTest::installOriginTrialsSampleAPI(
           scriptState->isolate(), scriptState->world(), v8::Local<v8::Object>(),
           prototypeObject, interfaceObject);
     }
@@ -104,19 +108,19 @@ void resetInternalsObject(v8::Local<v8::Context> context) {
   if (context.IsEmpty())
     return;
 
-  ScriptState* scriptState = ScriptState::from(context);
-  ScriptState::Scope scope(scriptState);
-  Document* document = toDocument(scriptState->getExecutionContext());
-  ASSERT(document);
-  LocalFrame* frame = document->frame();
+  blink::ScriptState* scriptState = blink::ScriptState::from(context);
+  blink::ScriptState::Scope scope(scriptState);
+  blink::Document* document = toDocument(scriptState->getExecutionContext());
+  DCHECK(document);
+  blink::LocalFrame* frame = document->frame();
   // Should the document have been detached, the page is assumed being destroyed
   // (=> no reset required.)
   if (!frame)
     return;
-  Page* page = frame->page();
-  ASSERT(page);
-  Internals::resetToConsistentState(page);
-  InternalSettings::from(*page)->resetToConsistentState();
+  blink::Page* page = frame->page();
+  DCHECK(page);
+  blink::Internals::resetToConsistentState(page);
+  blink::InternalSettings::from(*page)->resetToConsistentState();
 }
 
 void installPendingConditionalFeatureForTesting(

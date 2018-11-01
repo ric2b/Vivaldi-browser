@@ -58,10 +58,17 @@ ChildMemoryCoordinatorImpl::~ChildMemoryCoordinatorImpl() {
   g_child_memory_coordinator = nullptr;
 }
 
+void ChildMemoryCoordinatorImpl::PurgeMemory() {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("memory-infra"),
+               "ChildMemoryCoordinatorImpl::PurgeMemory");
+  base::MemoryCoordinatorClientRegistry::GetInstance()->PurgeMemory();
+}
+
 void ChildMemoryCoordinatorImpl::OnStateChange(mojom::MemoryState state) {
   base::MemoryState base_state = ToBaseMemoryState(state);
-  TRACE_EVENT1("memory-infra", "ChildMemoryCoordinatorImpl::OnStateChange",
-               "state", MemoryStateToString(base_state));
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("memory-infra"),
+               "ChildMemoryCoordinatorImpl::OnStateChange", "state",
+               MemoryStateToString(base_state));
   base::MemoryCoordinatorClientRegistry::GetInstance()->Notify(
       base_state);
 }

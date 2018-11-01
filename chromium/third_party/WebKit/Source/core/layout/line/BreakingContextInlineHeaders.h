@@ -382,7 +382,7 @@ inline void BreakingContext::increment() {
   // When the line box tree is created, this position in the line will be
   // snapped to LayoutUnit's, and those measurements will be used by the paint
   // code. Do the equivalent snapping here, to get consistent line measurements.
-  m_width.snapUncommittedWidth();
+  m_width.snapAtNodeBoundary();
 
   m_atStart = false;
 }
@@ -406,7 +406,7 @@ inline void BreakingContext::handleBR(EClear& clear) {
     // A <br> with clearance always needs a linebox in case the lines below it
     // get dirtied later and need to check for floats to clear - so if we're
     // ignoring spaces, stop ignoring them and add a run for this object.
-    if (m_ignoringSpaces && m_currentStyle->clear() != ClearNone)
+    if (m_ignoringSpaces && m_currentStyle->clear() != EClear::kNone)
       ensureLineBoxInsideIgnoredSpaces(&m_lineMidpointState, br);
 
     if (!m_lineInfo.isEmpty())
@@ -739,7 +739,8 @@ ALWAYS_INLINE int lastBreakablePositionForBreakAll(LineLayoutText text,
                                                    const ComputedStyle& style,
                                                    int start,
                                                    int end) {
-  LazyLineBreakIterator lineBreakIterator(text.text(), style.locale());
+  LazyLineBreakIterator lineBreakIterator(text.text(),
+                                          localeForLineBreakIterator(style));
   int lastBreakablePosition = 0, nextBreakablePosition = -1;
   for (int i = start;; i = nextBreakablePosition + 1) {
     lineBreakIterator.isBreakable(i, nextBreakablePosition,
@@ -798,7 +799,8 @@ ALWAYS_INLINE bool BreakingContext::rewindToFirstMidWordBreak(
   int start = wordMeasurement.startOffset;
   int end = canMidWordBreakBefore(text) ? start : start + 1;
   if (breakAll) {
-    LazyLineBreakIterator lineBreakIterator(text.text(), style.locale());
+    LazyLineBreakIterator lineBreakIterator(text.text(),
+                                            localeForLineBreakIterator(style));
     int nextBreakable = -1;
     lineBreakIterator.isBreakable(end, nextBreakable, LineBreakType::BreakAll);
     if (nextBreakable < 0)
@@ -987,7 +989,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements,
     m_layoutTextInfo.m_text = layoutText;
     m_layoutTextInfo.m_font = &font;
     m_layoutTextInfo.m_lineBreakIterator.resetStringAndReleaseIterator(
-        layoutText.text(), style.locale());
+        layoutText.text(), localeForLineBreakIterator(style));
   } else if (m_layoutTextInfo.m_font != &font) {
     m_layoutTextInfo.m_font = &font;
   }

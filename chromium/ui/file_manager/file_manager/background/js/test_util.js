@@ -3,14 +3,14 @@
 // found in the LICENSE file.
 
 /**
- * Opens the main Files.app's window and waits until it is ready.
+ * Opens the main Files app's window and waits until it is ready.
  *
  * @param {Object} appState App state.
  * @param {function(string)} callback Completion callback with the new window's
  *     App ID.
  */
 test.util.async.openMainWindow = function(appState, callback) {
-  launchFileManager(appState,
+  launcher.launchFileManager(appState,
                     undefined,  // opt_type
                     undefined,  // opt_id
                     callback);

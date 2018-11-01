@@ -1,14 +1,17 @@
 // Copyright (c) 2013-2017 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_NOTES_MODEL_H_
-#define VIVALDI_NOTES_MODEL_H_
+#ifndef NOTES_NOTES_MODEL_H_
+#define NOTES_NOTES_MODEL_H_
 
+#include <memory>
 #include <set>
-#include "notes/notesnode.h"
-#include "notes/notes_model_observer.h"
+#include <vector>
+
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "importer/imported_notes_entry.h"
+#include "notes/notes_model_observer.h"
+#include "notes/notesnode.h"
 
 class Profile;
 
@@ -248,4 +251,4 @@ Notes_Node* AsMutable(const Notes_Node* node);
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_NOTES_MODEL_H_
+#endif  // NOTES_NOTES_MODEL_H_

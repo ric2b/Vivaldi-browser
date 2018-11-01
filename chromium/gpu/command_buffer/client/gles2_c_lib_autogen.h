@@ -1313,14 +1313,6 @@ GLuint GL_APIENTRY GLES2CreateImageCHROMIUM(ClientBuffer buffer,
 void GL_APIENTRY GLES2DestroyImageCHROMIUM(GLuint image_id) {
   gles2::GetGLContext()->DestroyImageCHROMIUM(image_id);
 }
-GLuint GL_APIENTRY
-GLES2CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
-                                        GLsizei height,
-                                        GLenum internalformat,
-                                        GLenum usage) {
-  return gles2::GetGLContext()->CreateGpuMemoryBufferImageCHROMIUM(
-      width, height, internalformat, usage);
-}
 void GL_APIENTRY GLES2DescheduleUntilFinishedCHROMIUM() {
   gles2::GetGLContext()->DescheduleUntilFinishedCHROMIUM();
 }
@@ -1339,6 +1331,7 @@ void GL_APIENTRY GLES2PostSubBufferCHROMIUM(GLint x,
 }
 void GL_APIENTRY GLES2CopyTextureCHROMIUM(GLenum source_id,
                                           GLint source_level,
+                                          GLenum dest_target,
                                           GLenum dest_id,
                                           GLint dest_level,
                                           GLint internalformat,
@@ -1347,12 +1340,14 @@ void GL_APIENTRY GLES2CopyTextureCHROMIUM(GLenum source_id,
                                           GLboolean unpack_premultiply_alpha,
                                           GLboolean unpack_unmultiply_alpha) {
   gles2::GetGLContext()->CopyTextureCHROMIUM(
-      source_id, source_level, dest_id, dest_level, internalformat, dest_type,
-      unpack_flip_y, unpack_premultiply_alpha, unpack_unmultiply_alpha);
+      source_id, source_level, dest_target, dest_id, dest_level, internalformat,
+      dest_type, unpack_flip_y, unpack_premultiply_alpha,
+      unpack_unmultiply_alpha);
 }
 void GL_APIENTRY
 GLES2CopySubTextureCHROMIUM(GLenum source_id,
                             GLint source_level,
+                            GLenum dest_target,
                             GLenum dest_id,
                             GLint dest_level,
                             GLint xoffset,
@@ -1365,8 +1360,8 @@ GLES2CopySubTextureCHROMIUM(GLenum source_id,
                             GLboolean unpack_premultiply_alpha,
                             GLboolean unpack_unmultiply_alpha) {
   gles2::GetGLContext()->CopySubTextureCHROMIUM(
-      source_id, source_level, dest_id, dest_level, xoffset, yoffset, x, y,
-      width, height, unpack_flip_y, unpack_premultiply_alpha,
+      source_id, source_level, dest_target, dest_id, dest_level, xoffset,
+      yoffset, x, y, width, height, unpack_flip_y, unpack_premultiply_alpha,
       unpack_unmultiply_alpha);
 }
 void GL_APIENTRY GLES2CompressedCopyTextureCHROMIUM(GLenum source_id,
@@ -1721,11 +1716,15 @@ void GL_APIENTRY GLES2OverlayPromotionHintCHROMIUM(GLuint texture,
   gles2::GetGLContext()->OverlayPromotionHintCHROMIUM(texture, promotion_hint,
                                                       display_x, display_y);
 }
-void GL_APIENTRY GLES2SwapBuffersWithDamageCHROMIUM(GLint x,
-                                                    GLint y,
-                                                    GLint width,
-                                                    GLint height) {
-  gles2::GetGLContext()->SwapBuffersWithDamageCHROMIUM(x, y, width, height);
+void GL_APIENTRY GLES2SwapBuffersWithBoundsCHROMIUM(GLsizei count,
+                                                    const GLint* rects) {
+  gles2::GetGLContext()->SwapBuffersWithBoundsCHROMIUM(count, rects);
+}
+void GL_APIENTRY GLES2SetDrawRectangleCHROMIUM(GLint x,
+                                               GLint y,
+                                               GLint width,
+                                               GLint height) {
+  gles2::GetGLContext()->SetDrawRectangleCHROMIUM(x, y, width, height);
 }
 
 namespace gles2 {
@@ -2731,11 +2730,6 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glDestroyImageCHROMIUM),
     },
     {
-        "glCreateGpuMemoryBufferImageCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(
-            glCreateGpuMemoryBufferImageCHROMIUM),
-    },
-    {
         "glDescheduleUntilFinishedCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glDescheduleUntilFinishedCHROMIUM),
@@ -3031,8 +3025,12 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glOverlayPromotionHintCHROMIUM),
     },
     {
-        "glSwapBuffersWithDamageCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glSwapBuffersWithDamageCHROMIUM),
+        "glSwapBuffersWithBoundsCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glSwapBuffersWithBoundsCHROMIUM),
+    },
+    {
+        "glSetDrawRectangleCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glSetDrawRectangleCHROMIUM),
     },
     {
         NULL, NULL,

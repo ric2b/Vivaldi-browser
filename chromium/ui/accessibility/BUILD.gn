@@ -17,6 +17,8 @@ component("accessibility") {
   sources = [
     "ax_action_data.cc",
     "ax_action_data.h",
+    "ax_host_delegate.cc",
+    "ax_host_delegate.h",
     "ax_node.cc",
     "ax_node.h",
     "ax_node_data.cc",
@@ -27,6 +29,8 @@ component("accessibility") {
     "ax_range.h",
     "ax_relative_bounds.cc",
     "ax_relative_bounds.h",
+    "ax_role_properties.cc",
+    "ax_role_properties.h",
     "ax_serializable_tree.cc",
     "ax_serializable_tree.h",
     "ax_text_utils.cc",
@@ -37,6 +41,8 @@ component("accessibility") {
     "ax_tree_combiner.h",
     "ax_tree_data.cc",
     "ax_tree_data.h",
+    "ax_tree_id_registry.cc",
+    "ax_tree_id_registry.h",
     "ax_tree_serializer.cc",
     "ax_tree_serializer.h",
     "ax_tree_source.h",
@@ -84,10 +90,6 @@ component("accessibility") {
     ]
 
     configs += [ "//build/config/linux/atk" ]
-
-    if (use_gconf) {
-      configs += [ "//build/config/linux/gconf" ]
-    }
 
     if (use_glib) {
       configs += [ "//build/config/linux:glib" ]

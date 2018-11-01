@@ -631,8 +631,7 @@ HistoryModel.prototype.addResults = function(info, results) {
   $('loading-spinner').hidden = true;
   this.inFlight_ = false;
   this.isQueryFinished_ = info.finished;
-  this.queryStartTime = info.queryStartTime;
-  this.queryEndTime = info.queryEndTime;
+  this.queryInterval = info.queryInterval;
 
   var lastVisit = this.visits_.slice(-1)[0];
   var lastDay = lastVisit ? lastVisit.dateRelativeDay : null;
@@ -1579,10 +1578,8 @@ HistoryView.prototype.addTimeframeInterval_ = function(resultsFragment) {
       createElementWithClassName('h2', 'timeframe'));
   // TODO(sergiu): Figure the best way to show this for the first day of
   // the month.
-  timeFrame.appendChild(document.createTextNode(loadTimeData.getStringF(
-      'historyInterval',
-      this.model_.queryStartTime,
-      this.model_.queryEndTime)));
+  timeFrame.appendChild(
+      document.createTextNode(this.model_.queryInterval));
 };
 
 /**
@@ -1775,7 +1772,7 @@ HistoryView.prototype.toggleGroupedVisits_ = function(e) {
   } else {
     innerResultList.setAttribute('aria-hidden', 'false');
     innerResultList.style.height = 'auto';
-    // -webkit-transition does not work on height:auto elements so first set
+    // transition does not work on height:auto elements so first set
     // the height to auto so that it is computed and then set it to the
     // computed value in pixels so the transition works properly.
     var height = innerResultList.clientHeight;
@@ -2334,7 +2331,7 @@ function removeNode(node, onRemove, opt_scope) {
   node.classList.add('fade-out'); // Trigger CSS fade out animation.
 
   // Delete the node when the animation is complete.
-  node.addEventListener('webkitTransitionEnd', function(e) {
+  node.addEventListener('transitionend', function(e) {
     node.parentNode.removeChild(node);
 
     // In case there is nested deletion happening, prevent this event from

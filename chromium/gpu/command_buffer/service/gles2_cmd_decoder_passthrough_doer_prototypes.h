@@ -731,16 +731,15 @@ error::Error DoGetUniformsES3CHROMIUM(GLuint program,
                                       std::vector<uint8_t>* data);
 error::Error DoGetTranslatedShaderSourceANGLE(GLuint shader,
                                               std::string* source);
-error::Error DoSwapBuffersWithDamageCHROMIUM(GLint x,
-                                             GLint y,
-                                             GLint width,
-                                             GLint height);
+error::Error DoSwapBuffersWithBoundsCHROMIUM(GLsizei count,
+                                             const volatile GLint* rects);
 error::Error DoPostSubBufferCHROMIUM(GLint x,
                                      GLint y,
                                      GLint width,
                                      GLint height);
 error::Error DoCopyTextureCHROMIUM(GLenum source_id,
                                    GLint source_level,
+                                   GLenum dest_target,
                                    GLenum dest_id,
                                    GLint dest_level,
                                    GLint internalformat,
@@ -750,6 +749,7 @@ error::Error DoCopyTextureCHROMIUM(GLenum source_id,
                                    GLboolean unpack_unmultiply_alpha);
 error::Error DoCopySubTextureCHROMIUM(GLenum source_id,
                                       GLint source_level,
+                                      GLenum dest_target,
                                       GLenum dest_id,
                                       GLint dest_level,
                                       GLint xoffset,
@@ -954,3 +954,7 @@ error::Error DoOverlayPromotionHintCHROMIUM(GLuint texture,
                                             GLboolean promotion_hint,
                                             GLint display_x,
                                             GLint display_y);
+error::Error DoSetDrawRectangleCHROMIUM(GLint x,
+                                        GLint y,
+                                        GLint width,
+                                        GLint height);

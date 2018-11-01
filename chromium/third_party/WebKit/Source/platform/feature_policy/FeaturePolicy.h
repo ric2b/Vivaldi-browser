@@ -47,6 +47,25 @@ namespace blink {
 //   "*" refers to all origins; any origin will match a whitelist which contains
 //     it.
 //
+// Declarations
+// ------------
+// A feature policy declaration is a mapping of a feature name to a whitelist.
+// A set of declarations is a declared policy.
+//
+// Inherited Policy
+// ----------------
+// In addition to the declared policy (which may be empty), every frame has
+// an inherited policy, which is determined by the context in which it is
+// embedded, or by the defaults for each feature in the case of the top-level
+// document.
+//
+// Container Policy
+// ----------------
+// A declared policy can be set on a specific frame by the embedding page using
+// the iframe "allow" attribute, or through attributes such as "allowfullscreen"
+// or "allowpaymentrequest". This is the container policy for the embedded
+// frame.
+//
 // Defaults
 // --------
 // Each defined feature has a default policy, which determines whether the
@@ -75,7 +94,7 @@ class PLATFORM_EXPORT FeaturePolicy final {
   class Whitelist final {
    public:
     static std::unique_ptr<Whitelist> from(
-        const WebFeaturePolicy::ParsedWhitelist&);
+        const WebParsedFeaturePolicyDeclaration&);
 
     Whitelist();
 
@@ -132,17 +151,19 @@ class PLATFORM_EXPORT FeaturePolicy final {
   // but will be filtered out when the policy is constructed. If |messages| is
   // not null, then any errors in the input will cause an error message to be
   // appended to it.
-  static WebParsedFeaturePolicy parseFeaturePolicy(const String& policy,
-                                                   RefPtr<SecurityOrigin>,
-                                                   Vector<String>* messages);
+  static WebParsedFeaturePolicyHeader parseFeaturePolicy(
+      const String& policy,
+      RefPtr<SecurityOrigin>,
+      Vector<String>* messages);
 
   static std::unique_ptr<FeaturePolicy> createFromParentPolicy(
       const FeaturePolicy* parent,
+      const WebParsedFeaturePolicyHeader* containerPolicy,
       RefPtr<SecurityOrigin>);
 
   // Sets the declared policy from the parsed Feature-Policy HTTP header.
   // Unrecognized features will be ignored.
-  void setHeaderPolicy(const WebParsedFeaturePolicy&);
+  void setHeaderPolicy(const WebParsedFeaturePolicyHeader&);
 
   // Returns whether or not the given feature is enabled by this policy.
   bool isFeatureEnabledForOrigin(const Feature&, const SecurityOrigin&) const;
@@ -156,6 +177,11 @@ class PLATFORM_EXPORT FeaturePolicy final {
 
   String toString();
 
+  // Returns the corresponding WebFeaturePolicyFeature enum given a feature
+  // string.
+  static WebFeaturePolicyFeature getWebFeaturePolicyFeature(
+      const String& feature);
+
  private:
   friend class FeaturePolicyTest;
   friend class FeaturePolicyInFrameTest;
@@ -164,8 +190,14 @@ class PLATFORM_EXPORT FeaturePolicy final {
 
   static std::unique_ptr<FeaturePolicy> createFromParentPolicy(
       const FeaturePolicy* parent,
+      const WebParsedFeaturePolicyHeader* containerPolicy,
       RefPtr<SecurityOrigin>,
       FeatureList& features);
+
+  // Updates the inherited policy with the declarations from the iframe allow*
+  // attributes.
+  void addContainerPolicy(const WebParsedFeaturePolicyHeader* containerPolicy,
+                          const FeaturePolicy* parent);
 
   RefPtr<SecurityOrigin> m_origin;
 

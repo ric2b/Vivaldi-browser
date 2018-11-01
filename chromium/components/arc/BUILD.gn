@@ -21,8 +21,6 @@ static_library("arc") {
     "clipboard/arc_clipboard_bridge.h",
     "crash_collector/arc_crash_collector_bridge.cc",
     "crash_collector/arc_crash_collector_bridge.h",
-    "file_system/arc_file_system_operation_runner.cc",
-    "file_system/arc_file_system_operation_runner.h",
     "ime/arc_ime_bridge.h",
     "ime/arc_ime_bridge_impl.cc",
     "ime/arc_ime_bridge_impl.h",
@@ -66,7 +64,7 @@ static_library("arc") {
 
   deps = [
     "//ash:ash",
-    "//ash/public/interfaces",
+    "//ash/public/cpp:ash_public_cpp",
     "//base",
     "//chromeos",
     "//chromeos:power_manager_proto",
@@ -105,10 +103,12 @@ static_library("arc_base") {
     "arc_service.h",
     "arc_session.cc",
     "arc_session.h",
-    "arc_session_observer.cc",
-    "arc_session_observer.h",
     "arc_session_runner.cc",
     "arc_session_runner.h",
+    "arc_stop_reason.cc",
+    "arc_stop_reason.h",
+    "arc_util.cc",
+    "arc_util.h",
     "instance_holder.h",
   ]
 
@@ -126,6 +126,7 @@ static_library("arc_base") {
 
 mojom("arc_bindings") {
   sources = [
+    "common/accessibility_helper.mojom",
     "common/app.mojom",
     "common/arc_bridge.mojom",
     "common/audio.mojom",
@@ -166,8 +167,6 @@ mojom("arc_bindings") {
 static_library("arc_test_support") {
   testonly = true
   sources = [
-    "file_system/test/fake_arc_file_system_operation_runner.cc",
-    "file_system/test/fake_arc_file_system_operation_runner.h",
     "test/fake_app_instance.cc",
     "test/fake_app_instance.h",
     "test/fake_arc_session.cc",
@@ -191,6 +190,7 @@ static_library("arc_test_support") {
   deps = [
     "//base",
     "//mojo/common:common_base",
+    "//mojo/edk/embedder:headers",
   ]
 }
 
@@ -199,6 +199,7 @@ source_set("unit_tests") {
   sources = [
     "arc_service_manager_unittest.cc",
     "arc_session_runner_unittest.cc",
+    "arc_util_unittest.cc",
     "bluetooth/arc_bluetooth_bridge_unittest.cc",
     "bluetooth/bluetooth_struct_traits_unittest.cc",
     "bluetooth/bluetooth_type_converters_unittest.cc",
@@ -215,6 +216,7 @@ source_set("unit_tests") {
   deps = [
     ":arc_test_support",
     "//base",
+    "//base/test:test_support",
     "//chromeos",
     "//device/bluetooth",
     "//mojo/public/cpp/system:system",

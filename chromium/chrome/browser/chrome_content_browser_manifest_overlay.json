@@ -19,29 +19,7 @@
         "gpu": [
           "metrics::mojom::CallStackProfileCollector"
         ],
-        "ash": [
-          // Under classic ash the browser provides some of the ash interfaces
-          // to itself.
-          "app_list::mojom::AppList",
-          "app_list::mojom::AppListPresenter",
-          "ash::mojom::AcceleratorController",
-          "ash::mojom::CastConfig",
-          "ash::mojom::LocaleNotificationController",
-          "ash::mojom::MediaController",
-          "ash::mojom::NewWindowController",
-          "ash::mojom::SessionController",
-          "ash::mojom::ShelfController",
-          "ash::mojom::ShutdownController",
-          "ash::mojom::SystemTray",
-          "ash::mojom::TouchViewManager",
-          "ash::mojom::WallpaperController",
-          "ash::mojom::VpnList",
-          "keyboard::mojom::Keyboard"
-        ],
-        "ime:ime_driver": [],
-        "mash:launchable": [
-          "mash::mojom::Launchable"
-        ]
+        "ime:ime_driver": []
       },
       "requires": {
         "accessibility_autoclick": [ "ash:autoclick" ],
@@ -50,7 +28,7 @@
         "nacl_broker": [ "browser" ],
         "nacl_loader": [ "browser" ],
         "preferences": [ "preferences_manager" ],
-        "ui": [ "ime_registrar" ]
+        "ui": [ "display_controller", "ime_registrar" ]
       }
     },
     "navigation:frame": {
@@ -69,10 +47,7 @@
           "extensions::KeepAlive",
           "extensions::mime_handler::MimeHandlerService",
           "media_router::mojom::MediaRouter",
-          "mojom::OmniboxPageHandler",
           "password_manager::mojom::CredentialManager",
-          "shape_detection::mojom::BarcodeDetection",
-          "shape_detection::mojom::TextDetection",
           "translate::mojom::ContentTranslateDriver",
 
           // TODO(beng): These should be moved to a separate capability.

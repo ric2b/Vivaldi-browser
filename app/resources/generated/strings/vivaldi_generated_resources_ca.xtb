@@ -22,7 +22,6 @@
 <translation id="1616206807336925449">Aquesta extensió no requereix cap permís especial.</translation>
 <translation id="1620510694547887537">Càmera</translation>
 <translation id="1635033183663317347">Extensió instal·lada pel tutor.</translation>
-<translation id="1652965563555864525">S&amp;ilencia</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1723824996674794290">&amp;Finestra nova</translation>
 <translation id="1729533290416704613">També controla la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
@@ -32,7 +31,6 @@
 <translation id="1901303067676059328">Selecciona-ho &amp;tot</translation>
 <translation id="1965328510789761112">Memòria privada</translation>
 <translation id="1992397118740194946">No establerta</translation>
-<translation id="2011110593081822050">Treballador web: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">Amaga aquest connector</translation>
 <translation id="2087822576218954668">Impressió: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Actualitza el connector</translation>
@@ -58,7 +56,6 @@
 <translation id="2482878487686419369">Notificacions</translation>
 <translation id="2501797496290880632">Escriviu una drecera</translation>
 <translation id="2509857212037838238">Instal·lació de: <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">P&amp;ausa</translation>
 <translation id="2550212893339833758">Memòria intercanviada</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Torna a activar</translation>
@@ -108,7 +105,6 @@
 <translation id="3927932062596804919">Denega</translation>
 <translation id="3936390757709632190">&amp;Obre l'àudio en una pestanya nova</translation>
 <translation id="3943582379552582368">&amp;Enrere</translation>
-<translation id="3954582159466790312">Ac&amp;tiva el so</translation>
 <translation id="3979395879372752341">S'ha afegit una extensió nova (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">S'ha creat l'extensió:
@@ -136,17 +132,13 @@
 <translation id="4593021220803146968">&amp;Vés a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Només el gestor (<ph name="CUSTODIAN_NAME" />) pot modificar les aplicacions i les extensions.</translation>
 <translation id="4613271546271159013">Una extensió ha canviat la pàgina que es mostra en obrir una pestanya nova.</translation>
-<translation id="4623537843784569564">És possible que aquesta extensió no s'hagi actualitzat correctament. Torneu-la a instal·lar.</translation>
 <translation id="4677772697204437347">Memòria de la GPU</translation>
 <translation id="4711638718396952945">Restaura la configuració</translation>
 <translation id="4839303808932127586">De&amp;sa el vídeo com a...</translation>
 <translation id="4850258771229959924">Veure a les Eines de Desenvolupador</translation>
 <translation id="4851858059374029925">Vols instal·lar <ph name="PLUGIN_NAME" />? Instal·la només connectors de confiança.</translation>
-<translation id="4861833787540810454">Repro&amp;dueix</translation>
-<translation id="4883993111890464517">És possible que aquesta extensió estigui malmesa. Torna-la a instal·lar.</translation>
 <translation id="488785315393301722">Mostra els detalls</translation>
 <translation id="4911714727432509308">No hi ha cap extensió que tingui tecles de drecera assignades.</translation>
-<translation id="4919987486109157213">L'extensió està malmesa. Torneu-la a instal·lar.</translation>
 <translation id="4927301649992043040">Empaqueta l'extensió</translation>
 <translation id="4927753642311223124">Res d'interessant aquí, continua endavant.</translation>
 <translation id="49896407730300355">Gira en el sentit con&amp;trari a les agulles del rellotge</translation>
@@ -217,7 +209,6 @@
 <translation id="6787839852456839824">Tecles de drecera</translation>
 <translation id="6798954102094737107">Connector: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantén els canvis</translation>
-<translation id="6844537474943985871">És possible que aquesta extensió estigui malmesa. Desinstal·la-la i torna-la a instal·lar.</translation>
 <translation id="6863910145616405334">El connector no s'ha trobat</translation>
 <translation id="6886871292305414135">Obre l'enllaç en una pes&amp;tanya nova</translation>
 <translation id="6900284862687837908">Aplicació en segon pla: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -239,7 +230,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Pestanya nova</translation>
 <translation id="7564847347806291057">Finalitza el procés</translation>
-<translation id="7618337809041914424">&amp;Imprimeix el marc...</translation>
 <translation id="7629827748548208700">Pestanya: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancel·la</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -290,7 +280,6 @@ Deseu el fitxer de clau en una ubicació segura. El necessitareu per crear versi
 <translation id="8962083179518285172">Amaga els detalls</translation>
 <translation id="9003647077635673607">Permetre a totes els webs</translation>
 <translation id="9088234649737575428">La política d'empresa té el connector <ph name="PLUGIN_NAME" /> bloquejat</translation>
-<translation id="9101691533782776290">Inicia l'aplicació</translation>
 <translation id="9153341767479566106">Altres extension que no s'han carregat:</translation>
 <translation id="9170848237812810038">&amp;Desfés</translation>
 <translation id="9215293857209265904">S'ha afegit "<ph name="EXTENSION_NAME" />"</translation>

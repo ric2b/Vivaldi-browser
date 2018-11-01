@@ -8,8 +8,10 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "chrome/browser/chromeos/policy/remote_commands/device_command_fetch_status_job.h"
 #include "chrome/browser/chromeos/policy/remote_commands/device_command_reboot_job.h"
 #include "chrome/browser/chromeos/policy/remote_commands/device_command_screenshot_job.h"
+#include "chrome/browser/chromeos/policy/remote_commands/device_command_set_volume_job.h"
 #include "chrome/browser/chromeos/policy/remote_commands/screenshot_delegate.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/remote_commands/remote_command_job.h"
@@ -38,6 +40,12 @@ DeviceCommandsFactoryChromeOS::BuildJobForType(em::RemoteCommand_Type type) {
               content::BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
                   content::BrowserThread::GetBlockingPool()
                       ->GetSequenceToken()))));
+    case em::RemoteCommand_Type_DEVICE_SET_VOLUME:
+      return base::WrapUnique<RemoteCommandJob>(
+          new DeviceCommandSetVolumeJob());
+    case em::RemoteCommand_Type_DEVICE_FETCH_STATUS:
+      return base::WrapUnique<RemoteCommandJob>(
+          new DeviceCommandFetchStatusJob());
     default:
       return nullptr;
   }

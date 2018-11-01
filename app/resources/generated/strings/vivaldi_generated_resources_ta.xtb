@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">இந்த நீட்டிப்பிற்குச் சிறப்பு அனுமதிகள் தேவையில்லை.</translation>
 <translation id="1620510694547887537">கேமரா</translation>
 <translation id="1635033183663317347">பாதுகாப்பாளர் நிறுவியது.</translation>
-<translation id="1652965563555864525">&amp;முடக்கு</translation>
 <translation id="1723824996674794290">&amp;புதிய சாளரம்</translation>
 <translation id="1729533290416704613">சர்வபுலத்திலிருந்து தேடலை மேற்கொள்ளும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
 <translation id="1789575671122666129">பாப் அப்கள்</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">அ&amp;னைத்தையும் தேர்ந்தெடு</translation>
 <translation id="1965328510789761112">தனிப்பட்ட நினைவகம்</translation>
 <translation id="1992397118740194946">அமைக்கப்படவில்லை</translation>
-<translation id="2011110593081822050">வலையில் பணிபுரிபவர்: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">செருகுநிரலை மறை</translation>
 <translation id="2087822576218954668">அச்சிடு: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">செருகுநிரலைப் புதுப்பி</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">அறிவிப்புகள்</translation>
 <translation id="2501797496290880632">குறுக்குவழியைத் தட்டச்சு செய்க</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ஐ நிறுவவும்</translation>
-<translation id="253434972992662860">&amp;இடைநிறுத்து</translation>
 <translation id="2550212893339833758">ஸ்வாப்டு மெமரி</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">மீண்டும் இயக்கு</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">மறு</translation>
 <translation id="3936390757709632190">புதிய தாவலில் ஆடியோவை &amp;திற</translation>
 <translation id="3943582379552582368">&amp;முந்தைய பக்கம்</translation>
-<translation id="3954582159466790312">ஒலி&amp;இயக்கு</translation>
 <translation id="3979395879372752341">புதிய நீட்டிப்பு சேர்க்கப்பட்டது (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">இந்த நீட்டிப்பு உருவாக்கப்பட்டது:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968"><ph name="URL" /> க்குச் &amp;செல்க</translation>
 <translation id="4595560905247879544">பயன்பாடுகளையும் நீட்டிப்புகளையும் நிர்வாகியால் (<ph name="CUSTODIAN_NAME" />) மட்டுமே மாற்ற முடியும்.</translation>
 <translation id="4613271546271159013">புதிய தாவலைத் திறக்கும்போது காண்பிக்கப்படும் பக்கத்தை நீட்டிப்பு மாற்றியுள்ளது.</translation>
-<translation id="4623537843784569564">இந்த நீட்டிப்பு தவறாக புதுப்பிக்கப்பட்டிருக்கலாம். மீண்டும் நிறுவ முயற்சிக்கவும்.</translation>
 <translation id="4677772697204437347">GPU நினைவகம்</translation>
 <translation id="4711638718396952945">அமைப்புகளை மீட்டெடு</translation>
 <translation id="4839303808932127586">வீடியோவை இவ்வாறு சே&amp;மி...</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" />ஐ நிறுவவா? நீங்கள் நம்பும் செருகுநிரல்களை மட்டும் நிறுவவும்.</translation>
-<translation id="4861833787540810454">&amp;இயக்கு</translation>
-<translation id="4883993111890464517">இந்த நீட்டிப்பு சிதைக்கப்பட்டிருக்கலாம். மீண்டும் நிறுவ முயற்சிக்கவும்.</translation>
 <translation id="488785315393301722">விவரங்களைக் காண்பி</translation>
 <translation id="4911714727432509308">ஒதுக்கப்பட்ட விசைப்பலகை குறுக்குவழிகள் எந்த நீட்டிப்புகளிலும் இல்லை.</translation>
-<translation id="4919987486109157213">நீட்டிப்பு சிதைக்கப்பட்டுள்ளது. மீண்டும் நிறுவ முயற்சிக்கவும்.</translation>
 <translation id="4927301649992043040">நீட்டிப்பு தொகுப்பாக்கம்</translation>
 <translation id="49896407730300355">இ&amp;டஞ்சுழியாகச் சுற்று</translation>
 <translation id="4989966318180235467">&amp;பின்புலப் பக்கத்தை ஆய்வுசெய்</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">விசைப்பலகைக் குறுக்குவழிகள்</translation>
 <translation id="6798954102094737107">செருகுநிரல்: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">மாற்றங்களை வைத்திரு</translation>
-<translation id="6844537474943985871">இந்த நீட்டிப்பு சேதமடைந்திருக்கலாம். இதை நிறுவல் நீக்கி, மீண்டும் நிறுவவும்.</translation>
 <translation id="6863910145616405334">செருகுநிரல் இல்லை</translation>
 <translation id="6886871292305414135">இணைப்பை புதிய &amp;தாவலில் திற</translation>
 <translation id="6900284862687837908">பின்னணிப் பயன்பாடு: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">புதிய தாவல்</translation>
 <translation id="7564847347806291057">செயலாக்கத்தை முடி</translation>
-<translation id="7618337809041914424">&amp;சட்டத்தை அச்சிடு...</translation>
 <translation id="7629827748548208700">தாவல்: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">ரத்து செய்</translation>
 <translation id="7663719505383602579">ரிசீவர்: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -260,7 +250,6 @@
 <translation id="8916476537757519021">மறைநிலை துணைச்சட்டகம்: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">விவரங்களை மறை</translation>
 <translation id="9088234649737575428">நிறுவனக் கொள்கையால் <ph name="PLUGIN_NAME" /> முடக்கப்பட்டுள்ளது</translation>
-<translation id="9101691533782776290">பயன்பாட்டைத் தொடங்கு</translation>
 <translation id="9170848237812810038">&amp;செயல்தவிர்</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" சேர்க்கப்பட்டது</translation>
 <translation id="9219103736887031265">படங்கள்</translation>

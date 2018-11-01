@@ -30,7 +30,7 @@
 
 #include "bindings/core/v8/LocalWindowProxy.h"
 
-#include "bindings/core/v8/ConditionalFeatures.h"
+#include "bindings/core/v8/ConditionalFeaturesForCore.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ToV8.h"
@@ -43,12 +43,12 @@
 #include "bindings/core/v8/V8Window.h"
 #include "core/dom/Modulator.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/DocumentNameCollection.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -56,8 +56,9 @@
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityViolationReportingPolicy.h"
+#include "v8/include/v8.h"
 #include "wtf/Assertions.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -107,7 +108,7 @@ void LocalWindowProxy::initialize() {
     // FIXME: Can this be removed when CSP moves to browser?
     ContentSecurityPolicy* csp = frame()->document()->contentSecurityPolicy();
     context->AllowCodeGenerationFromStrings(
-        csp->allowEval(0, ContentSecurityPolicy::SuppressReport));
+        csp->allowEval(0, SecurityViolationReportingPolicy::SuppressReporting));
     context->SetErrorMessageForCodeGenerationFromStrings(
         v8String(isolate(), csp->evalDisabledErrorMessage()));
   } else {

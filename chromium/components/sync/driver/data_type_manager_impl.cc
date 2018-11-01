@@ -642,6 +642,12 @@ void DataTypeManagerImpl::StartNextAssociation(AssociationGroup group) {
   model_association_manager_.StartAssociationAsync(types_to_associate);
 }
 
+void DataTypeManagerImpl::OnSingleDataTypeWillStart(ModelType type) {
+  DCHECK(controllers_->find(type) != controllers_->end());
+  DataTypeController* dtc = controllers_->find(type)->second.get();
+  dtc->BeforeLoadModels(configurer_);
+}
+
 void DataTypeManagerImpl::OnSingleDataTypeWillStop(ModelType type,
                                                    const SyncError& error) {
   DataTypeController::TypeMap::const_iterator c_it = controllers_->find(type);
@@ -792,13 +798,14 @@ void DataTypeManagerImpl::NotifyStart() {
 }
 
 void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
-  catch_up_in_progress_ = false;
-
   DCHECK(!last_restart_time_.is_null());
   base::TimeDelta configure_time = base::Time::Now() - last_restart_time_;
 
   ConfigureResult result = raw_result;
   result.data_type_status_table = data_type_status_table_;
+  result.was_catch_up_configure = catch_up_in_progress_;
+
+  catch_up_in_progress_ = false;
 
   DVLOG(1) << "Total time spent configuring: " << configure_time.InSecondsF()
            << "s";
@@ -829,6 +836,16 @@ void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
       break;
   }
   observer_->OnConfigureDone(result);
+}
+
+ModelTypeSet DataTypeManagerImpl::GetActiveDataTypes() const {
+  if (state_ != CONFIGURED)
+    return ModelTypeSet();
+  return GetEnabledTypes();
+}
+
+bool DataTypeManagerImpl::IsNigoriEnabled() const {
+  return downloaded_types_.Has(NIGORI);
 }
 
 DataTypeManager::State DataTypeManagerImpl::state() const {

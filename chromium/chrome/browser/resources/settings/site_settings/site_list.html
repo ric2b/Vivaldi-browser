@@ -4,22 +4,19 @@
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="/i18n_setup.html">
-<link rel="import" href="/icons.html">
-<link rel="import" href="/route.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/site_settings/add_site_dialog.html">
-<link rel="import" href="/site_settings/constants.html">
-<link rel="import" href="/site_settings/site_settings_behavior.html">
-<link rel="import" href="/site_settings/site_settings_prefs_browser_proxy.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../icons.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="add_site_dialog.html">
+<link rel="import" href="constants.html">
+<link rel="import" href="edit_exception_dialog.html">
+<link rel="import" href="site_settings_behavior.html">
+<link rel="import" href="site_settings_prefs_browser_proxy.html">
 
 <dom-module id="site-list">
   <template>
     <style include="settings-shared">
-      paper-button {
-        margin-top: 12px;  /* Align with <h2>. */
-      }
-
       paper-icon-button {
         left: 8px;
         right: 8px;
@@ -32,7 +29,8 @@
     <div id="category">
       <div class="settings-box first" hidden$="[[allSites]]">
         <h2 class="start">[[categoryHeader]]</h2>
-        <paper-button class="secondary-button" id="icon" on-tap="onAddSiteTap_">
+        <paper-button class="secondary-button header-aligned-button" id="icon"
+            on-tap="onAddSiteTap_">
           $i18n{add}
         </paper-button>
       </div>
@@ -51,6 +49,10 @@
             hidden$="[[!showSessionOnlyActionForSite_(actionMenuSite_)]]">
           $i18n{siteSettingsActionSessionOnly}
         </button>
+        <button class="dropdown-item" role="option" id="edit"
+            on-tap="onEditTap_" hidden$="[[!showEditAction_]]">
+          $i18n{edit}
+        </button>
         <button class="dropdown-item" role="option" id="reset"
             on-tap="onResetTap_">
           $i18n{siteSettingsActionReset}
@@ -62,19 +64,16 @@
       </div>
       <div class="list-frame menu-content vertical-list" id="listContainer">
         <template is="dom-repeat" items="[[sites]]">
-          <div class="list-item">
-            <div class="start layout horizontal center" on-tap="onOriginTap_"
-                actionable$="[[enableSiteSettings_]]">
-              <div class="favicon-image"
-                  style$="[[computeSiteIcon(item.origin)]]">
-              </div>
-              <div class="middle">
-                <div class="selectable">[[item.displayName]]</div>
+          <div class="list-item" actionable$="[[enableSiteSettings_]]" on-tap="onOriginTap_">
+            <div class="favicon-image"
+                style$="[[computeSiteIcon(item.origin)]]">
+            </div>
+            <div class="middle no-min-width">
+              <div class="selectable text-elide">[[item.displayName]]</div>
 
-                <!-- This div must not contain extra whitespace. -->
-                <div class="selectable secondary"
-                    >[[computeSiteDescription_(item)]]</div>
-              </div>
+              <!-- This div must not contain extra whitespace. -->
+              <div class="selectable secondary text-elide" id="siteDescription"
+                  >[[computeSiteDescription_(item)]]</div>
             </div>
 
             <template is="dom-if" if="[[!!computeIconControlledBy_(item)]]">
@@ -83,18 +82,24 @@
 
             <paper-icon-button id="dots" icon="cr:more-vert"
                 hidden="[[isActionMenuHidden_(item.source)]]"
-                on-tap="onShowActionMenuTap_">
+                on-tap="onShowActionMenuTap_" title="$i18n{moreActions}">
             </paper-icon-button>
             <template is="dom-if" if="[[enableSiteSettings_]]">
               <div on-tap="onOriginTap_" actionable>
-                <button class="subpage-arrow" is="paper-icon-button-light">
-                </button>
+                <button class="subpage-arrow" is="paper-icon-button-light"
+                    aria-label$="[[item.displayName]]"
+                    aria-describedby="siteDescription"></button>
               </div>
             </template>
           </div>
         </template>
       </div>
     </div>
+    <template is="dom-if" if="[[showEditExceptionDialog_]]" restamp>
+      <settings-edit-exception-dialog model="[[actionMenuSite_]]"
+          on-close="onEditExceptionDialogClosed_">
+      </settings-edit-exception-dialog>
+    </template>
   </template>
   <script src="site_list.js"></script>
 </dom-module>

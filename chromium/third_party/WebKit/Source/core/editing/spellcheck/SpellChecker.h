@@ -36,6 +36,7 @@
 namespace blink {
 
 class CompositeEditCommand;
+class IdleSpellCheckCallback;
 class LocalFrame;
 class ReplaceSelectionCommand;
 class SpellCheckerClient;
@@ -57,6 +58,7 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   SpellCheckerClient& spellCheckerClient() const;
   TextCheckerClient& textChecker() const;
 
+  static bool isSpellCheckingEnabledAt(const Position&);
   bool isSpellCheckingEnabled() const;
   void toggleSpellCheckingEnabled();
   void ignoreSpelling();
@@ -68,11 +70,15 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   void didBeginEditing(Element*);
   void clearMisspellingsForMovingParagraphs(const VisibleSelection&);
   void markMisspellingsForMovingParagraphs(const VisibleSelection&);
+  void respondToChangedContents();
   void respondToChangedSelection(const Position& oldSelectionStart,
                                  FrameSelection::SetSelectionOptions);
   void replaceMisspelledRange(const String&);
   void removeSpellingMarkers();
   void removeSpellingMarkersUnderWords(const Vector<String>& words);
+  enum class ElementsType { kAll, kOnlyNonEditable };
+  void removeSpellingAndGrammarMarkers(const HTMLElement&,
+                                       ElementsType = ElementsType::kAll);
   void spellCheckAfterBlur();
 
   void didEndEditingOnTextField(Element*);
@@ -88,6 +94,9 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   SpellCheckRequester& spellCheckRequester() const {
     return *m_spellCheckRequester;
   }
+  IdleSpellCheckCallback& idleSpellCheckCallback() const {
+    return *m_idleSpellCheckCallback;
+  }
 
   // The leak detector will report leaks should queued requests be posted
   // while it GCs repeatedly, as the requests keep their associated element
@@ -96,6 +105,8 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   // Hence allow the leak detector to effectively stop the spell checker to
   // ensure leak reporting stability.
   void prepareForLeakDetection();
+
+  void documentAttached(Document*);
 
  private:
   explicit SpellChecker(LocalFrame&);
@@ -125,9 +136,8 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
 
   Member<LocalFrame> m_frame;
 
-  // TODO(xiaochengh): Move it to IdleSpellCheckCallback after idle time spell
-  // checking reaches status=stable.
   const Member<SpellCheckRequester> m_spellCheckRequester;
+  const Member<IdleSpellCheckCallback> m_idleSpellCheckCallback;
 };
 
 }  // namespace blink

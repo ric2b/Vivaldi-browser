@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Radiopogu grupa</translation>
 <translation id="2471138580042810658">6. līmeņa virsraksts</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{zvaigznīte}zero{# zvaigznīšu}one{# zvaigznīte}other{# zvaigznītes}}</translation>
+<translation id="2523609930580546572">ChromeVox mācības</translation>
 <translation id="2525706221823668172">Īsinājumtaustiņi Chromebook datorā</translation>
 <translation id="2549392850788122959">Taustiņš <ph name="KEY" /> ir atiestatīts.</translation>
 <translation id="2553108862507765288">gramatikas kļūda</translation>
@@ -222,7 +223,6 @@ Ja esat pabeidzis pamācības skatīšanu, izmantojiet ChromeVox, lai pārietu u
 <translation id="3226035351387556942">izvēles rūtiņa</translation>
 <translation id="3229375994964697375">Apmeklēta saite</translation>
 <translation id="3232388865800379423">Uznirstoša poga</translation>
-<translation id="323731244387692321">Atvērt ChromeVox tastatūras palīdzību</translation>
 <translation id="3241052487511142956">Iepriekšējā apmeklētā saite</translation>
 <translation id="3286390186030710347">Slīdnis</translation>
 <translation id="3299925995433437805">Tālāk nav nevienas apmeklētās saites.</translation>
@@ -377,6 +377,7 @@ Ja esat pabeidzis pamācības skatīšanu, izmantojiet ChromeVox, lai pārietu u
 <translation id="4372435075475052704">min.: <ph name="X" /></translation>
 <translation id="4372705107434148843">Apturēt runas izvadi</translation>
 <translation id="4373197658375206385">Nav neviena iepriekšējā vienuma, kas nav saite.</translation>
+<translation id="4376316291247992553">Skatīt grafiku Braila rakstā</translation>
 <translation id="4391478986194775161">satura informācija</translation>
 <translation id="443163561286008705">atiestatīt</translation>
 <translation id="4471074325120394300">Nav saišu.</translation>
@@ -719,6 +720,7 @@ Lai atvērtu Chrome pārlūka izvēlni, vienlaikus nospiediet alternēšanas tau
 <translation id="7693840228159394336">Iepriekšējā radiopoga</translation>
 <translation id="7701196182766842984">automātiski pabeigts saraksts</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, paroles tekstlodziņš</translation>
+<translation id="7776293189010177726">Atvērt ChromeVox izvēlnes</translation>
 <translation id="7805247615045262757">noklusējuma navigācija</translation>
 <translation id="7805768142964895445">Statuss</translation>
 <translation id="7810781339813764006">Nākamā grupa</translation>

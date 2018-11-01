@@ -5,24 +5,12 @@
 #ifndef CHROME_UTILITY_CHROME_CONTENT_UTILITY_CLIENT_H_
 #define CHROME_UTILITY_CHROME_CONTENT_UTILITY_CLIENT_H_
 
-#include <stdint.h>
-
-#include <memory>
-#include <set>
-#include <string>
-#include <vector>
-
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "build/build_config.h"
 #include "content/public/utility/content_utility_client.h"
 #include "ipc/ipc_platform_file.h"
-
-namespace base {
-class FilePath;
-struct FileDescriptor;
-}
 
 class UtilityMessageHandler;
 
@@ -31,31 +19,17 @@ class ChromeContentUtilityClient : public content::ContentUtilityClient {
   ChromeContentUtilityClient();
   ~ChromeContentUtilityClient() override;
 
+  // content::ContentUtilityClient:
   void UtilityThreadStarted() override;
   bool OnMessageReceived(const IPC::Message& message) override;
   void ExposeInterfacesToBrowser(
       service_manager::InterfaceRegistry* registry) override;
   void RegisterServices(StaticServiceMap* services) override;
 
-  void AddHandler(std::unique_ptr<UtilityMessageHandler> handler);
-
   static void PreSandboxStartup();
 
  private:
   // IPC message handlers.
-  void OnUnpackWebResource(const std::string& resource_data);
-#if defined(OS_CHROMEOS)
-  void OnCreateZipFile(const base::FilePath& src_dir,
-                       const std::vector<base::FilePath>& src_relative_paths,
-                       const base::FileDescriptor& dest_fd);
-#endif  // defined(OS_CHROMEOS)
-
-  void OnPatchFileBsdiff(const IPC::PlatformFileForTransit& input_file,
-                         const IPC::PlatformFileForTransit& patch_file,
-                         const IPC::PlatformFileForTransit& output_file);
-  void OnPatchFileCourgette(const IPC::PlatformFileForTransit& input_file,
-                            const IPC::PlatformFileForTransit& patch_file,
-                            const IPC::PlatformFileForTransit& output_file);
   void OnStartupPing();
 #if defined(FULL_SAFE_BROWSING)
   void OnAnalyzeZipFileForDownloadProtection(
@@ -70,10 +44,7 @@ class ChromeContentUtilityClient : public content::ContentUtilityClient {
   typedef ScopedVector<UtilityMessageHandler> Handlers;
   Handlers handlers_;
 
-  // Flag to enable whitelisting.
-  bool filter_messages_;
-  // A list of message_ids to filter.
-  std::set<int> message_id_whitelist_;
+  bool utility_process_running_elevated_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeContentUtilityClient);
 };

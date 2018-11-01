@@ -66,4 +66,4 @@ std::string VivaldiLastChange() {
   return LAST_CHANGE_VIVALDI;
 }
 
-} // namespace vivaldi
+}  // namespace vivaldi

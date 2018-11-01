@@ -59,7 +59,6 @@ class RenderPass;
 class ScrollbarLayerImplBase;
 class SimpleEnclosedRegion;
 class Tile;
-class ScrollState;
 
 struct AppendQuadsData;
 
@@ -89,8 +88,6 @@ class CC_EXPORT LayerImpl {
   void OnIsAnimatingChanged(const PropertyAnimationState& mask,
                             const PropertyAnimationState& state);
   bool IsActive() const;
-
-  void DistributeScroll(ScrollState* scroll_state);
 
   void set_property_tree_sequence_number(int sequence_number) {}
 
@@ -125,9 +122,6 @@ class CC_EXPORT LayerImpl {
 
   void UpdatePropertyTreeTransformIsAnimated(bool is_animated);
   void UpdatePropertyTreeScrollOffset();
-
-  // For compatibility with Layer.
-  bool has_render_surface() const { return !!render_surface(); }
 
   LayerTreeImpl* layer_tree_impl() const { return layer_tree_impl_; }
 
@@ -233,13 +227,7 @@ class CC_EXPORT LayerImpl {
 
   bool ShowDebugBorders() const;
 
-  // These invalidate the host's render surface layer list.  The caller
-  // is responsible for calling set_needs_update_draw_properties on the tree
-  // so that its list can be recreated.
-  void ClearRenderSurfaceLayerList();
-  void SetHasRenderSurface(bool has_render_surface);
-
-  RenderSurfaceImpl* render_surface() const { return render_surface_.get(); }
+  RenderSurfaceImpl* GetRenderSurface() const;
 
   // The render surface which this layer draws into. This can be either owned by
   // the same layer or an ancestor of this layer.
@@ -404,6 +392,10 @@ class CC_EXPORT LayerImpl {
 
   bool is_drawn_render_surface_layer_list_member() const {
     return is_drawn_render_surface_layer_list_member_;
+  }
+
+  bool IsDrawnScrollbar() {
+    return ToScrollbarLayer() && is_drawn_render_surface_layer_list_member_;
   }
 
   void set_may_contain_video(bool yes) { may_contain_video_ = yes; }

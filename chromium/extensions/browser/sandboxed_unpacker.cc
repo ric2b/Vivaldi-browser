@@ -36,7 +36,7 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/switches.h"
-#include "grit/extensions_strings.h"
+#include "extensions/strings/grit/extensions_strings.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -228,7 +228,12 @@ SandboxedUnpacker::SandboxedUnpacker(
       location_(location),
       creation_flags_(creation_flags),
       unpacker_io_task_runner_(unpacker_io_task_runner),
-      utility_wrapper_(new UtilityHostWrapper) {}
+      utility_wrapper_(new UtilityHostWrapper) {
+  // Tracking for crbug.com/692069. The location must be valid. If it's invalid,
+  // the utility process kills itself for a bad IPC.
+  CHECK_GT(location, Manifest::INVALID_LOCATION);
+  CHECK_LT(location, Manifest::NUM_LOCATIONS);
+}
 
 bool SandboxedUnpacker::CreateTempDirectory() {
   CHECK(unpacker_io_task_runner_->RunsTasksOnCurrentThread());

@@ -5,6 +5,10 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/common/frame_messages.h"
+#include "content/common/frame_replication_state.h"
+#include "content/common/input_messages.h"
+#include "content/common/text_input_client_messages.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/render_view_test.h"
@@ -18,6 +22,7 @@
 #include <Cocoa/Cocoa.h>
 
 using blink::WebFrameContentDumper;
+using blink::WebCompositionUnderline;
 
 namespace content {
 
@@ -92,7 +97,7 @@ TEST_F(RenderViewTest, MacTestCmdUp) {
   view->OnUpdateWebPreferences(prefs);
 
   const int kMaxOutputCharacters = 1024;
-  base::string16 output;
+  std::string output;
 
   NSEvent* arrowDownKeyDown = CmdDeadKeyEvent(NSKeyDown, kVK_DownArrow);
   NSEvent* arrowUpKeyDown = CmdDeadKeyEvent(NSKeyDown, kVK_UpArrow);
@@ -109,8 +114,9 @@ TEST_F(RenderViewTest, MacTestCmdUp) {
   ProcessPendingMessages();
   ExecuteJavaScriptForTests("scroll.textContent = window.pageYOffset");
   output = WebFrameContentDumper::dumpWebViewAsText(view->GetWebView(),
-                                                    kMaxOutputCharacters);
-  EXPECT_EQ(kArrowDownScrollDown, base::UTF16ToASCII(output));
+                                                    kMaxOutputCharacters)
+               .ascii();
+  EXPECT_EQ(kArrowDownScrollDown, output);
 
   const char* kArrowUpScrollUp = "38,false,false,true,false\n0\np1";
   view->OnSetEditCommandsForNextKeyEvent(
@@ -119,8 +125,9 @@ TEST_F(RenderViewTest, MacTestCmdUp) {
   ProcessPendingMessages();
   ExecuteJavaScriptForTests("scroll.textContent = window.pageYOffset");
   output = WebFrameContentDumper::dumpWebViewAsText(view->GetWebView(),
-                                                    kMaxOutputCharacters);
-  EXPECT_EQ(kArrowUpScrollUp, base::UTF16ToASCII(output));
+                                                    kMaxOutputCharacters)
+               .ascii();
+  EXPECT_EQ(kArrowUpScrollUp, output);
 
   // Now let javascript eat the key events -- no scrolling should happen.
   // Set a scroll position slightly down the page to ensure that it does not
@@ -134,8 +141,9 @@ TEST_F(RenderViewTest, MacTestCmdUp) {
   ProcessPendingMessages();
   ExecuteJavaScriptForTests("scroll.textContent = window.pageYOffset");
   output = WebFrameContentDumper::dumpWebViewAsText(view->GetWebView(),
-                                                    kMaxOutputCharacters);
-  EXPECT_EQ(kArrowDownNoScroll, base::UTF16ToASCII(output));
+                                                    kMaxOutputCharacters)
+               .ascii();
+  EXPECT_EQ(kArrowDownNoScroll, output);
 
   const char* kArrowUpNoScroll = "38,false,false,true,false\n100\np1";
   view->OnSetEditCommandsForNextKeyEvent(
@@ -144,8 +152,53 @@ TEST_F(RenderViewTest, MacTestCmdUp) {
   ProcessPendingMessages();
   ExecuteJavaScriptForTests("scroll.textContent = window.pageYOffset");
   output = WebFrameContentDumper::dumpWebViewAsText(view->GetWebView(),
-                                                    kMaxOutputCharacters);
-  EXPECT_EQ(kArrowUpNoScroll, base::UTF16ToASCII(output));
+                                                    kMaxOutputCharacters)
+               .ascii();
+  EXPECT_EQ(kArrowUpNoScroll, output);
+}
+
+// TODO(ekaramad): This test could be removed once we do not send irrelevant
+// IPCs from browser during the time RenderViewImpl is swapped out
+// (https://crbug.com/669219).
+// This test verfies that when RenderViewImpl is swapped out, handling IPCs
+// which need a WebFrameWidget will not lead to a crash.
+TEST_F(RenderViewTest, HandleIPCsInSwappedOutState) {
+  LoadHTML("<input/>");
+
+  // Normally, we have a WebFrameWidget.
+  EXPECT_TRUE(GetWebWidget()->isWebFrameWidget());
+
+  // Swap out the main frame so that the frame widget is destroyed.
+  auto* view = static_cast<RenderViewImpl*>(view_);
+  auto* main_frame = view->GetMainRenderFrame();
+  main_frame->OnMessageReceived(FrameMsg_SwapOut(
+      main_frame->GetRoutingID(), 123, true, FrameReplicationState()));
+
+  // We no longer have a frame widget.
+  EXPECT_FALSE(GetWebWidget()->isWebFrameWidget());
+
+  int routing_id = view->GetRoutingID();
+  // Now simulate some TextInputClientMac IPCs. These will be handled by
+  // RenderWidget which forwards them to the TextInputClientObserver
+  using Range = gfx::Range;
+  using Point = gfx::Point;
+  view->OnMessageReceived(
+      TextInputClientMsg_CharacterIndexForPoint(routing_id, Point()));
+  view->OnMessageReceived(
+      TextInputClientMsg_FirstRectForCharacterRange(routing_id, Range()));
+  view->OnMessageReceived(
+      TextInputClientMsg_StringForRange(routing_id, Range()));
+  view->OnMessageReceived(
+      TextInputClientMsg_CharacterIndexForPoint(routing_id, Point()));
+
+  // Simulate some IME related IPCs.
+  using Text = base::string16;
+  using Underlines = std::vector<blink::WebCompositionUnderline>;
+  view->OnMessageReceived(InputMsg_ImeSetComposition(
+      routing_id, Text(), Underlines(), Range(), 0, 0));
+  view->OnMessageReceived(
+      InputMsg_ImeCommitText(routing_id, Text(), Underlines(), Range(), 0));
+  view->OnMessageReceived(InputMsg_ImeFinishComposingText(routing_id, false));
 }
 
 }  // namespace content

@@ -2,6 +2,8 @@
 
 #include "sync/vivaldi_sync_model.h"
 
+#include <string>
+
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "sync/vivaldi_sync_model_observer.h"

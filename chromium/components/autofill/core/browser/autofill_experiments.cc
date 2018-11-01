@@ -16,33 +16,36 @@
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
 
 const base::Feature kAutofillCreditCardAssist{
     "AutofillCreditCardAssist", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kAutofillCreditCardSigninPromo{
-    "AutofillCreditCardSigninPromo", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillScanCardholderName{
     "AutofillScanCardholderName", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillCreditCardPopupLayout{
     "AutofillCreditCardPopupLayout", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillCreditCardLastUsedDateDisplay{
+    "AutofillCreditCardLastUsedDateDisplay", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillUkmLogging{"kAutofillUkmLogging",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 const char kCreditCardSigninPromoImpressionLimitParamKey[] = "impression_limit";
 const char kAutofillCreditCardPopupBackgroundColorKey[] = "background_color";
 const char kAutofillCreditCardPopupDividerColorKey[] = "dropdown_divider_color";
 const char kAutofillCreditCardPopupValueBoldKey[] = "is_value_bold";
 const char kAutofillCreditCardPopupIsValueAndLabelInSingleLineKey[] =
     "is_value_and_label_in_single_line";
-const char kAutofillPopupDropdownItemHeightKey[] =
-    "dropdown_item_height";
+const char kAutofillPopupDropdownItemHeightKey[] = "dropdown_item_height";
 const char kAutofillCreditCardPopupIsIconAtStartKey[] =
     "is_credit_card_icon_at_start";
 const char kAutofillPopupMarginKey[] = "margin";
+const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[] =
+    "show_expiration_date";
 
 namespace {
 
@@ -70,10 +73,6 @@ bool IsInAutofillSuggestionsDisabledExperiment() {
   return group_name == "Disabled";
 }
 
-bool IsAutofillCreditCardSigninPromoEnabled() {
-  return base::FeatureList::IsEnabled(kAutofillCreditCardSigninPromo);
-}
-
 bool IsAutofillCreditCardAssistEnabled() {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   return false;
@@ -82,19 +81,12 @@ bool IsAutofillCreditCardAssistEnabled() {
 #endif
 }
 
-int GetCreditCardSigninPromoImpressionLimit() {
-  int impression_limit;
-  std::string param_value = variations::GetVariationParamValueByFeature(
-      kAutofillCreditCardSigninPromo,
-      kCreditCardSigninPromoImpressionLimitParamKey);
-  if (!param_value.empty() && base::StringToInt(param_value, &impression_limit))
-    return impression_limit;
-
-  return 0;
-}
-
 bool IsAutofillCreditCardPopupLayoutExperimentEnabled() {
   return base::FeatureList::IsEnabled(kAutofillCreditCardPopupLayout);
+}
+
+bool IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillCreditCardLastUsedDateDisplay);
 }
 
 // |GetCreditCardPopupParameterUintValue| returns 0 if experiment parameter is
@@ -123,6 +115,13 @@ unsigned int GetPopupDropdownItemHeight() {
 bool IsIconInCreditCardPopupAtStart() {
   const std::string param_value = variations::GetVariationParamValueByFeature(
       kAutofillCreditCardPopupLayout, kAutofillCreditCardPopupIsIconAtStartKey);
+  return param_value == "true";
+}
+
+bool ShowExpirationDateInAutofillCreditCardLastUsedDate() {
+  const std::string param_value = variations::GetVariationParamValueByFeature(
+      kAutofillCreditCardLastUsedDateDisplay,
+      kAutofillCreditCardLastUsedDateShowExpirationDateKey);
   return param_value == "true";
 }
 
@@ -224,6 +223,10 @@ bool IsCreditCardUploadEnabled(const PrefService* pref_service,
   }
 
   return !group_name.empty() && group_name != "Disabled";
+}
+
+bool IsUkmLoggingEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillUkmLogging);
 }
 
 }  // namespace autofill

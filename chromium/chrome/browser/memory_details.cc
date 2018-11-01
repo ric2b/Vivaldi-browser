@@ -13,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
@@ -23,6 +24,7 @@
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -297,8 +299,8 @@ void MemoryDetails::CollectChildInfoOnUIThread() {
           chrome_browser->site_data[contents->GetBrowserContext()];
       SiteDetails::CollectSiteInfo(contents, &site_data);
 
-      bool is_webui =
-          rvh->GetEnabledBindings() & content::BINDINGS_POLICY_WEB_UI;
+      bool is_webui = rvh->GetMainFrame()->GetEnabledBindings() &
+                      content::BINDINGS_POLICY_WEB_UI;
 
       if (is_webui) {
         process.renderer_type = ProcessMemoryInformation::RENDERER_CHROME;

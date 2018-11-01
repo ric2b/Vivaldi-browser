@@ -8,11 +8,11 @@
 #include <deque>
 #include "base/feature_list.h"
 #include "content/common/content_export.h"
-#include "content/common/input/event_with_latency_info.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/common/input/web_input_event_queue.h"
 #include "content/public/common/content_features.h"
+#include "content/renderer/input/scoped_web_input_event_with_latency_info.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "ui/events/blink/web_input_event_traits.h"
@@ -22,9 +22,10 @@ namespace content {
 
 class EventWithDispatchType : public ScopedWebInputEventWithLatencyInfo {
  public:
-  EventWithDispatchType(blink::WebScopedInputEvent event,
+  EventWithDispatchType(ui::WebScopedInputEvent event,
                         const ui::LatencyInfo& latency,
-                        InputEventDispatchType dispatch_type);
+                        InputEventDispatchType dispatch_type,
+                        bool originally_cancelable);
   ~EventWithDispatchType();
   void CoalesceWith(const EventWithDispatchType& other);
 
@@ -41,6 +42,8 @@ class EventWithDispatchType : public ScopedWebInputEventWithLatencyInfo {
     return non_blocking_coalesced_count_ + blocking_coalesced_event_ids_.size();
   }
 
+  bool originallyCancelable() const { return originally_cancelable_; }
+
  private:
   InputEventDispatchType dispatch_type_;
 
@@ -53,6 +56,12 @@ class EventWithDispatchType : public ScopedWebInputEventWithLatencyInfo {
   size_t non_blocking_coalesced_count_;
   base::TimeTicks creation_timestamp_;
   base::TimeTicks last_coalesced_timestamp_;
+
+  // Whether the received event was originally cancelable or not. The compositor
+  // input handler can change the event based on presence of event handlers so
+  // this is the state at which the renderer received the event from the
+  // browser.
+  bool originally_cancelable_;
 };
 
 class CONTENT_EXPORT MainThreadEventQueueClient {
@@ -62,7 +71,7 @@ class CONTENT_EXPORT MainThreadEventQueueClient {
   // channel. Implementors must implement this callback.
   virtual void HandleEventOnMainThread(
       int routing_id,
-      const blink::WebInputEvent* event,
+      const blink::WebCoalescedInputEvent* event,
       const ui::LatencyInfo& latency,
       InputEventDispatchType dispatch_type) = 0;
 
@@ -120,11 +129,11 @@ class CONTENT_EXPORT MainThreadEventQueue
 
   // Called once the compositor has handled |event| and indicated that it is
   // a non-blocking event to be queued to the main thread.
-  bool HandleEvent(blink::WebScopedInputEvent event,
+  bool HandleEvent(ui::WebScopedInputEvent event,
                    const ui::LatencyInfo& latency,
                    InputEventDispatchType dispatch_type,
                    InputEventAckState ack_result);
-  void DispatchRafAlignedInput();
+  void DispatchRafAlignedInput(base::TimeTicks frame_time);
 
   // Call once the main thread has handled an outstanding |type| event
   // in flight.
@@ -149,12 +158,14 @@ class CONTENT_EXPORT MainThreadEventQueue
   bool IsRafAlignedEvent(const blink::WebInputEvent& event);
 
   friend class MainThreadEventQueueTest;
+  friend class MainThreadEventQueueInitializationTest;
   int routing_id_;
   MainThreadEventQueueClient* client_;
   std::unique_ptr<EventWithDispatchType> in_flight_event_;
   bool last_touch_start_forced_nonblocking_due_to_fling_;
   bool enable_fling_passive_listener_flag_;
   bool enable_non_blocking_due_to_main_thread_responsiveness_flag_;
+  base::TimeDelta main_thread_responsiveness_threshold_;
   bool handle_raf_aligned_touch_input_;
   bool handle_raf_aligned_mouse_input_;
 
@@ -165,6 +176,7 @@ class CONTENT_EXPORT MainThreadEventQueue
 
     WebInputEventQueue<EventWithDispatchType> events_;
     bool sent_main_frame_request_;
+    base::TimeTicks last_async_touch_move_timestamp_;
   };
 
   // Lock used to serialize |shared_state_|.

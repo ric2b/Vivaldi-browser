@@ -21,7 +21,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/notifications/notification_conversion_helper.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/notifications/notifier_state_tracker.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
@@ -46,6 +45,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_rep.h"
+#include "ui/gfx/skia_util.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notifier_settings.h"
 #include "url/gurl.h"
@@ -57,7 +57,7 @@ namespace extensions {
 namespace notifications = api::notifications;
 
 const base::Feature kAllowFullscreenAppNotificationsFeature{
-  "FSNotificationsApp", base::FEATURE_DISABLED_BY_DEFAULT
+  "FSNotificationsApp", base::FEATURE_ENABLED_BY_DEFAULT
 };
 
 namespace {
@@ -123,6 +123,65 @@ const gfx::Image GetMaskedSmallImage(const gfx::ImageSkia& small_image) {
       gfx::ImageSkiaOperations::CreateMaskedImage(foreground, small_image);
   return gfx::Image(gfx::ImageSkiaOperations::CreateSuperimposedImage(
       background, masked_small_image));
+}
+
+// Converts the |notification_bitmap| (in RGBA format) to the |*return_image|
+// (which is in ARGB format).
+bool NotificationBitmapToGfxImage(
+    float max_scale,
+    const gfx::Size& target_size_dips,
+    const notifications::NotificationBitmap& notification_bitmap,
+    gfx::Image* return_image) {
+  const int max_device_pixel_width = target_size_dips.width() * max_scale;
+  const int max_device_pixel_height = target_size_dips.height() * max_scale;
+
+  const int kBytesPerPixel = 4;
+
+  const int width = notification_bitmap.width;
+  const int height = notification_bitmap.height;
+
+  if (width < 0 || height < 0 || width > max_device_pixel_width ||
+      height > max_device_pixel_height)
+    return false;
+
+  // Ensure we have rgba data.
+  std::vector<char>* rgba_data = notification_bitmap.data.get();
+  if (!rgba_data)
+    return false;
+
+  const size_t rgba_data_length = rgba_data->size();
+  const size_t rgba_area = width * height;
+
+  if (rgba_data_length != rgba_area * kBytesPerPixel)
+    return false;
+
+  SkBitmap bitmap;
+  // Allocate the actual backing store with the sanitized dimensions.
+  if (!bitmap.tryAllocN32Pixels(width, height))
+    return false;
+
+  // Ensure that our bitmap and our data now refer to the same number of pixels.
+  if (rgba_data_length != bitmap.getSafeSize())
+    return false;
+
+  uint32_t* pixels = bitmap.getAddr32(0, 0);
+  const char* c_rgba_data = rgba_data->data();
+
+  for (size_t t = 0; t < rgba_area; ++t) {
+    // |c_rgba_data| is RGBA, pixels is ARGB.
+    size_t rgba_index = t * kBytesPerPixel;
+    pixels[t] =
+        SkPreMultiplyColor(((c_rgba_data[rgba_index + 3] & 0xFF) << 24) |
+                           ((c_rgba_data[rgba_index + 0] & 0xFF) << 16) |
+                           ((c_rgba_data[rgba_index + 1] & 0xFF) << 8) |
+                           ((c_rgba_data[rgba_index + 2] & 0xFF) << 0));
+  }
+
+  // TODO(dewittj): Handle HiDPI images with more than one scale factor
+  // representation.
+  gfx::ImageSkia skia(gfx::ImageSkiaRep(bitmap, 1.0f));
+  *return_image = gfx::Image(skia);
+  return true;
 }
 
 class ShutdownNotifierFactory
@@ -203,7 +262,7 @@ class NotificationsApiDelegate : public NotificationDelegate {
   bool ShouldDisplayOverFullscreen() const override {
     AppWindowRegistry::AppWindowList windows = AppWindowRegistry::Get(
         api_function_->GetProfile())->GetAppWindowsForApp(extension_id_);
-    for (const auto& window : windows) {
+    for (auto* window : windows) {
       // Window must be fullscreen and visible
       if (window->IsFullscreen() && window->GetBaseWindow()->IsActive()) {
         bool enabled = base::FeatureList::IsEnabled(
@@ -322,7 +381,7 @@ bool NotificationsApiFunction::CreateNotification(
   gfx::Image icon;
 
   if (!options->icon_bitmap.get() ||
-      !NotificationConversionHelper::NotificationBitmapToGfxImage(
+      !NotificationBitmapToGfxImage(
           image_scale, bitmap_sizes.icon_size, *options->icon_bitmap, &icon)) {
     SetError(kUnableToDecodeIconError);
     return false;
@@ -332,7 +391,7 @@ bool NotificationsApiFunction::CreateNotification(
   message_center::RichNotificationData optional_fields;
   if (options->app_icon_mask_url.get()) {
     gfx::Image small_icon_mask;
-    if (!NotificationConversionHelper::NotificationBitmapToGfxImage(
+    if (!NotificationBitmapToGfxImage(
             image_scale, bitmap_sizes.app_icon_mask_size,
             *options->app_icon_mask_bitmap, &small_icon_mask)) {
       SetError(kUnableToDecodeIconError);
@@ -366,7 +425,7 @@ bool NotificationsApiFunction::CreateNotification(
       extensions::api::notifications::NotificationBitmap* icon_bitmap_ptr =
           (*options->buttons)[i].icon_bitmap.get();
       if (icon_bitmap_ptr) {
-        NotificationConversionHelper::NotificationBitmapToGfxImage(
+        NotificationBitmapToGfxImage(
             image_scale, bitmap_sizes.button_icon_size, *icon_bitmap_ptr,
             &info.icon);
       }
@@ -380,7 +439,7 @@ bool NotificationsApiFunction::CreateNotification(
   }
 
   bool has_image = options->image_bitmap.get() &&
-                   NotificationConversionHelper::NotificationBitmapToGfxImage(
+                   NotificationBitmapToGfxImage(
                        image_scale, bitmap_sizes.image_size,
                        *options->image_bitmap, &optional_fields.image);
 
@@ -467,7 +526,7 @@ bool NotificationsApiFunction::UpdateNotification(
 
   if (options->icon_bitmap.get()) {
     gfx::Image icon;
-    if (!NotificationConversionHelper::NotificationBitmapToGfxImage(
+    if (!NotificationBitmapToGfxImage(
             image_scale, bitmap_sizes.icon_size, *options->icon_bitmap,
             &icon)) {
       SetError(kUnableToDecodeIconError);
@@ -478,7 +537,7 @@ bool NotificationsApiFunction::UpdateNotification(
 
   if (options->app_icon_mask_bitmap.get()) {
     gfx::Image app_icon_mask;
-    if (!NotificationConversionHelper::NotificationBitmapToGfxImage(
+    if (!NotificationBitmapToGfxImage(
             image_scale, bitmap_sizes.app_icon_mask_size,
             *options->app_icon_mask_bitmap, &app_icon_mask)) {
       SetError(kUnableToDecodeIconError);
@@ -506,7 +565,7 @@ bool NotificationsApiFunction::UpdateNotification(
       extensions::api::notifications::NotificationBitmap* icon_bitmap_ptr =
           (*options->buttons)[i].icon_bitmap.get();
       if (icon_bitmap_ptr) {
-        NotificationConversionHelper::NotificationBitmapToGfxImage(
+        NotificationBitmapToGfxImage(
             image_scale, bitmap_sizes.button_icon_size, *icon_bitmap_ptr,
             &button.icon);
       }
@@ -523,7 +582,7 @@ bool NotificationsApiFunction::UpdateNotification(
   gfx::Image image;
   bool has_image =
       options->image_bitmap.get() &&
-      NotificationConversionHelper::NotificationBitmapToGfxImage(
+      NotificationBitmapToGfxImage(
           image_scale, bitmap_sizes.image_size, *options->image_bitmap, &image);
 
   if (has_image) {
@@ -673,7 +732,7 @@ bool NotificationsUpdateFunction::RunNotificationsApi() {
           CreateScopedIdentifier(extension_->id(), params_->notification_id),
           NotificationUIManager::GetProfileID(GetProfile()));
   if (!matched_notification) {
-    SetResult(base::MakeUnique<base::FundamentalValue>(false));
+    SetResult(base::MakeUnique<base::Value>(false));
     SendResponse(true);
     return true;
   }
@@ -687,8 +746,7 @@ bool NotificationsUpdateFunction::RunNotificationsApi() {
   // TODO(dewittj): Add more human-readable error strings if this fails.
   bool could_update_notification = UpdateNotification(
       params_->notification_id, &params_->options, &notification);
-  SetResult(
-      base::MakeUnique<base::FundamentalValue>(could_update_notification));
+  SetResult(base::MakeUnique<base::Value>(could_update_notification));
   if (!could_update_notification)
     return false;
 
@@ -712,7 +770,7 @@ bool NotificationsClearFunction::RunNotificationsApi() {
       CreateScopedIdentifier(extension_->id(), params_->notification_id),
       NotificationUIManager::GetProfileID(GetProfile()));
 
-  SetResult(base::MakeUnique<base::FundamentalValue>(cancel_result));
+  SetResult(base::MakeUnique<base::Value>(cancel_result));
   SendResponse(true);
 
   return true;

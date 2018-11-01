@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">Šim paplašinājumam nav nepieciešamas īpašas atļaujas.</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Instalēja aizbildnis.</translation>
-<translation id="1652965563555864525">Izslēgt &amp;skaņu</translation>
 <translation id="1723824996674794290">Jauns logs</translation>
 <translation id="1729533290416704613">Tas nosaka arī to, kāda lapa tiks rādīta, kad meklēsiet, izmantojot universālo lodziņu.</translation>
 <translation id="1789575671122666129">Uznirstošie logi</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">Izvēlēties visus</translation>
 <translation id="1965328510789761112">Privāta atmiņa</translation>
 <translation id="1992397118740194946">Nav iestatīts</translation>
-<translation id="2011110593081822050">Tīmekļa darbinieks: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">Slēpt šo spraudni</translation>
 <translation id="2087822576218954668">Drukāšana: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">Atjaunināt spraudni</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">Paziņojumi</translation>
 <translation id="2501797496290880632">Ierakstiet saīsnes</translation>
 <translation id="2509857212037838238">Spraudņa <ph name="PLUGIN_NAME" /> instalēšana</translation>
-<translation id="253434972992662860">&amp;Pauzēt</translation>
 <translation id="2550212893339833758">Apmainītā atmiņa</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Atkārtoti iespējot</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">Neatļaut</translation>
 <translation id="3936390757709632190">Atvērt audi&amp;o jaunā cilnē</translation>
 <translation id="3943582379552582368">Atpakaļ</translation>
-<translation id="3954582159466790312">I&amp;eslēgt skaņu</translation>
 <translation id="3979395879372752341">Ir pievienots jauns paplašinājums (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">—</translation>
 <translation id="4087089424473531098">Izveidots paplašinājums:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968">Doties uz <ph name="URL" /></translation>
 <translation id="4595560905247879544">Lietotnes un paplašinājumus var pārveidot tikai pārvaldnieks (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Paplašinājums ir mainījis lapu, kas tiek parādīta, atverot jaunu cilni.</translation>
-<translation id="4623537843784569564">Šis paplašinājums, iespējams, nav pareizi atjaunināts. Mēģiniet to atkārtoti instalēt.</translation>
 <translation id="4677772697204437347">Grafiskā procesora atmiņa</translation>
 <translation id="4711638718396952945">Atjaunot iestatījumus</translation>
 <translation id="4839303808932127586">Saglabāt &amp;video kā</translation>
 <translation id="4851858059374029925">Vai vēlaties instalēt spraudni <ph name="PLUGIN_NAME" />? Instalējiet tikai uzticamus spraudņus.</translation>
-<translation id="4861833787540810454">&amp;Atskaņot</translation>
-<translation id="4883993111890464517">Šis paplašinājums, iespējams, ir bojāts. Atkārtoti instalējiet to.</translation>
 <translation id="488785315393301722">Rādīt detaļas</translation>
 <translation id="4911714727432509308">Nevienam paplašinājumam nav piešķirts īsinājumtaustiņš.</translation>
-<translation id="4919987486109157213">Paplašinājums ir bojāts. Atkārtoti instalējiet to.</translation>
 <translation id="4927301649992043040">Pakot paplašinājumu</translation>
 <translation id="49896407730300355">Pagriezt &amp;pretēji pulksteņrādītāju kustības virzienam</translation>
 <translation id="4989966318180235467">Pārbaudīt &amp;fona lapu</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">Īsinājumtaustiņi</translation>
 <translation id="6798954102094737107">Spraudnis: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Saglabāt izmaiņas</translation>
-<translation id="6844537474943985871">Šis paplašinājums, iespējams, ir bojāts. Lūdzu, to atinstalējiet un instalējiet vēlreiz.</translation>
 <translation id="6863910145616405334">Spraudnis netika atrasts</translation>
 <translation id="6886871292305414135">Atvērt saiti jaunā cilnē</translation>
 <translation id="6900284862687837908">Fona lietotne: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">Jauna cilne</translation>
 <translation id="7564847347806291057">Pārtraukt procesu</translation>
-<translation id="7618337809041914424">&amp;Drukāt rāmi...</translation>
 <translation id="7629827748548208700">Cilne: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Atcelt</translation>
 <translation id="7663719505383602579">Uztvērējs: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -260,7 +250,6 @@ Glabājiet atslēgas failu drošā vietā. Tas būs vajadzīgs, lai izveidotu ja
 <translation id="8916476537757519021">Inkognito apakšrāmis: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Slēpt detaļas</translation>
 <translation id="9088234649737575428">Spraudnis <ph name="PLUGIN_NAME" /> tika bloķēts saskaņā ar uzņēmuma politiku</translation>
-<translation id="9101691533782776290">Palaist lietotni</translation>
 <translation id="9170848237812810038">&amp;Atsaukt</translation>
 <translation id="9215293857209265904">Ir pievienots paplašinājums <ph name="EXTENSION_NAME" /></translation>
 <translation id="9219103736887031265">Attēli</translation>

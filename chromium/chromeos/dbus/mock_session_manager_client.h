@@ -62,6 +62,7 @@ class MockSessionManagerClient : public SessionManagerClient {
                void(const std::string&,
                     const std::string&,
                     const StorePolicyCallback&));
+  MOCK_CONST_METHOD0(SupportsRestartToApplyUserFlags, bool());
   MOCK_METHOD2(SetFlagsForUser,
                void(const cryptohome::Identification&,
                     const std::vector<std::string>&));
@@ -72,11 +73,11 @@ class MockSessionManagerClient : public SessionManagerClient {
                     bool,
                     const StartArcInstanceCallback&));
   MOCK_METHOD1(StopArcInstance, void(const ArcCallback&));
-  MOCK_METHOD1(PrioritizeArcInstance, void(const ArcCallback&));
   MOCK_METHOD2(SetArcCpuRestriction,
                void(login_manager::ContainerCpuRestrictionState,
                     const ArcCallback&));
-  MOCK_METHOD0(EmitArcBooted, void(void));
+  MOCK_METHOD2(EmitArcBooted,
+               void(const cryptohome::Identification&, const ArcCallback&));
   MOCK_METHOD1(GetArcStartTime, void(const GetArcStartTimeCallback&));
   MOCK_METHOD2(RemoveArcData,
                void(const cryptohome::Identification&, const ArcCallback&));

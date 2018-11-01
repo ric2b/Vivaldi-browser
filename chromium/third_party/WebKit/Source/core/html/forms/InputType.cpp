@@ -28,6 +28,8 @@
 
 #include "core/html/forms/InputType.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/InputTypeNames.h"
@@ -37,7 +39,6 @@
 #include "core/events/KeyboardEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/fileapi/FileList.h"
-#include "core/frame/FrameHost.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
@@ -68,12 +69,12 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutTheme.h"
+#include "core/page/Page.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/json/JSONValues.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/text/TextBreakIterator.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -87,27 +88,27 @@ using InputTypeFactoryMap =
 static std::unique_ptr<InputTypeFactoryMap> createInputTypeFactoryMap() {
   std::unique_ptr<InputTypeFactoryMap> map =
       WTF::wrapUnique(new InputTypeFactoryMap);
-  map->add(InputTypeNames::button, ButtonInputType::create);
-  map->add(InputTypeNames::checkbox, CheckboxInputType::create);
-  map->add(InputTypeNames::color, ColorInputType::create);
-  map->add(InputTypeNames::date, DateInputType::create);
-  map->add(InputTypeNames::datetime_local, DateTimeLocalInputType::create);
-  map->add(InputTypeNames::email, EmailInputType::create);
-  map->add(InputTypeNames::file, FileInputType::create);
-  map->add(InputTypeNames::hidden, HiddenInputType::create);
-  map->add(InputTypeNames::image, ImageInputType::create);
-  map->add(InputTypeNames::month, MonthInputType::create);
-  map->add(InputTypeNames::number, NumberInputType::create);
-  map->add(InputTypeNames::password, PasswordInputType::create);
-  map->add(InputTypeNames::radio, RadioInputType::create);
-  map->add(InputTypeNames::range, RangeInputType::create);
-  map->add(InputTypeNames::reset, ResetInputType::create);
-  map->add(InputTypeNames::search, SearchInputType::create);
-  map->add(InputTypeNames::submit, SubmitInputType::create);
-  map->add(InputTypeNames::tel, TelephoneInputType::create);
-  map->add(InputTypeNames::time, TimeInputType::create);
-  map->add(InputTypeNames::url, URLInputType::create);
-  map->add(InputTypeNames::week, WeekInputType::create);
+  map->insert(InputTypeNames::button, ButtonInputType::create);
+  map->insert(InputTypeNames::checkbox, CheckboxInputType::create);
+  map->insert(InputTypeNames::color, ColorInputType::create);
+  map->insert(InputTypeNames::date, DateInputType::create);
+  map->insert(InputTypeNames::datetime_local, DateTimeLocalInputType::create);
+  map->insert(InputTypeNames::email, EmailInputType::create);
+  map->insert(InputTypeNames::file, FileInputType::create);
+  map->insert(InputTypeNames::hidden, HiddenInputType::create);
+  map->insert(InputTypeNames::image, ImageInputType::create);
+  map->insert(InputTypeNames::month, MonthInputType::create);
+  map->insert(InputTypeNames::number, NumberInputType::create);
+  map->insert(InputTypeNames::password, PasswordInputType::create);
+  map->insert(InputTypeNames::radio, RadioInputType::create);
+  map->insert(InputTypeNames::range, RangeInputType::create);
+  map->insert(InputTypeNames::reset, ResetInputType::create);
+  map->insert(InputTypeNames::search, SearchInputType::create);
+  map->insert(InputTypeNames::submit, SubmitInputType::create);
+  map->insert(InputTypeNames::tel, TelephoneInputType::create);
+  map->insert(InputTypeNames::time, TimeInputType::create);
+  map->insert(InputTypeNames::url, URLInputType::create);
+  map->insert(InputTypeNames::week, WeekInputType::create);
   // No need to register "text" because it is the default type.
   return map;
 }
@@ -121,7 +122,7 @@ static const InputTypeFactoryMap* factoryMap() {
 InputType* InputType::create(HTMLInputElement& element,
                              const AtomicString& typeName) {
   InputTypeFactoryFunction factory =
-      typeName.isEmpty() ? 0 : factoryMap()->get(typeName);
+      typeName.isEmpty() ? 0 : factoryMap()->at(typeName);
   if (!factory)
     factory = TextInputType::create;
   return factory(element);
@@ -337,13 +338,13 @@ std::pair<String, String> InputType::validationMessage(
   // The order of the following checks is meaningful. e.g. We'd like to show the
   // badInput message even if the control has other validation errors.
   if (inputTypeView.hasBadInput())
-    return std::make_pair(badInputText(), emptyString());
+    return std::make_pair(badInputText(), emptyString);
 
   if (valueMissing(value))
-    return std::make_pair(valueMissingText(), emptyString());
+    return std::make_pair(valueMissingText(), emptyString);
 
   if (typeMismatch())
-    return std::make_pair(typeMismatchText(), emptyString());
+    return std::make_pair(typeMismatchText(), emptyString);
 
   if (patternMismatch(value)) {
     // https://html.spec.whatwg.org/multipage/forms.html#attr-input-pattern
@@ -356,32 +357,32 @@ std::pair<String, String> InputType::validationMessage(
         element().fastGetAttribute(titleAttr).getString());
   }
 
-  if (element().tooLong())
+  if (element().tooLong()) {
     return std::make_pair(locale().validationMessageTooLongText(
                               value.length(), element().maxLength()),
-                          emptyString());
+                          emptyString);
+  }
 
-  if (element().tooShort())
+  if (element().tooShort()) {
     return std::make_pair(locale().validationMessageTooShortText(
                               value.length(), element().minLength()),
-                          emptyString());
+                          emptyString);
+  }
 
   if (!isSteppable())
-    return std::make_pair(emptyString(), emptyString());
+    return std::make_pair(emptyString, emptyString);
 
   const Decimal numericValue = parseToNumberOrNaN(value);
   if (!numericValue.isFinite())
-    return std::make_pair(emptyString(), emptyString());
+    return std::make_pair(emptyString, emptyString);
 
   StepRange stepRange(createStepRange(RejectAny));
 
   if (numericValue < stepRange.minimum())
-    return std::make_pair(rangeUnderflowText(stepRange.minimum()),
-                          emptyString());
+    return std::make_pair(rangeUnderflowText(stepRange.minimum()), emptyString);
 
   if (numericValue > stepRange.maximum())
-    return std::make_pair(rangeOverflowText(stepRange.maximum()),
-                          emptyString());
+    return std::make_pair(rangeOverflowText(stepRange.maximum()), emptyString);
 
   if (stepRange.stepMismatch(numericValue)) {
     DCHECK(stepRange.hasStep());
@@ -391,25 +392,27 @@ std::pair<String, String> InputType::validationMessage(
                              ? candidate1 + stepRange.step()
                              : candidate1 - stepRange.step();
     if (!candidate2.isFinite() || candidate2 < stepRange.minimum() ||
-        candidate2 > stepRange.maximum())
+        candidate2 > stepRange.maximum()) {
       return std::make_pair(
           locale().queryString(
               WebLocalizedString::ValidationStepMismatchCloseToLimit,
               localizedCandidate1),
-          emptyString());
+          emptyString);
+    }
     String localizedCandidate2 = localizeValue(serialize(candidate2));
-    if (candidate1 < candidate2)
+    if (candidate1 < candidate2) {
       return std::make_pair(
           locale().queryString(WebLocalizedString::ValidationStepMismatch,
                                localizedCandidate1, localizedCandidate2),
-          emptyString());
+          emptyString);
+    }
     return std::make_pair(
         locale().queryString(WebLocalizedString::ValidationStepMismatch,
                              localizedCandidate2, localizedCandidate1),
-        emptyString());
+        emptyString);
   }
 
-  return std::make_pair(emptyString(), emptyString());
+  return std::make_pair(emptyString, emptyString);
 }
 
 Decimal InputType::parseToNumber(const String&,
@@ -428,8 +431,8 @@ String InputType::serialize(const Decimal&) const {
 }
 
 ChromeClient* InputType::chromeClient() const {
-  if (FrameHost* host = element().document().frameHost())
-    return &host->chromeClient();
+  if (Page* page = element().document().page())
+    return &page->chromeClient();
   return nullptr;
 }
 

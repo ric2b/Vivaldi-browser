@@ -59,6 +59,8 @@ Common.Settings = class {
     var isLocal = !!descriptor['local'];
     var setting = settingType === 'regex' ? this.createRegExpSetting(settingName, defaultValue, undefined, isLocal) :
                                             this.createSetting(settingName, defaultValue, isLocal);
+    if (descriptor['title'])
+      setting.setTitle(descriptor['title']);
     this._moduleSettings.set(settingName, setting);
   }
 
@@ -231,6 +233,8 @@ Common.Setting = class {
     this._defaultValue = defaultValue;
     this._eventSupport = eventSupport;
     this._storage = storage;
+    /** @type {string} */
+    this._title = '';
   }
 
   /**
@@ -251,6 +255,20 @@ Common.Setting = class {
 
   get name() {
     return this._name;
+  }
+
+  /**
+   * @return {string}
+   */
+  title() {
+    return this._title;
+  }
+
+  /**
+   * @param {string} title
+   */
+  setTitle(title) {
+    this._title = title;
   }
 
   /**
@@ -709,6 +727,17 @@ Common.VersionController = class {
     breakpointsSetting.set(breakpoints);
   }
 
+  _updateVersionFrom22To23() {
+    // This update is no-op.
+  }
+
+  _updateVersionFrom23To24() {
+    var oldSetting = Common.settings.createSetting('searchInContentScripts', false);
+    var newSetting = Common.settings.createSetting('searchInAnonymousAndContentScripts', false);
+    newSetting.set(oldSetting.get());
+    oldSetting.remove();
+  }
+
   _migrateSettingsFromLocalStorage() {
     // This step migrates all the settings except for the ones below into the browser profile.
     var localSettings = new Set([
@@ -741,7 +770,7 @@ Common.VersionController = class {
 };
 
 Common.VersionController._currentVersionName = 'inspectorVersion';
-Common.VersionController.currentVersion = 22;
+Common.VersionController.currentVersion = 24;
 
 /**
  * @type {!Common.Settings}

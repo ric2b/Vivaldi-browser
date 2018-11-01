@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace content {
@@ -29,7 +30,8 @@ WebMouseEvent SyntheticWebMouseEventBuilder::Build(
     blink::WebInputEvent::Type type,
     int window_x,
     int window_y,
-    int modifiers) {
+    int modifiers,
+    blink::WebPointerProperties::PointerType pointer_type) {
   DCHECK(WebInputEvent::isMouseEventType(type));
   WebMouseEvent result(type, modifiers,
                        ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
@@ -38,7 +40,8 @@ WebMouseEvent SyntheticWebMouseEventBuilder::Build(
   result.windowX = window_x;
   result.windowY = window_y;
   result.setModifiers(modifiers);
-  result.pointerType = blink::WebPointerProperties::PointerType::Mouse;
+  result.pointerType = pointer_type;
+  result.id = ui::PointerEvent::kMousePointerId;
   return result;
 }
 
@@ -227,6 +230,7 @@ void SyntheticWebTouchEvent::ReleasePoint(int index) {
   CHECK_GE(index, 0);
   CHECK_LT(index, kTouchesLengthCap);
   touches[index].state = WebTouchPoint::StateReleased;
+  touches[index].force = 0.f;
   WebTouchEventTraits::ResetType(WebInputEvent::TouchEnd, timeStampSeconds(),
                                  this);
 }

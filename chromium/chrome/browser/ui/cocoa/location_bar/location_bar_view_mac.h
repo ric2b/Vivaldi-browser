@@ -39,6 +39,10 @@ class SecurityStateBubbleDecoration;
 class ZoomDecoration;
 class ZoomDecorationTest;
 
+namespace {
+class LocationBarViewMacTest;
+}
+
 // A C++ bridge class that represents the location bar UI element to
 // the portable code.  Wires up an OmniboxViewMac instance to
 // the location bar text field, which handles most of the work.
@@ -70,7 +74,6 @@ class LocationBarViewMac : public LocationBar,
   void UpdateLocationBarVisibility(bool visible, bool animate) override;
   bool ShowPageActionPopup(const extensions::Extension* extension,
                            bool grant_active_tab) override;
-  void UpdateOpenPDFInReaderPrompt() override;
   void SaveStateToContents(content::WebContents* contents) override;
   void Revert() override;
   const OmniboxView* GetOmniboxView() const override;
@@ -84,6 +87,7 @@ class LocationBarViewMac : public LocationBar,
   ExtensionAction* GetVisiblePageAction(size_t index) override;
   void TestPageActionPressed(size_t index) override;
   bool GetBookmarkStarVisibility() override;
+  bool TestContentSettingImagePressed(size_t index) override;
 
   // Set/Get the editable state of the field.
   void SetEditable(bool editable);
@@ -126,14 +130,6 @@ class LocationBarViewMac : public LocationBar,
 
   // Re-draws |decoration| if it's already being displayed.
   void RedrawDecoration(LocationBarDecoration* decoration);
-
-  // Sets preview_enabled_ for the PageActionImageView associated with this
-  // |page_action|. If |preview_enabled|, the location bar will display the
-  // PageAction icon even if it has not been activated by the extension.
-  // This is used by the ExtensionInstalledBubble to preview what the icon
-  // will look like for the user upon installation of the extension.
-  void SetPreviewEnabledPageAction(ExtensionAction* page_action,
-                                   bool preview_enabled);
 
   // Retrieve the frame for the given |page_action|.
   NSRect GetPageActionFrame(ExtensionAction* page_action);
@@ -223,6 +219,7 @@ class LocationBarViewMac : public LocationBar,
   std::vector<NSView*> GetDecorationAccessibilityViews();
 
  private:
+  friend class LocationBarViewMacTest;
   friend ZoomDecorationTest;
 
   // Posts |notification| to the default notification center.

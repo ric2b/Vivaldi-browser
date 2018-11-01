@@ -38,6 +38,10 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
+#include "ui/base/ime/chromeos/fake_ime_keyboard.h"
+#include "ui/base/ime/chromeos/ime_keyboard.h"
+#include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/chromeos/mock_input_method_manager.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -335,21 +339,29 @@ TEST_F(AcceleratorControllerTest, LingeringExitWarningBubble) {
 }
 
 TEST_F(AcceleratorControllerTest, Register) {
-  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target;
-  GetController()->Register(accelerator_a, &target);
+  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
+  const ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_NONE);
+  const ui::Accelerator accelerator_c(ui::VKEY_C, ui::EF_NONE);
+  const ui::Accelerator accelerator_d(ui::VKEY_D, ui::EF_NONE);
 
-  // The registered accelerator is processed.
+  GetController()->Register(
+      {accelerator_a, accelerator_b, accelerator_c, accelerator_d}, &target);
+
+  // The registered accelerators are processed.
   EXPECT_TRUE(ProcessInController(accelerator_a));
-  EXPECT_EQ(1, target.accelerator_pressed_count());
+  EXPECT_TRUE(ProcessInController(accelerator_b));
+  EXPECT_TRUE(ProcessInController(accelerator_c));
+  EXPECT_TRUE(ProcessInController(accelerator_d));
+  EXPECT_EQ(4, target.accelerator_pressed_count());
 }
 
 TEST_F(AcceleratorControllerTest, RegisterMultipleTarget) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target1;
-  GetController()->Register(accelerator_a, &target1);
+  GetController()->Register({accelerator_a}, &target1);
   TestTarget target2;
-  GetController()->Register(accelerator_a, &target2);
+  GetController()->Register({accelerator_a}, &target2);
 
   // If multiple targets are registered with the same accelerator, the target
   // registered later processes the accelerator.
@@ -360,10 +372,9 @@ TEST_F(AcceleratorControllerTest, RegisterMultipleTarget) {
 
 TEST_F(AcceleratorControllerTest, Unregister) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
-  TestTarget target;
-  GetController()->Register(accelerator_a, &target);
   const ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_NONE);
-  GetController()->Register(accelerator_b, &target);
+  TestTarget target;
+  GetController()->Register({accelerator_a, accelerator_b}, &target);
 
   // Unregistering a different accelerator does not affect the other
   // accelerator.
@@ -380,13 +391,12 @@ TEST_F(AcceleratorControllerTest, Unregister) {
 
 TEST_F(AcceleratorControllerTest, UnregisterAll) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
-  TestTarget target1;
-  GetController()->Register(accelerator_a, &target1);
   const ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_NONE);
-  GetController()->Register(accelerator_b, &target1);
+  TestTarget target1;
+  GetController()->Register({accelerator_a, accelerator_b}, &target1);
   const ui::Accelerator accelerator_c(ui::VKEY_C, ui::EF_NONE);
   TestTarget target2;
-  GetController()->Register(accelerator_c, &target2);
+  GetController()->Register({accelerator_c}, &target2);
   GetController()->UnregisterAll(&target1);
 
   // All the accelerators registered for |target1| are no longer processed.
@@ -402,7 +412,7 @@ TEST_F(AcceleratorControllerTest, UnregisterAll) {
 TEST_F(AcceleratorControllerTest, Process) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target1;
-  GetController()->Register(accelerator_a, &target1);
+  GetController()->Register({accelerator_a}, &target1);
 
   // The registered accelerator is processed.
   EXPECT_TRUE(ProcessInController(accelerator_a));
@@ -417,7 +427,7 @@ TEST_F(AcceleratorControllerTest, IsRegistered) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   const ui::Accelerator accelerator_shift_a(ui::VKEY_A, ui::EF_SHIFT_DOWN);
   TestTarget target;
-  GetController()->Register(accelerator_a, &target);
+  GetController()->Register({accelerator_a}, &target);
   EXPECT_TRUE(GetController()->IsRegistered(accelerator_a));
   EXPECT_FALSE(GetController()->IsRegistered(accelerator_shift_a));
   GetController()->UnregisterAll(&target);
@@ -515,6 +525,25 @@ TEST_F(AcceleratorControllerTest, WindowSnapWithoutDocking) {
   EXPECT_TRUE(window_state->IsNormalStateType());
   EXPECT_FALSE(window_state->IsDocked());
   EXPECT_EQ(normal_bounds.ToString(), window->bounds().ToString());
+}
+
+TEST_F(AcceleratorControllerTest, RotateScreen) {
+  // TODO: needs GetDisplayInfo http://crbug.com/622480.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display::Rotation initial_rotation =
+      GetActiveDisplayRotation(display.id());
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  generator.PressKey(ui::VKEY_BROWSER_REFRESH,
+                     ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  generator.ReleaseKey(ui::VKEY_BROWSER_REFRESH,
+                       ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  display::Display::Rotation new_rotation =
+      GetActiveDisplayRotation(display.id());
+  // |new_rotation| is determined by the AcceleratorControllerDelegate.
+  EXPECT_NE(initial_rotation, new_rotation);
 }
 
 // Test class used for testing docked windows.
@@ -657,6 +686,9 @@ TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
 
 TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
        WindowPanelDockLeftDockRightRestore) {
+  // TODO: http://crbug.com/632209.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
   std::unique_ptr<aura::Window> window0(
       CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
 
@@ -717,11 +749,11 @@ TEST_F(AcceleratorControllerTest, AutoRepeat) {
   ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_CONTROL_DOWN);
   accelerator_a.set_type(ui::ET_KEY_PRESSED);
   TestTarget target_a;
-  GetController()->Register(accelerator_a, &target_a);
+  GetController()->Register({accelerator_a}, &target_a);
   ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_CONTROL_DOWN);
   accelerator_b.set_type(ui::ET_KEY_PRESSED);
   TestTarget target_b;
-  GetController()->Register(accelerator_b, &target_b);
+  GetController()->Register({accelerator_b}, &target_b);
 
   ui::test::EventGenerator& generator = GetEventGenerator();
   generator.PressKey(ui::VKEY_A, ui::EF_CONTROL_DOWN);
@@ -813,7 +845,7 @@ TEST_F(AcceleratorControllerTest, ProcessOnce) {
   DisableIME();
   ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target;
-  GetController()->Register(accelerator_a, &target);
+  GetController()->Register({accelerator_a}, &target);
 
   // The accelerator is processed only once.
   ui::EventProcessor* dispatcher =
@@ -838,6 +870,10 @@ TEST_F(AcceleratorControllerTest, ProcessOnce) {
 #endif
 
 TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
+  // TODO: TestScreenshotDelegate is null in mash http://crbug.com/632111.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   // CycleBackward
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_TAB, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN)));
@@ -1115,6 +1151,85 @@ TEST_F(AcceleratorControllerTest, PreferredReservedAccelerators) {
 
 namespace {
 
+class TestInputMethodManager
+    : public chromeos::input_method::MockInputMethodManager {
+ public:
+  TestInputMethodManager() = default;
+  ~TestInputMethodManager() override = default;
+
+  // MockInputMethodManager:
+  chromeos::input_method::ImeKeyboard* GetImeKeyboard() override {
+    return &keyboard_;
+  }
+
+ private:
+  chromeos::input_method::FakeImeKeyboard keyboard_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestInputMethodManager);
+};
+
+class ToggleCapsLockTest : public AcceleratorControllerTest {
+ public:
+  ToggleCapsLockTest() = default;
+  ~ToggleCapsLockTest() override = default;
+
+  void SetUp() override {
+    AcceleratorControllerTest::SetUp();
+    chromeos::input_method::InputMethodManager::Initialize(
+        new TestInputMethodManager);
+  }
+
+  void TearDown() override {
+    chromeos::input_method::InputMethodManager::Shutdown();
+    AcceleratorControllerTest::TearDown();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ToggleCapsLockTest);
+};
+
+// Tests the four combinations of the TOGGLE_CAPS_LOCK accelerator.
+TEST_F(ToggleCapsLockTest, ToggleCapsLockAccelerators) {
+  chromeos::input_method::InputMethodManager* input_method_manager =
+      chromeos::input_method::InputMethodManager::Get();
+  ASSERT_TRUE(input_method_manager);
+  EXPECT_FALSE(input_method_manager->GetImeKeyboard()->CapsLockIsEnabled());
+
+  // 1. Press Alt, Press Search, Release Search, Release Alt.
+  // Note when you press Alt then press search, the key_code at this point is
+  // VKEY_LWIN (for search) and Alt is the modifier.
+  const ui::Accelerator press_alt_then_search(ui::VKEY_LWIN, ui::EF_ALT_DOWN);
+  EXPECT_FALSE(ProcessInController(press_alt_then_search));
+  // When you release Search before Alt, the key_code is still VKEY_LWIN and
+  // Alt is still the modifier.
+  const ReleaseAccelerator release_search_before_alt(ui::VKEY_LWIN,
+                                                     ui::EF_ALT_DOWN);
+  EXPECT_TRUE(ProcessInController(release_search_before_alt));
+  EXPECT_TRUE(input_method_manager->GetImeKeyboard()->CapsLockIsEnabled());
+  input_method_manager->GetImeKeyboard()->SetCapsLockEnabled(false);
+
+  // 2. Press Search, Press Alt, Release Search, Release Alt.
+  const ui::Accelerator press_search_then_alt(ui::VKEY_MENU,
+                                              ui::EF_COMMAND_DOWN);
+  EXPECT_FALSE(ProcessInController(press_search_then_alt));
+  EXPECT_TRUE(ProcessInController(release_search_before_alt));
+  EXPECT_TRUE(input_method_manager->GetImeKeyboard()->CapsLockIsEnabled());
+  input_method_manager->GetImeKeyboard()->SetCapsLockEnabled(false);
+
+  // 3. Press Alt, Press Search, Release Alt, Release Search.
+  EXPECT_FALSE(ProcessInController(press_alt_then_search));
+  const ReleaseAccelerator release_alt_before_search(ui::VKEY_MENU,
+                                                     ui::EF_COMMAND_DOWN);
+  EXPECT_TRUE(ProcessInController(release_alt_before_search));
+  EXPECT_TRUE(input_method_manager->GetImeKeyboard()->CapsLockIsEnabled());
+  input_method_manager->GetImeKeyboard()->SetCapsLockEnabled(false);
+
+  // 4. Press Search, Press Alt, Release Alt, Release Search.
+  EXPECT_FALSE(ProcessInController(press_search_then_alt));
+  EXPECT_TRUE(ProcessInController(release_alt_before_search));
+  EXPECT_TRUE(input_method_manager->GetImeKeyboard()->CapsLockIsEnabled());
+}
+
 class PreferredReservedAcceleratorsTest : public test::AshTestBase {
  public:
   PreferredReservedAcceleratorsTest() {}
@@ -1134,6 +1249,10 @@ class PreferredReservedAcceleratorsTest : public test::AshTestBase {
 }  // namespace
 
 TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
+  // TODO: needs LockStateController ported: http://crbug.com/632189.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   aura::Window* w1 = CreateTestWindowInShellWithId(0);
   aura::Window* w2 = CreateTestWindowInShellWithId(1);
   wm::ActivateWindow(w1);
@@ -1181,6 +1300,9 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
 }
 
 TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithPinned) {
+  // TODO: needs LockStateController ported: http://crbug.com/632189.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
   aura::Window* w1 = CreateTestWindowInShellWithId(0);
   aura::Window* w2 = CreateTestWindowInShellWithId(1);
   wm::ActivateWindow(w1);
@@ -1210,6 +1332,10 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithPinned) {
 }
 
 TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
+  // TODO: TestScreenshotDelegate is null in mash http://crbug.com/632111.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
+
   std::set<AcceleratorAction> all_actions;
   for (size_t i = 0; i < kAcceleratorDataLength; ++i)
     all_actions.insert(kAcceleratorData[i].action);
@@ -1395,6 +1521,10 @@ class DeprecatedAcceleratorTester : public AcceleratorControllerTest {
 }  // namespace
 
 TEST_F(DeprecatedAcceleratorTester, TestDeprecatedAcceleratorsBehavior) {
+  // TODO: disabled because of UnblockUserSession() not working:
+  // http://crbug.com/632201.
+  if (WmShell::Get()->IsRunningInMash())
+    return;
   for (size_t i = 0; i < kDeprecatedAcceleratorsLength; ++i) {
     const AcceleratorData& entry = kDeprecatedAccelerators[i];
 

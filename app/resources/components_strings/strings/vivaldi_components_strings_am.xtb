@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">የዚህን ገጽ የተቀመጠ (ለምሳሌ ቀኑ ያለፈበት እንደሆነ የታወቀ) ቅጂን አሳይ።</translation>
 <translation id="1559528461873125649">እንደዚህ ያለ ፋይል ወይም አቃፊ የለም</translation>
 <translation id="1710259589646384581">ስርዓተ ክወና</translation>
-<translation id="1838667051080421715">የአንድ ድረ-ገጽ ምንጭን እየተመለከቱ ነው።</translation>
 <translation id="194030505837763158">ወደ <ph name="LINK" /> ሂድ</translation>
 <translation id="2030481566774242610"><ph name="LINK" />ን ማለትዎ ነው?</translation>
-<translation id="2089090684895656482">ያነሰ</translation>
 <translation id="2166378884831602661">ይህ ጣቢያ ደህንነቱ አስተማማኝ የሆነ ግንኙነት ማቅረብ አይችልም</translation>
 <translation id="2292556288342944218">የእርስዎ የበየነመረብ መዳረሻ ታግዷል</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ልክ ያልኾነ ምላሽ ልኳል።</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">የፋይሉ መዳረሻ ተከልክሏል</translation>
 <translation id="2705137772291741111">የተቀመጠው (የተሸጎጠ) የዚህ ጣቢያ ቅጂ የሚነበብ አልነበረም።</translation>
 <translation id="2784949926578158345">ግንኙነቱ ዳግም እንዲጀምር ተደርጓል።</translation>
-<translation id="284702764277384724">በ<ph name="HOST_NAME" /> ላይ የነበረው የአገልጋይ እውቅና ማረጋገጫ የተጨበረበረ ይመስላል።</translation>
 <translation id="2909946352844186028">የአውታረ መረብ ለውጥ ተገኝቷል።</translation>
 <translation id="3005723025932146533">የተቀመጠ ቅጂ አሳይ</translation>
 <translation id="3109728660330352905">ይህን ገጽ ለማየት ፍቃድ የለዎትም።</translation>
@@ -37,7 +34,6 @@
 <translation id="4021036232240155012">ዲኤንኤስ የአንድ ድር ጣቢያ ስም ወደ የእሱ የበይነመረብ አድራሻ የሚተረጉም የአውታረ መረብ አገልግሎት ነው።</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> የመግቢያ እውቅና ማረጋገጫዎን አልተቀበለም፣ ወይም ገና አልተሰጠዎት ይሆናል።</translation>
 <translation id="4522570452068850558">ዝርዝሮች</translation>
-<translation id="4670097147947922288">የቅጥያ ገጽ እየተመለከቱ ነው።</translation>
 <translation id="4708268264240856090">የእርስዎ ግንኙነት ተቋርጧል</translation>
 <translation id="4744603770635761495">የሚፈጸም ዱካ</translation>
 <translation id="4764776831041365478"><ph name="URL" /> ላይ ያለው ድረ-ገጽ ለጊዜው የማይሰራ ወይም እስከመጨረሻው ወደ አዲስ የድር አድራሻ ተዛውሮ ሊሆን ይችላል።</translation>
@@ -54,7 +50,6 @@
 <translation id="5675650730144413517">ይህ ገጽ እየሠራ አይደለም</translation>
 <translation id="5869405914158311789">ይህ ጣቢያ ሊደረስበት አይችልም</translation>
 <translation id="5990559369517809815">ወደ አገልጋዩ የተላኩ ጥያቄዎች በአንድ ቅጥያ ታግደዋል።</translation>
-<translation id="6042308850641462728">ተጨማሪ</translation>
 <translation id="6146055958333702838">ማናቸውም ገመዶችን ይፈትሹና እየተጠቀሙ ሊሆኑ የሚችሏቸውን ማንኛውም ራውተሮች፣
         ሞደሞችን ወይም ሌላ አውታረ መረብ መሣሪያዎችን ዳግም ያስጀምሩ።</translation>
 <translation id="6165508094623778733">ተጨማሪ ለመረዳት</translation>
@@ -64,10 +59,8 @@
 <translation id="6328639280570009161">የአውታረ መረብ መገመትን አሰናክለው ይሞክሩ</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> ማገናኘት አሻፈረኝ ብሏል።</translation>
 <translation id="6711464428925977395">በተኪ አገልጋዩ ላይ የሆነ ችግር አለ ወይም አድራሻው ትክክል አይደለም።</translation>
-<translation id="6830600606572693159"><ph name="URL" /> ላይ ያለው ድረ-ገጽ በአሁኑ ጊዜ አይገኝም።  ከአቅም በላይ ስራ በዝቶበት ወይም ለጥገና ከስራ ውጪ ተደርጎ ሊሆን ይችላል።</translation>
 <translation id="6897140037006041989">የተጠቀሚ ተወካይ</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> የደህንነት መስፈርቶችን አያከብርም።</translation>
-<translation id="7269802741830436641">ድረ-ገጹ የአድራሻ ቅየራ ምልልስ አለው</translation>
 <translation id="7353601530677266744">የትእዛዝ መስመር</translation>
 <translation id="7419106976560586862">የመገለጫ ዱካ</translation>
 <translation id="7518003948725431193">ለዚህ የድር አድራሻ ምንም ድረ-ገጽ አልተገኘም፦ <ph name="URL" /></translation>
@@ -75,7 +68,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> በአሁኑ ጊዜ ይህን ጥያቄ ተቀብሎ ለማስተናገድ አይችልም።</translation>
 <translation id="7716424297397655342">ይህ ጣቢያ ከመሸጎጫው ላይ ሊጫን አይችልም</translation>
 <translation id="7758069387465995638">የኬላ ወይም የፀረ-ቫይረስ ሶፍትዌር ግንኙነቱን አግዶት ሊሆን ይችላል።</translation>
-<translation id="778579833039460630">ምንም ውሂብ አልደረሰም</translation>
 <translation id="7951415247503192394">(32-ቢት)</translation>
 <translation id="8134994873729925007">የ<ph name="HOST_NAME" /> አገልጋይ <ph name="BEGIN_ABBR" />ዲኤንኤስ አድራሻ<ph name="END_ABBR" /> ሊገኝ አልተቻለም።</translation>
 <translation id="8142868475871995937">የተከለከሉ የዩ አር ኤሎች ዝርዝር እና ሌሎች በስርዓት አስተዳዳሪዎ አስገዳጅነት የተሰጣቸው መመሪያዎችን ለማየት &lt;strong&gt;vivaldi://policy&lt;/strong&gt;ን ይጎብኙ።</translation>

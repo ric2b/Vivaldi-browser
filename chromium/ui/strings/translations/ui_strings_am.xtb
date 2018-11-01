@@ -26,10 +26,9 @@
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ቴባ/ሰ</translation>
 <translation id="2482878487686419369">ማስታወቂያዎች</translation>
 <translation id="2497284189126895209">ሁሉም ፋይሎች</translation>
-<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">ልኬት ማስተካከል ተጠናቅቋል</translation>
 <translation id="252373100621549798">ያልታወቀ ማሳያ</translation>
-<translation id="2662783295652680457">የእርስዎን ማያ ንካ ይግለጹት</translation>
+<translation id="2583543531130364912">የእርስዎን ማያንካ ልኬት ያስተካክሉ</translation>
 <translation id="2666092431469916601">ላይ</translation>
 <translation id="2743387203779672305">ወደ ቅንጥብ ሰሌዳ ገልብጥ</translation>
 <translation id="2803313416453193357">አቃፊ ክፈት</translation>
@@ -83,6 +82,7 @@
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> ባ/ሰ</translation>
 <translation id="6203030746557259519">ምናባዊ ማሳያ</translation>
+<translation id="6264365405983206840">&amp;ሁሉንም ምረጥ</translation>
 <translation id="6364916375976753737">ወደ ግራ ሸብልል</translation>
 <translation id="6394627529324717982">ኮማ</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 ሰከንድ በፊት}one{# ሰከንዶች በፊት}other{# ሰከንዶች በፊት}}</translation>
@@ -92,7 +92,6 @@
 <translation id="6699343763173986273">የሚዲያ ቀጣይ ትራክ</translation>
 <translation id="6786750046913594791">አቃፊ ዝጋ</translation>
 <translation id="6808150112686056157">ሚዲያ አቁም</translation>
-<translation id="6829324100069873704">ወደ ማሳወቂያዎች ተመለስ።</translation>
 <translation id="6845383723252244143">አቃፊ ምረጥ</translation>
 <translation id="6845533974506654842">ተጫን</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 ሰዓት ቀርቷል}one{# ሰዓቶች ቀርቷል}other{# ሰዓቶች ቀርተዋል}}</translation>
@@ -110,7 +109,6 @@
 <translation id="7457942297256758195">ሁሉንም አጽዳ</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> ቴባ</translation>
 <translation id="7647488630410863958">የእርስዎን ማሳወቂያዎች ለማየት መሣሪያውን ይክፈቱ</translation>
-<translation id="7649070708921625228">እገዛ</translation>
 <translation id="7658239707568436148">ይቅር</translation>
 <translation id="7781829728241885113">ትናንት</translation>
 <translation id="7814458197256864873">&amp;ቅዳ</translation>
@@ -141,5 +139,4 @@
 <translation id="9150735707954472829">ትር</translation>
 <translation id="9170848237812810038">&amp;ቀልብስ</translation>
 <translation id="932327136139879170">መነሻ</translation>
-<translation id="945522503751344254">ግብረ መልስ ላክ</translation>
 </translationbundle>

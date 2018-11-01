@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h"
 
+#include "ash/public/cpp/mus_property_mirror_ash.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "base/memory/ptr_util.h"
@@ -20,29 +22,50 @@
 #include "chrome/browser/ui/ash/volume_controller.h"
 #include "chrome/browser/ui/ash/vpn_list_forwarder.h"
 #include "chrome/browser/ui/views/ash/tab_scrubber.h"
-#include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 #include "chrome/browser/ui/views/frame/immersive_context_mus.h"
 #include "chrome/browser/ui/views/frame/immersive_handler_factory_mus.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension_factory.h"
+#include "ui/aura/mus/property_converter.h"
+#include "ui/base/class_property.h"
 #include "ui/keyboard/content/keyboard.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/wm/core/capture_controller.h"
-#include "ui/wm/core/wm_state.h"
+#include "ui/views/mus/mus_client.h"
 
-ChromeBrowserMainExtraPartsAsh::ChromeBrowserMainExtraPartsAsh(
-    ChromeBrowserMainExtraPartsViews* extra_parts_views)
-    : extra_parts_views_(extra_parts_views) {}
+ChromeBrowserMainExtraPartsAsh::ChromeBrowserMainExtraPartsAsh() {}
 
 ChromeBrowserMainExtraPartsAsh::~ChromeBrowserMainExtraPartsAsh() {}
 
+void ChromeBrowserMainExtraPartsAsh::ServiceManagerConnectionStarted(
+    content::ServiceManagerConnection* connection) {
+  if (ash_util::IsRunningInMash()) {
+    // Register ash-specific window properties with Chrome's property converter.
+    // This propagates ash properties set on chrome windows to ash, via mojo.
+    DCHECK(views::MusClient::Exists());
+    views::MusClient* mus_client = views::MusClient::Get();
+    aura::WindowTreeClientDelegate* delegate = mus_client;
+    aura::PropertyConverter* converter = delegate->GetPropertyConverter();
+
+    converter->RegisterProperty(
+        ash::kPanelAttachedKey,
+        ui::mojom::WindowManager::kPanelAttached_Property,
+        aura::PropertyConverter::CreateAcceptAnyValueCallback());
+    converter->RegisterProperty(
+        ash::kShelfItemTypeKey,
+        ui::mojom::WindowManager::kShelfItemType_Property,
+        base::Bind(&ash::IsValidShelfItemType));
+
+    mus_client->SetMusPropertyMirror(
+        base::MakeUnique<ash::MusPropertyMirrorAsh>());
+  }
+}
+
 void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
-  if (chrome::ShouldOpenAshOnStartup())
+  if (ash_util::ShouldOpenAshOnStartup())
     chrome::OpenAsh(gfx::kNullAcceleratedWidget);
 
-  if (chrome::IsRunningInMash()) {
-    immersive_context_ = base::MakeUnique<ImmersiveContextMus>(
-        extra_parts_views_->wm_state()->capture_controller());
+  if (ash_util::IsRunningInMash()) {
+    immersive_context_ = base::MakeUnique<ImmersiveContextMus>();
     immersive_handler_factory_ = base::MakeUnique<ImmersiveHandlerFactoryMus>();
   }
 
@@ -63,7 +86,7 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
 }
 
 void ChromeBrowserMainExtraPartsAsh::PostProfileInit() {
-  if (chrome::IsRunningInMash()) {
+  if (ash_util::IsRunningInMash()) {
     DCHECK(!ash::Shell::HasInstance());
     DCHECK(!ChromeLauncherController::instance());
     chrome_launcher_controller_mus_ =

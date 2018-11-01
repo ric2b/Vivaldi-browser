@@ -1,5 +1,8 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
 
 #include "ui/about/vivaldi_about_version.h"
+
+#include <string>
 
 #include "app/vivaldi_apptools.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,22 +21,22 @@
 #define BUILD_VERSION_beta 1
 #define BUILD_VERSION_final 1
 
-#define S(s) BUILD_VERSION_ ## s
+#define S(s) BUILD_VERSION_##s
 #define BUILD_VERSION(s) S(s)
 
 #define VIVALDI_BUILD_PUBLIC_RELEASE 1
 
 namespace vivaldi {
 
-void UpdateVersionUIDataSource(content::WebUIDataSource *html_source) {
-
+void UpdateVersionUIDataSource(content::WebUIDataSource* html_source) {
   html_source->AddString(version_ui::kVersion,
-    vivaldi::GetVivaldiVersionString());
-#if defined(OFFICIAL_BUILD) &&  \
+                         vivaldi::GetVivaldiVersionString());
+#if defined(OFFICIAL_BUILD) && \
     (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
   html_source->AddString("official",
-      std::string(VIVALDI_PRODUCT_VERSION).empty() ?
-        "Stable channel" : VIVALDI_PRODUCT_VERSION);
+                         std::string(VIVALDI_PRODUCT_VERSION).empty()
+                             ? "Stable channel"
+                             : VIVALDI_PRODUCT_VERSION);
 #endif
 
   html_source->AddString("productLicense",
@@ -47,5 +50,4 @@ void UpdateVersionUIDataSource(content::WebUIDataSource *html_source) {
   html_source->AddResourcePath("vivaldi_about_version.js",
                                IDR_VIVALDI_VERSION_UI_JS);
 }
-
-}
+}  // namespace vivaldi

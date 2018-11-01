@@ -40,31 +40,31 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '1517224346e9e3e017401ec3f92bf30d98e5e995',
+  'skia_revision': '9c10df3b60f4a7d50c1070a5d8c4aaadb79ba9b7',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '975e9a320b6eaf9f12280c35df98e013beb8f041',
+  'v8_revision': 'c9b4087f4a00632b7133c491addac7272d45cbef',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': 'ebc8dab6f8b8d79ec221c94de39a921145abd404',
+  'swarming_revision': '11e31afa5d330756ff87aa12064bb5d032896cb5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'c1a5d16e964ad524487eac9d2e4b5a65d837ff27',
+  'angle_revision': '461d9a3060e315706c74d1203ed945a600a1a241',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': 'cb12d6e8641f0c9b0fbbfa4bf17c55c6c0d3c38f',
+  'buildtools_revision': 'b3771b1935ea74c388b6fb1750e83f5d83b39dec',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
-  'swiftshader_revision': '5615fd03603ea9059bcc21a338932cd322fcb4a3',
+  'swiftshader_revision': '91da6b00584afd7dcaed66da88e2b617429b3950',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'bc8dcc3ede286fbcaac3f741c379297cffff0eea',
+  'pdfium_revision': '2079dce2ca47f3866f1dd5d51849c53362727f7b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -72,7 +72,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '1252f8758ab1c4c4a14db25f9fa53e5950e4bcda',
+  'boringssl_revision': 'be2ee342d3781ddb954f91f8a7e660c6f59e87e5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -88,23 +88,27 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '94bbb858ca3830bcd56fb732cc6050608787f07e',
+  'nacl_revision': 'c948e9b82582e695d16ee6696a484f82239a86d7',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype-android
   # and whatever else without interference from each other.
-  'freetype_android_revision': 'c38be52bf8de3b1699d74932b849bf150265819e',
+  'freetype_android_revision': '66725768cdf758cfb3f9abf03cbf5e5a77f42088',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '5c82c92723367ca9ffc6d512c53e6eea6a5ef545',
+  'catapult_revision': '49eb11f63eb4d552d634833a01d2710208ba0523',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
-  'libfuzzer_revision': '78ee52d0c69db57fe0e984d252a991390e7d6c9b',
+  'libfuzzer_revision': '5bcbfc5bcc468328ac18b6ca42d603fc6c744a7d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling devtools-node-modules
   # and whatever else without interference from each other.
   'devtools_node_modules_revision': '6226d6cd80aaf2e5295ed460cf73ef6a582e4d78',
+  # Three lines of non-changing comments so that
+  # the commit queue can handle CLs rolling libFuzzer
+  # and whatever else without interference from each other.
+  'scanbuild_revision': '15bd7ca2934162c51654ddffc52933e45f95e7ef',
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
@@ -120,7 +124,7 @@ allowed_hosts = [
 
 deps = {
   'src/breakpad/src':
-    Var('chromium_git') + '/breakpad/breakpad/src.git' + '@' + 'efa6d5c1c84e2fcacf6a2eafcf9010f98ef3a4d7',
+    Var('chromium_git') + '/breakpad/breakpad/src.git' + '@' + '10162f61e9ca4992e7851c69c7b8c6eddaab9e8e',
 
   'src/buildtools':
     Var('chromium_git') + '/chromium/buildtools.git' + '@' +  Var('buildtools_revision'),
@@ -150,16 +154,16 @@ deps = {
     Var('chromium_git') + '/external/colorama.git' + '@' + '799604a1041e9b3bc5d2789ecbd7e8db2e18e6b8',
 
   'src/third_party/icu':
-    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '9cd2828740572ba6f694b9365236a8356fd06147',
+    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '450be73c9ee8ae29d43d4fdc82febb2a5f62bfb5',
 
   'src/third_party/hunspell_dictionaries':
     Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'dc6e7c25bf47cbfb466e0701fd2728b4a12e79d5',
 
   'src/third_party/leveldatabase/src':
-    Var('chromium_git') + '/external/leveldb.git' + '@' + 'a7bff697baa062c8f6b8fb760eacf658712b611a',
+    Var('chromium_git') + '/external/leveldb.git' + '@' + 'a53934a3ae1244679f812d998a4f16f2c7f309a6',
 
   'src/third_party/snappy/src':
-    Var('chromium_git') + '/external/snappy.git' + '@' + '762bb32f0c9d2f31ba4958c7c0933d22e80c20bf',
+    Var('chromium_git') + '/external/snappy.git' + '@' + 'f6a298d7c7ddcfdae824649a61408bcf6b334d92',
 
   'src/tools/gyp':
     Var('chromium_git') + '/external/gyp.git' + '@' + 'e7079f0e0e14108ab0dba58728ff219637458563',
@@ -192,16 +196,16 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '9b0c9deb177ff875792ad19bf925418eb890f735',
+    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'd0783b85bd445f700576dba25bf452d58c112d33',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
 
   'src/third_party/libvpx/source/libvpx':
-    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '5b1a8ca5e846f838062becaec9ed6b5ecef306e5',
+    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '8121f85473b28183c93fdcef290ed6f74b0b52db',
 
   'src/third_party/ffmpeg':
-    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '28e7fbe8891639aa53088c3e728a66a09b967ab1',
+    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '3f3ad2ea90df08f5907bd997e1ce22e1c19ce215',
 
   'src/third_party/usrsctp/usrsctplib':
     Var('chromium_git') + '/external/github.com/sctplab/usrsctp' + '@' + '8679f2b0bf063ac894dc473debefd61dbbebf622',
@@ -228,7 +232,7 @@ deps = {
     Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'd68fcc42256f0f6483d562aa69531091560ff9f2', # commit position 16134
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '9c8feae48b530e67829cd753aefdaca958437402', # commit position 16974
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -237,7 +241,7 @@ deps = {
     Var('chromium_git') + '/external/github.com/open-source-parsers/jsoncpp.git' + '@' + 'f572e8e42e22cfcf5ab0aea26574f408943edfa4', # from svn 248
 
   'src/third_party/libyuv':
-    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + 'b18fd21d3c27fce69b5c1ed44b89131dedc87284',  # from r1637
+    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '0741a3d70400dc96e59726674b0acf3bca02d710',
 
   'src/third_party/smhasher/src':
     Var('chromium_git') + '/external/smhasher.git' + '@' + 'e87738e57558e0ec472b2fc3a643b838e5b6e88f',
@@ -285,7 +289,7 @@ deps = {
     Var('chromium_git') + '/external/py_trace_event.git' + '@' + 'dd463ea9e2c430de2b9e53dea57a77b4c3ac9b30',
 
   'src/third_party/dom_distiller_js/dist':
-    Var('chromium_git') + '/external/github.com/chromium/dom-distiller-dist.git' + '@' + '05bd5115e2b02ab110f4b71c0d3d589fdc3c7d38',
+    Var('chromium_git') + '/external/github.com/chromium/dom-distiller-dist.git' + '@' + 'cfd68cb97b3050fd35f53c5231128f723d6dae08',
 
   'src/third_party/catapult':
     Var('chromium_git') + '/external/github.com/catapult-project/catapult.git' + '@' +
@@ -295,7 +299,7 @@ deps = {
     Var('chromium_git') + '/external/github.com/cisco/openh264' + '@' + '0fd88df93c5dcaf858c57eb7892bd27763f0f0ac',
 
   'src/third_party/re2/src':
-    Var('chromium_git') + '/external/github.com/google/re2.git' + '@' + 'dba3349aba83b5588e85e5ecf2b56c97f2d259b7',
+    Var('chromium_git') + '/external/github.com/google/re2.git' + '@' + 'db20d46c05900a12539225fe800dd860b14e0061',
 
   # Used for building libFuzzers (only supports Linux).
   'src/third_party/libFuzzer/src':
@@ -303,6 +307,9 @@ deps = {
 
   'src/third_party/visualmetrics/src':
     Var('chromium_git') + '/external/github.com/WPO-Foundation/visualmetrics.git' + '@' +  '1edde9d2fe203229c895b648fdec355917200ad6',
+
+  'src/third_party/scan-build/src':
+    Var('chromium_git') + '/chromium/llvm-project/cfe/tools/scan-build.git' + '@' +  Var('scanbuild_revision'),
 }
 
 
@@ -347,7 +354,7 @@ deps_os = {
   },
   'ios': {
     'src/ios/third_party/earl_grey/src':
-      Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + '625b2b7cdaf9371ae2b001d6cdc23b1790d41cd8',
+      Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + 'c5c89d810a8e76547ed0506e85c1a80f3a10bc48',
 
     'src/ios/third_party/fishhook/src':
       Var('chromium_git') + '/external/github.com/facebook/fishhook.git' + '@' + 'd172d5247aa590c25d0b1885448bae76036ea22c',
@@ -356,10 +363,10 @@ deps_os = {
       Var('chromium_git') + '/external/github.com/swisspol/GCDWebServer.git' + '@' + '43555c66627f6ed44817855a0f6d465f559d30e0',
 
     'src/ios/third_party/material_components_ios/src':
-      Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '43c7f9494f171baaf08d75cf3646eeb98a03252f',
+      Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '08c090470652228cdaf05eceee44d8b2a424c4ed',
 
     'src/ios/third_party/material_font_disk_loader_ios/src':
-      Var('chromium_git') + '/external/github.com/material-foundation/material-font-disk-loader-ios.git' + '@' + '93acc021e3034898716028822cb802a3a816be7e',
+      Var('chromium_git') + '/external/github.com/material-foundation/material-font-disk-loader-ios.git' + '@' + '8e30188777b016182658fbaa0a4a020a48183224',
 
     'src/ios/third_party/material_roboto_font_loader_ios/src':
       Var('chromium_git') + '/external/github.com/material-foundation/material-roboto-font-loader-ios.git' + '@' + '2e25f314512e71d3413315a20e62a4d0126671f5',
@@ -397,18 +404,14 @@ deps_os = {
 
     # For Linux and Chromium OS.
     'src/third_party/cros_system_api':
-      Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'eb397c32a942a2839b2aa3638b6c0da5c3bee146',
-
-    # Note that this is different from Android's freetype repo.
-    'src/third_party/freetype2/src':
-      Var('chromium_git') + '/chromium/src/third_party/freetype2.git' + '@' + 'fc1532a7c4c592f24a4c1a0261d2845524ca5cff',
+      Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'c08ae470458b06cf23c1907817490d2fc917ac29',
 
     'src/third_party/freetype-android/src':
       Var('chromium_git') + '/chromium/src/third_party/freetype2.git' + '@' + Var('freetype_android_revision'),
 
     # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
     'src/third_party/chromite':
-      Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '267bf6a6bbd075136ddde7f74c320c7acc073314',
+      Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '59fb3e8e603b6b2b781da58f9408dde5c53fbbd6',
 
     # Dependency of chromite.git and skia.
     'src/third_party/pyelftools':
@@ -423,7 +426,7 @@ deps_os = {
 
     # Graphics buffer allocator for Chrome OS.
     'src/third_party/minigbm/src':
-      Var('chromium_git') + '/chromiumos/platform/minigbm.git' + '@' + '682d73bd00595a493bd446c5274bef08bd17c096',
+      Var('chromium_git') + '/chromiumos/platform/minigbm.git' + '@' + '878fed4088662309dc57689650fa4648cc4b480b',
 
     # Userspace interface to kernel DRM services.
     'src/third_party/libdrm/src':
@@ -460,9 +463,6 @@ deps_os = {
     'src/third_party/android_tools':
       Var('chromium_git') + '/android_tools.git' + '@' + 'b43a6a289a7588b1769814f04dd6c7d7176974cc',
 
-    'src/third_party/apache-mime4j':
-      Var('chromium_git') + '/chromium/deps/apache-mime4j.git' + '@' + '28cb1108bff4b6cf0a2e86ff58b3d025934ebe3a',
-
     'src/third_party/apache-portable-runtime/src':
       Var('chromium_git') + '/external/apache-portable-runtime.git' + '@' + 'c76a8c4277e09a82eaa229e35246edea1ee0a6a1',
 
@@ -478,12 +478,6 @@ deps_os = {
     'src/third_party/elfutils/src':
       Var('chromium_git') + '/external/elfutils.git' + '@' + '249673729a7e5dbd5de4f3760bdcaa3d23d154d7',
 
-    'src/third_party/httpcomponents-client':
-      Var('chromium_git') + '/chromium/deps/httpcomponents-client.git' + '@' + '285c4dafc5de0e853fa845dce5773e223219601c',
-
-    'src/third_party/httpcomponents-core':
-      Var('chromium_git') + '/chromium/deps/httpcomponents-core.git' + '@' + '9f7180a96f8fa5cab23f793c14b413356d419e62',
-
     'src/third_party/jsr-305/src':
       Var('chromium_git') + '/external/jsr-305.git' + '@' + '642c508235471f7220af6d5df2d3210e3bfc0919',
 
@@ -494,7 +488,7 @@ deps_os = {
       Var('chromium_git') + '/external/mockito/mockito.git' + '@' + 'de83ad4598ad4cf5ea53c69a8a8053780b04b850',
 
     'src/third_party/netty-tcnative/src':
-      Var('chromium_git') + '/external/netty-tcnative.git' + '@' + 'dba66573998801a08ea41b605b1629857ae02a6b',
+      Var('chromium_git') + '/external/netty-tcnative.git' + '@' + '2e0f9503f3d4efe6fc3f70077f22471e83ffb446',
 
     'src/third_party/netty4/src':
       Var('chromium_git') + '/external/netty4.git' + '@' + 'e0f26303b4ce635365be19414d0ac81f2ef6ba3c',
@@ -515,7 +509,7 @@ deps_os = {
       Var('chromium_git') + '/external/github.com/kennethreitz/requests.git' + '@' + 'f172b30356d821d180fa4ecfa3e71c7274a32de4',
 
     'src/third_party/custom_tabs_client/src':
-      Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + 'f68fb050a78be781cbaacb7a34a96ca902dda0f3',
+      Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + '3c95e2dda9b292653ff13454f093e5ff136814d2',
 
     'src/third_party/gvr-android-sdk/src':
       Var('chromium_git') + '/external/github.com/googlevr/gvr-android-sdk.git' + '@' + '8d1395957283ee13ebe2bc672ba24e5ca4ec343f',
@@ -772,6 +766,38 @@ hooks = [
     ],
   },
   {
+    'name': 'xstream',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chromium-robolectric',
+               '-l', 'third_party/xstream'
+    ],
+  },
+  # Downloads the VR Services and Daydream Home APKs used for VR testing on
+  # Android.
+  {
+    'name': 'vr_services_apks',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chrome-vr-test-apks/vr_services',
+               '-l', 'third_party/gvr-android-sdk/test-apks/vr_services'
+    ],
+  },
+  {
+    'name': 'daydream_home_apks',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chrome-vr-test-apks/daydream_home',
+               '-l', 'third_party/gvr-android-sdk/test-apks/daydream_home'
+    ],
+  },
+  {
     # Downloads the current stable linux sysroot to build/linux/ if needed.
     # This sysroot updates at about the same rate that the chrome build deps
     # change. This script is a no-op except for linux users who are doing
@@ -1006,19 +1032,6 @@ hooks = [
                '--copy-dia-binaries',
     ],
   },
-  # TODO(pmonette): Move include files out of binaries folder.
-  {
-    'name': 'kasko',
-    'pattern': '.',
-    'action': ['python',
-               'src/build/get_syzygy_binaries.py',
-               '--output-dir=src/third_party/kasko/binaries',
-               '--revision=266a18d9209be5ca5c5dcd0620942b82a2d238f3',
-               '--resource=kasko.zip',
-               '--resource=kasko_symbols.zip',
-               '--overwrite',
-    ],
-  },
   {
     'name': 'apache_win32',
     'pattern': '\\.sha1',
@@ -1144,4 +1157,6 @@ recursedeps = [
   'src/third_party/android_tools',
   # ANGLE manages DEPS that it also owns the build files for, such as dEQP.
   ("src/third_party/angle", "DEPS.chromium"),
+  # SwiftShader manages DEPS that it also owns the build files for, such as Subzero.
+  ("src/third_party/swiftshader", "DEPS"),
 ]

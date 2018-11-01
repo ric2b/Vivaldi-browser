@@ -22,15 +22,21 @@
 #include "content/public/browser/web_contents.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "ui/aura/mus/mus_util.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/property_converter.h"
+#include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
+#include "ui/views/background.h"
 #include "ui/views/mus/mus_client.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
+#include "ui/wm/core/window_util.h"
 
 namespace {
 
@@ -60,24 +66,39 @@ class ImmersiveRevealedLockAsh : public ImmersiveRevealedLock {
   DISALLOW_COPY_AND_ASSIGN(ImmersiveRevealedLockAsh);
 };
 
-// TODO(sky): remove this, should instead create a layer that is clone of
-// existing layers. http://crbug.com/640378.
-class DelegatingPaintView : public views::View {
+// View responsible for mirroring the content of the TopContainer. This is done
+// by way of mirroring the actual layers.
+class TopContainerMirrorView : public views::View {
  public:
-  explicit DelegatingPaintView(views::View* view) : view_(view) {}
-
-  ~DelegatingPaintView() override {}
+  explicit TopContainerMirrorView(views::View* view) : view_(view) {
+    DCHECK(view_->layer());
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+    // At this point we have no size. Wait for the first resize before we
+    // create the mirrored layer.
+  }
+  ~TopContainerMirrorView() override {}
 
   // views::View:
-  void PaintChildren(const ui::PaintContext& context) override {
-    view_->Paint(ui::PaintContext(
-        context, ui::PaintContext::CLONE_WITHOUT_INVALIDATION));
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override {
+    if (mirrored_layer_tree_owner_ &&
+        mirrored_layer_tree_owner_->root()->size() == size()) {
+      return;
+    }
+
+    mirrored_layer_tree_owner_.reset();
+    DCHECK(view_->layer());  // SetPaintToLayer() should have been called.
+    mirrored_layer_tree_owner_ = wm::MirrorLayers(view_, false);
+    mirrored_layer_tree_owner_->root()->SetBounds(gfx::Rect(size()));
+    layer()->Add(mirrored_layer_tree_owner_->root());
   }
 
  private:
   views::View* view_;
 
-  DISALLOW_COPY_AND_ASSIGN(DelegatingPaintView);
+  std::unique_ptr<ui::LayerTreeOwner> mirrored_layer_tree_owner_;
+
+  DISALLOW_COPY_AND_ASSIGN(TopContainerMirrorView);
 };
 
 }  // namespace
@@ -145,6 +166,10 @@ void ImmersiveModeControllerAsh::OnFindBarVisibleBoundsChanged(
   find_bar_visible_bounds_in_screen_ = new_visible_bounds_in_screen;
 }
 
+views::Widget* ImmersiveModeControllerAsh::GetRevealWidget() {
+  return mash_reveal_widget_.get();
+}
+
 void ImmersiveModeControllerAsh::EnableWindowObservers(bool enable) {
   if (observers_enabled_ == enable)
     return;
@@ -154,7 +179,9 @@ void ImmersiveModeControllerAsh::EnableWindowObservers(bool enable) {
                                                    ->exclusive_access_manager()
                                                    ->fullscreen_controller());
   if (enable) {
-    if (chrome::IsRunningInMash()) {
+    if (ash_util::IsRunningInMash()) {
+      browser_view_->GetWidget()->GetNativeView()->GetRootWindow()->AddObserver(
+          this);
       // TODO: http://crbug.com/640381.
       NOTIMPLEMENTED();
     } else {
@@ -162,7 +189,11 @@ void ImmersiveModeControllerAsh::EnableWindowObservers(bool enable) {
     }
     registrar_.Add(this, chrome::NOTIFICATION_FULLSCREEN_CHANGED, source);
   } else {
-    if (chrome::IsRunningInMash()) {
+    if (ash_util::IsRunningInMash()) {
+      browser_view_->GetWidget()
+          ->GetNativeView()
+          ->GetRootWindow()
+          ->RemoveObserver(this);
       // TODO: http://crbug.com/640381.
       NOTIMPLEMENTED();
     } else {
@@ -182,7 +213,7 @@ void ImmersiveModeControllerAsh::LayoutBrowserRootView() {
 }
 
 void ImmersiveModeControllerAsh::CreateMashRevealWidget() {
-  if (!chrome::IsRunningInMash())
+  if (!ash_util::IsRunningInMash())
     return;
 
   DCHECK(!mash_reveal_widget_);
@@ -192,11 +223,18 @@ void ImmersiveModeControllerAsh::CreateMashRevealWidget() {
       [ui::mojom::WindowManager::kRenderParentTitleArea_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<aura::PropertyConverter::PrimitiveType>(true));
+  init_params.mus_properties
+      [ui::mojom::WindowManager::kWindowIgnoredByShelf_InitProperty] =
+      mojo::ConvertTo<std::vector<uint8_t>>(true);
   init_params.name = "ChromeImmersiveRevealWindow";
+  // We want events to fall through to the real views.
   init_params.accept_events = false;
   init_params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   init_params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
-  init_params.parent = native_window_;
+  init_params.parent = native_window_->GetRootWindow();
+  // The widget needs to be translucent so the frame decorations drawn by the
+  // window manager are visible.
+  init_params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   const gfx::Rect& top_container_bounds =
       browser_view_->top_container()->bounds();
   init_params.bounds =
@@ -204,7 +242,7 @@ void ImmersiveModeControllerAsh::CreateMashRevealWidget() {
                 top_container_bounds.height());
   mash_reveal_widget_->Init(init_params);
   mash_reveal_widget_->SetContentsView(
-      new DelegatingPaintView(browser_view_->top_container()));
+      new TopContainerMirrorView(browser_view_->top_container()));
   mash_reveal_widget_->StackAtTop();
   mash_reveal_widget_->Show();
 }
@@ -217,7 +255,7 @@ void ImmersiveModeControllerAsh::OnImmersiveRevealStarted() {
   DestroyMashRevealWidget();
 
   visible_fraction_ = 0;
-  browser_view_->top_container()->SetPaintToLayer(true);
+  browser_view_->top_container()->SetPaintToLayer();
   browser_view_->top_container()->layer()->SetFillsBoundsOpaquely(false);
   LayoutBrowserRootView();
   CreateMashRevealWidget();
@@ -228,26 +266,30 @@ void ImmersiveModeControllerAsh::OnImmersiveRevealStarted() {
 void ImmersiveModeControllerAsh::OnImmersiveRevealEnded() {
   DestroyMashRevealWidget();
   visible_fraction_ = 0;
-  browser_view_->top_container()->SetPaintToLayer(false);
+  browser_view_->top_container()->DestroyLayer();
   LayoutBrowserRootView();
+  for (Observer& observer : observers_)
+    observer.OnImmersiveRevealEnded();
 }
 
 void ImmersiveModeControllerAsh::OnImmersiveFullscreenExited() {
   DestroyMashRevealWidget();
-  browser_view_->top_container()->SetPaintToLayer(false);
+  browser_view_->top_container()->DestroyLayer();
   LayoutBrowserRootView();
 }
 
 void ImmersiveModeControllerAsh::SetVisibleFraction(double visible_fraction) {
-  if (visible_fraction_ != visible_fraction) {
-    visible_fraction_ = visible_fraction;
-    browser_view_->Layout();
+  if (visible_fraction_ == visible_fraction)
+    return;
 
-    if (mash_reveal_widget_) {
-      gfx::Rect bounds = mash_reveal_widget_->GetNativeWindow()->bounds();
-      bounds.set_y(visible_fraction * bounds.height() - bounds.height());
-      mash_reveal_widget_->SetBounds(bounds);
-    }
+  visible_fraction_ = visible_fraction;
+  browser_view_->Layout();
+  browser_view_->frame()->GetFrameView()->UpdateClientArea();
+
+  if (mash_reveal_widget_) {
+    gfx::Rect bounds = mash_reveal_widget_->GetNativeWindow()->bounds();
+    bounds.set_y(visible_fraction * bounds.height() - bounds.height());
+    mash_reveal_widget_->SetBounds(bounds);
   }
 }
 
@@ -291,7 +333,7 @@ void ImmersiveModeControllerAsh::Observe(
   if (!controller_->IsEnabled())
     return;
 
-  if (chrome::IsRunningInMash()) {
+  if (ash_util::IsRunningInMash()) {
     // TODO: http://crbug.com/640384.
     NOTIMPLEMENTED();
     return;
@@ -303,4 +345,16 @@ void ImmersiveModeControllerAsh::Observe(
   ash::wm::GetWindowState(native_window_)
       ->set_hide_shelf_when_fullscreen(in_tab_fullscreen);
   ash::Shell::GetInstance()->UpdateShelfVisibility();
+}
+
+void ImmersiveModeControllerAsh::OnWindowPropertyChanged(aura::Window* window,
+                                                         const void* key,
+                                                         intptr_t old) {
+  // In mash the window manager may move us out of immersive mode by changing
+  // the show state. When this happens notify the controller.
+  DCHECK(ash_util::IsRunningInMash());
+  if (key == aura::client::kShowStateKey &&
+      !browser_view_->GetWidget()->IsFullscreen()) {
+    SetEnabled(false);
+  }
 }

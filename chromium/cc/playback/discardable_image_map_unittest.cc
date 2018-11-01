@@ -82,10 +82,10 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectTest) {
     for (int x = 0; x < 4; ++x) {
       if ((x + y) & 1) {
         discardable_image[y][x] = CreateDiscardableImage(gfx::Size(500, 500));
-        SkPaint paint;
+        PaintFlags flags;
         content_layer_client.add_draw_image(
             discardable_image[y][x], gfx::Point(x * 512 + 6, y * 512 + 6),
-            paint);
+            flags);
       }
     }
   }
@@ -111,6 +111,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectTest) {
                                                                 << y;
         EXPECT_EQ(gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500),
                   images[0].image_rect);
+        EXPECT_EQ(images[0].image_rect,
+                  image_map.GetRectForImage(images[0].image->uniqueID()));
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }
@@ -121,16 +123,28 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectTest) {
   std::vector<PositionScaleDrawImage> images =
       GetDiscardableImagesInRect(image_map, gfx::Rect(512, 512, 2048, 2048));
   EXPECT_EQ(4u, images.size());
+
   EXPECT_TRUE(images[0].image == discardable_image[1][2]);
   EXPECT_EQ(gfx::Rect(2 * 512 + 6, 512 + 6, 500, 500), images[0].image_rect);
+  EXPECT_EQ(images[0].image_rect,
+            image_map.GetRectForImage(images[0].image->uniqueID()));
+
   EXPECT_TRUE(images[1].image == discardable_image[2][1]);
   EXPECT_EQ(gfx::Rect(512 + 6, 2 * 512 + 6, 500, 500), images[1].image_rect);
+  EXPECT_EQ(images[1].image_rect,
+            image_map.GetRectForImage(images[1].image->uniqueID()));
+
   EXPECT_TRUE(images[2].image == discardable_image[2][3]);
   EXPECT_EQ(gfx::Rect(3 * 512 + 6, 2 * 512 + 6, 500, 500),
             images[2].image_rect);
+  EXPECT_EQ(images[2].image_rect,
+            image_map.GetRectForImage(images[2].image->uniqueID()));
+
   EXPECT_TRUE(images[3].image == discardable_image[3][2]);
   EXPECT_EQ(gfx::Rect(2 * 512 + 6, 3 * 512 + 6, 500, 500),
             images[3].image_rect);
+  EXPECT_EQ(images[3].image_rect,
+            image_map.GetRectForImage(images[3].image->uniqueID()));
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
@@ -155,10 +169,10 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
     for (int x = 0; x < 4; ++x) {
       if ((x + y) & 1) {
         discardable_image[y][x] = CreateDiscardableImage(gfx::Size(500, 500));
-        SkPaint paint;
+        PaintFlags flags;
         content_layer_client.add_draw_image(
             discardable_image[y][x],
-            gfx::Point(1024 + x * 512 + 6, y * 512 + 6), paint);
+            gfx::Point(1024 + x * 512 + 6, y * 512 + 6), flags);
       }
     }
   }
@@ -184,6 +198,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
                                                                 << y;
         EXPECT_EQ(gfx::Rect(1024 + x * 512 + 6, y * 512 + 6, 500, 500),
                   images[0].image_rect);
+        EXPECT_EQ(images[0].image_rect,
+                  image_map.GetRectForImage(images[0].image->uniqueID()));
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }
@@ -194,18 +210,30 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
     std::vector<PositionScaleDrawImage> images = GetDiscardableImagesInRect(
         image_map, gfx::Rect(1024 + 512, 512, 2048, 2048));
     EXPECT_EQ(4u, images.size());
+
     EXPECT_TRUE(images[0].image == discardable_image[1][2]);
     EXPECT_EQ(gfx::Rect(1024 + 2 * 512 + 6, 512 + 6, 500, 500),
               images[0].image_rect);
+    EXPECT_EQ(images[0].image_rect,
+              image_map.GetRectForImage(images[0].image->uniqueID()));
+
     EXPECT_TRUE(images[1].image == discardable_image[2][1]);
     EXPECT_EQ(gfx::Rect(1024 + 512 + 6, 2 * 512 + 6, 500, 500),
               images[1].image_rect);
+    EXPECT_EQ(images[1].image_rect,
+              image_map.GetRectForImage(images[1].image->uniqueID()));
+
     EXPECT_TRUE(images[2].image == discardable_image[2][3]);
     EXPECT_EQ(gfx::Rect(1024 + 3 * 512 + 6, 2 * 512 + 6, 500, 500),
               images[2].image_rect);
+    EXPECT_EQ(images[2].image_rect,
+              image_map.GetRectForImage(images[2].image->uniqueID()));
+
     EXPECT_TRUE(images[3].image == discardable_image[3][2]);
     EXPECT_EQ(gfx::Rect(1024 + 2 * 512 + 6, 3 * 512 + 6, 500, 500),
               images[3].image_rect);
+    EXPECT_EQ(images[3].image_rect,
+              image_map.GetRectForImage(images[3].image->uniqueID()));
   }
 
   // Non intersecting rects
@@ -229,6 +257,12 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectNonZeroLayer) {
         image_map, gfx::Rect(3500, 1100, 1000, 1000));
     EXPECT_EQ(0u, images.size());
   }
+
+  // Image not present in the list.
+  {
+    sk_sp<SkImage> image = CreateDiscardableImage(gfx::Size(500, 500));
+    EXPECT_EQ(gfx::Rect(), image_map.GetRectForImage(image->uniqueID()));
+  }
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectOnePixelQuery) {
@@ -251,10 +285,10 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectOnePixelQuery) {
     for (int x = 0; x < 4; ++x) {
       if ((x + y) & 1) {
         discardable_image[y][x] = CreateDiscardableImage(gfx::Size(500, 500));
-        SkPaint paint;
+        PaintFlags flags;
         content_layer_client.add_draw_image(
             discardable_image[y][x], gfx::Point(x * 512 + 6, y * 512 + 6),
-            paint);
+            flags);
       }
     }
   }
@@ -280,6 +314,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectOnePixelQuery) {
                                                                 << y;
         EXPECT_EQ(gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500),
                   images[0].image_rect);
+        EXPECT_EQ(images[0].image_rect,
+                  image_map.GetRectForImage(images[0].image->uniqueID()));
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }
@@ -294,9 +330,9 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMassiveImage) {
 
   sk_sp<SkImage> discardable_image =
       CreateDiscardableImage(gfx::Size(1 << 25, 1 << 25));
-  SkPaint paint;
+  PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image, gfx::Point(0, 0),
-                                      paint);
+                                      flags);
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList(
@@ -313,6 +349,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMassiveImage) {
   EXPECT_EQ(1u, images.size());
   EXPECT_TRUE(images[0].image == discardable_image);
   EXPECT_EQ(gfx::Rect(0, 0, 2048, 2048), images[0].image_rect);
+  EXPECT_EQ(images[0].image_rect,
+            image_map.GetRectForImage(images[0].image->uniqueID()));
 }
 
 TEST_F(DiscardableImageMapTest, PaintDestroyedWhileImageIsDrawn) {
@@ -349,9 +387,9 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImage) {
   int dimension = std::numeric_limits<int>::max();
   sk_sp<SkImage> discardable_image =
       CreateDiscardableImage(gfx::Size(dimension, dimension));
-  SkPaint paint;
+  PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image, gfx::Point(42, 42),
-                                      paint);
+                                      flags);
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList(
@@ -368,6 +406,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImage) {
   EXPECT_EQ(1u, images.size());
   EXPECT_TRUE(images[0].image == discardable_image);
   EXPECT_EQ(gfx::Rect(42, 42, 2006, 2006), images[0].image_rect);
+  EXPECT_EQ(images[0].image_rect,
+            image_map.GetRectForImage(images[0].image->uniqueID()));
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImageMaxLayer) {
@@ -384,13 +424,13 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImageMaxLayer) {
 
   sk_sp<SkImage> discardable_image =
       CreateDiscardableImage(gfx::Size(dimension, dimension));
-  SkPaint paint;
+  PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image, gfx::Point(0, 0),
-                                      paint);
+                                      flags);
   content_layer_client.add_draw_image(discardable_image, gfx::Point(10000, 0),
-                                      paint);
+                                      flags);
   content_layer_client.add_draw_image(discardable_image,
-                                      gfx::Point(-10000, 500), paint);
+                                      gfx::Point(-10000, 500), flags);
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList(
@@ -423,6 +463,9 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInRectMaxImageMaxLayer) {
   EXPECT_EQ(gfx::Rect(0, 500, expected10k, dimension - 500),
             images[1].image_rect);
   EXPECT_EQ(gfx::Rect(0, 0, dimension, dimension), images[0].image_rect);
+
+  EXPECT_EQ(gfx::Rect(0, 0, dimension, dimension),
+            image_map.GetRectForImage(discardable_image->uniqueID()));
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesRectInBounds) {
@@ -435,13 +478,13 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesRectInBounds) {
   sk_sp<SkImage> long_discardable_image =
       CreateDiscardableImage(gfx::Size(10000, 100));
 
-  SkPaint paint;
+  PaintFlags flags;
   content_layer_client.add_draw_image(discardable_image, gfx::Point(-10, -11),
-                                      paint);
+                                      flags);
   content_layer_client.add_draw_image(discardable_image, gfx::Point(950, 951),
-                                      paint);
+                                      flags);
   content_layer_client.add_draw_image(long_discardable_image,
-                                      gfx::Point(-100, 500), paint);
+                                      gfx::Point(-100, 500), flags);
 
   scoped_refptr<DisplayItemList> display_list =
       content_layer_client.PaintContentsToDisplayList(
@@ -465,6 +508,15 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesRectInBounds) {
   images = GetDiscardableImagesInRect(image_map, gfx::Rect(0, 500, 1, 1));
   EXPECT_EQ(1u, images.size());
   EXPECT_EQ(gfx::Rect(0, 500, 1000, 100), images[0].image_rect);
+
+  gfx::Rect discardable_image_rect;
+  discardable_image_rect.Union(gfx::Rect(0, 0, 90, 89));
+  discardable_image_rect.Union(gfx::Rect(950, 951, 50, 49));
+  EXPECT_EQ(discardable_image_rect,
+            image_map.GetRectForImage(discardable_image->uniqueID()));
+
+  EXPECT_EQ(gfx::Rect(0, 500, 1000, 100),
+            image_map.GetRectForImage(long_discardable_image->uniqueID()));
 }
 
 TEST_F(DiscardableImageMapTest, GetDiscardableImagesInShader) {
@@ -483,16 +535,22 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInShader) {
   // | x |   | x |   |
   // |---|---|---|---|
   sk_sp<SkImage> discardable_image[4][4];
+
+  // Skia doesn't allow shader instantiation with non-invertible local
+  // transforms, so we can't let the scale drop all the way to 0.
+  static constexpr float kMinScale = 0.1f;
+
   for (int y = 0; y < 4; ++y) {
     for (int x = 0; x < 4; ++x) {
       if ((x + y) & 1) {
         discardable_image[y][x] = CreateDiscardableImage(gfx::Size(500, 500));
-        SkMatrix scale = SkMatrix::MakeScale(x * 0.5f, y * 0.5f);
-        SkPaint paint;
-        paint.setShader(discardable_image[y][x]->makeShader(
+        SkMatrix scale = SkMatrix::MakeScale(std::max(x * 0.5f, kMinScale),
+                                             std::max(y * 0.5f, kMinScale));
+        PaintFlags flags;
+        flags.setShader(discardable_image[y][x]->makeShader(
             SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &scale));
         content_layer_client.add_draw_rect(
-            gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500), paint);
+            gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500), flags);
       }
     }
   }
@@ -518,8 +576,8 @@ TEST_F(DiscardableImageMapTest, GetDiscardableImagesInShader) {
                                                                 << y;
         EXPECT_EQ(gfx::Rect(x * 512 + 6, y * 512 + 6, 500, 500),
                   images[0].image_rect);
-        EXPECT_EQ(x * 0.5f, images[0].scale.fWidth);
-        EXPECT_EQ(y * 0.5f, images[0].scale.fHeight);
+        EXPECT_EQ(std::max(x * 0.5f, kMinScale), images[0].scale.fWidth);
+        EXPECT_EQ(std::max(y * 0.5f, kMinScale), images[0].scale.fHeight);
       } else {
         EXPECT_EQ(0u, images.size()) << x << " " << y;
       }

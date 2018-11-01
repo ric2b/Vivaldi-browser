@@ -58,9 +58,10 @@
 #include "public/web/WebPlugin.h"
 #include "public/web/WebRange.h"
 #include "public/web/WebWidgetClient.h"
+#include "web/AnimationWorkletProxyClientImpl.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/CompositorMutatorImpl.h"
-#include "web/CompositorProxyClientImpl.h"
+#include "web/CompositorWorkerProxyClientImpl.h"
 #include "web/ContextMenuAllowedScope.h"
 #include "web/InspectorOverlay.h"
 #include "web/PageOverlay.h"
@@ -196,9 +197,11 @@ void WebFrameWidgetImpl::sendResizeEventAndRepaint() {
 
 void WebFrameWidgetImpl::resizeVisualViewport(const WebSize& newSize) {
   // TODO(alexmos, kenrb): resizing behavior such as this should be changed
-  // to use Page messages.  https://crbug.com/599688.
-  page()->frameHost().visualViewport().setSize(newSize);
-  page()->frameHost().visualViewport().clampToBoundaries();
+  // to use Page messages.  This uses the visual viewport size to set size on
+  // both the WebViewImpl size and the Page's VisualViewport. If there are
+  // multiple OOPIFs on a page, this will currently be set redundantly by
+  // each of them. See https://crbug.com/599688.
+  view()->resize(newSize);
 
   view()->didUpdateFullscreenSize();
 }
@@ -225,6 +228,11 @@ void WebFrameWidgetImpl::didExitFullscreen() {
   view()->didExitFullscreen();
 }
 
+void WebFrameWidgetImpl::setSuppressFrameRequestsWorkaroundFor704763Only(
+    bool suppressFrameRequests) {
+  page()->animator().setSuppressFrameRequestsWorkaroundFor704763Only(
+      suppressFrameRequests);
+}
 void WebFrameWidgetImpl::beginFrame(double lastFrameTimeMonotonic) {
   TRACE_EVENT1("blink", "WebFrameWidgetImpl::beginFrame", "frameTime",
                lastFrameTimeMonotonic);
@@ -273,7 +281,7 @@ void WebFrameWidgetImpl::updateLayerTreeDeviceScaleFactor() {
   DCHECK(page());
   DCHECK(m_layerTreeView);
 
-  float deviceScaleFactor = page()->deviceScaleFactor();
+  float deviceScaleFactor = page()->deviceScaleFactorDeprecated();
   m_layerTreeView->setDeviceScaleFactor(deviceScaleFactor);
 }
 
@@ -308,7 +316,8 @@ void WebFrameWidgetImpl::themeChanged() {
 const WebInputEvent* WebFrameWidgetImpl::m_currentInputEvent = nullptr;
 
 WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
-    const WebInputEvent& inputEvent) {
+    const WebCoalescedInputEvent& coalescedEvent) {
+  const WebInputEvent& inputEvent = coalescedEvent.event();
   TRACE_EVENT1("input", "WebFrameWidgetImpl::handleInputEvent", "type",
                WebInputEvent::GetName(inputEvent.type()));
 
@@ -334,6 +343,12 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
 
   AutoReset<const WebInputEvent*> currentEventChange(&m_currentInputEvent,
                                                      &inputEvent);
+
+  if (m_client->isPointerLocked() &&
+      WebInputEvent::isMouseEventType(inputEvent.type())) {
+    pointerLockMouseEvent(inputEvent);
+    return WebInputEventResult::HandledSystem;
+  }
 
   if (m_mouseCaptureNode &&
       WebInputEvent::isMouseEventType(inputEvent.type())) {
@@ -371,16 +386,16 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
         NOTREACHED();
     }
 
-    node->dispatchMouseEvent(
-        PlatformMouseEventBuilder(
-            m_localRoot->frameView(),
-            static_cast<const WebMouseEvent&>(inputEvent)),
-        eventType, static_cast<const WebMouseEvent&>(inputEvent).clickCount);
+    WebMouseEvent transformedEvent =
+        TransformWebMouseEvent(m_localRoot->frameView(),
+                               static_cast<const WebMouseEvent&>(inputEvent));
+    node->dispatchMouseEvent(transformedEvent, eventType,
+                             transformedEvent.clickCount);
     return WebInputEventResult::HandledSystem;
   }
 
-  return PageWidgetDelegate::handleInputEvent(
-      *this, WebCoalescedInputEvent(inputEvent), m_localRoot->frame());
+  return PageWidgetDelegate::handleInputEvent(*this, coalescedEvent,
+                                              m_localRoot->frame());
 }
 
 void WebFrameWidgetImpl::setCursorVisibilityState(bool isVisible) {
@@ -416,14 +431,25 @@ void WebFrameWidgetImpl::scheduleAnimation() {
     m_client->scheduleAnimation();
 }
 
-CompositorProxyClient* WebFrameWidgetImpl::createCompositorProxyClient() {
+CompositorMutatorImpl& WebFrameWidgetImpl::mutator() {
   if (!m_mutator) {
     std::unique_ptr<CompositorMutatorClient> mutatorClient =
         CompositorMutatorImpl::createClient();
     m_mutator = static_cast<CompositorMutatorImpl*>(mutatorClient->mutator());
     m_layerTreeView->setMutatorClient(std::move(mutatorClient));
   }
-  return new CompositorProxyClientImpl(m_mutator);
+
+  return *m_mutator;
+}
+
+CompositorWorkerProxyClient*
+WebFrameWidgetImpl::createCompositorWorkerProxyClient() {
+  return new CompositorWorkerProxyClientImpl(&mutator());
+}
+
+AnimationWorkletProxyClient*
+WebFrameWidgetImpl::createAnimationWorkletProxyClient() {
+  return new AnimationWorkletProxyClientImpl(&mutator());
 }
 
 void WebFrameWidgetImpl::applyViewportDeltas(
@@ -447,7 +473,10 @@ void WebFrameWidgetImpl::setFocus(bool enable) {
     LocalFrame* focusedFrame = page()->focusController().focusedFrame();
     if (focusedFrame) {
       Element* element = focusedFrame->document()->focusedElement();
-      if (element && focusedFrame->selection().selection().isNone()) {
+      if (element &&
+          focusedFrame->selection()
+              .computeVisibleSelectionInDOMTreeDeprecated()
+              .isNone()) {
         // If the selection was cleared while the WebView was not
         // focused, then the focus element shows with a focus ring but
         // no caret and does respond to keyboard inputs.
@@ -526,7 +555,7 @@ bool WebFrameWidgetImpl::selectionBounds(WebRect& anchor,
     return false;
 
   FrameSelection& selection = localFrame->selection();
-  if (selection.isNone())
+  if (selection.computeVisibleSelectionInDOMTreeDeprecated().isNone())
     return false;
 
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
@@ -536,11 +565,12 @@ bool WebFrameWidgetImpl::selectionBounds(WebRect& anchor,
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
       localFrame->document()->lifecycle());
 
-  if (selection.isCaret()) {
+  if (selection.computeVisibleSelectionInDOMTreeDeprecated().isCaret()) {
     anchor = focus = selection.absoluteCaretBounds();
   } else {
     const EphemeralRange selectedRange =
-        selection.selection().toNormalizedEphemeralRange();
+        selection.computeVisibleSelectionInDOMTree()
+            .toNormalizedEphemeralRange();
     if (selectedRange.isNull())
       return false;
     anchor = localFrame->editor().firstRectForRange(
@@ -557,7 +587,7 @@ bool WebFrameWidgetImpl::selectionBounds(WebRect& anchor,
   anchor = scaledAnchor;
   focus = scaledFocus;
 
-  if (!selection.selection().isBaseFirst())
+  if (!selection.computeVisibleSelectionInDOMTree().isBaseFirst())
     std::swap(anchor, focus);
   return true;
 }
@@ -575,19 +605,29 @@ bool WebFrameWidgetImpl::selectionTextDirection(WebTextDirection& start,
   frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
   FrameSelection& selection = frame->selection();
-  if (selection.selection().toNormalizedEphemeralRange().isNull())
+  if (selection.computeVisibleSelectionInDOMTree()
+          .toNormalizedEphemeralRange()
+          .isNull())
     return false;
-  start =
-      toWebTextDirection(primaryDirectionOf(*selection.start().anchorNode()));
-  end = toWebTextDirection(primaryDirectionOf(*selection.end().anchorNode()));
+  start = toWebTextDirection(
+      primaryDirectionOf(*selection.computeVisibleSelectionInDOMTreeDeprecated()
+                              .start()
+                              .anchorNode()));
+  end = toWebTextDirection(
+      primaryDirectionOf(*selection.computeVisibleSelectionInDOMTreeDeprecated()
+                              .end()
+                              .anchorNode()));
   return true;
 }
 
 // TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
 // code needs to be refactored  (http://crbug.com/629721).
 bool WebFrameWidgetImpl::isSelectionAnchorFirst() const {
-  if (const LocalFrame* frame = focusedLocalFrameInWidget())
-    return frame->selection().selection().isBaseFirst();
+  if (const LocalFrame* frame = focusedLocalFrameInWidget()) {
+    return frame->selection()
+        .computeVisibleSelectionInDOMTreeDeprecated()
+        .isBaseFirst();
+  }
   return false;
 }
 
@@ -654,18 +694,6 @@ void WebFrameWidgetImpl::willCloseLayerTreeView() {
   m_layerTreeViewClosed = true;
 }
 
-void WebFrameWidgetImpl::didAcquirePointerLock() {
-  page()->pointerLockController().didAcquirePointerLock();
-}
-
-void WebFrameWidgetImpl::didNotAcquirePointerLock() {
-  page()->pointerLockController().didNotAcquirePointerLock();
-}
-
-void WebFrameWidgetImpl::didLosePointerLock() {
-  page()->pointerLockController().didLosePointerLock();
-}
-
 // TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
 // code needs to be refactored  (http://crbug.com/629721).
 bool WebFrameWidgetImpl::getCompositionCharacterBounds(
@@ -693,16 +721,6 @@ bool WebFrameWidgetImpl::getCompositionCharacterBounds(
 
   bounds.swap(result);
   return true;
-}
-
-// TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
-// code needs to be refactored  (http://crbug.com/629721).
-void WebFrameWidgetImpl::applyReplacementRange(const WebRange& range) {
-  if (LocalFrame* frame = focusedLocalFrameInWidget()) {
-    // TODO(dglazkov): Going from LocalFrame to WebLocalFrameImpl seems
-    // silly. What is going on here?
-    WebLocalFrameImpl::fromFrame(frame)->selectRange(range);
-  }
 }
 
 void WebFrameWidgetImpl::setRemoteViewportIntersection(
@@ -766,10 +784,13 @@ void WebFrameWidgetImpl::handleMouseDown(LocalFrame& mainFrame,
 void WebFrameWidgetImpl::mouseContextMenu(const WebMouseEvent& event) {
   page()->contextMenuController().clearContextMenu();
 
-  PlatformMouseEventBuilder pme(m_localRoot->frameView(), event);
+  WebMouseEvent transformedEvent =
+      TransformWebMouseEvent(m_localRoot->frameView(), event);
+  IntPoint positionInRootFrame =
+      flooredIntPoint(transformedEvent.positionInRootFrame());
 
   // Find the right target frame. See issue 1186900.
-  HitTestResult result = hitTestResultForRootFramePos(pme.position());
+  HitTestResult result = hitTestResultForRootFramePos(positionInRootFrame);
   Frame* targetFrame;
   if (result.innerNodeOrImageMapImage())
     targetFrame = result.innerNodeOrImageMapImage()->document().frame();
@@ -785,13 +806,10 @@ void WebFrameWidgetImpl::mouseContextMenu(const WebMouseEvent& event) {
 
   LocalFrame* targetLocalFrame = toLocalFrame(targetFrame);
 
-#if OS(WIN)
-  targetLocalFrame->view()->setCursor(pointerCursor());
-#endif
-
   {
     ContextMenuAllowedScope scope;
-    targetLocalFrame->eventHandler().sendContextMenuEvent(pme, nullptr);
+    targetLocalFrame->eventHandler().sendContextMenuEvent(transformedEvent,
+                                                          nullptr);
   }
   // Actually showing the context menu is handled by the ContextMenuClient
   // implementation...

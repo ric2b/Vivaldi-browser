@@ -4,6 +4,8 @@
 
 #include "net/http/http_network_session.h"
 
+#include <inttypes.h>
+
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
@@ -17,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/values.h"
 #include "net/base/network_throttle_manager_impl.h"
@@ -153,6 +156,8 @@ HttpNetworkSession::Params::Params()
       quic_force_hol_blocking(false),
       quic_race_cert_verification(false),
       quic_do_not_fragment(false),
+      quic_do_not_mark_as_broken_on_network_change(false),
+      quic_estimate_initial_rtt(false),
       proxy_delegate(nullptr),
       enable_token_binding(false),
       http_09_on_non_default_ports_enabled(false),
@@ -215,6 +220,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
           params.quic_force_hol_blocking,
           params.quic_race_cert_verification,
           params.quic_do_not_fragment,
+          params.quic_estimate_initial_rtt,
           params.quic_connection_options,
           params.enable_token_binding),
       spdy_session_pool_(params.host_resolver,
@@ -419,7 +425,8 @@ void HttpNetworkSession::GetSSLConfig(const HttpRequestInfo& request,
 void HttpNetworkSession::DumpMemoryStats(
     base::trace_event::ProcessMemoryDump* pmd,
     const std::string& parent_absolute_name) const {
-  std::string name = base::StringPrintf("net/http_network_session_%p", this);
+  std::string name = base::StringPrintf("net/http_network_session_0x%" PRIxPTR,
+                                        reinterpret_cast<uintptr_t>(this));
   base::trace_event::MemoryAllocatorDump* http_network_session_dump =
       pmd->GetAllocatorDump(name);
   if (http_network_session_dump == nullptr) {
@@ -428,7 +435,14 @@ void HttpNetworkSession::DumpMemoryStats(
         pmd, http_network_session_dump->absolute_name());
     spdy_session_pool_.DumpMemoryStats(
         pmd, http_network_session_dump->absolute_name());
+    if (http_stream_factory_) {
+      http_stream_factory_->DumpMemoryStats(
+          pmd, http_network_session_dump->absolute_name());
+    }
+    quic_stream_factory_.DumpMemoryStats(
+        pmd, http_network_session_dump->absolute_name());
   }
+
   // Create an empty row under parent's dump so size can be attributed correctly
   // if |this| is shared between URLRequestContexts.
   base::trace_event::MemoryAllocatorDump* empty_row_dump =
@@ -472,22 +486,8 @@ void HttpNetworkSession::OnMemoryPressure(
   }
 }
 
-void HttpNetworkSession::OnMemoryStateChange(base::MemoryState state) {
-  // TODO(hajimehoshi): When the state changes, adjust the sizes of the caches
-  // to reduce the limits. HttpNetworkSession doesn't have the ability to limit
-  // at present.
-  switch (state) {
-    case base::MemoryState::NORMAL:
-      break;
-    case base::MemoryState::THROTTLED:
-      CloseIdleConnections();
-      break;
-    case base::MemoryState::SUSPENDED:
-    // Note: Not supported at present. Fall through.
-    case base::MemoryState::UNKNOWN:
-      NOTREACHED();
-      break;
-  }
+void HttpNetworkSession::OnPurgeMemory() {
+  CloseIdleConnections();
 }
 
 }  // namespace net

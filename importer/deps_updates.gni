@@ -1,6 +1,26 @@
 
-post_process_target("//chrome:chrome_child") {
-  deps += [
+post_process_target("//chrome:child_dependencies") {
+  public_deps += [
     "//vivaldi/importer",
+  ]
+}
+
+if (is_official_build) {
+  post_process_template("//chrome/browser:browser") {
+    deps += [
+      "//vivaldi/importer:browser",
+    ]
+  }
+} else {
+  post_process_target("//chrome/browser:browser") {
+    deps += [
+      "//vivaldi/importer:browser",
+    ]
+  }
+}
+
+post_process_target("//chrome/common/importer:interfaces") {
+  deps += [
+    "//vivaldi/importer:browser",
   ]
 }

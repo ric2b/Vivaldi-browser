@@ -123,7 +123,7 @@
 #include "ash/shell.h"  // nogncheck
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
@@ -140,7 +140,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
-#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_util.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/gfx/image/image_skia.h"
@@ -508,6 +508,31 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
     { "mouseSpeed", IDS_OPTIONS_SETTINGS_MOUSE_SPEED_DESCRIPTION },
     { "noPointingDevices", IDS_OPTIONS_NO_POINTING_DEVICES },
     { "confirm", IDS_CONFIRM },
+    { "configureFingerprintTitle", IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_TITLE },
+    { "configureFingerprintInstructionLocateScannerStep",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER },
+    { "configureFingerprintInstructionMoveFingerStep",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_MOVE_FINGER },
+    { "configureFingerprintInstructionReadyStep",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_READY },
+    { "configureFingerprintLiftFinger",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_LIFT_FINGER },
+    { "configureFingerprintPartialData",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_PARTIAL_DATA },
+    { "configureFingerprintInsufficientData",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSUFFICIENT_DATA },
+    { "configureFingerprintSensorDirty",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_SENSOR_DIRTY },
+    { "configureFingerprintTooSlow",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_SLOW },
+    { "configureFingerprintTooFast",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_FINGER_TOO_FAST },
+    { "configureFingerprintCancelButton",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_CANCEL_BUTTON },
+    { "configureFingerprintDoneButton",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_DONE_BUTTON },
+    { "configureFingerprintAddAnotherButton",
+      IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_ADD_ANOTHER_BUTTON },
     { "configurePinChoosePinTitle",
       IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CHOOSE_PIN_TITLE },
     { "configurePinConfirmPinTitle",
@@ -515,15 +540,33 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
     { "configurePinContinueButton",
       IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONTINUE_BUTTON },
     { "configurePinMismatched", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED },
-    { "configurePinTooShort", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT} ,
-    { "configurePinTooLong", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_LONG} ,
+    { "configurePinTooShort", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT },
+    { "configurePinTooLong", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_LONG },
     { "configurePinWeakPin", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_WEAK_PIN },
+    { "lockScreenAddFingerprint",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_ADD_FINGERPRINT_BUTTON },
     { "lockScreenChangePinButton",
       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_CHANGE_PIN_BUTTON},
+    { "lockScreenEditFingerprints",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS },
+    { "lockScreenEditFingerprintsDescription",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_EDIT_FINGERPRINTS_DESCRIPTION },
+    {"lockScreenNumberFingerprints",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NUM_FINGERPRINTS },
+    { "lockScreenFingerprintEnable",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_ENABLE_FINGERPRINT_CHECKBOX_LABEL },
+    { "lockScreenFingerprintNewName",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NEW_FINGERPRINT_DEFAULT_NAME },
+    { "lockScreenFingerprintTitle",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SUBPAGE_TITLE },
+    { "lockScreenFingerprintWarning",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_LESS_SECURE },
     { "lockScreenNone", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE },
     { "lockScreenPasswordOnly", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY },
     { "lockScreenPinOrPassword",
       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD },
+    { "lockScreenRegisteredFingerprints",
+      IDS_SETTINGS_PEOPLE_LOCK_SCREEN_REGISTERED_FINGERPRINTS_LABEL},
     { "lockScreenSetupPinButton",
       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_SETUP_PIN_BUTTON },
     { "lockScreenTitle", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_TITLE },
@@ -768,8 +811,10 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   values->SetBoolean("allowBluetooth", allow_bluetooth);
 
   values->SetBoolean("showQuickUnlockSettings",
-                     chromeos::IsPinUnlockEnabled(profile->GetPrefs()));
-  if (chromeos::IsPinUnlockEnabled(profile->GetPrefs())) {
+                     chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs()));
+  values->SetBoolean("fingerprintUnlockEnabled",
+                     chromeos::quick_unlock::IsFingerprintEnabled());
+  if (chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs())) {
     values->SetString(
         "enableScreenlock",
         l10n_util::GetStringUTF16(
@@ -951,19 +996,19 @@ void BrowserOptionsHandler::Uninitialize() {
 #endif
 }
 
-void BrowserOptionsHandler::OnStateChanged() {
+void BrowserOptionsHandler::OnStateChanged(syncer::SyncService* sync) {
   UpdateSyncState();
 }
 
 void BrowserOptionsHandler::GoogleSigninSucceeded(const std::string& account_id,
                                                   const std::string& username,
                                                   const std::string& password) {
-  OnStateChanged();
+  UpdateSyncState();
 }
 
 void BrowserOptionsHandler::GoogleSignedOut(const std::string& account_id,
                                             const std::string& username) {
-  OnStateChanged();
+  UpdateSyncState();
 }
 
 void BrowserOptionsHandler::PageLoadStarted() {
@@ -1126,7 +1171,7 @@ void BrowserOptionsHandler::InitializePage() {
   OnTemplateURLServiceChanged();
 
   ObserveThemeChanged();
-  OnStateChanged();
+  UpdateSyncState();
 #if !defined(OS_CHROMEOS)
   UpdateDefaultBrowserState();
 #endif
@@ -1170,10 +1215,9 @@ void BrowserOptionsHandler::InitializePage() {
       chromeos::WallpaperManager::Get()->IsPolicyControlled(
           user->GetAccountId()));
 
-  if (arc::ArcSessionManager::IsAllowedForProfile(profile) &&
-      !arc::ArcSessionManager::IsOptInVerificationDisabled()) {
-    base::FundamentalValue is_arc_enabled(
-        arc::ArcSessionManager::Get()->IsArcEnabled());
+  if (arc::IsArcAllowedForProfile(profile) &&
+      !arc::IsArcOptInVerificationDisabled()) {
+    base::Value is_arc_enabled(arc::IsArcPlayStoreEnabledForProfile(profile));
     web_ui()->CallJavascriptFunctionUnsafe(
         "BrowserOptions.showAndroidAppsSection",
         is_arc_enabled);
@@ -1270,10 +1314,10 @@ void BrowserOptionsHandler::SetDefaultBrowserUIString(int status_string_id) {
       l10n_util::GetStringFUTF16(status_string_id,
                                  l10n_util::GetStringUTF16(IDS_PRODUCT_NAME)));
 
-  base::FundamentalValue is_default(
-      status_string_id == IDS_OPTIONS_DEFAULTBROWSER_DEFAULT);
+  base::Value is_default(status_string_id ==
+                         IDS_OPTIONS_DEFAULTBROWSER_DEFAULT);
 
-  base::FundamentalValue can_be_default(
+  base::Value can_be_default(
       !IsDisabledByPolicy(default_browser_policy_) &&
       (status_string_id == IDS_OPTIONS_DEFAULTBROWSER_DEFAULT ||
        status_string_id == IDS_OPTIONS_DEFAULTBROWSER_NOTDEFAULT));
@@ -1310,10 +1354,9 @@ void BrowserOptionsHandler::OnTemplateURLServiceChanged() {
 
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.updateSearchEngines", search_engines,
-      base::FundamentalValue(default_index),
-      base::FundamentalValue(
-          template_url_service_->is_default_search_managed() ||
-          template_url_service_->IsExtensionControlledDefaultSearch()));
+      base::Value(default_index),
+      base::Value(template_url_service_->is_default_search_managed() ||
+                  template_url_service_->IsExtensionControlledDefaultSearch()));
 
   SetupExtensionControlledIndicators();
 
@@ -1378,7 +1421,7 @@ void BrowserOptionsHandler::Observe(
       break;
     case chrome::NOTIFICATION_GLOBAL_ERRORS_CHANGED:
       // Update our sync/signin status display.
-      OnStateChanged();
+      UpdateSyncState();
       break;
     default:
       NOTREACHED();
@@ -1479,15 +1522,14 @@ void BrowserOptionsHandler::ObserveThemeChanged() {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   bool profile_is_supervised = profile->IsSupervised();
   is_system_theme = theme_service->UsingSystemTheme();
-  base::FundamentalValue native_theme_enabled(!is_system_theme &&
-                                              !profile_is_supervised);
+  base::Value native_theme_enabled(!is_system_theme && !profile_is_supervised);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setNativeThemeButtonEnabled", native_theme_enabled);
 #endif
 
   bool is_classic_theme = !is_system_theme &&
                           theme_service->UsingDefaultTheme();
-  base::FundamentalValue enabled(!is_classic_theme);
+  base::Value enabled(!is_classic_theme);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setThemesResetButtonEnabled", enabled);
 }
@@ -1525,19 +1567,18 @@ void BrowserOptionsHandler::UpdateAccountPicture() {
 
 void BrowserOptionsHandler::OnAccountPictureManagedChanged(bool managed) {
   web_ui()->CallJavascriptFunctionUnsafe(
-      "BrowserOptions.setAccountPictureManaged",
-      base::FundamentalValue(managed));
+      "BrowserOptions.setAccountPictureManaged", base::Value(managed));
 }
 
 void BrowserOptionsHandler::OnWallpaperManagedChanged(bool managed) {
   web_ui()->CallJavascriptFunctionUnsafe("BrowserOptions.setWallpaperManaged",
-                                         base::FundamentalValue(managed));
+                                         base::Value(managed));
 }
 
 void BrowserOptionsHandler::OnSystemTimezonePolicyChanged() {
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setSystemTimezoneManaged",
-      base::FundamentalValue(chromeos::system::HasSystemTimezonePolicy()));
+      base::Value(chromeos::system::HasSystemTimezonePolicy()));
 }
 
 void BrowserOptionsHandler::OnSystemTimezoneAutomaticDetectionPolicyChanged() {
@@ -1553,7 +1594,7 @@ void BrowserOptionsHandler::OnSystemTimezoneAutomaticDetectionPolicyChanged() {
       prefs->GetInteger(prefs::kSystemTimezoneAutomaticDetectionPolicy);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setSystemTimezoneAutomaticDetectionManaged",
-      base::FundamentalValue(is_managed), base::FundamentalValue(value));
+      base::Value(is_managed), base::Value(value));
 }
 #endif
 
@@ -1650,13 +1691,13 @@ void BrowserOptionsHandler::FileSelected(const base::FilePath& path, int index,
 
 #if defined(OS_CHROMEOS)
 void BrowserOptionsHandler::TouchpadExists(bool exists) {
-  base::FundamentalValue val(exists);
+  base::Value val(exists);
   web_ui()->CallJavascriptFunctionUnsafe("BrowserOptions.showTouchpadControls",
                                          val);
 }
 
 void BrowserOptionsHandler::MouseExists(bool exists) {
-  base::FundamentalValue val(exists);
+  base::Value val(exists);
   web_ui()->CallJavascriptFunctionUnsafe("BrowserOptions.showMouseControls",
                                          val);
 }
@@ -1696,8 +1737,7 @@ void BrowserOptionsHandler::UpdateSyncState() {
   // A change in sign-in state also affects how hotwording and audio history are
   // displayed. Hide all hotwording and re-display properly.
   web_ui()->CallJavascriptFunctionUnsafe(
-      "BrowserOptions.setAllHotwordSectionsVisible",
-      base::FundamentalValue(false));
+      "BrowserOptions.setAllHotwordSectionsVisible", base::Value(false));
   HandleRequestHotwordAvailable(nullptr);
 }
 
@@ -1789,8 +1829,8 @@ void BrowserOptionsHandler::SetHotwordAudioHistorySectionVisible(
     bool success, bool logging_enabled) {
   bool visible = logging_enabled && success;
   web_ui()->CallJavascriptFunctionUnsafe(
-      "BrowserOptions.setAudioHistorySectionVisible",
-      base::FundamentalValue(visible), base::StringValue(audio_history_state));
+      "BrowserOptions.setAudioHistorySectionVisible", base::Value(visible),
+      base::StringValue(audio_history_state));
 }
 
 void BrowserOptionsHandler::HandleRequestGoogleNowAvailable(
@@ -1810,7 +1850,7 @@ void BrowserOptionsHandler::HandleRequestGoogleNowAvailable(
 
   bool should_show = is_search_provider_google && has_field_trial;
   web_ui()->CallJavascriptFunctionUnsafe("BrowserOptions.setNowSectionVisible",
-                                         base::FundamentalValue(should_show));
+                                         base::Value(should_show));
 }
 
 void BrowserOptionsHandler::HandleRequestHotwordAvailable(
@@ -1842,8 +1882,7 @@ void BrowserOptionsHandler::HandleRequestHotwordAvailable(
   // options.
   if (!is_search_provider_google) {
     web_ui()->CallJavascriptFunctionUnsafe(
-        "BrowserOptions.setAllHotwordSectionsVisible",
-        base::FundamentalValue(false));
+        "BrowserOptions.setAllHotwordSectionsVisible", base::Value(false));
     return;
   }
 
@@ -1865,8 +1904,7 @@ void BrowserOptionsHandler::HandleRequestHotwordAvailable(
       if (profile->GetPrefs()->GetBoolean(
               prefs::kHotwordAlwaysOnSearchEnabled)) {
         web_ui()->CallJavascriptFunctionUnsafe(
-            "BrowserOptions.setHotwordRetrainLinkVisible",
-            base::FundamentalValue(true));
+            "BrowserOptions.setHotwordRetrainLinkVisible", base::Value(true));
       }
     } else {
       function_name = "BrowserOptions.showHotwordNoDspSection";
@@ -2005,7 +2043,7 @@ void BrowserOptionsHandler::OnUserImageChanged(const user_manager::User& user) {
 }
 
 void BrowserOptionsHandler::UpdateAndroidSettingsAppState(bool visible) {
-  base::FundamentalValue is_visible(visible);
+  base::Value is_visible(visible);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setAndroidAppsSettingsVisibility", is_visible);
 }
@@ -2014,7 +2052,7 @@ void BrowserOptionsHandler::ShowAndroidAppsSettings(
     const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   // Settings in secondary profile cannot access ARC.
-  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
+  if (!arc::IsArcAllowedForProfile(profile)) {
     LOG(ERROR) << "Settings can't be invoked for non-primary profile";
     return;
   }
@@ -2033,7 +2071,7 @@ void BrowserOptionsHandler::ShowPlayStoreApps(const base::ListValue* args) {
   std::string apps_url;
   args->GetString(0, &apps_url);
   Profile* profile = Profile::FromWebUI(web_ui());
-  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
+  if (!arc::IsArcAllowedForProfile(profile)) {
     VLOG(1) << "ARC is not enabled for this profile";
     return;
   }
@@ -2045,7 +2083,7 @@ void BrowserOptionsHandler::ShowAccessibilityTalkBackSettings(
     const base::ListValue *args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   // Settings in secondary profile cannot access ARC.
-  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
+  if (!arc::IsArcAllowedForProfile(profile)) {
     LOG(WARNING) << "Settings can't be invoked for non-primary profile";
     return;
   }
@@ -2055,7 +2093,7 @@ void BrowserOptionsHandler::ShowAccessibilityTalkBackSettings(
 
 void BrowserOptionsHandler::SetupAccessibilityFeatures() {
   PrefService* pref_service = g_browser_process->local_state();
-  base::FundamentalValue virtual_keyboard_enabled(
+  base::Value virtual_keyboard_enabled(
       pref_service->GetBoolean(prefs::kAccessibilityVirtualKeyboardEnabled));
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setVirtualKeyboardCheckboxState",
@@ -2067,7 +2105,7 @@ void BrowserOptionsHandler::SetupMetricsReportingSettingVisibility() {
 #if defined(GOOGLE_CHROME_BUILD)
   // Don't show the reporting setting if we are in the guest mode.
   if (Profile::FromWebUI(web_ui())->IsGuestSession()) {
-    base::FundamentalValue visible(false);
+    base::Value visible(false);
     web_ui()->CallJavascriptFunctionUnsafe(
         "BrowserOptions.setMetricsReportingSettingVisibility", visible);
   }
@@ -2162,7 +2200,7 @@ void BrowserOptionsHandler::SetupAutoOpenFileTypes() {
       web_ui()->GetWebContents()->GetBrowserContext());
   bool display = manager &&
       DownloadPrefs::FromDownloadManager(manager)->IsAutoOpenUsed();
-  base::FundamentalValue value(display);
+  base::Value value(display);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setAutoOpenFileTypesDisplayed", value);
 }
@@ -2175,9 +2213,8 @@ void BrowserOptionsHandler::SetupProxySettingsSection() {
   bool is_extension_controlled = (proxy_config &&
                                   proxy_config->IsExtensionControlled());
 
-  base::FundamentalValue disabled(proxy_config &&
-                                  !proxy_config->IsUserModifiable());
-  base::FundamentalValue extension_controlled(is_extension_controlled);
+  base::Value disabled(proxy_config && !proxy_config->IsUserModifiable());
+  base::Value extension_controlled(is_extension_controlled);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setupProxySettingsButton", disabled,
       extension_controlled);
@@ -2192,13 +2229,13 @@ void BrowserOptionsHandler::SetupProxySettingsSection() {
 void BrowserOptionsHandler::SetupManagingSupervisedUsers() {
   bool has_users = !Profile::FromWebUI(web_ui())->
       GetPrefs()->GetDictionary(prefs::kSupervisedUsers)->empty();
-  base::FundamentalValue has_users_value(has_users);
+  base::Value has_users_value(has_users);
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.updateManagesSupervisedUsers", has_users_value);
 }
 
 void BrowserOptionsHandler::SetupEasyUnlock() {
-  base::FundamentalValue is_enabled(
+  base::Value is_enabled(
       EasyUnlockService::Get(Profile::FromWebUI(web_ui()))->IsEnabled());
   web_ui()->CallJavascriptFunctionUnsafe("BrowserOptions.updateEasyUnlock",
                                          is_enabled);
@@ -2288,13 +2325,12 @@ void BrowserOptionsHandler::SetMetricsReportingCheckbox(bool checked,
                                                         bool policy_managed,
                                                         bool owner_managed) {
   web_ui()->CallJavascriptFunctionUnsafe(
-      "BrowserOptions.setMetricsReportingCheckboxState",
-      base::FundamentalValue(checked), base::FundamentalValue(policy_managed),
-      base::FundamentalValue(owner_managed));
+      "BrowserOptions.setMetricsReportingCheckboxState", base::Value(checked),
+      base::Value(policy_managed), base::Value(owner_managed));
 }
 
 void BrowserOptionsHandler::SetupSafeBrowsingExtendedReporting() {
-  base::FundamentalValue is_enabled(safe_browsing::IsExtendedReportingEnabled(
+  base::Value is_enabled(safe_browsing::IsExtendedReportingEnabled(
       *Profile::FromWebUI(web_ui())->GetPrefs()));
   web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.setExtendedReportingEnabledCheckboxState", is_enabled);

@@ -8,6 +8,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -38,10 +39,16 @@ class RenderViewHostTestWebContentsObserver : public WebContentsObserver {
         navigation_count_(0) {}
   ~RenderViewHostTestWebContentsObserver() override {}
 
-  void DidNavigateMainFrame(const LoadCommittedDetails& details,
-                            const FrameNavigateParams& params) override {
-    observed_socket_address_ = params.socket_address;
-    base_url_ = params.base_url;
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->IsInMainFrame() ||
+        !navigation_handle->HasCommitted()) {
+      return;
+    }
+
+    NavigationHandleImpl* impl =
+        static_cast<NavigationHandleImpl*>(navigation_handle);
+    observed_socket_address_ = navigation_handle->GetSocketAddress();
+    base_url_ = impl->base_url();
     ++navigation_count_;
   }
 
@@ -120,10 +127,10 @@ IN_PROC_BROWSER_TEST_F(RenderViewHostTest, IsFocusedElementEditable) {
   GURL test_url = embedded_test_server()->GetURL("/touch_selection.html");
   NavigateToURL(shell(), test_url);
 
-  RenderViewHost* rvh = shell()->web_contents()->GetRenderViewHost();
-  EXPECT_FALSE(rvh->IsFocusedElementEditable());
+  WebContents* contents = shell()->web_contents();
+  EXPECT_FALSE(contents->IsFocusedElementEditable());
   EXPECT_TRUE(ExecuteScript(shell(), "focus_textfield();"));
-  EXPECT_TRUE(rvh->IsFocusedElementEditable());
+  EXPECT_TRUE(contents->IsFocusedElementEditable());
 }
 
 // Flaky on Linux (https://crbug.com/559192).

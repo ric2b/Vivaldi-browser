@@ -27,13 +27,13 @@
 
 #include <algorithm>
 #include "platform/HostWindow.h"
-#include "platform/PlatformMouseEvent.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "public/platform/WebGestureEvent.h"
+#include "public/platform/WebMouseEvent.h"
 
 namespace blink {
 
@@ -58,7 +58,9 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea,
       m_draggingDocument(false),
       m_documentDragPos(0),
       m_enabled(true),
-      m_scrollTimer(this, &Scrollbar::autoscrollTimerFired),
+      m_scrollTimer(scrollableArea->getTimerTaskRunner(),
+                    this,
+                    &Scrollbar::autoscrollTimerFired),
       m_elasticOverscroll(0),
       m_trackNeedsRepaint(true),
       m_thumbNeedsRepaint(true) {
@@ -72,7 +74,7 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea,
   m_themeScrollbarThickness = thickness;
   if (m_hostWindow)
     thickness = m_hostWindow->windowToViewportScalar(thickness);
-  Widget::setFrameRect(IntRect(0, 0, thickness, thickness));
+  FrameViewBase::setFrameRect(IntRect(0, 0, thickness, thickness));
 
   m_currentPos = scrollableAreaCurrentPos();
 }
@@ -84,15 +86,17 @@ Scrollbar::~Scrollbar() {
 DEFINE_TRACE(Scrollbar) {
   visitor->trace(m_scrollableArea);
   visitor->trace(m_hostWindow);
-  Widget::trace(visitor);
+  FrameViewBase::trace(visitor);
 }
 
 void Scrollbar::setFrameRect(const IntRect& frameRect) {
   if (frameRect == this->frameRect())
     return;
 
-  Widget::setFrameRect(frameRect);
+  FrameViewBase::setFrameRect(frameRect);
   setNeedsPaintInvalidation(AllParts);
+  if (m_scrollableArea)
+    m_scrollableArea->scrollbarFrameRectChanged();
 }
 
 ScrollbarOverlayColorTheme Scrollbar::getScrollbarOverlayColorTheme() const {
@@ -155,7 +159,7 @@ void Scrollbar::paint(GraphicsContext& context,
     return;
 
   if (!theme().paint(*this, context, cullRect))
-    Widget::paint(context, cullRect);
+    FrameViewBase::paint(context, cullRect);
 }
 
 void Scrollbar::autoscrollTimerFired(TimerBase*) {
@@ -416,7 +420,8 @@ bool Scrollbar::gestureEvent(const WebGestureEvent& evt,
   }
 }
 
-void Scrollbar::mouseMoved(const PlatformMouseEvent& evt) {
+void Scrollbar::mouseMoved(const WebMouseEvent& evt) {
+  IntPoint position = flooredIntPoint(evt.positionInRootFrame());
   if (m_pressedPart == ThumbPart) {
     if (theme().shouldSnapBackToDragOrigin(*this, evt)) {
       if (m_scrollableArea) {
@@ -427,19 +432,20 @@ void Scrollbar::mouseMoved(const PlatformMouseEvent& evt) {
       }
     } else {
       moveThumb(m_orientation == HorizontalScrollbar
-                    ? convertFromRootFrame(evt.position()).x()
-                    : convertFromRootFrame(evt.position()).y(),
+                    ? convertFromRootFrame(position).x()
+                    : convertFromRootFrame(position).y(),
                 theme().shouldDragDocumentInsteadOfThumb(*this, evt));
     }
     return;
   }
 
-  if (m_pressedPart != NoPart)
+  if (m_pressedPart != NoPart) {
     m_pressedPos = orientation() == HorizontalScrollbar
-                       ? convertFromRootFrame(evt.position()).x()
-                       : convertFromRootFrame(evt.position()).y();
+                       ? convertFromRootFrame(position).x()
+                       : convertFromRootFrame(position).y();
+  }
 
-  ScrollbarPart part = theme().hitTest(*this, evt.position());
+  ScrollbarPart part = theme().hitTest(*this, position);
   if (part != m_hoveredPart) {
     if (m_pressedPart != NoPart) {
       if (part == m_pressedPart) {
@@ -470,7 +476,7 @@ void Scrollbar::mouseExited() {
   setHoveredPart(NoPart);
 }
 
-void Scrollbar::mouseUp(const PlatformMouseEvent& mouseEvent) {
+void Scrollbar::mouseUp(const WebMouseEvent& mouseEvent) {
   bool isCaptured = m_pressedPart == ThumbPart;
   setPressedPart(NoPart);
   m_pressedPos = 0;
@@ -481,7 +487,8 @@ void Scrollbar::mouseUp(const PlatformMouseEvent& mouseEvent) {
     if (isCaptured)
       m_scrollableArea->mouseReleasedScrollbar();
 
-    ScrollbarPart part = theme().hitTest(*this, mouseEvent.position());
+    ScrollbarPart part = theme().hitTest(
+        *this, flooredIntPoint(mouseEvent.positionInRootFrame()));
     if (part == NoPart) {
       setHoveredPart(NoPart);
       m_scrollableArea->mouseExitedScrollbar(*this);
@@ -489,15 +496,16 @@ void Scrollbar::mouseUp(const PlatformMouseEvent& mouseEvent) {
   }
 }
 
-void Scrollbar::mouseDown(const PlatformMouseEvent& evt) {
+void Scrollbar::mouseDown(const WebMouseEvent& evt) {
   // Early exit for right click
-  if (evt.pointerProperties().button == WebPointerProperties::Button::Right)
+  if (evt.button == WebPointerProperties::Button::Right)
     return;
 
-  setPressedPart(theme().hitTest(*this, evt.position()));
+  IntPoint position = flooredIntPoint(evt.positionInRootFrame());
+  setPressedPart(theme().hitTest(*this, position));
   int pressedPos = orientation() == HorizontalScrollbar
-                       ? convertFromRootFrame(evt.position()).x()
-                       : convertFromRootFrame(evt.position()).y();
+                       ? convertFromRootFrame(position).x()
+                       : convertFromRootFrame(position).y();
 
   if ((m_pressedPart == BackTrackPart || m_pressedPart == ForwardTrackPart) &&
       theme().shouldCenterOnThumb(*this, evt)) {
@@ -567,7 +575,7 @@ IntRect Scrollbar::convertToContainingWidget(const IntRect& localRect) const {
     return m_scrollableArea->convertFromScrollbarToContainingWidget(*this,
                                                                     localRect);
 
-  return Widget::convertToContainingWidget(localRect);
+  return FrameViewBase::convertToContainingWidget(localRect);
 }
 
 IntRect Scrollbar::convertFromContainingWidget(
@@ -576,7 +584,7 @@ IntRect Scrollbar::convertFromContainingWidget(
     return m_scrollableArea->convertFromContainingWidgetToScrollbar(*this,
                                                                     parentRect);
 
-  return Widget::convertFromContainingWidget(parentRect);
+  return FrameViewBase::convertFromContainingWidget(parentRect);
 }
 
 IntPoint Scrollbar::convertToContainingWidget(
@@ -585,7 +593,7 @@ IntPoint Scrollbar::convertToContainingWidget(
     return m_scrollableArea->convertFromScrollbarToContainingWidget(*this,
                                                                     localPoint);
 
-  return Widget::convertToContainingWidget(localPoint);
+  return FrameViewBase::convertToContainingWidget(localPoint);
 }
 
 IntPoint Scrollbar::convertFromContainingWidget(
@@ -594,7 +602,7 @@ IntPoint Scrollbar::convertFromContainingWidget(
     return m_scrollableArea->convertFromContainingWidgetToScrollbar(
         *this, parentPoint);
 
-  return Widget::convertFromContainingWidget(parentPoint);
+  return FrameViewBase::convertFromContainingWidget(parentPoint);
 }
 
 float Scrollbar::scrollableAreaCurrentPos() const {
@@ -621,11 +629,6 @@ float Scrollbar::scrollableAreaTargetPos() const {
 
   return m_scrollableArea->scrollAnimator().desiredTargetOffset().height() -
          m_scrollableArea->minimumScrollOffset().height();
-}
-
-LayoutRect Scrollbar::visualRect() const {
-  return m_scrollableArea ? m_scrollableArea->visualRectForScrollbarParts()
-                          : LayoutRect();
 }
 
 void Scrollbar::setNeedsPaintInvalidation(ScrollbarPart invalidParts) {

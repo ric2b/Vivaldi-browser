@@ -10,6 +10,7 @@
 
 #include "base/files/file_util.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_cache_storage_helper.h"
@@ -21,13 +22,14 @@
 #include "chrome/browser/browsing_data/browsing_data_indexed_db_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_service_worker_helper.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/cryptohome/homedir_methods.h"
+#include "components/arc/arc_util.h"
 #include "components/browsing_data/content/conditional_cache_counting_helper.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/user_manager/user_manager.h"
@@ -41,9 +43,9 @@ namespace chromeos {
 namespace settings {
 namespace {
 
-void GetSizeStatOnBlockingPool(const base::FilePath& mount_path,
-                               int64_t* total_size,
-                               int64_t* available_size) {
+void GetSizeStatBlocking(const base::FilePath& mount_path,
+                         int64_t* total_size,
+                         int64_t* available_size) {
   int64_t size = base::SysInfo::AmountOfTotalDiskSpace(mount_path);
   if (size >= 0)
     *total_size = size;
@@ -142,15 +144,10 @@ void StorageHandler::UpdateSizeStat() {
   int64_t* total_size = new int64_t(0);
   int64_t* available_size = new int64_t(0);
   content::BrowserThread::PostBlockingPoolTaskAndReply(
-      FROM_HERE,
-      base::Bind(&GetSizeStatOnBlockingPool,
-                 downloads_path,
-                 total_size,
-                 available_size),
-      base::Bind(&StorageHandler::OnGetSizeStat,
-                 base::Unretained(this),
-                 base::Owned(total_size),
-                 base::Owned(available_size)));
+      FROM_HERE, base::Bind(&GetSizeStatBlocking, downloads_path, total_size,
+                            available_size),
+      base::Bind(&StorageHandler::OnGetSizeStat, base::Unretained(this),
+                 base::Owned(total_size), base::Owned(available_size)));
 }
 
 void StorageHandler::OnGetSizeStat(int64_t* total_size,
@@ -183,12 +180,11 @@ void StorageHandler::UpdateDownloadsSize() {
   const base::FilePath downloads_path =
       file_manager::util::GetDownloadsFolderForProfile(profile);
 
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(),
-      FROM_HERE,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
       base::Bind(&base::ComputeDirectorySize, downloads_path),
-      base::Bind(&StorageHandler::OnGetDownloadsSize,
-                 base::Unretained(this)));
+      base::Bind(&StorageHandler::OnGetDownloadsSize, base::Unretained(this)));
 }
 
 void StorageHandler::OnGetDownloadsSize(int64_t size) {
@@ -210,7 +206,7 @@ void StorageHandler::UpdateDriveCacheSize() {
   // Shows the item "Offline cache" and start calculating size.
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("storage-drive-enabled-changed"),
-                         base::FundamentalValue(true));
+                         base::Value(true));
   updating_drive_cache_size_ = true;
   file_system->CalculateCacheSize(
       base::Bind(&StorageHandler::OnGetDriveCacheSize, base::Unretained(this)));
@@ -220,7 +216,8 @@ void StorageHandler::OnGetDriveCacheSize(int64_t size) {
   updating_drive_cache_size_ = false;
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("storage-drive-cache-size-changed"),
-                         base::StringValue(ui::FormatBytes(size)));
+                         base::StringValue(ui::FormatBytes(size)),
+                         base::Value(size > 0));
 }
 
 void StorageHandler::UpdateBrowsingDataSize() {
@@ -349,16 +346,15 @@ void StorageHandler::UpdateAndroidSize() {
   updating_android_size_ = true;
 
   Profile* const profile = Profile::FromWebUI(web_ui());
-  if (!arc::ArcSessionManager::IsAllowedForProfile(profile) ||
-      arc::ArcSessionManager::IsOptInVerificationDisabled() ||
-      !arc::ArcSessionManager::Get()->IsArcEnabled()) {
+  if (!arc::IsArcPlayStoreEnabledForProfile(profile) ||
+      arc::IsArcOptInVerificationDisabled()) {
     return;
   }
 
   // Shows the item "Android apps and cache" and start calculating size.
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("storage-android-enabled-changed"),
-                         base::FundamentalValue(true));
+                         base::Value(true));
   bool success = arc::ArcStorageManager::Get()->GetApplicationsSize(
       base::Bind(&StorageHandler::OnGetAndroidSize,
                  base::Unretained(this)));

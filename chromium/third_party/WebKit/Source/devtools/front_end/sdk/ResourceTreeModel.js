@@ -34,11 +34,11 @@
 SDK.ResourceTreeModel = class extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} target
-   * @param {?SDK.NetworkManager} networkManager
-   * @param {!SDK.SecurityOriginManager} securityOriginManager
    */
-  constructor(target, networkManager, securityOriginManager) {
-    super(SDK.ResourceTreeModel, target);
+  constructor(target) {
+    super(target);
+
+    var networkManager = SDK.NetworkManager.fromTarget(target);
     if (networkManager) {
       networkManager.addEventListener(SDK.NetworkManager.Events.RequestFinished, this._onRequestFinished, this);
       networkManager.addEventListener(
@@ -47,7 +47,7 @@ SDK.ResourceTreeModel = class extends SDK.SDKModel {
 
     this._agent = target.pageAgent();
     this._agent.enable();
-    this._securityOriginManager = securityOriginManager;
+    this._securityOriginManager = SDK.SecurityOriginManager.fromTarget(target);
 
     this._fetchResourceTree();
 
@@ -356,7 +356,7 @@ SDK.ResourceTreeModel = class extends SDK.SDKModel {
   reloadPage(bypassCache, scriptToEvaluateOnLoad) {
     // Only dispatch PageReloadRequested upon first reload request to simplify client logic.
     if (!this._pendingReloadOptions)
-      this.dispatchEventToListeners(SDK.ResourceTreeModel.Events.PageReloadRequested);
+      this.dispatchEventToListeners(SDK.ResourceTreeModel.Events.PageReloadRequested, this);
     if (this._reloadSuspensionCount) {
       this._pendingReloadOptions = [bypassCache, scriptToEvaluateOnLoad];
       return;
@@ -404,6 +404,9 @@ SDK.ResourceTreeModel = class extends SDK.SDKModel {
       return parents.reverse();
     }
 
+    if (a.target() !== b.target())
+      return SDK.ExecutionContext.comparator(a, b);
+
     var framesA = a.frameId ? framePath(this.frameForId(a.frameId)) : [];
     var framesB = b.frameId ? framePath(this.frameForId(b.frameId)) : [];
     var frameA;
@@ -443,6 +446,8 @@ SDK.ResourceTreeModel = class extends SDK.SDKModel {
   }
 };
 
+SDK.SDKModel.register(SDK.ResourceTreeModel, SDK.Target.Capability.DOM);
+
 /** @enum {symbol} */
 SDK.ResourceTreeModel.Events = {
   FrameAdded: Symbol('FrameAdded'),
@@ -458,8 +463,6 @@ SDK.ResourceTreeModel.Events = {
   Load: Symbol('Load'),
   PageReloadRequested: Symbol('PageReloadRequested'),
   WillReloadPage: Symbol('WillReloadPage'),
-  ScreencastFrame: Symbol('ScreencastFrame'),
-  ScreencastVisibilityChanged: Symbol('ScreencastVisibilityChanged'),
   ColorPicked: Symbol('ColorPicked'),
   InterstitialShown: Symbol('InterstitialShown'),
   InterstitialHidden: Symbol('InterstitialHidden')
@@ -723,7 +726,7 @@ SDK.ResourceTreeFrame = class {
    * @return {string}
    */
   displayName() {
-    if (!this._parentFrame)
+    if (!this._parentFrame && !this._model.target().parentTarget())
       return Common.UIString('top');
     var subtitle = new Common.ParsedURL(this._url).displayName;
     if (subtitle) {
@@ -741,6 +744,9 @@ SDK.ResourceTreeFrame = class {
  * @unrestricted
  */
 SDK.PageDispatcher = class {
+  /**
+   * @param {!SDK.ResourceTreeModel} resourceTreeModel
+   */
   constructor(resourceTreeModel) {
     this._resourceTreeModel = resourceTreeModel;
   }
@@ -841,13 +847,10 @@ SDK.PageDispatcher = class {
   /**
    * @override
    * @param {string} data
-   * @param {!Protocol.Page.ScreencastFrameMetadata=} metadata
-   * @param {number=} sessionId
+   * @param {!Protocol.Page.ScreencastFrameMetadata} metadata
+   * @param {number} sessionId
    */
   screencastFrame(data, metadata, sessionId) {
-    this._resourceTreeModel._agent.screencastFrameAck(sessionId);
-    this._resourceTreeModel.dispatchEventToListeners(
-        SDK.ResourceTreeModel.Events.ScreencastFrame, {data: data, metadata: metadata});
   }
 
   /**
@@ -855,8 +858,6 @@ SDK.PageDispatcher = class {
    * @param {boolean} visible
    */
   screencastVisibilityChanged(visible) {
-    this._resourceTreeModel.dispatchEventToListeners(
-        SDK.ResourceTreeModel.Events.ScreencastVisibilityChanged, {visible: visible});
   }
 
   /**

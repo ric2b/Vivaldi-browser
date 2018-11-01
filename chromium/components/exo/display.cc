@@ -27,17 +27,50 @@
 #include "gpu/ipc/client/gpu_memory_buffer_impl_ozone_native_pixmap.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
+#include "ui/ozone/public/ozone_switches.h"
 #endif
 
 namespace exo {
+namespace {
+#if defined(USE_OZONE)
+// TODO(dcastagna): The following formats should be determined at runtime
+// querying kms (via ozone).
+const gfx::BufferFormat kOverlayFormats[] = {
+// TODO(dcastagna): Remove RGBX/RGBA once all the platforms using the fullscreen
+// optimization will have switched to atomic.
+#if defined(ARCH_CPU_ARM_FAMILY)
+    gfx::BufferFormat::RGBX_8888, gfx::BufferFormat::RGBA_8888,
+#endif
+    gfx::BufferFormat::BGRX_8888, gfx::BufferFormat::BGRA_8888};
+
+const gfx::BufferFormat kOverlayFormatsForDrmAtomic[] = {
+    gfx::BufferFormat::RGBX_8888, gfx::BufferFormat::RGBA_8888,
+    gfx::BufferFormat::BGR_565};
+#endif
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // Display, public:
 
-Display::Display() : notification_surface_manager_(nullptr) {}
+Display::Display() : Display(nullptr) {}
 
 Display::Display(NotificationSurfaceManager* notification_surface_manager)
-    : notification_surface_manager_(notification_surface_manager) {}
+    : notification_surface_manager_(notification_surface_manager)
+#if defined(USE_OZONE)
+      ,
+      overlay_formats_(std::begin(kOverlayFormats), std::end(kOverlayFormats))
+#endif
+{
+#if defined(USE_OZONE)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableDrmAtomic)) {
+    overlay_formats_.insert(overlay_formats_.end(),
+                            std::begin(kOverlayFormatsForDrmAtomic),
+                            std::end(kOverlayFormatsForDrmAtomic));
+  }
+#endif
+}
 
 Display::~Display() {}
 
@@ -87,13 +120,9 @@ std::unique_ptr<Buffer> Display::CreateLinuxDMABufBuffer(
   // Using zero-copy for optimal performance.
   bool use_zero_copy = true;
 
-  // List of overlay formats that are known to be supported.
-  // TODO(reveman): Determine this at runtime.
-  const gfx::BufferFormat kOverlayFormats[] = {gfx::BufferFormat::RGBA_8888,
-                                               gfx::BufferFormat::RGBX_8888};
   bool is_overlay_candidate =
-      std::find(std::begin(kOverlayFormats), std::end(kOverlayFormats),
-                format) != std::end(kOverlayFormats);
+      std::find(overlay_formats_.begin(), overlay_formats_.end(), format) !=
+      overlay_formats_.end();
 
   return base::MakeUnique<Buffer>(
       std::move(gpu_memory_buffer), GL_TEXTURE_EXTERNAL_OES,
@@ -112,8 +141,9 @@ std::unique_ptr<ShellSurface> Display::CreateShellSurface(Surface* surface) {
   }
 
   return base::MakeUnique<ShellSurface>(
-      surface, nullptr, gfx::Rect(), true /* activatable */,
-      false /* can_minimize */, ash::kShellWindowId_DefaultContainer);
+      surface, nullptr, ShellSurface::BoundsMode::SHELL, gfx::Point(),
+      true /* activatable */, false /* can_minimize */,
+      ash::kShellWindowId_DefaultContainer);
 }
 
 std::unique_ptr<ShellSurface> Display::CreatePopupShellSurface(
@@ -133,22 +163,23 @@ std::unique_ptr<ShellSurface> Display::CreatePopupShellSurface(
     return nullptr;
   }
 
-  // Determine the initial bounds for popup. |position| is relative to the
-  // parent's main surface origin and initial bounds are in screen coordinates.
+  // |position| is relative to the parent's main surface origin, and |origin| is
+  // in screen coordinates.
   gfx::Point origin = position;
   wm::ConvertPointToScreen(
       ShellSurface::GetMainSurface(parent->GetWidget()->GetNativeWindow())
           ->window(),
       &origin);
-  gfx::Rect initial_bounds(origin, gfx::Size(1, 1));
 
   return base::MakeUnique<ShellSurface>(
-      surface, parent, initial_bounds, false /* activatable */,
-      false /* can_minimize */, ash::kShellWindowId_DefaultContainer);
+      surface, parent, ShellSurface::BoundsMode::FIXED, origin,
+      false /* activatable */, false /* can_minimize */,
+      ash::kShellWindowId_DefaultContainer);
 }
 
 std::unique_ptr<ShellSurface> Display::CreateRemoteShellSurface(
     Surface* surface,
+    const gfx::Point& origin,
     int container) {
   TRACE_EVENT2("exo", "Display::CreateRemoteShellSurface", "surface",
                surface->AsTracedValue(), "container", container);
@@ -161,9 +192,9 @@ std::unique_ptr<ShellSurface> Display::CreateRemoteShellSurface(
   // Remote shell surfaces in system modal container cannot be minimized.
   bool can_minimize = container != ash::kShellWindowId_SystemModalContainer;
 
-  return base::MakeUnique<ShellSurface>(surface, nullptr, gfx::Rect(1, 1),
-                                        true /* activatable */, can_minimize,
-                                        container);
+  return base::MakeUnique<ShellSurface>(
+      surface, nullptr, ShellSurface::BoundsMode::CLIENT, origin,
+      true /* activatable */, can_minimize, container);
 }
 
 std::unique_ptr<SubSurface> Display::CreateSubSurface(Surface* surface,

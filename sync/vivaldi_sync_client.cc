@@ -15,4 +15,4 @@ invalidation::InvalidationService* VivaldiSyncClient::GetInvalidationService() {
   return invalidation_service_.get();
 }
 
-}  // namepace vivaldi
+}  // namespace vivaldi

@@ -6,7 +6,6 @@
 
 #include <iterator>
 
-#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/appcache/appcache_service_impl.h"
@@ -16,6 +15,9 @@
 #include "content/browser/frame_host/ancestor_throttle.h"
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/mixed_content_navigation_throttle.h"
+#include "content/browser/frame_host/navigation_controller_impl.h"
+#include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -32,7 +34,6 @@
 #include "content/public/common/url_constants.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/redirect_info.h"
-#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -57,6 +58,7 @@ void NotifyAbandonedTransferNavigation(const GlobalRequestID& id) {
 // static
 std::unique_ptr<NavigationHandleImpl> NavigationHandleImpl::Create(
     const GURL& url,
+    const std::vector<GURL>& redirect_chain,
     FrameTreeNode* frame_tree_node,
     bool is_renderer_initiated,
     bool is_same_page,
@@ -64,13 +66,14 @@ std::unique_ptr<NavigationHandleImpl> NavigationHandleImpl::Create(
     int pending_nav_entry_id,
     bool started_from_context_menu) {
   return std::unique_ptr<NavigationHandleImpl>(new NavigationHandleImpl(
-      url, frame_tree_node, is_renderer_initiated, is_same_page,
+      url, redirect_chain, frame_tree_node, is_renderer_initiated, is_same_page,
       navigation_start, pending_nav_entry_id,
       started_from_context_menu));
 }
 
 NavigationHandleImpl::NavigationHandleImpl(
     const GURL& url,
+    const std::vector<GURL>& redirect_chain,
     FrameTreeNode* frame_tree_node,
     bool is_renderer_initiated,
     bool is_same_page,
@@ -86,6 +89,9 @@ NavigationHandleImpl::NavigationHandleImpl(
       is_renderer_initiated_(is_renderer_initiated),
       is_same_page_(is_same_page),
       was_redirected_(false),
+      did_replace_entry_(false),
+      should_update_history_(false),
+      subframe_entry_committed_(false),
       connection_info_(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN),
       original_url_(url),
       state_(INITIAL),
@@ -97,15 +103,39 @@ NavigationHandleImpl::NavigationHandleImpl(
       request_context_type_(REQUEST_CONTEXT_TYPE_UNSPECIFIED),
       mixed_content_context_type_(blink::WebMixedContentContextType::Blockable),
       should_replace_current_entry_(false),
+      redirect_chain_(redirect_chain),
       is_download_(false),
       is_stream_(false),
       started_from_context_menu_(started_from_context_menu),
+      reload_type_(ReloadType::NONE),
+      restore_type_(RestoreType::NONE),
+      navigation_type_(NAVIGATION_TYPE_UNKNOWN),
       weak_factory_(this) {
   DCHECK(!navigation_start.is_null());
-  redirect_chain_.push_back(url);
+  if (redirect_chain_.empty())
+    redirect_chain_.push_back(url);
 
   starting_site_instance_ =
       frame_tree_node_->current_frame_host()->GetSiteInstance();
+
+  if (pending_nav_entry_id_) {
+    NavigationControllerImpl* nav_controller =
+        static_cast<NavigationControllerImpl*>(
+            frame_tree_node_->navigator()->GetController());
+    NavigationEntryImpl* nav_entry =
+        nav_controller->GetEntryWithUniqueID(pending_nav_entry_id_);
+    if (!nav_entry &&
+        nav_controller->GetPendingEntry() &&
+        nav_controller->GetPendingEntry()->GetUniqueID() ==
+            pending_nav_entry_id_) {
+      nav_entry = nav_controller->GetPendingEntry();
+    }
+
+    if (nav_entry) {
+      reload_type_ = nav_entry->reload_type();
+      restore_type_ = nav_entry->restore_type();
+    }
+  }
 
   if (!IsRendererDebugURL(url_))
     GetDelegate()->DidStartNavigation(this);
@@ -171,6 +201,10 @@ bool NavigationHandleImpl::IsRendererInitiated() {
 
 bool NavigationHandleImpl::WasServerRedirect() {
   return was_redirected_;
+}
+
+const std::vector<GURL>& NavigationHandleImpl::GetRedirectChain() {
+  return redirect_chain_;
 }
 
 int NavigationHandleImpl::GetFrameTreeNodeId() {
@@ -251,6 +285,32 @@ bool NavigationHandleImpl::HasCommitted() {
 
 bool NavigationHandleImpl::IsErrorPage() {
   return state_ == DID_COMMIT_ERROR_PAGE;
+}
+
+bool NavigationHandleImpl::HasSubframeNavigationEntryCommitted() {
+  DCHECK(!IsInMainFrame());
+  DCHECK(state_ == DID_COMMIT || state_ == DID_COMMIT_ERROR_PAGE);
+  return subframe_entry_committed_;
+}
+
+bool NavigationHandleImpl::DidReplaceEntry() {
+  DCHECK(state_ == DID_COMMIT || state_ == DID_COMMIT_ERROR_PAGE);
+  return did_replace_entry_;
+}
+
+bool NavigationHandleImpl::ShouldUpdateHistory() {
+  DCHECK(state_ == DID_COMMIT || state_ == DID_COMMIT_ERROR_PAGE);
+  return should_update_history_;
+}
+
+const GURL& NavigationHandleImpl::GetPreviousURL() {
+  DCHECK(state_ == DID_COMMIT || state_ == DID_COMMIT_ERROR_PAGE);
+  return previous_url_;
+}
+
+net::HostPortPair NavigationHandleImpl::GetSocketAddress() {
+  DCHECK(state_ == DID_COMMIT || state_ == DID_COMMIT_ERROR_PAGE);
+  return socket_address_;
 }
 
 void NavigationHandleImpl::Resume() {
@@ -381,7 +441,8 @@ void NavigationHandleImpl::CallDidCommitNavigationForTesting(const GURL& url) {
   params.page_state = PageState::CreateFromURL(url);
   params.contents_mime_type = std::string("text/html");
 
-  DidCommitNavigation(params, false, render_frame_host_);
+  DidCommitNavigation(params, true, false, GURL(), NAVIGATION_TYPE_NEW_PAGE,
+                      render_frame_host_);
 }
 
 bool NavigationHandleImpl::WasStartedFromContextMenu() const {
@@ -394,6 +455,14 @@ const GURL& NavigationHandleImpl::GetSearchableFormURL() {
 
 const std::string& NavigationHandleImpl::GetSearchableFormEncoding() {
   return searchable_form_encoding_;
+}
+
+ReloadType NavigationHandleImpl::GetReloadType() {
+  return reload_type_;
+}
+
+RestoreType NavigationHandleImpl::GetRestoreType() {
+  return restore_type_;
 }
 
 NavigationData* NavigationHandleImpl::GetNavigationData() {
@@ -436,14 +505,28 @@ void NavigationHandleImpl::WillStartRequest(
   method_ = method;
   if (method_ == "POST")
     resource_request_body_ = resource_request_body;
-  sanitized_referrer_ = sanitized_referrer;
   has_user_gesture_ = has_user_gesture;
   transition_ = transition;
+  // Mirrors the logic in RenderFrameImpl::SendDidCommitProvisionalLoad.
+  if (transition_ & ui::PAGE_TRANSITION_CLIENT_REDIRECT) {
+    // If the page contained a client redirect (meta refresh,
+    // document.location), set the referrer appropriately.
+    sanitized_referrer_ =
+        Referrer(redirect_chain_[0], sanitized_referrer.policy);
+  } else {
+    sanitized_referrer_ = sanitized_referrer;
+  }
   is_external_protocol_ = is_external_protocol;
   request_context_type_ = request_context_type;
   mixed_content_context_type_ = mixed_content_context_type;
   state_ = WILL_SEND_REQUEST;
   complete_callback_ = callback;
+
+  if (IsSelfReferentialURL()) {
+    state_ = CANCELING;
+    RunCompleteCallback(NavigationThrottle::CANCEL);
+    return;
+  }
 
   RegisterNavigationThrottles();
 
@@ -469,8 +552,13 @@ void NavigationHandleImpl::WillRedirectRequest(
   // Update the navigation parameters.
   url_ = new_url;
   method_ = new_method;
-  sanitized_referrer_.url = new_referrer_url;
-  sanitized_referrer_ = Referrer::SanitizeForRequest(url_, sanitized_referrer_);
+
+  if (!(transition_ & ui::PAGE_TRANSITION_CLIENT_REDIRECT)) {
+    sanitized_referrer_.url = new_referrer_url;
+    sanitized_referrer_ =
+        Referrer::SanitizeForRequest(url_, sanitized_referrer_);
+  }
+
   is_external_protocol_ = new_is_external_protocol;
   response_headers_ = response_headers;
   connection_info_ = connection_info;
@@ -481,6 +569,12 @@ void NavigationHandleImpl::WillRedirectRequest(
 
   state_ = WILL_REDIRECT_REQUEST;
   complete_callback_ = callback;
+
+  if (IsSelfReferentialURL()) {
+    state_ = CANCELING;
+    RunCompleteCallback(NavigationThrottle::CANCEL);
+    return;
+  }
 
   // Notify each throttle of the request.
   NavigationThrottle::ThrottleCheckResult result = CheckWillRedirectRequest();
@@ -536,22 +630,36 @@ void NavigationHandleImpl::ReadyToCommitNavigation(
   render_frame_host_ = render_frame_host;
   state_ = READY_TO_COMMIT;
 
-  if (!IsRendererDebugURL(url_))
+  if (!IsRendererDebugURL(url_) && !IsSamePage())
     GetDelegate()->ReadyToCommitNavigation(this);
 }
 
 void NavigationHandleImpl::DidCommitNavigation(
     const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
-    bool same_page,
+    bool navigation_entry_committed,
+    bool did_replace_entry,
+    const GURL& previous_url,
+    NavigationType navigation_type,
     RenderFrameHostImpl* render_frame_host) {
   DCHECK(!render_frame_host_ || render_frame_host_ == render_frame_host);
   DCHECK_EQ(frame_tree_node_, render_frame_host->frame_tree_node());
   CHECK_EQ(url_, params.url);
 
+  did_replace_entry_ = did_replace_entry;
   method_ = params.method;
   has_user_gesture_ = (params.gesture == NavigationGestureUser);
   transition_ = params.transition;
+  should_update_history_ = params.should_update_history;
   render_frame_host_ = render_frame_host;
+  previous_url_ = previous_url;
+  base_url_ = params.base_url;
+  socket_address_ = params.socket_address;
+  navigation_type_ = navigation_type;
+
+  DCHECK(!IsInMainFrame() || navigation_entry_committed)
+      << "Only subframe navigations can get here without changing the "
+      << "NavigationEntry";
+  subframe_entry_committed_ = navigation_entry_committed;
 
   // If an error page reloads, net_error_code might be 200 but we still want to
   // count it as an error page.
@@ -578,7 +686,9 @@ void NavigationHandleImpl::Transfer() {
   // transferring, the URLRequest can no longer be cancelled by its original
   // RenderFrame. Instead it will persist until being picked up by the transfer
   // RenderFrame, even if the original RenderFrame is destroyed.
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE, transfer_callback_);
+  // Note: |transfer_callback_| can be null in unit tests.
+  if (!transfer_callback_.is_null())
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE, transfer_callback_);
   transfer_callback_.Reset();
 }
 
@@ -720,9 +830,6 @@ bool NavigationHandleImpl::MaybeTransferAndProceedInternal() {
   if (!render_frame_host_->is_active()) {
     // This will cause the deletion of this NavigationHandle and the
     // cancellation of the navigation.
-    // TODO(clamy): Remove the logging code once we understand better how we can
-    // get there.
-    base::debug::DumpWithoutCrashing();
     render_frame_host_->SetNavigationHandle(nullptr);
     return false;
   }
@@ -795,11 +902,20 @@ void NavigationHandleImpl::RunCompleteCallback(
 
 void NavigationHandleImpl::RegisterNavigationThrottles() {
   // Register the navigation throttles. The vector returned by
-  // GetNavigationThrottles is not assigned to throttles_ directly because it
-  // would overwrite any throttles previously added with
+  // CreateThrottlesForNavigation is not assigned to throttles_ directly because
+  // it would overwrite any throttles previously added with
   // RegisterThrottleForTesting.
+  // TODO(carlosk, arthursonzogni): should simplify this to either use
+  // |throttles_| directly (except for the case described above) or
+  // |throttles_to_register| for registering all throttles.
   std::vector<std::unique_ptr<NavigationThrottle>> throttles_to_register =
       GetDelegate()->CreateThrottlesForNavigation(this);
+
+  std::unique_ptr<NavigationThrottle> mixed_content_throttle =
+      MixedContentNavigationThrottle::CreateThrottleForNavigation(this);
+  if (mixed_content_throttle)
+    throttles_to_register.push_back(std::move(mixed_content_throttle));
+
   std::unique_ptr<NavigationThrottle> devtools_throttle =
       RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(this);
   if (devtools_throttle)
@@ -818,6 +934,37 @@ void NavigationHandleImpl::RegisterNavigationThrottles() {
   throttles_.insert(throttles_.begin(),
                     std::make_move_iterator(throttles_to_register.begin()),
                     std::make_move_iterator(throttles_to_register.end()));
+}
+
+bool NavigationHandleImpl::IsSelfReferentialURL() {
+  // about: URLs should be exempted since they are reserved for other purposes
+  // and cannot be the source of infinite recursion. See
+  // https://crbug.com/341858 .
+  if (url_.SchemeIs("about"))
+    return false;
+
+  // Browser-triggered navigations should be exempted.
+  if (!is_renderer_initiated_)
+    return false;
+
+  // Some sites rely on constructing frame hierarchies where frames are loaded
+  // via POSTs with the same URLs, so exempt POST requests.  See
+  // https://crbug.com/710008.
+  if (method_ == "POST")
+    return false;
+
+  // We allow one level of self-reference because some sites depend on that,
+  // but we don't allow more than one.
+  bool found_self_reference = false;
+  for (const FrameTreeNode* node = frame_tree_node_->parent(); node;
+       node = node->parent()) {
+    if (node->current_url().EqualsIgnoringRef(url_)) {
+      if (found_self_reference)
+        return true;
+      found_self_reference = true;
+    }
+  }
+  return false;
 }
 
 }  // namespace content

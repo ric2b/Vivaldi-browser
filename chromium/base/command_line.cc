@@ -322,11 +322,6 @@ CommandLine::StringType CommandLine::GetSwitchValueNative(
                                                   : *(result->second);
 }
 
-void CommandLine::AppendSwitchNoDup(const std::string& switch_string) {
-  if (!HasSwitch(switch_string))
-    AppendSwitchNative(switch_string, StringType());
-}
-
 void CommandLine::AppendSwitch(const std::string& switch_string) {
   AppendSwitchNative(switch_string, StringType());
 }

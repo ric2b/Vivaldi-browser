@@ -634,8 +634,9 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
     return false;  // Can't request invalid URLs.
 
   if (IsPseudoScheme(url.scheme())) {
-    // Every child process can request <about:blank> and <about:srcdoc>.
-    if (url == url::kAboutBlankURL || url == kAboutSrcDocURL)
+    // Every child process can request <about:blank>, <about:blank?foo>,
+    // <about:blank/#foo> and <about:srcdoc>.
+    if (url.IsAboutBlank() || url == kAboutSrcDocURL)
       return true;
     // URLs like <about:version>, <about:crash>, <view-source:...> shouldn't be
     // requestable by any child process.  Also, this case covers

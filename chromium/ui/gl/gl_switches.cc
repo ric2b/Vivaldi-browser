@@ -13,7 +13,9 @@ const char kGLImplementationAppleName[]       = "apple";
 const char kGLImplementationEGLName[]         = "egl";
 const char kGLImplementationANGLEName[]       = "angle";
 const char kGLImplementationSwiftShaderName[] = "swiftshader";
+const char kGLImplementationSwiftShaderForWebGLName[] = "swiftshader-webgl";
 const char kGLImplementationMockName[]        = "mock";
+const char kGLImplementationStubName[] = "stub";
 
 const char kANGLEImplementationDefaultName[]  = "default";
 const char kANGLEImplementationD3D9Name[]     = "d3d9";
@@ -66,6 +68,7 @@ const char kUseANGLE[]                      = "use-angle";
 //  egl: whatever EGL / GLES2 the user has installed (Windows default - actually
 //       ANGLE).
 //  osmesa: The OSMesa software renderer.
+//  swiftshader: The SwiftShader software renderer.
 const char kUseGL[]                         = "use-gl";
 
 const char kSwiftShaderPath[]               = "swiftshader-path";
@@ -102,15 +105,15 @@ const char kEnableSgiVideoSync[] = "enable-sgi-video-sync";
 // the GL output will not be correct but tests will run faster.
 const char kDisableGLDrawingForTests[] = "disable-gl-drawing-for-tests";
 
-// Forces the use of OSMesa instead of hardware gpu.
-const char kOverrideUseGLWithOSMesaForTests[] =
-    "override-use-gl-with-osmesa-for-tests";
+// Forces the use of software GL instead of hardware gpu.
+const char kOverrideUseSoftwareGLForTests[] =
+    "override-use-software-gl-for-tests";
 
 // Disables specified comma separated GL Extensions if found.
 const char kDisableGLExtensions[] = "disable-gl-extensions";
 
-// Use EGL_KHR_swap_buffers_with_damage to implement PostSubBuffers
-const char kEnableSwapBuffersWithDamage[] = "enable-swap-buffers-with-damage";
+// Enables SwapBuffersWithBounds if it is supported.
+const char kEnableSwapBuffersWithBounds[] = "enable-swap-buffers-with-bounds";
 
 // This is the list of switches passed from this file that are passed from the
 // GpuProcessHost to the GPU Process. Add your switch to this list if you need
@@ -123,12 +126,22 @@ const char* kGLSwitchesCopiedFromGpuProcessHost[] = {
     kEnableSgiVideoSync,
     kGpuNoContextLost,
     kDisableGLDrawingForTests,
-    kOverrideUseGLWithOSMesaForTests,
+    kOverrideUseSoftwareGLForTests,
     kUseANGLE,
     kDisableDirectComposition,
-    kEnableSwapBuffersWithDamage,
+    kEnableSwapBuffersWithBounds,
 };
 const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
     arraysize(kGLSwitchesCopiedFromGpuProcessHost);
 
 }  // namespace switches
+
+namespace features {
+
+#if defined(OS_WIN)
+// Wait for D3D VSync signals in GPU process (as opposed to delay based VSync
+// generated in Browser process based on VSync parameters).
+const base::Feature kD3DVsync{"D3DVsync", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_WIN)
+
+}  // namespace features

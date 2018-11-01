@@ -23,6 +23,7 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/range/range.h"
 
 class GURL;
 class OmniboxClient;
@@ -57,9 +58,6 @@ class OmniboxView {
   OmniboxEditModel* model() { return model_.get(); }
   const OmniboxEditModel* model() const { return model_.get(); }
 
-  // Shared cross-platform focus handling.
-  void OnDidKillFocus();
-
   // Called when any relevant state changes other than changing tabs.
   virtual void Update() = 0;
 
@@ -89,8 +87,8 @@ class OmniboxView {
   // the field is empty.
   bool IsEditingOrEmpty() const;
 
-  // Like GetIcon(), but returns a vector icon identifier.
-  gfx::VectorIconId GetVectorIcon() const;
+  // Returns the vector icon to display as the location icon.
+  const gfx::VectorIcon& GetVectorIcon() const;
 
   // The user text is the text the user has manually keyed in.  When present,
   // this is shown in preference to the permanent text; hitting escape will
@@ -251,6 +249,10 @@ class OmniboxView {
   // Internally invoked whenever the text changes in some way.
   virtual void TextChanged();
 
+  // Returns whether the current text in the model represents a URL. Provided
+  // to allow tests to override the result.
+  virtual bool CurrentTextIsURL();
+
   // Return the number of characters in the current buffer. The name
   // |GetTextLength| can't be used as the Windows override of this class
   // inherits from a class that defines a method with that name.
@@ -261,6 +263,24 @@ class OmniboxView {
 
   OmniboxEditController* controller() { return controller_; }
   const OmniboxEditController* controller() const { return controller_; }
+
+  // Marks part (or, if |range| is invalid, all) of the current text as
+  // emphasized or de-emphasized, by changing its color.
+  virtual void SetEmphasis(bool emphasize, const gfx::Range& range) = 0;
+
+  // Sets the color and strikethrough state for |range|, which represents the
+  // current scheme, based on the current security state.  Schemes are displayed
+  // in different ways for different security levels.
+  virtual void UpdateSchemeStyle(const gfx::Range& range) = 0;
+
+  // Parses |display_text|, then invokes SetEmphasis() and UpdateSchemeStyle()
+  // appropriately. If the text is a query string, there is no scheme, and
+  // everything is emphasized equally, whereas for URLs the scheme may be styled
+  // based on the current security state, with parts of the URL de-emphasized to
+  // draw attention to whatever best represents the "identity" of the current
+  // URL.
+  void UpdateTextStyle(const base::string16& display_text,
+                       const AutocompleteSchemeClassifier& classifier);
 
  private:
   friend class OmniboxViewMacTest;

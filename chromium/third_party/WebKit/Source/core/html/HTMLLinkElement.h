@@ -35,6 +35,7 @@
 #include "core/html/RelList.h"
 #include "core/loader/LinkLoader.h"
 #include "core/loader/LinkLoaderClient.h"
+#include "platform/WebTaskRunner.h"
 #include <memory>
 
 namespace blink {
@@ -88,7 +89,6 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
 
   DOMTokenList* sizes() const;
 
-  void dispatchPendingEvent(std::unique_ptr<IncrementLoadEventDelayCount>);
   void scheduleEvent();
 
   // From LinkLoaderClient
@@ -120,6 +120,10 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   void process();
   static void processCallback(Node*);
 
+  // Always call this asynchronously because this can cause synchronous
+  // Document load event and JavaScript execution.
+  void dispatchPendingEvent(std::unique_ptr<IncrementLoadEventDelayCount>);
+
   // From Node and subclassses
   void parseAttribute(const AttributeModificationParams&) override;
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
@@ -140,6 +144,7 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   void didStopLinkPrerender() override;
   void didSendLoadForLinkPrerender() override;
   void didSendDOMContentLoadedForLinkPrerender() override;
+  RefPtr<WebTaskRunner> getLoadingTaskRunner() override;
 
   // From DOMTokenListObserver
   void valueWasSet() final;

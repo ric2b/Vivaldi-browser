@@ -50,28 +50,8 @@ public class KeySystemTest extends AwTestBase {
         mAwContents = testContainerView.getAwContents();
         enableJavaScriptOnUiThread(mAwContents);
 
-        loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
-                getKeySystemTestPage(), "text/html", false);
-    }
-
-    private String getKeySystemTestPage() {
-        return "<html> <script>"
-                + "var result;"
-                + "function success(keySystemAccess) {"
-                + "  result = 'supported';"
-                + "}"
-                + "function failure(error){"
-                + "  result = error.name;"
-                + "}"
-                + "function isKeySystemSupported(keySystem) {"
-                + "  navigator.requestMediaKeySystemAccess(keySystem, [{}]).then("
-                + "      success, failure);"
-                + "}"
-                + "function areProprietaryCodecsSupported() {"
-                + "  var video = document.createElement('video');"
-                + "  return video.canPlayType('video/mp4; codecs=\"avc1\"');"
-                + "}"
-                + "</script> </html>";
+        loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
+                "file:///android_asset/key-system-test.html");
     }
 
     private String isKeySystemSupported(String keySystem) throws Exception {

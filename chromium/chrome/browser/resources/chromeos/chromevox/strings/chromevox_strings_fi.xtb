@@ -136,6 +136,7 @@
 <translation id="2462626033734746142">Valintanappiryhmä</translation>
 <translation id="2471138580042810658">Otsikko 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{asteriski}other{# asteriskia}}</translation>
+<translation id="2523609930580546572">ChromeVox-opetusohjelma</translation>
 <translation id="2525706221823668172">Chromebookin pikanäppäimet</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> on nollattu.</translation>
 <translation id="2553108862507765288">kielioppivirhe</translation>
@@ -222,7 +223,6 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="3226035351387556942">chk</translation>
 <translation id="3229375994964697375">Käyty linkki</translation>
 <translation id="3232388865800379423">Ponnahduspainike</translation>
-<translation id="323731244387692321">Avaa ChromeVox-näppäimistöohje</translation>
 <translation id="3241052487511142956">Edellinen käyty linkki</translation>
 <translation id="3286390186030710347">Liukusäädin</translation>
 <translation id="3299925995433437805">Ei seuraavia käytyjä linkkejä.</translation>
@@ -377,6 +377,7 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="4372435075475052704">vähintään <ph name="X" /></translation>
 <translation id="4372705107434148843">Lopeta puhe</translation>
 <translation id="4373197658375206385">Ei edellisiä kohteita, jotka eivät ole linkkejä.</translation>
+<translation id="4376316291247992553">Näytä kuva pistekirjoituksena.</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="443163561286008705">palauta</translation>
 <translation id="4471074325120394300">Ei linkkejä.</translation>
@@ -719,6 +720,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="7693840228159394336">Edellinen valintanappi</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7770823902658038748"><ph name="VALUE" />, <ph name="NAME" />, salasanan tekstikenttä</translation>
+<translation id="7776293189010177726">Avaa ChromeVox-valikot.</translation>
 <translation id="7805247615045262757">oletusnavigointi</translation>
 <translation id="7805768142964895445">Tila</translation>
 <translation id="7810781339813764006">Seuraava ryhmä</translation>

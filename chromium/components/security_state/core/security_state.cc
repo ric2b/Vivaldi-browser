@@ -19,7 +19,12 @@ namespace {
 
 // Do not change or reorder this enum, and add new values at the end. It is used
 // in the MarkHttpAs histogram.
-enum MarkHttpStatus { NEUTRAL, NON_SECURE, HTTP_SHOW_WARNING, LAST_STATUS };
+enum MarkHttpStatus {
+  NEUTRAL /* deprecated */,
+  NON_SECURE,
+  HTTP_SHOW_WARNING_ON_SENSITIVE_FIELDS,
+  LAST_STATUS
+};
 
 // If |switch_or_field_trial_group| corresponds to a valid
 // MarkHttpAs group, sets |*level| and |*histogram_status| to the
@@ -29,30 +34,11 @@ bool GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
     bool displayed_sensitive_input_on_http,
     SecurityLevel* level,
     MarkHttpStatus* histogram_status) {
-  if (switch_or_field_trial_group == switches::kMarkHttpAsNeutral) {
-    *level = NONE;
-    *histogram_status = NEUTRAL;
-    return true;
-  }
-
-  if (switch_or_field_trial_group == switches::kMarkHttpAsDangerous) {
-    *level = DANGEROUS;
-    *histogram_status = NON_SECURE;
-    return true;
-  }
-
-  if (switch_or_field_trial_group ==
-      switches::kMarkHttpWithPasswordsOrCcWithChip) {
-    if (displayed_sensitive_input_on_http) {
-      *level = security_state::HTTP_SHOW_WARNING;
-    } else {
-      *level = NONE;
-    }
-    *histogram_status = HTTP_SHOW_WARNING;
-    return true;
-  }
-
-  return false;
+  if (switch_or_field_trial_group != switches::kMarkHttpAsDangerous)
+    return false;
+  *level = DANGEROUS;
+  *histogram_status = NON_SECURE;
+  return true;
 }
 
 SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
@@ -73,10 +59,10 @@ SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
           choice, displayed_sensitive_input_on_http, &level, &status)) {
     if (!GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
             group, displayed_sensitive_input_on_http, &level, &status)) {
-      // If neither the command-line switch nor field trial group is set, then
-      // nonsecure defaults to neutral.
-      status = NEUTRAL;
-      level = NONE;
+      status = HTTP_SHOW_WARNING_ON_SENSITIVE_FIELDS;
+      level = displayed_sensitive_input_on_http
+                  ? security_state::HTTP_SHOW_WARNING
+                  : NONE;
     }
   }
 
@@ -112,9 +98,9 @@ SecurityLevel GetSecurityLevelForRequest(
     return DANGEROUS;
   }
 
-  GURL url = visible_security_state.url;
+  const GURL url = visible_security_state.url;
 
-  bool is_cryptographic_with_certificate =
+  const bool is_cryptographic_with_certificate =
       (url.SchemeIsCryptographic() && visible_security_state.certificate);
 
   // Set the security level to DANGEROUS for major certificate errors.
@@ -130,9 +116,13 @@ SecurityLevel GetSecurityLevelForRequest(
   if (url.SchemeIs(url::kDataScheme))
     return SecurityLevel::HTTP_SHOW_WARNING;
 
-  // Choose the appropriate security level for HTTP requests.
+  // Choose the appropriate security level for requests to HTTP and remaining
+  // pseudo URLs (blob:, filesystem:). filesystem: is a standard scheme so does
+  // not need to be explicitly listed here.
+  // TODO(meacer): Remove special case for blob (crbug.com/684751).
   if (!is_cryptographic_with_certificate) {
-    if (!is_origin_secure_callback.Run(url) && url.IsStandard()) {
+    if (!is_origin_secure_callback.Run(url) &&
+        (url.IsStandard() || url.SchemeIs(url::kBlobScheme))) {
       return GetSecurityLevelForNonSecureFieldTrial(
           visible_security_state.displayed_password_field_on_http ||
           visible_security_state.displayed_credit_card_field_on_http);
@@ -232,6 +222,11 @@ void SecurityInfoForRequest(
       visible_security_state.displayed_password_field_on_http;
   security_info->displayed_credit_card_field_on_http =
       visible_security_state.displayed_credit_card_field_on_http;
+  if (visible_security_state.certificate) {
+    security_info->cert_missing_subject_alt_name =
+        !visible_security_state.certificate->GetSubjectAltName(nullptr,
+                                                               nullptr);
+  }
 
   security_info->security_level = GetSecurityLevelForRequest(
       visible_security_state, used_policy_installed_certificate,
@@ -259,7 +254,8 @@ SecurityInfo::SecurityInfo()
       obsolete_ssl_status(net::OBSOLETE_SSL_NONE),
       pkp_bypassed(false),
       displayed_password_field_on_http(false),
-      displayed_credit_card_field_on_http(false) {}
+      displayed_credit_card_field_on_http(false),
+      cert_missing_subject_alt_name(false) {}
 
 SecurityInfo::~SecurityInfo() {}
 

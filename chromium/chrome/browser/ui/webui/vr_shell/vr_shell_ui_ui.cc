@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/webui/vr_shell/vr_shell_ui_ui.h"
 
+#include <string>
+#include <unordered_set>
+
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/vr_shell/vr_shell_ui_message_handler.h"
@@ -169,10 +172,9 @@ void RemoteDataSource::OnURLFetchComplete(const net::URLFetcher* source) {
       // page from remote server. Empty string indicates default page.
       use_localhost_ = false;
       content::URLDataSource::GotDataCallback callback = it->second;
-      StartDataRequest(
-          std::string(),
-          content::ResourceRequestInfo::WebContentsGetter(),
-          callback);
+      StartDataRequest(std::string(),
+                       content::ResourceRequestInfo::WebContentsGetter(),
+                       callback);
     }
   } else {
     it->second.Run(base::RefCountedString::TakeString(&response));
@@ -189,6 +191,8 @@ content::WebUIDataSource* CreateVrShellUIHTMLSource() {
   source->AddResourcePath("vr_shell_ui.js", IDR_VR_SHELL_UI_JS);
   source->AddResourcePath("vr_shell_ui_api.js", IDR_VR_SHELL_UI_API_JS);
   source->AddResourcePath("vr_shell_ui_scene.js", IDR_VR_SHELL_UI_SCENE_JS);
+  source->AddResourcePath("vk.css", IDR_VR_SHELL_UI_VK_CSS);
+  source->AddResourcePath("vk.js", IDR_VR_SHELL_UI_VK_JS);
   source->SetDefaultResource(IDR_VR_SHELL_UI_HTML);
   source->AddLocalizedString(
       "insecureWebVrContentPermanent",
@@ -199,6 +203,9 @@ content::WebUIDataSource* CreateVrShellUIHTMLSource() {
   source->AddLocalizedString("back", IDS_VR_SHELL_UI_BACK_BUTTON);
   source->AddLocalizedString("forward", IDS_VR_SHELL_UI_FORWARD_BUTTON);
   source->AddLocalizedString("reload", IDS_VR_SHELL_UI_RELOAD_BUTTON);
+  source->AddLocalizedString("newTab", IDS_VR_SHELL_NEW_TAB_BUTTON);
+  source->AddLocalizedString("newIncognitoTab",
+                             IDS_VR_SHELL_NEW_INCOGNITO_TAB_BUTTON);
 
   return source;
 }

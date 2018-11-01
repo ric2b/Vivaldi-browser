@@ -12,6 +12,7 @@
 #include "ash/accelerators/accelerator_delegate.h"
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
+#include "ash/app_list/app_list_delegate_impl.h"
 #include "ash/aura/wm_shell_aura.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/common/accelerators/accelerator_controller.h"
@@ -28,6 +29,7 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/system/chromeos/bluetooth/bluetooth_notification_controller.h"
+#include "ash/common/system/chromeos/network/sms_observer.h"
 #include "ash/common/system/chromeos/power/power_status.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
@@ -94,14 +96,18 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/audio/audio_a11y_controller.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/system/devicemode.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
+#include "ui/aura/mus/user_activity_forwarder.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/ui_base_switches.h"
@@ -269,10 +275,7 @@ views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
 
 void Shell::SetDisplayWorkAreaInsets(Window* contains,
                                      const gfx::Insets& insets) {
-  if (!window_tree_host_manager_->UpdateWorkAreaOfDisplayNearestWindow(
-          contains, insets)) {
-    return;
-  }
+  wm_shell_->SetDisplayWorkAreaInsets(WmWindow::Get(contains), insets);
 }
 
 void Shell::OnLoginStateChanged(LoginStatus status) {
@@ -366,6 +369,11 @@ void Shell::SetTouchHudProjectionEnabled(bool enabled) {
 
 FirstRunHelper* Shell::CreateFirstRunHelper() {
   return new FirstRunHelperImpl;
+}
+
+void Shell::SetLargeCursorSizeInDip(int large_cursor_size_in_dip) {
+  window_tree_host_manager_->cursor_window_controller()
+      ->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
 }
 
 void Shell::SetCursorCompositingEnabled(bool enabled) {
@@ -530,6 +538,9 @@ Shell::~Shell() {
   ScreenAsh::CreateScreenForShutdown();
   display_configuration_controller_.reset();
 
+  // AppListDelegateImpl depends upon AppList.
+  app_list_delegate_impl_.reset();
+
   wm_shell_->Shutdown();
   // Depends on |focus_client_|, so must be destroyed before.
   window_tree_host_manager_.reset();
@@ -566,6 +577,9 @@ void Shell::Init(const ShellInitParams& init_params) {
   const bool is_mash = wm_shell_->IsRunningInMash();
 
   wm_shell_->Initialize(init_params.blocking_pool);
+
+  if (is_mash)
+    app_list_delegate_impl_ = base::MakeUnique<AppListDelegateImpl>();
 
   // TODO(sky): move creation to WmShell.
   if (!is_mash)
@@ -669,9 +683,10 @@ void Shell::Init(const ShellInitParams& init_params) {
         new ResolutionNotificationController);
   }
 
-  if (cursor_manager_)
+  if (cursor_manager_) {
     cursor_manager_->SetDisplay(
         display::Screen::GetScreen()->GetPrimaryDisplay());
+  }
 
   if (!is_mash) {
     // TODO(sky): move this to WmShell. http://crbug.com/671246.
@@ -733,6 +748,15 @@ void Shell::Init(const ShellInitParams& init_params) {
       display_configurator_->cached_displays());
 
   wm_shell_->AddShellObserver(lock_state_controller_.get());
+
+  // The connector is unavailable in some tests.
+  if (is_mash && wm_shell_->delegate()->GetShellConnector()) {
+    ui::mojom::UserActivityMonitorPtr user_activity_monitor;
+    wm_shell_->delegate()->GetShellConnector()->BindInterface(
+        ui::mojom::kServiceName, &user_activity_monitor);
+    user_activity_forwarder_ = base::MakeUnique<aura::UserActivityForwarder>(
+        std::move(user_activity_monitor), user_activity_detector_.get());
+  }
 
   drag_drop_controller_.reset(new DragDropController);
   // |screenshot_controller_| needs to be created (and prepended as a
@@ -824,6 +848,7 @@ void Shell::Init(const ShellInitParams& init_params) {
     screen_orientation_controller_.reset(new ScreenOrientationController());
     screen_layout_observer_.reset(new ScreenLayoutObserver());
   }
+  sms_observer_.reset(new SmsObserver());
 
   // The compositor thread and main message loop have to be running in
   // order to create mirror window. Run it after the main message loop

@@ -93,7 +93,7 @@ Bindings.NetworkProject = class extends SDK.SDKObject {
           debuggerModel.addEventListener(
               SDK.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this));
     }
-    var cssModel = SDK.CSSModel.fromTarget(target);
+    var cssModel = target.model(SDK.CSSModel);
     if (cssModel) {
       this._eventListeners.push(
           cssModel.addEventListener(SDK.CSSModel.Events.StyleSheetAdded, this._styleSheetAdded, this),
@@ -249,10 +249,12 @@ Bindings.NetworkProject = class extends SDK.SDKObject {
       if (!parsedURL.isValid)
         return;
     }
-    var uiSourceCode = this._createFile(script, SDK.ResourceTreeFrame.fromScript(script), script.isContentScript());
+    var originalContentProvider = script.originalContentProvider();
+    var uiSourceCode =
+        this._createFile(originalContentProvider, SDK.ResourceTreeFrame.fromScript(script), script.isContentScript());
     uiSourceCode[Bindings.NetworkProject._scriptSymbol] = script;
     var resource = SDK.ResourceTreeModel.resourceForURL(uiSourceCode.url());
-    this._addUISourceCodeWithProvider(uiSourceCode, script, this._resourceMetadata(resource));
+    this._addUISourceCodeWithProvider(uiSourceCode, originalContentProvider, this._resourceMetadata(resource));
   }
 
   /**
@@ -391,7 +393,7 @@ Bindings.NetworkProject = class extends SDK.SDKObject {
    * @return {?Workspace.UISourceCode}
    */
   static uiSourceCodeForScriptURL(workspace, url, script) {
-    var target = script.target();
+    var target = script.debuggerModel.target();
     var frame = SDK.ResourceTreeFrame.fromScript(script);
     return workspace.uiSourceCode(Bindings.NetworkProject.projectId(target, frame, false), url) ||
         workspace.uiSourceCode(Bindings.NetworkProject.projectId(target, frame, true), url);

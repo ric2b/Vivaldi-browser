@@ -124,7 +124,7 @@
       anchorPoint = NSMakePoint(NSWidth([[[self parentWindow] contentView] frame]) - 50,
                               NSHeight([[[self parentWindow] contentView] frame]) - 50);
     }
-    arrow = info_bubble::kTopRight;
+    arrow = info_bubble::kTopTrailing;
   } else {
     // Center the bubble if there's no location bar.
     NSRect contentFrame = [[[self parentWindow] contentView] frame];

@@ -1,7 +1,7 @@
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/settings_vars_css.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
 
 <dom-module id="media-picker">
   <template>
@@ -10,7 +10,7 @@
         display: block;
       }
     </style>
-    <div class="settings-box" id="picker" hidden>
+    <div class="settings-box first" id="picker" hidden>
       <div class="md-select-wrapper">
         <select id="mediaPicker" class="md-select" on-change="onChange_">
           <template is="dom-repeat" items="[[devices]]">

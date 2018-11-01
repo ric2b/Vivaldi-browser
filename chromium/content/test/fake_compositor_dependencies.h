@@ -20,7 +20,6 @@ class FakeCompositorDependencies : public CompositorDependencies {
 
   // CompositorDependencies implementation.
   bool IsGpuRasterizationForced() override;
-  bool IsGpuRasterizationEnabled() override;
   bool IsAsyncWorkerContextEnabled() override;
   int GetGpuRasterizationMSAASampleCount() override;
   bool IsLcdTextEnabled() override;
@@ -38,6 +37,7 @@ class FakeCompositorDependencies : public CompositorDependencies {
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   bool AreImageDecodeTasksEnabled() override;
   bool IsThreadedAnimationEnabled() override;
+  bool IsScrollAnimatorEnabled() override;
 
  private:
   cc::TestTaskGraphRunner task_graph_runner_;

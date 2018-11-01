@@ -12,9 +12,9 @@ Tree link: https://github.com/PolymerElements/iron-a11y-announcer/tree/v1.0.5
 
 Name: iron-a11y-keys
 Repository: https://github.com/PolymerElements/iron-a11y-keys.git
-Tree: v1.0.6
-Revision: aa9374f069b942dfabcaabb587cbb00b0dd28c63
-Tree link: https://github.com/PolymerElements/iron-a11y-keys/tree/v1.0.6
+Tree: v1.0.7
+Revision: 7830e675c3d0df6e7a7377d64fc3d6e6ae0e65a5
+Tree link: https://github.com/PolymerElements/iron-a11y-keys/tree/v1.0.7
 
 Name: iron-a11y-keys-behavior
 Repository: https://github.com/PolymerElements/iron-a11y-keys-behavior.git
@@ -306,9 +306,9 @@ Tree link: https://github.com/PolymerElements/paper-ripple/tree/v1.0.9
 
 Name: paper-slider
 Repository: https://github.com/PolymerElements/paper-slider.git
-Tree: v1.0.11
-Revision: 855e3ed20d12b4545175317536adca7897928537
-Tree link: https://github.com/PolymerElements/paper-slider/tree/v1.0.11
+Tree: v1.0.13
+Revision: ed9d5b512be1591b402e8a9c4961145576f8cc02
+Tree link: https://github.com/PolymerElements/paper-slider/tree/v1.0.13
 
 Name: paper-spinner
 Repository: https://github.com/PolymerElements/paper-spinner.git
@@ -330,9 +330,9 @@ Tree link: https://github.com/PolymerElements/paper-tabs/tree/v1.6.2
 
 Name: paper-toggle-button
 Repository: https://github.com/PolymerElements/paper-toggle-button.git
-Tree: v1.2.0
-Revision: 6aab07244c07f9598584e6dbce366574f96072a3
-Tree link: https://github.com/PolymerElements/paper-toggle-button/tree/v1.2.0
+Tree: v1.3.0
+Revision: 2f279868a9c8965aba76017c7ee6008ac4879f6a
+Tree link: https://github.com/PolymerElements/paper-toggle-button/tree/v1.3.0
 
 Name: paper-toolbar
 Repository: https://github.com/PolymerElements/paper-toolbar.git
@@ -348,7 +348,7 @@ Tree link: https://github.com/PolymerElements/paper-tooltip/tree/v1.1.3
 
 Name: polymer
 Repository: https://github.com/Polymer/polymer.git
-Tree: v1.6.1
-Revision: 1f197d9d7874b1e5808b2a5c26f34446a7d912fc
-Tree link: https://github.com/Polymer/polymer/tree/v1.6.1
+Tree: v1.8.1
+Revision: d89302fc3755b04ad4171f431e719a08b5b816f3
+Tree link: https://github.com/Polymer/polymer/tree/v1.8.1
 

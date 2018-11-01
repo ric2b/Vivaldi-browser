@@ -11,6 +11,12 @@ namespace features {
 
 // All features in alphabetical order.
 
+#if defined(OS_ANDROID)
+const base::Feature kAllowAutoplayUnmutedInWebappManifestScope{
+    "AllowAutoplayUnmutedInWebappManifestScope",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_ANDROID)
+
 #if defined(OS_MACOSX)
 // Enables Javascript execution via AppleScript.
 const base::Feature kAppleScriptExecuteJavaScript{
@@ -64,6 +70,12 @@ const base::Feature kBlockPromptsIfDismissedOften{
 const base::Feature kBrowserHangFixesExperiment{
     "BrowserHangFixesExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_MACOSX)
+// Enables or disables the browser's touch bar.
+const base::Feature kBrowserTouchBar{"BrowserTouchBar",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_MACOSX)
+
 #if defined(OS_ANDROID)
 // Experiment to make Geolocation permissions in the omnibox and the default
 // search engine's search page consistent.
@@ -72,6 +84,11 @@ const base::Feature kConsistentOmniboxGeolocation{
 #endif
 
 #if defined(OS_WIN)
+// Enables or disables desktop ios promotion, which shows a promotion to the
+// user promoting Chrome for iOS.
+const base::Feature kDesktopIOSPromotion{"DesktopIOSPromotion",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Disables the AutoImport feature on first run. See crbug.com/555550
 const base::Feature kDisableFirstRunAutoImportWin{
     "DisableFirstRunAutoImport", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -86,18 +103,30 @@ const base::Feature kDisplayPersistenceToggleInPermissionPrompts{
 // Enables Expect CT reporting, which sends reports for opted-in sites
 // that don't serve sufficient Certificate Transparency information.
 const base::Feature kExpectCTReporting{"ExpectCTReporting",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experimental fullscreen prototype that allows pages to map browser and
 // system-reserved keyboard shortcuts.
 const base::Feature kExperimentalKeyboardLockUI{
     "ExperimentalKeyboardLockUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_WIN)
+// Enables using GDI to print text as simply text.
+const base::Feature kGdiTextPrinting {"GdiTextPrinting",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined (OS_CHROMEOS)
 // Enables or disables the Happiness Tracking System for the device.
 const base::Feature kHappinessTrackingSystem {
     "HappinessTrackingSystem", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
+
+// Controls whether the "improved recovery component" is used. The improved
+// recovery component is a redesigned Chrome component intended to restore
+// a broken Chrome updater in more scenarios than before.
+const base::Feature kImprovedRecoveryComponent{
+    "ImprovedRecoveryComponent", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Enables showing the "This computer will no longer receive Google Chrome
@@ -120,6 +149,11 @@ const base::Feature kMaterialDesignBookmarks{"MaterialDesignBookmarks",
 // Enabled or disabled the Material Design version of chrome://extensions.
 const base::Feature kMaterialDesignExtensions{
     "MaterialDesignExtensions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Sets whether dismissing the new-tab-page override bubble counts as
+// acknowledgement.
+extern const base::Feature kAcknowledgeNtpOverrideOnDeactivate{
+    "AcknowledgeNtpOverrideOnDeactivate", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 // Enables or disables the Material Design version of chrome://history.
@@ -163,13 +197,16 @@ const base::Feature kNativeNotifications{"NativeNotifications",
 const base::Feature kOfflinePageDownloadSuggestionsFeature{
     "NTPOfflinePageDownloadSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables YouTube Flash videos to be overridden.
-const base::Feature kOverrideYouTubeFlashEmbed{
-    "OverrideYouTubeFlashEmbed", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enables Permissions Blacklisting via Safe Browsing.
 const base::Feature kPermissionsBlacklist{
     "PermissionsBlacklist", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables postscript generation instead of emf when printing to postscript
+// capable printers.
+#if defined(OS_WIN)
+const base::Feature kPostScriptPrinting{"PostScriptPrinting",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // OS_WIN
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Prefer HTML content by hiding Flash from the list of plugins.
@@ -178,11 +215,15 @@ const base::Feature kPreferHtmlOverPlugins{"PreferHtmlOverPlugins",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// Enables the pref service. See https://crbug.com/654988.
+const base::Feature kPrefService{"PrefService",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_CHROMEOS)
 // The lock screen will be preloaded so it is instantly available when the user
 // locks the Chromebook device.
 const base::Feature kPreloadLockScreen{"PreloadLockScreen",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables the Print Scaling feature in print preview.
@@ -238,9 +279,13 @@ const base::Feature kUseGroupedPermissionInfobars{
 const base::Feature kOptInImeMenu{"OptInImeMenu",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables or disables PIN quick unlock settings integration.
+// Enables or disables PIN quick unlock.
 const base::Feature kQuickUnlockPin{"QuickUnlockPin",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables or disables fingerprint quick unlock.
+const base::Feature kQuickUnlockFingerprint{"QuickUnlockFingerprint",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables or disables emoji, handwriting and voice input on opt-in IME menu.
 const base::Feature kEHVInputOnImeMenu{"EmojiHandwritingVoiceInput",

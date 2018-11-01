@@ -92,12 +92,12 @@ LayoutUnit RootInlineBox::lineHeight() const {
 }
 
 bool RootInlineBox::lineCanAccommodateEllipsis(bool ltr,
-                                               int blockEdge,
-                                               int lineBoxEdge,
-                                               int ellipsisWidth) {
+                                               LayoutUnit blockEdge,
+                                               LayoutUnit lineBoxEdge,
+                                               LayoutUnit ellipsisWidth) {
   // First sanity-check the unoverflowed width of the whole line to see if there
   // is sufficient room.
-  int delta = ltr ? lineBoxEdge - blockEdge : blockEdge - lineBoxEdge;
+  LayoutUnit delta = ltr ? lineBoxEdge - blockEdge : blockEdge - lineBoxEdge;
   if (logicalWidth() - delta < ellipsisWidth)
     return false;
 
@@ -111,34 +111,42 @@ LayoutUnit RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,
                                         bool ltr,
                                         LayoutUnit blockLeftEdge,
                                         LayoutUnit blockRightEdge,
-                                        LayoutUnit ellipsisWidth) {
-  // Create an ellipsis box.
-  EllipsisBox* ellipsisBox =
-      new EllipsisBox(getLineLayoutItem(), ellipsisStr, this, ellipsisWidth,
-                      logicalHeight().toFloat(), x().toInt(), y().toInt(),
-                      !prevRootBox(), isHorizontal());
+                                        LayoutUnit ellipsisWidth,
+                                        LayoutUnit logicalLeftOffset,
+                                        bool foundBox) {
+  // Create an ellipsis box if we don't already have one. If we already have one
+  // we're just
+  // here to blank out (truncate) the text boxes.
+  if (!foundBox) {
+    EllipsisBox* ellipsisBox = new EllipsisBox(
+        getLineLayoutItem(), ellipsisStr, this, ellipsisWidth, logicalHeight(),
+        location(), !prevRootBox(), isHorizontal());
 
-  if (!gEllipsisBoxMap)
-    gEllipsisBoxMap = new EllipsisBoxMap();
-  gEllipsisBoxMap->add(this, ellipsisBox);
-  setHasEllipsisBox(true);
+    if (!gEllipsisBoxMap)
+      gEllipsisBoxMap = new EllipsisBoxMap();
+    gEllipsisBoxMap->insert(this, ellipsisBox);
+    setHasEllipsisBox(true);
+  }
 
   // FIXME: Do we need an RTL version of this?
+  LayoutUnit adjustedLogicalLeft = logicalLeftOffset + logicalLeft();
   if (ltr &&
-      (logicalLeft() + logicalWidth() + ellipsisWidth) <= blockRightEdge) {
-    ellipsisBox->setLogicalLeft(logicalLeft() + logicalWidth());
+      (adjustedLogicalLeft + logicalWidth() + ellipsisWidth) <=
+          blockRightEdge) {
+    if (hasEllipsisBox())
+      ellipsisBox()->setLogicalLeft(logicalLeft() + logicalWidth());
     return logicalWidth() + ellipsisWidth;
   }
 
   // Now attempt to find the nearest glyph horizontally and place just to the
   // right (or left in RTL) of that glyph.  Mark all of the objects that
   // intersect the ellipsis box as not painting (as being truncated).
-  bool foundBox = false;
   LayoutUnit truncatedWidth;
   LayoutUnit position =
       placeEllipsisBox(ltr, blockLeftEdge, blockRightEdge, ellipsisWidth,
-                       truncatedWidth, foundBox);
-  ellipsisBox->setLogicalLeft(position);
+                       truncatedWidth, foundBox, logicalLeftOffset);
+  if (hasEllipsisBox())
+    ellipsisBox()->setLogicalLeft(position);
   return truncatedWidth;
 }
 
@@ -147,13 +155,17 @@ LayoutUnit RootInlineBox::placeEllipsisBox(bool ltr,
                                            LayoutUnit blockRightEdge,
                                            LayoutUnit ellipsisWidth,
                                            LayoutUnit& truncatedWidth,
-                                           bool& foundBox) {
-  LayoutUnit result =
-      InlineFlowBox::placeEllipsisBox(ltr, blockLeftEdge, blockRightEdge,
-                                      ellipsisWidth, truncatedWidth, foundBox);
+                                           bool& foundBox,
+                                           LayoutUnit logicalLeftOffset) {
+  LayoutUnit result = InlineFlowBox::placeEllipsisBox(
+      ltr, blockLeftEdge, blockRightEdge, ellipsisWidth, truncatedWidth,
+      foundBox, logicalLeftOffset);
   if (result == -1) {
-    result = ltr ? blockRightEdge - ellipsisWidth : blockLeftEdge;
-    truncatedWidth = blockRightEdge - blockLeftEdge;
+    result = ltr ? std::max<LayoutUnit>(
+                       LayoutUnit(),
+                       blockRightEdge - ellipsisWidth - logicalLeftOffset)
+                 : blockLeftEdge - logicalLeftOffset;
+    truncatedWidth = blockRightEdge - blockLeftEdge - logicalLeftOffset;
   }
   return result;
 }
@@ -300,12 +312,6 @@ LayoutUnit RootInlineBox::alignBoxesInBlockDirection(
   }
 
   return heightOfBlock + maxHeight;
-}
-
-LayoutUnit RootInlineBox::maxLogicalTop() const {
-  LayoutUnit maxLogicalTop;
-  computeMaxLogicalTop(maxLogicalTop);
-  return maxLogicalTop;
 }
 
 LayoutUnit RootInlineBox::beforeAnnotationsAdjustment() const {
@@ -524,7 +530,7 @@ void RootInlineBox::setLineBreakInfo(LineLayoutItem obj,
 EllipsisBox* RootInlineBox::ellipsisBox() const {
   if (!hasEllipsisBox())
     return nullptr;
-  return gEllipsisBoxMap->get(this);
+  return gEllipsisBoxMap->at(this);
 }
 
 void RootInlineBox::removeLineBoxFromLayoutObject() {
@@ -682,17 +688,17 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
 
   LayoutUnit verticalPosition;
   EVerticalAlign verticalAlign = boxModel.style()->verticalAlign();
-  if (verticalAlign == EVerticalAlign::Top ||
-      verticalAlign == EVerticalAlign::Bottom)
+  if (verticalAlign == EVerticalAlign::kTop ||
+      verticalAlign == EVerticalAlign::kBottom)
     return LayoutUnit();
 
   LineLayoutItem parent = boxModel.parent();
   if (parent.isLayoutInline() &&
-      parent.style()->verticalAlign() != EVerticalAlign::Top &&
-      parent.style()->verticalAlign() != EVerticalAlign::Bottom)
+      parent.style()->verticalAlign() != EVerticalAlign::kTop &&
+      parent.style()->verticalAlign() != EVerticalAlign::kBottom)
     verticalPosition = box->parent()->logicalTop();
 
-  if (verticalAlign != EVerticalAlign::Baseline) {
+  if (verticalAlign != EVerticalAlign::kBaseline) {
     const Font& font = parent.style(firstLine)->font();
     const SimpleFontData* fontData = font.primaryFont();
     DCHECK(fontData);
@@ -705,21 +711,21 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
     LineDirectionMode lineDirection =
         parent.isHorizontalWritingMode() ? HorizontalLine : VerticalLine;
 
-    if (verticalAlign == EVerticalAlign::Sub) {
+    if (verticalAlign == EVerticalAlign::kSub) {
       verticalPosition += fontSize / 5 + 1;
-    } else if (verticalAlign == EVerticalAlign::Super) {
+    } else if (verticalAlign == EVerticalAlign::kSuper) {
       verticalPosition -= fontSize / 3 + 1;
-    } else if (verticalAlign == EVerticalAlign::TextTop) {
+    } else if (verticalAlign == EVerticalAlign::kTextTop) {
       verticalPosition +=
           boxModel.baselinePosition(baselineType(), firstLine, lineDirection) -
           fontMetrics.ascent(baselineType());
-    } else if (verticalAlign == EVerticalAlign::Middle) {
+    } else if (verticalAlign == EVerticalAlign::kMiddle) {
       verticalPosition = LayoutUnit(
           (verticalPosition - LayoutUnit(fontMetrics.xHeight() / 2) -
            boxModel.lineHeight(firstLine, lineDirection) / 2 +
            boxModel.baselinePosition(baselineType(), firstLine, lineDirection))
               .round());
-    } else if (verticalAlign == EVerticalAlign::TextBottom) {
+    } else if (verticalAlign == EVerticalAlign::kTextBottom) {
       verticalPosition += fontMetrics.descent(baselineType());
       // lineHeight - baselinePosition is always 0 for replaced elements (except
       // inline blocks), so don't bother wasting time in that case.
@@ -728,11 +734,11 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
         verticalPosition -= (boxModel.lineHeight(firstLine, lineDirection) -
                              boxModel.baselinePosition(
                                  baselineType(), firstLine, lineDirection));
-    } else if (verticalAlign == EVerticalAlign::BaselineMiddle) {
+    } else if (verticalAlign == EVerticalAlign::kBaselineMiddle) {
       verticalPosition +=
           -boxModel.lineHeight(firstLine, lineDirection) / 2 +
           boxModel.baselinePosition(baselineType(), firstLine, lineDirection);
-    } else if (verticalAlign == EVerticalAlign::Length) {
+    } else if (verticalAlign == EVerticalAlign::kLength) {
       LayoutUnit lineHeight;
       // Per http://www.w3.org/TR/CSS21/visudet.html#propdef-vertical-align:
       // 'Percentages: refer to the 'line-height' of the element itself'.

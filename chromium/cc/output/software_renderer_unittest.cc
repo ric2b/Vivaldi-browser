@@ -67,8 +67,7 @@ class SoftwareRendererTest : public testing::Test {
                        base::Unretained(&bitmap_result),
                        loop.QuitClosure())));
 
-    renderer()->DrawFrame(list, device_scale_factor, gfx::ColorSpace(),
-                          viewport_size);
+    renderer()->DrawFrame(list, device_scale_factor, viewport_size);
     loop.Run();
     return bitmap_result;
   }
@@ -388,9 +387,7 @@ class PartialSwapSoftwareOutputDevice : public SoftwareOutputDevice {
     return canvas_;
   }
   void EndPaint() override {
-    SkIRect clip_device_bounds;
-    canvas_->getClipDeviceBounds(&clip_device_bounds);
-    clip_rect_at_end_ = gfx::SkIRectToRect(clip_device_bounds);
+    clip_rect_at_end_ = gfx::SkIRectToRect(canvas_->getDeviceClipBounds());
     SoftwareOutputDevice::EndPaint();
   }
 
@@ -426,8 +423,7 @@ TEST_F(SoftwareRendererTest, PartialSwap) {
   root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
 
   renderer()->DecideRenderPassAllocationsForFrame(list);
-  renderer()->DrawFrame(&list, device_scale_factor, gfx::ColorSpace(),
-                        viewport_size);
+  renderer()->DrawFrame(&list, device_scale_factor, viewport_size);
 
   // The damage rect should be reported to the SoftwareOutputDevice.
   EXPECT_EQ(gfx::Rect(2, 2, 3, 3), device->damage_rect_at_start());

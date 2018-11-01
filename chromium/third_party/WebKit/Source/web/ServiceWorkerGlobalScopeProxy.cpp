@@ -46,8 +46,8 @@
 #include "modules/notifications/Notification.h"
 #include "modules/notifications/NotificationEvent.h"
 #include "modules/notifications/NotificationEventInit.h"
-#include "modules/payments/PaymentAppRequestData.h"
-#include "modules/payments/PaymentAppRequestDataConversion.h"
+#include "modules/payments/PaymentAppRequest.h"
+#include "modules/payments/PaymentAppRequestConversion.h"
 #include "modules/payments/PaymentRequestEvent.h"
 #include "modules/push_messaging/PushEvent.h"
 #include "modules/push_messaging/PushMessageData.h"
@@ -109,12 +109,12 @@ void ServiceWorkerGlobalScopeProxy::dispatchExtendableMessageEvent(
     int eventID,
     const WebString& message,
     const WebSecurityOrigin& sourceOrigin,
-    const WebMessagePortChannelArray& webChannels,
+    WebMessagePortChannelArray webChannels,
     const WebServiceWorkerClientInfo& client) {
   WebSerializedScriptValue value =
       WebSerializedScriptValue::fromString(message);
-  MessagePortArray* ports =
-      MessagePort::toMessagePortArray(m_workerGlobalScope, webChannels);
+  MessagePortArray* ports = MessagePort::toMessagePortArray(
+      m_workerGlobalScope, std::move(webChannels));
   String origin;
   if (!sourceOrigin.isUnique())
     origin = sourceOrigin.toString();
@@ -135,12 +135,12 @@ void ServiceWorkerGlobalScopeProxy::dispatchExtendableMessageEvent(
     int eventID,
     const WebString& message,
     const WebSecurityOrigin& sourceOrigin,
-    const WebMessagePortChannelArray& webChannels,
+    WebMessagePortChannelArray webChannels,
     std::unique_ptr<WebServiceWorker::Handle> handle) {
   WebSerializedScriptValue value =
       WebSerializedScriptValue::fromString(message);
-  MessagePortArray* ports =
-      MessagePort::toMessagePortArray(m_workerGlobalScope, webChannels);
+  MessagePortArray* ports = MessagePort::toMessagePortArray(
+      m_workerGlobalScope, std::move(webChannels));
   String origin;
   if (!sourceOrigin.isUnique())
     origin = sourceOrigin.toString();
@@ -184,7 +184,7 @@ void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(
   if (navigationPreloadSent) {
     // Keep |fetchEvent| until onNavigationPreloadResponse() or
     // onNavigationPreloadError() will be called.
-    m_pendingPreloadFetchEvents.add(fetchEventID, fetchEvent);
+    m_pendingPreloadFetchEvents.insert(fetchEventID, fetchEvent);
   }
   waitUntilObserver->willDispatchEvent();
   respondWithObserver->willDispatchEvent();
@@ -338,13 +338,14 @@ void ServiceWorkerGlobalScopeProxy::dispatchSyncEvent(
 
 void ServiceWorkerGlobalScopeProxy::dispatchPaymentRequestEvent(
     int eventID,
-    const WebPaymentAppRequestData& webData) {
+    const WebPaymentAppRequest& webAppRequest) {
   WaitUntilObserver* observer = WaitUntilObserver::create(
       workerGlobalScope(), WaitUntilObserver::PaymentRequest, eventID);
   Event* event = PaymentRequestEvent::create(
       EventTypeNames::paymentrequest,
-      PaymentAppRequestDataConversion::toPaymentAppRequestData(
-          workerGlobalScope()->scriptController()->getScriptState(), webData),
+      PaymentAppRequestConversion::toPaymentAppRequest(
+          workerGlobalScope()->scriptController()->getScriptState(),
+          webAppRequest),
       observer);
   workerGlobalScope()->dispatchExtendableEvent(event, observer);
 }
@@ -354,16 +355,16 @@ bool ServiceWorkerGlobalScopeProxy::hasFetchEventHandler() {
   return m_workerGlobalScope->hasEventListeners(EventTypeNames::fetch);
 }
 
-void ServiceWorkerGlobalScopeProxy::countFeature(UseCounter::Feature) {
-  // TODO(nhiroki): Support UseCounter for ServiceWorker. Send an IPC message to
-  // the browser process and ask each controlled document to record API use in
-  // its UseCoutner (https://crbug.com/376039).
+void ServiceWorkerGlobalScopeProxy::countFeature(UseCounter::Feature feature) {
+  client().countFeature(static_cast<uint32_t>(feature));
 }
 
-void ServiceWorkerGlobalScopeProxy::countDeprecation(UseCounter::Feature) {
-  // TODO(nhiroki): Support UseCounter for ServiceWorker. Send an IPC message to
-  // the browser process and ask each controlled document to record API use in
-  // its UseCoutner (https://crbug.com/376039).
+void ServiceWorkerGlobalScopeProxy::countDeprecation(
+    UseCounter::Feature feature) {
+  // Go through the same code path with countFeature() because a deprecation
+  // message is already shown on the worker console and a remaining work is just
+  // to record an API use.
+  countFeature(feature);
 }
 
 void ServiceWorkerGlobalScopeProxy::reportException(
@@ -388,17 +389,11 @@ void ServiceWorkerGlobalScopeProxy::postMessageToPageInspector(
   DCHECK(m_embeddedWorker);
   // The TaskType of Inspector tasks need to be Unthrottled because they need to
   // run even on a suspended page.
-  getParentFrameTaskRunners()
-      ->get(TaskType::Unthrottled)
+  m_parentFrameTaskRunners->get(TaskType::Unthrottled)
       ->postTask(
           BLINK_FROM_HERE,
           crossThreadBind(&WebEmbeddedWorkerImpl::postMessageToPageInspector,
                           crossThreadUnretained(m_embeddedWorker), message));
-}
-
-ParentFrameTaskRunners*
-ServiceWorkerGlobalScopeProxy::getParentFrameTaskRunners() {
-  return m_parentFrameTaskRunners.get();
 }
 
 void ServiceWorkerGlobalScopeProxy::didCreateWorkerGlobalScope(

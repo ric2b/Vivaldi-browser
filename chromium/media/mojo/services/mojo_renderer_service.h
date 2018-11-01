@@ -16,7 +16,7 @@
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
 #include "media/base/buffering_state.h"
-#include "media/base/demuxer_stream_provider.h"
+#include "media/base/media_resource.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer_client.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
@@ -26,7 +26,7 @@
 namespace media {
 
 class AudioRendererSink;
-class DemuxerStreamProviderShim;
+class MediaResourceShim;
 class ContentDecryptionModule;
 class MojoCdmServiceContext;
 class Renderer;
@@ -63,8 +63,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
 
   // mojom::Renderer implementation.
   void Initialize(mojom::RendererClientAssociatedPtrInfo client,
-                  mojom::DemuxerStreamPtr audio,
-                  mojom::DemuxerStreamPtr video,
+                  base::Optional<std::vector<mojom::DemuxerStreamPtr>> streams,
                   const base::Optional<GURL>& media_url,
                   const base::Optional<GURL>& first_party_for_cookies,
                   const InitializeCallback& callback) final;
@@ -99,7 +98,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   void OnVideoOpacityChange(bool opaque) final;
   void OnDurationChange(base::TimeDelta duration) final;
 
-  // Called when the DemuxerStreamProviderShim is ready to go (has a config,
+  // Called when the MediaResourceShim is ready to go (has a config,
   // pipe handle, etc) and can be handed off to a renderer for use.
   void OnStreamReady(const base::Callback<void(bool)>& callback);
 
@@ -128,7 +127,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   State state_;
   double playback_rate_;
 
-  std::unique_ptr<DemuxerStreamProvider> stream_provider_;
+  std::unique_ptr<MediaResource> media_resource_;
 
   base::RepeatingTimer time_update_timer_;
   base::TimeDelta last_media_time_;
@@ -145,7 +144,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   std::unique_ptr<VideoRendererSink> video_sink_;
 
   // Note: Destroy |renderer_| first to avoid access violation into other
-  // members, e.g. |stream_provider_|, |cdm_|, |audio_sink_|, and
+  // members, e.g. |media_resource_|, |cdm_|, |audio_sink_|, and
   // |video_sink_|.
   // Must use "media::" because "Renderer" is ambiguous.
   std::unique_ptr<media::Renderer> renderer_;

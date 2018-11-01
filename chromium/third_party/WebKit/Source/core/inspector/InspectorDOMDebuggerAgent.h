@@ -58,7 +58,7 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
  public:
   static void eventListenersInfoForTarget(v8::Isolate*,
                                           v8::Local<v8::Value>,
-                                          V8EventListenerInfoList& listeners);
+                                          V8EventListenerInfoList* listeners);
 
   InspectorDOMDebuggerAgent(v8::Isolate*,
                             InspectorDOMAgent*,
@@ -79,6 +79,8 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
   Response removeXHRBreakpoint(const String& url) override;
   Response getEventListeners(
       const String& objectId,
+      Maybe<int> depth,
+      Maybe<bool> pierce,
       std::unique_ptr<protocol::Array<protocol::DOMDebugger::EventListener>>*
           listeners) override;
 
@@ -90,6 +92,7 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
   void didRemoveDOMNode(Node*);
   void willModifyDOMAttr(Element*, const AtomicString&, const AtomicString&);
   void willSendXMLHttpOrFetchNetworkRequest(const String& url);
+  void didCreateCanvasContext();
   void didFireWebGLError(const String& errorName);
   void didFireWebGLWarning();
   void didFireWebGLErrorOrWarning(const String& message);
@@ -104,6 +107,11 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
   void didCommitLoadForLocalFrame(LocalFrame*) override;
 
  private:
+  static void eventListenersInfoForTarget(v8::Isolate*,
+                                          v8::Local<v8::Value>,
+                                          int depth,
+                                          bool pierce,
+                                          V8EventListenerInfoList* listeners);
   void pauseOnNativeEventIfNeeded(
       std::unique_ptr<protocol::DictionaryValue> eventData,
       bool synchronous);

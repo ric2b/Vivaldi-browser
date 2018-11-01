@@ -22,6 +22,12 @@
 #include "extensions/common/extension_builder.h"
 #endif
 #include "chrome/browser/extensions/api/identity/identity_api.h"
+#include "chrome/browser/extensions/api/identity/identity_constants.h"
+#include "chrome/browser/extensions/api/identity/identity_get_accounts_function.h"
+#include "chrome/browser/extensions/api/identity/identity_get_auth_token_function.h"
+#include "chrome/browser/extensions/api/identity/identity_get_profile_user_info_function.h"
+#include "chrome/browser/extensions/api/identity/identity_launch_web_auth_flow_function.h"
+#include "chrome/browser/extensions/api/identity/identity_remove_cached_auth_token_function.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -1190,7 +1196,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveQueueShutdown) {
   EXPECT_FALSE(func->scope_ui_shown());
 
   // After the request is canceled, the function will complete.
-  func->OnShutdown();
+  func->Shutdown();
   EXPECT_EQ(std::string(errors::kCanceled), WaitForError(func.get()));
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
@@ -1208,7 +1214,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoninteractiveShutdown) {
   RunFunctionAsync(func.get(), "[{\"interactive\": false}]");
 
   // After the request is canceled, the function will complete.
-  func->OnShutdown();
+  func->Shutdown();
   EXPECT_EQ(std::string(errors::kCanceled), WaitForError(func.get()));
 }
 

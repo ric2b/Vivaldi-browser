@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "core/dom/DOMException.h"
 #include "core/events/Event.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/bluetooth/Bluetooth.h"
@@ -51,6 +52,8 @@ void BluetoothRemoteGATTCharacteristic::setValue(DOMDataView* domDataView) {
 
 void BluetoothRemoteGATTCharacteristic::dispatchCharacteristicValueChanged(
     const Vector<uint8_t>& value) {
+  if (!getGatt()->connected())
+    return;
   this->setValue(BluetoothRemoteGATTUtils::ConvertWTFVectorToDataView(value));
   dispatchEvent(Event::create(EventTypeNames::characteristicvaluechanged));
 }
@@ -101,11 +104,10 @@ void BluetoothRemoteGATTCharacteristic::ReadValueCallback(
       resolver->getExecutionContext()->isContextDestroyed())
     return;
 
-  // If the resolver is not in the set of ActiveAlgorithms then the frame
-  // disconnected so we reject.
+  // If the device is disconnected, reject.
   if (!getGatt()->RemoveFromActiveAlgorithms(resolver)) {
-    resolver->reject(BluetoothRemoteGATTUtils::CreateDOMException(
-        BluetoothRemoteGATTUtils::ExceptionType::kGATTServerDisconnected));
+    resolver->reject(BluetoothError::createDOMException(
+        blink::mojom::WebBluetoothResult::GATT_SERVER_DISCONNECTED));
     return;
   }
 
@@ -116,26 +118,23 @@ void BluetoothRemoteGATTCharacteristic::ReadValueCallback(
     setValue(domDataView);
     resolver->resolve(domDataView);
   } else {
-    resolver->reject(BluetoothError::take(resolver, result));
+    resolver->reject(BluetoothError::createDOMException(result));
   }
 }
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::readValue(
     ScriptState* scriptState) {
-  // We always check that the device is connected.
   if (!getGatt()->connected()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kGATTServerNotConnected));
+        BluetoothError::createDOMException(
+            blink::mojom::WebBluetoothResult::GATT_SERVER_NOT_CONNECTED));
   }
 
   if (!getGatt()->device()->isValidCharacteristic(
           m_characteristic->instance_id)) {
     return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kInvalidCharacteristic));
+        scriptState, createInvalidCharacteristicError());
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -160,11 +159,10 @@ void BluetoothRemoteGATTCharacteristic::WriteValueCallback(
       resolver->getExecutionContext()->isContextDestroyed())
     return;
 
-  // If the resolver is not in the set of ActiveAlgorithms then the frame
-  // disconnected so we reject.
+  // If the device is disconnected, reject.
   if (!getGatt()->RemoveFromActiveAlgorithms(resolver)) {
-    resolver->reject(BluetoothRemoteGATTUtils::CreateDOMException(
-        BluetoothRemoteGATTUtils::ExceptionType::kGATTServerDisconnected));
+    resolver->reject(BluetoothError::createDOMException(
+        blink::mojom::WebBluetoothResult::GATT_SERVER_DISCONNECTED));
     return;
   }
 
@@ -172,27 +170,24 @@ void BluetoothRemoteGATTCharacteristic::WriteValueCallback(
     setValue(BluetoothRemoteGATTUtils::ConvertWTFVectorToDataView(value));
     resolver->resolve();
   } else {
-    resolver->reject(BluetoothError::take(resolver, result));
+    resolver->reject(BluetoothError::createDOMException(result));
   }
 }
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::writeValue(
     ScriptState* scriptState,
     const DOMArrayPiece& value) {
-  // We always check that the device is connected.
   if (!getGatt()->connected()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kGATTServerNotConnected));
+        BluetoothError::createDOMException(
+            blink::mojom::WebBluetoothResult::GATT_SERVER_NOT_CONNECTED));
   }
 
   if (!getGatt()->device()->isValidCharacteristic(
           m_characteristic->instance_id)) {
     return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kInvalidCharacteristic));
+        scriptState, createInvalidCharacteristicError());
   }
 
   // Partial implementation of writeValue algorithm:
@@ -231,37 +226,33 @@ void BluetoothRemoteGATTCharacteristic::NotificationsCallback(
       resolver->getExecutionContext()->isContextDestroyed())
     return;
 
-  // If the resolver is not in the set of ActiveAlgorithms then the frame
-  // disconnected so we reject.
+  // If the device is disconnected, reject.
   if (!getGatt()->RemoveFromActiveAlgorithms(resolver)) {
-    resolver->reject(BluetoothRemoteGATTUtils::CreateDOMException(
-        BluetoothRemoteGATTUtils::ExceptionType::kGATTServerDisconnected));
+    resolver->reject(BluetoothError::createDOMException(
+        blink::mojom::WebBluetoothResult::GATT_SERVER_DISCONNECTED));
     return;
   }
 
   if (result == mojom::blink::WebBluetoothResult::SUCCESS) {
     resolver->resolve(this);
   } else {
-    resolver->reject(BluetoothError::take(resolver, result));
+    resolver->reject(BluetoothError::createDOMException(result));
   }
 }
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::startNotifications(
     ScriptState* scriptState) {
-  // We always check that the device is connected.
   if (!getGatt()->connected()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kGATTServerNotConnected));
+        BluetoothError::createDOMException(
+            blink::mojom::WebBluetoothResult::GATT_SERVER_NOT_CONNECTED));
   }
 
   if (!getGatt()->device()->isValidCharacteristic(
           m_characteristic->instance_id)) {
     return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kInvalidCharacteristic));
+        scriptState, createInvalidCharacteristicError());
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -280,20 +271,17 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::startNotifications(
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::stopNotifications(
     ScriptState* scriptState) {
-  // We always check that the device is connected.
   if (!getGatt()->connected()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kGATTServerNotConnected));
+        BluetoothError::createDOMException(
+            blink::mojom::WebBluetoothResult::GATT_SERVER_NOT_CONNECTED));
   }
 
   if (!getGatt()->device()->isValidCharacteristic(
           m_characteristic->instance_id)) {
     return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kInvalidCharacteristic));
+        scriptState, createInvalidCharacteristicError());
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -348,20 +336,18 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::getDescriptors(
 ScriptPromise BluetoothRemoteGATTCharacteristic::getDescriptorsImpl(
     ScriptState* scriptState,
     mojom::blink::WebBluetoothGATTQueryQuantity quantity,
-    const String& descriptor) {
+    const String& descriptorsUUID) {
   if (!getGatt()->connected()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kGATTServerNotConnected));
+        BluetoothError::createDOMException(
+            blink::mojom::WebBluetoothResult::GATT_SERVER_NOT_CONNECTED));
   }
 
   if (!getGatt()->device()->isValidCharacteristic(
           m_characteristic->instance_id)) {
     return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        BluetoothRemoteGATTUtils::CreateDOMException(
-            BluetoothRemoteGATTUtils::ExceptionType::kInvalidCharacteristic));
+        scriptState, createInvalidCharacteristicError());
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -369,15 +355,12 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::getDescriptorsImpl(
   getGatt()->AddToActiveAlgorithms(resolver);
 
   mojom::blink::WebBluetoothService* service = m_device->bluetooth()->service();
-  WTF::Optional<String> uuid = WTF::nullopt;
-  if (!descriptor.isEmpty())
-    uuid = descriptor;
   service->RemoteCharacteristicGetDescriptors(
-      m_characteristic->instance_id, quantity, uuid,
-      convertToBaseCallback(
-          WTF::bind(&BluetoothRemoteGATTCharacteristic::GetDescriptorsCallback,
-                    wrapPersistent(this), m_characteristic->instance_id,
-                    quantity, wrapPersistent(resolver))));
+      m_characteristic->instance_id, quantity, descriptorsUUID,
+      convertToBaseCallback(WTF::bind(
+          &BluetoothRemoteGATTCharacteristic::GetDescriptorsCallback,
+          wrapPersistent(this), descriptorsUUID, m_characteristic->instance_id,
+          quantity, wrapPersistent(resolver))));
 
   return promise;
 }
@@ -385,6 +368,7 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::getDescriptorsImpl(
 // Callback that allows us to resolve the promise with a single descriptor
 // or with a vector owning the descriptors.
 void BluetoothRemoteGATTCharacteristic::GetDescriptorsCallback(
+    const String& requestedDescriptorUUID,
     const String& characteristicInstanceId,
     mojom::blink::WebBluetoothGATTQueryQuantity quantity,
     ScriptPromiseResolver* resolver,
@@ -395,11 +379,10 @@ void BluetoothRemoteGATTCharacteristic::GetDescriptorsCallback(
       resolver->getExecutionContext()->isContextDestroyed())
     return;
 
-  // If the resolver is not in the set of ActiveAlgorithms then the frame
-  // disconnected so we reject.
+  // If the device is disconnected, reject.
   if (!service()->device()->gatt()->RemoveFromActiveAlgorithms(resolver)) {
-    resolver->reject(BluetoothRemoteGATTUtils::CreateDOMException(
-        BluetoothRemoteGATTUtils::ExceptionType::kGATTServerDisconnected));
+    resolver->reject(BluetoothError::createDOMException(
+        blink::mojom::WebBluetoothResult::GATT_SERVER_DISCONNECTED));
     return;
   }
 
@@ -423,8 +406,24 @@ void BluetoothRemoteGATTCharacteristic::GetDescriptorsCallback(
     }
     resolver->resolve(gattDescriptors);
   } else {
-    resolver->reject(BluetoothError::take(resolver, result));
+    if (result == mojom::blink::WebBluetoothResult::DESCRIPTOR_NOT_FOUND) {
+      resolver->reject(BluetoothError::createDOMException(
+          BluetoothErrorCode::DescriptorNotFound,
+          "No Descriptors matching UUID " + requestedDescriptorUUID +
+              " found in Characteristic with UUID " + uuid() + "."));
+    } else {
+      resolver->reject(BluetoothError::createDOMException(result));
+    }
   }
+}
+
+DOMException*
+BluetoothRemoteGATTCharacteristic::createInvalidCharacteristicError() {
+  return BluetoothError::createDOMException(
+      BluetoothErrorCode::InvalidCharacteristic,
+      "Characteristic with UUID " + uuid() +
+          " is no longer valid. Remember to retrieve the characteristic again "
+          "after reconnecting.");
 }
 
 DEFINE_TRACE(BluetoothRemoteGATTCharacteristic) {

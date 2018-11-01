@@ -5,12 +5,14 @@
 #ifndef WebLocalFrame_h
 #define WebLocalFrame_h
 
+#include <set>
 #include "WebCompositionUnderline.h"
 #include "WebFrame.h"
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLError.h"
+#include "public/platform/WebURLRequest.h"
 #include "public/platform/site_engagement.mojom-shared.h"
 
 namespace base {
@@ -19,6 +21,8 @@ class SingleThreadTaskRunner;
 
 namespace blink {
 
+class InterfaceProvider;
+class InterfaceRegistry;
 class WebAutofillClient;
 class WebContentSettingsClient;
 class WebDevToolsAgent;
@@ -46,6 +50,8 @@ class WebLocalFrame : public WebFrame {
   // WebFrameClient may not be null.
   BLINK_EXPORT static WebLocalFrame* create(WebTreeScopeType,
                                             WebFrameClient*,
+                                            blink::InterfaceProvider*,
+                                            blink::InterfaceRegistry*,
                                             WebFrame* opener = nullptr);
 
   // Used to create a provisional local frame. Currently, it's possible for a
@@ -65,9 +71,12 @@ class WebLocalFrame : public WebFrame {
   //
   // Otherwise, if the load should not commit, call detach() to discard the
   // frame.
-  BLINK_EXPORT static WebLocalFrame* createProvisional(WebFrameClient*,
-                                                       WebRemoteFrame*,
-                                                       WebSandboxFlags);
+  BLINK_EXPORT static WebLocalFrame* createProvisional(
+      WebFrameClient*,
+      blink::InterfaceProvider*,
+      blink::InterfaceRegistry*,
+      WebRemoteFrame*,
+      WebSandboxFlags);
 
   // Returns the WebFrame associated with the current V8 context. This
   // function can return 0 if the context is associated with a Document that
@@ -169,6 +178,21 @@ class WebLocalFrame : public WebFrame {
   // Mark this frame's document as having received a user gesture, based on
   // one of its descendants having processed a user gesture.
   virtual void setHasReceivedUserGesture() = 0;
+
+  // Reports a list of unique blink::UseCounter::Feature values representing
+  // Blink features used, performed or encountered by the browser during the
+  // current page load happening on the frame.
+  virtual void blinkFeatureUsageReport(const std::set<int>& features) = 0;
+
+  // Informs the renderer that mixed content was found externally regarding this
+  // frame. Currently only the the browser process can do so. The included data
+  // is used for instance to report to the CSP policy and to log to the frame
+  // console.
+  virtual void mixedContentFound(const WebURL& mainResourceUrl,
+                                 const WebURL& mixedContentUrl,
+                                 WebURLRequest::RequestContext,
+                                 bool wasAllowed,
+                                 bool hadRedirect) = 0;
 
   // Orientation Changes ----------------------------------------------------
 
@@ -316,8 +340,19 @@ class WebLocalFrame : public WebFrame {
   // Replaces the selection with the input string.
   virtual void replaceSelection(const WebString&) = 0;
   // Deletes text before and after the current cursor position, excluding the
-  // selection.
+  // selection. The lengths are supplied in UTF-16 Code Unit, not in code points
+  // or in glyphs.
   virtual void deleteSurroundingText(int before, int after) = 0;
+  // A variant of deleteSurroundingText(int, int). Major differences are:
+  // 1. The lengths are supplied in code points, not in UTF-16 Code Unit or in
+  // glyphs.
+  // 2. This method does nothing if there are one or more invalid surrogate
+  // pairs in the requested range.
+  virtual void deleteSurroundingTextInCodePoints(int before, int after) = 0;
+
+  virtual void extractSmartClipData(WebRect rectInViewport,
+                                    WebString& clipText,
+                                    WebString& clipHtml) = 0;
 
   // Spell-checking support -------------------------------------------------
   virtual void replaceMisspelledRange(const WebString&) = 0;

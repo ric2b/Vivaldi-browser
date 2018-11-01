@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.contextualsearch;
 
 import android.os.Handler;
+import android.text.TextUtils;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -69,7 +70,6 @@ public class ContextualSearchSelectionController {
     private ContextualSearchTapState mLastTapState;
     private TapSuppressionHeuristics mTapHeuristics;
     private boolean mIsWaitingForInvalidTapDetection;
-    private boolean mIsSelectionEstablished;
     private boolean mShouldHandleSelectionModification;
     private boolean mDidExpandSelection;
 
@@ -296,12 +296,6 @@ public class ContextualSearchSelectionController {
             case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
                 shouldHandleSelection = mShouldHandleSelectionModification;
                 break;
-            case SelectionEventType.SELECTION_ESTABLISHED:
-                mIsSelectionEstablished = true;
-                break;
-            case SelectionEventType.SELECTION_DISSOLVED:
-                mIsSelectionEstablished = false;
-                break;
             default:
         }
 
@@ -370,7 +364,7 @@ public class ContextualSearchSelectionController {
             mWasTapGestureDetected = true;
             long tapTimeNanoseconds = System.nanoTime();
             // TODO(donnd): add a policy method to get adjusted tap count.
-            ChromePreferenceManager prefs = ChromePreferenceManager.getInstance(mActivity);
+            ChromePreferenceManager prefs = ChromePreferenceManager.getInstance();
             int adjustedTapsSinceOpen = prefs.getContextualSearchTapCount()
                     - prefs.getContextualSearchTapQuickAnswerCount();
             // Explicitly destroy the old heuristics so native code can dispose data.
@@ -513,11 +507,11 @@ public class ContextualSearchSelectionController {
     }
 
     /**
-     * @return whether the selection has been established, for testing.
+     * @return whether selection is empty, for testing.
      */
     @VisibleForTesting
-    boolean isSelectionEstablished() {
-        return mIsSelectionEstablished;
+    boolean isSelectionEmpty() {
+        return TextUtils.isEmpty(mSelectedText);
     }
 
     /**
@@ -542,6 +536,14 @@ public class ContextualSearchSelectionController {
             // TODO(pedrosimonetti): actually suppress selection once the system supports it.
             if (ContextualSearchFieldTrial.isBlacklistEnabled() && reason != BlacklistReason.NONE) {
                 isValid = false;
+            }
+
+            int minSelectionLength = ContextualSearchFieldTrial.getMinimumSelectionLength();
+            if (selection.length() < minSelectionLength) {
+                isValid = false;
+                ContextualSearchUma.logSelectionLengthSuppression(true);
+            } else if (minSelectionLength > 0) {
+                ContextualSearchUma.logSelectionLengthSuppression(false);
             }
         }
 

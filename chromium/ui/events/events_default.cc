@@ -32,11 +32,7 @@ gfx::Point EventSystemLocationFromNative(
   return e->location();
 }
 
-gfx::Point EventLocationFromNative(const base::NativeEvent& native_event) {
-  return EventSystemLocationFromNative(native_event);
-}
-
-gfx::PointF EventLocationFromNativeF(const base::NativeEvent& native_event) {
+gfx::PointF EventLocationFromNative(const base::NativeEvent& native_event) {
   const ui::LocatedEvent* e =
       static_cast<const ui::LocatedEvent*>(native_event);
   DCHECK(e->IsMouseEvent() || e->IsTouchEvent() || e->IsGestureEvent() ||
@@ -57,7 +53,9 @@ PointerDetails GetMousePointerDetailsFromNative(
   const ui::MouseEvent* event =
       static_cast<const ui::MouseEvent*>(native_event);
   DCHECK(event->IsMouseEvent() || event->IsScrollEvent());
-  return event->pointer_details();
+  PointerDetails pointer_detail = event->pointer_details();
+  pointer_detail.id = PointerEvent::kMousePointerId;
+  return pointer_detail;
 }
 
 KeyboardCode KeyboardCodeFromNative(const base::NativeEvent& native_event) {
@@ -95,11 +93,12 @@ void ReleaseCopiedNativeEvent(const base::NativeEvent& event) {
 void ClearTouchIdIfReleased(const base::NativeEvent& xev) {
 }
 
+// TODO(687724): Will remove all GetTouchId functions.
 int GetTouchId(const base::NativeEvent& native_event) {
   const ui::TouchEvent* event =
       static_cast<const ui::TouchEvent*>(native_event);
   DCHECK(event->IsTouchEvent());
-  return event->touch_id();
+  return event->pointer_details().id;
 }
 
 PointerDetails GetTouchPointerDetailsFromNative(

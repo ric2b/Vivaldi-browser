@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/system/tray/system_tray.h"
+#include "ash/common/wm_window.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -32,7 +36,9 @@
 #include "extensions/browser/extension_system.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/test/rect_test_util.h"
 
+using ::gfx::test::RectContains;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Return;
@@ -178,8 +184,13 @@ class LoginTest : public LoginManagerTest {
 void TestSystemTrayIsVisible() {
   ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
   aura::Window* primary_win = ash::Shell::GetPrimaryRootWindow();
+  ash::WmWindow* wm_primary_win = ash::WmWindow::Get(primary_win);
+  ash::WmShelf* wm_shelf = ash::WmShelf::ForWindow(wm_primary_win);
+  SCOPED_TRACE(testing::Message()
+               << "ShelfVisibilityState=" << wm_shelf->GetVisibilityState()
+               << " ShelfAutoHideBehavior=" << wm_shelf->auto_hide_behavior());
   EXPECT_TRUE(tray->visible());
-  EXPECT_TRUE(primary_win->bounds().Contains(tray->GetBoundsInScreen()));
+  EXPECT_TRUE(RectContains(primary_win->bounds(), tray->GetBoundsInScreen()));
 }
 
 }  // namespace
@@ -205,7 +216,8 @@ IN_PROC_BROWSER_TEST_F(LoginUserTest, CursorShown) {
 }
 
 // After a guest login, we should get the OTR default profile.
-IN_PROC_BROWSER_TEST_F(LoginGuestTest, GuestIsOTR) {
+// Test is flaky https://crbug.com/693106
+IN_PROC_BROWSER_TEST_F(LoginGuestTest, DISABLED_GuestIsOTR) {
   Profile* profile = browser()->profile();
   EXPECT_TRUE(profile->IsOffTheRecord());
   // Ensure there's extension service for this profile.
@@ -215,7 +227,8 @@ IN_PROC_BROWSER_TEST_F(LoginGuestTest, GuestIsOTR) {
 }
 
 // Verifies the cursor is not hidden at startup when running guest session.
-IN_PROC_BROWSER_TEST_F(LoginGuestTest, CursorShown) {
+// Test is flaky https://crbug.com/693106
+IN_PROC_BROWSER_TEST_F(LoginGuestTest, DISABLED_CursorShown) {
   EXPECT_TRUE(ash::Shell::GetInstance()->cursor_manager()->IsCursorVisible());
 
   TestSystemTrayIsVisible();
@@ -254,7 +267,8 @@ IN_PROC_BROWSER_TEST_F(LoginTest, PRE_GaiaAuthOffline) {
   CrosSettings::Get()->SetBoolean(kAccountsPrefShowUserNamesOnSignIn, false);
 }
 
-IN_PROC_BROWSER_TEST_F(LoginTest, GaiaAuthOffline) {
+// Flaky, see http://crbug/692364.
+IN_PROC_BROWSER_TEST_F(LoginTest, DISABLED_GaiaAuthOffline) {
   PrepareOfflineLogin();
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,

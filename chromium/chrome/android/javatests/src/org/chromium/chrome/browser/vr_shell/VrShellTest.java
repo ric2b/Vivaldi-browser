@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.vr_shell;
 
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DAYDREAM_VIEW;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_NON_DAYDREAM;
 
 import android.content.pm.ActivityInfo;
@@ -13,6 +14,7 @@ import android.support.test.filters.SmallTest;
 import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -33,16 +35,18 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Instrumentation tests for VR Shell (Chrome VR)
  */
+@CommandLineFlags.Add("enable-features=VrShell")
 public class VrShellTest extends ChromeTabbedActivityTestBase {
     private static final String GOLDEN_DIR =
             "chrome/test/data/android/render_tests";
+
     private VrShellDelegate mDelegate;
     private ViewRenderer mViewRenderer;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mDelegate = getActivity().getVrShellDelegate();
+        mDelegate = VrShellDelegate.getInstanceForTesting();
     }
 
     @Override
@@ -52,37 +56,24 @@ public class VrShellTest extends ChromeTabbedActivityTestBase {
                 GOLDEN_DIR, this.getClass().getSimpleName());
     }
 
-    private void forceEnterVr() {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mDelegate.enterVRIfNecessary();
-            }
-        });
-    }
-
-    private void forceExitVr() {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mDelegate.exitVRIfNecessary(false /* isPausing */);
-            }
-        });
-    }
-
-    private void testEnterExitVrMode(boolean supported) {
-        forceEnterVr();
-        getInstrumentation().waitForIdleSync();
-        if (supported) {
-            assertTrue(mDelegate.isInVR());
-        } else {
-            assertFalse(mDelegate.isInVR());
+    private void enterExitVrMode(boolean supported) {
+        MockVrDaydreamApi mockApi = new MockVrDaydreamApi();
+        if (!supported) {
+            mDelegate.overrideDaydreamApiForTesting(mockApi);
         }
-        forceExitVr();
-        assertFalse(mDelegate.isInVR());
+        VrUtils.forceEnterVr();
+        if (supported) {
+            VrUtils.waitForVrSupported();
+            assertTrue(VrShellDelegate.isInVR());
+        } else {
+            assertFalse(mockApi.getLaunchInVrCalled());
+            assertFalse(VrShellDelegate.isInVR());
+        }
+        VrUtils.forceExitVr(mDelegate);
+        assertFalse(VrShellDelegate.isInVR());
     }
 
-    private void testEnterExitVrModeImage(boolean supported) throws IOException {
+    private void enterExitVrModeImage(boolean supported) throws IOException {
         int prevOrientation = getActivity().getRequestedOrientation();
         getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         getInstrumentation().waitForIdleSync();
@@ -90,8 +81,7 @@ public class VrShellTest extends ChromeTabbedActivityTestBase {
                 getActivity().getWindow().getDecorView().getRootView(),
                 "blank_page");
 
-        forceEnterVr();
-        getInstrumentation().waitForIdleSync();
+        VrUtils.forceEnterVr();
         // Currently, screenshots only show the static UI overlay, not the
         // actual content. Thus, 1:1 pixel checking is reliable until a
         // way to take screenshots of VR content is added, in which case
@@ -99,16 +89,19 @@ public class VrShellTest extends ChromeTabbedActivityTestBase {
         // assuming that if the UI overlay is visible, then the device has
         // successfully entered VR mode.
         if (supported) {
+            VrUtils.waitForVrSupported();
             mViewRenderer.renderAndCompare(
                     getActivity().getWindow().getDecorView().getRootView(),
                     "vr_entered");
         } else {
+            // TODO(bsheedy): Find a good way to wait before taking a screenshot
+            // when running on an unsupported device
             mViewRenderer.renderAndCompare(
                     getActivity().getWindow().getDecorView().getRootView(),
                     "blank_page");
         }
 
-        forceExitVr();
+        VrUtils.forceExitVr(mDelegate);
         getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         getInstrumentation().waitForIdleSync();
         mViewRenderer.renderAndCompare(
@@ -118,23 +111,59 @@ public class VrShellTest extends ChromeTabbedActivityTestBase {
         getActivity().setRequestedOrientation(prevOrientation);
     }
 
+    private void enterVrModeNfc(boolean supported) {
+        getInstrumentation().waitForIdleSync();
+        VrUtils.simNfc(getActivity());
+        if (supported) {
+            VrUtils.waitForVrSupported();
+            assertTrue(VrShellDelegate.isInVR());
+        } else {
+            assertFalse(VrShellDelegate.isInVR());
+        }
+        VrUtils.forceExitVr(mDelegate);
+        // TODO(bsheedy): Figure out why NFC tests cause the next test to fail
+        // to enter VR unless we sleep for some amount of time after exiting VR
+        // in the NFC test
+    }
+
+    /**
+     * Verifies that browser successfully enters VR mode when Daydream headset
+     * NFC tag is scanned on a Daydream-ready device. Requires that the phone
+     * is unlocked.
+     */
+    @Restriction({RESTRICTION_TYPE_DAYDREAM, RESTRICTION_TYPE_DAYDREAM_VIEW})
+    @MediumTest
+    public void testSimNfcSupported() {
+        enterVrModeNfc(true);
+    }
+
+    /**
+     * Verifies that the browser does not enter VR mode on Non-Daydream-ready
+     * devices when the Daydream headset NFC tag is scanned.
+     */
+    @Restriction(RESTRICTION_TYPE_NON_DAYDREAM)
+    @SmallTest
+    public void testSimNfcUnsupported() {
+        enterVrModeNfc(false);
+    }
+
     /**
      * Verifies that browser successfully enters and exits VR mode when told to
      * on Daydream-ready devices. Requires that the phone is unlocked.
      */
     @Restriction(RESTRICTION_TYPE_DAYDREAM)
-    @MediumTest
+    @SmallTest
     public void testEnterExitVrModeSupported() {
-        testEnterExitVrMode(true);
+        enterExitVrMode(true);
     }
 
     /**
      * Verifies that browser does not enter VR mode on Non-Daydream-ready devices.
      */
     @Restriction(RESTRICTION_TYPE_NON_DAYDREAM)
-    @MediumTest
+    @SmallTest
     public void testEnterExitVrModeUnsupported() {
-        testEnterExitVrMode(false);
+        enterExitVrMode(false);
     }
 
     /**
@@ -146,7 +175,7 @@ public class VrShellTest extends ChromeTabbedActivityTestBase {
     @Feature("RenderTest")
     @MediumTest
     public void testEnterExitVrModeSupportedImage() throws IOException {
-        testEnterExitVrModeImage(true);
+        enterExitVrModeImage(true);
     }
 
     /**
@@ -157,7 +186,7 @@ public class VrShellTest extends ChromeTabbedActivityTestBase {
     @Feature("RenderTest")
     @MediumTest
     public void testEnterExitVrModeUnsupportedImage() throws IOException {
-        testEnterExitVrModeImage(false);
+        enterExitVrModeImage(false);
     }
 
     /**

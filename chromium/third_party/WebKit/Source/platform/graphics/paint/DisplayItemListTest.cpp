@@ -4,9 +4,10 @@
 
 #include "platform/graphics/paint/DisplayItemList.h"
 
-#include "SkPictureRecorder.h"
 #include "SkTypes.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
+#include "platform/graphics/paint/PaintFlags.h"
+#include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/graphics/paint/SubsequenceDisplayItem.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/testing/FakeDisplayItemClient.h"
@@ -34,12 +35,13 @@ class DisplayItemListTest : public ::testing::Test {
   FakeDisplayItemClient m_client;
 };
 
-static sk_sp<SkPicture> createRectPicture(const IntRect& bounds) {
-  SkPictureRecorder recorder;
-  SkCanvas* canvas = recorder.beginRecording(bounds.width(), bounds.height());
+static sk_sp<PaintRecord> createRectRecord(const IntRect& bounds) {
+  PaintRecorder recorder;
+  PaintCanvas* canvas =
+      recorder.beginRecording(bounds.width(), bounds.height());
   canvas->drawRect(
       SkRect::MakeXYWH(bounds.x(), bounds.y(), bounds.width(), bounds.height()),
-      SkPaint());
+      PaintFlags());
   return recorder.finishRecordingAsPicture();
 }
 
@@ -47,7 +49,7 @@ TEST_F(DisplayItemListTest, AppendVisualRect_Simple) {
   IntRect drawingBounds(5, 6, 7, 8);
   m_list.allocateAndConstruct<DrawingDisplayItem>(
       m_client, DisplayItem::Type::kDocumentBackground,
-      createRectPicture(drawingBounds), true);
+      createRectRecord(drawingBounds), true);
   m_list.appendVisualRect(drawingBounds);
 
   EXPECT_EQ(static_cast<size_t>(1), m_list.size());
@@ -68,7 +70,7 @@ TEST_F(DisplayItemListTest, AppendVisualRect_BlockContainingDrawing) {
   IntRect drawingBounds(5, 6, 1, 1);
   m_list.allocateAndConstruct<DrawingDisplayItem>(
       m_client, DisplayItem::Type::kDocumentBackground,
-      createRectPicture(drawingBounds), true);
+      createRectRecord(drawingBounds), true);
   m_list.appendVisualRect(drawingBounds);
 
   m_list.allocateAndConstruct<EndSubsequenceDisplayItem>(m_client);

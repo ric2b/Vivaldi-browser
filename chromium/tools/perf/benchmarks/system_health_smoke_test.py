@@ -32,9 +32,6 @@ def GetSystemHealthBenchmarksToSmokeTest():
 
 
 _DISABLED_TESTS = frozenset({
-  # crbug.com/629123
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.browse:news:hackernews',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.browse:news:nytimes',  # pylint: disable=line-too-long
   # crbug.com/637230
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:cnn',  # pylint: disable=line-too-long
   # crbug.com/666293
@@ -48,6 +45,16 @@ _DISABLED_TESTS = frozenset({
   # Disable media tests in CQ. crbug.com/649392
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.play:media:soundcloud',  # pylint: disable=line-too-long
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.play:media:google_play_music',  # pylint: disable=line-too-long
+
+  # crbug.com/
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:nytimes',  # pylint: disable=line-too-long
+
+  # crbug.com/696824
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:news:qq',  # pylint: disable=line-too-long
+
+  # crbug.com/698006
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:drive',  # pylint: disable=line-too-long
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:gmail',  # pylint: disable=line-too-long
 })
 
 
@@ -119,7 +126,7 @@ def GenerateBenchmarkOptions(benchmark_class):
   benchmark_module.ProcessCommandLineArgs(None, options)
   # Only measure a single story so that this test cycles reasonably quickly.
   options.pageset_repeat = 1
-  options.page_repeat = 1
+
   # Enable browser logging in the smoke test only. Hopefully, this will detect
   # all crashes and hence remove the need to enable logging in actual perf
   # benchmarks.

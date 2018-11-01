@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">הצג עותק שמור (כלומר, ידוע שהוא עדכני) של הדף הזה.</translation>
 <translation id="1559528461873125649">אין קובץ או ספרייה בשם זה</translation>
 <translation id="1710259589646384581">מערכת הפעלה</translation>
-<translation id="1838667051080421715">אתה מציג את המקור של דף אינטרנט.</translation>
 <translation id="194030505837763158">עבור ל-<ph name="LINK" /></translation>
 <translation id="2030481566774242610">האם התכוונת ל-<ph name="LINK" />?</translation>
-<translation id="2089090684895656482">פחות</translation>
 <translation id="2166378884831602661">אתר זה לא יכול לספק חיבור מאובטח</translation>
 <translation id="2292556288342944218">הגישה לאינטרנט חסומה</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> שלח תגובה לא חוקית.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">הגישה לקובץ נדחתה</translation>
 <translation id="2705137772291741111">העותק השמור (בקובץ השמור) של האתר הזה היה בלתי קריא.</translation>
 <translation id="2784949926578158345">החיבור עבר איפוס.</translation>
-<translation id="284702764277384724">אישור השרת ב-<ph name="HOST_NAME" /> נראה מזויף.</translation>
 <translation id="2909946352844186028">אותר שינוי ברשת.</translation>
 <translation id="3005723025932146533">הצג עותק שמור</translation>
 <translation id="3109728660330352905">אין לך הרשאה להציג את הדף הזה.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">‏DNS הוא שירות הרשת שמתרגם שם של אתר לכתובת האינטרנט שלו.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> לא אישר את אישור ההתחברות שלך, או שלא סופק אישור התחברות.</translation>
 <translation id="4522570452068850558">פרטים</translation>
-<translation id="4670097147947922288">אתה צופה בדף של תוסף.</translation>
 <translation id="4708268264240856090">החיבור נקטע</translation>
 <translation id="4744603770635761495">נתיב להפעלה</translation>
 <translation id="4764776831041365478">ייתכן שדף האינטרנט בכתובת <ph name="URL" /> אינו פעיל זמנית, או שהועבר לכתובת אינטרנט חדשה לצמיתות.</translation>
@@ -56,7 +52,6 @@
 <translation id="5675650730144413517">הדף הזה לא עובד</translation>
 <translation id="5869405914158311789">לא ניתן לגשת לאתר הזה</translation>
 <translation id="5990559369517809815">בקשות שנשלחו לשרת נחסמו על ידי תוסף.</translation>
-<translation id="6042308850641462728">עוד</translation>
 <translation id="6146055958333702838">בדוק את הכבלים והפעל מחדש את הנתבים, המודמים ושאר התקני הרשת
   שאתה משתמש בהם.</translation>
 <translation id="6165508094623778733">למידע נוסף</translation>
@@ -66,10 +61,8 @@
 <translation id="6328639280570009161">נסה להשבית את חיזוי הרשת</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> סירב להתחבר.</translation>
 <translation id="6711464428925977395">‏משהו אינו תקין בשרת ה-proxy, או שהכתובת שגויה.</translation>
-<translation id="6830600606572693159">דף האינטרנט <ph name="URL" /> אינו זמין כעת. ייתכן שהוא בעומס יתר או שהושבת לצורך תחזוקה.</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> לא פועל בהתאם לתקני האבטחה.</translation>
-<translation id="7269802741830436641">דף אינטרנט זה מכיל לולאת כתובת אתר להפניה מחדש</translation>
 <translation id="7353601530677266744">שורת פקודה </translation>
 <translation id="7419106976560586862">נתיב פרופיל</translation>
 <translation id="7518003948725431193">לא נמצא דף אינטרנט עבור כתובת האינטרנט: <ph name="URL" /></translation>
@@ -77,7 +70,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> לא יכול לטפל כרגע בבקשה הזו.</translation>
 <translation id="7716424297397655342">לא ניתן לטעון את האתר הזה מהמטמון</translation>
 <translation id="7758069387465995638">ייתכן שחומת אש או תוכנת אנטי-וירוס חסמו את החיבור.</translation>
-<translation id="778579833039460630">לא התקבלו נתונים</translation>
 <translation id="7951415247503192394">(32 סיביות)</translation>
 <translation id="8134994873729925007">‏לא ניתן היה למצוא את <ph name="BEGIN_ABBR" />כתובת ה-DNS<ph name="END_ABBR" /> של השרת של <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">‏היכנס לכתובת &lt;strong&gt;vivaldi://policy&lt;/strong&gt; כדי לראות רשימה של כתובות אתרים שנמנעה אליהם הגישה, כמו גם תקנונים אחרים שנאכפו על ידי מנהל המערכת שלך.</translation>

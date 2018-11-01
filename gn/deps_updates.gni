@@ -98,6 +98,7 @@ foreach(_target,
     deps += [
       "//vivaldi/extraparts",
       "//vivaldi/notes",
+      "//vivaldi/importer",
       "//vivaldi/sync:browser",
     ]
   }
@@ -111,6 +112,7 @@ foreach(_target,
     deps += [
       "//chrome/utility",
       "//vivaldi/importer",
+      "//vivaldi/importer:browser",
       "//vivaldi/notes",
       "//vivaldi/sync:sync",
     ]

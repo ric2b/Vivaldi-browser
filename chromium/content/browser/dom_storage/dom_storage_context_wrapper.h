@@ -81,6 +81,7 @@ class CONTENT_EXPORT DOMStorageContextWrapper :
   friend class DOMStorageMessageFilter;  // for access to context()
   friend class SessionStorageNamespaceImpl;  // ditto
   friend class base::RefCountedThreadSafe<DOMStorageContextWrapper>;
+  friend class MojoDOMStorageBrowserTest;
 
   ~DOMStorageContextWrapper() override;
   DOMStorageContextImpl* context() const { return context_.get(); }
@@ -90,7 +91,7 @@ class CONTENT_EXPORT DOMStorageContextWrapper :
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
   // base::MemoryCoordinatorClient implementation:
-  void OnMemoryStateChange(base::MemoryState state) override;
+  void OnPurgeMemory() override;
 
   void PurgeMemory(DOMStorageContextImpl::PurgeOption purge_option);
 

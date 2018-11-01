@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "components/favicon/core/favicon_driver_impl.h"
+#import "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #include "ios/web/public/web_state/web_state_user_data.h"
 
@@ -32,9 +33,13 @@ class WebFaviconDriver : public web::WebStateObserver,
   void FetchFavicon(const GURL& url) override;
   gfx::Image GetFavicon() const override;
   bool FaviconIsValid() const override;
-  int StartDownload(const GURL& url, int max_bitmap_size) override;
-  bool IsOffTheRecord() override;
   GURL GetActiveURL() override;
+
+  // FaviconHandler::Delegate implementation.
+  int DownloadImage(const GURL& url,
+                    int max_image_size,
+                    ImageDownloadCallback callback) override;
+  bool IsOffTheRecord() override;
   void OnFaviconUpdated(
       const GURL& page_url,
       FaviconDriverObserver::NotificationIconType notification_icon_type,
@@ -57,6 +62,9 @@ class WebFaviconDriver : public web::WebStateObserver,
 
   // The URL passed to FetchFavicon().
   GURL fetch_favicon_url_;
+
+  // Image Fetcher used to fetch favicon.
+  image_fetcher::IOSImageDataFetcherWrapper image_fetcher_;
 
   DISALLOW_COPY_AND_ASSIGN(WebFaviconDriver);
 };

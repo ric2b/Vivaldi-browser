@@ -86,10 +86,10 @@ bool DOMWindowEventQueue::enqueueEvent(Event* event) {
     return false;
 
   DCHECK(event->target());
-  InspectorInstrumentation::asyncTaskScheduled(
-      event->target()->getExecutionContext(), event->type(), event);
+  probe::asyncTaskScheduled(event->target()->getExecutionContext(),
+                            event->type(), event);
 
-  bool wasAdded = m_queuedEvents.add(event).isNewEntry;
+  bool wasAdded = m_queuedEvents.insert(event).isNewEntry;
   DCHECK(wasAdded);  // It should not have already been in the list.
 
   if (!m_pendingEventTimer->isActive())
@@ -102,8 +102,7 @@ bool DOMWindowEventQueue::cancelEvent(Event* event) {
   HeapListHashSet<Member<Event>, 16>::iterator it = m_queuedEvents.find(event);
   bool found = it != m_queuedEvents.end();
   if (found) {
-    InspectorInstrumentation::asyncTaskCanceled(
-        event->target()->getExecutionContext(), event);
+    probe::asyncTaskCanceled(event->target()->getExecutionContext(), event);
     m_queuedEvents.remove(it);
   }
   if (m_queuedEvents.isEmpty())
@@ -115,9 +114,10 @@ void DOMWindowEventQueue::close() {
   m_isClosed = true;
   m_pendingEventTimer->stop();
   for (const auto& queuedEvent : m_queuedEvents) {
-    if (queuedEvent)
-      InspectorInstrumentation::asyncTaskCanceled(
-          queuedEvent->target()->getExecutionContext(), queuedEvent);
+    if (queuedEvent) {
+      probe::asyncTaskCanceled(queuedEvent->target()->getExecutionContext(),
+                               queuedEvent);
+    }
   }
   m_queuedEvents.clear();
 }
@@ -128,7 +128,7 @@ void DOMWindowEventQueue::pendingEventTimerFired() {
 
   // Insert a marker for where we should stop.
   DCHECK(!m_queuedEvents.contains(nullptr));
-  bool wasAdded = m_queuedEvents.add(nullptr).isNewEntry;
+  bool wasAdded = m_queuedEvents.insert(nullptr).isNewEntry;
   DCHECK(wasAdded);  // It should not have already been in the list.
 
   while (!m_queuedEvents.isEmpty()) {
@@ -143,8 +143,7 @@ void DOMWindowEventQueue::pendingEventTimerFired() {
 
 void DOMWindowEventQueue::dispatchEvent(Event* event) {
   EventTarget* eventTarget = event->target();
-  InspectorInstrumentation::AsyncTask asyncTask(
-      eventTarget->getExecutionContext(), event);
+  probe::AsyncTask asyncTask(eventTarget->getExecutionContext(), event);
   if (LocalDOMWindow* window = eventTarget->toLocalDOMWindow())
     window->dispatchEvent(event, nullptr);
   else

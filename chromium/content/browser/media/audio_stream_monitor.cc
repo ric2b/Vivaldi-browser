@@ -15,13 +15,30 @@ namespace content {
 
 namespace {
 
-AudioStreamMonitor* AudioStreamMonitorFromRenderFrame(int render_process_id,
-                                                      int render_frame_id) {
+enum class ActionType { STARTING, STOPPING };
+AudioStreamMonitor* StartStopMonitoringHelper(ActionType action_type,
+                                              int render_process_id,
+                                              int render_frame_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // It's important that this code uses only the process id for lookup as there
+  // may not be a RenderFrameHost or WebContents attached to the RenderProcess
+  // at time of call; e.g., in the event of a crash.
+  RenderProcessHost* const render_process_host =
+      RenderProcessHost::FromID(render_process_id);
+  if (!render_process_host)
+    return nullptr;
+
+  // TODO(dalecurtis, maxmorin): We should really only be sending these when the
+  // streams are audible or we don't have power level monitoring.
+  if (action_type == ActionType::STARTING)
+    render_process_host->OnAudioStreamAdded();
+  else
+    render_process_host->OnAudioStreamRemoved();
+
   WebContentsImpl* const web_contents =
       static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(
           RenderFrameHost::FromID(render_process_id, render_frame_id)));
-
   return web_contents ? web_contents->audio_stream_monitor() : nullptr;
 }
 
@@ -31,8 +48,7 @@ AudioStreamMonitor::AudioStreamMonitor(WebContents* contents)
     : web_contents_(contents),
       clock_(&default_tick_clock_),
       was_recently_audible_(false),
-      is_audible_(false),
-      active_streams_(0) {
+      is_audible_(false) {
   DCHECK(web_contents_);
 }
 
@@ -46,6 +62,28 @@ bool AudioStreamMonitor::WasRecentlyAudible() const {
 bool AudioStreamMonitor::IsCurrentlyAudible() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return is_audible_;
+}
+
+void AudioStreamMonitor::RenderProcessGone(int render_process_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Note: It's possible for the RenderProcessHost and WebContents (and thus
+  // this class) to survive the death of the render process and subsequently be
+  // reused. During this period StartStopMonitoringHelper() will be unable to
+  // lookup the WebContents using the now-dead |render_frame_id|. We must thus
+  // have this secondary mechanism for clearing stale callbacks.
+
+  for (auto it = poll_callbacks_.begin(); it != poll_callbacks_.end();) {
+    if (it->first.first == render_process_id) {
+      it = poll_callbacks_.erase(it);
+      OnStreamRemoved();
+    } else {
+      ++it;
+    }
+  }
+
+  if (poll_callbacks_.empty())
+    poll_timer_.Stop();
 }
 
 // static
@@ -82,18 +120,11 @@ void AudioStreamMonitor::StartMonitoringHelper(
     int stream_id,
     const ReadPowerAndClipCallback& read_power_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  AudioStreamMonitor* const monitor =
-      AudioStreamMonitorFromRenderFrame(render_process_id, render_frame_id);
-  if (!monitor)
-    return;
-
-  monitor->OnStreamAdded();
-
-  if (!power_level_monitoring_available())
-    return;
-
-  monitor->StartMonitoringStreamOnUIThread(render_process_id, stream_id,
-                                           read_power_callback);
+  if (AudioStreamMonitor* monitor = StartStopMonitoringHelper(
+          ActionType::STARTING, render_process_id, render_frame_id)) {
+    monitor->StartMonitoringStreamOnUIThread(render_process_id, stream_id,
+                                             read_power_callback);
+  }
 }
 
 // static
@@ -101,17 +132,10 @@ void AudioStreamMonitor::StopMonitoringHelper(int render_process_id,
                                               int render_frame_id,
                                               int stream_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  AudioStreamMonitor* const monitor =
-      AudioStreamMonitorFromRenderFrame(render_process_id, render_frame_id);
-  if (!monitor)
-    return;
-
-  monitor->OnStreamRemoved();
-
-  if (!power_level_monitoring_available())
-    return;
-
-  monitor->StopMonitoringStreamOnUIThread(render_process_id, stream_id);
+  if (AudioStreamMonitor* monitor = StartStopMonitoringHelper(
+          ActionType::STOPPING, render_process_id, render_frame_id)) {
+    monitor->StopMonitoringStreamOnUIThread(render_process_id, stream_id);
+  }
 }
 
 void AudioStreamMonitor::StartMonitoringStreamOnUIThread(
@@ -120,22 +144,25 @@ void AudioStreamMonitor::StartMonitoringStreamOnUIThread(
     const ReadPowerAndClipCallback& read_power_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!read_power_callback.is_null());
-  poll_callbacks_[StreamID(render_process_id, stream_id)] = read_power_callback;
-  if (!poll_timer_.IsRunning()) {
-    poll_timer_.Start(
-        FROM_HERE,
-        base::TimeDelta::FromSeconds(1) /
-            static_cast<int>(kPowerMeasurementsPerSecond),
-        base::Bind(&AudioStreamMonitor::Poll, base::Unretained(this)));
-  }
+
+  const StreamID qualified_id(render_process_id, stream_id);
+  DCHECK(poll_callbacks_.find(qualified_id) == poll_callbacks_.end());
+
+  poll_callbacks_[qualified_id] = read_power_callback;
+  OnStreamAdded();
 }
 
 void AudioStreamMonitor::StopMonitoringStreamOnUIThread(int render_process_id,
                                                         int stream_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  poll_callbacks_.erase(StreamID(render_process_id, stream_id));
-  if (poll_callbacks_.empty())
-    poll_timer_.Stop();
+
+  // In the event of render process death, these may have already been cleared.
+  auto it = poll_callbacks_.find(StreamID(render_process_id, stream_id));
+  if (it == poll_callbacks_.end())
+    return;
+
+  poll_callbacks_.erase(it);
+  OnStreamRemoved();
 }
 
 void AudioStreamMonitor::Poll() {
@@ -187,29 +214,32 @@ void AudioStreamMonitor::MaybeToggle() {
 
 void AudioStreamMonitor::OnStreamAdded() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  ++active_streams_;
-
-  if (power_level_monitoring_available())
+  if (poll_callbacks_.size() != 1u)
     return;
 
-  if (active_streams_ == 1) {
+  if (!power_level_monitoring_available()) {
     is_audible_ = true;
     web_contents_->OnAudioStateChanged(true);
     MaybeToggle();
+  } else if (!poll_timer_.IsRunning()) {
+    poll_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromSeconds(1) /
+                       static_cast<int>(kPowerMeasurementsPerSecond),
+        base::Bind(&AudioStreamMonitor::Poll, base::Unretained(this)));
   }
 }
 
 void AudioStreamMonitor::OnStreamRemoved() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  --active_streams_;
-
-  if (power_level_monitoring_available())
+  if (!poll_callbacks_.empty())
     return;
 
-  if (active_streams_ == 0) {
+  if (!power_level_monitoring_available()) {
     is_audible_ = false;
     web_contents_->OnAudioStateChanged(false);
     MaybeToggle();
+  } else {
+    poll_timer_.Stop();
   }
 }
 

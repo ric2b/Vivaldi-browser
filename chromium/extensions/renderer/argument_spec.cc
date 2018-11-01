@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
+#include "extensions/renderer/api_type_reference_map.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
 
@@ -25,7 +26,7 @@ bool ParseFundamentalValueHelper(v8::Local<v8::Value> arg,
   if (minimum && val < minimum.value())
     return false;
   if (out_value)
-    *out_value = base::MakeUnique<base::FundamentalValue>(val);
+    *out_value = base::MakeUnique<base::Value>(val);
   return true;
 }
 
@@ -75,6 +76,8 @@ void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
     type_ = ArgumentType::BOOLEAN;
   else if (type_string == "string")
     type_ = ArgumentType::STRING;
+  else if (type_string == "binary")
+    type_ = ArgumentType::BINARY;
   else if (type_string == "any")
     type_ = ArgumentType::ANY;
   else if (type_string == "function")
@@ -86,12 +89,19 @@ void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
   if (dict->GetInteger("minimum", &min))
     minimum_ = min;
 
-  const base::DictionaryValue* properties_value = nullptr;
-  if (type_ == ArgumentType::OBJECT &&
-      dict->GetDictionary("properties", &properties_value)) {
-    for (base::DictionaryValue::Iterator iter(*properties_value);
-         !iter.IsAtEnd(); iter.Advance()) {
-      properties_[iter.key()] = base::MakeUnique<ArgumentSpec>(iter.value());
+  if (type_ == ArgumentType::OBJECT) {
+    const base::DictionaryValue* properties_value = nullptr;
+    if (dict->GetDictionary("properties", &properties_value)) {
+      for (base::DictionaryValue::Iterator iter(*properties_value);
+           !iter.IsAtEnd(); iter.Advance()) {
+        properties_[iter.key()] = base::MakeUnique<ArgumentSpec>(iter.value());
+      }
+    }
+    const base::DictionaryValue* additional_properties_value = nullptr;
+    if (dict->GetDictionary("additionalProperties",
+                            &additional_properties_value)) {
+      additional_properties_ =
+          base::MakeUnique<ArgumentSpec>(*additional_properties_value);
     }
   } else if (type_ == ArgumentType::LIST) {
     const base::DictionaryValue* item_value = nullptr;
@@ -124,7 +134,7 @@ ArgumentSpec::~ArgumentSpec() {}
 
 bool ArgumentSpec::ParseArgument(v8::Local<v8::Context> context,
                                  v8::Local<v8::Value> value,
-                                 const RefMap& refs,
+                                 const APITypeReferenceMap& refs,
                                  std::unique_ptr<base::Value>* out_value,
                                  std::string* error) const {
   if (type_ == ArgumentType::FUNCTION) {
@@ -135,9 +145,9 @@ bool ArgumentSpec::ParseArgument(v8::Local<v8::Context> context,
 
   if (type_ == ArgumentType::REF) {
     DCHECK(ref_);
-    auto iter = refs.find(ref_.value());
-    DCHECK(iter != refs.end()) << ref_.value();
-    return iter->second->ParseArgument(context, value, refs, out_value, error);
+    const ArgumentSpec* reference = refs.GetSpec(ref_.value());
+    DCHECK(reference) << ref_.value();
+    return reference->ParseArgument(context, value, refs, out_value, error);
   }
 
   if (type_ == ArgumentType::CHOICES) {
@@ -171,6 +181,13 @@ bool ArgumentSpec::ParseArgument(v8::Local<v8::Context> context,
     }
     v8::Local<v8::Array> array = value.As<v8::Array>();
     return ParseArgumentToArray(context, array, refs, out_value, error);
+  }
+  if (type_ == ArgumentType::BINARY) {
+    if (!value->IsArrayBuffer() && !value->IsArrayBufferView()) {
+      *error = "Wrong type";
+      return false;
+    }
+    return ParseArgumentToAny(context, value, out_value, error);
   }
   if (type_ == ArgumentType::ANY)
     return ParseArgumentToAny(context, value, out_value, error);
@@ -221,8 +238,8 @@ bool ArgumentSpec::ParseArgumentToFundamental(
       if (!value->IsBoolean())
         return false;
       if (out_value) {
-        *out_value = base::MakeUnique<base::FundamentalValue>(
-            value.As<v8::Boolean>()->Value());
+        *out_value =
+            base::MakeUnique<base::Value>(value.As<v8::Boolean>()->Value());
       }
       return true;
     }
@@ -235,7 +252,7 @@ bool ArgumentSpec::ParseArgumentToFundamental(
 bool ArgumentSpec::ParseArgumentToObject(
     v8::Local<v8::Context> context,
     v8::Local<v8::Object> object,
-    const RefMap& refs,
+    const APITypeReferenceMap& refs,
     std::unique_ptr<base::Value>* out_value,
     std::string* error) const {
   DCHECK_EQ(ArgumentType::OBJECT, type_);
@@ -243,6 +260,7 @@ bool ArgumentSpec::ParseArgumentToObject(
   // Only construct the result if we have an |out_value| to populate.
   if (out_value)
     result = base::MakeUnique<base::DictionaryValue>();
+
   gin::Dictionary dictionary(context->GetIsolate(), object);
   for (const auto& kv : properties_) {
     v8::Local<v8::Value> subvalue;
@@ -272,6 +290,51 @@ bool ArgumentSpec::ParseArgumentToObject(
     if (result)
       result->Set(kv.first, std::move(property));
   }
+
+  // Check for additional properties.
+  if (additional_properties_) {
+    v8::Local<v8::Array> own_property_names;
+    if (!object->GetOwnPropertyNames(context).ToLocal(&own_property_names))
+      return false;
+    uint32_t length = own_property_names->Length();
+    for (uint32_t i = 0; i < length; ++i) {
+      v8::Local<v8::Value> key;
+      if (!own_property_names->Get(context, i).ToLocal(&key))
+        return false;
+      // In JS, all keys are strings or numbers (or symbols, but those are
+      // excluded by GetOwnPropertyNames()). If you try to set anything else
+      // (e.g. an object), it is converted to a string.
+      DCHECK(key->IsString() || key->IsNumber());
+      v8::String::Utf8Value utf8_key(key);
+      // If the key was one of the specified properties, we've already handled
+      // it. Continue.
+      if (properties_.find(*utf8_key) != properties_.end())
+        continue;
+      v8::Local<v8::Value> subvalue;
+      // Fun: It's possible that a previous getter has removed the property from
+      // the object. This isn't that big of a deal, since it would only manifest
+      // in the case of some reasonably-crazy script objects, and it's probably
+      // not worth optimizing for the uncommon case to the detriment of the
+      // common (and either should be totally safe). We can always add a
+      // HasOwnProperty() check here in the future, if we desire.
+      if (!object->Get(context, key).ToLocal(&subvalue))
+        return false;
+
+      // We don't serialize undefined values.
+      // TODO(devlin): This matches current behavior, but it is correct?
+      if (subvalue->IsUndefined())
+        continue;
+
+      std::unique_ptr<base::Value> property;
+      if (!additional_properties_->ParseArgument(
+              context, subvalue, refs, result ? &property : nullptr, error)) {
+        return false;
+      }
+      if (result)
+        result->SetWithoutPathExpansion(*utf8_key, std::move(property));
+    }
+  }
+
   if (out_value)
     *out_value = std::move(result);
   return true;
@@ -279,7 +342,7 @@ bool ArgumentSpec::ParseArgumentToObject(
 
 bool ArgumentSpec::ParseArgumentToArray(v8::Local<v8::Context> context,
                                         v8::Local<v8::Array> value,
-                                        const RefMap& refs,
+                                        const APITypeReferenceMap& refs,
                                         std::unique_ptr<base::Value>* out_value,
                                         std::string* error) const {
   DCHECK_EQ(ArgumentType::LIST, type_);
@@ -317,7 +380,7 @@ bool ArgumentSpec::ParseArgumentToAny(v8::Local<v8::Context> context,
                                       v8::Local<v8::Value> value,
                                       std::unique_ptr<base::Value>* out_value,
                                       std::string* error) const {
-  DCHECK_EQ(ArgumentType::ANY, type_);
+  DCHECK(type_ == ArgumentType::ANY || type_ == ArgumentType::BINARY);
   if (out_value) {
     std::unique_ptr<content::V8ValueConverter> converter(
         content::V8ValueConverter::create());
@@ -327,6 +390,8 @@ bool ArgumentSpec::ParseArgumentToAny(v8::Local<v8::Context> context,
       *error = "Could not convert to 'any'.";
       return false;
     }
+    if (type_ == ArgumentType::BINARY)
+      DCHECK_EQ(base::Value::Type::BINARY, converted->GetType());
     *out_value = std::move(converted);
   }
   return true;

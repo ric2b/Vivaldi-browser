@@ -17,19 +17,21 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_snapshot_manager.h"
 #include "base/metrics/user_metrics.h"
 #include "base/observer_list.h"
+#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/metrics/clean_exit_beacon.h"
 #include "components/metrics/data_use_tracker.h"
+#include "components/metrics/execution_phase.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
+#include "components/metrics/metrics_log_store.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/net/network_metrics_provider.h"
 #include "components/variations/synthetic_trials.h"
@@ -49,7 +51,6 @@ struct ActiveGroupId;
 namespace metrics {
 
 class MetricsLogUploader;
-class MetricsReportingScheduler;
 class MetricsRotationScheduler;
 class MetricsUploadScheduler;
 class MetricsServiceAccessor;
@@ -59,18 +60,6 @@ class MetricsStateManager;
 // See metrics_service.cc for a detailed description.
 class MetricsService : public base::HistogramFlattener {
  public:
-  // The execution phase of the browser.
-  enum ExecutionPhase {
-    UNINITIALIZED_PHASE = 0,
-    START_METRICS_RECORDING = 100,
-    CREATE_PROFILE = 200,
-    STARTUP_TIMEBOMB_ARM = 300,
-    THREAD_WATCHER_START = 400,
-    MAIN_MESSAGE_LOOP_RUN = 500,
-    SHUTDOWN_TIMEBOMB_ARM = 600,
-    SHUTDOWN_COMPLETE = 700,
-  };
-
   // Creates the MetricsService with the given |state_manager|, |client|, and
   // |local_state|.  Does not take ownership of the paramaters; instead stores
   // a weak pointer to each. Caller should ensure that the parameters are valid
@@ -208,12 +197,10 @@ class MetricsService : public base::HistogramFlattener {
                                int message_size,
                                bool is_cellular);
 
-  // Merge any data from metrics providers into the global StatisticsRecorder.
-  void MergeHistogramDeltas();
-
  protected:
   // Exposed for testing.
   MetricsLogManager* log_manager() { return &log_manager_; }
+  MetricsLogStore* log_store() { return &log_store_; }
 
  private:
   friend class MetricsServiceAccessor;
@@ -299,15 +286,6 @@ class MetricsService : public base::HistogramFlattener {
   // Notifies providers when a new metrics log is created.
   void NotifyOnDidCreateMetricsLog();
 
-  // Schedule the next save of LocalState information.  This is called
-  // automatically by the task that performs each save to schedule the next one.
-  void ScheduleNextStateSave();
-
-  // Save the LocalState information immediately. This should not be called by
-  // anybody other than the scheduler to avoid doing too many writes. When you
-  // make a change, call ScheduleNextStateSave() instead.
-  void SaveLocalState();
-
   // Opens a new log for recording user experience metrics.
   void OpenNewLog();
 
@@ -355,19 +333,12 @@ class MetricsService : public base::HistogramFlattener {
   // Called after transmission completes (either successfully or with failure).
   void OnLogUploadComplete(int response_code);
 
-  // Reads, increments and then sets the specified integer preference.
-  void IncrementPrefValue(const char* path);
-
   // Reads, increments and then sets the specified long preference that is
   // stored as a string.
   void IncrementLongPrefsValue(const char* path);
 
   // Records that the browser was shut down cleanly.
   void LogCleanShutdown(bool end_completed);
-
-  // Records state that should be periodically saved, like uptime and
-  // buffered plugin stability statistics.
-  void RecordCurrentState(PrefService* pref);
 
   // Notifies observers on a synthetic trial list change.
   void NotifySyntheticTrialObservers();
@@ -394,6 +365,9 @@ class MetricsService : public base::HistogramFlattener {
   // Manager for the various in-flight logs.
   MetricsLogManager log_manager_;
 
+  // Store of logs ready to be uploaded.
+  MetricsLogStore log_store_;
+
   // |histogram_snapshot_manager_| prepares histogram deltas for transmission.
   base::HistogramSnapshotManager histogram_snapshot_manager_;
 
@@ -406,7 +380,7 @@ class MetricsService : public base::HistogramFlattener {
   MetricsServiceClient* const client_;
 
   // Registered metrics providers.
-  ScopedVector<MetricsProvider> metrics_providers_;
+  std::vector<std::unique_ptr<MetricsProvider>> metrics_providers_;
 
   PrefService* local_state_;
 
@@ -446,9 +420,6 @@ class MetricsService : public base::HistogramFlattener {
   // A number that identifies the how many times the app has been launched.
   int session_id_;
 
-  // The scheduler for determining when log rotations+uploads should happen.
-  // TODO(holte): Remove this once we've switched to split schedulers.
-  std::unique_ptr<MetricsReportingScheduler> scheduler_;
   // The scheduler for determining when log rotations should happen.
   std::unique_ptr<MetricsRotationScheduler> rotation_scheduler_;
   // The scheduler for determining when uploads should happen.
@@ -467,9 +438,6 @@ class MetricsService : public base::HistogramFlattener {
   base::ObserverList<variations::SyntheticTrialObserver>
       synthetic_trial_observer_list_;
 
-  // Execution phase the browser is in.
-  static ExecutionPhase execution_phase_;
-
   // Redundant marker to check that we completed our shutdown, and set the
   // exited-cleanly bit in the prefs.
   static ShutdownCleanliness clean_shutdown_status_;
@@ -484,13 +452,11 @@ class MetricsService : public base::HistogramFlattener {
   // Pointer used for obtaining data use pref updater callback on above layers.
   std::unique_ptr<DataUseTracker> data_use_tracker_;
 
+  base::ThreadChecker thread_checker_;
+
   // Weak pointers factory used to post task on different threads. All weak
   // pointers managed by this factory have the same lifetime as MetricsService.
   base::WeakPtrFactory<MetricsService> self_ptr_factory_;
-
-  // Weak pointers factory used for saving state. All weak pointers managed by
-  // this factory are invalidated in ScheduleNextStateSave.
-  base::WeakPtrFactory<MetricsService> state_saver_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsService);
 };

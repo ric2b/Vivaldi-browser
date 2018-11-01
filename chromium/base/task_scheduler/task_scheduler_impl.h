@@ -5,8 +5,6 @@
 #ifndef BASE_TASK_SCHEDULER_TASK_SCHEDULER_IMPL_H_
 #define BASE_TASK_SCHEDULER_TASK_SCHEDULER_IMPL_H_
 
-#include <stddef.h>
-
 #include <memory>
 #include <vector>
 
@@ -44,9 +42,6 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
       const WorkerPoolIndexForTraitsCallback&
           worker_pool_index_for_traits_callback);
 
-  // Destroying a TaskSchedulerImpl is not allowed in production; it is always
-  // leaked. In tests, it can only be destroyed after JoinForTesting() has
-  // returned.
   ~TaskSchedulerImpl() override;
 
   // TaskScheduler:
@@ -61,12 +56,11 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   scoped_refptr<SingleThreadTaskRunner> CreateSingleThreadTaskRunnerWithTraits(
       const TaskTraits& traits) override;
   std::vector<const HistogramBase*> GetHistograms() const override;
+  int GetMaxConcurrentTasksWithTraitsDeprecated(
+      const TaskTraits& traits) const override;
   void Shutdown() override;
   void FlushForTesting() override;
-
-  // Joins all threads. Tasks that are already running are allowed to complete
-  // their execution. This can only be called once.
-  void JoinForTesting();
+  void JoinForTesting() override;
 
  private:
   explicit TaskSchedulerImpl(const WorkerPoolIndexForTraitsCallback&
@@ -76,7 +70,8 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
       const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector);
 
   // Returns the worker pool that runs Tasks with |traits|.
-  SchedulerWorkerPool* GetWorkerPoolForTraits(const TaskTraits& traits);
+  SchedulerWorkerPoolImpl* GetWorkerPoolForTraits(
+      const TaskTraits& traits) const;
 
   // Callback invoked when a non-single-thread |sequence| isn't empty after a
   // worker pops a Task from it.

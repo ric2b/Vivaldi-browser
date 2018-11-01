@@ -2,6 +2,7 @@
 
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 
+#include <memory>
 #include <set>
 #include <string>
 
@@ -21,7 +22,6 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 
-
 using vivaldi::IsVivaldiApp;
 using vivaldi::kVivaldiReservedApiError;
 using vivaldi::FindVivaldiBrowser;
@@ -32,16 +32,14 @@ namespace extensions {
 
 namespace bookmarks_private = vivaldi::bookmarks_private;
 
-VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext *context)
+VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
     : browser_context_(context), bookmark_model_(nullptr) {
-  bookmark_model_ =
-      BookmarkModelFactory::GetForBrowserContext(context);
+  bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
 }
 
-VivaldiBookmarksAPI::~VivaldiBookmarksAPI() {
-}
+VivaldiBookmarksAPI::~VivaldiBookmarksAPI() {}
 
 void VivaldiBookmarksAPI::Shutdown() {
   bookmark_model_->RemoveObserver(this);
@@ -68,11 +66,12 @@ void RemoveThumbnailForBookmarkNode(content::BrowserContext* browser_context,
 
 }  // namespace
 
-void VivaldiBookmarksAPI::BookmarkNodeMoved(bookmarks::BookmarkModel* model,
-                                     const bookmarks::BookmarkNode* old_parent,
-                                     int old_index,
-                                     const bookmarks::BookmarkNode* new_parent,
-                                     int new_index) {
+void VivaldiBookmarksAPI::BookmarkNodeMoved(
+    bookmarks::BookmarkModel* model,
+    const bookmarks::BookmarkNode* old_parent,
+    int old_index,
+    const bookmarks::BookmarkNode* new_parent,
+    int new_index) {
   if (new_parent->type() == BookmarkNode::TRASH) {
     // If it's moved to trash, remove the thumbnail immediately
     const BookmarkNode* node = new_parent->GetChild(new_index);
@@ -82,8 +81,10 @@ void VivaldiBookmarksAPI::BookmarkNodeMoved(bookmarks::BookmarkModel* model,
 }
 
 void VivaldiBookmarksAPI::BookmarkNodeRemoved(
-    bookmarks::BookmarkModel* model, const bookmarks::BookmarkNode* parent,
-    int old_index, const bookmarks::BookmarkNode* node,
+    bookmarks::BookmarkModel* model,
+    const bookmarks::BookmarkNode* parent,
+    int old_index,
+    const bookmarks::BookmarkNode* node,
     const std::set<GURL>& no_longer_bookmarked) {
   // We're removing the bookmark (emptying the trash most likely),
   // remove the thumbnail.
@@ -91,12 +92,10 @@ void VivaldiBookmarksAPI::BookmarkNodeRemoved(
 }
 
 BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::
-    BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() {
-}
+    BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() {}
 
 BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::
-    ~BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() {
-}
+    ~BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() {}
 
 bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
   std::unique_ptr<bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params>
@@ -130,11 +129,9 @@ bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
   return true;
 }
 
-BookmarksPrivateEmptyTrashFunction::BookmarksPrivateEmptyTrashFunction() {
-}
+BookmarksPrivateEmptyTrashFunction::BookmarksPrivateEmptyTrashFunction() {}
 
-BookmarksPrivateEmptyTrashFunction::~BookmarksPrivateEmptyTrashFunction() {
-}
+BookmarksPrivateEmptyTrashFunction::~BookmarksPrivateEmptyTrashFunction() {}
 
 bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   bool success = false;
@@ -143,7 +140,7 @@ bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   const BookmarkNode* trash_node = model->trash_node();
   if (trash_node) {
     while (trash_node->child_count()) {
-      const BookmarkNode *remove_node = trash_node->GetChild(0);
+      const BookmarkNode* remove_node = trash_node->GetChild(0);
       model->Remove(remove_node);
     }
     success = true;

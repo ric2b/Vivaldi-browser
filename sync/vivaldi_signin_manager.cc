@@ -27,8 +27,6 @@
 #include "net/base/escape.h"
 #include "third_party/icu/source/i18n/unicode/regex.h"
 
-using namespace signin_internals_util;
-
 namespace vivaldi {
 
 // Under the covers, we use a dummy chrome-extension ID to serve the purposes
@@ -96,7 +94,7 @@ void VivaldiSigninManager::SignOut(
   client_->SignOut();
 
   // Erase (now) stale information from AboutSigninInternals.
-  NotifyDiagnosticsObservers(SIGNIN_COMPLETED, "");
+  NotifyDiagnosticsObservers(signin_internals_util::SIGNIN_COMPLETED, "");
 
   // Determine the duration the user was logged in and log that to UMA.
   if (!signin_time.is_null()) {
@@ -174,4 +172,4 @@ void VivaldiSigninManager::OnAccountUpdateFailed(
   user_info_fetched_by_account_tracker_ = true;
   PostSignedIn();
 }
-}
+} //namespace vivaldi

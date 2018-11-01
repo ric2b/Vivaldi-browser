@@ -92,7 +92,7 @@ namespace cc {
 
 PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
                                    int id,
-                                   bool is_mask)
+                                   Layer::LayerMaskType mask_type)
     : LayerImpl(tree_impl, id),
       twin_layer_(nullptr),
       tilings_(CreatePictureLayerTilingSet()),
@@ -107,7 +107,7 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
       low_res_raster_contents_scale_(0.f),
       was_screen_space_transform_animating_(false),
       only_used_low_res_last_append_quads_(false),
-      is_mask_(is_mask),
+      mask_type_(mask_type),
       nearest_neighbor_(false),
       is_directly_composited_image_(false) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
@@ -125,12 +125,12 @@ const char* PictureLayerImpl::LayerTypeAsString() const {
 
 std::unique_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  return PictureLayerImpl::Create(tree_impl, id(), is_mask_);
+  return PictureLayerImpl::Create(tree_impl, id(), mask_type());
 }
 
 void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
-  DCHECK_EQ(layer_impl->is_mask_, is_mask_);
+  DCHECK_EQ(layer_impl->mask_type_, mask_type_);
 
   LayerImpl::PushPropertiesTo(base_layer);
 
@@ -354,7 +354,6 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
                        texture_rect, draw_info.resource_size(),
                        draw_info.contents_swizzled(), nearest_neighbor_);
           ValidateQuadResources(quad);
-          iter->draw_info().set_was_ever_used_to_draw();
           has_draw_quad = true;
           break;
         }
@@ -364,7 +363,6 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
                        draw_info.solid_color(), false);
           ValidateQuadResources(quad);
-          iter->draw_info().set_was_ever_used_to_draw();
           has_draw_quad = true;
           break;
         }
@@ -694,9 +692,11 @@ std::unique_ptr<Tile> PictureLayerImpl::CreateTile(
     const Tile::CreateInfo& info) {
   int flags = 0;
 
-  // We don't handle solid color masks, so we shouldn't bother analyzing those.
+  // We don't handle solid color masks if mask tiling is disabled, we also don't
+  // handle solid color single texture masks if the flag is enabled, so we
+  // shouldn't bother analyzing those.
   // Otherwise, always analyze to maximize memory savings.
-  if (!is_mask_)
+  if (mask_type_ != Layer::LayerMaskType::SINGLE_TEXTURE_MASK)
     flags = Tile::USE_PICTURE_ANALYSIS;
 
   if (contents_opaque())
@@ -738,7 +738,7 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
   int max_texture_size =
       layer_tree_impl()->resource_provider()->max_texture_size();
 
-  if (is_mask_) {
+  if (mask_type_ == Layer::LayerMaskType::SINGLE_TEXTURE_MASK) {
     // Masks are not tiled, so if we can't cover the whole mask with one tile,
     // we shouldn't have such a tiling at all.
     DCHECK_LE(content_bounds.width(), max_texture_size);
@@ -1172,25 +1172,24 @@ float PictureLayerImpl::MinimumContentsScale() const {
 }
 
 float PictureLayerImpl::MaximumContentsScale() const {
-  // Masks can not have tilings that would become larger than the
-  // max_texture_size since they use a single tile for the entire
-  // tiling. Other layers can have tilings of any scale.
-  if (!is_mask_)
-    return std::numeric_limits<float>::max();
-
-  int max_texture_size =
-      layer_tree_impl()->resource_provider()->max_texture_size();
-  float max_scale_width =
-      static_cast<float>(max_texture_size) / bounds().width();
-  float max_scale_height =
-      static_cast<float>(max_texture_size) / bounds().height();
+  // When mask tiling is disabled or the mask is single textured, masks can not
+  // have tilings that would become larger than the max_texture_size since they
+  // use a single tile for the entire tiling. Other layers can have tilings such
+  // that dimension * scale does not overflow.
+  float max_dimension = static_cast<float>(
+      mask_type_ == Layer::LayerMaskType::SINGLE_TEXTURE_MASK
+          ? layer_tree_impl()->resource_provider()->max_texture_size()
+          : std::numeric_limits<int>::max());
+  float max_scale_width = max_dimension / bounds().width();
+  float max_scale_height = max_dimension / bounds().height();
   float max_scale = std::min(max_scale_width, max_scale_height);
+
   // We require that multiplying the layer size by the contents scale and
-  // ceiling produces a value <= |max_texture_size|. Because for large layer
+  // ceiling produces a value <= |max_dimension|. Because for large layer
   // sizes floating point ambiguity may crop up, making the result larger or
   // smaller than expected, we use a slightly smaller floating point value for
   // the scale, to help ensure that the resulting content bounds will never end
-  // up larger than |max_texture_size|.
+  // up larger than |max_dimension|.
   return nextafterf(max_scale, 0.f);
 }
 
@@ -1369,6 +1368,29 @@ bool PictureLayerImpl::IsOnActiveOrPendingTree() const {
 bool PictureLayerImpl::HasValidTilePriorities() const {
   return IsOnActiveOrPendingTree() &&
          is_drawn_render_surface_layer_list_member();
+}
+
+void PictureLayerImpl::InvalidateRegionForImages(
+    const ImageIdFlatSet& images_to_invalidate) {
+  TRACE_EVENT_BEGIN0("cc", "PictureLayerImpl::InvalidateRegionForImages");
+
+  InvalidationRegion image_invalidation;
+  for (auto image_id : images_to_invalidate)
+    image_invalidation.Union(raster_source_->GetRectForImage(image_id));
+  Region invalidation;
+  image_invalidation.Swap(&invalidation);
+
+  if (invalidation.IsEmpty()) {
+    TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
+                     "Invalidation", invalidation.ToString());
+    return;
+  }
+
+  invalidation_.Union(invalidation);
+  tilings_->UpdateTilingsForImplSideInvalidation(invalidation);
+  SetNeedsPushProperties();
+  TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
+                   "Invalidation", invalidation.ToString());
 }
 
 }  // namespace cc

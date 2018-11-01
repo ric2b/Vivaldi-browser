@@ -141,13 +141,14 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
       DownloadDangerType danger_type,
       DownloadInterruptReason interrupt_reason,
       bool opened,
+      const std::vector<DownloadItem::ReceivedSlice>& received_slices,
       const net::NetLogWithSource& net_log) override {
     return new DownloadItemImpl(
         delegate, guid, download_id, current_path, target_path, url_chain,
         referrer_url, site_url, tab_url, tab_refererr_url, mime_type,
         original_mime_type, start_time, end_time, etag, last_modified,
         received_bytes, total_bytes, hash, state, danger_type, interrupt_reason,
-        opened, net_log);
+        opened, received_slices, net_log);
   }
 
   DownloadItemImpl* CreateActiveItem(
@@ -519,16 +520,6 @@ void DownloadManagerImpl::AddUrlDownloader(
     url_downloaders_.push_back(std::move(downloader));
 }
 
-void DownloadManagerImpl::RemoveUrlDownloader(UrlDownloader* downloader) {
-  for (auto ptr = url_downloaders_.begin(); ptr != url_downloaders_.end();
-       ++ptr) {
-    if (ptr->get() == downloader) {
-      url_downloaders_.erase(ptr);
-      return;
-    }
-  }
-}
-
 // static
 DownloadInterruptReason DownloadManagerImpl::BeginDownloadRequest(
     std::unique_ptr<net::URLRequest> url_request,
@@ -658,7 +649,8 @@ DownloadItem* DownloadManagerImpl::CreateDownloadItem(
     DownloadItem::DownloadState state,
     DownloadDangerType danger_type,
     DownloadInterruptReason interrupt_reason,
-    bool opened) {
+    bool opened,
+    const std::vector<DownloadItem::ReceivedSlice>& received_slices) {
   if (base::ContainsKey(downloads_, id)) {
     NOTREACHED();
     return nullptr;
@@ -668,7 +660,7 @@ DownloadItem* DownloadManagerImpl::CreateDownloadItem(
       this, guid, id, current_path, target_path, url_chain, referrer_url,
       site_url, tab_url, tab_refererr_url, mime_type, original_mime_type,
       start_time, end_time, etag, last_modified, received_bytes, total_bytes,
-      hash, state, danger_type, interrupt_reason, opened,
+      hash, state, danger_type, interrupt_reason, opened, received_slices,
       net::NetLogWithSource::Make(net_log_, net::NetLogSourceType::DOWNLOAD));
   downloads_[id] = base::WrapUnique(item);
   downloads_by_guid_[guid] = item;
@@ -712,6 +704,24 @@ DownloadItem* DownloadManagerImpl::GetDownloadByGuid(const std::string& guid) {
   DCHECK(guid == base::ToUpperASCII(guid));
   return base::ContainsKey(downloads_by_guid_, guid) ? downloads_by_guid_[guid]
                                                      : nullptr;
+}
+
+void DownloadManagerImpl::OnUrlDownloaderStarted(
+    std::unique_ptr<DownloadCreateInfo> download_create_info,
+    std::unique_ptr<ByteStreamReader> stream_reader,
+    const DownloadUrlParameters::OnStartedCallback& callback) {
+  StartDownload(std::move(download_create_info), std::move(stream_reader),
+                callback);
+}
+
+void DownloadManagerImpl::OnUrlDownloaderStopped(UrlDownloader* downloader) {
+  for (auto ptr = url_downloaders_.begin(); ptr != url_downloaders_.end();
+       ++ptr) {
+    if (ptr->get() == downloader) {
+      url_downloaders_.erase(ptr);
+      return;
+    }
+  }
 }
 
 void DownloadManagerImpl::GetAllDownloads(DownloadVector* downloads) {

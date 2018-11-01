@@ -18,7 +18,12 @@ namespace exo {
 CompositorFrameSink::CompositorFrameSink(const cc::FrameSinkId& frame_sink_id,
                                          cc::SurfaceManager* surface_manager,
                                          CompositorFrameSinkHolder* client)
-    : support_(this, surface_manager, frame_sink_id, nullptr, nullptr),
+    : support_(this,
+               surface_manager,
+               frame_sink_id,
+               false /* is_root */,
+               true /* handles_frame_sink_id_invalidation */,
+               true /* needs_sync_points */),
       client_(client) {}
 
 CompositorFrameSink::~CompositorFrameSink() {}
@@ -31,22 +36,13 @@ void CompositorFrameSink::SetNeedsBeginFrame(bool needs_begin_frame) {
 }
 
 void CompositorFrameSink::SubmitCompositorFrame(
-    const cc::LocalFrameId& local_frame_id,
+    const cc::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
-  support_.SubmitCompositorFrame(local_frame_id, std::move(frame));
+  support_.SubmitCompositorFrame(local_surface_id, std::move(frame));
 }
 
 void CompositorFrameSink::EvictFrame() {
   support_.EvictFrame();
-}
-
-void CompositorFrameSink::Require(const cc::LocalFrameId& local_frame_id,
-                                  const cc::SurfaceSequence& sequence) {
-  support_.Require(local_frame_id, sequence);
-}
-
-void CompositorFrameSink::Satisfy(const cc::SurfaceSequence& sequence) {
-  support_.Satisfy(sequence);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,8 +61,10 @@ void CompositorFrameSink::ReclaimResources(
   client_->ReclaimResources(resources);
 }
 
-void CompositorFrameSink::WillDrawSurface() {
-  client_->WillDrawSurface();
+void CompositorFrameSink::WillDrawSurface(
+    const cc::LocalSurfaceId& local_surface_id,
+    const gfx::Rect& damage_rect) {
+  client_->WillDrawSurface(local_surface_id, damage_rect);
 }
 
 }  // namespace exo

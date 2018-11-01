@@ -72,6 +72,7 @@ namespace blink {
 
 class InterfaceProvider;
 class WebAudioBus;
+class WebAudioLatencyHint;
 class WebBlobRegistry;
 class WebCanvasCaptureHandler;
 class WebClipboard;
@@ -136,7 +137,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Initialize platform and wtf. If you need to initialize the entire Blink,
   // you should use blink::initialize.
   static void initialize(Platform*);
-  static void shutdown();
   static Platform* current();
 
   // Used to switch the current platform only for testing.
@@ -174,13 +174,13 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Creates a device for audio I/O.
   // Pass in (numberOfInputChannels > 0) if live/local audio input is desired.
-  virtual WebAudioDevice* createAudioDevice(size_t bufferSize,
-                                            unsigned numberOfInputChannels,
-                                            unsigned numberOfChannels,
-                                            double sampleRate,
-                                            WebAudioDevice::RenderCallback*,
-                                            const WebString& deviceId,
-                                            const WebSecurityOrigin&) {
+  virtual WebAudioDevice* createAudioDevice(
+      unsigned numberOfInputChannels,
+      unsigned numberOfChannels,
+      const WebAudioLatencyHint& latencyHint,
+      WebAudioDevice::RenderCallback*,
+      const WebString& deviceId,
+      const WebSecurityOrigin&) {
     return nullptr;
   }
 
@@ -460,6 +460,13 @@ class BLINK_PLATFORM_EXPORT Platform {
   struct ContextAttributes {
     bool failIfMajorPerformanceCaveat = false;
     unsigned webGLVersion = 0;
+    // Offscreen contexts usually share a surface for the default frame buffer
+    // since they aren't rendering to it. Setting any of the following
+    // attributes causes creation of a custom surface owned by the context.
+    bool supportAlpha = false;
+    bool supportDepth = false;
+    bool supportAntialias = false;
+    bool supportStencil = false;
   };
   struct GraphicsInfo {
     unsigned vendorId = 0;
@@ -668,6 +675,12 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Experimental Framework ----------------------------------------------
 
   virtual WebTrialTokenValidator* trialTokenValidator() { return nullptr; }
+
+  // Memory ------------------------------------------------------------
+
+  // Requests purging memory. The platform may or may not purge memory,
+  // depending on memory pressure.
+  virtual void requestPurgeMemory() {}
 
  protected:
   Platform();

@@ -148,9 +148,9 @@ class CORE_EXPORT EditingStyle final : public GarbageCollected<EditingStyle> {
   void mergeInlineStyleOfElement(HTMLElement*,
                                  CSSPropertyOverrideMode,
                                  PropertiesToInclude = AllProperties);
-  static EditingStyle* wrappingStyleForAnnotatedSerialization(
-      ContainerNode* context);
-  static EditingStyle* wrappingStyleForSerialization(ContainerNode* context);
+  void mergeInlineAndImplicitStyleOfElement(Element*,
+                                            CSSPropertyOverrideMode,
+                                            PropertiesToInclude);
   void mergeStyleFromRules(Element*);
   void mergeStyleFromRulesForSerialization(Element*);
   void removeStyleFromRulesAndContext(Element*, ContainerNode* context);
@@ -162,18 +162,7 @@ class CORE_EXPORT EditingStyle final : public GarbageCollected<EditingStyle> {
   float fontSizeDelta() const { return m_fontSizeDelta; }
   bool hasFontSizeDelta() const { return m_fontSizeDelta != NoFontDelta; }
 
-  static EditingStyle* styleAtSelectionStart(
-      const VisibleSelection&,
-      bool shouldUseBackgroundColorInEffect = false,
-      MutableStylePropertySet* styleToCheck = nullptr);
-  static WritingDirection textDirectionForSelection(
-      const VisibleSelection&,
-      EditingStyle* typingStyle,
-      bool& hasNestedOrMultipleEmbeddings);
-  static bool isEmbedOrIsolate(CSSValueID unicodeBidi) {
-    return unicodeBidi == CSSValueIsolate ||
-           unicodeBidi == CSSValueWebkitIsolate || unicodeBidi == CSSValueEmbed;
-  }
+  void setProperty(CSSPropertyID, const String& value, bool important = false);
 
   DECLARE_TRACE();
 
@@ -185,7 +174,6 @@ class CORE_EXPORT EditingStyle final : public GarbageCollected<EditingStyle> {
   EditingStyle(CSSPropertyID, const String& value);
   void init(Node*, PropertiesToInclude);
   void removeInheritedColorsIfNeeded(const ComputedStyle*);
-  void setProperty(CSSPropertyID, const String& value, bool important = false);
   void replaceFontSizeByKeywordIfPossible(const ComputedStyle*,
                                           CSSComputedStyleDeclaration*);
   void extractFontSizeDelta();
@@ -195,9 +183,6 @@ class CORE_EXPORT EditingStyle final : public GarbageCollected<EditingStyle> {
       HTMLElement*,
       EditingStyle* extractedStyle,
       Vector<CSSPropertyID>* conflictingProperties) const;
-  void mergeInlineAndImplicitStyleOfElement(Element*,
-                                            CSSPropertyOverrideMode,
-                                            PropertiesToInclude);
   void mergeStyle(const StylePropertySet*, CSSPropertyOverrideMode);
 
   Member<MutableStylePropertySet> m_mutableStyle;

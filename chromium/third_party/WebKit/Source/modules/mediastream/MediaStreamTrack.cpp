@@ -198,12 +198,12 @@ void MediaStreamTrack::stopTrack(ExceptionState& exceptionState) {
   propagateTrackEnded();
 }
 
-MediaStreamTrack* MediaStreamTrack::clone(ExecutionContext* context) {
+MediaStreamTrack* MediaStreamTrack::clone(ScriptState* scriptState) {
   // TODO(pbos): Make sure m_readyState and m_stopped carries over on cloned
   // tracks.
   MediaStreamComponent* clonedComponent = component()->clone();
-  MediaStreamTrack* clonedTrack =
-      MediaStreamTrack::create(context, clonedComponent);
+  MediaStreamTrack* clonedTrack = MediaStreamTrack::create(
+      scriptState->getExecutionContext(), clonedComponent);
   MediaStreamCenter::instance().didCreateMediaStreamTrack(clonedComponent);
   return clonedTrack;
 }
@@ -227,6 +227,19 @@ void MediaStreamTrack::getSettings(MediaTrackSettings& settings) {
   }
   if (platformSettings.hasHeight()) {
     settings.setHeight(platformSettings.height);
+  }
+  if (RuntimeEnabledFeatures::mediaCaptureDepthEnabled() &&
+      m_component->source()->type() == MediaStreamSource::TypeVideo) {
+    if (platformSettings.hasVideoKind())
+      settings.setVideoKind(platformSettings.videoKind);
+    if (platformSettings.hasDepthNear())
+      settings.setDepthNear(platformSettings.depthNear);
+    if (platformSettings.hasDepthFar())
+      settings.setDepthFar(platformSettings.depthFar);
+    if (platformSettings.hasFocalLengthX())
+      settings.setFocalLengthX(platformSettings.focalLengthX);
+    if (platformSettings.hasFocalLengthY())
+      settings.setFocalLengthY(platformSettings.focalLengthY);
   }
   settings.setDeviceId(platformSettings.deviceId);
   if (platformSettings.hasFacingMode()) {
@@ -313,7 +326,7 @@ std::unique_ptr<AudioSourceProvider> MediaStreamTrack::createWebAudioSource() {
 void MediaStreamTrack::registerMediaStream(MediaStream* mediaStream) {
   CHECK(!m_isIteratingRegisteredMediaStreams);
   CHECK(!m_registeredMediaStreams.contains(mediaStream));
-  m_registeredMediaStreams.add(mediaStream);
+  m_registeredMediaStreams.insert(mediaStream);
 }
 
 void MediaStreamTrack::unregisterMediaStream(MediaStream* mediaStream) {
@@ -321,7 +334,7 @@ void MediaStreamTrack::unregisterMediaStream(MediaStream* mediaStream) {
   HeapHashSet<Member<MediaStream>>::iterator iter =
       m_registeredMediaStreams.find(mediaStream);
   CHECK(iter != m_registeredMediaStreams.end());
-  m_registeredMediaStreams.remove(iter);
+  m_registeredMediaStreams.erase(iter);
 }
 
 const AtomicString& MediaStreamTrack::interfaceName() const {

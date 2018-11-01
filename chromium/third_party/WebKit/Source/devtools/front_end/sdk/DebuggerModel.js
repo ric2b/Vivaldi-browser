@@ -36,10 +36,11 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
    * @param {!SDK.Target} target
    */
   constructor(target) {
-    super(SDK.DebuggerModel, target);
+    super(target);
 
     target.registerDebuggerDispatcher(new SDK.DebuggerDispatcher(this));
     this._agent = target.debuggerAgent();
+    this._runtimeModel = target.runtimeModel;
 
     /** @type {?SDK.DebuggerPausedDetails} */
     this._debuggerPausedDetails = null;
@@ -67,26 +68,11 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   }
 
   /**
-   * @return {!Array<!SDK.DebuggerModel>}
-   */
-  static instances() {
-    var result = [];
-    for (var target of SDK.targetManager.targets()) {
-      var debuggerModel = SDK.DebuggerModel.fromTarget(target);
-      if (debuggerModel)
-        result.push(debuggerModel);
-    }
-    return result;
-  }
-
-  /**
    * @param {?SDK.Target} target
    * @return {?SDK.DebuggerModel}
    */
   static fromTarget(target) {
-    if (!target || !target.hasJSCapability())
-      return null;
-    return target.model(SDK.DebuggerModel);
+    return target ? target.model(SDK.DebuggerModel) : null;
   }
 
   /**
@@ -165,7 +151,7 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   }
 
   asyncStackTracesStateChanged() {
-    const maxAsyncStackChainDepth = 4;
+    const maxAsyncStackChainDepth = 8;
     var enabled = Common.moduleSetting('enableAsyncStackTraces').get() && this._debuggerEnabled;
     this._agent.setAsyncCallStackDepth(enabled ? maxAsyncStackChainDepth : 0);
   }
@@ -283,12 +269,15 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   /**
    * @param {!SDK.DebuggerModel.Location} startLocation
    * @param {!SDK.DebuggerModel.Location} endLocation
+   * @param {boolean} restrictToFunction
    * @return {!Promise<!Array<!SDK.DebuggerModel.Location>>}
    */
-  getPossibleBreakpoints(startLocation, endLocation) {
+  getPossibleBreakpoints(startLocation, endLocation, restrictToFunction) {
     var fulfill;
     var promise = new Promise(resolve => fulfill = resolve);
-    this._agent.getPossibleBreakpoints(startLocation.payload(), endLocation.payload(), checkErrorAndReturn.bind(this));
+    this._agent.invoke_getPossibleBreakpoints(
+        {start: startLocation.payload(), end: endLocation.payload(), restrictToFunction: restrictToFunction},
+        checkErrorAndReturn.bind(this));
     return promise;
 
     /**
@@ -672,7 +661,7 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
       if (!result)
         callback(null);
       else
-        callback(this.target().runtimeModel.createRemoteObject(result), exceptionDetails);
+        callback(this._runtimeModel.createRemoteObject(result), exceptionDetails);
     }
 
     this.selectedCallFrame().evaluate(
@@ -684,7 +673,8 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
    * @return {!Promise<?SDK.DebuggerModel.FunctionDetails>}
    */
   functionDetailsPromise(remoteObject) {
-    return remoteObject.getAllPropertiesPromise(/* accessorPropertiesOnly */ false).then(buildDetails.bind(this));
+    return remoteObject.getAllPropertiesPromise(false /* accessorPropertiesOnly */, false /* generatePreview */)
+        .then(buildDetails.bind(this));
 
     /**
      * @param {!{properties: ?Array.<!SDK.RemoteObjectProperty>, internalProperties: ?Array.<!SDK.RemoteObjectProperty>}} response
@@ -836,6 +826,8 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   }
 };
 
+SDK.SDKModel.register(SDK.DebuggerModel, SDK.Target.Capability.JS);
+
 /** @typedef {{location: ?SDK.DebuggerModel.Location, functionName: string}} */
 SDK.DebuggerModel.FunctionDetails;
 
@@ -874,6 +866,7 @@ SDK.DebuggerModel.BreakReason = {
   PromiseRejection: 'promiseRejection',
   Assert: 'assert',
   DebugCommand: 'debugCommand',
+  OOM: 'OOM',
   Other: 'other'
 };
 
@@ -991,7 +984,7 @@ SDK.DebuggerDispatcher = class {
 /**
  * @unrestricted
  */
-SDK.DebuggerModel.Location = class extends SDK.SDKObject {
+SDK.DebuggerModel.Location = class {
   /**
    * @param {!SDK.DebuggerModel} debuggerModel
    * @param {string} scriptId
@@ -999,8 +992,7 @@ SDK.DebuggerModel.Location = class extends SDK.SDKObject {
    * @param {number=} columnNumber
    */
   constructor(debuggerModel, scriptId, lineNumber, columnNumber) {
-    super(debuggerModel.target());
-    this._debuggerModel = debuggerModel;
+    this.debuggerModel = debuggerModel;
     this.scriptId = scriptId;
     this.lineNumber = lineNumber;
     this.columnNumber = columnNumber || 0;
@@ -1026,18 +1018,18 @@ SDK.DebuggerModel.Location = class extends SDK.SDKObject {
    * @return {?SDK.Script}
    */
   script() {
-    return this._debuggerModel.scriptForId(this.scriptId);
+    return this.debuggerModel.scriptForId(this.scriptId);
   }
 
   continueToLocation() {
-    this._debuggerModel._agent.continueToLocation(this.payload());
+    this.debuggerModel._agent.continueToLocation(this.payload());
   }
 
   /**
    * @return {string}
    */
   id() {
-    return this.target().id() + ':' + this.scriptId + ':' + this.lineNumber + ':' + this.columnNumber;
+    return this.debuggerModel.target().id() + ':' + this.scriptId + ':' + this.lineNumber + ':' + this.columnNumber;
   }
 };
 
@@ -1045,17 +1037,14 @@ SDK.DebuggerModel.Location = class extends SDK.SDKObject {
 /**
  * @unrestricted
  */
-SDK.DebuggerModel.CallFrame = class extends SDK.SDKObject {
+SDK.DebuggerModel.CallFrame = class {
   /**
    * @param {!SDK.DebuggerModel} debuggerModel
    * @param {!SDK.Script} script
    * @param {!Protocol.Debugger.CallFrame} payload
    */
   constructor(debuggerModel, script, payload) {
-    var target = debuggerModel.target();
-    super(target);
     this.debuggerModel = debuggerModel;
-    this._debuggerAgent = debuggerModel._agent;
     this._script = script;
     this._payload = payload;
     this._location = SDK.DebuggerModel.Location.fromPayload(debuggerModel, payload.location);
@@ -1119,14 +1108,15 @@ SDK.DebuggerModel.CallFrame = class extends SDK.SDKObject {
    * @return {?SDK.RemoteObject}
    */
   thisObject() {
-    return this._payload.this ? this.target().runtimeModel.createRemoteObject(this._payload.this) : null;
+    return this._payload.this ? this.debuggerModel._runtimeModel.createRemoteObject(this._payload.this) : null;
   }
 
   /**
    * @return {?SDK.RemoteObject}
    */
   returnValue() {
-    return this._payload.returnValue ? this.target().runtimeModel.createRemoteObject(this._payload.returnValue) : null;
+    return this._payload.returnValue ? this.debuggerModel._runtimeModel.createRemoteObject(this._payload.returnValue) :
+                                       null;
   }
 
   /**
@@ -1173,8 +1163,11 @@ SDK.DebuggerModel.CallFrame = class extends SDK.SDKObject {
       }
       callback(result, exceptionDetails);
     }
-    this._debuggerAgent.evaluateOnCallFrame(
-        this._payload.callFrameId, code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview,
+    this.debuggerModel._agent.invoke_evaluateOnCallFrame(
+        {
+          callFrameId: this._payload.callFrameId,
+          expression: code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview
+        },
         didEvaluateOnCallFrame);
   }
 
@@ -1194,7 +1187,7 @@ SDK.DebuggerModel.CallFrame = class extends SDK.SDKObject {
       if (callback)
         callback(error);
     }
-    this._debuggerAgent.restartFrame(this._payload.callFrameId, protocolCallback.bind(this));
+    this.debuggerModel._agent.restartFrame(this._payload.callFrameId, protocolCallback.bind(this));
   }
 };
 
@@ -1286,7 +1279,7 @@ SDK.DebuggerModel.Scope = class {
   object() {
     if (this._object)
       return this._object;
-    var runtimeModel = this._callFrame.target().runtimeModel;
+    var runtimeModel = this._callFrame.debuggerModel._runtimeModel;
 
     var declarativeScope =
         this._type !== Protocol.Debugger.ScopeType.With && this._type !== Protocol.Debugger.ScopeType.Global;
@@ -1313,7 +1306,7 @@ SDK.DebuggerModel.Scope = class {
 /**
  * @unrestricted
  */
-SDK.DebuggerPausedDetails = class extends SDK.SDKObject {
+SDK.DebuggerPausedDetails = class {
   /**
    * @param {!SDK.DebuggerModel} debuggerModel
    * @param {!Array.<!Protocol.Debugger.CallFrame>} callFrames
@@ -1323,7 +1316,6 @@ SDK.DebuggerPausedDetails = class extends SDK.SDKObject {
    * @param {!Protocol.Runtime.StackTrace=} asyncStackTrace
    */
   constructor(debuggerModel, callFrames, reason, auxData, breakpointIds, asyncStackTrace) {
-    super(debuggerModel.target());
     this.debuggerModel = debuggerModel;
     this.callFrames = SDK.DebuggerModel.CallFrame.fromPayloadArray(debuggerModel, callFrames);
     this.reason = reason;
@@ -1340,7 +1332,8 @@ SDK.DebuggerPausedDetails = class extends SDK.SDKObject {
     if (this.reason !== SDK.DebuggerModel.BreakReason.Exception &&
         this.reason !== SDK.DebuggerModel.BreakReason.PromiseRejection)
       return null;
-    return this.target().runtimeModel.createRemoteObject(/** @type {!Protocol.Runtime.RemoteObject} */ (this.auxData));
+    return this.debuggerModel._runtimeModel.createRemoteObject(
+        /** @type {!Protocol.Runtime.RemoteObject} */ (this.auxData));
   }
 
   /**
@@ -1353,7 +1346,7 @@ SDK.DebuggerPausedDetails = class extends SDK.SDKObject {
     while (stack) {
       if (stack.description === 'async function' && stack.callFrames.length)
         stack.callFrames.shift();
-      if (previous && !stack.callFrames.length)
+      if (previous && (!stack.callFrames.length && !stack.promiseCreationFrame))
         previous.parent = stack.parent;
       else
         previous = stack;

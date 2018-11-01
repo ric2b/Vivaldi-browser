@@ -28,7 +28,7 @@ class BlobCreateThenRead(page_module.Page):
         action_runner.ExecuteJavaScript(
             'createAndRead({{ size }});', size=size_bytes)
         action_runner.WaitForJavaScriptCondition(
-            'doneReading === true || errors', timeout_in_seconds=60)
+            'doneReading === true || errors', timeout=60)
 
     errors = action_runner.EvaluateJavaScript('errors')
     if errors:
@@ -59,7 +59,7 @@ class BlobMassCreate(page_module.Page):
                                            repeatable=True):
         action_runner.ExecuteJavaScript('readBlobsSerially();')
         action_runner.WaitForJavaScriptCondition(
-            'doneReading === true || errors', timeout_in_seconds=60)
+            'doneReading === true || errors', timeout=60)
     # Clean up blobs. Make sure this flag is turned on:
     # --enable-experimental-web-platform-features
     action_runner.ExecuteJavaScript('garbageCollect();')

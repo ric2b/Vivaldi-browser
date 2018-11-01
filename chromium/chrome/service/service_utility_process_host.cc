@@ -17,7 +17,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -99,7 +99,7 @@ class ServiceUtilityProcessHost::PdfToEmfState {
       return false;
     return host_->Send(new ChromeUtilityMsg_RenderPDFPagesToMetafiles(
         IPC::TakePlatformFileForTransit(std::move(pdf_file)),
-        conversion_settings, false /* print_text_with_gdi */));
+        conversion_settings));
   }
 
   void GetMorePages() {
@@ -169,7 +169,6 @@ ServiceUtilityProcessHost::ServiceUtilityProcessHost(
     : client_(client),
       client_task_runner_(client_task_runner),
       waiting_for_reply_(false),
-      mojo_child_token_(mojo::edk::GenerateRandomToken()),
       weak_ptr_factory_(this) {
   child_process_host_.reset(ChildProcessHost::Create(this));
 }
@@ -183,7 +182,6 @@ bool ServiceUtilityProcessHost::StartRenderPDFPagesToMetafile(
     const base::FilePath& pdf_path,
     const printing::PdfRenderSettings& render_settings) {
   ReportUmaEvent(SERVICE_UTILITY_METAFILE_REQUEST);
-  start_time_ = base::Time::Now();
   base::File pdf_file(pdf_path, base::File::FLAG_OPEN | base::File::FLAG_READ |
                                     base::File::FLAG_DELETE_ON_CLOSE);
   if (!pdf_file.IsValid() || !StartProcess(false))
@@ -199,7 +197,6 @@ bool ServiceUtilityProcessHost::StartRenderPDFPagesToMetafile(
 bool ServiceUtilityProcessHost::StartGetPrinterCapsAndDefaults(
     const std::string& printer_name) {
   ReportUmaEvent(SERVICE_UTILITY_CAPS_REQUEST);
-  start_time_ = base::Time::Now();
   if (!StartProcess(true))
     return false;
   DCHECK(!waiting_for_reply_);
@@ -210,7 +207,6 @@ bool ServiceUtilityProcessHost::StartGetPrinterCapsAndDefaults(
 bool ServiceUtilityProcessHost::StartGetPrinterSemanticCapsAndDefaults(
     const std::string& printer_name) {
   ReportUmaEvent(SERVICE_UTILITY_SEMANTIC_CAPS_REQUEST);
-  start_time_ = base::Time::Now();
   if (!StartProcess(true))
     return false;
   DCHECK(!waiting_for_reply_);
@@ -221,7 +217,7 @@ bool ServiceUtilityProcessHost::StartGetPrinterSemanticCapsAndDefaults(
 
 bool ServiceUtilityProcessHost::StartProcess(bool no_sandbox) {
   std::string mojo_channel_token =
-      child_process_host_->CreateChannelMojo(mojo_child_token_);
+      child_process_host_->CreateChannelMojo(&process_connection_);
   if (mojo_channel_token.empty())
     return false;
 
@@ -278,13 +274,9 @@ bool ServiceUtilityProcessHost::Launch(base::CommandLine* cmd_line,
     }
   }
 
-  if (success) {
-    mojo::edk::ChildProcessLaunched(process_.Handle(),
-                                    std::move(parent_handle),
-                                    mojo_child_token_);
-  } else {
-    mojo::edk::ChildProcessLaunchFailed(mojo_child_token_);
-  }
+  if (success)
+    process_connection_.Connect(process_.Handle(), std::move(parent_handle));
+
   return success;
 }
 
@@ -306,8 +298,6 @@ void ServiceUtilityProcessHost::OnChildDisconnected() {
     client_task_runner_->PostTask(
         FROM_HERE, base::Bind(&Client::OnChildDied, client_.get()));
     ReportUmaEvent(SERVICE_UTILITY_DISCONNECTED);
-    UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilityDisconnectTime",
-                        base::Time::Now() - start_time_);
   }
   delete this;
 }
@@ -377,12 +367,8 @@ void ServiceUtilityProcessHost::OnPDFToEmfFinished(bool success) {
   waiting_for_reply_ = false;
   if (success) {
     ReportUmaEvent(SERVICE_UTILITY_METAFILE_SUCCEEDED);
-    UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilityMetafileTime",
-                        base::Time::Now() - start_time_);
   } else {
     ReportUmaEvent(SERVICE_UTILITY_METAFILE_FAILED);
-    UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilityMetafileFailTime",
-                        base::Time::Now() - start_time_);
   }
   client_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Client::OnRenderPDFPagesToMetafileDone,
@@ -395,8 +381,6 @@ void ServiceUtilityProcessHost::OnGetPrinterCapsAndDefaultsSucceeded(
     const printing::PrinterCapsAndDefaults& caps_and_defaults) {
   DCHECK(waiting_for_reply_);
   ReportUmaEvent(SERVICE_UTILITY_CAPS_SUCCEEDED);
-  UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilityCapsTime",
-                      base::Time::Now() - start_time_);
   waiting_for_reply_ = false;
   client_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Client::OnGetPrinterCapsAndDefaults, client_.get(),
@@ -408,8 +392,6 @@ void ServiceUtilityProcessHost::OnGetPrinterSemanticCapsAndDefaultsSucceeded(
     const printing::PrinterSemanticCapsAndDefaults& caps_and_defaults) {
   DCHECK(waiting_for_reply_);
   ReportUmaEvent(SERVICE_UTILITY_SEMANTIC_CAPS_SUCCEEDED);
-  UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilitySemanticCapsTime",
-                      base::Time::Now() - start_time_);
   waiting_for_reply_ = false;
   client_task_runner_->PostTask(
       FROM_HERE,
@@ -421,8 +403,6 @@ void ServiceUtilityProcessHost::OnGetPrinterCapsAndDefaultsFailed(
     const std::string& printer_name) {
   DCHECK(waiting_for_reply_);
   ReportUmaEvent(SERVICE_UTILITY_CAPS_FAILED);
-  UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilityCapsFailTime",
-                      base::Time::Now() - start_time_);
   waiting_for_reply_ = false;
   client_task_runner_->PostTask(
       FROM_HERE,
@@ -434,8 +414,6 @@ void ServiceUtilityProcessHost::OnGetPrinterSemanticCapsAndDefaultsFailed(
     const std::string& printer_name) {
   DCHECK(waiting_for_reply_);
   ReportUmaEvent(SERVICE_UTILITY_SEMANTIC_CAPS_FAILED);
-  UMA_HISTOGRAM_TIMES("CloudPrint.ServiceUtilitySemanticCapsFailTime",
-                      base::Time::Now() - start_time_);
   waiting_for_reply_ = false;
   client_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Client::OnGetPrinterSemanticCapsAndDefaults,

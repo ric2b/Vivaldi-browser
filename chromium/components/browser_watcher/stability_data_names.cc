@@ -8,11 +8,12 @@ namespace browser_watcher {
 
 const char kStabilityChannel[] = "channel";
 const char kStabilityExecutionPhase[] = "stability-execution-phase";
-const char kStabilityModuleAddress[] = "module-address";
-const char kStabilityModuleSize[] = "module-size";
-const char kStabilityModuleTimestamp[] = "module-timestamp";
 const char kStabilityPlatform[] = "platform";
 const char kStabilityProduct[] = "product";
+const char kStabilityReporterChannel[] = "reporter-channel";
+const char kStabilityReporterPlatform[] = "reporter-platform";
+const char kStabilityReporterProduct[] = "reporter-product";
+const char kStabilityReporterVersion[] = "reporter-version";
 const char kStabilitySpecialBuild[] = "special-build";
 const char kStabilityVersion[] = "version";
 

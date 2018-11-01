@@ -21,6 +21,7 @@
 #import "chrome/browser/ui/cocoa/hover_close_button.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
+#import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #include "chrome/browser/ui/cocoa/website_settings/permission_bubble_cocoa.h"
 #include "chrome/browser/ui/cocoa/website_settings/permission_selector_button.h"
@@ -142,37 +143,6 @@ const NSInteger kFullscreenLeftOffset = 40;
 
 @end
 
-// The window used for the permission bubble controller.
-// Subclassed to allow browser-handled keyboard events to be passed from the
-// permission bubble to its parent window, which is a browser window.
-@interface PermissionBubbleWindow : InfoBubbleWindow
-@end
-
-@implementation PermissionBubbleWindow
-- (BOOL)performKeyEquivalent:(NSEvent*)event {
-  // Before forwarding to parent, handle locally.
-  if ([super performKeyEquivalent:event])
-    return YES;
-
-  // Only handle events if they should be forwarded to the parent window.
-  if ([self allowShareParentKeyState]) {
-    content::NativeWebKeyboardEvent wrappedEvent(event);
-    if ([BrowserWindowUtils shouldHandleKeyboardEvent:wrappedEvent]) {
-      // Turn off sharing of key window state while the keyboard event is
-      // processed.  This avoids recursion - with the key window state shared,
-      // the parent window would just forward the event back to this class.
-      [self setAllowShareParentKeyState:NO];
-      BOOL eventHandled =
-          [BrowserWindowUtils handleKeyboardEvent:event
-                                         inWindow:[self parentWindow]];
-      [self setAllowShareParentKeyState:YES];
-      return eventHandled;
-    }
-  }
-  return NO;
-}
-@end
-
 @interface PermissionBubbleController ()
 
 // Determines if the bubble has an anchor in a corner or no anchor at all.
@@ -239,12 +209,12 @@ const NSInteger kFullscreenLeftOffset = 40;
   DCHECK(browser);
   DCHECK(bridge);
   browser_ = browser;
-  base::scoped_nsobject<PermissionBubbleWindow> window(
-      [[PermissionBubbleWindow alloc]
-          initWithContentRect:ui::kWindowSizeDeterminedLater
-                    styleMask:NSBorderlessWindowMask
-                      backing:NSBackingStoreBuffered
-                        defer:NO]);
+  base::scoped_nsobject<InfoBubbleWindow> window([[InfoBubbleWindow alloc]
+      initWithContentRect:ui::kWindowSizeDeterminedLater
+                styleMask:NSBorderlessWindowMask
+                  backing:NSBackingStoreBuffered
+                    defer:NO]);
+
   [window setAllowedAnimations:info_bubble::kAnimateNone];
   [window setReleasedWhenClosed:NO];
   if ((self = [super initWithWindow:window
@@ -261,15 +231,6 @@ const NSInteger kFullscreenLeftOffset = 40;
                  object:[self getExpectedParentWindow]];
   }
   return self;
-}
-
-- (LocationBarDecoration*)decorationForBubble {
-  if (![self hasVisibleLocationBar])
-    return nullptr;
-
-  LocationBarViewMac* location_bar =
-      [[self.parentWindow windowController] locationBarBridge];
-  return location_bar->GetPageInfoDecoration();
 }
 
 + (NSPoint)getAnchorPointForBrowser:(Browser*)browser {
@@ -319,6 +280,25 @@ const NSInteger kFullscreenLeftOffset = 40;
               object:nil];
   bridge_->OnBubbleClosing();
   [super windowWillClose:notification];
+}
+
+- (void)showWindow:(id)sender {
+  if ([self hasVisibleLocationBar]) {
+    decoration_ = [[self.parentWindow windowController] locationBarBridge]
+                      ->GetPageInfoDecoration();
+    decoration_->SetActive(true);
+  }
+
+  [super showWindow:sender];
+}
+
+- (void)close {
+  if (decoration_) {
+    decoration_->SetActive(false);
+    decoration_ = nullptr;
+  }
+
+  [super close];
 }
 
 - (void)parentWindowWillToggleFullScreen:(NSNotification*)notification {
@@ -510,7 +490,7 @@ const NSInteger kFullscreenLeftOffset = 40;
 }
 
 - (info_bubble::BubbleArrowLocation)getExpectedArrowLocation {
-  return info_bubble::kTopLeft;
+  return info_bubble::kTopLeading;
 }
 
 - (NSWindow*)getExpectedParentWindow {
@@ -628,23 +608,23 @@ const NSInteger kFullscreenLeftOffset = 40;
 }
 
 - (void)ok:(id)sender {
-  DCHECK(delegate_);
-  delegate_->Accept();
+  if (delegate_)
+    delegate_->Accept();
 }
 
 - (void)onAllow:(id)sender {
-  DCHECK(delegate_);
-  delegate_->Accept();
+  if (delegate_)
+    delegate_->Accept();
 }
 
 - (void)onBlock:(id)sender {
-  DCHECK(delegate_);
-  delegate_->Deny();
+  if (delegate_)
+    delegate_->Deny();
 }
 
 - (void)onClose:(id)sender {
-  DCHECK(delegate_);
-  delegate_->Closing();
+  if (delegate_)
+    delegate_->Closing();
 }
 
 + (NSInteger)getFullscreenLeftOffset {
@@ -678,8 +658,8 @@ const NSInteger kFullscreenLeftOffset = 40;
 
 - (IBAction)cancel:(id)sender {
   // This is triggered by ESC when the bubble has focus.
-  DCHECK(delegate_);
-  delegate_->Closing();
+  if (delegate_)
+    delegate_->Closing();
   [super cancel:sender];
 }
 

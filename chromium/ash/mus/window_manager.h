@@ -43,12 +43,15 @@ namespace ash {
 
 class RootWindowController;
 class ScreenMus;
-class SystemTrayDelegate;
+class ShellDelegate;
+
+namespace test {
+class AshTestHelper;
+}
 
 namespace mus {
 
 class AcceleratorHandler;
-class ShadowController;
 class WmLookupMus;
 class WmTestHelper;
 
@@ -103,6 +106,7 @@ class WindowManager : public aura::WindowManagerDelegate,
       std::unique_ptr<aura::WindowTreeHostMus> window_tree_host);
 
  private:
+  friend class ash::test::AshTestHelper;
   friend class WmTestHelper;
 
   using RootWindowControllers = std::set<std::unique_ptr<RootWindowController>>;
@@ -132,7 +136,6 @@ class WindowManager : public aura::WindowManagerDelegate,
   void OnLostConnection(aura::WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               aura::Window* target) override;
-  aura::client::CaptureClient* GetCaptureClient() override;
   aura::PropertyConverter* GetPropertyConverter() override;
 
   // WindowManagerDelegate:
@@ -142,6 +145,7 @@ class WindowManager : public aura::WindowManagerDelegate,
       aura::Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) override;
+  void OnWmSetCanFocus(aura::Window* window, bool can_focus) override;
   aura::Window* OnWmCreateTopLevelWindow(
       ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
@@ -179,8 +183,6 @@ class WindowManager : public aura::WindowManagerDelegate,
   std::unique_ptr<views::PointerWatcherEventRouter>
       pointer_watcher_event_router_;
 
-  std::unique_ptr<ShadowController> shadow_controller_;
-
   RootWindowControllers root_window_controllers_;
 
   std::unique_ptr<ScreenMus> screen_;
@@ -194,12 +196,11 @@ class WindowManager : public aura::WindowManagerDelegate,
 
   scoped_refptr<base::SequencedWorkerPool> blocking_pool_;
 
-  // If non-null this is used as the return value from
-  // ShellDelegateMus::CreateSystemTrayDelegate(). This is only set in tests.
-  //
-  // TODO(jamescook): Pass a TestShellDelegate into WindowManager and use it to
-  // create the various test delegates rather than a member.
-  std::unique_ptr<SystemTrayDelegate> system_tray_delegate_for_test_;
+  // Only set in tests. If non-null this is used as the shell delegate.
+  std::unique_ptr<ShellDelegate> shell_delegate_for_test_;
+
+  // See WmShellMus's constructor for details. Tests may set to false.
+  bool create_session_state_delegate_stub_for_test_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManager);
 };

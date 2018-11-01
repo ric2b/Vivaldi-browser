@@ -8,7 +8,7 @@
 #include "ash/common/system/chromeos/palette/palette_ids.h"
 #include "ash/common/wm_shell.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "grit/ash_strings.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
@@ -32,13 +32,13 @@ const gfx::VectorIcon& MagnifierMode::GetActiveTrayIcon() const {
 
 void MagnifierMode::OnEnable() {
   CommonPaletteTool::OnEnable();
-  WmShell::Get()->palette_delegate()->SetPartialMagnifierState(true);
+  WmShell::Get()->SetPartialMagnifierEnabled(true);
   delegate()->HidePalette();
 }
 
 void MagnifierMode::OnDisable() {
   CommonPaletteTool::OnDisable();
-  WmShell::Get()->palette_delegate()->SetPartialMagnifierState(false);
+  WmShell::Get()->SetPartialMagnifierEnabled(false);
 }
 
 views::View* MagnifierMode::CreateView() {

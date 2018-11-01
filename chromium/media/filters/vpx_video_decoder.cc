@@ -15,7 +15,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -111,8 +110,10 @@ class VpxOffloadThread {
   DISALLOW_COPY_AND_ASSIGN(VpxOffloadThread);
 };
 
-static base::LazyInstance<VpxOffloadThread>::Leaky g_vpx_offload_thread =
-    LAZY_INSTANCE_INITIALIZER;
+static VpxOffloadThread* GetOffloadThread() {
+  static VpxOffloadThread* thread = new VpxOffloadThread();
+  return thread;
+}
 
 // Always try to use three threads for video decoding.  There is little reason
 // not to since current day CPUs tend to be multi-core and we measured
@@ -442,7 +443,7 @@ void VpxVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 void VpxVideoDecoder::Reset(const base::Closure& closure) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (offload_task_runner_)
-    g_vpx_offload_thread.Pointer()->WaitForOutstandingTasks();
+    GetOffloadThread()->WaitForOutstandingTasks();
 
   state_ = kNormal;
   // PostTask() to avoid calling |closure| inmediately.
@@ -484,8 +485,7 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
     // Move high resolution vp9 decodes off of the main media thread (otherwise
     // decode may block audio decoding, demuxing, and other control activities).
     if (config.coded_size().width() >= 1024) {
-      offload_task_runner_ =
-          g_vpx_offload_thread.Pointer()->RequestOffloadThread();
+      offload_task_runner_ = GetOffloadThread()->RequestOffloadThread();
     }
 
     DCHECK(!memory_pool_);
@@ -513,8 +513,7 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
 
 void VpxVideoDecoder::CloseDecoder() {
   if (offload_task_runner_) {
-    g_vpx_offload_thread.Pointer()
-        ->WaitForOutstandingTasksAndReleaseOffloadThread();
+    GetOffloadThread()->WaitForOutstandingTasksAndReleaseOffloadThread();
     offload_task_runner_ = nullptr;
   }
 
@@ -605,11 +604,9 @@ bool VpxVideoDecoder::VpxDecode(const scoped_refptr<DecoderBuffer>& buffer,
     // bitstream data below.
     (*video_frame)->set_color_space(config_.color_space_info());
   } else {
-    gfx::ColorSpace::PrimaryID primaries =
-        gfx::ColorSpace::PrimaryID::UNSPECIFIED;
-    gfx::ColorSpace::TransferID transfer =
-        gfx::ColorSpace::TransferID::UNSPECIFIED;
-    gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::UNSPECIFIED;
+    gfx::ColorSpace::PrimaryID primaries = gfx::ColorSpace::PrimaryID::INVALID;
+    gfx::ColorSpace::TransferID transfer = gfx::ColorSpace::TransferID::INVALID;
+    gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::INVALID;
     gfx::ColorSpace::RangeID range = vpx_image->range == VPX_CR_FULL_RANGE
                                          ? gfx::ColorSpace::RangeID::FULL
                                          : gfx::ColorSpace::RangeID::LIMITED;
@@ -652,7 +649,8 @@ bool VpxVideoDecoder::VpxDecode(const scoped_refptr<DecoderBuffer>& buffer,
         break;
     }
 
-    if (primaries != gfx::ColorSpace::PrimaryID::UNSPECIFIED) {
+    // TODO(ccameron): Set a color space even for unspecified values.
+    if (primaries != gfx::ColorSpace::PrimaryID::INVALID) {
       (*video_frame)
           ->set_color_space(
               gfx::ColorSpace(primaries, transfer, matrix, range));

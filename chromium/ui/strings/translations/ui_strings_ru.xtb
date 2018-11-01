@@ -26,10 +26,9 @@
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ТБ/с</translation>
 <translation id="2482878487686419369">Оповещения</translation>
 <translation id="2497284189126895209">Все файлы</translation>
-<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">Калибровка завершена</translation>
 <translation id="252373100621549798">Неизвестный дисплей</translation>
-<translation id="2662783295652680457">Настройка сенсорного экрана</translation>
+<translation id="2583543531130364912">Откалибруйте сенсорный экран</translation>
 <translation id="2666092431469916601">Наверх</translation>
 <translation id="2743387203779672305">Скопировать в буфер</translation>
 <translation id="2803313416453193357">Открыть папку.</translation>
@@ -83,6 +82,7 @@
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> Б/с</translation>
 <translation id="6203030746557259519">Виртуальный дисплей</translation>
+<translation id="6264365405983206840">Выделить все</translation>
 <translation id="6364916375976753737">Прокрутка влево</translation>
 <translation id="6394627529324717982">Запятая</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 сек. назад}one{# сек. назад}few{# сек. назад}many{# сек. назад}other{# сек. назад}}</translation>
@@ -92,7 +92,6 @@
 <translation id="6699343763173986273">Следующий трек</translation>
 <translation id="6786750046913594791">Закрыть папку.</translation>
 <translation id="6808150112686056157">Остановить</translation>
-<translation id="6829324100069873704">Назад к оповещениям</translation>
 <translation id="6845383723252244143">Выбор папки</translation>
 <translation id="6845533974506654842">нажать</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Остался 1 час}one{Остался # час}few{Осталось # часа}many{Осталось # часов}other{Осталось # часа}}</translation>
@@ -110,7 +109,6 @@
 <translation id="7457942297256758195">Очистить все</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> ТБ</translation>
 <translation id="7647488630410863958">Чтобы просмотреть уведомления, разблокируйте устройство</translation>
-<translation id="7649070708921625228">Справка</translation>
 <translation id="7658239707568436148">Отмена</translation>
 <translation id="7781829728241885113">Вчера</translation>
 <translation id="7814458197256864873">&amp;Копировать</translation>
@@ -141,5 +139,4 @@
 <translation id="9150735707954472829">Вкладка</translation>
 <translation id="9170848237812810038">&amp;Отменить</translation>
 <translation id="932327136139879170">Главная страница</translation>
-<translation id="945522503751344254">Отправить отзыв</translation>
 </translationbundle>

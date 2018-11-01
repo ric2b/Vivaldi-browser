@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Показывает предыдущую сохранённую копию этой страницы.</translation>
 <translation id="1559528461873125649">Нет такого файла или каталога</translation>
 <translation id="1710259589646384581">ОС</translation>
-<translation id="1838667051080421715">Вы просматриваете код страницы.</translation>
+<translation id="1728677426644403582">Вы просматриваете код страницы</translation>
 <translation id="194030505837763158">Перейти на <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Вы имели в виду <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Свернуть</translation>
 <translation id="2166378884831602661">Этот сайт не может обеспечить безопасное соединение</translation>
 <translation id="2292556288342944218">Доступ в Интернет отсутствует</translation>
 <translation id="255002559098805027">Сайт <ph name="HOST_NAME" /> отправил неверный ответ.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Доступ к файлу запрещён</translation>
 <translation id="2705137772291741111">Невозможно прочитать копию сайта, сохранённую в кэше.</translation>
 <translation id="2784949926578158345">Соединение сброшено.</translation>
-<translation id="284702764277384724">Возможно, сертификат сервера <ph name="HOST_NAME" /> фальсифицирован.</translation>
 <translation id="2909946352844186028">Похоже, вы подключились к другой сети.</translation>
 <translation id="3005723025932146533">Открыть копию из кэша</translation>
 <translation id="3093245981617870298">Вы не в сети.</translation>
@@ -38,7 +36,6 @@
 <translation id="4021036232240155012">DNS – это сетевая служба, преобразующая название сайта в IP-адрес.</translation>
 <translation id="4432688616882109544">Ваш сертификат отклонён сайтом <ph name="HOST_NAME" /> или не был выдан.</translation>
 <translation id="4522570452068850558">Подробнее</translation>
-<translation id="4670097147947922288">Вы просматриваете страницу расширения</translation>
 <translation id="4708268264240856090">Соединение прервано</translation>
 <translation id="4744603770635761495">Путь к исполняемому файлу</translation>
 <translation id="4764776831041365478">Веб-страница по адресу <ph name="URL" />, возможно, временно недоступна или перемещена по новому адресу.</translation>
@@ -55,7 +52,6 @@
 <translation id="5675650730144413517">Страница недоступна</translation>
 <translation id="5869405914158311789">Не удаётся получить доступ к сайту</translation>
 <translation id="5990559369517809815">Расширение заблокировало отправку запроса на сервер.</translation>
-<translation id="6042308850641462728">Подробнее</translation>
 <translation id="6146055958333702838">Проверьте соединение кабелей, перезагрузите маршрутизаторы, модемы и другие
     сетевые устройства.</translation>
 <translation id="6165508094623778733">Подробнее...</translation>
@@ -64,12 +60,11 @@
 <translation id="6321917430147971392">Проверьте настройки DNS</translation>
 <translation id="6328639280570009161">Отключите предсказание сетевых действий</translation>
 <translation id="6433595998831338502">Сайт <ph name="HOST_NAME" /> не позволяет установить соединение.</translation>
+<translation id="6569060085658103619">Вы просматриваете страницу расширения</translation>
 <translation id="6711464428925977395">На прокси-сервере возникла проблема или адрес указан неверно.</translation>
 <translation id="6757797048963528358">Ваш компьютер перешёл в спящий режим.</translation>
-<translation id="6830600606572693159">Веб-страница <ph name="URL" /> пока недоступна. Возможно, она перегружена запросами или закрыта на ремонт.</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7210863904660874423">Сайт <ph name="HOST_NAME" /> не соответствует стандартам безопасности.</translation>
-<translation id="7269802741830436641">На этой странице обнаружена циклическая переадресация</translation>
 <translation id="7353601530677266744">Командная строка</translation>
 <translation id="7419106976560586862">Путь к профилю</translation>
 <translation id="7518003948725431193">Не найдена страница для веб-адреса: <ph name="URL" /></translation>
@@ -77,8 +72,8 @@
 <translation id="759889825892636187">Сайт <ph name="HOST_NAME" /> пока не может обработать этот запрос.</translation>
 <translation id="7716424297397655342">Не удалось загрузить сайт из кеша</translation>
 <translation id="7758069387465995638">Возможно, подключение заблокировано брандмауэром или антивирусным ПО.</translation>
-<translation id="778579833039460630">Данные не получены</translation>
 <translation id="7951415247503192394">(32 бит)</translation>
+<translation id="8089520772729574115">менее 1 МБ</translation>
 <translation id="8134994873729925007">Не удаётся найти <ph name="BEGIN_ABBR" />DNS-адрес<ph name="END_ABBR" /> сервера <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Чтобы просмотреть адреса в чёрном списке, и другие правила, заданные системным администратором, перейдите по адресу: &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="8149426793427495338">Ваш компьютер перешёл в спящий режим.</translation>

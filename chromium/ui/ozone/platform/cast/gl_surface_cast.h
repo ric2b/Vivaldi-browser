@@ -15,18 +15,17 @@
 
 namespace ui {
 
-class SurfaceFactoryCast;
+class GLOzoneEglCast;
 
 class GLSurfaceCast : public gl::NativeViewGLSurfaceEGL {
  public:
-  GLSurfaceCast(gfx::AcceleratedWidget widget, SurfaceFactoryCast* parent);
+  GLSurfaceCast(gfx::AcceleratedWidget widget, GLOzoneEglCast* parent);
 
   // gl::GLSurface:
+  bool SupportsSwapBuffersWithBounds() override;
   gfx::SwapResult SwapBuffers() override;
-  gfx::SwapResult SwapBuffersWithDamage(int x,
-                                        int y,
-                                        int width,
-                                        int height) override;
+  gfx::SwapResult SwapBuffersWithBounds(
+      const std::vector<gfx::Rect>& rects) override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
               bool has_alpha) override;
@@ -41,7 +40,8 @@ class GLSurfaceCast : public gl::NativeViewGLSurfaceEGL {
   ~GLSurfaceCast() override;
 
   gfx::AcceleratedWidget widget_;
-  SurfaceFactoryCast* parent_;
+  GLOzoneEglCast* parent_;
+  bool supports_swap_buffer_with_bounds_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GLSurfaceCast);

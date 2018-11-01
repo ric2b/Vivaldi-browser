@@ -10,6 +10,7 @@
 
 #include "base/ios/ios_util.h"
 #import "base/mac/scoped_nsobject.h"
+#include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
 #import "ios/web/navigation/crw_session_controller.h"
@@ -31,7 +32,6 @@
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/test/web_test_with_web_controller.h"
 #import "ios/web/test/wk_web_view_crash_utils.h"
-#import "ios/web/web_state/blocked_popup_info.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
@@ -50,46 +50,33 @@ using web::NavigationManagerImpl;
 
 @interface CRWWebController (PrivateAPI)
 @property(nonatomic, readwrite) web::PageDisplayState pageDisplayState;
-- (GURL)URLForHistoryNavigationFromItem:(web::NavigationItem*)fromItem
-                                 toItem:(web::NavigationItem*)toItem;
+- (GURL)URLForHistoryNavigationToItem:(web::NavigationItem*)toItem
+                          previousURL:(const GURL&)previousURL;
 @end
 
 // Used to mock CRWWebDelegate methods with C++ params.
 @interface MockInteractionLoader : OCMockComplexTypeHelper
-// popupURL passed to webController:shouldBlockPopupWithURL:sourceURL:
-// Used for testing.
-@property(nonatomic, assign) GURL popupURL;
-// sourceURL passed to webController:shouldBlockPopupWithURL:sourceURL:
-// Used for testing.
-@property(nonatomic, assign) GURL sourceURL;
 // Whether or not the delegate should block popups.
 @property(nonatomic, assign) BOOL blockPopups;
 // A web controller that will be returned by webPageOrdered... methods.
 @property(nonatomic, assign) CRWWebController* childWebController;
-// Blocked popup info received in |webController:didBlockPopup:| call.
-// nullptr if that delegate method was not called.
-@property(nonatomic, readonly) web::BlockedPopupInfo* blockedPopupInfo;
+
+// Values of arguments passed to
+// |webController:createWebControllerForURL:openerURL:initiatedByUser:|.
+@property(nonatomic, readonly) CRWWebController* webController;
+@property(nonatomic, readonly) GURL childURL;
+@property(nonatomic, readonly) GURL openerURL;
+@property(nonatomic, readonly) BOOL initiatedByUser;
 @end
 
-// Stub implementation for CRWWebUserInterfaceDelegate protocol.
-@interface CRWWebUserInterfaceDelegateStub
-    : OCMockComplexTypeHelper<CRWWebUserInterfaceDelegate>
-@end
+@implementation MockInteractionLoader
 
-@implementation MockInteractionLoader {
-  // Backs up the property with the same name.
-  std::unique_ptr<web::BlockedPopupInfo> _blockedPopupInfo;
-}
-@synthesize popupURL = _popupURL;
-@synthesize sourceURL = _sourceURL;
 @synthesize blockPopups = _blockPopups;
 @synthesize childWebController = _childWebController;
-
-typedef void (^webPageOrderedOpenBlankBlockType)();
-typedef void (^webPageOrderedOpenBlockType)(const GURL&,
-                                            const web::Referrer&,
-                                            NSString*,
-                                            BOOL);
+@synthesize webController = _webController;
+@synthesize childURL = _childURL;
+@synthesize openerURL = _openerURL;
+@synthesize initiatedByUser = _initiatedByUser;
 
 - (instancetype)initWithRepresentedObject:(id)representedObject {
   self = [super initWithRepresentedObject:representedObject];
@@ -99,18 +86,16 @@ typedef void (^webPageOrderedOpenBlockType)(const GURL&,
   return self;
 }
 
-- (CRWWebController*)webPageOrderedOpen {
-  static_cast<webPageOrderedOpenBlankBlockType>([self blockForSelector:_cmd])();
-  return _childWebController;
-}
+- (CRWWebController*)webController:(CRWWebController*)webController
+         createWebControllerForURL:(const GURL&)childURL
+                         openerURL:(const GURL&)openerURL
+                   initiatedByUser:(BOOL)initiatedByUser {
+  _webController = webController;
+  _childURL = childURL;
+  _openerURL = openerURL;
+  _initiatedByUser = initiatedByUser;
 
-- (CRWWebController*)webPageOrderedOpen:(const GURL&)url
-                               referrer:(const web::Referrer&)referrer
-                             windowName:(NSString*)windowName
-                           inBackground:(BOOL)inBackground {
-  static_cast<webPageOrderedOpenBlockType>([self blockForSelector:_cmd])(
-      url, referrer, windowName, inBackground);
-  return _childWebController;
+  return (_blockPopups && !initiatedByUser) ? nil : _childWebController;
 }
 
 typedef BOOL (^openExternalURLBlockType)(const GURL&);
@@ -120,22 +105,6 @@ typedef BOOL (^openExternalURLBlockType)(const GURL&);
       url);
 }
 
-- (BOOL)webController:(CRWWebController*)webController
-    shouldBlockPopupWithURL:(const GURL&)popupURL
-                  sourceURL:(const GURL&)sourceURL {
-  self.popupURL = popupURL;
-  self.sourceURL = sourceURL;
-  return _blockPopups;
-}
-
-- (void)webController:(CRWWebController*)webController
-        didBlockPopup:(const web::BlockedPopupInfo&)blockedPopupInfo {
-  _blockedPopupInfo.reset(new web::BlockedPopupInfo(blockedPopupInfo));
-}
-
-- (web::BlockedPopupInfo*)blockedPopupInfo {
-  return _blockedPopupInfo.get();
-}
 - (BOOL)webController:(CRWWebController*)webController
         shouldOpenURL:(const GURL&)URL
       mainDocumentURL:(const GURL&)mainDocumentURL
@@ -159,6 +128,9 @@ typedef BOOL (^openExternalURLBlockType)(const GURL&);
 @end
 
 namespace {
+
+// Syntactically invalid URL per rfc3986.
+const char kInvalidURL[] = "http://%3";
 
 const char kTestURLString[] = "http://www.google.com/";
 const char kTestAppSpecificURL[] = "testwebui://test/";
@@ -222,12 +194,11 @@ class CRWWebControllerTest : public web::WebTestWithWebController {
 
     NavigationManagerImpl& navigationManager =
         [web_controller() webStateImpl]->GetNavigationManagerImpl();
-    navigationManager.InitializeSession(@"name", nil, NO, 0);
-    [navigationManager.GetSessionController()
-          addPendingEntry:GURL("http://www.google.com/?q=foo#bar")
-                 referrer:web::Referrer()
-               transition:ui::PAGE_TRANSITION_TYPED
-        rendererInitiated:NO];
+    navigationManager.InitializeSession(NO);
+    navigationManager.AddPendingItem(
+        GURL("http://www.google.com/?q=foo#bar"), web::Referrer(),
+        ui::PAGE_TRANSITION_TYPED,
+        web::NavigationInitiationType::USER_INITIATED);
   }
 
   void TearDown() override {
@@ -305,27 +276,28 @@ TEST_F(CRWWebControllerTest, UrlForHistoryNavigation) {
       [urlsWithFragments addObject:[url stringByAppendingString:fragment]];
     }
   }
-  web::NavigationItemImpl fromItem;
+
+  GURL previous_url;
   web::NavigationItemImpl toItem;
 
   // No start fragment: the end url is never changed.
   for (NSString* start in urlsNoFragments) {
     for (NSString* end in urlsWithFragments) {
-      fromItem.SetURL(MAKE_URL(start));
+      previous_url = MAKE_URL(start);
       toItem.SetURL(MAKE_URL(end));
       EXPECT_EQ(MAKE_URL(end),
-                [web_controller() URLForHistoryNavigationFromItem:&fromItem
-                                                           toItem:&toItem]);
+                [web_controller() URLForHistoryNavigationToItem:&toItem
+                                                    previousURL:previous_url]);
     }
   }
   // Both contain fragments: the end url is never changed.
   for (NSString* start in urlsWithFragments) {
     for (NSString* end in urlsWithFragments) {
-      fromItem.SetURL(MAKE_URL(start));
+      previous_url = MAKE_URL(start);
       toItem.SetURL(MAKE_URL(end));
       EXPECT_EQ(MAKE_URL(end),
-                [web_controller() URLForHistoryNavigationFromItem:&fromItem
-                                                           toItem:&toItem]);
+                [web_controller() URLForHistoryNavigationToItem:&toItem
+                                                    previousURL:previous_url]);
     }
   }
   for (unsigned start_index = 0; start_index < [urlsWithFragments count];
@@ -334,21 +306,22 @@ TEST_F(CRWWebControllerTest, UrlForHistoryNavigation) {
     for (unsigned end_index = 0; end_index < [urlsNoFragments count];
          ++end_index) {
       NSString* end = urlsNoFragments[end_index];
+      previous_url = MAKE_URL(start);
       if (start_index / 2 != end_index) {
         // The URLs have nothing in common, they are left untouched.
-        fromItem.SetURL(MAKE_URL(start));
         toItem.SetURL(MAKE_URL(end));
-        EXPECT_EQ(MAKE_URL(end),
-                  [web_controller() URLForHistoryNavigationFromItem:&fromItem
-                                                             toItem:&toItem]);
+        EXPECT_EQ(
+            MAKE_URL(end),
+            [web_controller() URLForHistoryNavigationToItem:&toItem
+                                                previousURL:previous_url]);
       } else {
         // Start contains a fragment and matches end: An empty fragment is
         // added.
-        fromItem.SetURL(MAKE_URL(start));
         toItem.SetURL(MAKE_URL(end));
-        EXPECT_EQ(MAKE_URL([end stringByAppendingString:@"#"]),
-                  [web_controller() URLForHistoryNavigationFromItem:&fromItem
-                                                             toItem:&toItem]);
+        EXPECT_EQ(
+            MAKE_URL([end stringByAppendingString:@"#"]),
+            [web_controller() URLForHistoryNavigationToItem:&toItem
+                                                previousURL:previous_url]);
       }
     }
   }
@@ -647,7 +620,7 @@ TEST_F(CRWWebControllerPageScrollStateTest,
 };
 
 // TODO(crbug/493427): Flaky on the bots.
-TEST_F(CRWWebControllerPageScrollStateTest, FLAKY_AtTop) {
+TEST_F(CRWWebControllerPageScrollStateTest, DISABLED_AtTop) {
   // This test fails on iPhone 6/6+; skip until it's fixed. crbug.com/453105
   if (IsIPhone6Or6Plus())
     return;
@@ -705,6 +678,41 @@ TEST_F(CRWWebControllerNavigationTest, HTTPPassword) {
   [web_controller() didShowPasswordInputOnHTTP];
   EXPECT_TRUE(nav_manager.GetLastCommittedItem()->GetSSL().content_status &
               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+}
+
+// Tests that didShowCreditCardInputOnHTTP updates the SSLStatus to indicate
+// that a credit card field has been displayed on an HTTP page.
+TEST_F(CRWWebControllerNavigationTest, HTTPCreditCard) {
+  LoadHtml(@"<html><body></body></html>", GURL("http://chromium.test"));
+  NavigationManagerImpl& nav_manager =
+      web_controller().webStateImpl->GetNavigationManagerImpl();
+  EXPECT_FALSE(nav_manager.GetLastCommittedItem()->GetSSL().content_status &
+               web::SSLStatus::DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP);
+  [web_controller() didShowCreditCardInputOnHTTP];
+  EXPECT_TRUE(nav_manager.GetLastCommittedItem()->GetSSL().content_status &
+              web::SSLStatus::DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP);
+}
+
+// Real WKWebView is required for CRWWebControllerInvalidUrlTest.
+typedef web::WebTestWithWebState CRWWebControllerInvalidUrlTest;
+
+// Tests that web controller navigates to about:blank if invalid URL is loaded.
+TEST_F(CRWWebControllerInvalidUrlTest, LoadInvalidURL) {
+  GURL url(kInvalidURL);
+  ASSERT_FALSE(url.is_valid());
+  LoadHtml(@"<html><body></body></html>", url);
+  EXPECT_EQ(GURL(url::kAboutBlankURL), web_state()->GetLastCommittedURL());
+}
+
+// Tests that web controller does not navigate to about:blank if iframe src
+// has invalid url. Web controller loads about:blank if page navigates to
+// invalid url, but should do nothing if navigation is performed in iframe. This
+// test prevents crbug.com/694865 regression.
+TEST_F(CRWWebControllerInvalidUrlTest, IFrameWithInvalidURL) {
+  GURL url("http://chromium.test");
+  ASSERT_FALSE(GURL(kInvalidURL).is_valid());
+  LoadHtml([NSString stringWithFormat:@"<iframe src='%s'/>", kInvalidURL], url);
+  EXPECT_EQ(url, web_state()->GetLastCommittedURL());
 }
 
 // Real WKWebView is required for CRWWebControllerFormActivityTest.
@@ -801,12 +809,10 @@ class CRWWebControllerNativeContentTest : public web::WebTestWithWebController {
   void Load(const GURL& URL) {
     NavigationManagerImpl& navigation_manager =
         [web_controller() webStateImpl]->GetNavigationManagerImpl();
-    navigation_manager.InitializeSession(@"name", nil, NO, 0);
-    [navigation_manager.GetSessionController()
-          addPendingEntry:URL
-                 referrer:web::Referrer()
-               transition:ui::PAGE_TRANSITION_TYPED
-        rendererInitiated:NO];
+    navigation_manager.InitializeSession(NO);
+    navigation_manager.AddPendingItem(
+        URL, web::Referrer(), ui::PAGE_TRANSITION_TYPED,
+        web::NavigationInitiationType::USER_INITIATED);
     [web_controller() loadCurrentURL];
   }
 
@@ -906,7 +912,7 @@ class CRWWebControllerWindowOpenTest : public web::WebTestWithWebController {
     child_web_state_->GetNavigationManagerImpl().SetSessionController(
         sessionController);
 
-    LoadHtml(@"<html><body></body></html>");
+    LoadHtml(@"<html><body></body></html>", GURL("http://test"));
   }
   void TearDown() override {
     EXPECT_OCMOCK_VERIFY(delegate_);
@@ -936,76 +942,92 @@ TEST_F(CRWWebControllerWindowOpenTest, NoDelegate) {
 
   EXPECT_NSEQ([NSNull null], OpenWindowByDOM());
 
-  EXPECT_FALSE([delegate_ blockedPopupInfo]);
+  EXPECT_FALSE([delegate_ webController]);
+  EXPECT_FALSE([delegate_ childURL].is_valid());
+  EXPECT_FALSE([delegate_ openerURL].is_valid());
+  EXPECT_FALSE([delegate_ initiatedByUser]);
 }
 
 // Tests that window.open triggered by user gesture opens a new non-popup
 // window.
 TEST_F(CRWWebControllerWindowOpenTest, OpenWithUserGesture) {
-  SEL selector = @selector(webPageOrderedOpen);
-  [delegate_ onSelector:selector
-      callBlockExpectation:^(){
-      }];
-
   [web_controller() touched:YES];
   EXPECT_NSEQ(@"[object Window]", OpenWindowByDOM());
-  EXPECT_FALSE([delegate_ blockedPopupInfo]);
+
+  EXPECT_EQ(web_controller(), [delegate_ webController]);
+  EXPECT_EQ("javascript:void(0);", [delegate_ childURL].spec());
+  EXPECT_EQ("http://test/", [delegate_ openerURL].spec());
+  EXPECT_TRUE([delegate_ initiatedByUser]);
 }
 
 // Tests that window.open executed w/o user gesture does not open a new window.
 // Once the blocked popup is allowed a new window is opened.
 TEST_F(CRWWebControllerWindowOpenTest, AllowPopup) {
-  SEL selector =
-      @selector(webPageOrderedOpen:referrer:windowName:inBackground:);
-  [delegate_ onSelector:selector
-      callBlockExpectation:^(const GURL& new_window_url,
-                             const web::Referrer& referrer,
-                             NSString* obsoleted_window_name,
-                             BOOL in_background) {
-        EXPECT_EQ("javascript:void(0);", new_window_url.spec());
-        EXPECT_EQ("", referrer.url.spec());
-        EXPECT_FALSE(in_background);
-      }];
-
   ASSERT_FALSE([web_controller() userIsInteracting]);
   EXPECT_NSEQ([NSNull null], OpenWindowByDOM());
-  base::test::ios::WaitUntilCondition(^bool() {
-    return [delegate_ blockedPopupInfo];
-  });
 
-  if ([delegate_ blockedPopupInfo])
-    [delegate_ blockedPopupInfo]->ShowPopup();
-
-  EXPECT_EQ("", [delegate_ sourceURL].spec());
-  EXPECT_EQ("javascript:void(0);", [delegate_ popupURL].spec());
+  EXPECT_EQ(web_controller(), [delegate_ webController]);
+  EXPECT_EQ("javascript:void(0);", [delegate_ childURL].spec());
+  EXPECT_EQ("http://test/", [delegate_ openerURL].spec());
+  EXPECT_FALSE([delegate_ initiatedByUser]);
 }
 
 // Tests that window.open executed w/o user gesture opens a new window, assuming
 // that delegate allows popups.
 TEST_F(CRWWebControllerWindowOpenTest, DontBlockPopup) {
   [delegate_ setBlockPopups:NO];
-  SEL selector = @selector(webPageOrderedOpen);
-  [delegate_ onSelector:selector
-      callBlockExpectation:^(){
-      }];
-
   EXPECT_NSEQ(@"[object Window]", OpenWindowByDOM());
-  EXPECT_FALSE([delegate_ blockedPopupInfo]);
 
-  EXPECT_EQ("", [delegate_ sourceURL].spec());
-  EXPECT_EQ("javascript:void(0);", [delegate_ popupURL].spec());
+  EXPECT_EQ(web_controller(), [delegate_ webController]);
+  EXPECT_EQ("javascript:void(0);", [delegate_ childURL].spec());
+  EXPECT_EQ("http://test/", [delegate_ openerURL].spec());
+  EXPECT_FALSE([delegate_ initiatedByUser]);
 }
 
 // Tests that window.open executed w/o user gesture does not open a new window.
 TEST_F(CRWWebControllerWindowOpenTest, BlockPopup) {
   ASSERT_FALSE([web_controller() userIsInteracting]);
   EXPECT_NSEQ([NSNull null], OpenWindowByDOM());
-  base::test::ios::WaitUntilCondition(^bool() {
-    return [delegate_ blockedPopupInfo];
-  });
 
-  EXPECT_EQ("", [delegate_ sourceURL].spec());
-  EXPECT_EQ("javascript:void(0);", [delegate_ popupURL].spec());
+  EXPECT_EQ(web_controller(), [delegate_ webController]);
+  EXPECT_EQ("javascript:void(0);", [delegate_ childURL].spec());
+  EXPECT_EQ("http://test/", [delegate_ openerURL].spec());
+  EXPECT_FALSE([delegate_ initiatedByUser]);
+};
+
+// Tests page title changes.
+typedef web::WebTestWithWebState CRWWebControllerTitleTest;
+TEST_F(CRWWebControllerTitleTest, TitleChange) {
+  // Observes and waits for TitleWasSet call.
+  class TitleObserver : public web::WebStateObserver {
+   public:
+    explicit TitleObserver(web::WebState* web_state)
+        : web::WebStateObserver(web_state) {}
+    // Returns number of times |TitleWasSet| was called.
+    int title_change_count() { return title_change_count_; }
+    // WebStateObserver overrides:
+    void TitleWasSet() override { title_change_count_++; }
+
+   private:
+    int title_change_count_ = 0;
+  };
+
+  TitleObserver observer(web_state());
+  ASSERT_EQ(0, observer.title_change_count());
+
+  // Expect TitleWasSet callback after the page is loaded.
+  LoadHtml(@"<title>Title1</title>");
+  EXPECT_EQ("Title1", base::UTF16ToUTF8(web_state()->GetTitle()));
+  EXPECT_EQ(1, observer.title_change_count());
+
+  // Expect at least one more TitleWasSet callback after changing title via
+  // JavaScript. On iOS 10 WKWebView fires 3 callbacks after JS excucution
+  // with the following title changes: "Title2", "" and "Title2".
+  // TODO(crbug.com/696104): There should be only 2 calls of TitleWasSet.
+  // Fix expecteation when WKWebView stops sending extra KVO calls.
+  ExecuteJavaScript(@"window.document.title = 'Title2';");
+  EXPECT_EQ("Title2", base::UTF16ToUTF8(web_state()->GetTitle()));
+  EXPECT_GE(observer.title_change_count(), 2);
 };
 
 // Fixture class to test WKWebView crashes.
@@ -1019,6 +1041,9 @@ class CRWWebControllerWebProcessTest : public web::WebTestWithWebController {
             initWithMockWebView:webView_
                      scrollView:[webView_ scrollView]]);
     [web_controller() injectWebViewContentView:webViewContentView];
+
+    // This test intentionally crashes the render process.
+    SetIgnoreRenderProcessCrashesDuringTesting(true);
   }
   base::scoped_nsobject<WKWebView> webView_;
 };

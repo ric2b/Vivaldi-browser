@@ -10,8 +10,18 @@ Resources.AppManifestView = class extends UI.VBox {
     super(true);
     this.registerRequiredCSS('resources/appManifestView.css');
 
+    this._emptyView = new UI.EmptyWidget(Common.UIString('No manifest detected'));
+    var p = this._emptyView.appendParagraph();
+    var linkElement = UI.createExternalLink('https://developers.google.com/web/fundamentals/engage-and-retain/web-app-manifest/?utm_source=devtools',
+        Common.UIString('Read more about the web manifest'));
+    p.appendChild(UI.formatLocalized('A web manifest allows you to control how your app behaves when launched and displayed to the user. %s', [linkElement]));
+
+    this._emptyView.show(this.contentElement);
+    this._emptyView.hideWidget();
+
     this._reportView = new UI.ReportView(Common.UIString('App Manifest'));
     this._reportView.show(this.contentElement);
+    this._reportView.hideWidget();
 
     this._errorsSection = this._reportView.appendSection(Common.UIString('Errors and warnings'));
     this._identitySection = this._reportView.appendSection(Common.UIString('Identity'));
@@ -81,6 +91,14 @@ Resources.AppManifestView = class extends UI.VBox {
    * @param {!Array<!Protocol.Page.AppManifestError>} errors
    */
   _renderManifest(url, data, errors) {
+    if (!data && !errors.length) {
+      this._emptyView.showWidget();
+      this._reportView.hideWidget();
+      return;
+    }
+    this._emptyView.hideWidget();
+    this._reportView.showWidget();
+
     this._reportView.setURL(Components.Linkifier.linkifyURL(url));
     this._errorsSection.clearContent();
     this._errorsSection.element.classList.toggle('hidden', !errors.length);
@@ -90,7 +108,7 @@ Resources.AppManifestView = class extends UI.VBox {
     }
 
     if (!data)
-      data = '{}';
+      return;
 
     var parsedManifest = JSON.parse(data);
     this._nameField.textContent = stringProperty('name');

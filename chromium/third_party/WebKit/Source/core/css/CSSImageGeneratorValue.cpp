@@ -51,7 +51,7 @@ void CSSImageGeneratorValue::addClient(const LayoutObject* layoutObject,
 
   LayoutObjectSizeCountMap::iterator it = m_clients.find(layoutObject);
   if (it == m_clients.end()) {
-    m_clients.add(layoutObject, SizeAndCount(size, 1));
+    m_clients.insert(layoutObject, SizeAndCount(size, 1));
   } else {
     SizeAndCount& sizeCount = it->value;
     ++sizeCount.count;
@@ -75,11 +75,11 @@ void CSSImageGeneratorValue::removeClient(const LayoutObject* layoutObject) {
   if (!size.isEmpty()) {
     m_sizes.remove(size);
     if (!m_sizes.contains(size))
-      m_images.remove(size);
+      m_images.erase(size);
   }
 
   if (!--sizeCount.count)
-    m_clients.remove(layoutObject);
+    m_clients.erase(layoutObject);
 
   if (m_clients.isEmpty()) {
     ASSERT(m_keepAlive);
@@ -104,12 +104,12 @@ Image* CSSImageGeneratorValue::getImage(const LayoutObject* layoutObject,
     return nullptr;
 
   // Look up the image in our cache.
-  return m_images.get(size);
+  return m_images.at(size);
 }
 
 void CSSImageGeneratorValue::putImage(const IntSize& size,
                                       PassRefPtr<Image> image) {
-  m_images.add(size, std::move(image));
+  m_images.insert(size, std::move(image));
 }
 
 PassRefPtr<Image> CSSImageGeneratorValue::image(

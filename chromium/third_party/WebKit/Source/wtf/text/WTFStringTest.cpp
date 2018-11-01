@@ -48,7 +48,7 @@ TEST(StringTest, ASCII) {
   EXPECT_STREQ("", output.data());
 
   // Empty String.
-  output = emptyString().ascii();
+  output = emptyString.ascii();
   EXPECT_STREQ("", output.data());
 
   // Regular String.
@@ -445,14 +445,14 @@ TEST(StringTest, Ensure16Bit) {
   EXPECT_FALSE(string16.is8Bit());
   EXPECT_EQ("16bit", string16);
 
-  String empty8(StringImpl::empty());
+  String empty8(StringImpl::empty);
   EXPECT_TRUE(empty8.is8Bit());
   empty8.ensure16Bit();
   EXPECT_FALSE(empty8.is8Bit());
   EXPECT_TRUE(empty8.isEmpty());
   EXPECT_FALSE(empty8.isNull());
 
-  String empty16(StringImpl::empty16Bit());
+  String empty16(StringImpl::empty16Bit);
   EXPECT_FALSE(empty16.is8Bit());
   empty16.ensure16Bit();
   EXPECT_FALSE(empty16.is8Bit());
@@ -489,7 +489,7 @@ TEST(StringTest, StringPrinter) {
       toCStringThroughPrinter(String("\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F", 8)));
   EXPECT_EQ(CString("\"\\u007F\\u0080\\u0081\""),
             toCStringThroughPrinter("\x7F\x80\x81"));
-  EXPECT_EQ(CString("\"\""), toCStringThroughPrinter(emptyString()));
+  EXPECT_EQ(CString("\"\""), toCStringThroughPrinter(emptyString));
   EXPECT_EQ(CString("<null>"), toCStringThroughPrinter(String()));
 
   static const UChar unicodeSample[] = {0x30C6, 0x30B9,

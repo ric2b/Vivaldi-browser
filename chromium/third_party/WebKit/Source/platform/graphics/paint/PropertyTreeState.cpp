@@ -29,6 +29,28 @@ bool isAncestorOf(const PropertyNode* ancestor, const PropertyNode* child) {
   return child == ancestor;
 }
 
+const CompositorElementId PropertyTreeState::compositorElementId() const {
+// The effect or transform nodes could have a compositor element id. The order
+// doesn't matter as the element id should be the same on all that have a
+// non-default CompositorElementId.
+#if DCHECK_IS_ON()
+  CompositorElementId expectedElementId;
+  if (CompositorElementId actualElementId = effect()->compositorElementId()) {
+    expectedElementId = actualElementId;
+  }
+  if (CompositorElementId actualElementId =
+          transform()->compositorElementId()) {
+    if (expectedElementId)
+      DCHECK_EQ(expectedElementId, actualElementId);
+  }
+#endif
+  if (effect()->compositorElementId())
+    return effect()->compositorElementId();
+  if (transform()->compositorElementId())
+    return transform()->compositorElementId();
+  return CompositorElementId();
+}
+
 PropertyTreeState::InnermostNode PropertyTreeState::innermostNode() const {
   // TODO(chrishtr): this is very inefficient when innermostNode() is called
   // repeatedly.
@@ -72,5 +94,14 @@ const PropertyTreeState* PropertyTreeStateIterator::next() {
   }
   return nullptr;
 }
+
+#if DCHECK_IS_ON()
+
+String PropertyTreeState::toTreeString() const {
+  return transform()->toTreeString() + "\n" + clip()->toTreeString() + "\n" +
+         effect()->toTreeString();
+}
+
+#endif
 
 }  // namespace blink

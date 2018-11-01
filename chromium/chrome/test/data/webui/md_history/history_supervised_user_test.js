@@ -15,8 +15,8 @@ suite('history-list supervised-user', function() {
 
   setup(function() {
     app = replaceApp();
-    historyList = app.$['history'].$['infinite-list'];
-    toolbar = app.$['toolbar'];
+    historyList = app.$.history;
+    toolbar = app.$.toolbar;
     app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
   });
 
@@ -44,6 +44,6 @@ suite('history-list supervised-user', function() {
   test('remove history menu button disabled', function() {
     var listContainer = app.$['history'];
     listContainer.$.sharedMenu.get();
-    assertTrue(listContainer.$$('#menuRemoveButton').disabled);
+    assertTrue(listContainer.$$('#menuRemoveButton').hidden);
   });
 });

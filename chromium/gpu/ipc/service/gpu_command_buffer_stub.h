@@ -37,6 +37,10 @@
 #include "ui/gl/gpu_preference.h"
 #include "url/gurl.h"
 
+namespace gl {
+class GLShareGroup;
+}
+
 namespace gpu {
 struct Mailbox;
 struct SyncToken;
@@ -96,6 +100,9 @@ class GPU_EXPORT GpuCommandBufferStub
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
 
+  void AddFilter(IPC::MessageFilter* message_filter) override;
+  int32_t GetRouteID() const override;
+
   gles2::MemoryTracker* GetMemoryTracker() const;
 
   // Whether this command buffer can currently handle IPC messages.
@@ -110,10 +117,6 @@ class GPU_EXPORT GpuCommandBufferStub
 
   // Unique command buffer ID for this command buffer stub.
   CommandBufferId command_buffer_id() const { return command_buffer_id_; }
-
-  // Identifies the various GpuCommandBufferStubs in the GPU process belonging
-  // to the same renderer process.
-  int32_t route_id() const { return route_id_; }
 
   // Identifies the stream for this command buffer.
   int32_t stream_id() const { return stream_id_; }
@@ -164,21 +167,16 @@ class GPU_EXPORT GpuCommandBufferStub
                                 uint32_t size);
   void OnDestroyTransferBuffer(int32_t id);
   void OnGetTransferBuffer(int32_t id, IPC::Message* reply_message);
+  bool OnWaitSyncToken(const SyncToken& sync_token);
 
   void OnEnsureBackbuffer();
 
-  void OnWaitSyncToken(const SyncToken& sync_token);
   void OnSignalSyncToken(const SyncToken& sync_token, uint32_t id);
   void OnSignalAck(uint32_t id);
   void OnSignalQuery(uint32_t query, uint32_t id);
 
   void OnFenceSyncRelease(uint64_t release);
-  bool OnWaitFenceSync(CommandBufferNamespace namespace_id,
-                       CommandBufferId command_buffer_id,
-                       uint64_t release);
-  void OnWaitFenceSyncCompleted(CommandBufferNamespace namespace_id,
-                                CommandBufferId command_buffer_id,
-                                uint64_t release);
+  void OnWaitSyncTokenCompleted(const SyncToken& sync_token);
 
   void OnDescheduleUntilFinished();
   void OnRescheduleAfterFinished();
@@ -208,9 +206,6 @@ class GPU_EXPORT GpuCommandBufferStub
 
   bool CheckContextLost();
   void CheckCompleteWaits();
-  void PullTextureUpdates(CommandBufferNamespace namespace_id,
-                          CommandBufferId command_buffer_id,
-                          uint32_t release);
 
   // The lifetime of objects of this class is managed by a GpuChannel. The
   // GpuChannels destroy all the GpuCommandBufferStubs that they own when they
@@ -233,6 +228,7 @@ class GPU_EXPORT GpuCommandBufferStub
   std::unique_ptr<CommandExecutor> executor_;
   std::unique_ptr<SyncPointClient> sync_point_client_;
   scoped_refptr<gl::GLSurface> surface_;
+  scoped_refptr<gl::GLShareGroup> share_group_;
 
   base::ObserverList<DestructionObserver> destruction_observers_;
 

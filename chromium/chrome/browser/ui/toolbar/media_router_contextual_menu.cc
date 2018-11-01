@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/toolbar/media_router_contextual_menu.h"
+
 #include <string>
 
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -15,7 +16,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
-#include "chrome/browser/ui/toolbar/media_router_contextual_menu.h"
+#include "chrome/browser/ui/toolbar/media_router_action_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -24,15 +25,19 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "extensions/common/constants.h"
 #include "ui/base/models/menu_model_delegate.h"
-
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 
 MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser)
-    : browser_(browser),
-      menu_model_(this),
-      component_migration_helper_(ToolbarActionsModel::Get(browser->profile())
-                                      ->component_migration_helper()) {
-  DCHECK(component_migration_helper_);
+    : MediaRouterContextualMenu(
+          browser,
+          MediaRouterActionController::IsActionShownByPolicy(
+              browser->profile())) {}
 
+MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser,
+                                                     bool shown_by_policy)
+    : browser_(browser), menu_model_(this) {
   menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_ABOUT,
                                   IDS_MEDIA_ROUTER_ABOUT);
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
@@ -40,9 +45,18 @@ MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser)
                                   IDS_MEDIA_ROUTER_LEARN_MORE);
   menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_HELP,
                                   IDS_MEDIA_ROUTER_HELP);
-  menu_model_.AddCheckItemWithStringId(
-      IDC_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION,
-      IDS_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION);
+  if (shown_by_policy) {
+    menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_SHOWN_BY_POLICY,
+                                    IDS_MEDIA_ROUTER_SHOWN_BY_POLICY);
+    menu_model_.SetIcon(
+        menu_model_.GetIndexOfCommandId(IDC_MEDIA_ROUTER_SHOWN_BY_POLICY),
+        gfx::Image(gfx::CreateVectorIcon(gfx::VectorIconId::BUSINESS, 16,
+                                         gfx::kChromeIconGrey)));
+  } else {
+    menu_model_.AddCheckItemWithStringId(
+        IDC_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION,
+        IDS_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION);
+  }
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
   menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_MANAGE_DEVICES,
@@ -57,13 +71,13 @@ MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser)
 MediaRouterContextualMenu::~MediaRouterContextualMenu() {}
 
 bool MediaRouterContextualMenu::GetAlwaysShowActionPref() const {
-  return component_migration_helper_->GetComponentActionPref(
-      ComponentToolbarActionsFactory::kMediaRouterActionId);
+  return MediaRouterActionController::GetAlwaysShowActionPref(
+      browser_->profile());
 }
 
 void MediaRouterContextualMenu::SetAlwaysShowActionPref(bool always_show) {
-  component_migration_helper_->SetComponentActionPref(
-      ComponentToolbarActionsFactory::kMediaRouterActionId, always_show);
+  return MediaRouterActionController::SetAlwaysShowActionPref(
+      browser_->profile(), always_show);
 }
 
 bool MediaRouterContextualMenu::IsCommandIdChecked(int command_id) const {
@@ -71,14 +85,13 @@ bool MediaRouterContextualMenu::IsCommandIdChecked(int command_id) const {
     return browser_->profile()->GetPrefs()->GetBoolean(
         prefs::kMediaRouterEnableCloudServices);
   }
-  if (command_id == IDC_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION) {
+  if (command_id == IDC_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION)
     return GetAlwaysShowActionPref();
-  }
   return false;
 }
 
 bool MediaRouterContextualMenu::IsCommandIdEnabled(int command_id) const {
-  return true;
+  return command_id != IDC_MEDIA_ROUTER_SHOWN_BY_POLICY;
 }
 
 bool MediaRouterContextualMenu::IsCommandIdVisible(int command_id) const {

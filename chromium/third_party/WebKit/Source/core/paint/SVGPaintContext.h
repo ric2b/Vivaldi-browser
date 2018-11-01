@@ -117,7 +117,7 @@ class SVGPaintContext {
   // successfully applied.
   bool applyClipMaskAndFilterIfNecessary();
 
-  static void paintSubtree(GraphicsContext&, const LayoutObject*);
+  static void paintResourceSubtree(GraphicsContext&, const LayoutObject*);
 
   // TODO(fs): This functions feels a bit misplaced (we don't want this to
   // turn into the new kitchen sink). Move it if a better location surfaces.
@@ -126,7 +126,7 @@ class SVGPaintContext {
       const ComputedStyle&,
       const LayoutObject&,
       LayoutSVGResourceMode,
-      SkPaint&,
+      PaintFlags&,
       const AffineTransform* additionalPaintServerTransform = nullptr);
 
  private:

@@ -31,11 +31,7 @@
         border-style: none;
         display: flex;
         flex-direction: row;
-        height: 32px;
-      }
-
-      #divOuter[first-custom-item] {
-        border-top: var(--cr-separator-line);
+        min-height: 32px;
       }
 
       #divText {
@@ -66,6 +62,15 @@
         color: var(--google-green-500);
       }
 
+      #subpageDiv {
+        -webkit-border-start: var(--cr-separator-line);
+        -webkit-padding-start: 4px;
+      }
+
+      #subpageDiv > button {
+        margin: -8px 0;
+      }
+
       iron-icon {
         height: 24px;
         width: 24px;
@@ -80,8 +85,7 @@
         padding: 0 var(--cr-icon-padding);
       }
     </style>
-    <div id="divOuter" actionable$="[[isListItem]]"
-        first-custom-item$="[[item.isFirstCustomItem]]">
+    <div id="divOuter" actionable$="[[isListItem]]">
       <template is="dom-if" if="[[networkState]]">
         <cr-network-icon is-list-item="[[isListItem]]"
             network-state="[[networkState]]">
@@ -92,7 +96,7 @@
       </template>
       <div id="divText" class="layout horizontal flex">
         <div id="itemName" connected$="[[isConnected_(networkState)]]">
-          [[getItemName_(item, isListItem)]]
+          [[itemName]]
         </div>
         <div id="networkStateText"
             hidden$="[[!isStateTextVisible_(networkState, isListItem)]]"
@@ -107,9 +111,11 @@
       </template>
       <template is="dom-if"
           if="[[isSubpageButtonVisible_(networkState, showButtons)]]">
-        <button class="subpage-arrow" is="paper-icon-button-light"
-            on-tap="fireShowDetails_" tabindex$="[[tabindex]]">
-        </button>
+        <div id="subpageDiv" class="layout horizontal">
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              on-tap="fireShowDetails_" tabindex$="[[tabindex]]">
+          </button>
+        </div>
       </template>
     </div>
   </template>

@@ -13,7 +13,7 @@
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
@@ -1223,57 +1223,61 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 - (UICollectionReusableView*)collectionView:(UICollectionView*)collectionView
           viewForSupplementaryElementOfKind:(NSString*)kind
                                 atIndexPath:(NSIndexPath*)indexPath {
+  DCHECK(kind == UICollectionElementKindSectionHeader);
+
   if (!_supplementaryViews)
     _supplementaryViews.reset([[NSMutableArray alloc] init]);
-  if (kind == UICollectionElementKindSectionHeader) {
-    NSUInteger section = indexPath.section;
-    if (section == SectionWithOmnibox) {
-      if (!_headerView) {
-        _headerView.reset([[collectionView
-            dequeueReusableSupplementaryViewOfKind:
-                UICollectionElementKindSectionHeader
-                               withReuseIdentifier:@"header"
-                                      forIndexPath:indexPath] retain]);
-        [_headerView addSubview:[_doodleController view]];
-        [_headerView addSubview:_searchTapTarget];
-        [_headerView addViewsToSearchField:_searchTapTarget];
 
-        if (!IsIPadIdiom()) {
-          ReadingListModel* readingListModel = nullptr;
-          if (reading_list::switches::IsReadingListEnabled()) {
-            readingListModel =
-                ReadingListModelFactory::GetForBrowserState(_browserState);
-          }
-          // iPhone header also contains a toolbar since the normal toolbar is
-          // hidden.
-          [_headerView addToolbarWithDelegate:_webToolbarDelegate
-                                      focuser:_focuser
-                                     tabModel:_tabModel
-                             readingListModel:readingListModel];
+  if (indexPath.section == SectionWithOmnibox) {
+    if (!_headerView) {
+      _headerView.reset([[collectionView
+          dequeueReusableSupplementaryViewOfKind:
+              UICollectionElementKindSectionHeader
+                             withReuseIdentifier:@"header"
+                                    forIndexPath:indexPath] retain]);
+      [_headerView addSubview:[_doodleController view]];
+      [_headerView addSubview:_searchTapTarget];
+      [_headerView addViewsToSearchField:_searchTapTarget];
+
+      if (!IsIPadIdiom()) {
+        ReadingListModel* readingListModel = nullptr;
+        if (reading_list::switches::IsReadingListEnabled()) {
+          readingListModel =
+              ReadingListModelFactory::GetForBrowserState(_browserState);
         }
-        [_supplementaryViews addObject:_headerView];
+        // iPhone header also contains a toolbar since the normal toolbar is
+        // hidden.
+        [_headerView addToolbarWithDelegate:_webToolbarDelegate
+                                    focuser:_focuser
+                                   tabModel:_tabModel
+                           readingListModel:readingListModel];
       }
-      return _headerView;
-    } else if (section == SectionWithMostVisited) {
-      if (!_promoHeaderView) {
-        _promoHeaderView.reset([[collectionView
-            dequeueReusableSupplementaryViewOfKind:
-                UICollectionElementKindSectionHeader
-                               withReuseIdentifier:@"whatsNew"
-                                      forIndexPath:indexPath] retain]);
-        [_promoHeaderView setSideMargin:[self leftMargin]];
-        [_promoHeaderView setDelegate:self];
-        if (_notification_promo && _notification_promo->CanShow()) {
-          [_promoHeaderView setText:base::SysUTF8ToNSString(
-                                        _notification_promo->promo_text())];
-          [_promoHeaderView setIcon:_notification_promo->icon()];
-          _notification_promo->HandleViewed();
-        }
-        [_supplementaryViews addObject:_promoHeaderView];
-      }
-      return _promoHeaderView;
+      [_supplementaryViews addObject:_headerView];
     }
+    return _headerView;
   }
+
+  if (indexPath.section == SectionWithMostVisited) {
+    if (!_promoHeaderView) {
+      _promoHeaderView.reset([[collectionView
+          dequeueReusableSupplementaryViewOfKind:
+              UICollectionElementKindSectionHeader
+                             withReuseIdentifier:@"whatsNew"
+                                    forIndexPath:indexPath] retain]);
+      [_promoHeaderView setSideMargin:[self leftMargin]];
+      [_promoHeaderView setDelegate:self];
+      if (_notification_promo && _notification_promo->CanShow()) {
+        [_promoHeaderView
+            setText:base::SysUTF8ToNSString(_notification_promo->promo_text())];
+        [_promoHeaderView setIcon:_notification_promo->icon()];
+        _notification_promo->HandleViewed();
+      }
+      [_supplementaryViews addObject:_promoHeaderView];
+    }
+    return _promoHeaderView;
+  }
+
+  NOTREACHED();
   return nil;
 }
 
@@ -1377,7 +1381,6 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
       [strongSelf logMostVisitedClick:index tileType:cell.tileType];
       [[strongSelf loader] webPageOrderedOpen:url
                                      referrer:web::Referrer()
-                                   windowName:nil
                                  inBackground:YES
                                      appendTo:kCurrentTab];
     };
@@ -1397,7 +1400,6 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
         [strongSelf logMostVisitedClick:index tileType:cell.tileType];
         [[strongSelf loader] webPageOrderedOpen:url
                                        referrer:web::Referrer()
-                                     windowName:nil
                                     inIncognito:YES
                                    inBackground:NO
                                        appendTo:kCurrentTab];
@@ -1446,6 +1448,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   action.title = l10n_util::GetNSString(IDS_NEW_TAB_UNDO_THUMBNAIL_REMOVE);
   action.accessibilityIdentifier = @"Undo";
 
+  TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
   MDCSnackbarMessage* message = [MDCSnackbarMessage
       messageWithText:l10n_util::GetNSString(
                           IDS_IOS_NEW_TAB_MOST_VISITED_ITEM_REMOVED)];
@@ -1463,7 +1466,6 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   if (_notification_promo->IsURLPromo()) {
     [_loader webPageOrderedOpen:_notification_promo->url()
                        referrer:web::Referrer()
-                     windowName:nil
                    inBackground:NO
                        appendTo:kCurrentTab];
     _notification_promo.reset();

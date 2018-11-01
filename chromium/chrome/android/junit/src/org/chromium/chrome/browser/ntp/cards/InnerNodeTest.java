@@ -8,7 +8,6 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
@@ -26,12 +25,11 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
+import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -81,17 +79,15 @@ public class InnerNodeTest {
     @Test
     public void testBindViewHolder() {
         NewTabPageViewHolder holder = mock(NewTabPageViewHolder.class);
-        List<Object> payload1 = Collections.emptyList();
-        List<Object> payload2 = Arrays.<Object>asList("some data", "some other data");
-        mInnerNode.onBindViewHolder(holder, 0, payload1);
-        mInnerNode.onBindViewHolder(holder, 5, payload1);
-        mInnerNode.onBindViewHolder(holder, 6, payload2);
-        mInnerNode.onBindViewHolder(holder, 11, payload1);
+        mInnerNode.onBindViewHolder(holder, 0);
+        mInnerNode.onBindViewHolder(holder, 5);
+        mInnerNode.onBindViewHolder(holder, 6);
+        mInnerNode.onBindViewHolder(holder, 11);
 
-        verify(mChildren.get(0)).onBindViewHolder(holder, 0, payload1);
-        verify(mChildren.get(2)).onBindViewHolder(holder, 2, payload1);
-        verify(mChildren.get(4)).onBindViewHolder(holder, 0, payload2);
-        verify(mChildren.get(6)).onBindViewHolder(holder, 0, payload1);
+        verify(mChildren.get(0)).onBindViewHolder(holder, 0);
+        verify(mChildren.get(2)).onBindViewHolder(holder, 2);
+        verify(mChildren.get(4)).onBindViewHolder(holder, 0);
+        verify(mChildren.get(6)).onBindViewHolder(holder, 0);
     }
 
     @Test
@@ -161,15 +157,19 @@ public class InnerNodeTest {
 
     @Test
     public void testNotifications() {
-        mInnerNode.onItemRangeInserted(mChildren.get(0), 0, 23);
-        mInnerNode.onItemRangeChanged(mChildren.get(2), 2, 9000, null);
-        mInnerNode.onItemRangeChanged(mChildren.get(4), 0, 6502, null);
-        mInnerNode.onItemRangeRemoved(mChildren.get(6), 0, 8086);
+        mInnerNode.onItemRangeChanged(mChildren.get(0), 0, 1, null);
+        when(mChildren.get(2).getItemCount()).thenReturn(5);
+        mInnerNode.onItemRangeInserted(mChildren.get(2), 2, 2);
+        when(mChildren.get(4).getItemCount()).thenReturn(0);
+        mInnerNode.onItemRangeRemoved(mChildren.get(4), 0, 3);
+        mInnerNode.onItemRangeChanged(mChildren.get(6), 0, 1, null);
 
-        verify(mParent).onItemRangeInserted(mInnerNode, 0, 23);
-        verify(mParent).onItemRangeChanged(mInnerNode, 5, 9000, null);
-        verify(mParent).onItemRangeChanged(mInnerNode, 6, 6502, null);
-        verify(mParent).onItemRangeRemoved(mInnerNode, 11, 8086);
+        verify(mParent).onItemRangeChanged(mInnerNode, 0, 1, null);
+        verify(mParent).onItemRangeInserted(mInnerNode, 5, 2);
+        verify(mParent).onItemRangeRemoved(mInnerNode, 8, 3);
+        verify(mParent).onItemRangeChanged(mInnerNode, 10, 1, null);
+
+        assertThat(mInnerNode.getItemCount(), is(11));
     }
 
     /**
@@ -218,7 +218,8 @@ public class InnerNodeTest {
         }
 
         @Override
-        public void onItemRangeChanged(TreeNode child, int index, int count, Object payload) {
+        public void onItemRangeChanged(
+                TreeNode child, int index, int count, PartialBindCallback callback) {
             checkCount(child);
         }
 
@@ -241,8 +242,7 @@ public class InnerNodeTest {
 
     private static TreeNode makeDummyNode(int itemCount) {
         TreeNode node = mock(TreeNode.class);
-        doReturn(itemCount).when(node).getItemCount();
+        when(node.getItemCount()).thenReturn(itemCount);
         return node;
     }
 }
-

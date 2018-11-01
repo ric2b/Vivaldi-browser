@@ -4,14 +4,10 @@
 
 package org.chromium.chrome.browser.suggestions;
 
-import org.chromium.base.Callback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
-import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
-
-import java.util.Set;
 
 /**
  * Interface between the suggestion surface and the rest of the browser.
@@ -66,12 +62,6 @@ public interface SuggestionsUiDelegate {
      */
     void addDestructionObserver(DestructionObserver destructionObserver);
 
-    // Offline
-
-    /**
-     * Checks if the pages with the given URLs are available offline.
-     * @param pageUrls The URLs of the sites whose offline availability is requested.
-     * @param callback Fired when the results are available.
-     */
-    void getUrlsAvailableOffline(Set<String> pageUrls, Callback<Set<String>> callback);
+    /** @return whether the suggestions UI is currently visible. */
+    boolean isVisible();
 }

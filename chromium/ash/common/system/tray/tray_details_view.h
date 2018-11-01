@@ -12,18 +12,15 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/view_click_listener.h"
 #include "base/macros.h"
+#include "base/timer/timer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
-
-namespace base {
-class OneShotTimer;
-}  // namespace base
 
 namespace views {
 class BoxLayout;
 class CustomButton;
-class Label;
 class ProgressBar;
+class ScrollView;
 }  // namespace views
 
 namespace ash {
@@ -31,7 +28,6 @@ namespace test {
 class TrayDetailsViewTest;
 }  // namespace test
 
-class FixedSizedScrollView;
 class ScrollBorder;
 class SystemTrayItem;
 class TriView;
@@ -53,7 +49,7 @@ class ASH_EXPORT TrayDetailsView : public views::View,
 
   SystemTrayItem* owner() { return owner_; }
   SpecialPopupRow* title_row() { return title_row_; }
-  FixedSizedScrollView* scroller() { return scroller_; }
+  views::ScrollView* scroller() { return scroller_; }
   views::View* scroll_content() { return scroll_content_; }
 
  protected:
@@ -88,20 +84,14 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   // Helper functions which create and return the settings and help buttons,
   // respectively, used in the material design top-most header row. The caller
   // assumes ownership of the returned buttons.
-  views::CustomButton* CreateSettingsButton(LoginStatus status);
+  views::CustomButton* CreateSettingsButton(LoginStatus status,
+                                            int setting_accessible_name_id);
   views::CustomButton* CreateHelpButton(LoginStatus status);
 
   TriView* tri_view() { return tri_view_; }
 
  private:
   friend class test::TrayDetailsViewTest;
-
-  // views::View:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
-
-  // Updates the style of |label_| based on the current native theme, if it
-  // exists. Only used for material design.
-  void UpdateStyle();
 
   // Overridden to handle clicks on subclass-specific views.
   virtual void HandleViewClicked(views::View* view);
@@ -132,7 +122,7 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   SystemTrayItem* owner_;
   views::BoxLayout* box_layout_;
   SpecialPopupRow* title_row_;  // Not used in material design.
-  FixedSizedScrollView* scroller_;
+  views::ScrollView* scroller_;
   views::View* scroll_content_;
   views::ProgressBar* progress_bar_;
 
@@ -141,14 +131,11 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   // The container view for the top-most title row in material design.
   TriView* tri_view_;
 
-  // The label used in the top-most title row for material design.
-  views::Label* label_;
-
   // The back button that appears in the material design title row. Not owned.
   views::Button* back_button_;
 
   // Used to delay the transition to the default view.
-  std::unique_ptr<base::OneShotTimer> transition_delay_timer_;
+  base::OneShotTimer transition_delay_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayDetailsView);
 };

@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -220,6 +221,32 @@ const PrefHashFilter::TrackedPreferenceMetadata kTrackedPrefs[] = {
     PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
     PrefHashFilter::VALUE_PERSONAL
   },
+#if defined(OS_WIN)
+  {
+    25, prefs::kSettingsResetPromptPromptWave,
+    PrefHashFilter::ENFORCE_ON_LOAD,
+    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
+    PrefHashFilter::VALUE_IMPERSONAL
+  },
+  {
+    26, prefs::kSettingsResetPromptLastTriggeredForDefaultSearch,
+    PrefHashFilter::ENFORCE_ON_LOAD,
+    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
+    PrefHashFilter::VALUE_IMPERSONAL
+  },
+  {
+    27, prefs::kSettingsResetPromptLastTriggeredForStartupUrls,
+    PrefHashFilter::ENFORCE_ON_LOAD,
+    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
+    PrefHashFilter::VALUE_IMPERSONAL
+  },
+  {
+    28, prefs::kSettingsResetPromptLastTriggeredForHomepage,
+    PrefHashFilter::ENFORCE_ON_LOAD,
+    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
+    PrefHashFilter::VALUE_IMPERSONAL
+  },
+#endif  // defined(OS_WIN)
   // See note at top, new items added here also need to be added to
   // histograms.xml's TrackedPreference enum.
 };
@@ -246,13 +273,13 @@ SettingsEnforcementGroup GetSettingsEnforcementGroup() {
 # if defined(OS_WIN)
   if (!g_disable_domain_check_for_testing) {
     static bool first_call = true;
-    static const bool is_enrolled_to_domain = base::win::IsEnrolledToDomain();
+    static const bool is_managed = base::win::IsEnterpriseManaged();
     if (first_call) {
       UMA_HISTOGRAM_BOOLEAN("Settings.TrackedPreferencesNoEnforcementOnDomain",
-                            is_enrolled_to_domain);
+                            is_managed);
       first_call = false;
     }
-    if (is_enrolled_to_domain)
+    if (is_managed)
       return GROUP_NO_ENFORCEMENT;
   }
 #endif
@@ -274,12 +301,12 @@ SettingsEnforcementGroup GetSettingsEnforcementGroup() {
   };
 
   // Use the strongest enforcement setting in the absence of a field trial
-  // config on Windows. Remember to update the OFFICIAL_BUILD section of
-  // extension_startup_browsertest.cc and pref_hash_browsertest.cc when updating
-  // the default value below.
+  // config on Windows and MacOS. Remember to update the OFFICIAL_BUILD section
+  // of extension_startup_browsertest.cc and pref_hash_browsertest.cc when
+  // updating the default value below.
   // TODO(gab): Enforce this on all platforms.
   SettingsEnforcementGroup enforcement_group =
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
       GROUP_ENFORCE_DEFAULT;
 #else
       GROUP_NO_ENFORCEMENT;
@@ -380,7 +407,7 @@ void HandleReadError(const base::FilePath& pref_filename,
 
 std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
     const base::FilePath& profile_path) {
-  std::string device_id;
+  std::string legacy_device_id;
 #if defined(OS_WIN) && BUILDFLAG(ENABLE_RLZ)
   // This is used by
   // chrome/browser/extensions/api/music_manager_private/device_id_win.cc
@@ -388,7 +415,10 @@ std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
   // not available synchronously.
   // As part of improving pref metrics on other platforms we may want to find
   // ways to defer preference loading until the device ID can be used.
-  rlz_lib::GetMachineId(&device_id);
+  rlz_lib::GetMachineId(&legacy_device_id);
+
+  UMA_HISTOGRAM_BOOLEAN("Settings.LegacyMachineIdGenerationSuccess",
+                        !legacy_device_id.empty());
 #endif
   std::string seed;
 #if defined(GOOGLE_CHROME_BUILD)
@@ -397,7 +427,7 @@ std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
 #endif
   return base::MakeUnique<ProfilePrefStoreManager>(
       profile_path, GetTrackingConfiguration(), kTrackedPrefsReportingIDsCount,
-      seed, device_id, g_browser_process->local_state());
+      seed, legacy_device_id, g_browser_process->local_state());
 }
 
 void PrepareFactory(sync_preferences::PrefServiceSyncableFactory* factory,
@@ -510,9 +540,9 @@ void DisableDomainCheckForTesting() {
 
 bool InitializePrefsFromMasterPrefs(
     const base::FilePath& profile_path,
-    const base::DictionaryValue& master_prefs) {
+    std::unique_ptr<base::DictionaryValue> master_prefs) {
   return CreateProfilePrefStoreManager(profile_path)
-      ->InitializePrefsFromMasterPrefs(master_prefs);
+      ->InitializePrefsFromMasterPrefs(std::move(master_prefs));
 }
 
 base::Time GetResetTime(Profile* profile) {

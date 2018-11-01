@@ -1,19 +1,21 @@
 // Copyright 2015-2016 Vivaldi Technologies AS. All rights reserved.
 
-#ifndef EXTENSIONS_API_EXTENSION_ACTION_EXTENSION_ACTION_UTILS_API_H_
-#define EXTENSIONS_API_EXTENSION_ACTION_EXTENSION_ACTION_UTILS_API_H_
+#ifndef EXTENSIONS_API_EXTENSION_ACTION_UTILS_EXTENSION_ACTION_UTILS_API_H_
+#define EXTENSIONS_API_EXTENSION_ACTION_UTILS_EXTENSION_ACTION_UTILS_API_H_
 
 #include <map>
+#include <memory>
+#include <set>
 #include <string>
 
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/toolbar/component_action_delegate.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "extensions/browser/extension_icon_image.h"
@@ -53,8 +55,6 @@ class ExtensionActionUtil
       public extensions::ExtensionActionAPI::Observer,
       public extensions::ExtensionRegistryObserver,
       public TabStripModelObserver,
-      public extensions::ComponentMigrationHelper::ComponentActionDelegate,
-      public chrome::BrowserListObserver,
       public ToolbarActionViewDelegate {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
   Profile* profile_;
@@ -66,18 +66,13 @@ class ExtensionActionUtil
   ScopedObserver<ExtensionActionAPI, ExtensionActionAPI::Observer>
       extension_action_api_observer_;
 
-  std::unique_ptr<extensions::ComponentMigrationHelper>
-      component_migration_helper_;
-
   void OnImageLoaded(const std::string& extension_id, const gfx::Image& image);
-
-  // Component extensions is first added and removed and then added to this set
-  // separately.
-  std::set<std::string> component_extension_actions_;
 
   content::WebContents* current_webcontents_ = nullptr;
 
  public:
+  explicit ExtensionActionUtil(Profile*);
+
   static void BroadcastEvent(const std::string& eventname,
                              std::unique_ptr<base::ListValue> args,
                              content::BrowserContext* context);
@@ -117,14 +112,6 @@ class ExtensionActionUtil
                         int index,
                         int reason) override;
 
-  // ComponentMigrationHelper::ComponentActionDelegate:
-  void AddComponentAction(const std::string& action_id) override;
-  void RemoveComponentAction(const std::string& action_id) override;
-  bool HasComponentAction(const std::string& action_id) const override;
-
-  // BrowserListObserver
-  void OnBrowserAdded(Browser* browser) override;
-
   // ToolbarActionViewDelegate
   content::WebContents* GetCurrentWebContents() const override;
 
@@ -134,42 +121,29 @@ class ExtensionActionUtil
   // Returns true if a context menu is running.
   bool IsMenuRunning() const override;
 
-  extensions::ComponentMigrationHelper* component_migration_helper() {
-    return component_migration_helper_.get();
-  }
-
   // Fills the relevant information about an extensionaction for a specific tab.
   // return true if the action should be added.
   static bool FillInfoForTabId(
-      vivaldi::extension_action_utils::ExtensionInfo& info,
+      vivaldi::extension_action_utils::ExtensionInfo* info,
       ExtensionAction* action,
       int tab_id,
       Profile* profile);
 
-  static bool FillInfoFromComponentExtension(
-      const std::string* action_id,
-      vivaldi::extension_action_utils::ExtensionInfo& info,
-      Profile* profile);
-
   static void FillInfoFromManifest(
-      vivaldi::extension_action_utils::ExtensionInfo& info,
+      vivaldi::extension_action_utils::ExtensionInfo* info,
       const Extension* extension);
 
   static bool GetWindowIdFromExtData(const std::string& extdata,
-                                     std::string& windowId);
+                                     std::string* windowId);
 
   // Encodes the passed bitmap as a PNG represented as a dataurl.
   static std::string* EncodeBitmapToPng(const SkBitmap* bitmap);
-
-  std::set<std::string> component_extension_actions() {
-    return component_extension_actions_;
-  }
 
   void set_current_webcontents(content::WebContents* contents) {
     current_webcontents_ = contents;
   }
 
-  ExtensionActionUtil(Profile*);
+ private:
   ~ExtensionActionUtil() override;
 
   base::WeakPtrFactory<ExtensionActionUtil> weak_ptr_factory_;
@@ -184,7 +158,7 @@ class ExtensionActionUtilsGetToolbarExtensionsFunction
                              GETTOOLBAR_EXTENSIONS)
   ExtensionActionUtilsGetToolbarExtensionsFunction();
 
- protected:
+ private:
   ~ExtensionActionUtilsGetToolbarExtensionsFunction() override;
 
   // ExtensionFunction:
@@ -199,7 +173,7 @@ class ExtensionActionUtilsExecuteExtensionActionFunction
                              EXECUTE_EXTENSIONACTION)
   ExtensionActionUtilsExecuteExtensionActionFunction();
 
- protected:
+ private:
   ~ExtensionActionUtilsExecuteExtensionActionFunction() override;
 
   // ExtensionFunction:
@@ -216,7 +190,7 @@ class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
       TOGGLE_BROWSERACTIONVISIBILITY)
   ExtensionActionUtilsToggleBrowserActionVisibilityFunction();
 
- protected:
+ private:
   ~ExtensionActionUtilsToggleBrowserActionVisibilityFunction() override;
 
   // ExtensionFunction:
@@ -233,7 +207,7 @@ class ExtensionActionUtilsRemoveExtensionFunction
                              GETTOOLBAR_EXTENSIONS)
   ExtensionActionUtilsRemoveExtensionFunction();
 
- protected:
+ private:
   ~ExtensionActionUtilsRemoveExtensionFunction() override;
 
   // ExtensionFunction:
@@ -244,4 +218,4 @@ class ExtensionActionUtilsRemoveExtensionFunction
 
 }  // namespace extensions
 
-#endif  // EXTENSIONS_API_EXTENSION_ACTION_EXTENSION_ACTION_UTILS_API_H_
+#endif  // EXTENSIONS_API_EXTENSION_ACTION_UTILS_EXTENSION_ACTION_UTILS_API_H_

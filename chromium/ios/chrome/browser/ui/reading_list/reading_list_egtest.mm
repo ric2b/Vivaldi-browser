@@ -6,7 +6,6 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/reading_list/ios/reading_list_model.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
@@ -24,6 +23,10 @@
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #import "ios/web/public/test/http_server.h"
 #import "ios/web/public/test/http_server_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 const char kReadTitle[] = "foobar";
@@ -58,7 +61,7 @@ ReadingListModel* GetReadingListModel() {
 // Asserts the |button_id| button is not visible.
 void AssertButtonNotVisibleWithID(int button_id) {
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::buttonWithAccessibilityLabelId(
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    button_id)]
       assertWithMatcher:grey_notVisible()];
 }
@@ -66,7 +69,7 @@ void AssertButtonNotVisibleWithID(int button_id) {
 // Assert the |button_id| button is visible.
 void AssertButtonVisibleWithID(int button_id) {
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::buttonWithAccessibilityLabelId(
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    button_id)]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
@@ -74,14 +77,14 @@ void AssertButtonVisibleWithID(int button_id) {
 // Taps the |button_id| button.
 void TapButtonWithID(int button_id) {
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::buttonWithAccessibilityLabelId(
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    button_id)] performAction:grey_tap()];
 }
 
 // Taps the entry |title|.
 void TapEntry(std::string title) {
   [[EarlGrey selectElementWithMatcher:
-                 grey_allOf(chrome_test_util::staticTextWithAccessibilityLabel(
+                 grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(
                                 base::SysUTF8ToNSString(title)),
                             grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
@@ -92,7 +95,7 @@ void AssertEntryVisible(std::string title) {
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [[EarlGrey
       selectElementWithMatcher:
-          grey_allOf(chrome_test_util::staticTextWithAccessibilityLabel(
+          grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(
                          base::SysUTF8ToNSString(title)),
                      grey_ancestor(grey_kindOfClass([ReadingListCell class])),
                      nil)] assertWithMatcher:grey_sufficientlyVisible()];
@@ -117,7 +120,7 @@ void AssertEntryNotVisible(std::string title) {
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [[EarlGrey
       selectElementWithMatcher:
-          grey_allOf(chrome_test_util::staticTextWithAccessibilityLabel(
+          grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(
                          base::SysUTF8ToNSString(title)),
                      grey_ancestor(grey_kindOfClass([ReadingListCell class])),
                      nil)] assertWithMatcher:grey_notVisible()];
@@ -126,15 +129,15 @@ void AssertEntryNotVisible(std::string title) {
 // Asserts |header| is visible.
 void AssertHeaderNotVisible(std::string header) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                          staticTextWithAccessibilityLabel(
+                                          StaticTextWithAccessibilityLabel(
                                               base::SysUTF8ToNSString(header))]
       assertWithMatcher:grey_notVisible()];
 }
 
 // Opens the reading list menu using command line.
 void OpenReadingList() {
-  base::scoped_nsobject<GenericChromeCommand> command(
-      [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_READING_LIST]);
+  GenericChromeCommand* command =
+      [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_READING_LIST];
   chrome_test_util::RunCommandWithActiveViewController(command);
 }
 
@@ -210,7 +213,7 @@ size_t ModelReadSize(ReadingListModel* model) {
 
   // Wait for the snackbar to appear.
   id<GREYMatcher> snackbarMatcher =
-      chrome_test_util::buttonWithAccessibilityLabelId(
+      chrome_test_util::ButtonWithAccessibilityLabelId(
           IDS_IOS_READING_LIST_SNACKBAR_MESSAGE);
   ConditionBlock waitForAppearance = ^{
     NSError* error = nil;

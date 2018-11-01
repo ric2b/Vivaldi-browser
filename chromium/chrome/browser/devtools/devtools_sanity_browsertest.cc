@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -63,8 +64,10 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/switches.h"
 #include "extensions/common/value_builder.h"
 #include "net/dns/mock_host_resolver.h"
@@ -488,23 +491,9 @@ class DevToolsExtensionTest : public DevToolsSanityTest,
         browser()->profile())->extension_service();
     extensions::ExtensionRegistry* registry =
         extensions::ExtensionRegistry::Get(browser()->profile());
-    size_t num_before = registry->enabled_extensions().size();
-    {
-      content::NotificationRegistrar registrar;
-      registrar.Add(this,
-                    extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-                    content::NotificationService::AllSources());
-      base::CancelableClosure timeout(
-          base::Bind(&TimeoutCallback, "Extension load timed out."));
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, timeout.callback(), TestTimeouts::action_timeout());
-      extensions::UnpackedInstaller::Create(service)->Load(path);
-      content::RunMessageLoop();
-      timeout.Cancel();
-    }
-    size_t num_after = registry->enabled_extensions().size();
-    if (num_after != (num_before + 1))
-      return nullptr;
+    extensions::TestExtensionRegistryObserver observer(registry);
+    extensions::UnpackedInstaller::Create(service)->Load(path);
+    observer.WaitForExtensionLoaded();
 
     if (!WaitForExtensionViewsToLoad())
       return nullptr;
@@ -559,15 +548,9 @@ class DevToolsExtensionTest : public DevToolsSanityTest,
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override {
-    switch (type) {
-      case extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED:
-      case extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD:
-        base::MessageLoopForUI::current()->QuitWhenIdle();
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
+    DCHECK_EQ(extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
+              type);
+    base::MessageLoopForUI::current()->QuitWhenIdle();
   }
 
   base::FilePath test_extensions_dir_;
@@ -1572,4 +1555,3 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDevToolsSharedWorker) {
   RunTest("testDevToolsSharedWorker", url::kAboutBlankURL);
 }
-

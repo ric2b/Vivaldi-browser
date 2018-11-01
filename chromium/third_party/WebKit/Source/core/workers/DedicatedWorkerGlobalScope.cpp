@@ -30,16 +30,16 @@
 
 #include "core/workers/DedicatedWorkerGlobalScope.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/DedicatedWorkerThread.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThreadStartupData.h"
-#include <memory>
 
 namespace blink {
 
@@ -85,13 +85,14 @@ const AtomicString& DedicatedWorkerGlobalScope::interfaceName() const {
 }
 
 void DedicatedWorkerGlobalScope::postMessage(
-    ExecutionContext* context,
+    ScriptState* scriptState,
     PassRefPtr<SerializedScriptValue> message,
     const MessagePortArray& ports,
     ExceptionState& exceptionState) {
   // Disentangle the port in preparation for sending it to the remote context.
-  std::unique_ptr<MessagePortChannelArray> channels =
-      MessagePort::disentanglePorts(context, ports, exceptionState);
+  MessagePortChannelArray channels =
+      MessagePort::disentanglePorts(scriptState->getExecutionContext(), ports,
+                                    exceptionState);
   if (exceptionState.hadException())
     return;
   workerObjectProxy().postMessageToWorkerObject(std::move(message),

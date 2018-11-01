@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -31,7 +32,9 @@ IOSChromeLargeIconServiceFactory::GetInstance() {
 IOSChromeLargeIconServiceFactory::IOSChromeLargeIconServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "LargeIconService",
-          BrowserStateDependencyManager::GetInstance()) {}
+          BrowserStateDependencyManager::GetInstance()) {
+  DependsOn(ios::FaviconServiceFactory::GetInstance());
+}
 
 IOSChromeLargeIconServiceFactory::~IOSChromeLargeIconServiceFactory() {}
 
@@ -50,4 +53,8 @@ IOSChromeLargeIconServiceFactory::BuildServiceInstanceFor(
 web::BrowserState* IOSChromeLargeIconServiceFactory::GetBrowserStateToUse(
     web::BrowserState* context) const {
   return GetBrowserStateOwnInstanceInIncognito(context);
+}
+
+bool IOSChromeLargeIconServiceFactory::ServiceIsNULLWhileTesting() const {
+  return true;
 }

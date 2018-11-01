@@ -2,7 +2,9 @@
 
 #include "extensions/api/import_data/import_data_api.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "app/vivaldi_resources.h"
@@ -20,8 +22,8 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
-#include "chrome/browser/ui/webui/settings_utils.h"
 #include "chrome/browser/ui/webui/options/content_settings_handler.h"
+#include "chrome/browser/ui/webui/settings_utils.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
 
@@ -39,14 +41,14 @@
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/url_pattern_set.h"
 
-#include "ui/base/models/simple_menu_model.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/views/controls/menu/menu_runner.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/simple_menu_model.h"
+#include "ui/views/controls/menu/menu_runner.h"
 
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
@@ -60,7 +62,6 @@
 #include "components/strings/grit/components_strings.h"
 
 class Browser;
-
 
 namespace extensions {
 namespace GetProfiles = vivaldi::import_data::GetProfiles;
@@ -90,7 +91,7 @@ ProfileSingletonFactory::~ProfileSingletonFactory() {
   profilesRequested = false;
 }
 
-ImporterList *ProfileSingletonFactory::getImporterList() {
+ImporterList* ProfileSingletonFactory::getImporterList() {
   return single->api_importer_list_.get();
 }
 
@@ -116,14 +117,16 @@ Browser* GetBrowserFromWebContents(WebContents* web_contents) {
 static struct ImportItemToStringMapping {
   importer::ImportItem item;
   const char* name;
-} import_item_string_mapping[] {
-  { importer::FAVORITES, "favorites" },
-  { importer::PASSWORDS, "passwords" },
-  { importer::HISTORY, "history" },
-  { importer::COOKIES, "cookies" },
-  { importer::SEARCH_ENGINES, "search" },
-  { importer::NOTES, "notes" },
-  { importer::SPEED_DIAL, "speeddial" },
+} import_item_string_mapping[]{
+    // clang-format off
+    {importer::FAVORITES, "favorites"},
+    {importer::PASSWORDS, "passwords"},
+    {importer::HISTORY, "history"},
+    {importer::COOKIES, "cookies"},
+    {importer::SEARCH_ENGINES, "search"},
+    {importer::NOTES, "notes"},
+    {importer::SPEED_DIAL, "speeddial"},
+    // clang-format on
 };
 
 const size_t kImportItemToStringMappingLength =
@@ -141,18 +144,16 @@ const std::string ImportItemToString(importer::ImportItem item) {
 }
 }  // namespace
 
-
 ImportDataEventRouter::ImportDataEventRouter(Profile* profile)
-  : browser_context_(profile) {
-}
+    : browser_context_(profile) {}
 
-ImportDataEventRouter::~ImportDataEventRouter() {
-}
+ImportDataEventRouter::~ImportDataEventRouter() {}
 
 // Helper to actually dispatch an event to extension listeners.
 void ImportDataEventRouter::DispatchEvent(
-    const std::string &event_name, std::unique_ptr<base::ListValue> event_args) {
-  EventRouter *event_router = EventRouter::Get(browser_context_);
+    const std::string& event_name,
+    std::unique_ptr<base::ListValue> event_args) {
+  EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(base::WrapUnique(
         new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
@@ -160,10 +161,11 @@ void ImportDataEventRouter::DispatchEvent(
   }
 }
 
-ImportDataAPI::ImportDataAPI(content::BrowserContext *context)
-    : browser_context_(context), importer_host_(nullptr),
+ImportDataAPI::ImportDataAPI(content::BrowserContext* context)
+    : browser_context_(context),
+      importer_host_(nullptr),
       import_succeeded_count_(0) {
-  EventRouter *event_router = EventRouter::Get(browser_context_);
+  EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(
       this, vivaldi::import_data::OnImportStarted::kEventName);
   event_router->RegisterObserver(
@@ -176,10 +178,9 @@ ImportDataAPI::ImportDataAPI(content::BrowserContext *context)
       this, vivaldi::import_data::OnImportItemFailed::kEventName);
 }
 
-ImportDataAPI::~ImportDataAPI() {
-}
+ImportDataAPI::~ImportDataAPI() {}
 
-void ImportDataAPI::StartImport(const importer::SourceProfile &source_profile,
+void ImportDataAPI::StartImport(const importer::SourceProfile& source_profile,
                                 uint16_t imported_items) {
   if (!imported_items)
     return;
@@ -192,12 +193,12 @@ void ImportDataAPI::StartImport(const importer::SourceProfile &source_profile,
   if (importer_host_)
     importer_host_->set_observer(NULL);
 
-  base::FundamentalValue importing(true);
+  base::Value importing(true);
 
   importer_host_ = new ExternalProcessImporterHost();
   importer_host_->set_observer(this);
 
-  Profile* profile = static_cast<Profile *>(browser_context_);
+  Profile* profile = static_cast<Profile*>(browser_context_);
 
   importer_host_->StartImportSettings(source_profile, profile, imported_items,
                                       new ProfileWriter(profile));
@@ -254,7 +255,7 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI> >
     g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
-BrowserContextKeyedAPIFactory<ImportDataAPI> *
+BrowserContextKeyedAPIFactory<ImportDataAPI>*
 ImportDataAPI::GetFactoryInstance() {
   return g_factory.Pointer();
 }
@@ -265,11 +266,9 @@ void ImportDataAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-ImporterApiFunction::ImporterApiFunction() {
-}
+ImporterApiFunction::ImporterApiFunction() {}
 
-ImporterApiFunction::~ImporterApiFunction() {
-}
+ImporterApiFunction::~ImporterApiFunction() {}
 
 void ImporterApiFunction::SendResponseToCallback() {
   SendResponse(true);
@@ -296,7 +295,7 @@ void ImporterApiFunction::Finished() {
   for (size_t i = 0; i < api_importer_list->count(); ++i) {
     const importer::SourceProfile& source_profile =
         api_importer_list->GetSourceProfileAt(i);
-    vivaldi::import_data::ProfileItem *profile =
+    vivaldi::import_data::ProfileItem* profile =
         new vivaldi::import_data::ProfileItem;
 
     uint16_t browser_services = source_profile.services_supported;
@@ -358,8 +357,7 @@ void ImporterApiFunction::Finished() {
   SendAsyncResponse();
 }
 
-ImportDataGetProfilesFunction::ImportDataGetProfilesFunction() {
-}
+ImportDataGetProfilesFunction::ImportDataGetProfilesFunction() {}
 
 bool ImportDataGetProfilesFunction::RunAsyncImpl() {
   ProfileSingletonFactory* singl = ProfileSingletonFactory::getInstance();
@@ -376,11 +374,9 @@ bool ImportDataGetProfilesFunction::RunAsyncImpl() {
   // }
 }
 
-ImportDataGetProfilesFunction::~ImportDataGetProfilesFunction() {
-}
+ImportDataGetProfilesFunction::~ImportDataGetProfilesFunction() {}
 
-ImportDataStartImportFunction::ImportDataStartImportFunction() {
-}
+ImportDataStartImportFunction::ImportDataStartImportFunction() {}
 
 // ExtensionFunction:
 bool ImportDataStartImportFunction::RunAsyncImpl() {
@@ -439,8 +435,7 @@ bool ImportDataStartImportFunction::RunAsyncImpl() {
     dialog_title =
         l10n_util::GetStringUTF16(IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE);
     HandleChooseBookmarksFileOrFolder(dialog_title, "html", imported_items,
-                                      source_profile.importer_type,
-                                      path, true);
+                                      source_profile.importer_type, path, true);
     return true;
   } else if (source_profile.importer_type ==
              importer::TYPE_OPERA_BOOKMARK_FILE) {
@@ -451,15 +446,15 @@ bool ImportDataStartImportFunction::RunAsyncImpl() {
                                       source_profile.importer_type, path, true);
     return true;
   } else if ((source_profile.importer_type == importer::TYPE_OPERA ||
-             source_profile.importer_type == importer::TYPE_VIVALDI) &&
+              source_profile.importer_type == importer::TYPE_VIVALDI) &&
              ids[6] == "false") {
     dialog_title = l10n_util::GetStringUTF16(
         source_profile.importer_type == importer::TYPE_VIVALDI
             ? IDS_IMPORT_VIVALDI_PROFILE_TITLE
             : IDS_IMPORT_OPERA_PROFILE_TITLE);
     HandleChooseBookmarksFileOrFolder(dialog_title, "ini", imported_items,
-                                      source_profile.importer_type,
-                                      path, false);
+                                      source_profile.importer_type, path,
+                                      false);
     return true;
   } else {
     if (imported_items) {
@@ -473,11 +468,11 @@ bool ImportDataStartImportFunction::RunAsyncImpl() {
 }
 
 void ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
-    base::string16 &title,
-    const std::string &extension,
+    const base::string16& title,
+    const std::string& extension,
     int imported_items,
     importer::ImporterType importer_type,
-    base::FilePath& default_file,
+    const base::FilePath& default_file,
     bool file_selection) {
   if (!dispatcher())
     return;  // Extension was unloaded.
@@ -508,8 +503,8 @@ void ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
   select_file_dialog_->SelectFile(
       file_selection ? ui::SelectFileDialog::SELECT_OPEN_FILE
                      : ui::SelectFileDialog::SELECT_FOLDER,
-      title, default_file, &file_type_info, 0,
-      base::FilePath::StringType(), window, reinterpret_cast<void *>(params));
+      title, default_file, &file_type_info, 0, base::FilePath::StringType(),
+      window, reinterpret_cast<void*>(params));
 }
 
 void ImportDataStartImportFunction::FileSelectionCanceled(void* params) {
@@ -552,12 +547,11 @@ void ImportDataStartImportFunction::StartImport(
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
     ImportDataSetVivaldiAsDefaultBrowserFunction()
-  : weak_ptr_factory_(this) {
-  default_browser_worker_ =
-    new shell_integration::DefaultBrowserWorker(
+    : weak_ptr_factory_(this) {
+  default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
       base::Bind(&ImportDataSetVivaldiAsDefaultBrowserFunction::
-                    OnDefaultBrowserWorkerFinished,
-                    weak_ptr_factory_.GetWeakPtr()));
+                     OnDefaultBrowserWorkerFinished,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
@@ -565,9 +559,9 @@ ImportDataSetVivaldiAsDefaultBrowserFunction::
   Respond(ArgumentList(std::move(results_)));
 }
 
-void
-ImportDataSetVivaldiAsDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
-    shell_integration::DefaultWebClientState state) {
+void ImportDataSetVivaldiAsDefaultBrowserFunction::
+    OnDefaultBrowserWorkerFinished(
+        shell_integration::DefaultWebClientState state) {
   if (state == shell_integration::IS_DEFAULT) {
     results_ =
         vivaldi::import_data::SetVivaldiAsDefaultBrowser::Results::Create(
@@ -597,12 +591,11 @@ bool ImportDataSetVivaldiAsDefaultBrowserFunction::RunAsync() {
 
 ImportDataIsVivaldiDefaultBrowserFunction::
     ImportDataIsVivaldiDefaultBrowserFunction()
- : weak_ptr_factory_(this) {
-  default_browser_worker_ =
-    new shell_integration::DefaultBrowserWorker(
+    : weak_ptr_factory_(this) {
+  default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
       base::Bind(&ImportDataIsVivaldiDefaultBrowserFunction::
-                    OnDefaultBrowserWorkerFinished,
-                    weak_ptr_factory_.GetWeakPtr()));
+                     OnDefaultBrowserWorkerFinished,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 ImportDataIsVivaldiDefaultBrowserFunction::
@@ -639,12 +632,10 @@ void ImportDataIsVivaldiDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
 }
 
 ImportDataLaunchNetworkSettingsFunction::
-    ImportDataLaunchNetworkSettingsFunction() {
-}
+    ImportDataLaunchNetworkSettingsFunction() {}
 
 ImportDataLaunchNetworkSettingsFunction::
-    ~ImportDataLaunchNetworkSettingsFunction() {
-}
+    ~ImportDataLaunchNetworkSettingsFunction() {}
 
 bool ImportDataLaunchNetworkSettingsFunction::RunAsync() {
   settings_utils::ShowNetworkProxySettings(NULL);
@@ -652,11 +643,9 @@ bool ImportDataLaunchNetworkSettingsFunction::RunAsync() {
   return true;
 }
 
-ImportDataSavePageFunction::ImportDataSavePageFunction() {
-}
+ImportDataSavePageFunction::ImportDataSavePageFunction() {}
 
-ImportDataSavePageFunction::~ImportDataSavePageFunction() {
-}
+ImportDataSavePageFunction::~ImportDataSavePageFunction() {}
 
 bool ImportDataSavePageFunction::RunAsync() {
   Browser* browser =
@@ -668,11 +657,9 @@ bool ImportDataSavePageFunction::RunAsync() {
   return true;
 }
 
-ImportDataOpenPageFunction::ImportDataOpenPageFunction() {
-}
+ImportDataOpenPageFunction::ImportDataOpenPageFunction() {}
 
-ImportDataOpenPageFunction::~ImportDataOpenPageFunction() {
-}
+ImportDataOpenPageFunction::~ImportDataOpenPageFunction() {}
 
 bool ImportDataOpenPageFunction::RunAsync() {
   Browser* browser =
@@ -682,11 +669,9 @@ bool ImportDataOpenPageFunction::RunAsync() {
   return true;
 }
 
-ImportDataSetVivaldiLanguageFunction::ImportDataSetVivaldiLanguageFunction() {
-}
+ImportDataSetVivaldiLanguageFunction::ImportDataSetVivaldiLanguageFunction() {}
 
-ImportDataSetVivaldiLanguageFunction::~ImportDataSetVivaldiLanguageFunction() {
-}
+ImportDataSetVivaldiLanguageFunction::~ImportDataSetVivaldiLanguageFunction() {}
 
 bool ImportDataSetVivaldiLanguageFunction::RunAsync() {
   std::unique_ptr<vivaldi::import_data::SetVivaldiLanguage::Params> params(
@@ -704,16 +689,15 @@ bool ImportDataSetVivaldiLanguageFunction::RunAsync() {
 }
 
 ImportDataSetDefaultContentSettingsFunction::
-    ImportDataSetDefaultContentSettingsFunction() {
-}
+    ImportDataSetDefaultContentSettingsFunction() {}
 
 ImportDataSetDefaultContentSettingsFunction::
-    ~ImportDataSetDefaultContentSettingsFunction() {
-}
+    ~ImportDataSetDefaultContentSettingsFunction() {}
 
 bool ImportDataSetDefaultContentSettingsFunction::RunAsync() {
-  std::unique_ptr<vivaldi::import_data::SetDefaultContentSettings::Params> params(
-      vivaldi::import_data::SetDefaultContentSettings::Params::Create(*args_));
+  std::unique_ptr<vivaldi::import_data::SetDefaultContentSettings::Params>
+      params(vivaldi::import_data::SetDefaultContentSettings::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string& content_settings = params->content_setting;
@@ -726,7 +710,7 @@ bool ImportDataSetDefaultContentSettingsFunction::RunAsync() {
 
   Profile* profile = GetProfile();
 
-  HostContentSettingsMap *map =
+  HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
   map->SetDefaultContentSetting(content_type, default_setting);
 
@@ -737,16 +721,15 @@ bool ImportDataSetDefaultContentSettingsFunction::RunAsync() {
 }
 
 ImportDataGetDefaultContentSettingsFunction::
-    ImportDataGetDefaultContentSettingsFunction() {
-}
+    ImportDataGetDefaultContentSettingsFunction() {}
 
 ImportDataGetDefaultContentSettingsFunction::
-    ~ImportDataGetDefaultContentSettingsFunction() {
-}
+    ~ImportDataGetDefaultContentSettingsFunction() {}
 
 bool ImportDataGetDefaultContentSettingsFunction::RunAsync() {
-  std::unique_ptr<vivaldi::import_data::GetDefaultContentSettings::Params> params(
-      vivaldi::import_data::GetDefaultContentSettings::Params::Create(*args_));
+  std::unique_ptr<vivaldi::import_data::GetDefaultContentSettings::Params>
+      params(vivaldi::import_data::GetDefaultContentSettings::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   std::string& content_settings = params->content_setting;
   std::string def_provider = "";
@@ -755,9 +738,8 @@ bool ImportDataGetDefaultContentSettingsFunction::RunAsync() {
   ContentSetting default_setting;
   Profile* profile = GetProfile();
 
-  default_setting =
-      HostContentSettingsMapFactory::GetForProfile(profile)->
-          GetDefaultContentSetting(content_type, &def_provider);
+  default_setting = HostContentSettingsMapFactory::GetForProfile(profile)
+                        ->GetDefaultContentSetting(content_type, &def_provider);
 
   std::string setting = vivContentSettingToString(default_setting);
 
@@ -768,16 +750,15 @@ bool ImportDataGetDefaultContentSettingsFunction::RunAsync() {
 }
 
 ImportDataSetBlockThirdPartyCookiesFunction::
-    ImportDataSetBlockThirdPartyCookiesFunction() {
-}
+    ImportDataSetBlockThirdPartyCookiesFunction() {}
 
 ImportDataSetBlockThirdPartyCookiesFunction::
-    ~ImportDataSetBlockThirdPartyCookiesFunction() {
-}
+    ~ImportDataSetBlockThirdPartyCookiesFunction() {}
 
 bool ImportDataSetBlockThirdPartyCookiesFunction::RunAsync() {
-  std::unique_ptr<vivaldi::import_data::SetBlockThirdPartyCookies::Params> params(
-      vivaldi::import_data::SetBlockThirdPartyCookies::Params::Create(*args_));
+  std::unique_ptr<vivaldi::import_data::SetBlockThirdPartyCookies::Params>
+      params(vivaldi::import_data::SetBlockThirdPartyCookies::Params::Create(
+          *args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
   bool block3rdparty = params->block3rd_party;
@@ -795,12 +776,10 @@ bool ImportDataSetBlockThirdPartyCookiesFunction::RunAsync() {
 }
 
 ImportDataGetBlockThirdPartyCookiesFunction::
-    ImportDataGetBlockThirdPartyCookiesFunction() {
-}
+    ImportDataGetBlockThirdPartyCookiesFunction() {}
 
 ImportDataGetBlockThirdPartyCookiesFunction::
-    ~ImportDataGetBlockThirdPartyCookiesFunction() {
-}
+    ~ImportDataGetBlockThirdPartyCookiesFunction() {}
 
 bool ImportDataGetBlockThirdPartyCookiesFunction::RunAsync() {
   PrefService* service = GetProfile()->GetPrefs();
@@ -812,8 +791,7 @@ bool ImportDataGetBlockThirdPartyCookiesFunction::RunAsync() {
   return true;
 }
 
-ImportDataOpenTaskManagerFunction::~ImportDataOpenTaskManagerFunction() {
-}
+ImportDataOpenTaskManagerFunction::~ImportDataOpenTaskManagerFunction() {}
 
 bool ImportDataOpenTaskManagerFunction::RunAsync() {
   Browser* browser =
@@ -825,14 +803,11 @@ bool ImportDataOpenTaskManagerFunction::RunAsync() {
   return true;
 }
 
-ImportDataOpenTaskManagerFunction::ImportDataOpenTaskManagerFunction() {
-}
+ImportDataOpenTaskManagerFunction::ImportDataOpenTaskManagerFunction() {}
 
-ImportDataShowDevToolsFunction::ImportDataShowDevToolsFunction() {
-}
+ImportDataShowDevToolsFunction::ImportDataShowDevToolsFunction() {}
 
-ImportDataShowDevToolsFunction::~ImportDataShowDevToolsFunction() {
-}
+ImportDataShowDevToolsFunction::~ImportDataShowDevToolsFunction() {}
 
 bool ImportDataShowDevToolsFunction::RunAsync() {
   Browser* browser =
@@ -845,11 +820,9 @@ bool ImportDataShowDevToolsFunction::RunAsync() {
   return true;
 }
 
-ImportDataGetStartupActionFunction::ImportDataGetStartupActionFunction() {
-}
+ImportDataGetStartupActionFunction::ImportDataGetStartupActionFunction() {}
 
-ImportDataGetStartupActionFunction::~ImportDataGetStartupActionFunction() {
-}
+ImportDataGetStartupActionFunction::~ImportDataGetStartupActionFunction() {}
 
 bool ImportDataGetStartupActionFunction::RunAsync() {
   Profile* profile = GetProfile();
@@ -879,11 +852,9 @@ bool ImportDataGetStartupActionFunction::RunAsync() {
   return true;
 }
 
-ImportDataSetStartupActionFunction::ImportDataSetStartupActionFunction() {
-}
+ImportDataSetStartupActionFunction::ImportDataSetStartupActionFunction() {}
 
-ImportDataSetStartupActionFunction::~ImportDataSetStartupActionFunction() {
-}
+ImportDataSetStartupActionFunction::~ImportDataSetStartupActionFunction() {}
 
 bool ImportDataSetStartupActionFunction::RunAsync() {
   std::unique_ptr<vivaldi::import_data::SetStartupAction::Params> params(

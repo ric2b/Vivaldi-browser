@@ -67,7 +67,6 @@ Network.NetworkPanel = class extends UI.Panel {
     this._splitWidget.show(this.element);
 
     this._progressBarContainer = createElement('div');
-    this._createToolbarButtons();
 
     this._searchableView = new UI.SearchableView(this);
     this._searchableView.setPlaceholder(Common.UIString('Find by filename or path'));
@@ -89,6 +88,10 @@ Network.NetworkPanel = class extends UI.Panel {
     this._networkLogShowOverviewSetting.addChangeListener(this._toggleShowOverview, this);
     this._networkLogLargeRowsSetting.addChangeListener(this._toggleLargerRequests, this);
     this._networkRecordFilmStripSetting.addChangeListener(this._toggleRecordFilmStrip, this);
+
+    /** @type {!Map<string, !Runtime.Extension>} */
+    this._groupingExtensions = new Map();
+    this._createToolbarButtons();
 
     this._toggleRecord(true);
     this._toggleShowOverview();
@@ -170,23 +173,58 @@ Network.NetworkPanel = class extends UI.Panel {
         'change', this._onPreserveLogCheckboxChanged.bind(this), false);
     this._panelToolbar.appendToolbarItem(this._preserveLogCheckbox);
 
-    this._disableCacheCheckbox = new UI.ToolbarCheckbox(
-        Common.UIString('Disable cache'), Common.UIString('Disable cache (while DevTools is open)'),
-        Common.moduleSetting('cacheDisabled'));
+    this._disableCacheCheckbox = new UI.ToolbarSettingCheckbox(
+        Common.moduleSetting('cacheDisabled'), Common.UIString('Disable cache (while DevTools is open)'),
+        Common.UIString('Disable cache'));
     this._panelToolbar.appendToolbarItem(this._disableCacheCheckbox);
 
     this._panelToolbar.appendSeparator();
     this._panelToolbar.appendToolbarItem(this._createBlockedURLsButton());
-    this._panelToolbar.appendToolbarItem(Components.NetworkConditionsSelector.createOfflineToolbarCheckbox());
+    this._panelToolbar.appendToolbarItem(NetworkConditions.NetworkConditionsSelector.createOfflineToolbarCheckbox());
     this._panelToolbar.appendToolbarItem(this._createNetworkConditionsSelect());
+
+    this._setupGroupingCombo();
+
     this._panelToolbar.appendToolbarItem(new UI.ToolbarItem(this._progressBarContainer));
+  }
+
+  _setupGroupingCombo() {
+    var extensions = self.runtime.extensions(Network.NetworkGroupLookupInterface);
+    if (!extensions.length)
+      return;
+
+    var setting = Common.settings.createSetting('networkGrouping', '');
+    /** @type {!Array<!{value: string, label: string, title: string}>} */
+    var options = [{value: '', label: Common.UIString('No grouping'), title: Common.UIString('No grouping')}];
+
+    extensions.forEach(extension => {
+      var identifier = extension.descriptor()['id'];
+      this._groupingExtensions.set(identifier, extension);
+      options.push({value: identifier, label: extension.title(), title: extension.title()});
+    });
+    this._panelToolbar.appendToolbarItem(new UI.ToolbarSettingComboBox(options, setting, Common.UIString('Group by')));
+    setting.addChangeListener(event => this._groupingChanged(/** @type {string} */ (event.data)));
+    this._groupingChanged(setting.get());
+  }
+
+  /**
+   * @param {string} identifier
+   */
+  _groupingChanged(identifier) {
+    var extension = this._groupingExtensions.get(identifier);
+    if (extension) {
+      extension.instance().then(
+          grouping => this._networkLogView.setGrouping(/** @type {?Network.NetworkGroupLookupInterface} */ (grouping)));
+    } else {
+      this._networkLogView.setGrouping(null);
+    }
   }
 
   /**
    * @return {!UI.ToolbarItem}
    */
   _createBlockedURLsButton() {
-    var setting = Common.moduleSetting('blockedURLs');
+    var setting = Common.moduleSetting('networkBlockedURLs');
     setting.addChangeListener(updateAction);
     var action = /** @type {!UI.Action }*/ (UI.actionRegistry.action('network.blocked-urls.show'));
     var button = UI.Toolbar.createActionButton(action);
@@ -205,7 +243,7 @@ Network.NetworkPanel = class extends UI.Panel {
   _createNetworkConditionsSelect() {
     var toolbarItem = new UI.ToolbarComboBox(null);
     toolbarItem.setMaxWidth(140);
-    Components.NetworkConditionsSelector.decorateSelect(toolbarItem.selectElement());
+    NetworkConditions.NetworkConditionsSelector.decorateSelect(toolbarItem.selectElement());
     return toolbarItem;
   }
 
@@ -633,14 +671,12 @@ Network.NetworkPanel.FilmStripRecorder = class {
    * @param {!PerfUI.FilmStripView} filmStripView
    */
   constructor(timeCalculator, filmStripView) {
+    /** @type {?SDK.TracingManager} */
+    this._tracingManager = null;
+    /** @type {?SDK.ResourceTreeModel} */
+    this._resourceTreeModel = null;
     this._timeCalculator = timeCalculator;
     this._filmStripView = filmStripView;
-  }
-
-  /**
-   * @override
-   */
-  tracingStarted() {
   }
 
   /**
@@ -656,13 +692,15 @@ Network.NetworkPanel.FilmStripRecorder = class {
    * @override
    */
   tracingComplete() {
-    if (!this._tracingModel)
+    if (!this._tracingModel || !this._tracingManager)
       return;
     this._tracingModel.tracingComplete();
-    SDK.targetManager.resumeReload(this._target);
-    this._target = null;
+    this._tracingManager = null;
     this._callback(new SDK.FilmStripModel(this._tracingModel, this._timeCalculator.minimumBoundary() * 1000));
     delete this._callback;
+    if (this._resourceTreeModel)
+      this._resourceTreeModel.resumeReload();
+    this._resourceTreeModel = null;
   }
 
   /**
@@ -681,33 +719,36 @@ Network.NetworkPanel.FilmStripRecorder = class {
   startRecording() {
     this._filmStripView.reset();
     this._filmStripView.setStatusText(Common.UIString('Recording frames...'));
-    if (this._target)
+    var tracingManagers = SDK.targetManager.models(SDK.TracingManager);
+    if (this._tracingManager || !tracingManagers.length)
       return;
 
-    this._target = SDK.targetManager.mainTarget();
+    this._tracingManager = tracingManagers[0];
+    this._resourceTreeModel = this._tracingManager.target().model(SDK.ResourceTreeModel);
     if (this._tracingModel)
       this._tracingModel.reset();
     else
       this._tracingModel = new SDK.TracingModel(new Bindings.TempFileBackingStorage('tracing'));
-    this._target.tracingManager.start(this, '-*,disabled-by-default-devtools.screenshot', '');
+    this._tracingManager.start(this, '-*,disabled-by-default-devtools.screenshot', '');
   }
 
   /**
    * @return {boolean}
    */
   isRecording() {
-    return !!this._target;
+    return !!this._tracingManager;
   }
 
   /**
    * @param {function(?SDK.FilmStripModel)} callback
    */
   stopRecording(callback) {
-    if (!this._target)
+    if (!this._tracingManager)
       return;
 
-    this._target.tracingManager.stop();
-    SDK.targetManager.suspendReload(this._target);
+    this._tracingManager.stop();
+    if (this._resourceTreeModel)
+      this._resourceTreeModel.suspendReload();
     this._callback = callback;
     this._filmStripView.setStatusText(Common.UIString('Fetching frames...'));
   }

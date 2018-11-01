@@ -3,12 +3,23 @@
 # found in the LICENSE file.
 
 # TODO(kjellander): Remove remaining dependencies on the WebRTC codebase.
-import("../webrtc/build/webrtc.gni")
+import("../webrtc/webrtc.gni")
 
 group("libjingle_xmpp") {
   public_deps = [
     ":rtc_xmllite",
     ":rtc_xmpp",
+  ]
+}
+
+rtc_static_library("rtc_task_runner") {
+  sources = [
+    "task_runner/task.cc",
+    "task_runner/task.h",
+    "task_runner/taskparent.cc",
+    "task_runner/taskparent.h",
+    "task_runner/taskrunner.cc",
+    "task_runner/taskrunner.h",
   ]
 }
 
@@ -47,13 +58,6 @@ config("rtc_xmpp_warnings_config") {
   }
 }
 
-config("rtc_xmpp_inherited_config") {
-  defines = [
-    "FEATURE_ENABLE_SSL",
-    "FEATURE_ENABLE_VOICEMAIL",
-  ]
-}
-
 rtc_static_library("rtc_xmpp") {
   cflags = []
   sources = [
@@ -84,18 +88,17 @@ rtc_static_library("rtc_xmpp") {
     "xmpp/xmpptask.h",
   ]
 
-  defines = [ "FEATURE_ENABLE_SSL" ]
+  defines = []
 
   deps = [
     ":rtc_xmllite",
     "//third_party/webrtc/base:rtc_base",
   ]
   public_deps = [
+    ":rtc_task_runner",
     "//third_party/expat",
   ]
   configs += [ ":rtc_xmpp_warnings_config" ]
-
-  public_configs = [ ":rtc_xmpp_inherited_config" ]
 
   if (is_nacl) {
     deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
@@ -127,6 +130,7 @@ rtc_test("libjingle_xmpp_unittests") {
 
   deps = [
     ":libjingle_xmpp",
+    ":rtc_task_runner",
 
     # TODO(kjellander): Refactor/remove this dependency. It is needed by
     # third_party/webrtc_overrides/webrtc/base/win32socketinit.cc.
@@ -136,6 +140,7 @@ rtc_test("libjingle_xmpp_unittests") {
 
   sources = [
     "run_all_unittests.cc",
+    "task_runner/task_unittest.cc",
     "xmllite/qname_unittest.cc",
     "xmllite/xmlbuilder_unittest.cc",
     "xmllite/xmlelement_unittest.cc",

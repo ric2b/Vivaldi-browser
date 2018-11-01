@@ -17,14 +17,11 @@ var gStatsWhitelist = new Map();
  * @private
  */
 var kRTCRTPStreamStats = new RTCStats_(null, {
-  ssrc: 'string',
+  ssrc: 'number',
   associateStatsId: 'string',
   isRemote: 'boolean',
   mediaType: 'string',
   trackId: 'string',
-  // TODO(hbos): As soon as |mediaTrackId| has been renamed to |trackId|, remove
-  // this line. crbug.com/657854
-  mediaTrackId: 'string',
   transportId: 'string',
   codecId: 'string',
   firCount: 'number',
@@ -41,10 +38,13 @@ var kRTCRTPStreamStats = new RTCStats_(null, {
  */
 var kRTCCodecStats = new RTCStats_(null, {
   payloadType: 'number',
+  mimeType: 'string',
+  // TODO(hbos): As soon as |codec| has been renamed |mimeType| in the webrtc
+  // repo, remove this line. https://bugs.webrtc.org/7061
   codec: 'string',
   clockRate: 'number',
   channels: 'number',
-  parameters: 'string',
+  sdpFmtpLine: 'string',
   implementation: 'string',
 });
 gStatsWhitelist.set('codec', kRTCCodecStats);
@@ -123,9 +123,6 @@ var kRTCMediaStreamTrackStats = new RTCStats_(null, {
   ended: 'boolean',
   detached: 'boolean',
   kind: 'string',
-  // TODO(hbos): As soon as |ssrcIds| has been removed, remove this line.
-  // crbug.com/659137
-  ssrcIds: 'sequence_string',
   frameWidth: 'number',
   frameHeight: 'number',
   framesPerSecond: 'number',
@@ -169,9 +166,6 @@ var kRTCTransportStats = new RTCStats_(null, {
   bytesReceived: 'number',
   rtcpTransportStatsId: 'string',
   dtlsState: 'string',
-  // TODO(hbos): As soon as |activeConnection| has been replaced by |dtlsState|,
-  // remove this line. crbug.com/653873
-  activeConnection: 'boolean',
   selectedCandidatePairId: 'string',
   localCertificateId: 'string',
   remoteCertificateId: 'string',
@@ -301,6 +295,36 @@ function getStatsReportDictionary() {
 }
 
 /**
+ * Measures the performance of the promise-based |RTCPeerConnection.getStats|
+ * and returns the time it took in milliseconds as a double
+ * (DOMHighResTimeStamp, accurate to one thousandth of a millisecond).
+ * Verifies that all stats types of the whitelist were contained in the result.
+ *
+ * Returns "ok-" followed by a double on success.
+ */
+function measureGetStatsPerformance() {
+  let t0 = performance.now();
+  peerConnection_().getStats()
+    .then(function(report) {
+      let t1 = performance.now();
+      let statsTypes = new Set();
+      for (let stats of report.values()) {
+        verifyStatsIsWhitelisted_(stats);
+        statsTypes.add(stats.type);
+      }
+      if (statsTypes.size != gStatsWhitelist.size) {
+        returnToTest('The returned report contains a different number (' +
+            statsTypes.size + ') of stats types than the whitelist. ' +
+            JSON.stringify(Array.from(statsTypes)));
+      }
+      returnToTest('ok-' + (t1 - t0));
+    },
+    function(e) {
+      throw failTest('Promise was rejected: ' + e);
+    });
+}
+
+/**
  * Returns a complete list of whitelisted "RTCStats.type" values as a
  * JSON-stringified array of strings to the test.
  */
@@ -350,6 +374,8 @@ function verifyStatsIsWhitelisted_(stats) {
       throw failTest('stats.' + propertyName + ' is not a whitelisted ' +
           'member: ' + stats[propertyName]);
     }
+    if (whitelistedStats[propertyName] === 'any')
+      continue;
     if (!whitelistedStats[propertyName].startsWith('sequence_')) {
       if (typeof(stats[propertyName]) !== whitelistedStats[propertyName]) {
         throw failTest('stats.' + propertyName + ' should have a different ' +

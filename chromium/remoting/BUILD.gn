@@ -107,9 +107,10 @@ group("test_support") {
   deps = [
     "//base",
     "//net",
-    "//remoting/base",
+    "//remoting/base:test_support",
     "//remoting/client",
-    "//remoting/codec",
+    "//remoting/codec:decoder",
+    "//remoting/codec:encoder",
     "//remoting/protocol:test_support",
     "//remoting/resources",
     "//remoting/signaling:test_support",
@@ -162,7 +163,7 @@ test("remoting_unittests") {
   }
 
   if (enable_webrtc) {
-    deps += [ "//third_party/libjingle/webrtc:libjingle_webrtc" ]
+    deps += [ "//third_party/webrtc_overrides:init_webrtc" ]
   }
 
   if (is_android) {
@@ -200,12 +201,12 @@ if (enable_remoting_host) {
       "//net:test_support",
       "//remoting/base",
       "//testing/gtest",
-      "//third_party/libjingle",
       "//third_party/webrtc/modules/desktop_capture",
+      "//third_party/webrtc_overrides",
     ]
 
     if (enable_webrtc) {
-      deps += [ "//third_party/libjingle/webrtc:libjingle_webrtc" ]
+      deps += [ "//third_party/webrtc_overrides:init_webrtc" ]
     }
 
     if (is_win) {

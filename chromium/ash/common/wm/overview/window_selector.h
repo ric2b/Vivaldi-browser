@@ -14,9 +14,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/wm_activation_observer.h"
-#include "ash/common/wm_window_observer.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "ui/aura/window_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -35,7 +35,7 @@ class WindowGrid;
 // The WindowSelector shows a grid of all of your windows, allowing to select
 // one by clicking or tapping on it.
 class ASH_EXPORT WindowSelector : public display::DisplayObserver,
-                                  public WmWindowObserver,
+                                  public aura::WindowObserver,
                                   public WmActivationObserver,
                                   public views::TextfieldController {
  public:
@@ -61,6 +61,14 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   // Called when the last window selector item from a grid is deleted.
   void OnGridEmpty(WindowGrid* grid);
 
+  // Moves the current selection by |increment| items. Positive values of
+  // |increment| move the selection forward, negative values move it backward.
+  void IncrementSelection(int increment);
+
+  // Accepts current selection if any. Returns true if a selection was made,
+  // false otherwise.
+  bool AcceptSelection();
+
   // Activates |item's| window.
   void SelectWindow(WindowSelectorItem* item);
 
@@ -83,10 +91,9 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override;
 
-  // WmWindowObserver:
-  void OnWindowTreeChanged(WmWindow* window,
-                           const TreeChangeParams& params) override;
-  void OnWindowDestroying(WmWindow* window) override;
+  // aura::WindowObserver:
+  void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
+  void OnWindowDestroying(aura::Window* window) override;
 
   // WmActivationObserver
   void OnWindowActivated(WmWindow* gained_active,

@@ -36,44 +36,129 @@ std::pair<unsigned, unsigned> GetMarkerPaintOffsets(
 }
 }
 
-static int computeUnderlineOffset(const TextUnderlinePosition underlinePosition,
-                                  const FontMetrics& fontMetrics,
-                                  const InlineTextBox* inlineTextBox,
-                                  const float textDecorationThickness) {
+enum class ResolvedUnderlinePosition { Roman, Under, Over };
+
+static ResolvedUnderlinePosition resolveUnderlinePosition(
+    const ComputedStyle& style,
+    const InlineTextBox* inlineTextBox) {
+  // |auto| should resolve to |under| to avoid drawing through glyphs in
+  // scripts where it would not be appropriate (e.g., ideographs.)
+  // However, this has performance implications. For now, we only work with
+  // vertical text.
+  switch (inlineTextBox->root().baselineType()) {
+    default:
+      NOTREACHED();
+    // Fall though.
+    case AlphabeticBaseline:
+      switch (style.getTextUnderlinePosition()) {
+        default:
+          NOTREACHED();
+        // Fall though.
+        case TextUnderlinePositionAuto:
+          return ResolvedUnderlinePosition::Roman;
+        case TextUnderlinePositionUnder:
+          return ResolvedUnderlinePosition::Under;
+      }
+      break;
+    case IdeographicBaseline:
+      // Compute language-appropriate default underline position.
+      // https://drafts.csswg.org/css-text-decor-3/#default-stylesheet
+      UScriptCode script = style.getFontDescription().script();
+      if (script == USCRIPT_KATAKANA_OR_HIRAGANA || script == USCRIPT_HANGUL)
+        return ResolvedUnderlinePosition::Over;
+      return ResolvedUnderlinePosition::Under;
+  }
+}
+
+static LineLayoutItem enclosingUnderlineObject(
+    const InlineTextBox* inlineTextBox) {
+  bool firstLine = inlineTextBox->isFirstLineStyle();
+  for (LineLayoutItem current = inlineTextBox->parent()->getLineLayoutItem();
+       ;) {
+    if (current.isLayoutBlock())
+      return current;
+    if (!current.isLayoutInline() || current.isRubyText())
+      return nullptr;
+
+    const ComputedStyle& styleToUse = current.styleRef(firstLine);
+    if (styleToUse.getTextDecoration() & TextDecorationUnderline)
+      return current;
+
+    current = current.parent();
+    if (!current)
+      return current;
+
+    if (Node* node = current.node()) {
+      if (isHTMLAnchorElement(node) || node->hasTagName(HTMLNames::fontTag))
+        return current;
+    }
+  }
+}
+
+static int computeUnderlineOffsetForUnder(const ComputedStyle& style,
+                                          const InlineTextBox* inlineTextBox,
+                                          bool isOverline = false) {
+  const RootInlineBox& root = inlineTextBox->root();
+  LineLayoutItem decorationObject = enclosingUnderlineObject(inlineTextBox);
+  LayoutUnit offset;
+  if (style.isFlippedLinesWritingMode()) {
+    LayoutUnit position = inlineTextBox->logicalTop();
+    offset =
+        position - root.minLogicalTopForUnderline(decorationObject, position);
+  } else {
+    LayoutUnit position = inlineTextBox->logicalBottom();
+    offset = root.maxLogicalBottomForUnderline(decorationObject, position) -
+             position;
+  }
+  if (isOverline)
+    return std::min(-offset, LayoutUnit()).toInt();
+  return (inlineTextBox->logicalHeight() + std::max(offset, LayoutUnit()))
+      .toInt();
+}
+
+static int computeOverlineOffset(const ComputedStyle& style,
+                                 const InlineTextBox* inlineTextBox) {
+  return computeUnderlineOffsetForUnder(style, inlineTextBox, true);
+}
+
+static int computeUnderlineOffsetForRoman(const FontMetrics& fontMetrics,
+                                          const float textDecorationThickness) {
   // Compute the gap between the font and the underline. Use at least one
   // pixel gap, if underline is thick then use a bigger gap.
   int gap = 0;
 
   // Underline position of zero means draw underline on Baseline Position,
   // in Blink we need at least 1-pixel gap to adding following check.
-  // Positive underline Position means underline should be drawn above baselin e
+  // Positive underline Position means underline should be drawn above baseline
   // and negative value means drawing below baseline, negating the value as in
-  // Blink
-  // downward Y-increases.
+  // Blink downward Y-increases.
 
   if (fontMetrics.underlinePosition())
     gap = -fontMetrics.underlinePosition();
   else
     gap = std::max<int>(1, ceilf(textDecorationThickness / 2.f));
 
-  // FIXME: We support only horizontal text for now.
-  switch (underlinePosition) {
-    case TextUnderlinePositionAuto:
-      return fontMetrics.ascent() +
-             gap;  // Position underline near the alphabetic baseline.
-    case TextUnderlinePositionUnder: {
-      // Position underline relative to the under edge of the lowest element's
-      // content box.
-      const LayoutUnit offset =
-          inlineTextBox->root().maxLogicalTop() - inlineTextBox->logicalTop();
-      if (offset > 0)
-        return (inlineTextBox->logicalHeight() + gap + offset).toInt();
-      return (inlineTextBox->logicalHeight() + gap).toInt();
-    }
-  }
-
-  NOTREACHED();
+  // Position underline near the alphabetic baseline.
   return fontMetrics.ascent() + gap;
+}
+
+static int computeUnderlineOffset(ResolvedUnderlinePosition underlinePosition,
+                                  const ComputedStyle& style,
+                                  const FontMetrics& fontMetrics,
+                                  const InlineTextBox* inlineTextBox,
+                                  const float textDecorationThickness) {
+  switch (underlinePosition) {
+    default:
+      NOTREACHED();
+    // Fall through.
+    case ResolvedUnderlinePosition::Roman:
+      return computeUnderlineOffsetForRoman(fontMetrics,
+                                            textDecorationThickness);
+    case ResolvedUnderlinePosition::Under:
+      // Position underline at the under edge of the lowest element's
+      // content box.
+      return computeUnderlineOffsetForUnder(style, inlineTextBox);
+  }
 }
 
 static bool shouldSetDecorationAntialias(
@@ -357,23 +442,7 @@ Path AppliedDecorationPainter::prepareWavyStrokePath() {
   return path;
 }
 
-typedef WTF::HashMap<const InlineTextBox*, TextBlobPtr>
-    InlineTextBoxBlobCacheMap;
-static InlineTextBoxBlobCacheMap* gTextBlobCache;
-
 static const int misspellingLineThickness = 3;
-
-void InlineTextBoxPainter::removeFromTextBlobCache(
-    const InlineTextBox& inlineTextBox) {
-  if (gTextBlobCache)
-    gTextBlobCache->remove(&inlineTextBox);
-}
-
-static TextBlobPtr* addToTextBlobCache(const InlineTextBox& inlineTextBox) {
-  if (!gTextBlobCache)
-    gTextBlobCache = new InlineTextBoxBlobCacheMap;
-  return &gTextBlobCache->add(&inlineTextBox, nullptr).storedValue->value;
-}
 
 LayoutObject& InlineTextBoxPainter::inlineLayoutObject() const {
   return *LineLayoutAPIShim::layoutObjectFrom(
@@ -560,8 +629,10 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo,
     selectionEnd = textRun.length();
 
   bool ltr = m_inlineTextBox.isLeftToRightDirection();
-  bool flowIsLTR =
-      m_inlineTextBox.getLineLayoutItem().style()->isLeftToRightDirection();
+  bool flowIsLTR = m_inlineTextBox.getLineLayoutItem()
+                       .containingBlock()
+                       .style()
+                       ->isLeftToRightDirection();
   if (m_inlineTextBox.truncation() != cNoTruncation) {
     // In a mixed-direction flow the ellipsis is at the start of the text
     // rather than at the end of it.
@@ -605,26 +676,13 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo,
       endOffset = selectionStart;
     }
 
-    // FIXME: This cache should probably ultimately be held somewhere else.
-    // A hashmap is convenient to avoid a memory hit when the
-    // RuntimeEnabledFeature is off.
-    bool textBlobIsCacheable = startOffset == 0 && endOffset == length;
-    TextBlobPtr* cachedTextBlob = 0;
-    if (textBlobIsCacheable)
-      cachedTextBlob = addToTextBlobCache(m_inlineTextBox);
-    textPainter.paint(startOffset, endOffset, length, textStyle,
-                      cachedTextBlob);
+    textPainter.paint(startOffset, endOffset, length, textStyle);
   }
 
   if ((paintSelectedTextOnly || paintSelectedTextSeparately) &&
       selectionStart < selectionEnd) {
     // paint only the text that is selected
-    bool textBlobIsCacheable = selectionStart == 0 && selectionEnd == length;
-    TextBlobPtr* cachedTextBlob = 0;
-    if (textBlobIsCacheable)
-      cachedTextBlob = addToTextBlobCache(m_inlineTextBox);
-    textPainter.paint(selectionStart, selectionEnd, length, selectionStyle,
-                      cachedTextBlob);
+    textPainter.paint(selectionStart, selectionEnd, length, selectionStyle);
   }
 
   // Paint decorations
@@ -920,7 +978,8 @@ void InlineTextBoxPainter::paintDocumentMarker(GraphicsContext& context,
   context.drawLineForDocumentMarker(
       FloatPoint((boxOrigin.x() + start).toFloat(),
                  (boxOrigin.y() + underlineOffset).toFloat()),
-      width.toFloat(), lineStyleForMarkerType(marker.type()));
+      width.toFloat(), lineStyleForMarkerType(marker.type()),
+      style.effectiveZoom());
 }
 
 template <InlineTextBoxPainter::PaintOptions options>
@@ -950,8 +1009,10 @@ void InlineTextBoxPainter::paintSelection(GraphicsContext& context,
   unsigned start = m_inlineTextBox.start();
   int length = m_inlineTextBox.len();
   bool ltr = m_inlineTextBox.isLeftToRightDirection();
-  bool flowIsLTR =
-      m_inlineTextBox.getLineLayoutItem().style()->isLeftToRightDirection();
+  bool flowIsLTR = m_inlineTextBox.getLineLayoutItem()
+                       .containingBlock()
+                       .style()
+                       ->isLeftToRightDirection();
   if (m_inlineTextBox.truncation() != cNoTruncation) {
     // In a mixed-direction flow the ellipsis is at the start of the text
     // so we need to start after it. Otherwise we just need to make sure
@@ -1096,11 +1157,24 @@ void InlineTextBoxPainter::paintDecorations(
   bool skipIntercepts =
       styleToUse.getTextDecorationSkip() & TextDecorationSkipInk;
 
+  // text-underline-position may flip underline and overline.
+  ResolvedUnderlinePosition underlinePosition =
+      resolveUnderlinePosition(styleToUse, &m_inlineTextBox);
+  bool flipUnderlineAndOverline = false;
+  if (underlinePosition == ResolvedUnderlinePosition::Over) {
+    flipUnderlineAndOverline = true;
+    underlinePosition = ResolvedUnderlinePosition::Under;
+  }
+
   for (const AppliedTextDecoration& decoration : decorations) {
     TextDecoration lines = decoration.lines();
+    if (flipUnderlineAndOverline) {
+      lines = static_cast<TextDecoration>(
+          lines ^ (TextDecorationUnderline | TextDecorationOverline));
+    }
     if ((lines & TextDecorationUnderline) && fontData) {
       const int underlineOffset = computeUnderlineOffset(
-          styleToUse.getTextUnderlinePosition(), fontData->getFontMetrics(),
+          underlinePosition, styleToUse, fontData->getFontMetrics(),
           &m_inlineTextBox, textDecorationThickness);
       AppliedDecorationPainter decorationPainter(
           context, FloatPoint(localOrigin) + FloatPoint(0, underlineOffset),
@@ -1116,9 +1190,12 @@ void InlineTextBoxPainter::paintDecorations(
       decorationPainter.paint();
     }
     if (lines & TextDecorationOverline) {
+      const int overlineOffset =
+          computeOverlineOffset(styleToUse, &m_inlineTextBox);
       AppliedDecorationPainter decorationPainter(
-          context, FloatPoint(localOrigin), width.toFloat(), decoration,
-          textDecorationThickness, -doubleOffset, 1, antialiasDecoration);
+          context, FloatPoint(localOrigin) + FloatPoint(0, overlineOffset),
+          width.toFloat(), decoration, textDecorationThickness, -doubleOffset,
+          1, antialiasDecoration);
       if (skipIntercepts) {
         textPainter.clipDecorationsStripe(
             -baseline + decorationPainter.decorationBounds().y() -
@@ -1259,7 +1336,7 @@ void InlineTextBoxPainter::paintTextMatchMarkerForeground(
                           m_inlineTextBox.isHorizontal());
 
   textPainter.paint(paintOffsets.first, paintOffsets.second,
-                    m_inlineTextBox.len(), textStyle, 0);
+                    m_inlineTextBox.len(), textStyle);
 }
 
 void InlineTextBoxPainter::paintTextMatchMarkerBackground(

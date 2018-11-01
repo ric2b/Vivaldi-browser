@@ -38,7 +38,6 @@
 #include "core/InputTypeNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/IdTargetObserver.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/TaskRunnerHelper.h"
@@ -51,7 +50,6 @@
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
@@ -71,8 +69,8 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
+#include "core/page/Page.h"
 #include "platform/Language.h"
-#include "platform/PlatformMouseEvent.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/PlatformLocale.h"
 #include "wtf/MathExtras.h"
@@ -340,7 +338,7 @@ void HTMLInputElement::endEditing() {
 
   LocalFrame* frame = document().frame();
   frame->spellChecker().didEndEditingOnTextField(this);
-  frame->host()->chromeClient().didEndEditingOnTextField(*this);
+  frame->page()->chromeClient().didEndEditingOnTextField(*this);
 }
 
 void HTMLInputElement::handleFocusEvent(Element* oldFocusedElement,
@@ -550,27 +548,21 @@ bool HTMLInputElement::canStartSelection() const {
   return TextControlElement::canStartSelection();
 }
 
-int HTMLInputElement::selectionStartForBinding(
+unsigned HTMLInputElement::selectionStartForBinding(
+    bool& isNull,
     ExceptionState& exceptionState) const {
   if (!m_inputType->supportsSelectionAPI()) {
-    UseCounter::count(document(), UseCounter::InputSelectionGettersThrow);
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "The input element's type ('" +
-                                         m_inputType->formControlType() +
-                                         "') does not support selection.");
+    isNull = true;
     return 0;
   }
   return TextControlElement::selectionStart();
 }
 
-int HTMLInputElement::selectionEndForBinding(
+unsigned HTMLInputElement::selectionEndForBinding(
+    bool& isNull,
     ExceptionState& exceptionState) const {
   if (!m_inputType->supportsSelectionAPI()) {
-    UseCounter::count(document(), UseCounter::InputSelectionGettersThrow);
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "The input element's type ('" +
-                                         m_inputType->formControlType() +
-                                         "') does not support selection.");
+    isNull = true;
     return 0;
   }
   return TextControlElement::selectionEnd();
@@ -579,18 +571,13 @@ int HTMLInputElement::selectionEndForBinding(
 String HTMLInputElement::selectionDirectionForBinding(
     ExceptionState& exceptionState) const {
   if (!m_inputType->supportsSelectionAPI()) {
-    UseCounter::count(document(), UseCounter::InputSelectionGettersThrow);
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "The input element's type ('" +
-                                         m_inputType->formControlType() +
-                                         "') does not support selection.");
     return String();
   }
   return TextControlElement::selectionDirection();
 }
 
 void HTMLInputElement::setSelectionStartForBinding(
-    int start,
+    unsigned start,
     ExceptionState& exceptionState) {
   if (!m_inputType->supportsSelectionAPI()) {
     exceptionState.throwDOMException(InvalidStateError,
@@ -603,7 +590,7 @@ void HTMLInputElement::setSelectionStartForBinding(
 }
 
 void HTMLInputElement::setSelectionEndForBinding(
-    int end,
+    unsigned end,
     ExceptionState& exceptionState) {
   if (!m_inputType->supportsSelectionAPI()) {
     exceptionState.throwDOMException(InvalidStateError,
@@ -629,8 +616,8 @@ void HTMLInputElement::setSelectionDirectionForBinding(
 }
 
 void HTMLInputElement::setSelectionRangeForBinding(
-    int start,
-    int end,
+    unsigned start,
+    unsigned end,
     ExceptionState& exceptionState) {
   if (!m_inputType->supportsSelectionAPI()) {
     exceptionState.throwDOMException(InvalidStateError,
@@ -643,8 +630,8 @@ void HTMLInputElement::setSelectionRangeForBinding(
 }
 
 void HTMLInputElement::setSelectionRangeForBinding(
-    int start,
-    int end,
+    unsigned start,
+    unsigned end,
     const String& direction,
     ExceptionState& exceptionState) {
   if (!m_inputType->supportsSelectionAPI()) {
@@ -1024,7 +1011,7 @@ String HTMLInputElement::value() const {
       return m_nonAttributeValue;
   }
   NOTREACHED();
-  return emptyString();
+  return emptyString;
 }
 
 String HTMLInputElement::valueOrDefaultLabel() const {
@@ -1265,10 +1252,11 @@ void HTMLInputElement::defaultEventHandler(Event* evt) {
 
   if (m_inputTypeView->shouldSubmitImplicitly(evt)) {
     // FIXME: Remove type check.
-    if (type() == InputTypeNames::search)
-      document().postTask(TaskType::UserInteraction, BLINK_FROM_HERE,
-                          createSameThreadTask(&HTMLInputElement::onSearch,
-                                               wrapPersistent(this)));
+    if (type() == InputTypeNames::search) {
+      TaskRunnerHelper::get(TaskType::UserInteraction, &document())
+          ->postTask(BLINK_FROM_HERE, WTF::bind(&HTMLInputElement::onSearch,
+                                                wrapPersistent(this)));
+    }
     // Form submission finishes editing, just as loss of focus does.
     // If there was a change, send the event now.
     if (wasChangedSinceLastFormControlChangeEvent())
@@ -1277,12 +1265,12 @@ void HTMLInputElement::defaultEventHandler(Event* evt) {
     HTMLFormElement* formForSubmission = m_inputTypeView->formForSubmission();
     // Form may never have been present, or may have been destroyed by code
     // responding to the change event.
-    if (formForSubmission) {
+    if (formForSubmission)
       formForSubmission->submitImplicitly(evt, canTriggerImplicitSubmission());
-      // We treat implicit submission is something like blur()-then-focus(). So
-      // we reset the last value. crbug.com/695349.
-      setTextAsOfLastFormControlChangeEvent(value());
-    }
+
+    // We treat implicit submission is something like blur()-then-focus(). So
+    // we reset the last value. crbug.com/695349 and crbug.com/700842.
+    setTextAsOfLastFormControlChangeEvent(value());
 
     evt->setDefaultHandled();
     return;

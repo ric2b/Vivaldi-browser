@@ -24,12 +24,12 @@ class SwiffyPage(page_module.Page):
     action_runner.EvaluateJavaScript(
         'Function.prototype.toString = function() { return "[native code]"; }')
     # Make sure we have a reasonable viewport for mobile.
-    viewport_js = (
-        'var meta = document.createElement("meta");'
-        'meta.name = "viewport";'
-        'meta.content = "width=device-width";'
-        'document.getElementsByTagName("head")[0].appendChild(meta);')
-    action_runner.EvaluateJavaScript(viewport_js)
+    action_runner.EvaluateJavaScript("""
+        var meta = document.createElement("meta");
+        meta.name = "viewport";
+        meta.content = "width=device-width";
+        document.getElementsByTagName("head")[0].appendChild(meta);
+        """)
 
   def RunPageInteractions(self, action_runner):
     with action_runner.CreateInteraction('ToughAd'):
@@ -189,9 +189,8 @@ class ToughAdCasesPageSet(story.StorySet):
         self, scroll=scroll))
     self.AddStory(AdPage('http://androidcentral.com', self, scroll=scroll,
         wait_for_interactive_or_better=True))
-    # Disabled: crbug.com/682349
-    #self.AddStory(AdPage('http://mashable.com', self, scroll=scroll,
-    #    y_scroll_distance_multiplier=0.25))
+    self.AddStory(AdPage('http://mashable.com', self, scroll=scroll,
+        y_scroll_distance_multiplier=0.25))
     self.AddStory(AdPage('http://www.androidauthority.com/'
         'reduce-data-use-turn-on-data-compression-in-chrome-630064/', self,
         scroll=scroll))

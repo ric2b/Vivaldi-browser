@@ -21,9 +21,9 @@
 #include "url/gurl.h"
 
 class GURL;
-class SkBitmap;
 
 @class CRWJSInjectionReceiver;
+@class CRWSessionStorage;
 @protocol CRWScrollableContent;
 @protocol CRWWebViewProxy;
 typedef id<CRWWebViewProxy> CRWWebViewProxyType;
@@ -83,21 +83,11 @@ class WebState : public base::SupportsUserData {
     bool is_renderer_initiated;
   };
 
-  // Callback for |DownloadImage()|.
-  typedef base::Callback<void(
-      int, /* id */
-      int, /* HTTP status code */
-      const GURL&, /* image_url */
-      const std::vector<SkBitmap>&, /* bitmaps */
-      /* The sizes in pixel of the bitmaps before they were resized due to the
-         max bitmap size passed to DownloadImage(). Each entry in the bitmaps
-         vector corresponds to an entry in the sizes vector. If a bitmap was
-         resized, there should be a single returned bitmap. */
-      const std::vector<gfx::Size>&)>
-          ImageDownloadCallback;
-
   // Creates a new WebState.
   static std::unique_ptr<WebState> Create(const CreateParams& params);
+  // Creates a new WebState from a serialized NavigationManager.
+  static std::unique_ptr<WebState> Create(const CreateParams& params,
+                                          CRWSessionStorage* session_storage);
 
   ~WebState() override {}
 
@@ -134,6 +124,10 @@ class WebState : public base::SupportsUserData {
   // null.
   virtual const NavigationManager* GetNavigationManager() const = 0;
   virtual NavigationManager* GetNavigationManager() = 0;
+
+  // Creates a serializable representation of the session. The returned value
+  // is autoreleased.
+  virtual CRWSessionStorage* BuildSessionStorage() = 0;
 
   // Gets the CRWJSInjectionReceiver associated with this WebState.
   virtual CRWJSInjectionReceiver* GetJSInjectionReceiver() const = 0;
@@ -200,9 +194,15 @@ class WebState : public base::SupportsUserData {
   // Returns the currently visible WebInterstitial if one is shown.
   virtual WebInterstitial* GetWebInterstitial() const = 0;
 
-  // Tells the WebState that the current page is an HTTP page
-  // containing a password field.
+  // Called when the WebState has displayed a password field on an HTTP page.
+  // This method modifies the appropriate NavigationEntry's SSLStatus to record
+  // the sensitive input field, so that embedders can adjust the UI if desired.
   virtual void OnPasswordInputShownOnHttp() = 0;
+
+  // Called when the WebState has displayed a credit card field on an HTTP page.
+  // This method modifies the appropriate NavigationEntry's SSLStatus to record
+  // the sensitive input field, so that embedders can adjust the UI if desired.
+  virtual void OnCreditCardInputShownOnHttp() = 0;
 
   // Callback used to handle script commands.
   // The callback must return true if the command was handled, and false
@@ -226,23 +226,6 @@ class WebState : public base::SupportsUserData {
 
   // Returns the current CRWWebViewProxy object.
   virtual CRWWebViewProxyType GetWebViewProxy() const = 0;
-
-  // Sends a request to download the given image |url| and returns the unique
-  // id of the download request. When the download is finished, |callback| will
-  // be called with the bitmaps received from the renderer.
-  // If |is_favicon| is true, the cookies are not sent and not accepted during
-  // download.
-  // Bitmaps with pixel sizes larger than |max_bitmap_size| are filtered out
-  // from the bitmap results. If there are no bitmap results <=
-  // |max_bitmap_size|, the smallest bitmap is resized to |max_bitmap_size| and
-  // is the only result. A |max_bitmap_size| of 0 means unlimited.
-  // If |bypass_cache| is true, |url| is requested from the server even if it
-  // is present in the browser cache.
-  virtual int DownloadImage(const GURL& url,
-                            bool is_favicon,
-                            uint32_t max_bitmap_size,
-                            bool bypass_cache,
-                            const ImageDownloadCallback& callback) = 0;
 
   // Returns Mojo interface registry for this WebState.
   virtual service_manager::InterfaceRegistry* GetMojoInterfaceRegistry() = 0;

@@ -38,7 +38,7 @@
 #include "WebSetSinkIdCallbacks.h"
 #include "WebString.h"
 
-class SkPaint;
+#include "cc/paint/paint_flags.h"
 
 namespace gpu {
 namespace gles2 {
@@ -179,23 +179,18 @@ class WebMediaPlayer {
   virtual size_t audioDecodedByteCount() const = 0;
   virtual size_t videoDecodedByteCount() const = 0;
 
-  virtual void paint(WebCanvas*, const WebRect&, SkPaint&) = 0;
+  virtual void paint(WebCanvas*, const WebRect&, cc::PaintFlags&) = 0;
 
-  // TODO(kbr): remove non-|target| version. crbug.com/349871
-  //
-  // Do a GPU-GPU texture copy of the natural size of the current
-  // video frame to |texture|. Caller is responsible for allocating
-  // |texture| with the appropriate size. If the copy is impossible or
-  // fails, it returns false.
+  // TODO(dshwang): remove non-|target| version. crbug.com/349871
   virtual bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
                                                  unsigned texture,
+                                                 unsigned internalFormat,
+                                                 unsigned type,
                                                  bool premultiplyAlpha,
                                                  bool flipY) {
     return false;
   }
 
-  // TODO(kbr): when updating calling code to use this, remove the
-  // |internalFormat| and |type| parameters. crbug.com/349871
   // Do a GPU-GPU textures copy. If the copy is impossible or fails, it returns
   // false.
   virtual bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
@@ -271,6 +266,14 @@ class WebMediaPlayer {
   // intersection with viewport is activated by calling
   // WebMediaPlayerClient::activateViewportIntersectionMonitoring().
   virtual void becameDominantVisibleContent(bool isDominant) {}
+
+  // Inform WebMediaPlayer when the element starts/stops being the effectively
+  // fullscreen video, i.e. being the fullscreen element or child of the
+  // fullscreen element, and being dominant in the viewport.
+  //
+  // TODO(zqzhang): merge with becameDominantVisibleContent(). See
+  // https://crbug.com/696211
+  virtual void setIsEffectivelyFullscreen(bool) {}
 
   virtual void enabledAudioTracksChanged(
       const WebVector<TrackId>& enabledTrackIds) {}

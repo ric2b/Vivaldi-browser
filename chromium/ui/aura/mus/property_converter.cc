@@ -9,7 +9,7 @@
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 
 namespace aura {
 
@@ -27,32 +27,79 @@ std::unique_ptr<std::vector<uint8_t>> GetArray(Window* window,
       mojo::ConvertTo<std::vector<uint8_t>>(*value));
 }
 
+// A validator that always returns true regardless of its input.
+bool AlwaysTrue(int64_t value) {
+  return true;
+}
+
+bool ValidateResizeBehaviour(int64_t value) {
+  // Resize behaviour is a 3 bitfield.
+  return value >= 0 &&
+         value <= (ui::mojom::kResizeBehaviorCanMaximize |
+                   ui::mojom::kResizeBehaviorCanMinimize |
+                   ui::mojom::kResizeBehaviorCanResize);
+}
+
+bool ValidateShowState(int64_t value) {
+  return value == int64_t(ui::mojom::ShowState::DEFAULT) ||
+         value == int64_t(ui::mojom::ShowState::NORMAL) ||
+         value == int64_t(ui::mojom::ShowState::MINIMIZED) ||
+         value == int64_t(ui::mojom::ShowState::MAXIMIZED) ||
+         value == int64_t(ui::mojom::ShowState::INACTIVE) ||
+         value == int64_t(ui::mojom::ShowState::FULLSCREEN) ||
+         value == int64_t(ui::mojom::ShowState::DOCKED);
+}
+
 }  // namespace
+
+PropertyConverter::PrimitiveProperty::PrimitiveProperty() {}
+
+PropertyConverter::PrimitiveProperty::PrimitiveProperty(
+    const PrimitiveProperty& property) = default;
+
+PropertyConverter::PrimitiveProperty::~PrimitiveProperty() {}
+
+// static
+base::RepeatingCallback<bool(int64_t)>
+PropertyConverter::CreateAcceptAnyValueCallback() {
+  return base::Bind(&AlwaysTrue);
+}
 
 PropertyConverter::PropertyConverter() {
   // Add known aura properties with associated mus properties.
   RegisterProperty(client::kAlwaysOnTopKey,
-                   ui::mojom::WindowManager::kAlwaysOnTop_Property);
+                   ui::mojom::WindowManager::kAlwaysOnTop_Property,
+                   CreateAcceptAnyValueCallback());
   RegisterProperty(client::kAppIconKey,
                    ui::mojom::WindowManager::kAppIcon_Property);
   RegisterProperty(client::kAppIdKey,
                    ui::mojom::WindowManager::kAppID_Property);
+  RegisterProperty(client::kImmersiveFullscreenKey,
+                   ui::mojom::WindowManager::kImmersiveFullscreen_Property,
+                   CreateAcceptAnyValueCallback());
   RegisterProperty(client::kNameKey, ui::mojom::WindowManager::kName_Property);
   RegisterProperty(client::kPreferredSize,
                    ui::mojom::WindowManager::kPreferredSize_Property);
   RegisterProperty(client::kResizeBehaviorKey,
-                   ui::mojom::WindowManager::kResizeBehavior_Property);
+                   ui::mojom::WindowManager::kResizeBehavior_Property,
+                   base::Bind(&ValidateResizeBehaviour));
   RegisterProperty(client::kRestoreBoundsKey,
                    ui::mojom::WindowManager::kRestoreBounds_Property);
   RegisterProperty(client::kShowStateKey,
-                   ui::mojom::WindowManager::kShowState_Property);
-  RegisterProperty(client::kTitleKey,
-                   ui::mojom::WindowManager::kWindowTitle_Property);
+                   ui::mojom::WindowManager::kShowState_Property,
+                   base::Bind(&ValidateShowState));
   RegisterProperty(client::kWindowIconKey,
                    ui::mojom::WindowManager::kWindowIcon_Property);
+  RegisterProperty(client::kTitleKey,
+                   ui::mojom::WindowManager::kWindowTitle_Property);
 }
 
 PropertyConverter::~PropertyConverter() {}
+
+bool PropertyConverter::IsTransportNameRegistered(
+    const std::string& name) const {
+  return transport_names_.count(name) > 0;
+}
 
 bool PropertyConverter::ConvertPropertyForTransport(
     Window* window,
@@ -63,7 +110,7 @@ bool PropertyConverter::ConvertPropertyForTransport(
   if (transport_name->empty())
     return false;
 
-  auto image_key = static_cast<const WindowProperty<gfx::ImageSkia*>*>(key);
+  auto* image_key = static_cast<const WindowProperty<gfx::ImageSkia*>*>(key);
   if (image_properties_.count(image_key) > 0) {
     const gfx::ImageSkia* value = window->GetProperty(image_key);
     if (value) {
@@ -77,25 +124,25 @@ bool PropertyConverter::ConvertPropertyForTransport(
     return true;
   }
 
-  auto rect_key = static_cast<const WindowProperty<gfx::Rect*>*>(key);
+  auto* rect_key = static_cast<const WindowProperty<gfx::Rect*>*>(key);
   if (rect_properties_.count(rect_key) > 0) {
     *transport_value = GetArray(window, rect_key);
     return true;
   }
 
-  auto size_key = static_cast<const WindowProperty<gfx::Size*>*>(key);
+  auto* size_key = static_cast<const WindowProperty<gfx::Size*>*>(key);
   if (size_properties_.count(size_key) > 0) {
     *transport_value = GetArray(window, size_key);
     return true;
   }
 
-  auto string_key = static_cast<const WindowProperty<std::string*>*>(key);
+  auto* string_key = static_cast<const WindowProperty<std::string*>*>(key);
   if (string_properties_.count(string_key) > 0) {
     *transport_value = GetArray(window, string_key);
     return true;
   }
 
-  auto string16_key = static_cast<const WindowProperty<base::string16*>*>(key);
+  auto* string16_key = static_cast<const WindowProperty<base::string16*>*>(key);
   if (string16_properties_.count(string16_key) > 0) {
     *transport_value = GetArray(window, string16_key);
     return true;
@@ -115,23 +162,23 @@ std::string PropertyConverter::GetTransportNameForPropertyKey(const void* key) {
   if (primitive_properties_.count(key) > 0)
     return primitive_properties_[key].transport_name;
 
-  auto image_key = static_cast<const WindowProperty<gfx::ImageSkia*>*>(key);
+  auto* image_key = static_cast<const WindowProperty<gfx::ImageSkia*>*>(key);
   if (image_properties_.count(image_key) > 0)
     return image_properties_[image_key];
 
-  auto rect_key = static_cast<const WindowProperty<gfx::Rect*>*>(key);
+  auto* rect_key = static_cast<const WindowProperty<gfx::Rect*>*>(key);
   if (rect_properties_.count(rect_key) > 0)
     return rect_properties_[rect_key];
 
-  auto size_key = static_cast<const WindowProperty<gfx::Size*>*>(key);
+  auto* size_key = static_cast<const WindowProperty<gfx::Size*>*>(key);
   if (size_properties_.count(size_key) > 0)
     return size_properties_[size_key];
 
-  auto string_key = static_cast<const WindowProperty<std::string*>*>(key);
+  auto* string_key = static_cast<const WindowProperty<std::string*>*>(key);
   if (string_properties_.count(string_key) > 0)
     return string_properties_[string_key];
 
-  auto string16_key = static_cast<const WindowProperty<base::string16*>*>(key);
+  auto* string16_key = static_cast<const WindowProperty<base::string16*>*>(key);
   if (string16_properties_.count(string16_key) > 0)
     return string16_properties_[string16_key];
 
@@ -151,6 +198,11 @@ void PropertyConverter::SetPropertyFromTransportValue(
         return;
       }
       const PrimitiveType value = mojo::ConvertTo<PrimitiveType>(*data);
+      if (!primitive_property.second.validator.Run(value)) {
+        DVLOG(2) << "Property value rejected (PrimitiveType): "
+                 << transport_name;
+        return;
+      }
       // TODO(msw): Should aura::Window just store all properties by name?
       window->SetPropertyInternal(
           primitive_property.first, primitive_property.second.property_name,
@@ -226,7 +278,13 @@ bool PropertyConverter::GetPropertyValueFromTransportValue(
   }
   for (const auto& primitive_property : primitive_properties_) {
     if (primitive_property.second.transport_name == transport_name) {
-      *value = mojo::ConvertTo<PrimitiveType>(transport_data);
+      PrimitiveType v = mojo::ConvertTo<PrimitiveType>(transport_data);
+      if (!primitive_property.second.validator.Run(v)) {
+        DVLOG(2) << "Property value rejected (PrimitiveType): "
+                 << transport_name;
+        return false;
+      }
+      *value = v;
       return true;
     }
   }
@@ -237,30 +295,35 @@ void PropertyConverter::RegisterProperty(
     const WindowProperty<gfx::ImageSkia*>* property,
     const char* transport_name) {
   image_properties_[property] = transport_name;
+  transport_names_.insert(transport_name);
 }
 
 void PropertyConverter::RegisterProperty(
     const WindowProperty<gfx::Rect*>* property,
     const char* transport_name) {
   rect_properties_[property] = transport_name;
+  transport_names_.insert(transport_name);
 }
 
 void PropertyConverter::RegisterProperty(
     const WindowProperty<gfx::Size*>* property,
     const char* transport_name) {
   size_properties_[property] = transport_name;
+  transport_names_.insert(transport_name);
 }
 
 void PropertyConverter::RegisterProperty(
     const WindowProperty<std::string*>* property,
     const char* transport_name) {
   string_properties_[property] = transport_name;
+  transport_names_.insert(transport_name);
 }
 
 void PropertyConverter::RegisterProperty(
     const WindowProperty<base::string16*>* property,
     const char* transport_name) {
   string16_properties_[property] = transport_name;
+  transport_names_.insert(transport_name);
 }
 
 }  // namespace aura

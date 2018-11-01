@@ -4,7 +4,15 @@
 
 package org.chromium.content.browser;
 
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
+import android.os.Messenger;
 import android.os.RemoteException;
 import android.support.test.filters.MediumTest;
 import android.test.InstrumentationTestCase;
@@ -16,7 +24,9 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.common.ContentSwitches;
 import org.chromium.content.common.FileDescriptorInfo;
+import org.chromium.content_shell_apk.ChildProcessLauncherTestHelperService;
 
 import java.util.concurrent.Callable;
 
@@ -296,6 +306,185 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
         assertNotNull(tabConnection);
     }
 
+    /**
+     * Tests binding to the same sandboxed service process from multiple processes in the
+     * same package. This uses the ChildProcessLauncherTestHelperService declared in
+     * ContentShell.apk as a separate android:process to bind the first (slot 0) service. The
+     * instrumentation test then tries to bind the same slot, which fails, so the
+     * ChildProcessLauncher retries on a new connection.
+     */
+    @MediumTest
+    @Feature({"ProcessManagement"})
+    public void testBindServiceFromMultipleProcesses() throws RemoteException {
+        final Context context = getInstrumentation().getTargetContext();
+
+        // Start the Helper service.
+        class HelperConnection implements ServiceConnection {
+            Messenger mMessenger = null;
+
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                mMessenger = new Messenger(service);
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {}
+        }
+        final HelperConnection serviceConn = new HelperConnection();
+
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName(context.getPackageName(),
+                context.getPackageName() + ".ChildProcessLauncherTestHelperService"));
+        assertTrue(context.bindService(intent, serviceConn, Context.BIND_AUTO_CREATE));
+
+        // Wait for the Helper service to connect.
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Failed to get helper service Messenger") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return serviceConn.mMessenger != null;
+                    }
+                });
+
+        assertNotNull(serviceConn.mMessenger);
+
+        class ReplyHandler implements Handler.Callback {
+            Message mMessage;
+
+            @Override
+            public boolean handleMessage(Message msg) {
+                // Copy the message so its contents outlive this Binder transaction.
+                mMessage = Message.obtain();
+                mMessage.copyFrom(msg);
+                return true;
+            }
+        }
+        final ReplyHandler replyHandler = new ReplyHandler();
+
+        // Send a message to the Helper and wait for the reply. This will cause the slot 0
+        // sandboxed service connection to be bound by a different PID (i.e., not this
+        // process).
+        Message msg = Message.obtain(null, ChildProcessLauncherTestHelperService.MSG_BIND_SERVICE);
+        msg.replyTo = new Messenger(new Handler(Looper.getMainLooper(), replyHandler));
+        serviceConn.mMessenger.send(msg);
+
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Failed waiting for helper service reply") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return replyHandler.mMessage != null;
+                    }
+                });
+
+        // Verify that the Helper was able to launch the sandboxed service.
+        assertNotNull(replyHandler.mMessage);
+        assertEquals(ChildProcessLauncherTestHelperService.MSG_BIND_SERVICE_REPLY,
+                replyHandler.mMessage.what);
+        assertEquals("Connection slot from helper service is not 0", 0, replyHandler.mMessage.arg2);
+
+        final int helperConnPid = replyHandler.mMessage.arg1;
+        assertTrue(helperConnPid > 0);
+
+        // Launch a service from this process. Since slot 0 is already bound by the Helper, it
+        // will fail to start and the ChildProcessLauncher will retry.
+        final ChildProcessCreationParams creationParams = new ChildProcessCreationParams(
+                context.getPackageName(), false /* isExternalService */,
+                LibraryProcessType.PROCESS_CHILD, true /* bindToCallerCheck */);
+        final ChildProcessConnection conn = ChildProcessLauncher.startForTesting(
+                context, sProcessWaitArguments, new FileDescriptorInfo[0], creationParams);
+
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Failed waiting for instrumentation-bound service") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return conn.getService() != null;
+                    }
+                });
+
+        assertEquals(0, conn.getServiceNumber());
+
+        final ChildProcessConnection[] sandboxedConnections =
+                ChildProcessLauncher.getSandboxedConnectionArrayForTesting(
+                        context.getPackageName());
+
+        // Wait for the retry to succeed.
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Failed waiting for both child process services") {
+                    @Override
+                    public boolean isSatisfied() {
+                        boolean allChildrenConnected = true;
+                        for (int i = 0; i <= 1; ++i) {
+                            ChildProcessConnection conn = sandboxedConnections[i];
+                            allChildrenConnected &= conn != null && conn.getService() != null;
+                        }
+                        return allChildrenConnected;
+                    }
+                });
+
+        // Check that only two connections are created.
+        for (int i = 0; i < sandboxedConnections.length; ++i) {
+            ChildProcessConnection sandboxedConn = sandboxedConnections[i];
+            if (i <= 1) {
+                assertNotNull(sandboxedConn);
+                assertNotNull(sandboxedConn.getService());
+            } else {
+                assertNull(sandboxedConn);
+            }
+        }
+
+        assertTrue(conn == sandboxedConnections[0]);
+        final ChildProcessConnection retryConn = sandboxedConnections[1];
+
+        assertFalse(conn == retryConn);
+
+        assertEquals(0, conn.getServiceNumber());
+        assertEquals(0, conn.getPid());
+        assertFalse(conn.getService().bindToCaller());
+
+        assertEquals(1, retryConn.getServiceNumber());
+        assertTrue(retryConn.getPid() > 0);
+        assertTrue(retryConn.getPid() != helperConnPid);
+        assertTrue(retryConn.getService().bindToCaller());
+    }
+
+    @MediumTest
+    @Feature({"ProcessManagement"})
+    public void testWarmUp() {
+        Context context = getInstrumentation().getTargetContext();
+        ChildProcessLauncher.warmUp(context); // Not on UI thread.
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount());
+
+        final ChildProcessConnection conn = ChildProcessLauncher.startForTesting(
+                context, new String[0], new FileDescriptorInfo[0], null);
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount()); // Used warmup connection.
+
+        ChildProcessLauncher.stop(conn.getPid());
+    }
+
+    @MediumTest
+    @Feature({"ProcessManagement"})
+    public void testCustomCreationParamDoesNotReuseWarmupConnection() {
+        // Since warmUp only uses default params.
+        Context context = getInstrumentation().getTargetContext();
+        // Check uses object identity, having the params match exactly is fine.
+        ChildProcessCreationParams.registerDefault(
+                getDefaultChildProcessCreationParams(context.getPackageName()));
+        int paramId = ChildProcessCreationParams.register(
+                getDefaultChildProcessCreationParams(context.getPackageName()));
+
+        ChildProcessLauncher.warmUp(context); // Not on UI thread.
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount());
+
+        startRendererProcess(context, paramId, new FileDescriptorInfo[0]);
+        assertEquals(2, allocatedChromeSandboxedConnectionsCount()); // Warmup not used.
+
+        startRendererProcess(
+                context, ChildProcessCreationParams.DEFAULT_ID, new FileDescriptorInfo[0]);
+        assertEquals(2, allocatedChromeSandboxedConnectionsCount()); // Warmup used.
+
+        ChildProcessCreationParams.unregister(paramId);
+    }
+
     private ChildProcessConnectionImpl startConnection() {
         // Allocate a new connection.
         Context context = getInstrumentation().getTargetContext();
@@ -312,6 +501,14 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
                     }
                 });
         return connection;
+    }
+
+    private static void startRendererProcess(
+            Context context, int paramId, FileDescriptorInfo[] filesToMap) {
+        ChildProcessLauncher.start(context, paramId,
+                new String[] {"--" + ContentSwitches.SWITCH_PROCESS_TYPE + "="
+                        + ContentSwitches.SWITCH_RENDERER_PROCESS},
+                0 /* childProcessId */, filesToMap, 0 /* clientContext */);
     }
 
     /**
@@ -337,7 +534,7 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
 
     private ChildProcessCreationParams getDefaultChildProcessCreationParams(String packageName) {
         return new ChildProcessCreationParams(packageName, false /* isExternalService */,
-                LibraryProcessType.PROCESS_CHILD);
+                LibraryProcessType.PROCESS_CHILD, false /* bindToCallerCheck */);
     }
 
     private void triggerConnectionSetup(ChildProcessConnectionImpl connection) {

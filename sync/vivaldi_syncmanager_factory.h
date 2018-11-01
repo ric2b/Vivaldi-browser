@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_SYNC_VIVALDI_SYNCMANAGER_FACTORY_H_
-#define VIVALDI_SYNC_VIVALDI_SYNCMANAGER_FACTORY_H_
+#ifndef SYNC_VIVALDI_SYNCMANAGER_FACTORY_H_
+#define SYNC_VIVALDI_SYNCMANAGER_FACTORY_H_
 
 #include "base/memory/singleton.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -40,4 +40,4 @@ class VivaldiSyncManagerFactory : public ProfileSyncServiceFactory {
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_VIVALDI_SYNCMANAGER_FACTORY_H_
+#endif  // SYNC_VIVALDI_SYNCMANAGER_FACTORY_H_

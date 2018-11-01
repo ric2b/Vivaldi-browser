@@ -41,26 +41,30 @@ ThreadDebugger* ThreadDebugger::from(v8::Isolate* isolate) {
   if (!isolate)
     return nullptr;
   V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-  return data ? data->threadDebugger() : nullptr;
+  return data ? static_cast<ThreadDebugger*>(data->threadDebugger()) : nullptr;
 }
 
 // static
-MessageLevel ThreadDebugger::consoleAPITypeToMessageLevel(
-    v8_inspector::V8ConsoleAPIType type) {
-  switch (type) {
-    case v8_inspector::V8ConsoleAPIType::kDebug:
-      return DebugMessageLevel;
-    case v8_inspector::V8ConsoleAPIType::kLog:
-      return LogMessageLevel;
-    case v8_inspector::V8ConsoleAPIType::kInfo:
-      return InfoMessageLevel;
-    case v8_inspector::V8ConsoleAPIType::kWarning:
-      return WarningMessageLevel;
-    case v8_inspector::V8ConsoleAPIType::kError:
-      return ErrorMessageLevel;
+MessageLevel ThreadDebugger::v8MessageLevelToMessageLevel(
+    v8::Isolate::MessageErrorLevel level) {
+  MessageLevel result = InfoMessageLevel;
+  switch (level) {
+    case v8::Isolate::kMessageDebug:
+      result = VerboseMessageLevel;
+      break;
+    case v8::Isolate::kMessageWarning:
+      result = WarningMessageLevel;
+      break;
+    case v8::Isolate::kMessageError:
+      result = ErrorMessageLevel;
+      break;
+    case v8::Isolate::kMessageLog:
+    case v8::Isolate::kMessageInfo:
     default:
-      return LogMessageLevel;
+      result = InfoMessageLevel;
+      break;
   }
+  return result;
 }
 
 void ThreadDebugger::willExecuteScript(v8::Isolate* isolate, int scriptId) {
@@ -390,7 +394,7 @@ void ThreadDebugger::getEventListenersCallback(
   if (groupId)
     debugger->muteMetrics(groupId);
   InspectorDOMDebuggerAgent::eventListenersInfoForTarget(isolate, info[0],
-                                                         listenerInfo);
+                                                         &listenerInfo);
   if (groupId)
     debugger->unmuteMetrics(groupId);
 
@@ -418,10 +422,6 @@ void ThreadDebugger::getEventListenersCallback(
                        v8::Boolean::New(isolate, info.once));
     createDataProperty(context, listenerObject, v8String(isolate, "type"),
                        v8String(isolate, currentEventType));
-    v8::Local<v8::Function> removeFunction;
-    if (info.removeFunction.ToLocal(&removeFunction))
-      createDataProperty(context, listenerObject, v8String(isolate, "remove"),
-                         removeFunction);
     createDataPropertyInArray(context, listeners, outputIndex++,
                               listenerObject);
   }

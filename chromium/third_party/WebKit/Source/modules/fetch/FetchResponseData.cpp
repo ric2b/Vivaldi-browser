@@ -6,9 +6,9 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMArrayBuffer.h"
-#include "core/fetch/FetchUtils.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchHeaderList.h"
+#include "platform/loader/fetch/FetchUtils.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "wtf/PtrUtil.h"
 
@@ -126,7 +126,7 @@ FetchResponseData* FetchResponseData::createCORSFilteredResponse(
         (explicitlyExposed &&
          !FetchUtils::isForbiddenResponseHeaderName(name))) {
       if (explicitlyExposed)
-        response->m_corsExposedHeaderNames.add(name);
+        response->m_corsExposedHeaderNames.insert(name);
       response->m_headerList->append(name, header->second);
     }
   }

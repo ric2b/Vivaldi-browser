@@ -24,7 +24,6 @@
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_overlay.h"
-#include "ui/gl/sync_control_vsync_provider.h"
 
 namespace gl {
 
@@ -47,25 +46,6 @@ GL_EXPORT void GetEGLInitDisplays(bool supports_angle_d3d,
                                   bool supports_angle_null,
                                   const base::CommandLine* command_line,
                                   std::vector<DisplayType>* init_displays);
-
-// VSync provider for EGL surface;
-class GL_EXPORT EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
- public:
-  explicit EGLSyncControlVSyncProvider(EGLSurface surface);
-  ~EGLSyncControlVSyncProvider() override;
-
- protected:
-  bool GetSyncValues(int64_t* system_time,
-                     int64_t* media_stream_counter,
-                     int64_t* swap_buffer_counter) override;
-
-  bool GetMscRate(int32_t* numerator, int32_t* denominator) override;
-
- private:
-  EGLSurface surface_;
-
-  DISALLOW_COPY_AND_ASSIGN(EGLSyncControlVSyncProvider);
-};
 
 // Interface for EGL surface.
 class GL_EXPORT GLSurfaceEGL : public GLSurface {
@@ -122,12 +102,7 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL {
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;
   EGLSurface GetHandle() override;
-  bool SupportsSwapBuffersWithDamage() override;
   bool SupportsPostSubBuffer() override;
-  gfx::SwapResult SwapBuffersWithDamage(int x,
-                                        int y,
-                                        int width,
-                                        int height) override;
   gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
   bool SupportsCommitOverlayPlanes() override;
   gfx::SwapResult CommitOverlayPlanes() override;
@@ -155,6 +130,7 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL {
   bool enable_fixed_size_angle_;
 
   void OnSetSwapInterval(int interval) override;
+  gfx::SwapResult SwapBuffersWithDamage(const std::vector<int>& rects);
 
  private:
   // Commit the |pending_overlays_| and clear the vector. Returns false if any

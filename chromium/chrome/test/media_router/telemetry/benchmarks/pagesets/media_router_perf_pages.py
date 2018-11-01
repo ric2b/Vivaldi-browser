@@ -9,8 +9,11 @@ from telemetry import story
 from benchmarks.pagesets import media_router_page
 from telemetry.core import exceptions
 from telemetry.page import shared_page_state
+from telemetry.util import js_template
+
 
 SESSION_TIME = 300  # 5 minutes
+
 
 class SharedState(shared_page_state.SharedPageState):
   """Shared state that restarts the browser for every single story."""
@@ -107,7 +110,8 @@ class CastFlingingPage(media_router_page.CastPage):
       # Load Media
       self.ExecuteAsyncJavaScript(
           action_runner,
-          'loadMedia("%s");' % utils.GetInternalVideoURL(),
+          js_template.Render(
+              'loadMedia({{ url }});', url=utils.GetInternalVideoURL()),
           lambda: action_runner.EvaluateJavaScript('currentMedia'),
           'Failed to load media',
           timeout=120)

@@ -266,10 +266,6 @@ void WebRemoteFrameImpl::setReferrerForRequest(WebURLRequest&,
   NOTREACHED();
 }
 
-void WebRemoteFrameImpl::dispatchWillSendRequest(WebURLRequest&) {
-  NOTREACHED();
-}
-
 WebAssociatedURLLoader* WebRemoteFrameImpl::createAssociatedURLLoader(
     const WebAssociatedURLLoaderOptions&) {
   NOTREACHED();
@@ -332,10 +328,13 @@ WebLocalFrame* WebRemoteFrameImpl::createLocalChild(
     const WebString& uniqueName,
     WebSandboxFlags sandboxFlags,
     WebFrameClient* client,
+    blink::InterfaceProvider* interfaceProvider,
+    blink::InterfaceRegistry* interfaceRegistry,
     WebFrame* previousSibling,
     const WebFrameOwnerProperties& frameOwnerProperties,
     WebFrame* opener) {
-  WebLocalFrameImpl* child = WebLocalFrameImpl::create(scope, client, opener);
+  WebLocalFrameImpl* child = WebLocalFrameImpl::create(
+      scope, client, interfaceProvider, interfaceRegistry, opener);
   insertAfter(child, previousSibling);
   RemoteFrameOwner* owner = RemoteFrameOwner::create(
       static_cast<SandboxFlags>(sandboxFlags), frameOwnerProperties);
@@ -427,7 +426,7 @@ void WebRemoteFrameImpl::setReplicatedName(const WebString& name,
 }
 
 void WebRemoteFrameImpl::setReplicatedFeaturePolicyHeader(
-    const WebParsedFeaturePolicy& parsedHeader) const {
+    const WebParsedFeaturePolicyHeader& parsedHeader) const {
   if (RuntimeEnabledFeatures::featurePolicyEnabled()) {
     FeaturePolicy* parentFeaturePolicy = nullptr;
     if (parent()) {

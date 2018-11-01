@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">显示为此页面保存的已知过时副本。</translation>
 <translation id="1559528461873125649">不存在此类文件或目录</translation>
 <translation id="1710259589646384581">操作系统</translation>
-<translation id="1838667051080421715">您正在查看网页的源代码。</translation>
 <translation id="194030505837763158">请访问<ph name="LINK" /></translation>
 <translation id="2030481566774242610">您是想访问<ph name="LINK" />吗？</translation>
-<translation id="2089090684895656482">收起</translation>
 <translation id="2166378884831602661">此网站无法提供安全连接</translation>
 <translation id="2292556288342944218">您被禁止访问互联网</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 发送的响应无效。</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">访问文件遭拒</translation>
 <translation id="2705137772291741111">无法读取此网站的已保存（缓存）副本。</translation>
 <translation id="2784949926578158345">连接已重置。</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" /> 上的服务器证书似乎是伪造的。</translation>
 <translation id="2909946352844186028">检测到了网络变化。</translation>
 <translation id="3005723025932146533">显示已保存的版本</translation>
 <translation id="3093245981617870298">您已下线。</translation>
@@ -36,7 +33,6 @@
 <translation id="4021036232240155012">DNS 是一项网络服务，可将网站的名称转译为其对应的互联网地址。</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> 不接受您的登录证书，或者您可能没有提供登录证书。</translation>
 <translation id="4522570452068850558">详细信息</translation>
-<translation id="4670097147947922288">您正在查看的是扩展程序页面。</translation>
 <translation id="4708268264240856090">您的连接已中断</translation>
 <translation id="4744603770635761495">可执行文件路径</translation>
 <translation id="4764776831041365478">网址为 <ph name="URL" /> 的网页可能暂时无法连接，或者它已永久性地移动到了新网址。</translation>
@@ -53,7 +49,6 @@
 <translation id="5675650730144413517">该网页无法正常运作</translation>
 <translation id="5869405914158311789">无法访问此网站</translation>
 <translation id="5990559369517809815">对服务器的请求已遭到某个扩展程序的阻止。</translation>
-<translation id="6042308850641462728">更多</translation>
 <translation id="6146055958333702838">请检查所有网线是否都已连好，然后重新启动您可能正在使用的任何路由器、调制解调器或其他网络设备。</translation>
 <translation id="6165508094623778733">了解详情</translation>
 <translation id="6203231073485539293">请检查您的互联网连接是否正常</translation>
@@ -63,10 +58,8 @@
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒绝了我们的连接请求。</translation>
 <translation id="6711464428925977395">代理服务器出现问题，或者地址有误。</translation>
 <translation id="6757797048963528358">您的计算机已进入休眠模式。</translation>
-<translation id="6830600606572693159">网址为 <ph name="URL" /> 的网页目前无法访问。该网页可能已超载或关闭进行维护。</translation>
 <translation id="6897140037006041989">用户代理</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合相关安全标准。</translation>
-<translation id="7269802741830436641">此网页包含重定向循环</translation>
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7419106976560586862">个人资料路径</translation>
 <translation id="7518003948725431193">找不到与以下网址对应的网页：<ph name="URL" /></translation>
@@ -74,7 +67,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> 目前无法处理此请求。</translation>
 <translation id="7716424297397655342">无法从缓存中加载此网站</translation>
 <translation id="7758069387465995638">防火墙或防病毒软件可能已阻止您连接到网络。</translation>
-<translation id="778579833039460630">未收到数据</translation>
 <translation id="7951415247503192394">（32 位）</translation>
 <translation id="8134994873729925007">找不到 <ph name="HOST_NAME" /> 的服务器 <ph name="BEGIN_ABBR" />DNS 地址<ph name="END_ABBR" />。</translation>
 <translation id="8142868475871995937">请访问 &lt;strong&gt;vivaldi:// 政策&lt;/strong&gt;，查看列入黑名单的网址列表以及您的系统管理员强制要求执行的其他政策。</translation>

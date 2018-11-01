@@ -242,13 +242,10 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // Removes the overflow controls host layer from its parent and positions it
   // so that it can be inserted as a sibling to this CLM without changing
   // position.
-  GraphicsLayer* detachLayerForOverflowControls(
-      const PaintLayer& enclosingLayer);
+  GraphicsLayer* detachLayerForOverflowControls();
 
   void updateFilters(const ComputedStyle&);
   void updateBackdropFilters(const ComputedStyle&);
-
-  void updateStickyConstraints(const ComputedStyle&);
 
   void setBlendMode(WebBlendMode);
 
@@ -298,6 +295,10 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // draw with subpixel anti-aliasing.
   bool backgroundPaintsOntoScrollingContentsLayer() {
     return m_backgroundPaintsOntoScrollingContentsLayer;
+  }
+
+  bool drawsBackgroundOntoContentLayer() {
+    return m_drawsBackgroundOntoContentLayer;
   }
 
  private:
@@ -362,6 +363,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       const FloatSize& relativeCompositingBoundsSize);
   void updateScrollingLayerGeometry(const IntRect& localCompositingBounds);
   void updateChildClippingMaskLayerGeometry();
+  void updateStickyConstraints(const ComputedStyle&, const PaintLayer*);
 
   void createPrimaryGraphicsLayer();
   void destroyGraphicsLayers();
@@ -373,7 +375,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
                                     bool needsLayer,
                                     CompositingReasons);
 
-  LayoutBoxModelObject* layoutObject() const {
+  LayoutBoxModelObject& layoutObject() const {
     return m_owningLayer.layoutObject();
   }
   PaintLayerCompositor* compositor() const {
@@ -486,8 +488,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // the child is not clipped. We accept the approximation because most border
   // radii are small and the outcome is used to reduce the number of layers,
   // not influence correctness.
-  bool ancestorRoundedCornersWontClip(const LayoutObject* child,
-                                      const LayoutObject* clippingAncestor);
+  bool ancestorRoundedCornersWontClip(
+      const LayoutBoxModelObject& child,
+      const LayoutBoxModelObject& clippingAncestor);
 
   // Return true in |owningLayerIsClipped| iff |m_owningLayer|'s compositing
   // ancestor is not a descendant (inclusive) of the clipping container for
@@ -696,6 +699,8 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // layer and the graphics layer because the scrolling contents layer is
   // clipped by the padding box.
   unsigned m_backgroundPaintsOntoGraphicsLayer : 1;
+
+  bool m_drawsBackgroundOntoContentLayer;
 
   friend class CompositedLayerMappingTest;
 };

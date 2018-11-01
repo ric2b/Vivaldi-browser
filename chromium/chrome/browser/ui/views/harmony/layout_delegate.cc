@@ -20,28 +20,40 @@ LayoutDelegate* LayoutDelegate::Get() {
              : layout_delegate_.Pointer();
 }
 
-int LayoutDelegate::GetLayoutDistance(LayoutDistanceType type) const {
-  switch (type) {
-    case LayoutDistanceType::PANEL_HORIZ_MARGIN:
-      return views::kPanelHorizMargin;
-    case LayoutDistanceType::PANEL_VERT_MARGIN:
-      return views::kPanelVertMargin;
-    case LayoutDistanceType::RELATED_BUTTON_HORIZONTAL_SPACING:
-      return views::kRelatedButtonHSpacing;
-    case LayoutDistanceType::RELATED_CONTROL_HORIZONTAL_SPACING:
-      return views::kRelatedControlHorizontalSpacing;
-    case LayoutDistanceType::RELATED_CONTROL_VERTICAL_SPACING:
-      return views::kRelatedControlVerticalSpacing;
-    case LayoutDistanceType::UNRELATED_CONTROL_VERTICAL_SPACING:
-      return views::kUnrelatedControlVerticalSpacing;
-    case LayoutDistanceType::UNRELATED_CONTROL_LARGE_VERTICAL_SPACING:
-      return views::kUnrelatedControlLargeVerticalSpacing;
-    case LayoutDistanceType::BUTTON_VEDGE_MARGIN_NEW:
-      return views::kButtonVEdgeMarginNew;
-    case LayoutDistanceType::BUTTON_HEDGE_MARGIN_NEW:
+int LayoutDelegate::GetMetric(Metric metric) const {
+  switch (metric) {
+    case Metric::BUTTON_HORIZONTAL_PADDING:
+      return views::kButtonHorizontalPadding;
+    case Metric::BUTTON_MINIMUM_WIDTH:
+      return views::kMinimumButtonWidth;
+    case Metric::DIALOG_BUTTON_MARGIN:
       return views::kButtonHEdgeMarginNew;
-    case LayoutDistanceType::CHECKBOX_INDENT:
+    case Metric::DIALOG_BUTTON_MINIMUM_WIDTH:
+      return views::kDialogMinimumButtonWidth;
+    case Metric::DIALOG_BUTTON_TOP_SPACING:
+      return 0;
+    case Metric::DIALOG_CLOSE_BUTTON_MARGIN:
+      return views::kCloseButtonMargin;
+    case Metric::PANEL_CONTENT_MARGIN:
+      return views::kPanelHorizMargin;
+    case Metric::RELATED_BUTTON_HORIZONTAL_SPACING:
+      return views::kRelatedButtonHSpacing;
+    case Metric::RELATED_CONTROL_HORIZONTAL_SPACING:
+      return views::kRelatedControlHorizontalSpacing;
+    case Metric::RELATED_CONTROL_VERTICAL_SPACING:
+      return views::kRelatedControlVerticalSpacing;
+    case Metric::RELATED_LABEL_HORIZONTAL_SPACING:
+      return views::kItemLabelSpacing;
+    case Metric::SUBSECTION_HORIZONTAL_INDENT:
       return views::kCheckboxIndent;
+    case Metric::UNRELATED_CONTROL_HORIZONTAL_SPACING:
+      return views::kUnrelatedControlHorizontalSpacing;
+    case Metric::UNRELATED_CONTROL_HORIZONTAL_SPACING_LARGE:
+      return views::kUnrelatedControlLargeHorizontalSpacing;
+    case Metric::UNRELATED_CONTROL_VERTICAL_SPACING:
+      return views::kUnrelatedControlVerticalSpacing;
+    case Metric::UNRELATED_CONTROL_VERTICAL_SPACING_LARGE:
+      return views::kUnrelatedControlLargeVerticalSpacing;
   }
   NOTREACHED();
   return 0;
@@ -60,6 +72,6 @@ bool LayoutDelegate::IsHarmonyMode() const {
   return false;
 }
 
-int LayoutDelegate::GetDialogPreferredWidth(DialogWidthType type) const {
+int LayoutDelegate::GetDialogPreferredWidth(DialogWidth width) const {
   return 0;
 }

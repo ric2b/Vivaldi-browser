@@ -27,7 +27,6 @@
 
 #include "core/editing/serializers/MarkupAccumulator.h"
 
-#include "core/HTMLNames.h"
 #include "core/XLinkNames.h"
 #include "core/XMLNSNames.h"
 #include "core/XMLNames.h"
@@ -45,8 +44,6 @@
 #include "wtf/text/CharacterNames.h"
 
 namespace blink {
-
-using namespace HTMLNames;
 
 MarkupAccumulator::MarkupAccumulator(EAbsoluteURLs resolveUrlsMethod,
                                      SerializationType serializationType)
@@ -91,11 +88,7 @@ static bool elementCannotHaveEndTag(const Node& node) {
   if (!node.isHTMLElement())
     return false;
 
-  // FIXME: ieForbidsInsertHTML may not be the right function to call here
-  // ieForbidsInsertHTML is used to disallow setting innerHTML/outerHTML
-  // or createContextualFragment.  It does not necessarily align with
-  // which elements should be serialized w/o end tags.
-  return toHTMLElement(node).ieForbidsInsertHTML();
+  return !toHTMLElement(node).shouldSerializeEndTag();
 }
 
 void MarkupAccumulator::appendEndMarkup(StringBuilder& result,
@@ -111,13 +104,18 @@ void MarkupAccumulator::appendText(StringBuilder& result, Text& text) {
   m_formatter.appendText(result, text);
 }
 
-bool MarkupAccumulator::shouldIgnoreAttribute(const Element& element,
-                                              const Attribute& attribute) {
+bool MarkupAccumulator::shouldIgnoreAttribute(
+    const Element& element,
+    const Attribute& attribute) const {
+  return false;
+}
+
+bool MarkupAccumulator::shouldIgnoreElement(const Element& element) const {
   return false;
 }
 
 void MarkupAccumulator::appendElement(StringBuilder& result,
-                                      Element& element,
+                                      const Element& element,
                                       Namespaces* namespaces) {
   appendOpenTag(result, element, namespaces);
 
@@ -164,6 +162,11 @@ static void serializeNodesWithNamespaces(MarkupAccumulator& accumulator,
                                          Node& targetNode,
                                          EChildrenOnly childrenOnly,
                                          const Namespaces* namespaces) {
+  if (targetNode.isElementNode() &&
+      accumulator.shouldIgnoreElement(toElement(targetNode))) {
+    return;
+  }
+
   Namespaces namespaceHash;
   if (namespaces)
     namespaceHash = *namespaces;
@@ -182,7 +185,9 @@ static void serializeNodesWithNamespaces(MarkupAccumulator& accumulator,
                                              &namespaceHash);
   }
 
-  if (!childrenOnly && targetNode.isElementNode())
+  if ((!childrenOnly && targetNode.isElementNode()) &&
+      !(accumulator.serializeAsHTMLDocument(targetNode) &&
+        elementCannotHaveEndTag(targetNode)))
     accumulator.appendEndTag(toElement(targetNode));
 }
 

@@ -13,10 +13,8 @@ views::GridLayout* CreatePanelLayout(views::View* host) {
   views::GridLayout* layout = new views::GridLayout(host);
   LayoutDelegate* delegate = LayoutDelegate::Get();
   layout->SetInsets(gfx::Insets(
-      delegate->GetLayoutDistance(
-          LayoutDelegate::LayoutDistanceType::PANEL_VERT_MARGIN),
-      delegate->GetLayoutDistance(
-          LayoutDelegate::LayoutDistanceType::BUTTON_HEDGE_MARGIN_NEW)));
+      delegate->GetMetric(LayoutDelegate::Metric::PANEL_CONTENT_MARGIN),
+      delegate->GetMetric(LayoutDelegate::Metric::DIALOG_BUTTON_MARGIN)));
   host->SetLayoutManager(layout);
   return layout;
 }

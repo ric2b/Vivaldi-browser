@@ -10,6 +10,7 @@ import android.webkit.WebSettings.RenderPriority;
 import android.webkit.WebSettings.ZoomDensity;
 
 import org.chromium.android_webview.AwSettings;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.annotations.SuppressFBWarnings;
 
 /**
@@ -102,6 +103,16 @@ public class ContentSettingsAdapter extends android.webkit.WebSettings {
         return mAwSettings.getLoadWithOverviewMode();
     }
 
+    // TODO(ntfschr): add @Override once Android O is released (crbug/706631)
+    public void setSafeBrowsingEnabled(boolean accept) {
+        mAwSettings.setSafeBrowsingEnabled(accept);
+    }
+
+    // TODO(ntfschr): add @Override once Android O is released (crbug/706631)
+    public boolean getSafeBrowsingEnabled() {
+        return mAwSettings.getSafeBrowsingEnabled();
+    }
+
     @Override
     public void setAcceptThirdPartyCookies(boolean accept) {
         mAwSettings.setAcceptThirdPartyCookies(accept);
@@ -136,11 +147,15 @@ public class ContentSettingsAdapter extends android.webkit.WebSettings {
 
     @Override
     public void setSaveFormData(boolean save) {
+        if (BuildInfo.isAtLeastO()) return;
+
         mAwSettings.setSaveFormData(save);
     }
 
     @Override
     public boolean getSaveFormData() {
+        if (BuildInfo.isAtLeastO()) return false;
+
         return mAwSettings.getSaveFormData();
     }
 

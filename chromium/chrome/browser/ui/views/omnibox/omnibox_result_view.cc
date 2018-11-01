@@ -20,12 +20,14 @@
 #include "base/i18n/bidi_line_iterator.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -40,7 +42,6 @@
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_utils.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/native_theme.h"
 
 using ui::NativeTheme;
@@ -215,8 +216,7 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupContentsView* model,
   CHECK_GE(model_index, 0);
   keyword_icon_->set_owned_by_client();
   keyword_icon_->EnableCanvasFlippingForRTLUI(true);
-  keyword_icon_->SetImage(
-      GetVectorIcon(gfx::VectorIconId::OMNIBOX_KEYWORD_SEARCH));
+  keyword_icon_->SetImage(GetVectorIcon(omnibox::kKeywordSearchIcon));
   keyword_icon_->SizeToPreferredSize();
 }
 
@@ -582,19 +582,18 @@ gfx::ImageSkia OmniboxResultView::GetIcon() const {
   if (!image.IsEmpty())
     return image.AsImageSkia();
 
-  return GetVectorIcon(
-      model_->IsStarredMatch(match_)
-          ? gfx::VectorIconId::OMNIBOX_STAR
-          : AutocompleteMatch::TypeToVectorIcon(match_.type));
+  return GetVectorIcon(model_->IsStarredMatch(match_)
+                           ? omnibox::kStarIcon
+                           : AutocompleteMatch::TypeToVectorIcon(match_.type));
 }
 
 gfx::ImageSkia OmniboxResultView::GetVectorIcon(
-    gfx::VectorIconId icon_id) const {
+    const gfx::VectorIcon& icon) const {
   // For selected rows, paint the icon the same color as the text.
   SkColor color = GetColor(GetState(), TEXT);
   if (GetState() != SELECTED)
     color = color_utils::DeriveDefaultIconColor(color);
-  return gfx::CreateVectorIcon(icon_id, 16, color);
+  return gfx::CreateVectorIcon(icon, 16, color);
 }
 
 bool OmniboxResultView::ShowOnlyKeywordMatch() const {
@@ -604,28 +603,32 @@ bool OmniboxResultView::ShowOnlyKeywordMatch() const {
 
 void OmniboxResultView::InitContentsRenderTextIfNecessary() const {
   if (!contents_rendertext_) {
-    contents_rendertext_.reset(
-        CreateClassifiedRenderText(
-            match_.contents, match_.contents_class, false).release());
+    if (match_.answer) {
+      contents_rendertext_ =
+          CreateAnswerLine(match_.answer->first_line(), font_list_);
+    } else {
+      contents_rendertext_ = CreateClassifiedRenderText(
+          match_.contents, match_.contents_class, false);
+    }
   }
 }
 
 void OmniboxResultView::Layout() {
-  constexpr int horizontal_padding = LocationBarView::kHorizontalPadding;
+  const int horizontal_padding =
+      GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
+      LocationBarView::kIconInteriorPadding;
   // The horizontal bounds we're given are the outside bounds, so we can match
   // the omnibox border outline shape exactly in OnPaint().  We have to inset
   // here to keep the icons lined up.
-  constexpr int start_x =
-      BackgroundWith1PxBorder::kLocationBarBorderThicknessDip +
-      horizontal_padding;
+  const int start_x = BackgroundWith1PxBorder::kLocationBarBorderThicknessDip +
+                      horizontal_padding;
   const int end_x = width() - start_x;
 
   const gfx::ImageSkia icon = GetIcon();
   icon_bounds_.SetRect(start_x, (GetContentLineHeight() - icon.height()) / 2,
                        icon.width(), icon.height());
 
-  constexpr int text_x =
-      start_x + LocationBarView::kIconWidth + horizontal_padding;
+  const int text_x = start_x + LocationBarView::kIconWidth + horizontal_padding;
   int text_width = end_x - text_x;
 
   if (match_.associated_keyword.get()) {
@@ -661,8 +664,6 @@ void OmniboxResultView::OnPaint(gfx::Canvas* canvas) {
 
     if (!description_rendertext_) {
       if (match_.answer) {
-        contents_rendertext_ =
-            CreateAnswerLine(match_.answer->first_line(), font_list_);
         description_rendertext_ =
             CreateAnswerLine(match_.answer->second_line(), GetAnswerLineFont());
       } else if (!match_.description.empty()) {
@@ -679,17 +680,13 @@ void OmniboxResultView::OnPaint(gfx::Canvas* canvas) {
     int x = GetMirroredXForRect(keyword_text_bounds_);
     mirroring_context_->Initialize(x, keyword_text_bounds_.width());
     if (!keyword_contents_rendertext_) {
-      keyword_contents_rendertext_.reset(
-          CreateClassifiedRenderText(keyword_match->contents,
-                                     keyword_match->contents_class,
-                                     false).release());
+      keyword_contents_rendertext_ = CreateClassifiedRenderText(
+          keyword_match->contents, keyword_match->contents_class, false);
     }
     if (!keyword_description_rendertext_ &&
         !keyword_match->description.empty()) {
-      keyword_description_rendertext_.reset(
-          CreateClassifiedRenderText(keyword_match->description,
-                                     keyword_match->description_class,
-                                     true).release());
+      keyword_description_rendertext_ = CreateClassifiedRenderText(
+          keyword_match->description, keyword_match->description_class, true);
     }
     PaintMatch(*keyword_match, keyword_contents_rendertext_.get(),
                keyword_description_rendertext_.get(), canvas, x);

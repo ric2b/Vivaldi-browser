@@ -50,10 +50,10 @@ class LocalFrame;
 class Node;
 class Page;
 class PageOverlay;
-class PlatformMouseEvent;
-class PlatformTouchEvent;
 class WebGestureEvent;
+class WebMouseEvent;
 class WebLocalFrameImpl;
+class WebTouchEvent;
 
 namespace protocol {
 class Value;
@@ -132,8 +132,8 @@ class InspectorOverlay final
 
   bool handleMousePress();
   bool handleGestureEvent(const WebGestureEvent&);
-  bool handleTouchEvent(const PlatformTouchEvent&);
-  bool handleMouseMove(const PlatformMouseEvent&);
+  bool handleTouchEvent(const WebTouchEvent&);
+  bool handleMouseMove(const WebMouseEvent&);
   bool shouldSearchForNode();
   void inspect(Node*);
 
@@ -150,7 +150,7 @@ class InspectorOverlay final
   bool m_drawViewSize;
   bool m_resizeTimerActive;
   bool m_omitTooltip;
-  Timer<InspectorOverlay> m_timer;
+  TaskRunnerTimer<InspectorOverlay> m_timer;
   bool m_suspended;
   bool m_showReloadingBlanket;
   bool m_inLayout;

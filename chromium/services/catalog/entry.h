@@ -16,7 +16,7 @@
 #include "services/service_manager/public/interfaces/resolver.mojom.h"
 
 namespace base {
-class DictionaryValue;
+class Value;
 }
 
 namespace catalog {
@@ -28,9 +28,7 @@ class Entry {
   explicit Entry(const std::string& name);
   ~Entry();
 
-  std::unique_ptr<base::DictionaryValue> Serialize() const;
-
-  static std::unique_ptr<Entry> Deserialize(const base::DictionaryValue& value);
+  static std::unique_ptr<Entry> Deserialize(const base::Value& manifest_root);
 
   bool ProvidesCapability(const std::string& capability) const;
 
@@ -66,11 +64,17 @@ class Entry {
     return interface_provider_specs_;
   }
 
+  void AddRequiredFilePath(const std::string& name, const base::FilePath& path);
+  const std::map<std::string, base::FilePath>& required_file_paths() const {
+    return required_file_paths_;
+  }
+
  private:
   std::string name_;
   base::FilePath path_;
   std::string display_name_;
   service_manager::InterfaceProviderSpecMap interface_provider_specs_;
+  std::map<std::string, base::FilePath> required_file_paths_;
   const Entry* parent_ = nullptr;
   std::vector<std::unique_ptr<Entry>> children_;
 

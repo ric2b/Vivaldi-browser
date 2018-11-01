@@ -33,6 +33,11 @@ settings.PowerSource;
  */
 settings.BatteryStatus;
 
+/**
+ * @typedef {{name:string, value:string, preferred:boolean}}
+ */
+settings.NoteAppInfo;
+
 cr.define('settings', function() {
   /** @interface */
   function DevicePageBrowserProxy() {}
@@ -66,6 +71,32 @@ cr.define('settings', function() {
      *     battery (no external power source).
      */
     setPowerSource: function(powerSourceId) {},
+
+    /**
+     * |callback| is run when there is new note-taking app information
+     * available or after |requestNoteTakingApps| has been called.
+     * @param {function(Array<settings.NoteAppInfo>, boolean):void} callback
+     */
+    setNoteTakingAppsUpdatedCallback: function(callback) {},
+
+    /**
+     * Open up the play store with the given URL.
+     * @param {string} url
+     */
+    showPlayStore: function(url) {},
+
+    /**
+     * Request current note-taking app info. Invokes any callback registered in
+     * |onNoteTakingAppsUpdated|.
+     */
+    requestNoteTakingApps: function() {},
+
+    /**
+     * Changes the preferred note taking app.
+     * @param {string} appId The app id. This should be a value retrieved from a
+     *     |onNoteTakingAppsUpdated| callback.
+     */
+    setPreferredNoteTakingApp: function(appId) {},
   };
 
   /**
@@ -112,6 +143,26 @@ cr.define('settings', function() {
     /** @override */
     setPowerSource: function(powerSourceId) {
       chrome.send('setPowerSource', [powerSourceId]);
+    },
+
+    /** @override */
+    setNoteTakingAppsUpdatedCallback: function(callback) {
+      cr.addWebUIListener('onNoteTakingAppsUpdated', callback);
+    },
+
+    /** @override */
+    showPlayStore: function(url) {
+      chrome.send('showPlayStoreApps', [url]);
+    },
+
+    /** @override */
+    requestNoteTakingApps: function() {
+      chrome.send('requestNoteTakingApps');
+    },
+
+    /** @override */
+    setPreferredNoteTakingApp: function(appId) {
+      chrome.send('setPreferredNoteTakingApp', [appId]);
     },
   };
 

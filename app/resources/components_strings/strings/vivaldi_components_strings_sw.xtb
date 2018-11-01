@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Onyesha nakala iliyohifadhiwa (yaani inayojulikana kwisha muda) ya ukurasa huu.</translation>
 <translation id="1559528461873125649">Hakuna faili au saraka kama hiyo</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">Unaangalia chanzo cha ukurasa wa wavuti.</translation>
 <translation id="194030505837763158">Nenda kwenye <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Je, ulimaanisha <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Chache</translation>
 <translation id="2166378884831602661">Tovuti hii haiwezi kutoa muunganisho salama</translation>
 <translation id="2292556288342944218">Ufikiaji wako wa intaneti umezuiwa</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> imetuma jibu ambalo si sahihi.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">Ufikivu katika faili umekataliwa</translation>
 <translation id="2705137772291741111">Nakala iliyohifadhiwa (iliyowekwa katika akiba) ya tovuti hii haikusomeka.</translation>
 <translation id="2784949926578158345">Muunganisho uliwekwa upya.</translation>
-<translation id="284702764277384724">Cheti cha seva kilchopo kwenye <ph name="HOST_NAME" /> kinaonekana ghushi.</translation>
 <translation id="2909946352844186028">Mabadiliko ya mtandao yamegunduliwa.</translation>
 <translation id="3005723025932146533">Onyesha nakala iliyohifadhiwa</translation>
 <translation id="3109728660330352905">Huna idhini ya kuona ukurasa huu.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS ni huduma za mtandao ambazo hubadilisha jina la tovuti kuwa anwani yake ya Intaneti.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> haikukubali cheti chako cha kuingia katika akaunti, au huenda hukutoa cheti.</translation>
 <translation id="4522570452068850558">Maelezo</translation>
-<translation id="4670097147947922288">Unaangalia ukurasa wa kiendelezi.</translation>
 <translation id="4708268264240856090">Muunganisho wako umekatizwa</translation>
 <translation id="4744603770635761495">Njia Tekelezi</translation>
 <translation id="4764776831041365478">Ukurasa wa wavuti ulio <ph name="URL" /> unaweza kuwa haupatikani kwa muda au unaweza kuwa umehamishwa kabisa hadi anwani mpya ya wavuti.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">Ukurasa huu haufanyi kazi</translation>
 <translation id="5869405914158311789">Tovuti hii haiwezi kufikiwa</translation>
 <translation id="5990559369517809815">Maombi katika seva yamezuiwa kwa kiendelezi.</translation>
-<translation id="6042308850641462728">Zaidi</translation>
 <translation id="6146055958333702838">Angalia kebo zozote na uwashe tena kisambaza data, modemu, au vifaa vingine vyovyote vya
         mtandao ambavyo huenda unavitumia.</translation>
 <translation id="6165508094623778733">Pata maelezo zaidi</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">Jaribu kuzima utabiri wa mtandao</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> imekataa kuunganisha.</translation>
 <translation id="6711464428925977395">Kuna hitilafu katika seva mbadala, au anwani siyo sahihi.</translation>
-<translation id="6830600606572693159">Ukurasa wa wavuti katika <ph name="URL" /> haupatikani kwa sasa. Huenda umezidishwa kiwango au unarekebishwa.</translation>
 <translation id="6897140037006041989">Programu ya Mtumiaji</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> haizingatii viwango vya usalama.</translation>
-<translation id="7269802741830436641">Ukurasa huu wa wavuti una kitanzi cha kuelekeza upya</translation>
 <translation id="7353601530677266744">Mbinu ya Amri</translation>
 <translation id="7419106976560586862">Kijia cha Maelezo mafupi</translation>
 <translation id="7518003948725431193">Hakuna ukurasa wa wavuti uliopatikana kwa anwani hii ya wavuti: <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> haiwezi kushughulikia ombi hili kwa sasa.</translation>
 <translation id="7716424297397655342">Faili hii haiwezi kupakiwa kutoka akiba</translation>
 <translation id="7758069387465995638">Huenda programu ya kinga-mtandao au kinga-virusi zimezuia muunganisho huu.</translation>
-<translation id="778579833039460630">Hakuna data zilizopokewa</translation>
 <translation id="7951415247503192394">(biti 32)</translation>
 <translation id="8134994873729925007"><ph name="BEGIN_ABBR" />Anwani ya DNS <ph name="END_ABBR" /> ya seva ya <ph name="HOST_NAME" /> haikupatikana.</translation>
 <translation id="8142868475871995937">Tembelea &lt;strong&gt;vivaldi://policy&lt;/strong&gt; ili kuona orodha ya URL zilizoondolewa idhini na sera zingine zinazosimamiwa na msimamizi wako wa mfumo.</translation>

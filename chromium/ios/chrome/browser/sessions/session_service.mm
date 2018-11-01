@@ -20,8 +20,8 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/sessions/session_window.h"
 #import "ios/web/navigation/crw_session_certificate_policy_manager.h"
-#import "ios/web/navigation/crw_session_controller.h"
-#import "ios/web/navigation/crw_session_entry.h"
+#import "ios/web/public/crw_navigation_item_storage.h"
+#import "ios/web/public/crw_session_storage.h"
 #include "ios/web/public/web_thread.h"
 
 // When C++ exceptions are disabled, the C++ library defines |try| and
@@ -84,7 +84,7 @@ const NSTimeInterval kSaveDelay = 2.5;  // Value taken from Desktop Chrome.
   self = [super init];
   if (self) {
     pendingWindows_.reset([[NSMutableDictionary alloc] init]);
-    auto pool = web::WebThread::GetBlockingPool();
+    auto* pool = web::WebThread::GetBlockingPool();
     taskRunner_ = pool->GetSequencedTaskRunner(pool->GetSequenceToken());
   }
   return self;
@@ -187,7 +187,7 @@ const NSTimeInterval kSaveDelay = 2.5;  // Value taken from Desktop Chrome.
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
     [self performSaveToDirectoryInBackground:stashPath];
   } else if (!pendingSession) {
-    // If there wasn't previously a delayed save pending for |stashPath}|,
+    // If there wasn't previously a delayed save pending for |stashPath|,
     // enqueue one now.
     [self performSelector:@selector(performSaveToDirectoryInBackground:)
                withObject:stashPath
@@ -211,10 +211,14 @@ const NSTimeInterval kSaveDelay = 2.5;  // Value taken from Desktop Chrome.
   // class on disk.
   [SessionWindowUnarchiver setClass:[CRWSessionCertificatePolicyManager class]
                        forClassName:@"SessionCertificatePolicyManager"];
-  [SessionWindowUnarchiver setClass:[CRWSessionController class]
+  [SessionWindowUnarchiver setClass:[CRWSessionStorage class]
                        forClassName:@"SessionController"];
-  [SessionWindowUnarchiver setClass:[CRWSessionEntry class]
+  [SessionWindowUnarchiver setClass:[CRWSessionStorage class]
+                       forClassName:@"CRWSessionController"];
+  [SessionWindowUnarchiver setClass:[CRWNavigationItemStorage class]
                        forClassName:@"SessionEntry"];
+  [SessionWindowUnarchiver setClass:[CRWNavigationItemStorage class]
+                       forClassName:@"CRWSessionEntry"];
   // TODO(crbug.com/661633): Remove this hack.
   [SessionWindowUnarchiver setClass:[SessionWindowIOS class]
                        forClassName:@"SessionWindow"];

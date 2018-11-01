@@ -97,10 +97,12 @@ class RejectActivateTestHelper : public EmbeddedWorkerTestHelper {
  public:
   RejectActivateTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
-  void OnActivateEvent(int embedded_worker_id, int request_id) override {
-    SimulateSend(new ServiceWorkerHostMsg_ActivateEventFinished(
-        embedded_worker_id, request_id,
-        blink::WebServiceWorkerEventResultRejected, base::Time::Now()));
+  void OnActivateEvent(
+      const mojom::ServiceWorkerEventDispatcher::DispatchActivateEventCallback&
+          callback) override {
+    dispatched_events()->push_back(Event::Activate);
+    callback.Run(SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED,
+                 base::Time::Now());
   }
 };
 
@@ -215,14 +217,15 @@ TEST_F(ServiceWorkerContextTest, Register) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
 
-  EXPECT_EQ(2UL, helper_->ipc_sink()->message_count());
+  EXPECT_EQ(1UL, helper_->ipc_sink()->message_count());
+  ASSERT_EQ(1UL, helper_->dispatched_events()->size());
   ASSERT_EQ(2UL, client->events().size());
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StartWorker,
             client->events()[0]);
   EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
       ServiceWorkerMsg_InstallEvent::ID));
-  EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_ActivateEvent::ID));
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
+            helper_->dispatched_events()->at(0));
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StopWorker,
             client->events()[1]);
 
@@ -271,13 +274,12 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   EXPECT_TRUE(called);
 
   EXPECT_EQ(1UL, helper_->ipc_sink()->message_count());
+  EXPECT_EQ(0UL, helper_->dispatched_events()->size());
   ASSERT_EQ(2UL, client->events().size());
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StartWorker,
             client->events()[0]);
   EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
       ServiceWorkerMsg_InstallEvent::ID));
-  EXPECT_FALSE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_ActivateEvent::ID));
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StopWorker,
             client->events()[1]);
 
@@ -322,14 +324,15 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
 
-  EXPECT_EQ(2UL, helper_->ipc_sink()->message_count());
+  EXPECT_EQ(1UL, helper_->ipc_sink()->message_count());
+  ASSERT_EQ(1UL, helper_->dispatched_events()->size());
   ASSERT_EQ(2UL, client->events().size());
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StartWorker,
             client->events()[0]);
   EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
       ServiceWorkerMsg_InstallEvent::ID));
-  EXPECT_TRUE(helper_->inner_ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_ActivateEvent::ID));
+  EXPECT_EQ(EmbeddedWorkerTestHelper::Event::Activate,
+            helper_->dispatched_events()->at(0));
   EXPECT_EQ(RecordableEmbeddedWorkerInstanceClient::Message::StopWorker,
             client->events()[1]);
 
@@ -583,41 +586,41 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
   int provider_id = 1;
 
   // Host1 (provider_id=1): process_id=1, origin1.
-  ServiceWorkerProviderHost* host1(new ServiceWorkerProviderHost(
-      kRenderProcessId1, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
-      context()->AsWeakPtr(), nullptr));
+  std::unique_ptr<ServiceWorkerProviderHost> host1 =
+      CreateProviderHostForWindow(kRenderProcessId1, provider_id++,
+                                  true /* is_parent_frame_secure */,
+                                  context()->AsWeakPtr());
   host1->SetDocumentUrl(kOrigin1);
 
   // Host2 (provider_id=2): process_id=2, origin2.
-  ServiceWorkerProviderHost* host2(new ServiceWorkerProviderHost(
-      kRenderProcessId2, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
-      context()->AsWeakPtr(), nullptr));
+  std::unique_ptr<ServiceWorkerProviderHost> host2 =
+      CreateProviderHostForWindow(kRenderProcessId2, provider_id++,
+                                  true /* is_parent_frame_secure */,
+                                  context()->AsWeakPtr());
   host2->SetDocumentUrl(kOrigin2);
 
   // Host3 (provider_id=3): process_id=2, origin1.
-  ServiceWorkerProviderHost* host3(new ServiceWorkerProviderHost(
-      kRenderProcessId2, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
-      context()->AsWeakPtr(), nullptr));
+  std::unique_ptr<ServiceWorkerProviderHost> host3 =
+      CreateProviderHostForWindow(kRenderProcessId2, provider_id++,
+                                  true /* is_parent_frame_secure */,
+                                  context()->AsWeakPtr());
   host3->SetDocumentUrl(kOrigin1);
 
   // Host4 (provider_id=4): process_id=2, origin2, for ServiceWorker.
-  ServiceWorkerProviderHost* host4(new ServiceWorkerProviderHost(
-      kRenderProcessId2, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_CONTROLLER,
-      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
-      context()->AsWeakPtr(), nullptr));
+  std::unique_ptr<ServiceWorkerProviderHost> host4 =
+      CreateProviderHostForServiceWorkerContext(
+          kRenderProcessId2, provider_id++, true /* is_parent_frame_secure */,
+          context()->AsWeakPtr());
   host4->SetDocumentUrl(kOrigin2);
 
-  context()->AddProviderHost(base::WrapUnique(host1));
-  context()->AddProviderHost(base::WrapUnique(host2));
-  context()->AddProviderHost(base::WrapUnique(host3));
-  context()->AddProviderHost(base::WrapUnique(host4));
+  ServiceWorkerProviderHost* host1_raw = host1.get();
+  ServiceWorkerProviderHost* host2_raw = host2.get();
+  ServiceWorkerProviderHost* host3_raw = host3.get();
+  ServiceWorkerProviderHost* host4_raw = host4.get();
+  context()->AddProviderHost(std::move(host1));
+  context()->AddProviderHost(std::move(host2));
+  context()->AddProviderHost(std::move(host3));
+  context()->AddProviderHost(std::move(host4));
 
   // Iterate over all provider hosts.
   std::set<ServiceWorkerProviderHost*> results;
@@ -626,10 +629,10 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
     results.insert(it->GetProviderHost());
   }
   EXPECT_EQ(4u, results.size());
-  EXPECT_TRUE(ContainsKey(results, host1));
-  EXPECT_TRUE(ContainsKey(results, host2));
-  EXPECT_TRUE(ContainsKey(results, host3));
-  EXPECT_TRUE(ContainsKey(results, host4));
+  EXPECT_TRUE(ContainsKey(results, host1_raw));
+  EXPECT_TRUE(ContainsKey(results, host2_raw));
+  EXPECT_TRUE(ContainsKey(results, host3_raw));
+  EXPECT_TRUE(ContainsKey(results, host4_raw));
 
   // Iterate over the client provider hosts that belong to kOrigin1.
   results.clear();
@@ -638,8 +641,8 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
     results.insert(it->GetProviderHost());
   }
   EXPECT_EQ(2u, results.size());
-  EXPECT_TRUE(ContainsKey(results, host1));
-  EXPECT_TRUE(ContainsKey(results, host3));
+  EXPECT_TRUE(ContainsKey(results, host1_raw));
+  EXPECT_TRUE(ContainsKey(results, host3_raw));
 
   // Iterate over the provider hosts that belong to kOrigin2.
   // (This should not include host4 as it's not for controllee.)
@@ -649,7 +652,7 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
     results.insert(it->GetProviderHost());
   }
   EXPECT_EQ(1u, results.size());
-  EXPECT_TRUE(ContainsKey(results, host2));
+  EXPECT_TRUE(ContainsKey(results, host2_raw));
 
   context()->RemoveProviderHost(kRenderProcessId1, 1);
   context()->RemoveProviderHost(kRenderProcessId2, 2);

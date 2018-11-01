@@ -88,9 +88,9 @@ enum ElementFlags {
   IsInTopLayer = 1 << 4,
   HasPendingResources = 1 << 5,
   AlreadySpellChecked = 1 << 6,
+  ContainsPersistentVideo = 1 << 7,
 
-  NumberOfElementFlags =
-      7,  // Required size of bitfield used to store the flags.
+  NumberOfElementFlags = 8,  // Size of bitfield used to store the flags.
 };
 
 enum class ShadowRootType;
@@ -458,6 +458,17 @@ class CORE_EXPORT Element : public ContainerNode {
   // display none.
   const ComputedStyle* ensureComputedStyle(PseudoId = PseudoIdNone);
 
+  const ComputedStyle* nonLayoutObjectComputedStyle() const;
+
+  bool hasDisplayContentsStyle() const;
+
+  ComputedStyle* mutableNonLayoutObjectComputedStyle() const {
+    return const_cast<ComputedStyle*>(nonLayoutObjectComputedStyle());
+  }
+
+  bool shouldStoreNonLayoutObjectComputedStyle(const ComputedStyle&) const;
+  void storeNonLayoutObjectComputedStyle(PassRefPtr<ComputedStyle>);
+
   // Methods for indicating the style is affected by dynamic updates (e.g.,
   // children changing, our position changing in our sibling list, etc.)
   bool styleAffectedByEmpty() const {
@@ -673,6 +684,11 @@ class CORE_EXPORT Element : public ContainerNode {
   void setContainsFullScreenElement(bool);
   void setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(bool);
 
+  bool containsPersistentVideo() const {
+    return hasElementFlag(ContainsPersistentVideo);
+  }
+  void setContainsPersistentVideo(bool);
+
   bool isInTopLayer() const { return hasElementFlag(IsInTopLayer); }
   void setIsInTopLayer(bool);
 
@@ -769,7 +785,7 @@ class CORE_EXPORT Element : public ContainerNode {
   void childrenChanged(const ChildrenChange&) override;
 
   virtual void willRecalcStyle(StyleRecalcChange);
-  virtual void didRecalcStyle(StyleRecalcChange);
+  virtual void didRecalcStyle();
   virtual PassRefPtr<ComputedStyle> customStyleForLayoutObject();
 
   virtual bool shouldRegisterAsNamedItem() const { return false; }
@@ -907,7 +923,7 @@ class CORE_EXPORT Element : public ContainerNode {
 
   // cloneNode is private so that non-virtual cloneElementWithChildren and
   // cloneElementWithoutChildren are used instead.
-  Node* cloneNode(bool deep) override;
+  Node* cloneNode(bool deep, ExceptionState&) override;
   virtual Element* cloneElementWithoutAttributesAndChildren();
 
   QualifiedName m_tagName;

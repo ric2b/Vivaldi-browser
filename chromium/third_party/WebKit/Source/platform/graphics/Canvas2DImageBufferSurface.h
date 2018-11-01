@@ -47,16 +47,22 @@ class Canvas2DImageBufferSurface final : public ImageBufferSurface {
       int msaaSampleCount,
       OpacityMode opacityMode,
       Canvas2DLayerBridge::AccelerationMode accelerationMode,
-      sk_sp<SkColorSpace> colorSpace,
+      const gfx::ColorSpace& colorSpace,
+      bool skSurfacesUseColorSpace,
       SkColorType colorType)
-      : ImageBufferSurface(size, opacityMode, colorSpace, colorType),
+      : ImageBufferSurface(
+            size,
+            opacityMode,
+            skSurfacesUseColorSpace ? colorSpace.ToSkColorSpace() : nullptr,
+            colorType),
         m_layerBridge(
             adoptRef(new Canvas2DLayerBridge(std::move(contextProvider),
                                              size,
                                              msaaSampleCount,
                                              opacityMode,
                                              accelerationMode,
-                                             std::move(colorSpace),
+                                             colorSpace,
+                                             skSurfacesUseColorSpace,
                                              colorType))) {
     init();
   }
@@ -65,7 +71,7 @@ class Canvas2DImageBufferSurface final : public ImageBufferSurface {
                              const IntSize& size)
       : ImageBufferSurface(size,
                            bridge->opacityMode(),
-                           bridge->colorSpace(),
+                           bridge->skSurfaceColorSpace(),
                            bridge->colorType()),
         m_layerBridge(std::move(bridge)) {
     init();
@@ -74,11 +80,12 @@ class Canvas2DImageBufferSurface final : public ImageBufferSurface {
   ~Canvas2DImageBufferSurface() override { m_layerBridge->beginDestruction(); }
 
   // ImageBufferSurface implementation
-  void finalizeFrame(const FloatRect& dirtyRect) override {
-    m_layerBridge->finalizeFrame(dirtyRect);
+  void finalizeFrame() override { m_layerBridge->finalizeFrame(); }
+  void doPaintInvalidation(const FloatRect& dirtyRect) override {
+    m_layerBridge->doPaintInvalidation(dirtyRect);
   }
   void willOverwriteCanvas() override { m_layerBridge->willOverwriteCanvas(); }
-  SkCanvas* canvas() override { return m_layerBridge->canvas(); }
+  PaintCanvas* canvas() override { return m_layerBridge->canvas(); }
   void disableDeferral(DisableDeferralReason reason) override {
     m_layerBridge->disableDeferral(reason);
   }
@@ -96,9 +103,6 @@ class Canvas2DImageBufferSurface final : public ImageBufferSurface {
   void didDraw(const FloatRect& rect) override { m_layerBridge->didDraw(rect); }
   void flush(FlushReason) override { m_layerBridge->flush(); }
   void flushGpu(FlushReason) override { m_layerBridge->flushGpu(); }
-  void prepareSurfaceForPaintingIfNeeded() override {
-    m_layerBridge->prepareSurfaceForPaintingIfNeeded();
-  }
   bool writePixels(const SkImageInfo& origInfo,
                    const void* pixels,
                    size_t rowBytes,

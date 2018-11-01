@@ -629,8 +629,17 @@ void WebSettingsImpl::setMediaPlaybackRequiresUserGesture(bool required) {
   m_settings->setMediaPlaybackRequiresUserGesture(required);
 }
 
+void WebSettingsImpl::setMediaPlaybackGestureWhitelistScope(
+    const WebString& scope) {
+  m_settings->setMediaPlaybackGestureWhitelistScope(scope);
+}
+
 void WebSettingsImpl::setPresentationRequiresUserGesture(bool required) {
   m_settings->setPresentationRequiresUserGesture(required);
+}
+
+void WebSettingsImpl::setEmbeddedMediaExperienceEnabled(bool enabled) {
+  m_settings->setEmbeddedMediaExperienceEnabled(enabled);
 }
 
 void WebSettingsImpl::setViewportEnabled(bool enabled) {
@@ -717,6 +726,15 @@ void WebSettingsImpl::setExpensiveBackgroundThrottlingMaxBudget(
 
 void WebSettingsImpl::setExpensiveBackgroundThrottlingMaxDelay(float maxDelay) {
   m_expensiveBackgroundThrottlingMaxDelay = maxDelay;
+}
+
+void WebSettingsImpl::setMediaControlsEnabled(bool enabled) {
+  m_settings->setMediaControlsEnabled(enabled);
+}
+
+void WebSettingsImpl::setDoNotUpdateSelectionOnMutatingSelectionRange(
+    bool enabled) {
+  m_settings->setDoNotUpdateSelectionOnMutatingSelectionRange(enabled);
 }
 
 void WebSettingsImpl::setServeResourceFromCacheOnly(bool onlyLoadFromCache)

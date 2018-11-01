@@ -1,7 +1,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="/controls/settings_toggle_button.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-cloud-printers">
   <template>
@@ -23,11 +23,13 @@
     <div class="settings-box two-line" on-tap="onManageTap_" actionable>
       <div class="start">
         $i18n{printingManageCloudPrintDevices}
-        <div class="secondary">
+        <div class="secondary" id="manageCloudPrintSecondary">
           $i18n{printingManageCloudPrintDevicesDescription}
         </div>
       </div>
-      <button class="icon-external" is="paper-icon-button-light"></button>
+      <button class="icon-external" is="paper-icon-button-light"
+          aria-label="$i18n{printingManageCloudPrintDevices}"
+          aria-describedby="manageCloudPrintSecondary"></button>
     </div>
   </template>
   <script src="cloud_printers.js"></script>

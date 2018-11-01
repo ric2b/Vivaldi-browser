@@ -22,7 +22,6 @@ source_set("browser_sources") {
   visibility = [ "//content/*" ]
 
   sources = [
-    "android/app_web_message_port_service.h",
     "android/browser_media_player_manager_register.cc",
     "android/browser_media_player_manager_register.h",
     "android/compositor.h",
@@ -71,6 +70,7 @@ source_set("browser_sources") {
     "browser_thread.h",
     "browser_thread_delegate.h",
     "browser_url_handler.h",
+    "browsing_data_filter_builder.h",
     "cache_storage_context.h",
     "cache_storage_usage_info.h",
     "cdm_registry.h",
@@ -116,6 +116,8 @@ source_set("browser_sources") {
     "global_request_id.h",
     "gpu_data_manager.h",
     "gpu_data_manager_observer.h",
+    "gpu_feature_checker.cc",
+    "gpu_feature_checker.h",
     "gpu_service_registry.cc",
     "gpu_service_registry.h",
     "gpu_utils.cc",
@@ -144,7 +146,6 @@ source_set("browser_sources") {
     "memory_coordinator_delegate.h",
     "memory_pressure_controller.cc",
     "memory_pressure_controller.h",
-    "message_port_delegate.h",
     "message_port_provider.h",
     "native_web_keyboard_event.h",
     "navigation_controller.cc",
@@ -200,7 +201,6 @@ source_set("browser_sources") {
     "render_view_host.h",
     "render_widget_host.h",
     "render_widget_host_view.h",
-    "render_widget_host_view_frame_subscriber.h",
     "render_widget_host_view_mac_delegate.h",
     "renderer_unresponsive_type.h",
     "resource_context.h",
@@ -217,8 +217,6 @@ source_set("browser_sources") {
     "resource_throttle.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
-    "screen_orientation_provider.cc",
-    "screen_orientation_provider.h",
     "security_style_explanation.h",
     "security_style_explanations.cc",
     "security_style_explanations.h",
@@ -290,13 +288,15 @@ source_set("browser_sources") {
   ]
 
   public_deps = [
-    "//device/screen_orientation/public/interfaces",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
 
     # We expose skia headers in the public API.
     "//skia",
+
+    # We expose storage headers for quota in the public API.
+    "//storage/browser",
     "//third_party/WebKit/public:mojo_bindings",
   ]
   deps = [
@@ -309,7 +309,6 @@ source_set("browser_sources") {
     "//media",
     "//net",
     "//ppapi/c",
-    "//storage/browser",
     "//ui/accessibility",
     "//ui/base",
     "//ui/events",

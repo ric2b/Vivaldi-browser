@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">このページの保存されているコピー（古いバージョン）を表示します。</translation>
 <translation id="1559528461873125649">該当するファイルまたはディレクトリがありません</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">ウェブページのソースを表示しています。</translation>
 <translation id="194030505837763158"><ph name="LINK" /> に移動します</translation>
 <translation id="2030481566774242610">もしかして: <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">一部表示</translation>
 <translation id="2166378884831602661">このサイトは安全に接続できません</translation>
 <translation id="2292556288342944218">インターネット アクセスがブロックされています</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> から無効な応答が送信されました。</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">ファイルへのアクセスが拒否されました</translation>
 <translation id="2705137772291741111">このサイトの保存（キャッシュ）されたコピーを読み取れませんでした。</translation>
 <translation id="2784949926578158345">接続がリセットされました。</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" /> のサーバー証明書は偽造されたもののようです。</translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
 <translation id="3005723025932146533">保存済みのコピーを表示</translation>
 <translation id="3109728660330352905">このページを表示する権限がありません。</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS はウェブサイトの名前をインターネット アドレスに変換するネットワーク サービスです。</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> でログイン証明書が承認されなかったか、ログイン証明書が提示されていない可能性があります。</translation>
 <translation id="4522570452068850558">詳細</translation>
-<translation id="4670097147947922288">拡張機能のページを表示しています。</translation>
 <translation id="4708268264240856090">接続が中断されました</translation>
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4764776831041365478"><ph name="URL" /> のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">このページは動作していません</translation>
 <translation id="5869405914158311789">このサイトにアクセスできません</translation>
 <translation id="5990559369517809815">サーバーへのリクエストは拡張機能によってブロックされています。</translation>
-<translation id="6042308850641462728">詳細表示</translation>
 <translation id="6146055958333702838">ケーブルを確認し、使用しているネットワーク デバイス（ルーター、モデムなど）を
     再起動してください。</translation>
 <translation id="6165508094623778733">詳しく見る</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">ネットワーク予測を無効にしてみてください</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> で接続が拒否されました。</translation>
 <translation id="6711464428925977395">プロキシ サーバーに問題がある、またはアドレスが正しくありません。</translation>
-<translation id="6830600606572693159">ウェブページ（<ph name="URL" />）は現在表示できません。アクセスが集中しているか、メンテナンスのために停止している可能性があります。</translation>
 <translation id="6897140037006041989">ユーザー エージェント</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ではセキュリティ規格が遵守されていません。</translation>
-<translation id="7269802741830436641">このウェブページにはリダイレクト ループが含まれています</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7419106976560586862">プロフィール パス</translation>
 <translation id="7518003948725431193">次のウェブページアドレスは見つかりませんでした: <ph name="URL" /></translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> では現在このリクエストを処理できません。</translation>
 <translation id="7716424297397655342">このサイトをキャッシュから読み込むことができません</translation>
 <translation id="7758069387465995638">ファイアウォールまたはウイルス対策ソフトウェアによって接続がブロックされた可能性があります。</translation>
-<translation id="778579833039460630">データを受信していません</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" /> のサーバーの <ph name="BEGIN_ABBR" />DNS アドレス<ph name="END_ABBR" />が見つかりませんでした。</translation>
 <translation id="8142868475871995937">&lt;strong&gt;vivaldi://policy&lt;/strong&gt; にアクセスして、ブラックリストに登録されている URL とシステム管理者が設定した他のポリシーを確認できます。</translation>

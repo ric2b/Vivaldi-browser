@@ -28,13 +28,13 @@
 #include "core/html/parser/CSSPreloadScanner.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/text/SegmentedString.h"
 #include <memory>
 
@@ -98,6 +98,9 @@ inline void CSSPreloadScanner::tokenize(UChar c,
                                         const SegmentedString& source) {
   // We are just interested in @import rules, no need for real tokenization here
   // Searching for other types of resources is probably low payoff.
+  // If we ever decide to preload fonts, we also need to change
+  // ResourceFetcher::resourceNeedsLoad to immediately load speculative font
+  // preloads.
   switch (m_state) {
     case Initial:
       if (isHTMLSpace<UChar>(c))

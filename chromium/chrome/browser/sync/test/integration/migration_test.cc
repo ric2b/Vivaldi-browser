@@ -40,7 +40,7 @@ syncer::ModelTypeSet MakeSet(syncer::ModelType type1,
 
 // An ordered list of model types sets to migrate.  Used by
 // RunMigrationTest().
-typedef std::deque<syncer::ModelTypeSet> MigrationList;
+using MigrationList = std::deque<syncer::ModelTypeSet>;
 
 // Utility functions to make a MigrationList out of a small number of
 // model types / model type sets.
@@ -105,7 +105,7 @@ class MigrationTest : public SyncTest  {
     preferred_data_types.Remove(syncer::AUTOFILL_WALLET_DATA);
     preferred_data_types.Remove(syncer::AUTOFILL_WALLET_METADATA);
 
-    // Arc package will be unready during this test, so we should not request
+    // ARC package will be unready during this test, so we should not request
     // that it be migrated.
     preferred_data_types.Remove(syncer::ARC_PACKAGE);
 

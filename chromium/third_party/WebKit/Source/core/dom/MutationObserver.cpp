@@ -77,7 +77,7 @@ void MutationObserver::observe(Node* node,
   HashSet<AtomicString> attributeFilter;
   if (observerInit.hasAttributeFilter()) {
     for (const auto& name : observerInit.attributeFilter())
-      attributeFilter.add(AtomicString(name));
+      attributeFilter.insert(AtomicString(name));
     options |= AttributeFilter;
   }
 
@@ -157,13 +157,13 @@ void MutationObserver::disconnect() {
 void MutationObserver::observationStarted(
     MutationObserverRegistration* registration) {
   DCHECK(!m_registrations.contains(registration));
-  m_registrations.add(registration);
+  m_registrations.insert(registration);
 }
 
 void MutationObserver::observationEnded(
     MutationObserverRegistration* registration) {
   DCHECK(m_registrations.contains(registration));
-  m_registrations.remove(registration);
+  m_registrations.erase(registration);
 }
 
 static MutationObserverSet& activeMutationObservers() {
@@ -211,15 +211,15 @@ void MutationObserver::cleanSlotChangeList(Document& document) {
 
 static void activateObserver(MutationObserver* observer) {
   ensureEnqueueMicrotask();
-  activeMutationObservers().add(observer);
+  activeMutationObservers().insert(observer);
 }
 
 void MutationObserver::enqueueMutationRecord(MutationRecord* mutation) {
   DCHECK(isMainThread());
   m_records.push_back(mutation);
   activateObserver(this);
-  InspectorInstrumentation::asyncTaskScheduled(
-      m_callback->getExecutionContext(), mutation->type(), mutation);
+  probe::asyncTaskScheduled(m_callback->getExecutionContext(), mutation->type(),
+                            mutation);
 }
 
 void MutationObserver::setHasTransientRegistration() {
@@ -241,8 +241,7 @@ bool MutationObserver::shouldBeSuspended() const {
 
 void MutationObserver::cancelInspectorAsyncTasks() {
   for (auto& record : m_records)
-    InspectorInstrumentation::asyncTaskCanceled(
-        m_callback->getExecutionContext(), record);
+    probe::asyncTaskCanceled(m_callback->getExecutionContext(), record);
 }
 
 void MutationObserver::deliver() {
@@ -266,8 +265,8 @@ void MutationObserver::deliver() {
   records.swap(m_records);
 
   // Report the first (earliest) stack as the async cause.
-  InspectorInstrumentation::AsyncTask asyncTask(
-      m_callback->getExecutionContext(), records.front());
+  probe::AsyncTask asyncTask(m_callback->getExecutionContext(),
+                             records.front());
   m_callback->call(records, this);
 }
 
@@ -280,7 +279,7 @@ void MutationObserver::resumeSuspendedObservers() {
   copyToVector(suspendedMutationObservers(), suspended);
   for (const auto& observer : suspended) {
     if (!observer->shouldBeSuspended()) {
-      suspendedMutationObservers().remove(observer);
+      suspendedMutationObservers().erase(observer);
       activateObserver(observer);
     }
   }
@@ -303,7 +302,7 @@ void MutationObserver::deliverMutations() {
   std::sort(observers.begin(), observers.end(), ObserverLessThan());
   for (const auto& observer : observers) {
     if (observer->shouldBeSuspended())
-      suspendedMutationObservers().add(observer);
+      suspendedMutationObservers().insert(observer);
     else
       observer->deliver();
   }
@@ -315,7 +314,6 @@ DEFINE_TRACE(MutationObserver) {
   visitor->trace(m_callback);
   visitor->trace(m_records);
   visitor->trace(m_registrations);
-  visitor->trace(m_callback);
 }
 
 }  // namespace blink

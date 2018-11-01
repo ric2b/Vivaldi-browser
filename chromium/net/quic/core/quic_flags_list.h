@@ -31,9 +31,6 @@ QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support,
           true)
 
-// This flag is not in use, just to keep consistency for shared code.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_always_log_bugs_for_tests, true)
-
 // If true, multipath is enabled for the connection.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_multipath, false)
 
@@ -68,18 +65,11 @@ QUIC_FLAG(bool,
 // If true, re-enables QUIC_VERSION_36.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_version_36_v3, true)
 
-// If true, use async codepaths to invoke ProofSource::GetProof.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_enable_async_get_proof, false)
-
 // If true, only open limited number of quic sessions per epoll event. Leave the
 // rest to next event.
 QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop,
           true)
-
-// Only close the connection on the 5th RTO client side when the 5RTO option
-// is enabled.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_only_5rto_client_side, false)
 
 // If true, QUIC server push will enabled by default.
 QUIC_FLAG(bool,
@@ -88,12 +78,6 @@ QUIC_FLAG(bool,
 
 // Allow large send deltas to be used as RTT samples.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_allow_large_send_deltas, true)
-
-// Engage early retransmit anytime the largest acked is greater than
-// or equal to the largest retransmittable packet.
-QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_quic_largest_sent_retransmittable,
-          true)
 
 // If true, release QuicCryptoStream\'s read buffer when stream are less
 // frequently used.
@@ -113,15 +97,8 @@ QUIC_FLAG(bool,
           FLAGS_quic_reloadable_flag_quic_buffer_packets_after_chlo,
           false)
 
-// Previously QUIC didn't register a packet as received until it was fully
-// processed, but now that flow control is implemented, it can be received once
-// decrypted.
-QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_quic_receive_packet_once_decrypted,
-          false)
-
 // If true, enable the Lazy FACK style loss detection in QUIC.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_lazy_fack, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_lazy_fack, true)
 
 // If true, do not override a connection in global map if exists. Only create
 // QUIC session if it is successfully inserted to the global map. Toss the
@@ -152,23 +129,12 @@ QUIC_FLAG(
     FLAGS_quic_reloadable_flag_quic_headers_stream_release_sequencer_buffer,
     true)
 
-// Set the retransmission alarm only when there are unacked
-// retransmittable packets.
-QUIC_FLAG(
-    bool,
-    FLAGS_quic_reloadable_flag_quic_more_conservative_retransmission_alarm,
-    true)
-
 // Enable QUIC force HOL blocking experiment.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_force_hol_blocking, true)
 
 // If true, allows packets to be buffered in anticipation of a future CHLO, and
 // allow CHLO packets to be buffered until next iteration of the event loop.
 QUIC_FLAG(bool, FLAGS_quic_allow_chlo_buffering, true)
-
-// If true, fix version manager bug, in which version flag does not really
-// help.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_version_manager, false)
 
 // Add a new client connection options field to QuicOptions which is only used
 // to configure client side features, such as congestion control.
@@ -177,9 +143,6 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_client_connection_options, true)
 // If true, fix some casts that were causing off-by-one errors in QUIC's cubic
 // "convex" increases.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_cubic_convex_mode, false)
-
-// Ensure that BBR startup pacing rate does not drop below the initial one.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_faster_startup, true)
 
 // If true, GFE sends SETTINGS_MAX_HEADER_LIST_SIZE to the client at the
 // beginning of a connection.
@@ -192,7 +155,7 @@ QUIC_FLAG(bool,
 
 // If true, QUIC cubic code will use the event time when adjusting CWND after an
 // ACK instead of the clock\'s current approximate time.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_use_event_time, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_use_event_time, true)
 
 // If true, lazy allocate and early release memeory used in
 // QuicStreamSequencerBuffer to buffer incoming data.
@@ -203,16 +166,35 @@ QUIC_FLAG(
 
 // If true, Makes GFE respect the connection options for initial flow control
 // window larger than 32 KB.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_large_ifw_options, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_large_ifw_options, true)
 
 // If true, fix Cubic\'s use of kBetaLastMax for n-connection emulation.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_fix_beta_last_max, false)
 
 // If true, enable QUIC v37.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_version_37, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_version_37, true)
 
 // If true, disables QUIC v34.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_34, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_version_34, true)
 
 // Allow quic to properly support proxying 100 Continue responses.
 QUIC_FLAG(bool, FLAGS_quic_restart_flag_quic_supports_100_continue, false)
+
+// If true, enable quic version 38
+QUIC_FLAG(bool, FLAGS_quic_enable_version_38, false)
+
+// When true, ensures the session's flow control window is always at least 1.5x
+// larger than the largest stream flow control window.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_flow_control_invariant, false)
+
+// If greater than zero, mean RTT variation is multiplied by the specified
+// factor and added to the congestion window limit.
+QUIC_FLAG(double, FLAGS_quic_bbr_rtt_variation_weight, 0.0f)
+
+// Congestion window gain for QUIC BBR during PROBE_BW phase.
+QUIC_FLAG(double, FLAGS_quic_bbr_cwnd_gain, 2.0f)
+
+// If true, bidi streaming is always enabled in QUIC.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_always_enable_bidi_streaming,
+          false)

@@ -29,6 +29,7 @@ SourceListDirective::SourceListDirective(const String& name,
       m_allowEval(false),
       m_allowDynamic(false),
       m_allowHashedAttributes(false),
+      m_reportSample(false),
       m_hashAlgorithmsUsed(0) {
   Vector<UChar> characters;
   value.appendTo(characters);
@@ -101,6 +102,12 @@ bool SourceListDirective::allowHash(const CSPHashValue& hashValue) const {
 
 bool SourceListDirective::allowHashedAttributes() const {
   return m_allowHashedAttributes;
+}
+
+bool SourceListDirective::allowReportSample() const {
+  if (!m_policy->experimentalFeaturesEnabled())
+    return false;
+  return m_reportSample;
 }
 
 bool SourceListDirective::isNone() const {
@@ -208,6 +215,11 @@ bool SourceListDirective::parseSource(
 
   if (equalIgnoringCase("'unsafe-hashed-attributes'", token)) {
     addSourceUnsafeHashedAttributes();
+    return true;
+  }
+
+  if (equalIgnoringCase("'report-sample'", token)) {
+    addReportSample();
     return true;
   }
 
@@ -560,25 +572,29 @@ void SourceListDirective::addSourceUnsafeHashedAttributes() {
   m_allowHashedAttributes = true;
 }
 
+void SourceListDirective::addReportSample() {
+  m_reportSample = true;
+}
+
 void SourceListDirective::addSourceNonce(const String& nonce) {
-  m_nonces.add(nonce);
+  m_nonces.insert(nonce);
 }
 
 void SourceListDirective::addSourceHash(
     const ContentSecurityPolicyHashAlgorithm& algorithm,
     const DigestValue& hash) {
-  m_hashes.add(CSPHashValue(algorithm, hash));
+  m_hashes.insert(CSPHashValue(algorithm, hash));
   m_hashAlgorithmsUsed |= algorithm;
 }
 
 void SourceListDirective::addSourceToMap(
     HeapHashMap<String, Member<CSPSource>>& hashMap,
     CSPSource* source) {
-  hashMap.add(source->getScheme(), source);
+  hashMap.insert(source->getScheme(), source);
   if (source->getScheme() == "http")
-    hashMap.add("https", source);
+    hashMap.insert("https", source);
   else if (source->getScheme() == "ws")
-    hashMap.add("wss", source);
+    hashMap.insert("wss", source);
 }
 
 bool SourceListDirective::hasSourceMatchInList(
@@ -696,6 +712,18 @@ bool SourceListDirective::subsumes(
   return CSPSource::firstSubsumesSecond(normalizedA, normalizedB);
 }
 
+WebContentSecurityPolicySourceList
+SourceListDirective::exposeForNavigationalChecks() const {
+  WebContentSecurityPolicySourceList sourceList;
+  sourceList.allowSelf = m_allowSelf;
+  sourceList.allowStar = m_allowStar;
+  WebVector<WebContentSecurityPolicySourceExpression> list(m_list.size());
+  for (size_t i = 0; i < m_list.size(); ++i)
+    list[i] = m_list[i]->exposeForNavigationalChecks();
+  sourceList.sources.swap(list);
+  return sourceList;
+}
+
 bool SourceListDirective::subsumesNoncesAndHashes(
     const HashSet<String>& nonces,
     const HashSet<CSPHashValue> hashes) const {
@@ -719,7 +747,7 @@ HashSet<String> SourceListDirective::getIntersectNonces(
   HashSet<String> normalized;
   for (const auto& nonce : m_nonces) {
     if (other.contains(nonce))
-      normalized.add(nonce);
+      normalized.insert(nonce);
   }
 
   return normalized;
@@ -733,7 +761,7 @@ HashSet<CSPHashValue> SourceListDirective::getIntersectHashes(
   HashSet<CSPHashValue> normalized;
   for (const auto& hash : m_hashes) {
     if (other.contains(hash))
-      normalized.add(hash);
+      normalized.insert(hash);
   }
 
   return normalized;
@@ -755,9 +783,9 @@ SourceListDirective::getIntersectSchemesOnly(
       if (schemesA.contains(sourceB->getScheme()))
         addSourceToMap(intersect, sourceB);
       else if (sourceB->getScheme() == "http" && schemesA.contains("https"))
-        intersect.add("https", schemesA.get("https"));
+        intersect.insert("https", schemesA.at("https"));
       else if (sourceB->getScheme() == "ws" && schemesA.contains("wss"))
-        intersect.add("wss", schemesA.get("wss"));
+        intersect.insert("wss", schemesA.at("wss"));
     }
   }
 

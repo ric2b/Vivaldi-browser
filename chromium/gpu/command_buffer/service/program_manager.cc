@@ -1282,9 +1282,9 @@ bool Program::Link(ShaderManager* manager,
   TimeTicks before_time = TimeTicks::Now();
   bool link = true;
   ProgramCache* cache = manager_->program_cache_;
-  if (cache) {
-    DCHECK(!attached_shaders_[0]->last_compiled_source().empty() &&
-           !attached_shaders_[1]->last_compiled_source().empty());
+  if (cache &&
+      !attached_shaders_[0]->last_compiled_source().empty() &&
+      !attached_shaders_[1]->last_compiled_source().empty()) {
     ProgramCache::LinkedProgramStatus status = cache->GetLinkedProgramStatus(
         attached_shaders_[0]->last_compiled_signature(),
         attached_shaders_[1]->last_compiled_signature(),
@@ -1383,7 +1383,7 @@ bool Program::Link(ShaderManager* manager,
     ExecuteProgramOutputBindCalls();
 
     before_time = TimeTicks::Now();
-    if (cache && gl::g_driver_gl.ext.b_GL_ARB_get_program_binary) {
+    if (cache && gl::g_current_gl_driver->ext.b_GL_ARB_get_program_binary) {
       glProgramParameteri(service_id(),
                           PROGRAM_BINARY_RETRIEVABLE_HINT,
                           GL_TRUE);

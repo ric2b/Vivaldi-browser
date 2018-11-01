@@ -4,6 +4,8 @@
 
 #include "bindings/modules/v8/ConditionalFeaturesForModules.h"
 
+#include "bindings/core/v8/ConditionalFeatures.h"
+#include "bindings/core/v8/ConditionalFeaturesForCore.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8DedicatedWorkerGlobalScope.h"
 #include "bindings/core/v8/V8Navigator.h"
@@ -55,7 +57,9 @@ void installConditionalFeaturesForModules(
                                           v8::Local<v8::Object>(),
                                           prototypeObject, interfaceObject);
     }
-    if (OriginTrials::webUSBEnabled(executionContext)) {
+    // Mimics the [SecureContext] extended attribute.
+    if (OriginTrials::webUSBEnabled(executionContext) &&
+        executionContext->isSecureContext()) {
       V8NavigatorPartial::installWebUSB(isolate, world, v8::Local<v8::Object>(),
                                         prototypeObject, interfaceObject);
     }
@@ -69,7 +73,9 @@ void installConditionalFeaturesForModules(
       V8WindowPartial::installImageCapture(isolate, world, instanceObject,
                                            prototypeObject, interfaceObject);
     }
-    if (OriginTrials::webUSBEnabled(executionContext)) {
+    // Mimics the [SecureContext] extended attribute.
+    if (OriginTrials::webUSBEnabled(executionContext) &&
+        executionContext->isSecureContext()) {
       V8WindowPartial::installWebUSB(isolate, world, instanceObject,
                                      prototypeObject, interfaceObject);
     }
@@ -248,6 +254,7 @@ void installPendingConditionalFeatureForModules(
 }
 
 void registerInstallConditionalFeaturesForModules() {
+  registerInstallConditionalFeaturesForCore();
   s_originalInstallConditionalFeaturesFunction =
       setInstallConditionalFeaturesFunction(
           &installConditionalFeaturesForModules);

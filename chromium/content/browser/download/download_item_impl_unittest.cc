@@ -61,6 +61,7 @@ namespace {
 class MockDelegate : public DownloadItemImplDelegate {
  public:
   MockDelegate() : DownloadItemImplDelegate() {
+    browser_context_.reset(new TestBrowserContext);
     SetDefaultExpectations();
   }
 
@@ -80,7 +81,10 @@ class MockDelegate : public DownloadItemImplDelegate {
   MOCK_METHOD2(MockResumeInterruptedDownload,
                void(DownloadUrlParameters* params, uint32_t id));
 
-  MOCK_CONST_METHOD0(GetBrowserContext, BrowserContext*());
+  BrowserContext* GetBrowserContext() const override {
+    return browser_context_.get();
+  }
+
   MOCK_METHOD1(DownloadOpened, void(DownloadItemImpl*));
   MOCK_METHOD1(DownloadRemoved, void(DownloadItemImpl*));
   MOCK_CONST_METHOD1(AssertStateConsistent, void(DownloadItemImpl*));
@@ -99,6 +103,8 @@ class MockDelegate : public DownloadItemImplDelegate {
     EXPECT_CALL(*this, ShouldOpenDownload(_, _))
         .WillRepeatedly(Return(true));
   }
+
+  std::unique_ptr<TestBrowserContext> browser_context_;
 };
 
 class MockRequestHandle : public DownloadRequestHandleInterface {
@@ -418,7 +424,8 @@ TEST_F(DownloadItemTest, NotificationAfterUpdate) {
   ASSERT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
   TestDownloadItemObserver observer(item);
 
-  item->DestinationUpdate(kDownloadChunkSize, kDownloadSpeed);
+  item->DestinationUpdate(kDownloadChunkSize, kDownloadSpeed,
+                          std::vector<DownloadItem::ReceivedSlice>());
   ASSERT_TRUE(observer.CheckAndResetDownloadUpdated());
   EXPECT_EQ(kDownloadSpeed, item->CurrentSpeed());
   CleanupItem(item, file, DownloadItem::IN_PROGRESS);
@@ -616,8 +623,6 @@ TEST_F(DownloadItemTest, ContinueAfterInterrupted) {
   EXPECT_CALL(*download_file, FullPath())
       .WillOnce(ReturnRefOfCopy(base::FilePath()));
   EXPECT_CALL(*download_file, Detach());
-  EXPECT_CALL(*mock_delegate(), GetBrowserContext())
-      .WillRepeatedly(Return(browser_context()));
   EXPECT_CALL(*mock_delegate(), MockResumeInterruptedDownload(_, _)).Times(1);
   item->DestinationObserverAsWeakPtr()->DestinationError(
       DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
@@ -703,8 +708,6 @@ TEST_F(DownloadItemTest, LimitRestartsAfterInterrupted) {
 
   EXPECT_CALL(*mock_delegate(), DetermineDownloadTarget(item, _))
       .WillRepeatedly(SaveArg<1>(&callback));
-  EXPECT_CALL(*mock_delegate(), GetBrowserContext())
-      .WillRepeatedly(Return(browser_context()));
   EXPECT_CALL(*mock_delegate(), MockResumeInterruptedDownload(_, _))
       .Times(DownloadItemImpl::kMaxAutoResumeAttempts);
   for (int i = 0; i < (DownloadItemImpl::kMaxAutoResumeAttempts + 1); ++i) {
@@ -760,10 +763,12 @@ TEST_F(DownloadItemTest, FailedResumptionDoesntUpdateOriginState) {
   const char kFirstETag[] = "ABC";
   const char kFirstLastModified[] = "Yesterday";
   const char kFirstURL[] = "http://www.example.com/download";
+  const char kMimeType[] = "text/css";
   create_info()->content_disposition = kContentDisposition;
   create_info()->etag = kFirstETag;
   create_info()->last_modified = kFirstLastModified;
   create_info()->url_chain.push_back(GURL(kFirstURL));
+  create_info()->mime_type = kMimeType;
 
   DownloadItemImpl* item = CreateDownloadItem();
   MockDownloadFile* download_file =
@@ -772,10 +777,9 @@ TEST_F(DownloadItemTest, FailedResumptionDoesntUpdateOriginState) {
   EXPECT_EQ(kFirstETag, item->GetETag());
   EXPECT_EQ(kFirstLastModified, item->GetLastModifiedTime());
   EXPECT_EQ(kFirstURL, item->GetURL().spec());
+  EXPECT_EQ(kMimeType, item->GetMimeType());
 
   EXPECT_CALL(*mock_delegate(), MockResumeInterruptedDownload(_, _));
-  EXPECT_CALL(*mock_delegate(), GetBrowserContext())
-      .WillRepeatedly(Return(browser_context()));
   EXPECT_CALL(*download_file, Detach());
   item->DestinationObserverAsWeakPtr()->DestinationError(
       DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
@@ -789,11 +793,13 @@ TEST_F(DownloadItemTest, FailedResumptionDoesntUpdateOriginState) {
   const char kSecondETag[] = "123";
   const char kSecondLastModified[] = "Today";
   const char kSecondURL[] = "http://example.com/another-download";
+  const char kSecondMimeType[] = "text/html";
   create_info()->content_disposition = kSecondContentDisposition;
   create_info()->etag = kSecondETag;
   create_info()->last_modified = kSecondLastModified;
   create_info()->url_chain.clear();
   create_info()->url_chain.push_back(GURL(kSecondURL));
+  create_info()->mime_type = kSecondMimeType;
   create_info()->result = DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED;
 
   // The following ends up calling DownloadItem::Start(), but shouldn't result
@@ -804,8 +810,60 @@ TEST_F(DownloadItemTest, FailedResumptionDoesntUpdateOriginState) {
   EXPECT_EQ(kFirstETag, item->GetETag());
   EXPECT_EQ(kFirstLastModified, item->GetLastModifiedTime());
   EXPECT_EQ(kFirstURL, item->GetURL().spec());
+  EXPECT_EQ(kMimeType, item->GetMimeType());
   EXPECT_EQ(DownloadItem::INTERRUPTED, item->GetState());
   EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, item->GetLastReason());
+}
+
+// If the download resumption request succeeds, the origin state should be
+// updated
+TEST_F(DownloadItemTest, SucceededResumptionUpdatesOriginState) {
+  const char kContentDisposition[] = "attachment; filename=foo";
+  const char kFirstETag[] = "ABC";
+  const char kFirstLastModified[] = "Yesterday";
+  const char kFirstURL[] = "http://www.example.com/download";
+  const char kMimeType[] = "text/css";
+  create_info()->content_disposition = kContentDisposition;
+  create_info()->etag = kFirstETag;
+  create_info()->last_modified = kFirstLastModified;
+  create_info()->url_chain.push_back(GURL(kFirstURL));
+  create_info()->mime_type = kMimeType;
+
+  DownloadItemImpl* item = CreateDownloadItem();
+  MockDownloadFile* download_file =
+      DoIntermediateRename(item, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
+  EXPECT_CALL(*mock_delegate(), MockResumeInterruptedDownload(_, _));
+  EXPECT_CALL(*download_file, Detach());
+  item->DestinationObserverAsWeakPtr()->DestinationError(
+      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
+      std::unique_ptr<crypto::SecureHash>());
+  RunAllPendingInMessageLoops();
+  EXPECT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
+
+  // Now change the create info. The changes should not cause the DownloadItem
+  // to be updated.
+  const char kSecondContentDisposition[] = "attachment; filename=bar";
+  const char kSecondETag[] = "123";
+  const char kSecondLastModified[] = "Today";
+  const char kSecondURL[] = "http://example.com/another-download";
+  const char kSecondMimeType[] = "text/html";
+  create_info()->content_disposition = kSecondContentDisposition;
+  create_info()->etag = kSecondETag;
+  create_info()->last_modified = kSecondLastModified;
+  create_info()->url_chain.clear();
+  create_info()->url_chain.push_back(GURL(kSecondURL));
+  create_info()->mime_type = kSecondMimeType;
+
+  DownloadItemImplDelegate::DownloadTargetCallback target_callback;
+  download_file = CallDownloadItemStart(item, &target_callback);
+
+  EXPECT_EQ(kSecondContentDisposition, item->GetContentDisposition());
+  EXPECT_EQ(kSecondETag, item->GetETag());
+  EXPECT_EQ(kSecondLastModified, item->GetLastModifiedTime());
+  EXPECT_EQ(kSecondURL, item->GetURL().spec());
+  EXPECT_EQ(kSecondMimeType, item->GetMimeType());
+
+  CleanupItem(item, download_file, DownloadItem::IN_PROGRESS);
 }
 
 // Test that resumption uses the final URL in a URL chain when resuming.
@@ -825,8 +883,6 @@ TEST_F(DownloadItemTest, ResumeUsingFinalURL) {
   EXPECT_CALL(*download_file, FullPath())
       .WillOnce(ReturnRefOfCopy(base::FilePath()));
   EXPECT_CALL(*download_file, Detach());
-  EXPECT_CALL(*mock_delegate(), GetBrowserContext())
-      .WillRepeatedly(Return(browser_context()));
   EXPECT_CALL(*mock_delegate(), MockResumeInterruptedDownload(
                                     Property(&DownloadUrlParameters::url,
                                              GURL("http://example.com/c")),
@@ -1170,16 +1226,21 @@ TEST_F(DownloadItemTest, DestinationUpdate) {
   item->SetTotalBytes(100l);
   EXPECT_EQ(100l, item->GetTotalBytes());
 
-  as_observer->DestinationUpdate(10, 20);
+  std::vector<DownloadItem::ReceivedSlice> received_slices;
+  received_slices.emplace_back(0, 10);
+  as_observer->DestinationUpdate(10, 20, received_slices);
   EXPECT_EQ(20l, item->CurrentSpeed());
   EXPECT_EQ(10l, item->GetReceivedBytes());
   EXPECT_EQ(100l, item->GetTotalBytes());
+  EXPECT_EQ(received_slices, item->GetReceivedSlices());
   EXPECT_TRUE(observer.CheckAndResetDownloadUpdated());
 
-  as_observer->DestinationUpdate(200, 20);
+  received_slices.emplace_back(200, 100);
+  as_observer->DestinationUpdate(200, 20, received_slices);
   EXPECT_EQ(20l, item->CurrentSpeed());
   EXPECT_EQ(200l, item->GetReceivedBytes());
   EXPECT_EQ(0l, item->GetTotalBytes());
+  EXPECT_EQ(received_slices, item->GetReceivedSlices());
   EXPECT_TRUE(observer.CheckAndResetDownloadUpdated());
 
   CleanupItem(item, file, DownloadItem::IN_PROGRESS);
@@ -1251,7 +1312,8 @@ TEST_F(DownloadItemTest, DestinationCompleted) {
   EXPECT_FALSE(item->AllDataSaved());
   EXPECT_FALSE(observer.CheckAndResetDownloadUpdated());
 
-  as_observer->DestinationUpdate(10, 20);
+  as_observer->DestinationUpdate(
+      10, 20, std::vector<DownloadItem::ReceivedSlice>());
   EXPECT_TRUE(observer.CheckAndResetDownloadUpdated());
   EXPECT_FALSE(observer.CheckAndResetDownloadUpdated());  // Confirm reset.
   EXPECT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
@@ -1706,8 +1768,10 @@ void DestinationUpdateInvoker(
   DVLOG(20) << "DestinationUpdate(bytes_so_far:" << bytes_so_far
             << ", bytes_per_sec:" << bytes_per_sec
             << ") observer:" << !!observer;
-  if (observer)
-    observer->DestinationUpdate(bytes_so_far, bytes_per_sec);
+  if (observer) {
+    observer->DestinationUpdate(bytes_so_far, bytes_per_sec,
+                                std::vector<DownloadItem::ReceivedSlice>());
+  }
 }
 
 void DestinationErrorInvoker(

@@ -1,30 +1,28 @@
 // Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
 
+#include "importer/chrome_bookmark_reader.h"
 
+#include <memory>
 #include <stack>
 #include <string>
 
-#include "chrome/browser/importer/importer_list.h"
-
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
+#include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/common/ini_parser.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_tokenizer.h"
-#include "base/path_service.h"
+#include "chrome/browser/importer/importer_list.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/common/ini_parser.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "base/json/json_reader.h"
-
-
-#include "importer/chrome_bookmark_reader.h"
 
 const char* ChromeBookmarkFileReader::kNameKey = "name";
 const char* ChromeBookmarkFileReader::kTypeKey = "type";
@@ -33,13 +31,11 @@ const char* ChromeBookmarkFileReader::kTypeFolder = "folder";
 const char* ChromeBookmarkFileReader::kChildrenKey = "children";
 const char* ChromeBookmarkFileReader::kTypeURL = "url";
 
-ChromeBookmarkFileReader::ChromeBookmarkFileReader() {
-}
+ChromeBookmarkFileReader::ChromeBookmarkFileReader() {}
 
-ChromeBookmarkFileReader::~ChromeBookmarkFileReader() {
-}
+ChromeBookmarkFileReader::~ChromeBookmarkFileReader() {}
 
-void ChromeBookmarkFileReader::LoadFile(base::FilePath& file) {
+void ChromeBookmarkFileReader::LoadFile(const base::FilePath& file) {
   if (!base::PathExists(file))
     return;
 
@@ -146,8 +142,7 @@ bool ChromeBookmarkFileReader::DecodeNode(const base::DictionaryValue& value) {
 }
 
 bool ChromeBookmarkFileReader::DecodeChildren(
-  const base::ListValue& child_value_list) {
-
+    const base::ListValue& child_value_list) {
   for (size_t i = 0; i < child_value_list.GetSize(); ++i) {
     const base::Value* child_value;
     if (!child_value_list.Get(i, &child_value))

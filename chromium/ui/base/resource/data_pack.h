@@ -14,11 +14,11 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "base/files/file.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string_piece.h"
 #include "ui/base/resource/data_pack_export.h"
 #include "ui/base/resource/resource_handle.h"
@@ -46,6 +46,10 @@ class UI_DATA_PACK_EXPORT DataPack : public ResourceHandle {
   bool LoadFromFileRegion(base::File file,
                           const base::MemoryMappedFile::Region& region);
 
+  // Loads a pack file from |buffer|, returning false on error.
+  // Data is not copied, |buffer| should stay alive during |DataPack| lifetime.
+  bool LoadFromBuffer(base::StringPiece buffer);
+
   // Writes a pack file containing |resources| to |path|. If there are any
   // text resources to be written, their encoding must already agree to the
   // |textEncodingType| specified. If no text resources are present, please
@@ -66,15 +70,20 @@ class UI_DATA_PACK_EXPORT DataPack : public ResourceHandle {
 #if DCHECK_IS_ON()
   // Checks to see if any resource in this DataPack already exists in the list
   // of resources.
-  void CheckForDuplicateResources(const ScopedVector<ResourceHandle>& packs);
+  void CheckForDuplicateResources(
+      const std::vector<std::unique_ptr<ResourceHandle>>& packs);
 #endif
 
  private:
-  // Does the actual loading of a pack file. Called by Load and LoadFromFile.
-  bool LoadImpl();
+  class DataSource;
+  class BufferDataSource;
+  class MemoryMappedDataSource;
 
-  // The memory-mapped data.
-  std::unique_ptr<base::MemoryMappedFile> mmap_;
+  // Does the actual loading of a pack file.
+  // Called by Load and LoadFromFile and LoadFromBuffer.
+  bool LoadImpl(std::unique_ptr<DataSource> data_source);
+
+  std::unique_ptr<DataSource> data_source_;
 
   // Number of resources in the data.
   size_t resource_count_;

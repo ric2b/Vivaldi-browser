@@ -145,18 +145,6 @@ RenderWidgetHostViewBase* WebContentsViewGuest::CreateViewForWidget(
     // view (RenderWidgetHostViewGuest) present we need to destroy this and
     // create a new one. This can happen when the user moves a tab between
     // windows.
-
-    // Since the platform window keeps the surface id pointer, (it is lazily
-    // deleted after Destroy above), and this will be the same for the one
-    // created below we must inform the surface manager about this now otherwise
-    // the surface registration will fail.
-    RenderWidgetHostViewChildFrame* rwhv =
-        static_cast<RenderWidgetHostViewChildFrame*>(
-            render_widget_host->GetView());
-    if (rwhv) {
-      rwhv->InvalidateFrameSinkId();
-    }
-
     static_cast<RenderWidgetHostViewBase*>(render_widget_host->GetView())
         ->Destroy();
   } else {

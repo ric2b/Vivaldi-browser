@@ -31,12 +31,15 @@ enum PresentationConnectionCloseReason {
 // Represents a presentation session that has been established via either
 // browser actions or Presentation API.
 struct CONTENT_EXPORT PresentationSessionInfo {
+  PresentationSessionInfo() = default;
   PresentationSessionInfo(const GURL& presentation_url,
                           const std::string& presentation_id);
   ~PresentationSessionInfo();
 
-  const GURL presentation_url;
-  const std::string presentation_id;
+  static constexpr size_t kMaxIdLength = 256;
+
+  GURL presentation_url;
+  std::string presentation_id;
 };
 
 // Possible reasons why an attempt to create a presentation session failed.
@@ -44,17 +47,21 @@ enum PresentationErrorType {
   PRESENTATION_ERROR_NO_AVAILABLE_SCREENS,
   PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED,
   PRESENTATION_ERROR_NO_PRESENTATION_FOUND,
+  PRESENTATION_ERROR_PREVIOUS_START_IN_PROGRESS,
   PRESENTATION_ERROR_UNKNOWN,
 };
 
 // Struct returned when an attempt to create a presentation session failed.
 struct CONTENT_EXPORT PresentationError {
+  PresentationError() = default;
   PresentationError(PresentationErrorType error_type,
                     const std::string& message);
   ~PresentationError();
 
-  const PresentationErrorType error_type;
-  const std::string message;
+  static constexpr size_t kMaxMessageLength = 256;
+
+  PresentationErrorType error_type;
+  std::string message;
 };
 
 }  // namespace content

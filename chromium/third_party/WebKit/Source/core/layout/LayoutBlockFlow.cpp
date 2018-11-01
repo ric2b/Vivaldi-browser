@@ -207,7 +207,7 @@ class BlockChildrenLayoutInfo {
                           LayoutUnit beforeEdge,
                           LayoutUnit afterEdge)
       : m_marginInfo(blockFlow, beforeEdge, afterEdge),
-        m_previousBreakAfterValue(BreakAuto),
+        m_previousBreakAfterValue(EBreakBetween::kAuto),
         m_isAtFirstInFlowChild(true) {}
 
   // Store multicol layout state before first layout of a block child. The child
@@ -227,8 +227,10 @@ class BlockChildrenLayoutInfo {
     return m_previousFloatLogicalBottom;
   }
 
-  EBreak previousBreakAfterValue() const { return m_previousBreakAfterValue; }
-  void setPreviousBreakAfterValue(EBreak value) {
+  EBreakBetween previousBreakAfterValue() const {
+    return m_previousBreakAfterValue;
+  }
+  void setPreviousBreakAfterValue(EBreakBetween value) {
     m_previousBreakAfterValue = value;
   }
 
@@ -239,7 +241,7 @@ class BlockChildrenLayoutInfo {
   MultiColumnLayoutState m_multiColumnLayoutState;
   MarginInfo m_marginInfo;
   LayoutUnit m_previousFloatLogicalBottom;
-  EBreak m_previousBreakAfterValue;
+  EBreakBetween m_previousBreakAfterValue;
   bool m_isAtFirstInFlowChild;
 };
 
@@ -754,7 +756,7 @@ void LayoutBlockFlow::insertForcedBreakBeforeChildIfNeeded(
   // Figure out if a forced break should be inserted in front of the child. If
   // we insert a forced break, the margins on this child may not collapse with
   // those preceding the break.
-  EBreak classABreakPointValue =
+  EBreakBetween classABreakPointValue =
       child.classABreakPointValue(layoutInfo.previousBreakAfterValue());
   if (isForcedFragmentainerBreakValue(classABreakPointValue)) {
     layoutInfo.marginInfo().clearMargin();
@@ -1034,8 +1036,7 @@ LayoutUnit LayoutBlockFlow::adjustFloatLogicalTopForPagination(
     } else {
       // Even if we didn't break before the border box to the next
       // fragmentainer, we need to check if we can fit the margin before it.
-      if (LayoutUnit pageLogicalHeight =
-              pageLogicalHeightForOffset(logicalTopMarginEdge)) {
+      if (pageLogicalHeightForOffset(logicalTopMarginEdge)) {
         LayoutUnit remainingSpace = pageRemainingLogicalHeightForOffset(
             logicalTopMarginEdge, AssociateWithLatterPage);
         if (remainingSpace <= marginBefore)
@@ -1262,7 +1263,7 @@ void LayoutBlockFlow::rebuildFloatsFromIntruding() {
          ++it) {
       const FloatingObject& floatingObject = *it->get();
       if (!floatingObject.isDescendant())
-        oldIntrudingFloatSet.add(floatingObject.layoutObject());
+        oldIntrudingFloatSet.insert(floatingObject.layoutObject());
     }
   }
 
@@ -1345,7 +1346,7 @@ void LayoutBlockFlow::rebuildFloatsFromIntruding() {
            ++it) {
         const FloatingObject& floatingObject = *it->get();
         FloatingObject* oldFloatingObject =
-            floatMap.get(floatingObject.layoutObject());
+            floatMap.at(floatingObject.layoutObject());
         LayoutUnit logicalBottom = logicalBottomForFloat(floatingObject);
         if (oldFloatingObject) {
           LayoutUnit oldLogicalBottom =
@@ -1413,7 +1414,7 @@ void LayoutBlockFlow::rebuildFloatsFromIntruding() {
       FloatingObjectSetIterator end = floatingObjectSet.end();
       for (FloatingObjectSetIterator it = floatingObjectSet.begin();
            it != end && !oldIntrudingFloatSet.isEmpty(); ++it)
-        oldIntrudingFloatSet.remove((*it)->layoutObject());
+        oldIntrudingFloatSet.erase((*it)->layoutObject());
       if (!oldIntrudingFloatSet.isEmpty())
         markAllDescendantsWithFloatsForLayout();
     }
@@ -2055,7 +2056,7 @@ void LayoutBlockFlow::marginBeforeEstimateForChild(
   // require clearance to move past any floats. If that's the case we want to be
   // sure we estimate the correct position including margins after any floats
   // rather than use 'clearance' later which could give us the wrong position.
-  if (grandchildBox->style()->clear() != ClearNone &&
+  if (grandchildBox->style()->clear() != EClear::kNone &&
       childBlockFlow->marginBeforeForChild(*grandchildBox) == 0)
     return;
 
@@ -2119,7 +2120,7 @@ LayoutUnit LayoutBlockFlow::estimateLogicalTopPosition(
       // out the children of |child|. There may be forced break-before values
       // set on first-children inside that get propagated up to the child.
       // Just make an estimate with what we know so far.
-      EBreak breakValue =
+      EBreakBetween breakValue =
           child.classABreakPointValue(layoutInfo.previousBreakAfterValue());
       if (isForcedFragmentainerBreakValue(breakValue)) {
         logicalTopEstimate = applyForcedBreak(logicalHeight(), breakValue);
@@ -2340,7 +2341,7 @@ bool LayoutBlockFlow::mustSeparateMarginAfterForChild(
 }
 
 LayoutUnit LayoutBlockFlow::applyForcedBreak(LayoutUnit logicalOffset,
-                                             EBreak breakValue) {
+                                             EBreakBetween breakValue) {
   if (!isForcedFragmentainerBreakValue(breakValue))
     return logicalOffset;
   // TODO(mstensho): honor breakValue. There are different types of forced
@@ -2369,29 +2370,32 @@ LayoutUnit LayoutBlockFlow::applyForcedBreak(LayoutUnit logicalOffset,
   return logicalOffset + remainingLogicalHeight;
 }
 
-void LayoutBlockFlow::setBreakBefore(EBreak breakValue) {
-  if (breakValue != BreakAuto && !isBreakBetweenControllable(breakValue))
-    breakValue = BreakAuto;
-  if (breakValue == BreakAuto && !m_rareData)
+void LayoutBlockFlow::setBreakBefore(EBreakBetween breakValue) {
+  if (breakValue != EBreakBetween::kAuto &&
+      !isBreakBetweenControllable(breakValue))
+    breakValue = EBreakBetween::kAuto;
+  if (breakValue == EBreakBetween::kAuto && !m_rareData)
     return;
-  ensureRareData().m_breakBefore = breakValue;
+  ensureRareData().m_breakBefore = static_cast<unsigned>(breakValue);
 }
 
-void LayoutBlockFlow::setBreakAfter(EBreak breakValue) {
-  if (breakValue != BreakAuto && !isBreakBetweenControllable(breakValue))
-    breakValue = BreakAuto;
-  if (breakValue == BreakAuto && !m_rareData)
+void LayoutBlockFlow::setBreakAfter(EBreakBetween breakValue) {
+  if (breakValue != EBreakBetween::kAuto &&
+      !isBreakBetweenControllable(breakValue))
+    breakValue = EBreakBetween::kAuto;
+  if (breakValue == EBreakBetween::kAuto && !m_rareData)
     return;
-  ensureRareData().m_breakAfter = breakValue;
+  ensureRareData().m_breakAfter = static_cast<unsigned>(breakValue);
 }
 
-EBreak LayoutBlockFlow::breakBefore() const {
-  return m_rareData ? static_cast<EBreak>(m_rareData->m_breakBefore)
-                    : BreakAuto;
+EBreakBetween LayoutBlockFlow::breakBefore() const {
+  return m_rareData ? static_cast<EBreakBetween>(m_rareData->m_breakBefore)
+                    : EBreakBetween::kAuto;
 }
 
-EBreak LayoutBlockFlow::breakAfter() const {
-  return m_rareData ? static_cast<EBreak>(m_rareData->m_breakAfter) : BreakAuto;
+EBreakBetween LayoutBlockFlow::breakAfter() const {
+  return m_rareData ? static_cast<EBreakBetween>(m_rareData->m_breakAfter)
+                    : EBreakBetween::kAuto;
 }
 
 void LayoutBlockFlow::addOverflowFromFloats() {
@@ -2701,7 +2705,7 @@ LayoutUnit LayoutBlockFlow::getClearDelta(LayoutBox* child,
 
   // We also clear floats if we are too big to sit on the same line as a float
   // (and wish to avoid floats by default).
-  LayoutUnit result = clear != ClearNone
+  LayoutUnit result = clear != EClear::kNone
                           ? (logicalBottom - logicalTop).clampNegativeToZero()
                           : LayoutUnit();
   if (!result && child->avoidsFloats()) {
@@ -3913,13 +3917,14 @@ void LayoutBlockFlow::addOverhangingFloats(LayoutBlockFlow* child,
 }
 
 LayoutUnit LayoutBlockFlow::lowestFloatLogicalBottom(EClear clear) const {
-  if (clear == ClearNone || !m_floatingObjects)
+  if (clear == EClear::kNone || !m_floatingObjects)
     return LayoutUnit();
 
-  FloatingObject::Type floatType =
-      clear == ClearLeft ? FloatingObject::FloatLeft
-                         : clear == ClearRight ? FloatingObject::FloatRight
-                                               : FloatingObject::FloatLeftRight;
+  FloatingObject::Type floatType = clear == EClear::kLeft
+                                       ? FloatingObject::FloatLeft
+                                       : clear == EClear::kRight
+                                             ? FloatingObject::FloatRight
+                                             : FloatingObject::FloatLeftRight;
   return m_floatingObjects->lowestFloatLogicalBottom(floatType);
 }
 
@@ -4312,8 +4317,8 @@ void LayoutBlockFlow::positionDialog() {
   if (dialog->getCenteringMode() == HTMLDialogElement::NotCentered)
     return;
 
-  bool canCenterDialog = (style()->position() == AbsolutePosition ||
-                          style()->position() == FixedPosition) &&
+  bool canCenterDialog = (style()->position() == EPosition::kAbsolute ||
+                          style()->position() == EPosition::kFixed) &&
                          style()->hasAutoTopAndBottom();
 
   if (dialog->getCenteringMode() == HTMLDialogElement::Centered) {
@@ -4329,7 +4334,7 @@ void LayoutBlockFlow::positionDialog() {
   }
 
   FrameView* frameView = document().view();
-  LayoutUnit top = LayoutUnit((style()->position() == FixedPosition)
+  LayoutUnit top = LayoutUnit((style()->position() == EPosition::kFixed)
                                   ? 0
                                   : frameView->scrollOffsetInt().height());
   int visibleHeight = frameView->visibleContentRect(IncludeScrollbars).height();
@@ -4350,7 +4355,7 @@ void LayoutBlockFlow::simplifiedNormalFlowInlineLayout() {
       o->layoutIfNeeded();
       if (toLayoutBox(o)->inlineBoxWrapper()) {
         RootInlineBox& box = toLayoutBox(o)->inlineBoxWrapper()->root();
-        lineBoxes.add(&box);
+        lineBoxes.insert(&box);
       }
     } else if (o->isText() ||
                (o->isLayoutInline() && !walker.atEndOfInline())) {
@@ -4379,7 +4384,7 @@ bool LayoutBlockFlow::recalcInlineChildrenOverflowAfterStyleChange() {
       childrenOverflowChanged = true;
       if (InlineBox* inlineBoxWrapper =
               toLayoutBlock(layoutObject)->inlineBoxWrapper())
-        lineBoxes.add(&inlineBoxWrapper->root());
+        lineBoxes.insert(&inlineBoxWrapper->root());
     }
   }
 

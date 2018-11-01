@@ -22,6 +22,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/history/core/browser/top_sites_observer.h"
 #include "components/ntp_tiles/icon_cacher.h"
 #include "components/ntp_tiles/json_unsafe_parser.h"
 #include "components/ntp_tiles/popular_sites_impl.h"
@@ -54,6 +55,7 @@ using testing::ByMove;
 using testing::ElementsAre;
 using testing::InSequence;
 using testing::Invoke;
+using testing::IsEmpty;
 using testing::Mock;
 using testing::Return;
 using testing::ReturnRef;
@@ -156,6 +158,10 @@ class MockTopSites : public TopSites {
   MOCK_METHOD2(AddForcedURL, bool(const GURL& url, const base::Time& time));
   MOCK_METHOD1(OnNavigationCommitted, void(const GURL& url));
 
+  // Publicly expose notification to observers, since the implementation cannot
+  // be overriden.
+  using TopSites::NotifyTopSitesChanged;
+
  protected:
   ~MockTopSites() override = default;
 };
@@ -187,9 +193,10 @@ class MockMostVisitedSitesObserver : public MostVisitedSites::Observer {
 
 class MockIconCacher : public IconCacher {
  public:
-  MOCK_METHOD2(StartFetch,
+  MOCK_METHOD3(StartFetch,
                void(PopularSites::Site site,
-                    const base::Callback<void(bool)>& done));
+                    const base::Closure& icon_available,
+                    const base::Closure& preliminary_icon_available));
 };
 
 class PopularSitesFactoryForTest {
@@ -202,9 +209,8 @@ class PopularSitesFactoryForTest {
         url_request_context_(new net::TestURLRequestContextGetter(
             base::ThreadTaskRunnerHandle::Get())),
         worker_pool_owner_(/*max_threads=*/2, "PopularSitesFactoryForTest.") {
+    PopularSitesImpl::RegisterProfilePrefs(pref_service->registry());
     if (enabled) {
-      PopularSitesImpl::RegisterProfilePrefs(pref_service->registry());
-
       prefs_->SetString(prefs::kPopularSitesOverrideCountry, "IN");
       prefs_->SetString(prefs::kPopularSitesOverrideVersion, "7");
 
@@ -306,7 +312,7 @@ class MostVisitedSitesTest : public ::testing::TestWithParam<bool> {
           .WillRepeatedly(Return(false));
       // Mock icon cacher never replies, and we also don't verify whether the
       // code uses it correctly.
-      EXPECT_CALL(*icon_cacher, StartFetch(_, _)).Times(AtLeast(0));
+      EXPECT_CALL(*icon_cacher, StartFetch(_, _, _)).Times(AtLeast(0));
     }
 
     most_visited_sites_ = base::MakeUnique<MostVisitedSites>(
@@ -383,9 +389,22 @@ TEST_P(MostVisitedSitesTest, ShouldHandleTopSitesCacheHit) {
 
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
-  base::RunLoop().RunUntilIdle();
+  VerifyAndClearExpectations();
   EXPECT_FALSE(suggestions_service_callbacks_.empty());
   CHECK(top_sites_callbacks_.empty());
+
+  // Update by TopSites is propagated.
+  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
+      .WillOnce(InvokeCallbackArgument<0>(
+          MostVisitedURLList{MakeMostVisitedURL("Site 2", "http://site2/")}));
+  if (IsPopularSitesEnabledViaVariations()) {
+    EXPECT_CALL(*mock_top_sites_, IsBlacklisted(_))
+        .WillRepeatedly(Return(false));
+  }
+  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(_));
+  mock_top_sites_->NotifyTopSitesChanged(
+      history::TopSitesObserver::ChangeReason::MOST_VISITED);
+  base::RunLoop().RunUntilIdle();
 }
 
 INSTANTIATE_TEST_CASE_P(MostVisitedSitesTest,
@@ -597,6 +616,11 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
   // Reply from top sites is ignored (i.e. not reported to observer).
   top_sites_callbacks_.ClearAndNotify(
       {MakeMostVisitedURL("Site 4", "http://site4/")});
+  VerifyAndClearExpectations();
+
+  // Update by TopSites is also ignored.
+  mock_top_sites_->NotifyTopSitesChanged(
+      history::TopSitesObserver::ChangeReason::MOST_VISITED);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -667,11 +691,7 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
        MakeMostVisitedURL("Site 3", "http://site3/")});
   VerifyAndClearExpectations();
 
-  // Reply from suggestions service is empty and thus ignored. However, the
-  // current implementation issues a redundant query to TopSites.
-  // TODO(mastiz): Avoid this redundant call.
-  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
-      .WillOnce(Invoke(&top_sites_callbacks_, &TopSitesCallbackList::Add));
+  // Reply from suggestions service is empty and thus ignored.
   suggestions_service_callbacks_.Notify(SuggestionsProfile());
   base::RunLoop().RunUntilIdle();
 }
@@ -690,26 +710,96 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest, ShouldPropagateUpdateByTopSites) {
        MakeMostVisitedURL("Site 3", "http://site3/")});
   VerifyAndClearExpectations();
 
-  // Reply from suggestions service is empty and thus ignored. However, the
-  // current implementation issues a redundant query to TopSites.
-  // TODO(mastiz): Avoid this redundant call.
-  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
-      .WillOnce(Invoke(&top_sites_callbacks_, &TopSitesCallbackList::Add));
+  // Reply from suggestions service is empty and thus ignored.
   suggestions_service_callbacks_.Notify(SuggestionsProfile());
   VerifyAndClearExpectations();
+  EXPECT_TRUE(top_sites_callbacks_.empty());
 
   // Update from top sites is propagated to observer.
+  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
+      .WillOnce(InvokeCallbackArgument<0>(
+          MostVisitedURLList{MakeMostVisitedURL("Site 4", "http://site4/"),
+                             MakeMostVisitedURL("Site 5", "http://site5/"),
+                             MakeMostVisitedURL("Site 6", "http://site6/")}));
   EXPECT_CALL(
       mock_observer_,
       OnMostVisitedURLsAvailable(ElementsAre(
           MatchesTile("Site 4", "http://site4/", NTPTileSource::TOP_SITES),
           MatchesTile("Site 5", "http://site5/", NTPTileSource::TOP_SITES),
           MatchesTile("Site 6", "http://site6/", NTPTileSource::TOP_SITES))));
-  top_sites_callbacks_.ClearAndNotify(
-      {MakeMostVisitedURL("Site 4", "http://site4/"),
-       MakeMostVisitedURL("Site 5", "http://site5/"),
-       MakeMostVisitedURL("Site 6", "http://site6/")});
+  mock_top_sites_->NotifyTopSitesChanged(
+      history::TopSitesObserver::ChangeReason::MOST_VISITED);
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_P(MostVisitedSitesWithEmptyCacheTest,
+       ShouldSendEmptyListIfBothTopSitesAndSuggestionsServiceEmpty) {
+  if (IsPopularSitesEnabledViaVariations()) {
+    EXPECT_CALL(mock_observer_,
+                OnMostVisitedURLsAvailable(ElementsAre(
+                    MatchesTile("PopularSite1", "http://popularsite1/",
+                                NTPTileSource::POPULAR),
+                    MatchesTile("PopularSite2", "http://popularsite2/",
+                                NTPTileSource::POPULAR))));
+  } else {
+    EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(IsEmpty()));
+  }
+  suggestions_service_callbacks_.Notify(SuggestionsProfile());
+  top_sites_callbacks_.ClearAndNotify(MostVisitedURLList{});
+
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_P(MostVisitedSitesWithEmptyCacheTest,
+       ShouldRepeatedlyNotifyObserverIfTopSitesNotifies) {
+  EXPECT_CALL(
+      mock_observer_,
+      OnMostVisitedURLsAvailable(ElementsAre(
+          MatchesTile("Site 1", "http://site1/", NTPTileSource::TOP_SITES),
+          MatchesTile("Site 2", "http://site2/", NTPTileSource::TOP_SITES),
+          MatchesTile("Site 3", "http://site3/", NTPTileSource::TOP_SITES))))
+      .Times(5);
+
+  suggestions_service_callbacks_.Notify(SuggestionsProfile());
+
+  top_sites_callbacks_.ClearAndNotify(
+      {MakeMostVisitedURL("Site 1", "http://site1/"),
+       MakeMostVisitedURL("Site 2", "http://site2/"),
+       MakeMostVisitedURL("Site 3", "http://site3/")});
+  base::RunLoop().RunUntilIdle();
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
+        .WillOnce(Invoke(&top_sites_callbacks_, &TopSitesCallbackList::Add));
+    mock_top_sites_->NotifyTopSitesChanged(
+        history::TopSitesObserver::ChangeReason::MOST_VISITED);
+    EXPECT_FALSE(top_sites_callbacks_.empty());
+    top_sites_callbacks_.ClearAndNotify(
+        {MakeMostVisitedURL("Site 1", "http://site1/"),
+         MakeMostVisitedURL("Site 2", "http://site2/"),
+         MakeMostVisitedURL("Site 3", "http://site3/")});
+    base::RunLoop().RunUntilIdle();
+  }
+}
+
+TEST_P(MostVisitedSitesWithEmptyCacheTest,
+       ShouldRepeatedlyNotifyObserverIfSuggestionsServiceNotifies) {
+  EXPECT_CALL(mock_observer_,
+              OnMostVisitedURLsAvailable(
+                  ElementsAre(MatchesTile("Site 1", "http://site1/",
+                                          NTPTileSource::SUGGESTIONS_SERVICE),
+                              MatchesTile("Site 2", "http://site2/",
+                                          NTPTileSource::SUGGESTIONS_SERVICE),
+                              MatchesTile("Site 3", "http://site3/",
+                                          NTPTileSource::SUGGESTIONS_SERVICE))))
+      .Times(5);
+
+  for (int i = 0; i < 5; ++i) {
+    suggestions_service_callbacks_.Notify(
+        MakeProfile({MakeSuggestion("Site 1", "http://site1/"),
+                     MakeSuggestion("Site 2", "http://site2/"),
+                     MakeSuggestion("Site 3", "http://site3/")}));
+  }
 }
 
 INSTANTIATE_TEST_CASE_P(MostVisitedSitesWithEmptyCacheTest,

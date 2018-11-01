@@ -30,6 +30,7 @@ enum PresentationErrorType {
   NO_AVAILABLE_SCREENS,
   SESSION_REQUEST_CANCELLED,
   NO_PRESENTATION_FOUND,
+  PREVIOUS_START_IN_PROGRESS,
   UNKNOWN,
 };
 
@@ -62,6 +63,9 @@ interface PresentationConnection {
 
    // Called when target connection notifies connection state change.
    DidChangeState(PresentationConnectionState state);
+
+   // Called when target connection calls close().
+   OnClose();
 };
 
 interface PresentationService {
@@ -113,14 +117,6 @@ interface PresentationService {
       PresentationConnection& receiver_connection_request);
 
   //////////////////////////////////////////////////////////////////////////////
-
-  // Called when send() is called by the frame. The true in the
-  // result callback notifies that the service is ready for next message.
-  // The false in the result callback notifies the renderer to stop sending
-  // the send requests and invalidate all pending requests. This occurs
-  // for eg., when frame is deleted or navigated away.
-  SendConnectionMessage(PresentationSessionInfo sessionInfo,
-                     ConnectionMessage message_request) => (bool success);
 
   // Called when close() is called by the frame.
   CloseConnection(url.mojom.Url presentation_url, string presentation_id);

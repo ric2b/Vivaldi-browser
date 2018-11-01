@@ -22,6 +22,7 @@ import com.google.ipc.invalidation.external.client.types.ObjectId;
 import com.google.protos.ipc.invalidation.Types.ClientType;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -317,13 +318,13 @@ public class InvalidationClientService extends AndroidListener {
     private void startClient() {
         byte[] clientName = InvalidationClientNameProvider.get().getInvalidatorClientName();
         Intent startIntent = AndroidListener.createStartIntent(this, CLIENT_TYPE, clientName);
-        startService(startIntent);
+        startServiceIfPossible(startIntent);
         setIsClientStarted(true);
     }
 
     /** Stops the notification client. */
     private void stopClient() {
-        startService(AndroidListener.createStopIntent(this));
+        startServiceIfPossible(AndroidListener.createStopIntent(this));
         setIsClientStarted(false);
         setClientId(null);
     }
@@ -539,5 +540,19 @@ public class InvalidationClientService extends AndroidListener {
 
     private static void setIsClientStarted(boolean isStarted) {
         sIsClientStarted = isStarted;
+    }
+
+    private void startServiceIfPossible(Intent intent) {
+        // The use of background services is restricted when the application is not in foreground
+        // for O. See crbug.com/680812.
+        if (BuildInfo.isAtLeastO()) {
+            try {
+                startService(intent);
+            } catch (IllegalStateException exception) {
+                Log.e(TAG, "Failed to start service from exception: ", exception);
+            }
+        } else {
+            startService(intent);
+        }
     }
 }

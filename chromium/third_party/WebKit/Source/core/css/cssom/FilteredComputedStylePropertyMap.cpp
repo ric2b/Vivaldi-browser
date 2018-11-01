@@ -9,14 +9,15 @@ namespace blink {
 FilteredComputedStylePropertyMap::FilteredComputedStylePropertyMap(
     CSSComputedStyleDeclaration* computedStyleDeclaration,
     const Vector<CSSPropertyID>& nativeProperties,
-    const Vector<AtomicString>& customProperties)
-    : ComputedStylePropertyMap(computedStyleDeclaration) {
+    const Vector<AtomicString>& customProperties,
+    Node* node)
+    : ComputedStylePropertyMap(node) {
   for (const auto& nativeProperty : nativeProperties) {
-    m_nativeProperties.add(nativeProperty);
+    m_nativeProperties.insert(nativeProperty);
   }
 
   for (const auto& customProperty : customProperties) {
-    m_customProperties.add(customProperty);
+    m_customProperties.insert(customProperty);
   }
 }
 

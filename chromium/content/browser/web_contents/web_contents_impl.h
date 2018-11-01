@@ -72,7 +72,6 @@ class RenderViewHostDelegateView;
 class RenderWidgetHostImpl;
 class RenderWidgetHostInputEventRouter;
 class SavePackage;
-class ScreenOrientation;
 class ScreenOrientationProvider;
 class SiteInstance;
 class TestWebContents;
@@ -210,6 +209,12 @@ class CONTENT_EXPORT WebContentsImpl
 
   WebContentsView* GetView() const;
 
+  void OnScreenOrientationChange();
+
+  ScreenOrientationProvider* GetScreenOrientationProviderForTesting() const {
+    return screen_orientation_provider_.get();
+  }
+
   bool should_normally_be_visible() { return should_normally_be_visible_; }
 
   // Indicate if the window has been occluded, and pass this to the views, only
@@ -343,7 +348,7 @@ class CONTENT_EXPORT WebContentsImpl
   void PasteAndMatchStyle() override;
   void Delete() override;
   void SelectAll() override;
-  void Unselect() override;
+  void CollapseSelection() override;
   void Replace(const base::string16& word) override;
   void ReplaceMisspelling(const base::string16& word) override;
   void NotifyContextMenuClosed(
@@ -415,6 +420,8 @@ class CONTENT_EXPORT WebContentsImpl
   void OnAllPasswordInputsHiddenOnHttp() override;
   void OnCreditCardInputShownOnHttp() override;
   void SetIsOverlayContent(bool is_overlay_content) override;
+  bool IsFocusedElementEditable() override;
+  void ClearFocusedElement() override;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() override;
@@ -445,12 +452,12 @@ class CONTENT_EXPORT WebContentsImpl
   void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
   void ShowContextMenu(RenderFrameHost* render_frame_host,
                        const ContextMenuParams& params) override;
-  void RunJavaScriptMessage(RenderFrameHost* render_frame_host,
-                            const base::string16& message,
-                            const base::string16& default_prompt,
-                            const GURL& frame_url,
-                            JavaScriptMessageType type,
-                            IPC::Message* reply_msg) override;
+  void RunJavaScriptDialog(RenderFrameHost* render_frame_host,
+                           const base::string16& message,
+                           const base::string16& default_prompt,
+                           const GURL& frame_url,
+                           JavaScriptDialogType dialog_type,
+                           IPC::Message* reply_msg) override;
   void RunBeforeUnloadConfirm(RenderFrameHost* render_frame_host,
                               bool is_reload,
                               IPC::Message* reply_msg) override;
@@ -479,7 +486,6 @@ class CONTENT_EXPORT WebContentsImpl
       int browser_plugin_instance_id) override;
   device::GeolocationServiceContext* GetGeolocationServiceContext() override;
   device::WakeLockServiceContext* GetWakeLockServiceContext() override;
-  ScreenOrientationProvider* GetScreenOrientationProvider() override;
   void EnterFullscreenMode(const GURL& origin) override;
   void ExitFullscreenMode(bool will_cause_resize) override;
   bool ShouldRouteMessageEvent(
@@ -504,6 +510,14 @@ class CONTENT_EXPORT WebContentsImpl
                          WindowOpenDisposition disposition,
                          const gfx::Rect& initial_rect,
                          bool user_gesture) override;
+  void DidDisplayInsecureContent() override;
+  void DidRunInsecureContent(const GURL& security_origin,
+                             const GURL& target_url) override;
+  void PassiveInsecureContentFound(const GURL& resource_url) override;
+  bool ShouldAllowRunningInsecureContent(content::WebContents* web_contents,
+                                         bool allowed_per_prefs,
+                                         const url::Origin& origin,
+                                         const GURL& resource_url) override;
 
   // RenderViewHostDelegate ----------------------------------------------------
   RenderViewHostDelegateView* GetDelegateView() override;
@@ -518,8 +532,6 @@ class CONTENT_EXPORT WebContentsImpl
                             base::TerminationStatus status,
                             int error_code) override;
   void RenderViewDeleted(RenderViewHost* render_view_host) override;
-  void UpdateState(RenderViewHost* render_view_host,
-                   const PageState& page_state) override;
   void UpdateTargetURL(RenderViewHost* render_view_host,
                        const GURL& url) override;
   void Close(RenderViewHost* render_view_host) override;
@@ -552,6 +564,7 @@ class CONTENT_EXPORT WebContentsImpl
       const MediaResponseCallback& callback) override;
   bool CheckMediaAccessPermission(const GURL& security_origin,
                                   MediaStreamType type) override;
+  std::string GetDefaultMediaDeviceID(MediaStreamType type) override;
   SessionStorageNamespace* GetSessionStorageNamespace(
       SiteInstance* instance) override;
   SessionStorageNamespaceMap GetSessionStorageNamespaceMap() override;
@@ -562,8 +575,7 @@ class CONTENT_EXPORT WebContentsImpl
   bool IsOverridingUserAgent() override;
   bool IsJavaScriptDialogShowing() const override;
   bool HideDownloadUI() const override;
-  bool IsFocusedElementEditable() override;
-  void ClearFocusedElement() override;
+  bool HasPersistentVideo() const override;
 
   // NavigatorDelegate ---------------------------------------------------------
 
@@ -571,22 +583,11 @@ class CONTENT_EXPORT WebContentsImpl
   void DidRedirectNavigation(NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
-  void DidStartProvisionalLoad(RenderFrameHostImpl* render_frame_host,
-                               const GURL& validated_url,
-                               bool is_error_page) override;
-  void DidFailProvisionalLoadWithError(RenderFrameHostImpl* render_frame_host,
-                                       const GURL& validated_url,
-                                       int error_code,
-                                       const base::string16& error_description,
-                                       bool was_ignored_by_handler) override;
   void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
                             const GURL& url,
                             int error_code,
                             const base::string16& error_description,
                             bool was_ignored_by_handler) override;
-  void DidCommitProvisionalLoad(RenderFrameHostImpl* render_frame_host,
-                                const GURL& url,
-                                ui::PageTransition transition_type) override;
   void DidNavigateMainFramePreCommit(bool navigation_is_within_page) override;
   void DidNavigateMainFramePostCommit(
       RenderFrameHostImpl* render_frame_host,
@@ -601,8 +602,6 @@ class CONTENT_EXPORT WebContentsImpl
   void NotifyChangedNavigationState(InvalidateTypes changed_flags) override;
   void DidStartNavigationToPendingEntry(const GURL& url,
                                         ReloadType reload_type) override;
-  void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                      const OpenURLParams& params) override;
   bool ShouldTransferNavigation(bool is_main_frame_navigation) override;
   bool ShouldPreserveAbortedURLs() override;
   void DidStartLoading(FrameTreeNode* frame_tree_node,
@@ -663,13 +662,16 @@ class CONTENT_EXPORT WebContentsImpl
   void LostCapture(RenderWidgetHostImpl* render_widget_host) override;
   void LostMouseLock(RenderWidgetHostImpl* render_widget_host) override;
   bool HasMouseLock(RenderWidgetHostImpl* render_widget_host) override;
+  RenderWidgetHostImpl* GetMouseLockWidget() override;
   void OnRenderFrameProxyVisibilityChanged(bool visible) override;
   void SendScreenRects() override;
   void OnFirstPaintAfterLoad(RenderWidgetHostImpl* render_widget_host) override;
   TextInputManager* GetTextInputManager() override;
   bool OnUpdateDragCursor() override;
+  bool IsWidgetForMainFrame(RenderWidgetHostImpl* render_widget_host) override;
   bool AddDomainInfoToRapporSample(rappor::Sample* sample) override;
   void FocusedNodeTouched(bool editable) override;
+  bool HasFocusedGuests() override;
 
   // RenderFrameHostManager::Delegate ------------------------------------------
 
@@ -798,6 +800,16 @@ class CONTENT_EXPORT WebContentsImpl
   // Modify the counter of connected devices for this WebContents.
   void IncrementBluetoothConnectedDeviceCount();
   void DecrementBluetoothConnectedDeviceCount();
+
+  // Called when the WebContents gains or loses a persistent video.
+  void SetHasPersistentVideo(bool has_persistent_video);
+
+  // Whether the WebContents has an active player is effectively fullscreen.
+  // That means that the video is either fullscreen or it is the content of
+  // a fullscreen page (in other words, a fullscreen video with custom
+  // controls).
+  // |IsFullscreen| must return |true| when this method is called.
+  bool HasActiveEffectivelyFullscreenVideo() const;
 
 #if defined(OS_ANDROID)
   // Called by FindRequestManager when all of the find match rects are in.
@@ -1180,6 +1192,10 @@ class CONTENT_EXPORT WebContentsImpl
   // certificate via --allow-insecure-localhost.
   void ShowInsecureLocalhostWarningIfNeeded();
 
+  // Notify this WebContents that the preferences have changed. This will send
+  // an IPC to all the renderer process associated with this WebContents.
+  void NotifyPreferencesChanged();
+
   // Data for core operation ---------------------------------------------------
 
   // Delegate for notifying our owner about stuff. Not owned by us.
@@ -1321,6 +1337,10 @@ class CONTENT_EXPORT WebContentsImpl
   // See getter above.
   bool is_being_destroyed_;
 
+  // Keep track of whether this WebContents is currently iterating over its list
+  // of observers, during which time it should not be deleted.
+  bool is_notifying_observers_;
+
   // Indicates whether we should notify about disconnection of this
   // WebContentsImpl. This is used to ensure disconnection notifications only
   // happen if a connection notification has happened and that they happen only
@@ -1454,7 +1474,7 @@ class CONTENT_EXPORT WebContentsImpl
 
   std::unique_ptr<device::WakeLockServiceContext> wake_lock_service_context_;
 
-  std::unique_ptr<ScreenOrientation> screen_orientation_;
+  std::unique_ptr<ScreenOrientationProvider> screen_orientation_provider_;
 
   std::unique_ptr<ManifestManagerHost> manifest_manager_host_;
 
@@ -1511,6 +1531,8 @@ class CONTENT_EXPORT WebContentsImpl
   bool is_overlay_content_;
 
   int currently_playing_video_count_ = 0;
+
+  bool has_persistent_video_ = false;
 
   // These are kept here to make sure they overwrite the site specific settings.
   std::unique_ptr<bool> show_images_;

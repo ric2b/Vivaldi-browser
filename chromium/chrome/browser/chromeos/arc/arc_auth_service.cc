@@ -7,20 +7,23 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
-#include "chrome/browser/chromeos/arc/auth/arc_auth_code_fetcher.h"
+#include "chrome/browser/chromeos/arc/auth/arc_active_directory_enrollment_token_fetcher.h"
+#include "chrome/browser/chromeos/arc/auth/arc_auth_info_fetcher.h"
 #include "chrome/browser/chromeos/arc/auth/arc_background_auth_code_fetcher.h"
 #include "chrome/browser/chromeos/arc/auth/arc_manual_auth_code_fetcher.h"
 #include "chrome/browser/chromeos/arc/auth/arc_robot_auth_code_fetcher.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_features.h"
+#include "components/arc/arc_util.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace arc {
@@ -62,9 +65,8 @@ ProvisioningResult ConvertArcSignInFailureReasonToProvisioningResult(
 }
 
 mojom::ChromeAccountType GetAccountType() {
-  return ArcSessionManager::IsArcKioskMode()
-             ? mojom::ChromeAccountType::ROBOT_ACCOUNT
-             : mojom::ChromeAccountType::USER_ACCOUNT;
+  return IsArcKioskMode() ? mojom::ChromeAccountType::ROBOT_ACCOUNT
+                          : mojom::ChromeAccountType::USER_ACCOUNT;
 }
 
 }  // namespace
@@ -88,25 +90,31 @@ class ArcAuthService::AccountInfoNotifier {
         account_info_callback_(account_info_callback) {}
 
   void Notify(bool is_enforced,
-              const std::string& auth_code,
+              const std::string& auth_info,
+              const std::string& account_name,
               mojom::ChromeAccountType account_type,
               bool is_managed) {
     switch (callback_type_) {
       case CallbackType::AUTH_CODE:
         DCHECK(!auth_callback_.is_null());
-        auth_callback_.Run(auth_code, is_enforced);
+        auth_callback_.Run(auth_info, is_enforced);
         break;
       case CallbackType::AUTH_CODE_AND_ACCOUNT:
         DCHECK(!auth_account_callback_.is_null());
-        auth_account_callback_.Run(auth_code, is_enforced, account_type);
+        auth_account_callback_.Run(auth_info, is_enforced, account_type);
         break;
       case CallbackType::ACCOUNT_INFO:
         DCHECK(!account_info_callback_.is_null());
         mojom::AccountInfoPtr account_info = mojom::AccountInfo::New();
-        if (!is_enforced) {
-          account_info->auth_code = base::nullopt;
+        account_info->account_name = account_name;
+        if (account_type ==
+            mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT) {
+          account_info->enrollment_token = auth_info;
         } else {
-          account_info->auth_code = auth_code;
+          if (!is_enforced)
+            account_info->auth_code = base::nullopt;
+          else
+            account_info->auth_code = auth_info;
         }
         account_info->account_type = account_type;
         account_info->is_managed = is_managed;
@@ -190,7 +198,16 @@ void ArcAuthService::ReportMetrics(mojom::MetricsType metrics_type,
       UpdateAuthTiming("ArcAuth.SignInTime",
                        base::TimeDelta::FromMilliseconds(value));
       break;
+    case mojom::MetricsType::ACCOUNT_CHECK_MILLISECONDS:
+      UpdateAuthTiming("ArcAuth.AccountCheckTime",
+                       base::TimeDelta::FromMilliseconds(value));
+      break;
   }
+}
+
+void ArcAuthService::ReportAccountCheckStatus(
+    mojom::AccountCheckStatus status) {
+  UpdateAuthAccountCheckStatus(status);
 }
 
 void ArcAuthService::OnAccountInfoReady(mojom::AccountInfoPtr account_info) {
@@ -211,7 +228,7 @@ void ArcAuthService::GetAuthCodeDeprecated(
     const GetAuthCodeDeprecatedCallback& callback) {
   // For robot account we must use RequestAccountInfo because it allows
   // to specify account type.
-  DCHECK(!ArcSessionManager::IsArcKioskMode());
+  DCHECK(!IsArcKioskMode());
   RequestAccountInfoInternal(
       base::MakeUnique<ArcAuthService::AccountInfoNotifier>(callback));
 }
@@ -236,9 +253,10 @@ void ArcAuthService::RequestAccountInfoInternal(
   DCHECK(!notifier_);
   DCHECK(!fetcher_);
 
-  if (ArcSessionManager::IsOptInVerificationDisabled()) {
+  if (IsArcOptInVerificationDisabled()) {
     notifier->Notify(
-        false /* = is_enforced */, std::string(), GetAccountType(),
+        false /* = is_enforced */, std::string() /* auth_info */,
+        std::string() /* auth_name */, GetAccountType(),
         policy_util::IsAccountManaged(ArcSessionManager::Get()->profile()));
     return;
   }
@@ -246,21 +264,35 @@ void ArcAuthService::RequestAccountInfoInternal(
   // Hereafter asynchronous operation. Remember the notifier.
   notifier_ = std::move(notifier);
 
-  if (ArcSessionManager::IsArcKioskMode()) {
+  Profile* profile = ArcSessionManager::Get()->profile();
+  const user_manager::User* user = nullptr;
+  if (profile)
+    user = chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+
+  if (user && user->IsActiveDirectoryUser()) {
+    // For Active Directory enrolled devices, we get an enrollment token for a
+    // managed Google Play account from DMServer.
+    fetcher_ = base::MakeUnique<ArcActiveDirectoryEnrollmentTokenFetcher>();
+    fetcher_->Fetch(base::Bind(&ArcAuthService::OnEnrollmentTokenFetched,
+                               weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+  // For non-AD enrolled devices an auth code is fetched.
+  if (IsArcKioskMode()) {
     // In Kiosk mode, use Robot auth code fetching.
     fetcher_ = base::MakeUnique<ArcRobotAuthCodeFetcher>();
   } else if (base::FeatureList::IsEnabled(arc::kArcUseAuthEndpointFeature)) {
     // Optionally retrieve auth code in silent mode.
+    DCHECK(profile);
     fetcher_ = base::MakeUnique<ArcBackgroundAuthCodeFetcher>(
-        ArcSessionManager::Get()->profile(),
-        ArcSessionManager::Get()->auth_context());
+        profile, ArcSessionManager::Get()->auth_context());
   } else {
     // Report that silent auth code is not activated. All other states are
     // reported in ArcBackgroundAuthCodeFetcher.
     UpdateSilentAuthCodeUMA(OptInSilentAuthCode::DISABLED);
     // Otherwise, show LSO page and let user click "Sign in" button.
     // Here, support_host should be available always. The case support_host is
-    // not created is when 1) IsOptInVerificationDisabled() is true or 2)
+    // not created is when 1) IsArcOptInVerificationDisabled() is true or 2)
     // IsArcKioskMode() is true. Both cases are handled above.
     fetcher_ = base::MakeUnique<ArcManualAuthCodeFetcher>(
         ArcSessionManager::Get()->auth_context(),
@@ -268,6 +300,23 @@ void ArcAuthService::RequestAccountInfoInternal(
   }
   fetcher_->Fetch(base::Bind(&ArcAuthService::OnAuthCodeFetched,
                              weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ArcAuthService::OnEnrollmentTokenFetched(
+    const std::string& enrollment_token) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  fetcher_.reset();
+
+  if (enrollment_token.empty()) {
+    ArcSessionManager::Get()->OnProvisioningFinished(
+        ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR);
+    return;
+  }
+
+  notifier_->Notify(true /*is_enforced*/, enrollment_token,
+                    std::string() /* account_name */,
+                    mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT, true);
+  notifier_.reset();
 }
 
 void ArcAuthService::OnAuthCodeFetched(const std::string& auth_code) {
@@ -281,7 +330,8 @@ void ArcAuthService::OnAuthCodeFetched(const std::string& auth_code) {
   }
 
   notifier_->Notify(
-      !ArcSessionManager::IsOptInVerificationDisabled(), auth_code,
+      !IsArcOptInVerificationDisabled(), auth_code,
+      ArcSessionManager::Get()->auth_context()->full_account_id(),
       GetAccountType(),
       policy_util::IsAccountManaged(ArcSessionManager::Get()->profile()));
   notifier_.reset();

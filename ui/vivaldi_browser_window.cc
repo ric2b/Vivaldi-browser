@@ -35,9 +35,7 @@
 
 // VivaldiBrowserWindow --------------------------------------------------------
 
-VivaldiBrowserWindow::VivaldiBrowserWindow() :
-  bounds_(gfx::Rect()) {
-}
+VivaldiBrowserWindow::VivaldiBrowserWindow() : bounds_(gfx::Rect()) {}
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
   // Explicitly set browser_ to NULL.
@@ -61,7 +59,7 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::GetBrowserWindowForBrowser(
 
 // static
 VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
-  Browser* browser) {
+    Browser* browser) {
   // Create the view and the frame. The frame will attach itself via the view
   // so we don't need to do anything with the pointer.
   VivaldiBrowserWindow* vview = new VivaldiBrowserWindow();
@@ -88,7 +86,7 @@ void VivaldiBrowserWindow::SetBounds(const gfx::Rect& bounds) {
 }
 
 void VivaldiBrowserWindow::Close() {
-  //gisli@vivaldi.com: Code based on BrowserView::CanClose();
+  // gisli@vivaldi.com: Code based on BrowserView::CanClose();
 
   // Give beforeunload handlers the chance to cancel the close before we hide
   // the window below.
@@ -108,7 +106,7 @@ void VivaldiBrowserWindow::Close() {
       browser_->tab_strip_model()->CloseAllTabs();
     return;
   } else if (fast_tab_closing_enabled &&
-        !browser_->HasCompletedUnloadProcessing()) {
+             !browser_->HasCompletedUnloadProcessing()) {
     // The browser needs to finish running unload handlers.
     // Hide the frame (so it appears to have closed immediately), and
     // the browser will call us back again when it is ready to close.
@@ -126,8 +124,7 @@ void VivaldiBrowserWindow::Activate() {
   BrowserList::SetLastActive(browser_.get());
 }
 
-void VivaldiBrowserWindow::Deactivate() {
-}
+void VivaldiBrowserWindow::Deactivate() {}
 
 bool VivaldiBrowserWindow::IsActive() const {
   Browser* active = BrowserList::GetInstance()->GetLastActive();
@@ -142,37 +139,34 @@ extensions::AppWindow* VivaldiBrowserWindow::GetAppWindow() const {
   extensions::AppWindow* app_window = NULL;
 
   extensions::AppWindowRegistry* appwinreg =
-    extensions::AppWindowRegistry::Get(browser_->profile());
+      extensions::AppWindowRegistry::Get(browser_->profile());
   content::WebContentsImpl* web_contents =
-    static_cast<content::WebContentsImpl*>(browser_->tab_strip_model()
-    ->GetActiveWebContents());
+      static_cast<content::WebContentsImpl*>(
+          browser_->tab_strip_model()->GetActiveWebContents());
   if (!!web_contents) {
     content::BrowserPluginGuest* guestplugin =
-      web_contents->GetBrowserPluginGuest();
+        web_contents->GetBrowserPluginGuest();
     if (!!guestplugin) {
-      content::WebContents* embedder_web_contents
-        = guestplugin->embedder_web_contents();
+      content::WebContents* embedder_web_contents =
+          guestplugin->embedder_web_contents();
       if (embedder_web_contents) {
         app_window =
-          appwinreg->GetAppWindowForWebContents(
-          embedder_web_contents);
+            appwinreg->GetAppWindowForWebContents(embedder_web_contents);
       }
     }
   }
-  if(!app_window){
-
-    std::unique_ptr<base::Value> value(base::JSONReader::Read(browser_->ext_data()));
+  if (!app_window) {
+    std::unique_ptr<base::Value> value(
+        base::JSONReader::Read(browser_->ext_data()));
     base::DictionaryValue* dictionary;
     if (value && value->GetAsDictionary(&dictionary)) {
       std::string windowid;
       if (dictionary->GetString("ext_id", &windowid)) {
         windowid.insert(0, "vivaldi_window_");  // This is added in the client.
-        app_window =
-            appwinreg->GetAppWindowForAppAndKey(
-                vivaldi::kVivaldiAppId, windowid);
+        app_window = appwinreg->GetAppWindowForAppAndKey(vivaldi::kVivaldiAppId,
+                                                         windowid);
       }
     }
-
   }
   return app_window;
 }
@@ -222,7 +216,7 @@ bool VivaldiBrowserWindow::IsFullscreenBubbleVisible() const {
 }
 
 LocationBar* VivaldiBrowserWindow::GetLocationBar() const {
-  return NULL;;
+  return NULL;
 }
 
 ToolbarActionsBar* VivaldiBrowserWindow::GetToolbarActionsBar() {
@@ -230,8 +224,8 @@ ToolbarActionsBar* VivaldiBrowserWindow::GetToolbarActionsBar() {
 }
 
 bool VivaldiBrowserWindow::PreHandleKeyboardEvent(
-  const content::NativeWebKeyboardEvent& event,
-  bool* is_keyboard_shortcut) {
+    const content::NativeWebKeyboardEvent& event,
+    bool* is_keyboard_shortcut) {
   return false;
 }
 
@@ -259,42 +253,38 @@ DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
   return NULL;
 }
 
-void VivaldiBrowserWindow::ShowWebsiteSettings(Profile* profile,
-        content::WebContents* web_contents,
-        const GURL& url,
-        const security_state::SecurityInfo& security_info) {
-
+void VivaldiBrowserWindow::ShowWebsiteSettings(
+    Profile* profile,
+    content::WebContents* web_contents,
+    const GURL& url,
+    const security_state::SecurityInfo& security_info) {
   // For Vivaldi we reroute this back to javascript site, for either
   // display a javascript siteinfo or call back to us (via webview) using
   // VivaldiShowWebsiteSettingsAt.
   content::WebContentsImpl* web_contents_impl =
-    static_cast<content::WebContentsImpl*>(web_contents);
+      static_cast<content::WebContentsImpl*>(web_contents);
 
-  static_cast<extensions::WebViewGuest*>(
-    web_contents_impl->GetDelegate())->RequestPageInfo(url);
+  static_cast<extensions::WebViewGuest*>(web_contents_impl->GetDelegate())
+      ->RequestPageInfo(url);
 }
 
 // See comments on: BrowserWindow.VivaldiShowWebSiteSettingsAt.
-void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(Profile* profile,
-        content::WebContents* web_contents,
-        const GURL& url,
-        const security_state::SecurityInfo& security_info,
-        gfx::Point pos) {
+void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
+    Profile* profile,
+    content::WebContents* web_contents,
+    const GURL& url,
+    const security_state::SecurityInfo& security_info,
+    gfx::Point pos) {
 #if defined(USE_AURA)
   // This is only for AURA.  Mac is done in VivaldiBrowserCocoa.
-  WebsiteSettingsPopupView::ShowPopupAtPos(
-    pos,
-    profile,
-    web_contents,
-    url,
-    security_info,
-    browser_.get(),
-    GetAppWindow()->GetNativeWindow());
+  WebsiteSettingsPopupView::ShowPopupAtPos(pos, profile, web_contents, url,
+                                           security_info, browser_.get(),
+                                           GetAppWindow()->GetNativeWindow());
 #endif
 }
 
 WindowOpenDisposition VivaldiBrowserWindow::GetDispositionForPopupBounds(
-  const gfx::Rect& bounds) {
+    const gfx::Rect& bounds) {
   return WindowOpenDisposition::NEW_POPUP;
 }
 
@@ -307,23 +297,22 @@ VivaldiBrowserWindow::GetWebContentsModalDialogHost() {
   return NULL;
 }
 
-int
-VivaldiBrowserWindow::GetRenderViewHeightInsetWithDetachedBookmarkBar() {
+int VivaldiBrowserWindow::GetRenderViewHeightInsetWithDetachedBookmarkBar() {
   return 0;
 }
 
 void VivaldiBrowserWindow::ExecuteExtensionCommand(
-  const extensions::Extension* extension,
-  const extensions::Command& command) {}
+    const extensions::Extension* extension,
+    const extensions::Command& command) {}
 
 ExclusiveAccessContext* VivaldiBrowserWindow::GetExclusiveAccessContext() {
   return this;
 }
 
 autofill::SaveCardBubbleView* VivaldiBrowserWindow::ShowSaveCreditCardBubble(
-      content::WebContents* contents,
-      autofill::SaveCardBubbleController* controller,
-      bool is_user_gesture) {
+    content::WebContents* contents,
+    autofill::SaveCardBubbleController* controller,
+    bool is_user_gesture) {
   return NULL;
 }
 

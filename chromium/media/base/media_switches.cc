@@ -22,12 +22,6 @@ const char kDisableMediaSuspend[] = "disable-media-suspend";
 const char kReportVp9AsAnUnsupportedMimeType[] =
     "report-vp9-as-an-unsupported-mime-type";
 
-#if defined(OS_ANDROID)
-// Use WebMediaPlayerAndroid instead of WebMediaPlayerImpl. This is a temporary
-// switch for holding back the new unified media pipeline.
-const char kDisableUnifiedMediaPipeline[] = "disable-unified-media-pipeline";
-#endif
-
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
 // The Alsa device to use when opening an audio input stream.
 const char kAlsaInputDevice[] = "alsa-input-device";
@@ -81,6 +75,13 @@ const char kEnableDefaultMediaSession[] = "enable-default-media-session";
 const char kEnableDefaultMediaSessionDuckFlash[] = "duck-flash";
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
+#if BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
+// Rather than use the renderer hosted remotely in the media service, fall back
+// to the default renderer within content_renderer. Does not change the behavior
+// of the media service.
+const char kDisableMojoRenderer[] = "disable-mojo-renderer";
+#endif  // BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
+
 // Use fake device for Media Stream to replace actual camera and microphone.
 const char kUseFakeDeviceForMediaStream[] = "use-fake-device-for-media-stream";
 
@@ -126,6 +127,11 @@ const char kForceVideoOverlays[] = "force-video-overlays";
 const char kMSEAudioBufferSizeLimit[] = "mse-audio-buffer-size-limit";
 const char kMSEVideoBufferSizeLimit[] = "mse-video-buffer-size-limit";
 
+// By default, if any CDM host (including signature) file is missing, the CDM
+// will not be called to verify the host. Enable this switch to ignore missing
+// CDM host files. This can be used in tests.
+const char kIgnoreMissingCdmHostFile[] = "ignore-missing-cdm-host-file";
+
 }  // namespace switches
 
 namespace media {
@@ -138,7 +144,7 @@ const base::Feature kD3D11VideoDecoding{"D3D11VideoDecoding",
 
 // Enables H264 HW encode acceleration using Media Foundation for Windows.
 const base::Feature kMediaFoundationH264Encoding{
-    "MediaFoundationH264Encoding", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaFoundationH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
 
 // Use new audio rendering mixer.
@@ -164,6 +170,12 @@ const base::Feature kResumeBackgroundVideo {
 const base::Feature kBackgroundVideoTrackOptimization{
     "BackgroundVideoTrackOptimization", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Make MSE garbage collection algorithm more aggressive when we are under
+// moderate or critical memory pressure. This will relieve memory pressure by
+// releasing stale data from MSE buffers.
+const base::Feature kMemoryPressureBasedSourceBufferGC{
+    "MemoryPressureBasedSourceBufferGC", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
@@ -183,13 +195,16 @@ const base::Feature kExternalClearKeyForTesting{
     "external-clear-key-for-testing", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
-// Replaces WPMA by the MediaPlayerRenderer for HLS and fallback playback.
-const base::Feature kAndroidMediaPlayerRenderer{
-    "android-media-player-renderer", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Lock the screen orientation when a video goes fullscreen.
 const base::Feature kVideoFullscreenOrientationLock{
     "VideoFullscreenOrientationLock", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// An experimental feature to enable persistent-license type support in MediaDrm
+// when using Encrypted Media Extensions (EME) API.
+// TODO(xhwang): Remove this after feature launch. See http://crbug.com/493521
+const base::Feature kMediaDrmPersistentLicense{
+    "MediaDrmPersistentLicense", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #endif
 
 }  // namespace media

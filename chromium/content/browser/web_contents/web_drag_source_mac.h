@@ -77,6 +77,8 @@ CONTENT_EXPORT
 // Call when the web contents is gone.
 - (void)clearWebContentsView;
 
+- (content::DropData*)currentDropData;
+
 // Returns a mask of the allowed drag operations.
 - (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal;
 

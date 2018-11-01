@@ -6,6 +6,7 @@
 #define PlatformEventController_h
 
 #include "core/CoreExport.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/page/PageVisibilityObserver.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -25,7 +26,7 @@ class CORE_EXPORT PlatformEventController : public PageVisibilityObserver {
   virtual void didUpdateData() = 0;
 
  protected:
-  explicit PlatformEventController(Page*);
+  explicit PlatformEventController(LocalFrame*);
   virtual ~PlatformEventController();
 
   virtual void registerWithDispatcher() = 0;
@@ -44,7 +45,7 @@ class CORE_EXPORT PlatformEventController : public PageVisibilityObserver {
   void oneShotCallback(TimerBase*);
 
   bool m_isActive;
-  Timer<PlatformEventController> m_timer;
+  TaskRunnerTimer<PlatformEventController> m_timer;
 };
 
 }  // namespace blink

@@ -17,15 +17,19 @@ namespace content {
 class CONTENT_EXPORT DownloadedTempFileImpl final
     : public mojom::DownloadedTempFile {
  public:
-  static mojo::InterfacePtr<mojom::DownloadedTempFile> Create(int child_id,
-                                                              int request_id);
+  // Creates a DownloadedTempFileImpl, binds it as a strong interface, and
+  // returns the interface ptr to be passed to the client.
+  // That means:
+  //  * The DownloadedTempFile object created here is essentially owned by the
+  //    client. It keeps alive until the client destroys the other endpoint.
+  static mojom::DownloadedTempFilePtr Create(int child_id, int request_id);
 
   DownloadedTempFileImpl(int child_id, int request_id);
   ~DownloadedTempFileImpl() override;
 
  private:
-  int child_id_;
-  int request_id_;
+  const int child_id_;
+  const int request_id_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadedTempFileImpl);
 };

@@ -24,6 +24,8 @@
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/native_widget_types.h"
 
+#include "cc/resources/single_release_callback.h"
+
 namespace content {
 class BrowserPluginGuest;
 class RenderWidgetHost;
@@ -106,10 +108,15 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
 
-  bool CanCopyToVideoFrame() const override;
+  void CopyFromSurfaceToVideoFrame(
+      const gfx::Rect& src_rect,
+      scoped_refptr<media::VideoFrame> target,
+      const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
+
   void BeginFrameSubscription(
       std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
+
 
   bool LockMouse() override;
   void UnlockMouse() override;
@@ -124,9 +131,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
 
-  void LockCompositingSurface() override;
-  void UnlockCompositingSurface() override;
-
   void WheelEventAck(const blink::WebMouseWheelEvent& event,
                      InputEventAckState ack_result) override;
 
@@ -136,10 +140,27 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   bool IsRenderWidgetHostViewGuest() override;
   RenderWidgetHostViewBase* GetOwnerRenderWidgetHostView() const;
 
+
+  static void ReadBackDone(
+    scoped_refptr<media::VideoFrame> video_frame,
+    const base::Callback<void(bool)>& callback,
+    std::unique_ptr<cc::SingleReleaseCallback> release_callback, bool result);
+
+  static void DidCopyOutput(
+    scoped_refptr<media::VideoFrame> video_frame,
+    const base::Callback<void(const gfx::Rect&, bool)>& capture_frame_cb,
+    std::unique_ptr<cc::CopyOutputResult> result);
+
  protected:
   friend class RenderWidgetHostView;
+  bool ShouldCreateNewSurfaceId(uint32_t compositor_frame_sink_id,
+                                const cc::CompositorFrame& frame) override;
 
  private:
+  void SendSurfaceInfoToEmbedderImpl(
+      const cc::SurfaceInfo& surface_info,
+      const cc::SurfaceSequence& sequence) override;
+
   RenderWidgetHostViewGuest(
       RenderWidgetHost* widget,
       BrowserPluginGuest* guest,

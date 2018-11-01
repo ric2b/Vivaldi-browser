@@ -5,6 +5,24 @@
 import("//testing/test.gni")
 import("//v8/gni/v8.gni")
 
+# This is depended upon from the browser DLL on Windows, where V8 is not used,
+# but features are enabled. This cannot depend on V8.
+source_set("gin_features") {
+  sources = [
+    "gin_export.h",
+    "gin_features.cc",
+    "public/gin_features.h",
+  ]
+
+  defines = [ "GIN_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+  ]
+
+  assert_no_deps = [ "//v8" ]
+}
+
 component("gin") {
   sources = [
     "arguments.cc",
@@ -21,7 +39,6 @@ component("gin") {
     "function_template.cc",
     "function_template.h",
     "gin_export.h",
-    "gin_features.cc",
     "handle.h",
     "interceptor.cc",
     "interceptor.h",
@@ -46,7 +63,6 @@ component("gin") {
     "public/context_holder.h",
     "public/debug.h",
     "public/gin_embedders.h",
-    "public/gin_features.h",
     "public/isolate_holder.h",
     "public/v8_idle_task_runner.h",
     "public/v8_platform.h",
@@ -83,50 +99,16 @@ component("gin") {
     "//v8",
   ]
   deps = [
+    ":gin_features",
     "//base/third_party/dynamic_annotations",
     "//crypto",
   ]
-  if (v8_use_external_startup_data && is_win) {
-    public_deps += [ ":gin_v8_snapshot_fingerprint" ]
-    sources += [ "$target_gen_dir/v8_snapshot_fingerprint.cc" ]
-    defines += [ "V8_VERIFY_EXTERNAL_STARTUP_DATA" ]
-  }
 
   if (is_mac) {
     libs = [ "CoreFoundation.framework" ]
   }
 
   configs += [ "//v8:external_startup_data" ]
-}
-
-if (v8_use_external_startup_data) {
-  action("gin_v8_snapshot_fingerprint") {
-    script = "//gin/fingerprint/fingerprint_v8_snapshot.py"
-
-    snapshot_file = "$root_out_dir/snapshot_blob.bin"
-    natives_file = "$root_out_dir/natives_blob.bin"
-    output_file = "$target_gen_dir/v8_snapshot_fingerprint.cc"
-
-    args = [
-      "--snapshot_file",
-      rebase_path(snapshot_file, root_build_dir),
-      "--natives_file",
-      rebase_path(natives_file, root_build_dir),
-      "--output_file",
-      rebase_path(output_file, root_build_dir),
-    ]
-    inputs = [
-      snapshot_file,
-      natives_file,
-    ]
-    outputs = [
-      output_file,
-    ]
-
-    deps = [
-      "//v8",
-    ]
-  }
 }
 
 executable("gin_shell") {
@@ -187,6 +169,7 @@ test("gin_unittests") {
     "test/run_all_unittests.cc",
     "test/run_js_tests.cc",
     "v8_isolate_memory_dump_provider_unittest.cc",
+    "v8_platform_unittest.cc",
     "wrappable_unittest.cc",
   ]
 

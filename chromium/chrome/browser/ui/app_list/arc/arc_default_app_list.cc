@@ -7,7 +7,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/path_service.h"
-#include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
@@ -24,7 +24,7 @@ const char kName[] = "name";
 const char kOem[] = "oem";
 const char kPackageName[] = "package_name";
 
-// Sub-directory wher Arc apps forward declarations are stored.
+// Sub-directory wher ARC apps forward declarations are stored.
 const base::FilePath::CharType kArcDirectory[] = FILE_PATH_LITERAL("arc");
 const base::FilePath::CharType kArcTestDirectory[] =
     FILE_PATH_LITERAL("arc_default_apps");
@@ -33,8 +33,6 @@ bool use_test_apps_directory = false;
 
 std::unique_ptr<ArcDefaultAppList::AppInfoMap>
 ReadAppsFromFileThread() {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
-
   std::unique_ptr<ArcDefaultAppList::AppInfoMap> apps(
       new ArcDefaultAppList::AppInfoMap);
 
@@ -90,8 +88,8 @@ ReadAppsFromFileThread() {
           package_name.empty() ||
           activity.empty() ||
           app_path.empty()) {
-        VLOG(2) << "Arc app declaration is incomplete in file "
-                << file.value() << ".";
+        VLOG(2) << "ARC app declaration is incomplete in file " << file.value()
+                << ".";
         continue;
       }
 
@@ -130,11 +128,12 @@ ArcDefaultAppList::ArcDefaultAppList(Delegate* delegate,
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
   // Once ready OnAppsReady is called.
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(), FROM_HERE,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
       base::Bind(&ReadAppsFromFileThread),
       base::Bind(&ArcDefaultAppList::OnAppsReady,
-          weak_ptr_factory_.GetWeakPtr()));
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 ArcDefaultAppList::~ArcDefaultAppList() {}
@@ -172,8 +171,11 @@ void ArcDefaultAppList::OnAppsReady(std::unique_ptr<AppInfoMap> apps) {
 
 const ArcDefaultAppList::AppInfo* ArcDefaultAppList::GetApp(
     const std::string& app_id) const {
-  if (hidden_)
+  if ((filter_level_ == FilterLevel::ALL) ||
+      (filter_level_ == FilterLevel::OPTIONAL_APPS &&
+       app_id != arc::kPlayStoreAppId)) {
     return nullptr;
+  }
   const auto it = apps_.find(app_id);
   if (it == apps_.end())
     return nullptr;

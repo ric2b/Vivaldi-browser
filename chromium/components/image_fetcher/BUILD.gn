@@ -11,12 +11,15 @@ static_library("image_fetcher") {
     "image_fetcher_delegate.h",
     "image_fetcher_impl.cc",
     "image_fetcher_impl.h",
+    "request_metadata.cc",
+    "request_metadata.h",
   ]
 
   public_deps = [
     "//base",
     "//components/data_use_measurement/core",
     "//net",
+    "//ui/gfx/geometry",
     "//url",
   ]
 }
@@ -25,6 +28,7 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "image_data_fetcher_unittest.cc",
+    "request_metadata_unittest.cc",
   ]
   deps = [
     ":image_fetcher",

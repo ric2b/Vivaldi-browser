@@ -56,7 +56,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor {
   void update(
       const PaintArtifact&,
       RasterInvalidationTrackingMap<const PaintChunk>* paintChunkInvalidations,
-      bool storeDebugInfo);
+      bool storeDebugInfo,
+      GeometryMapper&);
 
   // The root layer of the tree managed by this object.
   cc::Layer* rootLayer() const { return m_rootLayer.get(); }
@@ -169,6 +170,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor {
                            MergeSimpleChunks);
   FRIEND_TEST_ALL_PREFIXES(PaintArtifactCompositorTestWithPropertyTrees,
                            Merge2DTransform);
+  FRIEND_TEST_ALL_PREFIXES(PaintArtifactCompositorTestWithPropertyTrees,
+                           Merge2DTransformDirectAncestor);
   FRIEND_TEST_ALL_PREFIXES(PaintArtifactCompositorTestWithPropertyTrees,
                            MergeTransformOrigin);
   FRIEND_TEST_ALL_PREFIXES(PaintArtifactCompositorTestWithPropertyTrees,

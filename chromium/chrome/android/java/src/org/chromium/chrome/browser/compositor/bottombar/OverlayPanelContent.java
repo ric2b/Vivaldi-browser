@@ -57,6 +57,12 @@ public class OverlayPanelContent {
     private boolean mDidStartLoadingUrl;
 
     /**
+     * Whether we should reuse any existing WebContents instead of deleting and recreating.
+     * See crbug.com/682953 for details.
+     */
+    private boolean mShouldReuseWebContents;
+
+    /**
      * Whether the ContentViewCore is processing a pending navigation.
      * NOTE(pedrosimonetti): This is being used to prevent redirections on the SERP to be
      * interpreted as a regular navigation, which should cause the Contextual Search Panel
@@ -180,7 +186,7 @@ public class OverlayPanelContent {
      * otherwise one is created when the panel's content becomes visible.
      * @param url The URL that should be loaded.
      * @param shouldLoadImmediately If a URL should be loaded immediately or wait until visibility
-     *                        changes.
+     *        changes.
      */
     public void loadUrl(String url, boolean shouldLoadImmediately) {
         mPendingUrl = null;
@@ -197,6 +203,14 @@ public class OverlayPanelContent {
                         new LoadUrlParams(url));
             }
         }
+    }
+
+    /**
+     * Call this when a loadUrl request has failed to notify the panel that the WebContents can
+     * be reused.  See crbug.com/682953 for details.
+     */
+    void onLoadUrlFailed() {
+        mShouldReuseWebContents = true;
     }
 
     /**
@@ -233,7 +247,7 @@ public class OverlayPanelContent {
         if (mContentViewCore != null) {
             // If the ContentViewCore has already been created, but never used,
             // then there's no need to create a new one.
-            if (!mDidStartLoadingUrl) return;
+            if (!mDidStartLoadingUrl || mShouldReuseWebContents) return;
 
             destroyContentView();
         }
@@ -299,28 +313,25 @@ public class OverlayPanelContent {
                     }
 
                     @Override
-                    public void didStartProvisionalLoadForFrame(long frameId, long parentFrameId,
-                            boolean isMainFrame, String validatedUrl, boolean isErrorPage) {
-                        if (isMainFrame) {
-                            mContentDelegate.onMainFrameLoadStarted(validatedUrl,
-                                    !TextUtils.equals(validatedUrl, mLoadedUrl));
+                    public void didStartNavigation(String url, boolean isInMainFrame,
+                            boolean isSamePage, boolean isErrorPage) {
+                        if (isInMainFrame && !isSamePage) {
+                            mContentDelegate.onMainFrameLoadStarted(
+                                    url, !TextUtils.equals(url, mLoadedUrl));
                         }
                     }
 
                     @Override
-                    public void didNavigateMainFrame(String url, String baseUrl,
-                            boolean isNavigationToDifferentPage, boolean isNavigationInPage,
-                            int httpResultCode) {
-                        mIsProcessingPendingNavigation = false;
-                        mContentDelegate.onMainFrameNavigation(url,
-                                !TextUtils.equals(url, mLoadedUrl),
-                                isHttpFailureCode(httpResultCode));
-                    }
-
-                    @Override
-                    public void didFinishLoad(long frameId, String validatedUrl,
-                            boolean isMainFrame) {
-                        mContentDelegate.onContentLoadFinished();
+                    public void didFinishNavigation(String url, boolean isInMainFrame,
+                            boolean isErrorPage, boolean hasCommitted, boolean isSamePage,
+                            boolean isFragmentNavigation, Integer pageTransition, int errorCode,
+                            String errorDescription, int httpStatusCode) {
+                        if (hasCommitted && isInMainFrame) {
+                            mIsProcessingPendingNavigation = false;
+                            mContentDelegate.onMainFrameNavigation(url,
+                                    !TextUtils.equals(url, mLoadedUrl),
+                                    isHttpFailureCode(httpStatusCode));
+                        }
                     }
                 };
 
@@ -347,6 +358,7 @@ public class OverlayPanelContent {
 
             mDidStartLoadingUrl = false;
             mIsProcessingPendingNavigation = false;
+            mShouldReuseWebContents = false;
 
             setVisibility(false);
 

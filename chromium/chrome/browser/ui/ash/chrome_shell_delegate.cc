@@ -12,7 +12,6 @@
 #include "ash/accelerators/spoken_feedback_toggler.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
-#include "ash/common/session/session_state_delegate.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
@@ -479,9 +478,15 @@ ash::ShelfDelegate* ChromeShellDelegate::CreateShelfDelegate(
 ui::MenuModel* ChromeShellDelegate::CreateContextMenu(
     ash::WmShelf* wm_shelf,
     const ash::ShelfItem* item) {
-  DCHECK(shelf_delegate_);
   // Don't show context menu for exclusive app runtime mode.
   if (chrome::IsRunningInAppMode())
+    return nullptr;
+
+  // No context menu before |shelf_delegate_| is created. This is possible
+  // now because CreateShelfDelegate is called by session state change
+  // via mojo asynchronously. Context menu could be triggered when the
+  // mojo message is still in-fly and crashes.
+  if (!shelf_delegate_)
     return nullptr;
 
   return LauncherContextMenu::Create(shelf_delegate_, item, wm_shelf);
@@ -501,7 +506,7 @@ void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
   Browser* browser = chrome::FindTabbedBrowser(profile, false);
 
   if (!browser) {
-    browser = new Browser(Browser::CreateParams(profile));
+    browser = new Browser(Browser::CreateParams(profile, true));
     browser->window()->Show();
   }
 

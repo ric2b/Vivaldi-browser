@@ -22,8 +22,8 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
@@ -34,7 +34,6 @@
 #include "content/test/test_web_contents.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
-#include "media/base/yuv_convert.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_capture_device_client.h"
@@ -42,6 +41,7 @@
 #include "skia/ext/platform_canvas.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/layout.h"
 #include "ui/display/display.h"
@@ -85,8 +85,8 @@ void RunCurrentLoopWithDeadline() {
 
 SkColor ConvertRgbToYuv(SkColor rgb) {
   uint8_t yuv[3];
-  media::ConvertRGB32ToYUV(reinterpret_cast<uint8_t*>(&rgb), yuv, yuv + 1,
-                           yuv + 2, 1, 1, 1, 1, 1);
+  libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(&rgb), 1, yuv, 1, yuv + 1, 1,
+                     yuv + 2, 1, 1, 1);
   return SkColorSetRGB(yuv[0], yuv[1], yuv[2]);
 }
 
@@ -99,9 +99,9 @@ media::VideoCaptureParams DefaultCaptureParams() {
 }
 
 // A stub implementation which fills solid-colors into VideoFrames in calls to
-// CopyFromCompositingSurfaceToVideoFrame(). The colors are changed by tests
-// in-between draw events to confirm that the right frames have the right
-// content and in the right sequence.
+// CopyFromSurfaceToVideoFrame(). The colors are changed by tests in-between
+// draw events to confirm that the right frames have the right content and in
+// the right sequence.
 class CaptureTestView : public TestRenderWidgetHostView {
  public:
   explicit CaptureTestView(RenderWidgetHostImpl* rwh)
@@ -124,12 +124,21 @@ class CaptureTestView : public TestRenderWidgetHostView {
     fake_bounds_ = rect;
   }
 
-  bool CanCopyToVideoFrame() const override { return true; }
+  bool IsSurfaceAvailableForCopy() const override { return true; }
 
-  void CopyFromCompositingSurfaceToVideoFrame(
+  void CopyFromSurface(const gfx::Rect& src_rect,
+                       const gfx::Size& output_size,
+                       const ReadbackRequestCallback& callback,
+                       const SkColorType color_type) override {
+    // WebContentsVideoCaptureDevice implementation does not use this.
+    NOTREACHED();
+  }
+
+  void CopyFromSurfaceToVideoFrame(
       const gfx::Rect& src_subrect,
-      const scoped_refptr<media::VideoFrame>& target,
+      scoped_refptr<media::VideoFrame> target,
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override {
+    ASSERT_TRUE(src_subrect.IsEmpty());
     media::FillYUV(target.get(), SkColorGetR(yuv_color_),
                    SkColorGetG(yuv_color_), SkColorGetB(yuv_color_));
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
@@ -155,8 +164,8 @@ class CaptureTestView : public TestRenderWidgetHostView {
     scoped_refptr<media::VideoFrame> target;
     if (subscriber_ && subscriber_->ShouldCaptureFrame(
             gfx::Rect(), present_time, &target, &callback)) {
-      CopyFromCompositingSurfaceToVideoFrame(
-          gfx::Rect(), target, base::Bind(callback, present_time));
+      CopyFromSurfaceToVideoFrame(gfx::Rect(), target,
+                                  base::Bind(callback, present_time));
     }
   }
 
@@ -243,6 +252,7 @@ class StubClient : public media::VideoCaptureDevice::Client {
                     int frame_feedback_id));
 
   MOCK_METHOD0(DoOnIncomingCapturedBuffer, void(void));
+  MOCK_METHOD0(OnStarted, void(void));
 
   media::VideoCaptureDevice::Client::Buffer ReserveOutputBuffer(
       const gfx::Size& dimensions,
@@ -284,8 +294,7 @@ class StubClient : public media::VideoCaptureDevice::Client {
     // analysis is too slow, the backlog of frames will grow without bound and
     // trouble erupts. http://crbug.com/174519
     using media::VideoFrame;
-    auto buffer_access =
-        buffer.handle_provider()->GetHandleForInProcessAccess();
+    auto buffer_access = buffer.handle_provider->GetHandleForInProcessAccess();
     auto frame = VideoFrame::WrapExternalSharedMemory(
         media::PIXEL_FORMAT_I420, format.frame_size, visible_rect,
         format.frame_size, buffer_access->data(), buffer_access->mapped_size(),
@@ -346,9 +355,7 @@ class StubClientObserver {
 
   virtual ~StubClientObserver() {}
 
-  std::unique_ptr<media::VideoCaptureDevice::Client> PassClient() {
-    return std::move(client_);
-  }
+  std::unique_ptr<StubClient> PassClient() { return std::move(client_); }
 
   void SetIsExpectingFrames(bool expecting_frames) {
     expecting_frames_ = expecting_frames;
@@ -453,11 +460,11 @@ class WebContentsVideoCaptureDeviceTest : public testing::Test {
     // TODO(nick): Sadness and woe! Much "mock-the-world" boilerplate could be
     // eliminated here, if only we could use RenderViewHostTestHarness. The
     // catch is that we need to inject our CaptureTestView::
-    // CopyFromCompositingSurfaceToVideoFrame() mock. To accomplish that,
-    // either RenderViewHostTestHarness would have to support installing a
-    // custom RenderViewHostFactory, or else we implant some kind of delegated
-    // CopyFromCompositingSurfaceToVideoFrame functionality into
-    // TestRenderViewHostView itself.
+    // CopyFromSurfaceToVideoFrame() mock. To accomplish that, either
+    // RenderViewHostTestHarness would have to support installing a custom
+    // RenderViewHostFactory, or else we implant some kind of delegated
+    // CopyFromSurfaceToVideoFrame functionality into TestRenderWidgetHostView
+    // itself.
 
     render_process_host_factory_.reset(new MockRenderProcessHostFactory());
     // Create our (self-registering) RVH factory, so that when we create a
@@ -636,8 +643,9 @@ class WebContentsVideoCaptureDeviceTest : public testing::Test {
 TEST_F(WebContentsVideoCaptureDeviceTest,
        SafelyStartsUpAfterWebContentsHasGone) {
   ResetWebContents();
-  device()->AllocateAndStart(DefaultCaptureParams(),
-                             client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client));
   ASSERT_NO_FATAL_FAILURE(client_observer()->WaitForError());
   device()->StopAndDeAllocate();
 }
@@ -649,8 +657,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest,
        RunsThenErrorsOutWhenWebContentsIsDestroyed) {
   // We'll simulate the tab being closed after the capture pipeline is up and
   // running.
-  device()->AllocateAndStart(DefaultCaptureParams(),
-                             client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client));
 
   // Do one capture to prove the tab is initially open and being captured
   // normally.
@@ -694,8 +703,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest,
        DeliversToCorrectClientAcrossRestarts) {
   // While the device is up-and-running, expect frame captures.
   client_observer()->SetIsExpectingFrames(true);
-  device()->AllocateAndStart(DefaultCaptureParams(),
-                             client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client));
   base::RunLoop().RunUntilIdle();
   test_view()->SetSolidColor(SK_ColorRED);
   SimulateDrawEvent();
@@ -719,7 +729,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest,
   // expect to see any frame captures.
   StubClientObserver observer2;
   observer2.SetIsExpectingFrames(true);
-  device()->AllocateAndStart(DefaultCaptureParams(), observer2.PassClient());
+  auto client2 = observer2.PassClient();
+  EXPECT_CALL(*client2, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client2));
   test_view()->SetSolidColor(SK_ColorBLUE);
   SimulateDrawEvent();
   ASSERT_NO_FATAL_FAILURE(observer2.WaitForNextColor(SK_ColorBLUE));
@@ -734,8 +746,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest,
 // consumer. The test will alternate between the RGB/SkBitmap and YUV/VideoFrame
 // capture paths.
 TEST_F(WebContentsVideoCaptureDeviceTest, GoesThroughAllTheMotions) {
-  device()->AllocateAndStart(DefaultCaptureParams(),
-                             client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client));
 
   for (int i = 0; i < 3; i++) {
     SCOPED_TRACE(base::StringPrintf("Iteration #%d", i));
@@ -771,7 +784,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest, VariableResolution_FixedAspectRatio) {
   auto capture_params = DefaultCaptureParams();
   capture_params.resolution_change_policy =
       media::RESOLUTION_POLICY_FIXED_ASPECT_RATIO;
-  device()->AllocateAndStart(capture_params, client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(capture_params, std::move(client));
 
   // Source size equals maximum size.  Expect delivered frames to be
   // kTestWidth by kTestHeight.
@@ -817,7 +832,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest, VariableResolution_AnyWithinLimits) {
   auto capture_params = DefaultCaptureParams();
   capture_params.resolution_change_policy =
       media::RESOLUTION_POLICY_ANY_WITHIN_LIMIT;
-  device()->AllocateAndStart(capture_params, client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(capture_params, std::move(client));
 
   // Source size equals maximum size.  Expect delivered frames to be
   // kTestWidth by kTestHeight.
@@ -888,7 +905,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest,
     capture_params.requested_format.frame_size = oddball_size;
     capture_params.resolution_change_policy = policy;
     StubClientObserver unused_observer;
-    device()->AllocateAndStart(capture_params, unused_observer.PassClient());
+    auto client = unused_observer.PassClient();
+    EXPECT_CALL(*client, OnStarted());
+    device()->AllocateAndStart(capture_params, std::move(client));
     base::RunLoop().RunUntilIdle();
 
     // Check that the preferred size of the WebContents matches the one provided
@@ -954,8 +973,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest,
 
 // Tests the Suspend/Resume() functionality.
 TEST_F(WebContentsVideoCaptureDeviceTest, SuspendsAndResumes) {
-  device()->AllocateAndStart(DefaultCaptureParams(),
-                             client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client));
 
   for (int i = 0; i < 3; ++i) {
     // Draw a RED frame and wait for a normal frame capture to occur.
@@ -988,8 +1008,9 @@ TEST_F(WebContentsVideoCaptureDeviceTest, SuspendsAndResumes) {
 
 // Tests the RequestRefreshFrame() functionality.
 TEST_F(WebContentsVideoCaptureDeviceTest, ProvidesRefreshFrames) {
-  device()->AllocateAndStart(DefaultCaptureParams(),
-                             client_observer()->PassClient());
+  auto client = client_observer()->PassClient();
+  EXPECT_CALL(*client, OnStarted());
+  device()->AllocateAndStart(DefaultCaptureParams(), std::move(client));
 
   // Request a refresh frame before the first frame has been drawn.  This forces
   // a capture.

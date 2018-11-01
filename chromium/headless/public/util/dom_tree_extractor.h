@@ -19,6 +19,7 @@ class HeadlessDevToolsClient;
 // addition, it also extracts details of bounding boxes and layout text (NB the
 // exact layout should not be regarded as stable, it's subject to change without
 // notice).
+// TODO(alexclarke): Remove in favor of one using DOM.getFlattenedDocument.
 class DomTreeExtractor {
  public:
   explicit DomTreeExtractor(HeadlessDevToolsClient* devtools_client);

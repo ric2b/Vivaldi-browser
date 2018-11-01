@@ -4,6 +4,7 @@
 
 #include "modules/fetch/Response.h"
 
+#include <memory>
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
@@ -14,23 +15,24 @@
 #include "bindings/core/v8/V8FormData.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8URLSearchParams.h"
+#include "bindings/modules/v8/ByteStringSequenceSequenceOrDictionaryOrHeaders.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/URLSearchParams.h"
-#include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/FormData.h"
 #include "core/streams/ReadableStreamOperations.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FormDataBytesConsumer.h"
 #include "modules/fetch/ResponseInit.h"
+#include "platform/loader/fetch/FetchUtils.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/NetworkUtils.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "wtf/RefPtr.h"
-#include <memory>
 
 namespace blink {
 
@@ -73,7 +75,7 @@ FetchResponseData* createFetchResponseDataFromWebResponse(
     case WebServiceWorkerResponseTypeCORS: {
       HTTPHeaderSet headerNames;
       for (const auto& header : webResponse.corsExposedHeaderNames())
-        headerNames.add(String(header));
+        headerNames.insert(String(header));
       response = response->createCORSFilteredResponse(headerNames);
       break;
     }
@@ -127,10 +129,9 @@ Response* Response::create(ScriptState* scriptState,
 
 Response* Response::create(ScriptState* scriptState,
                            ScriptValue bodyValue,
-                           const Dictionary& init,
+                           const ResponseInit& init,
                            ExceptionState& exceptionState) {
   v8::Local<v8::Value> body = bodyValue.v8Value();
-  ScriptValue reader;
   v8::Isolate* isolate = scriptState->isolate();
   ExecutionContext* executionContext = scriptState->getExecutionContext();
 
@@ -172,6 +173,8 @@ Response* Response::create(ScriptState* scriptState,
     contentType = "application/x-www-form-urlencoded;charset=UTF-8";
   } else if (ReadableStreamOperations::isReadableStream(scriptState,
                                                         bodyValue)) {
+    UseCounter::count(executionContext,
+                      UseCounter::FetchResponseConstructionWithStream);
     bodyBuffer = new BodyStreamBuffer(scriptState, bodyValue);
   } else {
     String string = toUSVString(isolate, body, exceptionState);
@@ -181,25 +184,7 @@ Response* Response::create(ScriptState* scriptState,
         new BodyStreamBuffer(scriptState, new FormDataBytesConsumer(string));
     contentType = "text/plain;charset=UTF-8";
   }
-  Response* response =
-      create(scriptState, bodyBuffer, contentType,
-             ResponseInit(init, exceptionState), exceptionState);
-  if (!exceptionState.hadException() && !reader.isEmpty()) {
-    // Add a hidden reference so that the weak persistent in the
-    // ReadableStreamBytesConsumer will be valid as long as the
-    // Response is valid.
-    v8::Local<v8::Value> wrapper = ToV8(response, scriptState);
-    if (wrapper.IsEmpty()) {
-      exceptionState.throwTypeError("Cannot create a Response wrapper");
-      return nullptr;
-    }
-    ASSERT(wrapper->IsObject());
-    V8HiddenValue::setHiddenValue(
-        scriptState, wrapper.As<v8::Object>(),
-        V8HiddenValue::readableStreamReaderInResponse(scriptState->isolate()),
-        reader.v8Value());
-  }
-  return response;
+  return create(scriptState, bodyBuffer, contentType, init, exceptionState);
 }
 
 Response* Response::create(ScriptState* scriptState,
@@ -207,7 +192,7 @@ Response* Response::create(ScriptState* scriptState,
                            const String& contentType,
                            const ResponseInit& init,
                            ExceptionState& exceptionState) {
-  unsigned short status = init.status;
+  unsigned short status = init.status();
 
   // "1. If |init|'s status member is not in the range 200 to 599, inclusive,
   //     throw a RangeError."
@@ -221,7 +206,7 @@ Response* Response::create(ScriptState* scriptState,
 
   // "2. If |init|'s statusText member does not match the Reason-Phrase
   // token production, throw a TypeError."
-  if (!isValidReasonPhrase(init.statusText)) {
+  if (!isValidReasonPhrase(init.statusText())) {
     exceptionState.throwTypeError("Invalid statusText");
     return nullptr;
   }
@@ -231,26 +216,25 @@ Response* Response::create(ScriptState* scriptState,
   Response* r = new Response(scriptState->getExecutionContext());
 
   // "4. Set |r|'s response's status to |init|'s status member."
-  r->m_response->setStatus(init.status);
+  r->m_response->setStatus(init.status());
 
   // "5. Set |r|'s response's status message to |init|'s statusText member."
-  r->m_response->setStatusMessage(AtomicString(init.statusText));
+  r->m_response->setStatusMessage(AtomicString(init.statusText()));
 
   // "6. If |init|'s headers member is present, run these substeps:"
-  if (init.headers) {
+  if (init.hasHeaders()) {
     // "1. Empty |r|'s response's header list."
     r->m_response->headerList()->clearList();
     // "2. Fill |r|'s Headers object with |init|'s headers member. Rethrow
     // any exceptions."
-    r->m_headers->fillWith(init.headers.get(), exceptionState);
-    if (exceptionState.hadException())
-      return nullptr;
-  } else if (!init.headersDictionary.isUndefinedOrNull()) {
-    // "1. Empty |r|'s response's header list."
-    r->m_response->headerList()->clearList();
-    // "2. Fill |r|'s Headers object with |init|'s headers member. Rethrow
-    // any exceptions."
-    r->m_headers->fillWith(init.headersDictionary, exceptionState);
+    if (init.headers().isByteStringSequenceSequence()) {
+      r->m_headers->fillWith(init.headers().getAsByteStringSequenceSequence(),
+                             exceptionState);
+    } else if (init.headers().isDictionary()) {
+      r->m_headers->fillWith(init.headers().getAsDictionary(), exceptionState);
+    } else if (init.headers().isHeaders()) {
+      r->m_headers->fillWith(init.headers().getAsHeaders(), exceptionState);
+    }
     if (exceptionState.hadException())
       return nullptr;
   }
@@ -357,7 +341,7 @@ String Response::url() const {
   // flag set, otherwise."
   const KURL* responseURL = m_response->url();
   if (!responseURL)
-    return emptyString();
+    return emptyString;
   if (!responseURL->hasFragmentIdentifier())
     return *responseURL;
   KURL url(*responseURL);

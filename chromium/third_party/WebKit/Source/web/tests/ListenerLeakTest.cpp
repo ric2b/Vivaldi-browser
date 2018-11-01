@@ -29,14 +29,14 @@
  */
 
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebView.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "v8/include/v8-profiler.h"
+#include "v8/include/v8.h"
 #include "web/tests/FrameTestHelpers.h"
-#include <v8/include/v8-profiler.h>
-#include <v8/include/v8.h>
 
 namespace blink {
 
@@ -82,21 +82,22 @@ int GetNumObjects(const char* constructor) {
   return count;
 }
 
-class ListenerLeakTest : public testing::Test {
+class ListenerLeakTest : public ::testing::Test {
  public:
   void RunTest(const std::string& filename) {
     std::string baseURL("http://www.example.com/");
     std::string fileName(filename);
     bool executeScript = true;
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(baseURL), blink::testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
     webViewHelper.initializeAndLoad(baseURL + fileName, executeScript);
   }
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
  protected:

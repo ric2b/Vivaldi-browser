@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef VIVALDI_SYNC_VIVALDI_SIGNIN_CLIENT_FACTORY_H_
-#define VIVALDI_SYNC_VIVALDI_SIGNIN_CLIENT_FACTORY_H_
+#ifndef SYNC_VIVALDI_SIGNIN_CLIENT_FACTORY_H_
+#define SYNC_VIVALDI_SIGNIN_CLIENT_FACTORY_H_
 
 #include "base/memory/singleton.h"
 #include "chrome/browser/signin/chrome_signin_client.h"
@@ -36,6 +36,6 @@ class VivaldiSigninClientFactory : public BrowserContextKeyedServiceFactory {
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
 };
-}
+}  // namespace vivaldi
 
-#endif  // VIVALDI_SYNC_VIVALDI_SIGNIN_CLIENT_FACTORY_H_
+#endif  // SYNC_VIVALDI_SIGNIN_CLIENT_FACTORY_H_

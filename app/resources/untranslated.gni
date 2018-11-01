@@ -42,7 +42,6 @@ template("vivaldi_extract_untranslated") {
     deps_list += [":"+name]
     action(name) {
       script = "//vivaldi/app/resources/extract_translations.py"
-      idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
       inputs = [
         idlist,
         source,

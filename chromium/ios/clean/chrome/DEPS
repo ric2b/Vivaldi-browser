@@ -1,0 +1,11 @@
+include_rules = [
+  "+net",
+  "+ui/base",
+  "+ios/chrome",
+  "+ios/shared",
+  "+ios/third_party",
+  "+ios/web",
+
+  # Strings and resources.
+  "+components/strings/grit",
+]

@@ -147,7 +147,7 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::supportsMediaMIMEType(
 #endif
 
   std::vector<std::string> codecVector;
-  media::ParseCodecString(ToASCIIOrEmpty(codecs), &codecVector, false);
+  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &codecVector, false);
   return static_cast<SupportsType>(
       media::IsSupportedMediaFormat(asciiMimeType, codecVector));
 }
@@ -158,7 +158,7 @@ bool MIMETypeRegistry::isSupportedMediaSourceMIMEType(const String& mimeType,
   if (asciiMimeType.empty())
     return false;
   std::vector<std::string> parsedCodecIds;
-  media::ParseCodecString(ToASCIIOrEmpty(codecs), &parsedCodecIds, false);
+  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &parsedCodecIds, false);
   return static_cast<MIMETypeRegistry::SupportsType>(
       media::StreamParserFactory::IsTypeSupported(asciiMimeType,
                                                   parsedCodecIds));

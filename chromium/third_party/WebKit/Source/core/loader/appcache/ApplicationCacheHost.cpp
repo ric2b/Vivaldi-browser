@@ -36,13 +36,13 @@
 #include "core/frame/Deprecation.h"
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorApplicationCacheAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/appcache/ApplicationCache.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
@@ -53,8 +53,6 @@
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebVector.h"
-
-using namespace blink;
 
 namespace blink {
 
@@ -200,8 +198,7 @@ void ApplicationCacheHost::notifyApplicationCache(
     int errorStatus,
     const String& errorMessage) {
   if (id != kProgressEvent) {
-    InspectorInstrumentation::updateApplicationCacheStatus(
-        m_documentLoader->frame());
+    probe::updateApplicationCacheStatus(m_documentLoader->frame());
   }
 
   if (m_defersEvents) {
@@ -290,8 +287,7 @@ bool ApplicationCacheHost::update() {
 bool ApplicationCacheHost::swapCache() {
   bool success = m_host ? m_host->swapCache() : false;
   if (success) {
-    InspectorInstrumentation::updateApplicationCacheStatus(
-        m_documentLoader->frame());
+    probe::updateApplicationCacheStatus(m_documentLoader->frame());
   }
   return success;
 }

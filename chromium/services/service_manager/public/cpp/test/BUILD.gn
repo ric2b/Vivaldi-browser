@@ -4,25 +4,21 @@
 
 import("//testing/test.gni")
 
-group("test") {
-  testonly = true
-  deps = [
-    ":run_all_service_tests",
-  ]
-}
-
+# NOTE: Don't depend on this target directly. Instead use the service_test
+# template from //services/service_manager/public/tools/test/service_test.gni.
 source_set("run_all_service_tests") {
   testonly = true
 
   sources = [
     "run_all_service_tests.cc",
+    "service_test_catalog.h",
   ]
 
   deps = [
     "//base",
     "//base/test:test_support",
     "//mojo/edk/system",
+    "//services/catalog:lib",
     "//services/service_manager/background:lib",
-    "//services/service_manager/background:main",
   ]
 }

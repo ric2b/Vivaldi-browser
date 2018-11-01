@@ -204,10 +204,10 @@ void LayoutInline::styleDidChange(StyleDifference diff,
   // If we are changing to/from static, we need to reposition
   // out-of-flow positioned descendants.
   if (oldStyle && oldStyle->position() != newStyle.position() &&
-      (newStyle.position() == StaticPosition ||
-       oldStyle->position() == StaticPosition)) {
+      (newStyle.position() == EPosition::kStatic ||
+       oldStyle->position() == EPosition::kStatic)) {
     LayoutBlock* absContainingBlock = nullptr;
-    if (oldStyle->position() == StaticPosition) {
+    if (oldStyle->position() == EPosition::kStatic) {
       absContainingBlock = containingBlockForAbsolutePosition();
     } else {
       // When position was not static, containingBlockForAbsolutePosition
@@ -235,8 +235,8 @@ void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout) {
   bool alwaysCreateLineBoxesNew =
       (parentLayoutInline && parentLayoutInline->alwaysCreateLineBoxes()) ||
       (parentLayoutInline &&
-       parentStyle.verticalAlign() != EVerticalAlign::Baseline) ||
-      style()->verticalAlign() != EVerticalAlign::Baseline ||
+       parentStyle.verticalAlign() != EVerticalAlign::kBaseline) ||
+      style()->verticalAlign() != EVerticalAlign::kBaseline ||
       style()->getTextEmphasisMark() != TextEmphasisMarkNone ||
       (checkFonts &&
        (!styleRef().hasIdenticalAscentDescentAndLineGap(parentStyle) ||
@@ -249,7 +249,7 @@ void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout) {
     const ComputedStyle& childStyle = styleRef(true);
     alwaysCreateLineBoxesNew =
         !firstLineParentStyle.hasIdenticalAscentDescentAndLineGap(childStyle) ||
-        childStyle.verticalAlign() != EVerticalAlign::Baseline ||
+        childStyle.verticalAlign() != EVerticalAlign::kBaseline ||
         firstLineParentStyle.lineHeight() != childStyle.lineHeight();
   }
 
@@ -571,29 +571,28 @@ void LayoutInline::addChildToContinuation(LayoutObject* newChild,
       beforeChildParent = flow;
   }
 
-  // TODO(rhogan): Should we treat out-of-flows and floats as through they're
-  // inline below?
-  if (newChild->isFloatingOrOutOfFlowPositioned())
-    return beforeChildParent->addChildIgnoringContinuation(newChild,
-                                                           beforeChild);
-
-  // A table part will be wrapped by an inline anonymous table when it is added
-  // to the layout tree, so treat it as inline when deciding where to add it.
-  bool childInline = newChild->isInline() || newChild->isTablePart();
-  bool bcpInline = beforeChildParent->isInline();
-  bool flowInline = flow->isInline();
-
+  // If the two candidates are the same, no further checking is necessary.
   if (flow == beforeChildParent)
     return flow->addChildIgnoringContinuation(newChild, beforeChild);
 
+  // A table part will be wrapped by an inline anonymous table when it is added
+  // to the layout tree, so treat it as inline when deciding where to add
+  // it. Floating and out-of-flow-positioned objects can also live under
+  // inlines, and since this about adding a child to an inline parent, we
+  // should not put them into a block continuation.
+  bool addInsideInline = newChild->isInline() || newChild->isTablePart() ||
+                         newChild->isFloatingOrOutOfFlowPositioned();
+
   // The goal here is to match up if we can, so that we can coalesce and create
   // the minimal # of continuations needed for the inline.
-  if (childInline == bcpInline || (beforeChild && beforeChild->isInline()))
+  if (addInsideInline == beforeChildParent->isInline() ||
+      (beforeChild && beforeChild->isInline())) {
     return beforeChildParent->addChildIgnoringContinuation(newChild,
                                                            beforeChild);
-  if (flowInline == childInline) {
+  }
+  if (addInsideInline == flow->isInline()) {
     // Just treat like an append.
-    return flow->addChildIgnoringContinuation(newChild, 0);
+    return flow->addChildIgnoringContinuation(newChild);
   }
   return beforeChildParent->addChildIgnoringContinuation(newChild, beforeChild);
 }
@@ -1200,9 +1199,9 @@ LayoutRect LayoutInline::visualOverflowRect() const {
   return overflowRect;
 }
 
-bool LayoutInline::mapToVisualRectInAncestorSpace(
+bool LayoutInline::mapToVisualRectInAncestorSpaceInternal(
     const LayoutBoxModelObject* ancestor,
-    LayoutRect& rect,
+    TransformState& transformState,
     VisualRectFlags visualRectFlags) const {
   if (ancestor == this)
     return true;
@@ -1212,26 +1211,37 @@ bool LayoutInline::mapToVisualRectInAncestorSpace(
   if (!container)
     return true;
 
+  bool preserve3D = container->style()->preserves3D() || style()->preserves3D();
+
+  TransformState::TransformAccumulation accumulation =
+      preserve3D ? TransformState::AccumulateTransform
+                 : TransformState::FlattenTransform;
+
   if (style()->hasInFlowPosition() && layer()) {
     // Apply the in-flow position offset when invalidating a rectangle. The
     // layer is translated, but the layout box isn't, so we need to do this to
     // get the right dirty rect. Since this is called from LayoutObject::
     // setStyle, the relative position flag on the LayoutObject has been
     // cleared, so use the one on the style().
-    rect.move(layer()->offsetForInFlowPosition());
+    transformState.move(layer()->offsetForInFlowPosition(), accumulation);
   }
 
   LayoutBox* containerBox =
       container->isBox() ? toLayoutBox(container) : nullptr;
   if (containerBox && container != ancestor &&
-      !containerBox->mapScrollingContentsRectToBoxSpace(rect, visualRectFlags))
+      !containerBox->mapScrollingContentsRectToBoxSpace(
+          transformState, accumulation, visualRectFlags))
     return false;
 
   // TODO(wkorman): Generalize Ruby specialization and/or document more clearly.
-  if (containerBox && !isRuby())
+  if (containerBox && !isRuby()) {
+    transformState.flatten();
+    LayoutRect rect(transformState.lastPlanarQuad().boundingBox());
     containerBox->flipForWritingMode(rect);
-  return container->mapToVisualRectInAncestorSpace(ancestor, rect,
-                                                   visualRectFlags);
+    transformState.setQuad(FloatQuad(FloatRect(rect)));
+  }
+  return container->mapToVisualRectInAncestorSpaceInternal(
+      ancestor, transformState, visualRectFlags);
 }
 
 LayoutSize LayoutInline::offsetFromContainer(

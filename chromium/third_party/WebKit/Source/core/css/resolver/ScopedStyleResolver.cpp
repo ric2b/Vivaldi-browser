@@ -116,7 +116,7 @@ void ScopedStyleResolver::collectFeaturesTo(
     ASSERT(m_authorStyleSheets[i]->ownerNode());
     StyleSheetContents* contents = m_authorStyleSheets[i]->contents();
     if (contents->hasOneClient() ||
-        visitedSharedStyleSheetContents.add(contents).isNewEntry)
+        visitedSharedStyleSheetContents.insert(contents).isNewEntry)
       features.add(contents->ruleSet().features());
   }
 
@@ -253,8 +253,6 @@ void ScopedStyleResolver::matchPageRules(PageRuleCollector& collector) {
 DEFINE_TRACE(ScopedStyleResolver) {
   visitor->trace(m_scope);
   visitor->trace(m_authorStyleSheets);
-  visitor->trace(m_viewportDependentMediaQueryResults);
-  visitor->trace(m_deviceDependentMediaQueryResults);
   visitor->trace(m_keyframesRuleMap);
   visitor->trace(m_treeBoundaryCrossingRuleSet);
 }

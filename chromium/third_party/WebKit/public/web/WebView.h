@@ -40,6 +40,10 @@
 #include "../platform/WebVector.h"
 #include "WebWidget.h"
 
+namespace gfx {
+class ICCProfile;
+}
+
 namespace blink {
 
 class WebAXObject;
@@ -317,7 +321,7 @@ class WebView : protected WebWidget {
   virtual void setZoomFactorForDeviceScaleFactor(float) = 0;
 
   // Set and reset the device color profile.
-  virtual void setDeviceColorProfile(const WebVector<char>&) = 0;
+  virtual void setDeviceColorProfile(const gfx::ICCProfile&) = 0;
 
   // Resize the view at the same time as changing the state of the top
   // controls. If |browserControlsShrinkLayout| is true, the embedder shrunk the
@@ -374,7 +378,7 @@ class WebView : protected WebWidget {
   virtual void vivaldiSetPinchZoom(float scale, int x, int y) {};
 
   // Retrieves a list of spelling markers.
-  virtual void spellingMarkers(WebVector<uint32_t>* markers) = 0;
+  virtual void spellingMarkerOffsetsForTest(WebVector<unsigned>* offsets) = 0;
   virtual void removeSpellingMarkersUnderWords(
       const WebVector<WebString>& words) = 0;
 
@@ -406,12 +410,6 @@ class WebView : protected WebWidget {
 
   // Notify that context menu has been closed.
   virtual void didCloseContextMenu() = 0;
-
-  // SmartClip support ---------------------------------------------------
-  virtual void extractSmartClipData(WebRect initRect,
-                                    WebString& text,
-                                    WebString& html,
-                                    WebRect& resultRect) = 0;
 
   // Popup menu ----------------------------------------------------------
 

@@ -20,6 +20,7 @@ import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -37,7 +38,17 @@ public final class PrefServiceBridge {
     private static final String MIGRATION_PREF_KEY = "PrefMigrationVersion";
     private static final int MIGRATION_CURRENT_VERSION = 4;
 
-    private static final String HTTPS_SCHEME = "https";
+    /** The android permissions associated with requesting location. */
+    private static final String[] LOCATION_PERMISSIONS = {
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION};
+    /** The android permissions associated with requesting access to the camera. */
+    private static final String[] CAMERA_PERMISSIONS = {android.Manifest.permission.CAMERA};
+    /** The android permissions associated with requesting access to the microphone. */
+    private static final String[] MICROPHONE_PERMISSIONS = {
+            android.Manifest.permission.RECORD_AUDIO};
+    /** Signifies there are no permissions associated. */
+    private static final String[] EMPTY_PERMISSIONS = {};
 
     // Object to notify when "clear browsing data" completes.
     private OnClearBrowsingDataListener mClearBrowsingDataListener;
@@ -92,10 +103,12 @@ public final class PrefServiceBridge {
          *                       favicons.
          * @param importantReasons Bitfield of reasons why this domain was selected. Pass this back
          *                         to clearBrowinsgData so we can record metrics.
+         * @param dialogDisabled If the important dialog has been ignored too many times and should
+         *                       not be shown.
          */
         @CalledByNative("ImportantSitesCallback")
-        void onImportantRegisterableDomainsReady(
-                String[] domains, String[] exampleOrigins, int[] importantReasons);
+        void onImportantRegisterableDomainsReady(String[] domains, String[] exampleOrigins,
+                int[] importantReasons, boolean dialogDisabled);
     }
 
     /**
@@ -236,24 +249,24 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * Return the android permission string for a given {@link ContentSettingsType}.  If there
-     * is no corresponding permission, then null will be returned.
+     * Return the list of android permission strings for a given {@link ContentSettingsType}.  If
+     * there is no permissions associated with the content setting, then an empty array is returned.
      *
      * @param contentSettingType The content setting to get the android permission for.
-     * @return The android permission for the given content setting.
+     * @return The android permissions for the given content setting.
      */
     @CalledByNative
-    public static String getAndroidPermissionForContentSetting(int contentSettingType) {
+    public static String[] getAndroidPermissionsForContentSetting(int contentSettingType) {
         if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION) {
-            return android.Manifest.permission.ACCESS_FINE_LOCATION;
+            return Arrays.copyOf(LOCATION_PERMISSIONS, LOCATION_PERMISSIONS.length);
         }
         if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
-            return android.Manifest.permission.RECORD_AUDIO;
+            return Arrays.copyOf(MICROPHONE_PERMISSIONS, MICROPHONE_PERMISSIONS.length);
         }
         if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
-            return android.Manifest.permission.CAMERA;
+            return Arrays.copyOf(CAMERA_PERMISSIONS, CAMERA_PERMISSIONS.length);
         }
-        return null;
+        return EMPTY_PERMISSIONS;
     }
 
     /**
@@ -268,10 +281,18 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * @return Whether cookies acceptance is configured by policy
+     * @return Whether cookies acceptance is modifiable by the user
      */
-    public boolean isAcceptCookiesManaged() {
-        return nativeGetAcceptCookiesManaged();
+    public boolean isAcceptCookiesUserModifiable() {
+        return nativeGetAcceptCookiesUserModifiable();
+    }
+
+    /**
+     * @return Whether cookies acceptance is configured by the user's custodian
+     * (for supervised users).
+     */
+    public boolean isAcceptCookiesManagedByCustodian() {
+        return nativeGetAcceptCookiesManagedByCustodian();
     }
 
     public boolean isBlockThirdPartyCookiesEnabled() {
@@ -726,8 +747,24 @@ public final class PrefServiceBridge {
                 ignoredDomains, ignoredDomainReasons);
     }
 
-    /*
-     * Whether browser history can be deleted by the user.
+    /**
+     * @return The index of the tab last visited by the user in the CBD dialog.
+     *         Index 0 is for the basic tab, 1 is the advanced tab.
+     */
+    public int getLastSelectedClearBrowsingDataTab() {
+        return nativeGetLastClearBrowsingDataTab();
+    }
+
+    /**
+     * Set the index of the tab last visited by the user.
+     * @param tabIndex The last visited tab index, 0 for basic, 1 for advanced.
+     */
+    public void setLastSelectedClearBrowsingDataTab(int tabIndex) {
+        nativeSetLastClearBrowsingDataTab(tabIndex);
+    }
+
+    /**
+     * @return Whether browser history can be deleted by the user.
      */
     public boolean canDeleteBrowsingHistory() {
         return nativeCanDeleteBrowsingHistory();
@@ -1047,7 +1084,8 @@ public final class PrefServiceBridge {
     }
 
     private native boolean nativeGetAcceptCookiesEnabled();
-    private native boolean nativeGetAcceptCookiesManaged();
+    private native boolean nativeGetAcceptCookiesUserModifiable();
+    private native boolean nativeGetAcceptCookiesManagedByCustodian();
     private native boolean nativeGetAutoplayEnabled();
     private native boolean nativeGetBackgroundSyncEnabled();
     private native boolean nativeGetBlockThirdPartyCookiesEnabled();
@@ -1090,6 +1128,8 @@ public final class PrefServiceBridge {
     private native void nativeClearBrowsingData(int[] dataTypes, int timePeriod,
             String[] blacklistDomains, int[] blacklistedDomainReasons, String[] ignoredDomains,
             int[] ignoredDomainReasons);
+    private native int nativeGetLastClearBrowsingDataTab();
+    private native void nativeSetLastClearBrowsingDataTab(int lastTab);
     private native void nativeRequestInfoAboutOtherFormsOfBrowsingHistory(
             OtherFormsOfBrowsingHistoryListener listener);
     private native boolean nativeCanDeleteBrowsingHistory();

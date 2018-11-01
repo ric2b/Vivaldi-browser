@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -105,6 +106,15 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
   }
 
   void RequestUpdateCheck(const UpdateCheckCallback& callback) override {
+    if (!service_available_) {
+      // TODO(alemate): we probably need to remember callbacks only.
+      // When service becomes available, we can do a single request,
+      // and trigger all callbacks with the same return value.
+      pending_tasks_.push_back(
+          base::Bind(&UpdateEngineClientImpl::RequestUpdateCheck,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
+      return;
+    }
     dbus::MethodCall method_call(
         update_engine::kUpdateEngineInterface,
         update_engine::kAttemptUpdate);
@@ -218,6 +228,23 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
                    weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
+  void SetUpdateOverCellularPermission(bool allowed,
+                                       const base::Closure& callback) override {
+    dbus::MethodCall method_call(
+        update_engine::kUpdateEngineInterface,
+        update_engine::kSetUpdateOverCellularPermission);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(allowed);
+
+    VLOG(1) << "Requesting UpdateEngine to " << (allowed ? "allow" : "prohibit")
+            << " updates over cellular.";
+
+    return update_engine_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&UpdateEngineClientImpl::OnSetUpdateOverCellularPermission,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
  protected:
   void Init(dbus::Bus* bus) override {
     update_engine_proxy_ = bus->GetObjectProxy(
@@ -238,6 +265,13 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
  private:
   void OnServiceInitiallyAvailable(bool service_is_available) {
     if (service_is_available) {
+      service_available_ = true;
+      std::vector<base::Closure> callbacks;
+      callbacks.swap(pending_tasks_);
+      for (const auto& callback : callbacks) {
+        callback.Run();
+      }
+
       // Get update engine status for the initial status. Update engine won't
       // send StatusUpdate signal unless there is a status change. If chrome
       // crashes after UPDATE_STATUS_UPDATED_NEED_REBOOT status is set,
@@ -245,6 +279,7 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
       GetUpdateEngineStatus();
     } else {
       LOG(ERROR) << "Failed to wait for D-Bus service to become available";
+      pending_tasks_.clear();
     }
   }
 
@@ -394,6 +429,35 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
     callback.Run(static_cast<update_engine::EndOfLifeStatus>(status));
   }
 
+  // Called when a response for SetUpdateOverCellularPermission() is received.
+  void OnSetUpdateOverCellularPermission(const base::Closure& callback,
+                                         dbus::Response* response) {
+    constexpr char kFailureMessage[] =
+        "Failed to set UpdateEngine to allow updates over cellular: ";
+
+    if (response) {
+      switch (response->GetMessageType()) {
+        case dbus::Message::MESSAGE_ERROR:
+          LOG(ERROR) << kFailureMessage
+                     << "DBus responded with error: " << response->ToString();
+          break;
+        case dbus::Message::MESSAGE_INVALID:
+          LOG(ERROR) << kFailureMessage
+                     << "Invalid response from DBus (cannot be parsed).";
+          break;
+        default:
+          VLOG(1) << "Successfully set UpdateEngine to allow update over cell.";
+          break;
+      }
+    } else {
+      LOG(ERROR) << kFailureMessage << "No response from DBus.";
+    }
+
+    // Callback should run anyway, regardless of whether DBus call to enable
+    // update over cellular succeeded or failed.
+    callback.Run();
+  }
+
   // Called when a status update signal is received.
   void StatusUpdateReceived(dbus::Signal* signal) {
     VLOG(1) << "Status update signal received: " << signal->ToString();
@@ -435,6 +499,13 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
   dbus::ObjectProxy* update_engine_proxy_;
   base::ObserverList<Observer> observers_;
   Status last_status_;
+
+  // True after update_engine's D-Bus service has become available.
+  bool service_available_ = false;
+
+  // This is a list of postponed calls to update engine to be called
+  // after it becomes available.
+  std::vector<base::Closure> pending_tasks_;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.
@@ -485,6 +556,11 @@ class UpdateEngineClientStubImpl : public UpdateEngineClient {
 
   void GetEolStatus(const GetEolStatusCallback& callback) override {
     callback.Run(update_engine::EndOfLifeStatus::kSupported);
+  }
+
+  void SetUpdateOverCellularPermission(bool allowed,
+                                       const base::Closure& callback) override {
+    callback.Run();
   }
 
   std::string current_channel_;

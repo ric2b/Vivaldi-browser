@@ -6,25 +6,19 @@
 
 #include <memory>
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/events/MessageEvent.h"
-#include "core/frame/External.h"
 #include "core/frame/Frame.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Location.h"
-#include "core/frame/RemoteDOMWindow.h"
-#include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
-#include "core/input/EventHandler.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -70,7 +64,7 @@ const DOMWindow* DOMWindow::toDOMWindow() const {
 
 Location* DOMWindow::location() const {
   if (!m_location)
-    m_location = Location::create(frame());
+    m_location = Location::create(const_cast<DOMWindow*>(this));
   return m_location.get();
 }
 
@@ -113,12 +107,6 @@ DOMWindow* DOMWindow::top() const {
   return frame()->tree().top()->domWindow();
 }
 
-External* DOMWindow::external() {
-  if (!m_external)
-    m_external = new External;
-  return m_external;
-}
-
 DOMWindow* DOMWindow::anonymousIndexedGetter(uint32_t index) const {
   if (!frame())
     return nullptr;
@@ -134,8 +122,8 @@ bool DOMWindow::isCurrentlyDisplayedInFrame() const {
 }
 
 bool DOMWindow::isInsecureScriptAccess(LocalDOMWindow& callingWindow,
-                                       const String& urlString) {
-  if (!protocolIsJavaScript(urlString))
+                                       const KURL& url) {
+  if (!url.protocolIsJavaScript())
     return false;
 
   // If this DOMWindow isn't currently active in the Frame, then there's no
@@ -157,23 +145,6 @@ bool DOMWindow::isInsecureScriptAccess(LocalDOMWindow& callingWindow,
   callingWindow.printErrorMessage(
       crossDomainAccessErrorMessage(&callingWindow));
   return true;
-}
-
-void DOMWindow::resetLocation() {
-  // Location needs to be reset manually so that it doesn't retain a stale
-  // Frame pointer.
-  if (m_location) {
-    m_location->reset();
-    m_location = nullptr;
-  }
-}
-
-bool DOMWindow::isSecureContext() const {
-  if (!frame())
-    return false;
-
-  return document()->isSecureContext(
-      ExecutionContext::StandardSecureContextCheck);
 }
 
 void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
@@ -205,9 +176,8 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
     }
   }
 
-  std::unique_ptr<MessagePortChannelArray> channels =
-      MessagePort::disentanglePorts(getExecutionContext(), ports,
-                                    exceptionState);
+  MessagePortChannelArray channels = MessagePort::disentanglePorts(
+      getExecutionContext(), ports, exceptionState);
   if (exceptionState.hadException())
     return;
 
@@ -231,16 +201,23 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
 
   KURL targetUrl =
       isLocalDOMWindow()
-          ? document()->url()
+          ? blink::toLocalDOMWindow(this)->document()->url()
           : KURL(KURL(),
                  frame()->securityContext()->getSecurityOrigin()->toString());
   if (MixedContentChecker::isMixedContent(sourceDocument->getSecurityOrigin(),
-                                          targetUrl))
+                                          targetUrl)) {
     UseCounter::count(frame(), UseCounter::PostMessageFromSecureToInsecure);
-  else if (MixedContentChecker::isMixedContent(
-               frame()->securityContext()->getSecurityOrigin(),
-               sourceDocument->url()))
+  } else if (MixedContentChecker::isMixedContent(
+                 frame()->securityContext()->getSecurityOrigin(),
+                 sourceDocument->url())) {
     UseCounter::count(frame(), UseCounter::PostMessageFromInsecureToSecure);
+    if (MixedContentChecker::isMixedContent(
+            frame()->tree().top()->securityContext()->getSecurityOrigin(),
+            sourceDocument->url())) {
+      UseCounter::count(frame(),
+                        UseCounter::PostMessageFromInsecureToSecureToplevel);
+    }
+  }
 
   MessageEvent* event =
       MessageEvent::create(std::move(channels), std::move(message),
@@ -307,8 +284,9 @@ String DOMWindow::crossDomainAccessErrorMessage(
   // aren't replicated.  For now, construct the URL using the replicated
   // origin for RemoteFrames. If the target frame is remote and sandboxed,
   // there isn't anything else to show other than "null" for its origin.
-  KURL targetURL = isLocalDOMWindow() ? document()->url()
-                                      : KURL(KURL(), targetOrigin->toString());
+  KURL targetURL = isLocalDOMWindow()
+                       ? blink::toLocalDOMWindow(this)->document()->url()
+                       : KURL(KURL(), targetOrigin->toString());
   if (frame()->securityContext()->isSandboxed(SandboxOrigin) ||
       callingWindow->document()->isSandboxed(SandboxOrigin)) {
     message = "Blocked a frame at \"" +
@@ -400,8 +378,7 @@ void DOMWindow::close(ExecutionContext* context) {
   if (!frame()->shouldClose())
     return;
 
-  InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(context, "close",
-                                                              true);
+  probe::breakIfNeeded(context, "DOMWindow.close");
 
   page->closeSoon();
 
@@ -448,7 +425,6 @@ DEFINE_TRACE(DOMWindow) {
   visitor->trace(m_frame);
   visitor->trace(m_inputCapabilities);
   visitor->trace(m_location);
-  visitor->trace(m_external);
   EventTargetWithInlineData::trace(visitor);
 }
 

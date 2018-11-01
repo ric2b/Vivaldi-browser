@@ -84,7 +84,7 @@ void HTMLFormControlElement::setFormAction(const AtomicString& value) {
 String HTMLFormControlElement::formEnctype() const {
   const AtomicString& formEnctypeAttr = fastGetAttribute(formenctypeAttr);
   if (formEnctypeAttr.isNull())
-    return emptyString();
+    return emptyString;
   return FormSubmission::Attributes::parseEncodingType(formEnctypeAttr);
 }
 
@@ -95,7 +95,7 @@ void HTMLFormControlElement::setFormEnctype(const AtomicString& value) {
 String HTMLFormControlElement::formMethod() const {
   const AtomicString& formMethodAttr = fastGetAttribute(formmethodAttr);
   if (formMethodAttr.isNull())
-    return emptyString();
+    return emptyString;
   return FormSubmission::Attributes::methodString(
       FormSubmission::Attributes::parseMethodType(formMethodAttr));
 }
@@ -109,20 +109,19 @@ bool HTMLFormControlElement::formNoValidate() const {
 }
 
 void HTMLFormControlElement::updateAncestorDisabledState() const {
-  HTMLFieldSetElement* fieldSetAncestor = 0;
-  ContainerNode* legendAncestor = 0;
+  HTMLFieldSetElement* highestDisabledFieldSetAncestor = nullptr;
+  ContainerNode* highestLegendAncestor = nullptr;
   for (HTMLElement* ancestor = Traversal<HTMLElement>::firstAncestor(*this);
        ancestor; ancestor = Traversal<HTMLElement>::firstAncestor(*ancestor)) {
-    if (!legendAncestor && isHTMLLegendElement(*ancestor))
-      legendAncestor = ancestor;
-    if (isHTMLFieldSetElement(*ancestor)) {
-      fieldSetAncestor = toHTMLFieldSetElement(ancestor);
-      break;
-    }
+    if (isHTMLLegendElement(*ancestor))
+      highestLegendAncestor = ancestor;
+    if (isHTMLFieldSetElement(*ancestor) && ancestor->isDisabledFormControl())
+      highestDisabledFieldSetAncestor = toHTMLFieldSetElement(ancestor);
   }
   m_ancestorDisabledState =
-      (fieldSetAncestor && fieldSetAncestor->isDisabledFormControl() &&
-       !(legendAncestor && legendAncestor == fieldSetAncestor->legend()))
+      (highestDisabledFieldSetAncestor &&
+       !(highestLegendAncestor &&
+         highestLegendAncestor == highestDisabledFieldSetAncestor->legend()))
           ? AncestorDisabledStateDisabled
           : AncestorDisabledStateEnabled;
 }
@@ -347,7 +346,7 @@ String HTMLFormControlElement::resultForDialogSubmit() {
   return fastGetAttribute(valueAttr);
 }
 
-void HTMLFormControlElement::didRecalcStyle(StyleRecalcChange) {
+void HTMLFormControlElement::didRecalcStyle() {
   if (LayoutObject* layoutObject = this->layoutObject())
     layoutObject->updateFromElement();
 }
@@ -462,7 +461,7 @@ void HTMLFormControlElement::findCustomValidationMessageTextDirection(
 
 void HTMLFormControlElement::updateVisibleValidationMessage() {
   Page* page = document().page();
-  if (!page || !page->isPageVisible())
+  if (!page || !page->isPageVisible() || document().unloadStarted())
     return;
   String message;
   if (layoutObject() && willValidate())
@@ -583,9 +582,10 @@ void HTMLFormControlElement::setNeedsValidityCheck() {
     fieldSetAncestorsSetNeedsValidityCheck(parentNode());
     pseudoStateChanged(CSSSelector::PseudoValid);
     pseudoStateChanged(CSSSelector::PseudoInvalid);
-    pseudoStateChanged(CSSSelector::PseudoInRange);
-    pseudoStateChanged(CSSSelector::PseudoOutOfRange);
   }
+
+  pseudoStateChanged(CSSSelector::PseudoInRange);
+  pseudoStateChanged(CSSSelector::PseudoOutOfRange);
 
   // Updates only if this control already has a validation message.
   if (isValidationMessageVisible()) {

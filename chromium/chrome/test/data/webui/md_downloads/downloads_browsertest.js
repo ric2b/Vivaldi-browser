@@ -15,16 +15,35 @@ GEN_INCLUDE(
  * @constructor
  * @extends {PolymerTest}
  */
+function DownloadsTest() {}
+
+DownloadsTest.prototype = {
+  __proto__: PolymerTest.prototype,
+
+  /** @override */
+  setUp: function() {
+    PolymerTest.prototype.setUp.call(this);
+    this.accessibilityAuditConfig.ignoreSelectors('humanLangMissing', 'html');
+  },
+
+  /** @override */
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH),
+};
+
+/**
+ * @constructor
+ * @extends {DownloadsTest}
+ */
 function DownloadsItemTest() {}
 
 DownloadsItemTest.prototype = {
-  __proto__: PolymerTest.prototype,
+  __proto__: DownloadsTest.prototype,
 
   /** @override */
   browsePreload: 'chrome://downloads/item.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: DownloadsTest.prototype.extraLibraries.concat([
     'item_tests.js',
   ]),
 };
@@ -33,21 +52,20 @@ TEST_F('DownloadsItemTest', 'All', function() {
   mocha.run();
 });
 
-
 /**
  * @constructor
- * @extends {PolymerTest}
+ * @extends {DownloadsTest}
  */
 function DownloadsLayoutTest() {}
 
 DownloadsLayoutTest.prototype = {
-  __proto__: PolymerTest.prototype,
+  __proto__: DownloadsTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://downloads/manager.html',
+  browsePreload: 'chrome://downloads/',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: DownloadsTest.prototype.extraLibraries.concat([
     'layout_tests.js',
   ]),
 };
@@ -58,22 +76,44 @@ TEST_F('DownloadsLayoutTest', 'All', function() {
 
 /**
  * @constructor
- * @extends {PolymerTest}
+ * @extends {DownloadsTest}
  */
 function DownloadsToolbarTest() {}
 
 DownloadsToolbarTest.prototype = {
-  __proto__: PolymerTest.prototype,
+  __proto__: DownloadsTest.prototype,
 
   /** @override */
   browsePreload: 'chrome://downloads/toolbar.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: DownloadsTest.prototype.extraLibraries.concat([
     'toolbar_tests.js',
   ]),
 };
 
 TEST_F('DownloadsToolbarTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {DownloadsTest}
+ */
+function DownloadsUrlTest() {}
+
+DownloadsUrlTest.prototype = {
+  __proto__: DownloadsTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://downloads/a/b/',
+};
+
+TEST_F('DownloadsUrlTest', 'All', function() {
+  suite('loading a nonexistent URL of /a/b/', function() {
+    test('should yield no console errors', function() {
+      assertEquals(location.href, DownloadsUrlTest.prototype.browsePreload);
+    });
+  });
   mocha.run();
 });

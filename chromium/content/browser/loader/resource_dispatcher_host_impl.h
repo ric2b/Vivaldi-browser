@@ -277,6 +277,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // loader to attach to the leaf resource handler.
   void BeginNavigationRequest(
       ResourceContext* resource_context,
+      net::URLRequestContext* request_context,
       const NavigationRequestInfo& info,
       std::unique_ptr<NavigationUIData> navigation_ui_data,
       NavigationURLLoaderImplCore* loader,
@@ -298,13 +299,12 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void OnRenderFrameDeleted(const GlobalFrameRoutingId& global_routing_id);
 
   // Called when loading a request with mojo.
-  void OnRequestResourceWithMojo(
-      ResourceRequesterInfo* requester_info,
-      int routing_id,
-      int request_id,
-      const ResourceRequest& request,
-      mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client);
+  void OnRequestResourceWithMojo(ResourceRequesterInfo* requester_info,
+                                 int routing_id,
+                                 int request_id,
+                                 const ResourceRequest& request,
+                                 mojom::URLLoaderAssociatedRequest mojo_request,
+                                 mojom::URLLoaderClientPtr url_loader_client);
 
   void OnSyncLoadWithMojo(ResourceRequesterInfo* requester_info,
                           int routing_id,
@@ -535,13 +535,12 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                          int request_id,
                          const ResourceRequest& request_data);
 
-  void OnRequestResourceInternal(
-      ResourceRequesterInfo* requester_info,
-      int routing_id,
-      int request_id,
-      const ResourceRequest& request_data,
-      mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client);
+  void OnRequestResourceInternal(ResourceRequesterInfo* requester_info,
+                                 int routing_id,
+                                 int request_id,
+                                 const ResourceRequest& request_data,
+                                 mojom::URLLoaderAssociatedRequest mojo_request,
+                                 mojom::URLLoaderClientPtr url_loader_client);
 
   void OnSyncLoad(ResourceRequesterInfo* requester_info,
                   int request_id,
@@ -552,14 +551,13 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Update the ResourceRequestInfo and internal maps when a request is
   // transferred from one process to another.
-  void UpdateRequestForTransfer(
-      ResourceRequesterInfo* requester_info,
-      int route_id,
-      int request_id,
-      const ResourceRequest& request_data,
-      LoaderMap::iterator iter,
-      mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client);
+  void UpdateRequestForTransfer(ResourceRequesterInfo* requester_info,
+                                int route_id,
+                                int request_id,
+                                const ResourceRequest& request_data,
+                                LoaderMap::iterator iter,
+                                mojom::URLLoaderAssociatedRequest mojo_request,
+                                mojom::URLLoaderClientPtr url_loader_client);
 
   // If |request_data| is for a request being transferred from another process,
   // then CompleteTransfer method can be used to complete the transfer.
@@ -568,7 +566,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                         const ResourceRequest& request_data,
                         int route_id,
                         mojom::URLLoaderAssociatedRequest mojo_request,
-                        mojom::URLLoaderClientAssociatedPtr url_loader_client);
+                        mojom::URLLoaderClientPtr url_loader_client);
 
   void BeginRequest(
       ResourceRequesterInfo* requester_info,
@@ -577,7 +575,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       const SyncLoadResultCallback& sync_result_handler,  // only valid for sync
       int route_id,
       mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client);
+      mojom::URLLoaderClientPtr url_loader_client);
 
   // There are requests which need decisions to be made like the following:
   // Whether the presence of certain HTTP headers like the Origin header are
@@ -585,9 +583,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // decisions which could be time consuming. We allow for these decisions
   // to be made asynchronously. The request proceeds when we hear back from
   // the interceptors about whether to continue or not.
-  // The |continue_request| parameter in the function indicates whether the
-  // request should be continued or aborted. The |error_code| parameter is set
-  // if |continue_request| is false.
+  // The |interceptor_result| indicates whether the request should be continued
+  // or aborted, and in the latter case whether the renderer should be killed.
   void ContinuePendingBeginRequest(
       scoped_refptr<ResourceRequesterInfo> requester_info,
       int request_id,
@@ -596,9 +593,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       int route_id,
       const net::HttpRequestHeaders& headers,
       mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client,
-      bool continue_request,
-      int error_code);
+      mojom::URLLoaderClientPtr url_loader_client,
+      HeaderInterceptorResult interceptor_result);
 
   // Creates a ResourceHandler to be used by BeginRequest() for normal resource
   // loading.
@@ -611,7 +607,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       int child_id,
       ResourceContext* resource_context,
       mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client);
+      mojom::URLLoaderClientPtr url_loader_client);
 
   // Wraps |handler| in the standard resource handlers for normal resource
   // loading and navigation requests. This adds MimeTypeResourceHandler and

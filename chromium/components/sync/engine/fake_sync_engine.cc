@@ -24,20 +24,25 @@ void FakeSyncEngine::TriggerRefresh(const ModelTypeSet& types) {}
 
 void FakeSyncEngine::UpdateCredentials(const SyncCredentials& credentials) {}
 
+void FakeSyncEngine::StartConfiguration() {}
+
 void FakeSyncEngine::StartSyncingWithServer() {}
 
 void FakeSyncEngine::SetEncryptionPassphrase(const std::string& passphrase,
                                              bool is_explicit) {}
 
-bool FakeSyncEngine::SetDecryptionPassphrase(const std::string& passphrase) {
-  return false;
-}
+void FakeSyncEngine::SetDecryptionPassphrase(const std::string& passphrase) {}
 
 void FakeSyncEngine::StopSyncingForShutdown() {}
 
 void FakeSyncEngine::Shutdown(ShutdownReason reason) {}
 
 void FakeSyncEngine::ConfigureDataTypes(ConfigureParams params) {}
+
+void FakeSyncEngine::RegisterDirectoryDataType(ModelType type,
+                                               ModelSafeGroup group) {}
+
+void FakeSyncEngine::UnregisterDirectoryDataType(ModelType type) {}
 
 void FakeSyncEngine::EnableEncryptEverything() {}
 
@@ -63,18 +68,6 @@ SyncEngine::Status FakeSyncEngine::GetDetailedStatus() {
 
 bool FakeSyncEngine::HasUnsyncedItems() const {
   return false;
-}
-
-bool FakeSyncEngine::IsNigoriEnabled() const {
-  return true;
-}
-
-PassphraseType FakeSyncEngine::GetPassphraseType() const {
-  return PassphraseType::IMPLICIT_PASSPHRASE;
-}
-
-base::Time FakeSyncEngine::GetExplicitPassphraseTime() const {
-  return base::Time();
 }
 
 bool FakeSyncEngine::IsCryptographerReady(const BaseTransaction* trans) const {

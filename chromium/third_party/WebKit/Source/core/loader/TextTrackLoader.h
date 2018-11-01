@@ -26,12 +26,11 @@
 #ifndef TextTrackLoader_h
 #define TextTrackLoader_h
 
-#include "core/fetch/RawResource.h"
-#include "core/fetch/ResourceOwner.h"
 #include "core/html/track/vtt/VTTParser.h"
 #include "platform/CrossOriginAttributeValue.h"
-#include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/RawResource.h"
+#include "platform/loader/fetch/ResourceOwner.h"
 
 namespace blink {
 
@@ -44,7 +43,6 @@ class TextTrackLoaderClient : public GarbageCollectedMixin {
 
   virtual void newCuesAvailable(TextTrackLoader*) = 0;
   virtual void cueLoadingCompleted(TextTrackLoader*, bool loadingFailed) = 0;
-  virtual void newRegionsAvailable(TextTrackLoader*) = 0;
 };
 
 class TextTrackLoader final : public GarbageCollectedFinalized<TextTrackLoader>,
@@ -66,7 +64,6 @@ class TextTrackLoader final : public GarbageCollectedFinalized<TextTrackLoader>,
   State loadState() { return m_state; }
 
   void getNewCues(HeapVector<Member<TextTrackCue>>& outputCues);
-  void getNewRegions(HeapVector<Member<VTTRegion>>& outputRegions);
 
   DECLARE_TRACE();
 
@@ -81,7 +78,6 @@ class TextTrackLoader final : public GarbageCollectedFinalized<TextTrackLoader>,
 
   // VTTParserClient
   void newCuesParsed() override;
-  void newRegionsParsed() override;
   void fileFailedToParse() override;
 
   TextTrackLoader(TextTrackLoaderClient&, Document&);
@@ -95,7 +91,7 @@ class TextTrackLoader final : public GarbageCollectedFinalized<TextTrackLoader>,
   Member<VTTParser> m_cueParser;
   // FIXME: Remove this pointer and get the Document from m_client.
   Member<Document> m_document;
-  Timer<TextTrackLoader> m_cueLoadTimer;
+  TaskRunnerTimer<TextTrackLoader> m_cueLoadTimer;
   State m_state;
   bool m_newCuesAvailable;
 };

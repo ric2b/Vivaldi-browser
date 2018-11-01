@@ -26,8 +26,8 @@
 #ifndef Scrollbar_h
 #define Scrollbar_h
 
+#include "platform/FrameViewBase.h"
 #include "platform/Timer.h"
-#include "platform/Widget.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -39,12 +39,12 @@ namespace blink {
 class GraphicsContext;
 class HostWindow;
 class IntRect;
-class PlatformMouseEvent;
 class ScrollableArea;
 class ScrollbarTheme;
 class WebGestureEvent;
+class WebMouseEvent;
 
-class PLATFORM_EXPORT Scrollbar : public Widget,
+class PLATFORM_EXPORT Scrollbar : public FrameViewBase,
                                   public ScrollbarThemeClient,
                                   public DisplayItemClient {
  public:
@@ -67,18 +67,18 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   ~Scrollbar() override;
 
   // ScrollbarThemeClient implementation.
-  int x() const override { return Widget::x(); }
-  int y() const override { return Widget::y(); }
-  int width() const override { return Widget::width(); }
-  int height() const override { return Widget::height(); }
-  IntSize size() const override { return Widget::size(); }
-  IntPoint location() const override { return Widget::location(); }
+  int x() const override { return FrameViewBase::x(); }
+  int y() const override { return FrameViewBase::y(); }
+  int width() const override { return FrameViewBase::width(); }
+  int height() const override { return FrameViewBase::height(); }
+  IntSize size() const override { return FrameViewBase::size(); }
+  IntPoint location() const override { return FrameViewBase::location(); }
 
-  Widget* parent() const override { return Widget::parent(); }
-  Widget* root() const override { return Widget::root(); }
+  FrameViewBase* parent() const override { return FrameViewBase::parent(); }
+  FrameViewBase* root() const override { return FrameViewBase::root(); }
 
   void setFrameRect(const IntRect&) override;
-  IntRect frameRect() const override { return Widget::frameRect(); }
+  IntRect frameRect() const override { return FrameViewBase::frameRect(); }
 
   ScrollbarOverlayColorTheme getScrollbarOverlayColorTheme() const override;
   void getTickmarks(Vector<IntRect>&) const override;
@@ -86,7 +86,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
 
   IntPoint convertFromRootFrame(
       const IntPoint& pointInRootFrame) const override {
-    return Widget::convertFromRootFrame(pointInRootFrame);
+    return FrameViewBase::convertFromRootFrame(pointInRootFrame);
   }
 
   bool isCustomScrollbar() const override { return false; }
@@ -145,14 +145,14 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   // They will not get called when the mouse went down in a scrollbar, since it
   // is assumed the scrollbar will start
   // grabbing all events in that case anyway.
-  void mouseMoved(const PlatformMouseEvent&);
+  void mouseMoved(const WebMouseEvent&);
   void mouseEntered();
   void mouseExited();
 
   // Used by some platform scrollbars to know when they've been released from
   // capture.
-  void mouseUp(const PlatformMouseEvent&);
-  void mouseDown(const PlatformMouseEvent&);
+  void mouseUp(const WebMouseEvent&);
+  void mouseDown(const WebMouseEvent&);
 
   ScrollbarTheme& theme() const { return m_theme; }
 
@@ -181,7 +181,9 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
     return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar"
                                                 : "VerticalScrollbar";
   }
-  LayoutRect visualRect() const override;
+  LayoutRect visualRect() const final { return m_visualRect; }
+
+  virtual void setVisualRect(const LayoutRect& r) { m_visualRect = r; }
 
   // Marks the scrollbar as needing to be redrawn.
   //
@@ -236,7 +238,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
 
   bool m_enabled;
 
-  Timer<Scrollbar> m_scrollTimer;
+  TaskRunnerTimer<Scrollbar> m_scrollTimer;
 
   float m_elasticOverscroll;
 
@@ -255,13 +257,14 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   int m_themeScrollbarThickness;
   bool m_trackNeedsRepaint;
   bool m_thumbNeedsRepaint;
+  LayoutRect m_visualRect;
 };
 
 DEFINE_TYPE_CASTS(Scrollbar,
-                  Widget,
-                  widget,
-                  widget->isScrollbar(),
-                  widget.isScrollbar());
+                  FrameViewBase,
+                  frameViewBase,
+                  frameViewBase->isScrollbar(),
+                  frameViewBase.isScrollbar());
 
 }  // namespace blink
 

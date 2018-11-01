@@ -7,7 +7,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/time/time.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_driver.h"
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
 #include "components/subresource_filter/core/browser/subresource_filter_client.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
@@ -17,6 +16,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_message_macros.h"
+#include "net/base/net_errors.h"
 #include "url/gurl.h"
 
 namespace subresource_filter {
@@ -62,34 +62,34 @@ ContentSubresourceFilterDriverFactory::FromWebContents(
       web_contents->GetUserData(kWebContentsUserDataKey));
 }
 
+// static
+bool ContentSubresourceFilterDriverFactory::NavigationIsPageReload(
+    const GURL& url,
+    const content::Referrer& referrer,
+    ui::PageTransition transition) {
+  return ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD) ||
+         // Some pages 'reload' from JavaScript by navigating to themselves.
+         url == referrer.url;
+}
+
 ContentSubresourceFilterDriverFactory::ContentSubresourceFilterDriverFactory(
     content::WebContents* web_contents,
     std::unique_ptr<SubresourceFilterClient> client)
     : content::WebContentsObserver(web_contents),
       client_(std::move(client)),
-      activation_state_(ActivationState::DISABLED),
-      measure_performance_(false) {
-  content::RenderFrameHost* main_frame_host = web_contents->GetMainFrame();
-  if (main_frame_host && main_frame_host->IsRenderFrameLive())
-    CreateDriverForFrameHostIfNeeded(main_frame_host);
-}
+      activation_level_(ActivationLevel::DISABLED),
+      activation_decision_(ActivationDecision::UNKNOWN),
+      measure_performance_(false) {}
 
 ContentSubresourceFilterDriverFactory::
     ~ContentSubresourceFilterDriverFactory() {}
 
-void ContentSubresourceFilterDriverFactory::CreateDriverForFrameHostIfNeeded(
-    content::RenderFrameHost* render_frame_host) {
-  auto iterator_and_inserted =
-      frame_drivers_.insert(std::make_pair(render_frame_host, nullptr));
-  if (iterator_and_inserted.second) {
-    iterator_and_inserted.first->second.reset(
-        new ContentSubresourceFilterDriver(render_frame_host));
-  }
-}
-
 void ContentSubresourceFilterDriverFactory::OnFirstSubresourceLoadDisallowed() {
-  client_->ToggleNotificationVisibility(activation_state_ ==
-                                        ActivationState::ENABLED);
+  if (ShouldSuppressNotifications())
+    return;
+
+  client_->ToggleNotificationVisibility(activation_level_ ==
+                                        ActivationLevel::ENABLED);
 }
 
 void ContentSubresourceFilterDriverFactory::OnDocumentLoadStatistics(
@@ -140,26 +140,46 @@ void ContentSubresourceFilterDriverFactory::AddHostOfURLToWhitelistSet(
     whitelisted_hosts_.insert(url.host());
 }
 
-bool ContentSubresourceFilterDriverFactory::ShouldActivateForMainFrameURL(
+ContentSubresourceFilterDriverFactory::ActivationDecision
+ContentSubresourceFilterDriverFactory::ComputeActivationDecisionForMainFrameURL(
     const GURL& url) const {
-  switch (GetCurrentActivationScope()) {
+  if (GetMaximumActivationLevel() == ActivationLevel::DISABLED)
+    return ActivationDecision::ACTIVATION_DISABLED;
+
+  ActivationScope scope = GetCurrentActivationScope();
+  if (scope == ActivationScope::NO_SITES)
+    return ActivationDecision::ACTIVATION_DISABLED;
+
+  if (!url.SchemeIsHTTPOrHTTPS())
+    return ActivationDecision::UNSUPPORTED_SCHEME;
+  if (IsWhitelisted(url))
+    return ActivationDecision::URL_WHITELISTED;
+
+  switch (scope) {
     case ActivationScope::ALL_SITES:
-      return !IsWhitelisted(url);
+      return ActivationDecision::ACTIVATED;
     case ActivationScope::ACTIVATION_LIST:
-      return DidURLMatchCurrentActivationList(url) && !IsWhitelisted(url);
+      // The logic to ensure only http/https URLs are activated lives in
+      // AddActivationListMatch to ensure the activation list only has relevant
+      // entries.
+      DCHECK(url.SchemeIsHTTPOrHTTPS() ||
+             !DidURLMatchCurrentActivationList(url));
+      return DidURLMatchCurrentActivationList(url)
+                 ? ActivationDecision::ACTIVATED
+                 : ActivationDecision::ACTIVATION_LIST_NOT_MATCHED;
     default:
-      return false;
+      return ActivationDecision::ACTIVATION_DISABLED;
   }
 }
 
 void ContentSubresourceFilterDriverFactory::ActivateForFrameHostIfNeeded(
     content::RenderFrameHost* render_frame_host,
     const GURL& url) {
-  if (activation_state_ != ActivationState::DISABLED) {
-    auto* driver = DriverFromFrameHost(render_frame_host);
-    DCHECK(driver);
-    driver->ActivateForProvisionalLoad(GetMaximumActivationState(), url,
-                                       measure_performance_);
+  if (activation_level_ != ActivationLevel::DISABLED) {
+    render_frame_host->Send(
+        new SubresourceFilterMsg_ActivateForNextCommittedLoad(
+            render_frame_host->GetRoutingID(), activation_level_,
+            measure_performance_));
   }
 }
 
@@ -170,32 +190,21 @@ void ContentSubresourceFilterDriverFactory::OnReloadRequested() {
   web_contents()->GetController().Reload(content::ReloadType::NORMAL, true);
 }
 
-void ContentSubresourceFilterDriverFactory::SetDriverForFrameHostForTesting(
-    content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<ContentSubresourceFilterDriver> driver) {
-  auto iterator_and_inserted =
-      frame_drivers_.insert(std::make_pair(render_frame_host, nullptr));
-  iterator_and_inserted.first->second = std::move(driver);
-}
-
-ContentSubresourceFilterDriver*
-ContentSubresourceFilterDriverFactory::DriverFromFrameHost(
-    content::RenderFrameHost* render_frame_host) {
-  auto iterator = frame_drivers_.find(render_frame_host);
-  return iterator == frame_drivers_.end() ? nullptr : iterator->second.get();
+void ContentSubresourceFilterDriverFactory::ResetActivationState() {
+  navigation_chain_.clear();
+  activation_list_matches_.clear();
+  activation_level_ = ActivationLevel::DISABLED;
+  measure_performance_ = false;
+  aggregated_document_statistics_ = DocumentLoadStatistics();
 }
 
 void ContentSubresourceFilterDriverFactory::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->IsInMainFrame() && !navigation_handle->IsSamePage()) {
-    navigation_chain_.clear();
-    activation_list_matches_.clear();
+    activation_decision_ = ActivationDecision::UNKNOWN;
+    ResetActivationState();
     navigation_chain_.push_back(navigation_handle->GetURL());
-
     client_->ToggleNotificationVisibility(false);
-    activation_state_ = ActivationState::DISABLED;
-    measure_performance_ = false;
-    aggregated_document_statistics_ = DocumentLoadStatistics();
   }
 }
 
@@ -206,23 +215,23 @@ void ContentSubresourceFilterDriverFactory::DidRedirectNavigation(
     navigation_chain_.push_back(navigation_handle->GetURL());
 }
 
-void ContentSubresourceFilterDriverFactory::RenderFrameCreated(
-    content::RenderFrameHost* render_frame_host) {
-  CreateDriverForFrameHostIfNeeded(render_frame_host);
-}
-
-void ContentSubresourceFilterDriverFactory::RenderFrameDeleted(
-    content::RenderFrameHost* render_frame_host) {
-  frame_drivers_.erase(render_frame_host);
-}
-
 void ContentSubresourceFilterDriverFactory::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
   DCHECK(!navigation_handle->IsSamePage());
+
+  // ReadyToCommitNavigation with browser-side navigation disabled is not called
+  // in production code for failed navigations (e.g. network errors). We don't
+  // want to activate on these pages, so we bail early to guarantee consistent
+  // behavior regardless of whether browser-side navigation is enabled.
+  if (navigation_handle->GetNetErrorCode() != net::OK)
+    return;
+
   content::RenderFrameHost* render_frame_host =
       navigation_handle->GetRenderFrameHost();
   GURL url = navigation_handle->GetURL();
-  ReadyToCommitNavigationInternal(render_frame_host, url);
+  const content::Referrer& referrer = navigation_handle->GetReferrer();
+  ui::PageTransition transition = navigation_handle->GetPageTransition();
+  ReadyToCommitNavigationInternal(render_frame_host, url, referrer, transition);
 }
 
 void ContentSubresourceFilterDriverFactory::DidFinishLoad(
@@ -231,21 +240,23 @@ void ContentSubresourceFilterDriverFactory::DidFinishLoad(
   if (render_frame_host->GetParent())
     return;
 
-  UMA_HISTOGRAM_COUNTS_1000(
-      "SubresourceFilter.PageLoad.NumSubresourceLoads.Total",
-      aggregated_document_statistics_.num_loads_total);
-  UMA_HISTOGRAM_COUNTS_1000(
-      "SubresourceFilter.PageLoad.NumSubresourceLoads.Evaluated",
-      aggregated_document_statistics_.num_loads_evaluated);
-  UMA_HISTOGRAM_COUNTS_1000(
-      "SubresourceFilter.PageLoad.NumSubresourceLoads.MatchedRules",
-      aggregated_document_statistics_.num_loads_matching_rules);
-  UMA_HISTOGRAM_COUNTS_1000(
-      "SubresourceFilter.PageLoad.NumSubresourceLoads.Disallowed",
-      aggregated_document_statistics_.num_loads_disallowed);
+  if (activation_level_ != ActivationLevel::DISABLED) {
+    UMA_HISTOGRAM_COUNTS_1000(
+        "SubresourceFilter.PageLoad.NumSubresourceLoads.Total",
+        aggregated_document_statistics_.num_loads_total);
+    UMA_HISTOGRAM_COUNTS_1000(
+        "SubresourceFilter.PageLoad.NumSubresourceLoads.Evaluated",
+        aggregated_document_statistics_.num_loads_evaluated);
+    UMA_HISTOGRAM_COUNTS_1000(
+        "SubresourceFilter.PageLoad.NumSubresourceLoads.MatchedRules",
+        aggregated_document_statistics_.num_loads_matching_rules);
+    UMA_HISTOGRAM_COUNTS_1000(
+        "SubresourceFilter.PageLoad.NumSubresourceLoads.Disallowed",
+        aggregated_document_statistics_.num_loads_disallowed);
+  }
 
   if (measure_performance_) {
-    DCHECK(activation_state_ != ActivationState::DISABLED);
+    DCHECK(activation_level_ != ActivationLevel::DISABLED);
     UMA_HISTOGRAM_CUSTOM_MICRO_TIMES(
         "SubresourceFilter.PageLoad.SubresourceEvaluation.TotalWallDuration",
         aggregated_document_statistics_.evaluation_total_wall_duration,
@@ -280,22 +291,33 @@ bool ContentSubresourceFilterDriverFactory::OnMessageReceived(
 
 void ContentSubresourceFilterDriverFactory::ReadyToCommitNavigationInternal(
     content::RenderFrameHost* render_frame_host,
-    const GURL& url) {
-  if (!render_frame_host->GetParent()) {
-    RecordRedirectChainMatchPattern();
-    if (ShouldActivateForMainFrameURL(url)) {
-      activation_state_ = GetMaximumActivationState();
-      measure_performance_ = activation_state_ != ActivationState::DISABLED &&
-                             ShouldMeasurePerformanceForPageLoad();
-      ActivateForFrameHostIfNeeded(render_frame_host, url);
-    } else {
-      activation_state_ = ActivationState::DISABLED;
-      measure_performance_ = false;
-      aggregated_document_statistics_ = DocumentLoadStatistics();
-    }
-  } else {
+    const GURL& url,
+    const content::Referrer& referrer,
+    ui::PageTransition transition) {
+  if (render_frame_host->GetParent()) {
     ActivateForFrameHostIfNeeded(render_frame_host, url);
+    return;
   }
+
+  RecordRedirectChainMatchPattern();
+
+  if (ShouldWhitelistSiteOnReload() &&
+      NavigationIsPageReload(url, referrer, transition)) {
+    // Whitelist this host for the current as well as subsequent navigations.
+    AddHostOfURLToWhitelistSet(url);
+  }
+
+  activation_decision_ = ComputeActivationDecisionForMainFrameURL(url);
+  DCHECK(activation_decision_ != ActivationDecision::UNKNOWN);
+  if (activation_decision_ != ActivationDecision::ACTIVATED) {
+    ResetActivationState();
+    return;
+  }
+
+  activation_level_ = GetMaximumActivationLevel();
+  measure_performance_ = activation_level_ != ActivationLevel::DISABLED &&
+                         ShouldMeasurePerformanceForPageLoad();
+  ActivateForFrameHostIfNeeded(render_frame_host, url);
 }
 
 bool ContentSubresourceFilterDriverFactory::DidURLMatchCurrentActivationList(
@@ -310,7 +332,7 @@ bool ContentSubresourceFilterDriverFactory::DidURLMatchCurrentActivationList(
 void ContentSubresourceFilterDriverFactory::AddActivationListMatch(
     const GURL& url,
     ActivationList match_type) {
-  if (!url.host().empty() && url.SchemeIsHTTPOrHTTPS())
+  if (url.has_host() && url.SchemeIsHTTPOrHTTPS())
     activation_list_matches_[DistillURLToHostAndPath(url)].insert(match_type);
 }
 

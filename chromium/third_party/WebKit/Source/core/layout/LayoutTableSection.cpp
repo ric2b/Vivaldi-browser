@@ -258,9 +258,9 @@ void LayoutTableSection::addCell(LayoutTableCell* cell, LayoutTableRow* row) {
   // <TR><TD>1 <TD rowspan="2">2 <TD>3 <TD>4
   // <TR><TD colspan="2">5
   // </TABLE>
-  while (m_cCol < numCols(insertionRow) &&
-         (cellAt(insertionRow, m_cCol).hasCells() ||
-          cellAt(insertionRow, m_cCol).inColSpan))
+  unsigned nCols = numCols(insertionRow);
+  while (m_cCol < nCols && (cellAt(insertionRow, m_cCol).hasCells() ||
+                            cellAt(insertionRow, m_cCol).inColSpan))
     m_cCol++;
 
   updateLogicalHeightForCell(m_grid[insertionRow], cell);
@@ -272,9 +272,10 @@ void LayoutTableSection::addCell(LayoutTableCell* cell, LayoutTableRow* row) {
   unsigned col = m_cCol;
   // tell the cell where it is
   bool inColSpan = false;
+  unsigned colSize = columns.size();
   while (cSpan) {
     unsigned currentSpan;
-    if (m_cCol >= columns.size()) {
+    if (m_cCol >= colSize) {
       table()->appendEffectiveColumn(cSpan);
       currentSpan = cSpan;
     } else {
@@ -1103,8 +1104,8 @@ static bool shouldFlexCellChild(const LayoutTableCell& cell,
                                 LayoutObject* cellDescendant) {
   if (!cell.style()->logicalHeight().isSpecified())
     return false;
-  if (cellDescendant->style()->overflowY() == EOverflow::Visible ||
-      cellDescendant->style()->overflowY() == EOverflow::Hidden)
+  if (cellDescendant->style()->overflowY() == EOverflow::kVisible ||
+      cellDescendant->style()->overflowY() == EOverflow::kHidden)
     return true;
   return cellDescendant->isBox() &&
          toLayoutBox(cellDescendant)->shouldBeConsideredAsReplaced();
@@ -1152,7 +1153,8 @@ void LayoutTableSection::layoutRows() {
   for (unsigned r = 0; r < totalRows; r++) {
     LayoutTableRow* rowLayoutObject = m_grid[r].rowLayoutObject;
 
-    for (unsigned c = 0; c < numCols(r); c++) {
+    unsigned nCols = numCols(r);
+    for (unsigned c = 0; c < nCols; c++) {
       CellStruct& cs = cellAt(r, c);
       LayoutTableCell* cell = cs.primaryCell();
 
@@ -1187,7 +1189,7 @@ void LayoutTableSection::layoutRows() {
       // dependencies and unstable layout.
       if (state.isPaginated() &&
           crossesPageBoundary(LayoutUnit(rowLogicalTop), LayoutUnit(rHeight)))
-        cellVerticalAlign = EVerticalAlign::Top;
+        cellVerticalAlign = EVerticalAlign::kTop;
       else
         cellVerticalAlign = cell->style()->verticalAlign();
       cell->computeIntrinsicPadding(rHeight, cellVerticalAlign, layouter);
@@ -1272,7 +1274,8 @@ void LayoutTableSection::computeOverflowFromCells(unsigned totalRows,
 #endif
   // Now that our height has been determined, add in overflow from cells.
   for (unsigned r = 0; r < totalRows; r++) {
-    for (unsigned c = 0; c < numCols(r); c++) {
+    unsigned nCols = numCols(r);
+    for (unsigned c = 0; c < nCols; c++) {
       CellStruct& cs = cellAt(r, c);
       LayoutTableCell* cell = cs.primaryCell();
       if (!cell || cs.inColSpan)
@@ -1285,7 +1288,7 @@ void LayoutTableSection::computeOverflowFromCells(unsigned totalRows,
 #endif
       if (cell->hasVisualOverflow() &&
           !m_forceSlowPaintPathWithOverflowingCell) {
-        m_overflowingCells.add(cell);
+        m_overflowingCells.insert(cell);
         if (m_overflowingCells.size() > maxAllowedOverflowingCellsCount) {
           // We need to set m_forcesSlowPaintPath only if there is a least one
           // overflowing cells as the hit testing code rely on this information.
@@ -1313,7 +1316,8 @@ bool LayoutTableSection::recalcChildOverflowAfterStyleChange() {
       continue;
     rowLayouter->clearChildNeedsOverflowRecalcAfterStyleChange();
     bool rowChildrenOverflowChanged = false;
-    for (unsigned c = 0; c < numCols(r); c++) {
+    unsigned nCols = numCols(r);
+    for (unsigned c = 0; c < nCols; c++) {
       CellStruct& cs = cellAt(r, c);
       LayoutTableCell* cell = cs.primaryCell();
       if (!cell || cs.inColSpan || !cell->needsOverflowRecalcAfterStyleChange())
@@ -1366,7 +1370,8 @@ int LayoutTableSection::calcBlockDirectionOuterBorder(
 
   bool allHidden = true;
   unsigned r = side == BorderBefore ? 0 : m_grid.size() - 1;
-  for (unsigned c = 0; c < numCols(r); c++) {
+  unsigned nCols = numCols(r);
+  for (unsigned c = 0; c < nCols; c++) {
     const CellStruct& current = cellAt(r, c);
     if (current.inColSpan || !current.hasCells())
       continue;
@@ -1687,7 +1692,8 @@ unsigned LayoutTableSection::numEffectiveColumns() const {
   unsigned result = 0;
 
   for (unsigned r = 0; r < m_grid.size(); ++r) {
-    for (unsigned c = result; c < numCols(r); ++c) {
+    unsigned nCols = numCols(r);
+    for (unsigned c = result; c < nCols; ++c) {
       const CellStruct& cell = cellAt(r, c);
       if (cell.hasCells() || cell.inColSpan)
         result = c;
@@ -1805,11 +1811,9 @@ bool LayoutTableSection::nodeAtPoint(HitTestResult& result,
 
   // Now iterate over the spanned rows and columns.
   for (unsigned hitRow = rowSpan.start(); hitRow < rowSpan.end(); ++hitRow) {
-    for (unsigned hitColumn = columnSpan.start(); hitColumn < columnSpan.end();
-         ++hitColumn) {
-      if (hitColumn >= numCols(hitRow))
-        break;
-
+    unsigned nCols = numCols(hitRow);
+    for (unsigned hitColumn = columnSpan.start();
+         hitColumn < nCols && hitColumn < columnSpan.end(); ++hitColumn) {
       CellStruct& current = cellAt(hitRow, hitColumn);
 
       // If the cell is empty, there's nothing to do
@@ -2059,9 +2063,9 @@ bool LayoutTableSection::isRepeatingHeaderGroup() const {
   return true;
 }
 
-bool LayoutTableSection::mapToVisualRectInAncestorSpace(
+bool LayoutTableSection::mapToVisualRectInAncestorSpaceInternal(
     const LayoutBoxModelObject* ancestor,
-    LayoutRect& rect,
+    TransformState& transformState,
     VisualRectFlags flags) const {
   if (ancestor == this)
     return true;
@@ -2071,10 +2075,14 @@ bool LayoutTableSection::mapToVisualRectInAncestorSpace(
   // the header in all columns.
   // Note that this is in flow thread coordinates, not visual coordinates. The
   // enclosing LayoutFlowThread will convert to visual coordinates.
-  if (table()->header() == this && isRepeatingHeaderGroup())
+  if (table()->header() == this && isRepeatingHeaderGroup()) {
+    transformState.flatten();
+    FloatRect rect = transformState.lastPlanarQuad().boundingBox();
     rect.setHeight(table()->logicalHeight());
-  return LayoutTableBoxComponent::mapToVisualRectInAncestorSpace(ancestor, rect,
-                                                                 flags);
+    transformState.setQuad(FloatQuad(rect));
+  }
+  return LayoutTableBoxComponent::mapToVisualRectInAncestorSpaceInternal(
+      ancestor, transformState, flags);
 }
 
 }  // namespace blink

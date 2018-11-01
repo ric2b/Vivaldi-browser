@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">या विस्तारास कोणत्याही विशिष्ट परवानग्यांची आवश्यकता नाही.</translation>
 <translation id="1620510694547887537">कॅमेरा</translation>
 <translation id="1635033183663317347">आपल्‍या पालकाद्वारे स्थापित केले.</translation>
-<translation id="1652965563555864525">&amp;निःशब्द</translation>
 <translation id="1723824996674794290">&amp;नवीन विंडो</translation>
 <translation id="1729533290416704613">आपण विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
 <translation id="1789575671122666129">पॉपअप</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">&amp;सर्व निवडा</translation>
 <translation id="1965328510789761112">खासगी मेमरी</translation>
 <translation id="1992397118740194946">सेट नाही</translation>
-<translation id="2011110593081822050">वेब कर्मचारी: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">हे प्लगिन लपवा</translation>
 <translation id="2087822576218954668">मुद्रण: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">प्लगिन अद्यतनित करा</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">सूचना</translation>
 <translation id="2501797496290880632">शॉर्टकट टाइप करा</translation>
 <translation id="2509857212037838238">स्‍थापित करा <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;विराम द्या</translation>
 <translation id="2550212893339833758">स्वॅप केलेली मेमरी</translation>
 <translation id="2662876636500006917">Vivaldi वेब बाजार</translation>
 <translation id="2678063897982469759">पुन्हा-सक्षम करा</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">नकार द्या</translation>
 <translation id="3936390757709632190">नवीन टॅबमध्ये ऑडिओ &amp;उघडा</translation>
 <translation id="3943582379552582368">&amp;मागील</translation>
-<translation id="3954582159466790312">स&amp;शब्द करा</translation>
 <translation id="3979395879372752341">नवीन विस्तार जोडला (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">विस्तार तयार केला: <ph name="EXTENSION_FILE" /></translation>
@@ -121,16 +117,12 @@
 <translation id="4593021220803146968"><ph name="URL" /> &amp;येथे जा</translation>
 <translation id="4595560905247879544">अॅप्स आणि विस्तार केवळ (<ph name="CUSTODIAN_NAME" />) व्यवस्थापकाद्वारे सुधारित केले जाऊ शकतात.</translation>
 <translation id="4613271546271159013">आपण नवीन टॅब उघडता तेव्हा कोणते पृष्ठ दर्शविले जाते हे विस्ताराने बदलले आहे.</translation>
-<translation id="4623537843784569564">हा विस्तार अयोग्यपणे अद्यतनित केला गेला असू शकतो. तो पुन्हा स्थापित करून पहा.</translation>
 <translation id="4677772697204437347">GPU मेमरी</translation>
 <translation id="4711638718396952945">सेटिंग्ज पुनर्संचयित करा</translation>
 <translation id="4839303808932127586">म्हणून व्हिडिओ ज&amp;तन करा...</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> स्थापित करायचे? केवळ आपला विश्वास असलेले प्लगिन स्थापित करा.</translation>
-<translation id="4861833787540810454">&amp;प्ले करा</translation>
-<translation id="4883993111890464517">हा विस्तार दूषित झालेला असू शकतो. पुन्हा स्थापित करून पहा.</translation>
 <translation id="488785315393301722">तपशील दर्शवा</translation>
 <translation id="4911714727432509308">कोणत्याही विस्तारांनी कीबोर्ड शॉर्टकट नियुक्त केले नाहीत.</translation>
-<translation id="4919987486109157213">विस्तार दूषित झाला. पुन्हा स्थापित करून पहा.</translation>
 <translation id="4927301649992043040">पॅक विस्तार</translation>
 <translation id="49896407730300355">घड्याळाच्या वि&amp;रूद्ध दिशेने फिरवा</translation>
 <translation id="4989966318180235467">&amp;पार्श्वभूमी पृष्ठाचे निरीक्षण करा</translation>
@@ -193,7 +185,6 @@
 <translation id="6787839852456839824">कीबोर्ड शॉर्टकट</translation>
 <translation id="6798954102094737107">प्लगिन: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">बदल ठेवा</translation>
-<translation id="6844537474943985871">हा विस्तार दूषित झालेला असू शकतो. कृपया विस्थापित करून पहा आणि पुन्हा स्थापित करून पहा.</translation>
 <translation id="6863910145616405334">प्लगिन सापडले नाही</translation>
 <translation id="6886871292305414135">नवीन &amp;टॅबमध्ये दुवा उघडा</translation>
 <translation id="6900284862687837908">पार्श्वभूमी अॅप: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -212,7 +203,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">नवीन टॅब</translation>
 <translation id="7564847347806291057">प्रक्रिया समाप्त करा</translation>
-<translation id="7618337809041914424">&amp;फ्रेम मुद्रित करा...</translation>
 <translation id="7629827748548208700">टॅब: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">रद्द करा</translation>
 <translation id="7663719505383602579">प्राप्तकर्ता: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -258,7 +248,6 @@
 <translation id="8916476537757519021">गुप्त सबफ्रेम: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">तपशील लपवा</translation>
 <translation id="9088234649737575428">संस्‍थेच्या धोरणाद्वारे <ph name="PLUGIN_NAME" /> अवरोधित केले आहे</translation>
-<translation id="9101691533782776290">अॅप लाँच करा</translation>
 <translation id="9170848237812810038">&amp;पूर्ववत करा</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" जोडले</translation>
 <translation id="9219103736887031265">प्रतिमा</translation>

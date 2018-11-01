@@ -182,7 +182,7 @@ void AnimationHost::SetNeedsPushProperties() {
 }
 
 void AnimationHost::PushPropertiesTo(MutatorHost* mutator_host_impl) {
-  auto host_impl = static_cast<AnimationHost*>(mutator_host_impl);
+  auto* host_impl = static_cast<AnimationHost*>(mutator_host_impl);
 
   if (needs_push_properties_) {
     needs_push_properties_ = false;
@@ -303,7 +303,7 @@ bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
   if (!NeedsTickAnimations())
     return false;
 
-  auto animation_events = static_cast<AnimationEvents*>(mutator_events);
+  auto* animation_events = static_cast<AnimationEvents*>(mutator_events);
 
   TRACE_EVENT0("cc", "AnimationHost::UpdateAnimationState");
   PlayersList ticking_players_copy = ticking_players_;
@@ -551,9 +551,10 @@ ScrollOffsetAnimations& AnimationHost::scroll_offset_animations() const {
   return *scroll_offset_animations_.get();
 }
 
-void AnimationHost::ScrollAnimationAbort(bool needs_completion) {
+void AnimationHost::ScrollAnimationAbort() {
   DCHECK(scroll_offset_animations_impl_);
-  return scroll_offset_animations_impl_->ScrollAnimationAbort(needs_completion);
+  scroll_offset_animations_impl_->ScrollAnimationAbort(
+      false /* needs_completion */);
 }
 
 void AnimationHost::AddToTicking(scoped_refptr<AnimationPlayer> player) {

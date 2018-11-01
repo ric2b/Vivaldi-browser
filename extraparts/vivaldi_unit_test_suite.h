@@ -11,5 +11,4 @@ class VivaldiChromeUnitTestSuite : public ChromeUnitTestSuite {
   ~VivaldiChromeUnitTestSuite() override;
 };
 
-
-#endif // EXTRAPARTS_VIVALDI_UNIT_TEST_SUITE_H_
+#endif  // EXTRAPARTS_VIVALDI_UNIT_TEST_SUITE_H_

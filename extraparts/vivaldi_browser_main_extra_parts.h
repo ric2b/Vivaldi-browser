@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_BORWSER_MAIN_EXTRA_PARTS_H_
-#define VIVALDI_BORWSER_MAIN_EXTRA_PARTS_H_
+#ifndef EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_
+#define EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_
 
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -35,4 +35,4 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraParts);
 };
 
-#endif // VIVALDI_BORWSER_MAIN_EXTRA_PARTS_H_
+#endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_

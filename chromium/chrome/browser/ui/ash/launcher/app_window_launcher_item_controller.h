@@ -23,10 +23,10 @@ class BaseWindow;
 
 class ChromeLauncherController;
 
-// This is a LauncherItemController for abstract app windows. There is one
-// instance per app, per launcher id. For apps with multiple windows, each item
-// controller keeps track of all windows associated with the app and their
-// activation order. Instances are owned by ash::ShelfModel.
+// This is a LauncherItemController for abstract app windows (extension or ARC).
+// There is one instance per app, per launcher id. For apps with multiple
+// windows, each item controller keeps track of all windows associated with the
+// app and their activation order. Instances are owned by ash::ShelfModel.
 //
 // Tests are in chrome_launcher_controller_impl_browsertest.cc
 class AppWindowLauncherItemController : public LauncherItemController,
@@ -43,14 +43,13 @@ class AppWindowLauncherItemController : public LauncherItemController,
   ui::BaseWindow* GetAppWindow(aura::Window* window);
 
   // LauncherItemController overrides:
-  void Launch(ash::LaunchSource source, int event_flags) override;
-  ash::ShelfItemDelegate::PerformedAction Activate(
-      ash::LaunchSource source) override;
-  ChromeLauncherAppMenuItems GetApplicationList(int event_flags) override;
   AppWindowLauncherItemController* AsAppWindowLauncherItemController() override;
-  ash::ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
+  ash::ShelfAction ItemSelected(ui::EventType event_type,
+                                int event_flags,
+                                int64_t display_id,
+                                ash::ShelfLaunchSource source) override;
+  ash::ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
+  void ExecuteCommand(uint32_t command_id, int event_flags) override;
   void Close() override;
 
   // aura::WindowObserver overrides:
@@ -74,16 +73,15 @@ class AppWindowLauncherItemController : public LauncherItemController,
   // Called when app window is removed from controller.
   virtual void OnWindowRemoved(ui::BaseWindow* window) {}
 
-  // Returns the action performed. Should be one of kNoAction,
-  // kExistingWindowActivated, or kExistingWindowMinimized.
-  ash::ShelfItemDelegate::PerformedAction ShowAndActivateOrMinimize(
-      ui::BaseWindow* window);
+  // Returns the action performed. Should be one of SHELF_ACTION_NONE,
+  // SHELF_ACTION_WINDOW_ACTIVATED, or SHELF_ACTION_WINDOW_MINIMIZED.
+  ash::ShelfAction ShowAndActivateOrMinimize(ui::BaseWindow* window);
 
   // Activate the given |window_to_show|, or - if already selected - advance to
   // the next window of similar type.
-  // Returns the action performed. Should be one of kNoAction,
-  // kExistingWindowActivated, or kExistingWindowMinimized.
-  ash::ShelfItemDelegate::PerformedAction ActivateOrAdvanceToNextAppWindow(
+  // Returns the action performed. Should be one of SHELF_ACTION_NONE,
+  // SHELF_ACTION_WINDOW_ACTIVATED, or SHELF_ACTION_WINDOW_MINIMIZED.
+  ash::ShelfAction ActivateOrAdvanceToNextAppWindow(
       ui::BaseWindow* window_to_show);
 
  private:

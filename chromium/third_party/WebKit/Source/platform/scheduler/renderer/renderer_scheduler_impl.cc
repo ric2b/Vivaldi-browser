@@ -24,6 +24,7 @@
 #include "platform/scheduler/renderer/task_queue_throttler.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
 #include "platform/scheduler/renderer/webthread_impl_for_renderer_scheduler.h"
+#include "public/platform/Platform.h"
 
 namespace blink {
 namespace scheduler {
@@ -48,15 +49,15 @@ constexpr base::TimeDelta kThreadLoadTrackerWaitingPeriodBeforeReporting =
 // We do not throttle anything while audio is played and shortly after that.
 constexpr base::TimeDelta kThrottlingDelayAfterAudioIsPlayed =
     base::TimeDelta::FromSeconds(5);
-// Maximum task queueing time before the main thread is considered unresponsive.
-constexpr base::TimeDelta kMainThreadResponsivenessThreshold =
-    base::TimeDelta::FromMilliseconds(200);
 
 void ReportForegroundRendererTaskLoad(base::TimeTicks time, double load) {
   if (!blink::RuntimeEnabledFeatures::timerThrottlingForBackgroundTabsEnabled())
     return;
 
   int load_percentage = static_cast<int>(load * 100);
+  // TODO(altimin): Revert back to DCHECK.
+  CHECK_LE(load_percentage, 100);
+
   UMA_HISTOGRAM_PERCENTAGE("RendererScheduler.ForegroundRendererMainThreadLoad",
                            load_percentage);
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
@@ -68,6 +69,9 @@ void ReportBackgroundRendererTaskLoad(base::TimeTicks time, double load) {
     return;
 
   int load_percentage = static_cast<int>(load * 100);
+  // TODO(altimin): Revert back to DCHECK.
+  CHECK_LE(load_percentage, 100);
+
   UMA_HISTOGRAM_PERCENTAGE("RendererScheduler.BackgroundRendererMainThreadLoad",
                            load_percentage);
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
@@ -121,7 +125,6 @@ RendererSchedulerImpl::RendererSchedulerImpl(
                         helper_.scheduler_tqm_delegate().get(),
                         helper_.scheduler_tqm_delegate()->NowTicks()),
       policy_may_need_update_(&any_thread_lock_),
-      main_thread_responsiveness_threshold_(kMainThreadResponsivenessThreshold),
       weak_factory_(this) {
   task_queue_throttler_.reset(
       new TaskQueueThrottler(this, "renderer.scheduler"));
@@ -1580,6 +1583,7 @@ void RendererSchedulerImpl::SuspendTimerQueueWhenBackgrounded() {
 
   MainThreadOnly().timer_queue_suspended_when_backgrounded = true;
   ForceUpdatePolicy();
+  Platform::current()->requestPurgeMemory();
 }
 
 void RendererSchedulerImpl::ResumeTimerQueueWhenForegroundedOrResumed() {
@@ -1632,7 +1636,8 @@ void RendererSchedulerImpl::SetRAILModeObserver(RAILModeObserver* observer) {
   MainThreadOnly().rail_mode_observer = observer;
 }
 
-bool RendererSchedulerImpl::MainThreadSeemsUnresponsive() {
+bool RendererSchedulerImpl::MainThreadSeemsUnresponsive(
+    base::TimeDelta main_thread_responsiveness_threshold) {
   base::TimeTicks now = tick_clock()->NowTicks();
   base::TimeDelta estimated_queueing_time;
 
@@ -1660,7 +1665,7 @@ bool RendererSchedulerImpl::MainThreadSeemsUnresponsive() {
       queueing_time_estimator.EstimateQueueingTimeIncludingCurrentTask(now);
 
   bool main_thread_seems_unresponsive =
-      estimated_queueing_time > main_thread_responsiveness_threshold_;
+      estimated_queueing_time > main_thread_responsiveness_threshold;
   CompositorThreadOnly().main_thread_seems_unresponsive =
       main_thread_seems_unresponsive;
 

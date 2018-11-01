@@ -118,6 +118,11 @@
     "type": "raw",
     "args": [],
   },
+  "angle_white_box_tests": {
+    "label": "//third_party/angle/src/tests:angle_white_box_tests",
+    "type": "raw",
+    "args": [],
+  },
   "angle_unittests": {
     "label": "//third_party/angle/src/tests:angle_unittests",
     "type": "raw",
@@ -271,6 +276,10 @@
     "label": "//chrome/android:chrome_public_test_apk",
     "type": "console_test_launcher",
   },
+  "chrome_public_test_vr_apk": {
+    "label": "//chrome/android:chrome_public_test_vr_apk",
+    "type": "console_test_launcher",
+  },
   "chrome_sync_shell_test_apk": {
     "label": "//chrome/android:chrome_sync_shell_test_apk",
     "type": "console_test_launcher",
@@ -311,6 +320,10 @@
     "label": "//components:components_browsertests",
     "type": "windowed_test_launcher",
   },
+  "components_gcm_driver_junit_tests": {
+    "label": "//components/gcm_driver/android:components_gcm_driver_junit_tests",
+    "type": "junit_test",
+  },
   "components_invalidation_impl_junit_tests": {
     "label": "//components/invalidation/impl:components_invalidation_impl_junit_tests",
     "type": "junit_test",
@@ -322,6 +335,10 @@
   "components_unittests": {
     "label": "//components:components_unittests",
     "type": "windowed_test_launcher",
+  },
+  "components_variations_junit_tests": {
+    "label": "//components/variations/android:components_variations_junit_tests",
+    "type": "junit_test",
   },
   "components_web_restrictions_junit_tests": {
     "label": "//components/web_restrictions:components_web_restrictions_junit_tests",
@@ -338,6 +355,11 @@
   "content_junit_tests": {
     "label": "//content/public/android:content_junit_tests",
     "type": "junit_test",
+  },
+  "content_shell_crash_test": {
+    "label": "//content/shell:content_shell_crash_test",
+    "type": "script",
+    "script": "//testing/scripts/content_shell_crash_test.py",
   },
   "content_shell_test_apk": {
     "label": "//content/shell/android:content_shell_test_apk",
@@ -505,8 +527,33 @@
     "label": "//chrome/test:interactive_ui_tests",
     "type": "windowed_test_launcher",
   },
+  "ios_chrome_integration_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_integration_egtests",
+    "type": "raw",
+    "args": [],
+  },
+  "ios_chrome_settings_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_settings_egtests",
+    "type": "raw",
+    "args": [],
+  },
+  "ios_chrome_smoke_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_smoke_egtests",
+    "type": "raw",
+    "args": [],
+  },
+  "ios_chrome_ui_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_ui_egtests",
+    "type": "raw",
+    "args": [],
+  },
   "ios_chrome_unittests": {
     "label": "//ios/chrome/test:ios_chrome_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "ios_chrome_web_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_web_egtests",
     "type": "raw",
     "args": [],
   },
@@ -515,8 +562,18 @@
     "type": "raw",
     "args": [],
   },
+  "ios_showcase_egtests": {
+    "label": "//ios/showcase:ios_showcase_egtests",
+    "type": "raw",
+    "args": [],
+  },
   "ios_web_inttests": {
     "label": "//ios/web:ios_web_inttests",
+    "type": "raw",
+    "args": [],
+  },
+  "ios_web_shell_egtests": {
+    "label": "//ios/web/shell/test:ios_web_shell_egtests",
     "type": "raw",
     "args": [],
   },
@@ -563,6 +620,16 @@
     "label": "//mash:all",
     "type": "additional_compile_target",
   },
+  "mash_browser_tests": {
+    "label": "//chrome/test:mash_browser_tests",
+    "label_type": "group",
+    "type": "windowed_test_launcher",
+    "executable": "browser_tests",
+    "args": [
+      "--run-in-mash",
+      "--service-overrides=../../chrome/app/mash/mash_service_overrides.json",
+    ],
+  },
   "media_unittests": {
     "label": "//media:media_unittests",
     "type": "windowed_test_launcher",
@@ -599,6 +666,10 @@
       "./browser_tests",
     ],
   },
+  "microdump_stackwalk" : {
+    "label": "//breakpad:microdump_stackwalk",
+    "type": "additional_compile_target",
+  },
   "midi_unittests": {
     "label": "//media/midi:midi_unittests",
     "type": "windowed_test_launcher",
@@ -612,11 +683,11 @@
     "type": "console_test_launcher",
   },
   "mojo_js_integration_tests": {
-    "label": "//mojo/edk/js/test:js_integration_tests",
+    "label": "//mojo/edk/js/tests:mojo_js_integration_tests",
     "type": "console_test_launcher",
   },
   "mojo_js_unittests": {
-    "label": "//mojo/edk/js/test:js_unittests",
+    "label": "//mojo/edk/js/tests:mojo_js_unittests",
     "type": "console_test_launcher",
   },
   "mojo_public_application_unittests": {
@@ -750,6 +821,10 @@
     "label": "//services/service_manager/tests:service_manager_unittests",
     "type": "console_test_launcher",
   },
+  "service_unittests": {
+    "label": "//services:service_unittests",
+    "type": "console_test_launcher",
+  },
   "setup_unittests": {
     "label": "//chrome/installer/setup:setup_unittests",
     "type": "console_test_launcher",
@@ -757,6 +832,10 @@
   "skia_unittests": {
     "label": "//skia:skia_unittests",
     "type": "console_test_launcher",
+  },
+  "snapshot_unittests": {
+    "label": "//ui/snapshot:snapshot_unittests",
+    "type": "windowed_test_launcher",
   },
   "sql_unittests": {
     "label": "//sql:sql_unittests",
@@ -976,12 +1055,30 @@
   "webkit_layout_tests": {
     "label": "//:webkit_layout_tests",
     "type": "script",
-    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "script": "//testing/scripts/run_isolated_script_test.py",
     "args": [
       "--xvfb",
       "../../third_party/WebKit/Tools/Scripts/run-webkit-tests",
       "--clobber-old-results",
+      "--debug-rwt-logging",
       "--no-show-results",
+      "--results-directory", "${ISOLATED_OUTDIR}/layout-test-results",
+    ],
+  },
+  "webkit_layout_tests_exparchive": {
+    "label": "//:webkit_layout_tests_exparchive",
+    "type": "script",
+    "script": "//testing/scripts/run_isolated_script_test.py",
+    "args": [
+      "--xvfb",
+      "../../third_party/WebKit/Tools/Scripts/run-webkit-tests",
+      "--seed", "4",
+      "--no-show-results",
+      "--full-results-html",
+      "--clobber-old-results",
+      "--exit-after-n-failures", "5000",
+      "--exit-after-n-crashes-or-timeouts", "100",
+      "--debug-rwt-logging",
       "--results-directory", "${ISOLATED_OUTDIR}/layout-test-results",
     ],
   },

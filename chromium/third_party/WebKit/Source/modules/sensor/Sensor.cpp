@@ -6,13 +6,13 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/timing/DOMWindowPerformance.h"
+#include "core/timing/Performance.h"
 #include "device/generic_sensor/public/interfaces/sensor.mojom-blink.h"
 #include "modules/sensor/SensorErrorEvent.h"
 #include "modules/sensor/SensorProviderProxy.h"
-#include "modules/sensor/SensorReading.h"
 
 using namespace device::mojom::blink;
 
@@ -25,7 +25,7 @@ Sensor::Sensor(ExecutionContext* executionContext,
     : ContextLifecycleObserver(executionContext),
       m_sensorOptions(sensorOptions),
       m_type(type),
-      m_state(Sensor::SensorState::Idle),
+      m_state(Sensor::SensorState::Unconnected),
       m_lastUpdateTimestamp(0.0) {
   // Check secure context.
   String errorMessage;
@@ -45,11 +45,6 @@ Sensor::Sensor(ExecutionContext* executionContext,
   // Check the given frequency value.
   if (m_sensorOptions.hasFrequency()) {
     double frequency = m_sensorOptions.frequency();
-    if (frequency <= 0.0) {
-      exceptionState.throwRangeError("Frequency must be positive.");
-      return;
-    }
-
     if (frequency > SensorConfiguration::kMaxAllowedFrequency) {
       m_sensorOptions.setFrequency(SensorConfiguration::kMaxAllowedFrequency);
       ConsoleMessage* consoleMessage = ConsoleMessage::create(
@@ -61,46 +56,42 @@ Sensor::Sensor(ExecutionContext* executionContext,
 
 Sensor::~Sensor() = default;
 
-void Sensor::start(ScriptState* scriptState, ExceptionState& exceptionState) {
-  if (m_state != Sensor::SensorState::Idle &&
-      m_state != Sensor::SensorState::Errored) {
-    exceptionState.throwDOMException(
-        InvalidStateError,
-        "Cannot start because SensorState is not Idle or errored");
+void Sensor::start() {
+  if (m_state != Sensor::SensorState::Unconnected &&
+      m_state != Sensor::SensorState::Idle &&
+      m_state != Sensor::SensorState::Errored)
     return;
-  }
 
   initSensorProxyIfNeeded();
-
   if (!m_sensorProxy) {
-    exceptionState.throwDOMException(
-        InvalidStateError, "The Sensor is no longer associated to a frame.");
+    reportError(InvalidStateError,
+                "The Sensor is no longer associated to a frame.");
     return;
   }
+
   m_lastUpdateTimestamp = WTF::monotonicallyIncreasingTime();
   startListening();
 }
 
-void Sensor::stop(ScriptState*, ExceptionState& exceptionState) {
-  if (m_state == Sensor::SensorState::Idle ||
-      m_state == Sensor::SensorState::Errored) {
-    exceptionState.throwDOMException(
-        InvalidStateError,
-        "Cannot stop because SensorState is either Idle or errored");
+void Sensor::stop() {
+  if (m_state == Sensor::SensorState::Unconnected ||
+      m_state == Sensor::SensorState::Idle ||
+      m_state == Sensor::SensorState::Errored)
     return;
-  }
 
   stopListening();
 }
 
 static String ToString(Sensor::SensorState state) {
   switch (state) {
-    case Sensor::SensorState::Idle:
-      return "idle";
+    case Sensor::SensorState::Unconnected:
+      return "unconnected";
     case Sensor::SensorState::Activating:
       return "activating";
     case Sensor::SensorState::Activated:
       return "activated";
+    case Sensor::SensorState::Idle:
+      return "idle";
     case Sensor::SensorState::Errored:
       return "errored";
     default:
@@ -114,11 +105,26 @@ String Sensor::state() const {
   return ToString(m_state);
 }
 
-SensorReading* Sensor::reading() const {
-  if (m_state != Sensor::SensorState::Activated)
-    return nullptr;
+DOMHighResTimeStamp Sensor::timestamp(ScriptState* scriptState,
+                                      bool& isNull) const {
+  if (!canReturnReadings()) {
+    isNull = true;
+    return 0.0;
+  }
+
+  LocalDOMWindow* window = scriptState->domWindow();
+  if (!window) {
+    isNull = true;
+    return 0.0;
+  }
+
+  Performance* performance = DOMWindowPerformance::performance(*window);
+  DCHECK(performance);
   DCHECK(m_sensorProxy);
-  return m_sensorProxy->sensorReading();
+  isNull = false;
+
+  return performance->monotonicTimeToDOMHighResTimeStamp(
+      m_sensorProxy->reading().timestamp);
 }
 
 DEFINE_TRACE(Sensor) {
@@ -129,7 +135,8 @@ DEFINE_TRACE(Sensor) {
 }
 
 bool Sensor::hasPendingActivity() const {
-  if (m_state == Sensor::SensorState::Idle ||
+  if (m_state == Sensor::SensorState::Unconnected ||
+      m_state == Sensor::SensorState::Idle ||
       m_state == Sensor::SensorState::Errored)
     return false;
   return getExecutionContext() && hasEventListeners();
@@ -139,7 +146,8 @@ auto Sensor::createSensorConfig() -> SensorConfigurationPtr {
   auto result = SensorConfiguration::New();
 
   double defaultFrequency = m_sensorProxy->defaultConfig()->frequency;
-  double maximumFrequency = m_sensorProxy->maximumFrequency();
+  double minimumFrequency = m_sensorProxy->frequencyLimits().first;
+  double maximumFrequency = m_sensorProxy->frequencyLimits().second;
 
   double frequency = m_sensorOptions.hasFrequency()
                          ? m_sensorOptions.frequency()
@@ -147,9 +155,21 @@ auto Sensor::createSensorConfig() -> SensorConfigurationPtr {
 
   if (frequency > maximumFrequency)
     frequency = maximumFrequency;
+  if (frequency < minimumFrequency)
+    frequency = minimumFrequency;
 
   result->frequency = frequency;
   return result;
+}
+
+double Sensor::readingValue(int index, bool& isNull) const {
+  if (!canReturnReadings()) {
+    isNull = true;
+    return 0.0;
+  }
+  DCHECK(m_sensorProxy);
+  DCHECK(index >= 0 && index < device::SensorReading::kValuesCount);
+  return m_sensorProxy->reading().values[index];
 }
 
 void Sensor::initSensorProxyIfNeeded() {
@@ -163,10 +183,8 @@ void Sensor::initSensorProxyIfNeeded() {
   auto provider = SensorProviderProxy::from(document->frame());
   m_sensorProxy = provider->getSensorProxy(m_type);
 
-  if (!m_sensorProxy) {
-    m_sensorProxy = provider->createSensorProxy(m_type, document,
-                                                createSensorReadingFactory());
-  }
+  if (!m_sensorProxy)
+    m_sensorProxy = provider->createSensorProxy(m_type, document->page());
 }
 
 void Sensor::contextDestroyed(ExecutionContext*) {
@@ -228,7 +246,8 @@ void Sensor::startListening() {
     m_configuration = createSensorConfig();
     DCHECK(m_configuration);
     DCHECK(m_configuration->frequency > 0 &&
-           m_configuration->frequency <= m_sensorProxy->maximumFrequency());
+           m_configuration->frequency <=
+               SensorConfiguration::kMaxAllowedFrequency);
   }
 
   auto startCallback =
@@ -258,10 +277,9 @@ void Sensor::updateState(Sensor::SensorState newState) {
     // so that the first reading update will be notified considering the given
     // frequency hint.
     m_lastUpdateTimestamp = WTF::monotonicallyIncreasingTime();
-    getExecutionContext()->postTask(
-        TaskType::Sensor, BLINK_FROM_HERE,
-        createSameThreadTask(&Sensor::notifyOnActivate,
-                             wrapWeakPersistent(this)));
+    TaskRunnerHelper::get(TaskType::Sensor, getExecutionContext())
+        ->postTask(BLINK_FROM_HERE, WTF::bind(&Sensor::notifyOnActivate,
+                                              wrapWeakPersistent(this)));
   }
 
   m_state = newState;
@@ -274,19 +292,18 @@ void Sensor::reportError(ExceptionCode code,
   if (getExecutionContext()) {
     auto error =
         DOMException::create(code, sanitizedMessage, unsanitizedMessage);
-    getExecutionContext()->postTask(
-        TaskType::Sensor, BLINK_FROM_HERE,
-        createSameThreadTask(&Sensor::notifyError, wrapWeakPersistent(this),
+    TaskRunnerHelper::get(TaskType::Sensor, getExecutionContext())
+        ->postTask(BLINK_FROM_HERE,
+                   WTF::bind(&Sensor::notifyError, wrapWeakPersistent(this),
                              wrapPersistent(error)));
   }
 }
 
 void Sensor::notifySensorReadingChanged() {
   DCHECK(m_sensorProxy);
-  DCHECK(m_sensorProxy->sensorReading());
 
-  if (m_sensorProxy->sensorReading()->isReadingUpdated(m_storedData)) {
-    m_storedData = m_sensorProxy->sensorReading()->data();
+  if (m_sensorProxy->reading().timestamp != m_storedData.timestamp) {
+    m_storedData = m_sensorProxy->reading();
     dispatchEvent(Event::create(EventTypeNames::change));
   }
 }
@@ -298,6 +315,13 @@ void Sensor::notifyOnActivate() {
 void Sensor::notifyError(DOMException* error) {
   dispatchEvent(
       SensorErrorEvent::create(EventTypeNames::error, std::move(error)));
+}
+
+bool Sensor::canReturnReadings() const {
+  if (m_state != Sensor::SensorState::Activated)
+    return false;
+  DCHECK(m_sensorProxy);
+  return m_sensorProxy->reading().timestamp != 0.0;
 }
 
 }  // namespace blink

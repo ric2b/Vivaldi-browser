@@ -166,6 +166,12 @@ void GpuProcessHostUIShim::SimulateHang() {
   Send(new GpuMsg_Hang());
 }
 
+#if defined(OS_ANDROID)
+void GpuProcessHostUIShim::SimulateJavaCrash() {
+  Send(new GpuMsg_JavaCrash());
+}
+#endif
+
 GpuProcessHostUIShim::~GpuProcessHostUIShim() {
   DCHECK(CalledOnValidThread());
   if (!close_callback_.is_null())
@@ -181,8 +187,6 @@ bool GpuProcessHostUIShim::OnControlMessageReceived(
     IPC_MESSAGE_HANDLER(GpuHostMsg_OnLogMessage, OnLogMessage)
     IPC_MESSAGE_HANDLER(GpuHostMsg_GraphicsInfoCollected,
                         OnGraphicsInfoCollected)
-    IPC_MESSAGE_HANDLER(GpuHostMsg_VideoMemoryUsageStats,
-                        OnVideoMemoryUsageStatsReceived);
 
     IPC_MESSAGE_UNHANDLED_ERROR()
   IPC_END_MESSAGE_MAP()
@@ -205,12 +209,6 @@ void GpuProcessHostUIShim::OnGraphicsInfoCollected(
   TRACE_EVENT0("test_gpu", "OnGraphicsInfoCollected");
 
   GpuDataManagerImpl::GetInstance()->UpdateGpuInfo(gpu_info);
-}
-
-void GpuProcessHostUIShim::OnVideoMemoryUsageStatsReceived(
-    const gpu::VideoMemoryUsageStats& video_memory_usage_stats) {
-  GpuDataManagerImpl::GetInstance()->UpdateVideoMemoryUsageStats(
-      video_memory_usage_stats);
 }
 
 }  // namespace content

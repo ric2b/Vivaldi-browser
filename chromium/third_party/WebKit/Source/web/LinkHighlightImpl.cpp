@@ -45,6 +45,8 @@
 #include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintRecorder.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebContentLayer.h"
@@ -54,9 +56,7 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebSize.h"
 #include "public/web/WebKit.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "ui/gfx/geometry/rect.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebSettingsImpl.h"
@@ -275,16 +275,16 @@ void LinkHighlightImpl::paintContents(
   if (!m_node || !m_node->layoutObject())
     return;
 
-  SkPictureRecorder recorder;
+  PaintRecorder recorder;
   gfx::Rect visualRect = paintableRegion();
-  SkCanvas* canvas =
+  PaintCanvas* canvas =
       recorder.beginRecording(visualRect.width(), visualRect.height());
 
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setFlags(SkPaint::kAntiAlias_Flag);
-  paint.setColor(m_node->layoutObject()->style()->tapHighlightColor().rgb());
-  canvas->drawPath(m_path.getSkPath(), paint);
+  PaintFlags flags;
+  flags.setStyle(PaintFlags::kFill_Style);
+  flags.setAntiAlias(true);
+  flags.setColor(m_node->layoutObject()->style()->tapHighlightColor().rgb());
+  canvas->drawPath(m_path.getSkPath(), flags);
 
   webDisplayItemList->appendDrawingItem(
       WebRect(visualRect.x(), visualRect.y(), visualRect.width(),

@@ -43,12 +43,14 @@ Polymer({
   },
 
   /** @private */
-  onAddImportTap_: function() {
+  onImportTap_: function() {
+    chrome.bookmarks.import();
     this.closeDropdownMenu_();
   },
 
   /** @private */
-  onAddExportTap_: function() {
+  onExportTap_: function() {
+    chrome.bookmarks.export();
     this.closeDropdownMenu_();
   },
 
@@ -69,7 +71,6 @@ Polymer({
 
   /** @private */
   onSearchTermChanged_: function() {
-    if (!this.searchTerm)
-      this.searchField.setValue('');
+    this.searchField.setValue(this.searchTerm || '');
   },
 });

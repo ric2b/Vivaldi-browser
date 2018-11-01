@@ -50,10 +50,8 @@ void NSSCertDatabaseChromeOS::ListCerts(
   // base::Pased will NULL out |certs|, so cache the underlying pointer here.
   CertificateList* raw_certs = certs.get();
   GetSlowTaskRunner()->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&NSSCertDatabaseChromeOS::ListCertsImpl,
-                 profile_filter_,
-                 base::Unretained(raw_certs)),
+      FROM_HERE, base::Bind(&NSSCertDatabaseChromeOS::ListCertsImpl,
+                            profile_filter_, base::Unretained(raw_certs)),
       base::Bind(callback, base::Passed(&certs)));
 }
 
@@ -63,8 +61,9 @@ crypto::ScopedPK11Slot NSSCertDatabaseChromeOS::GetSystemSlot() const {
   return crypto::ScopedPK11Slot();
 }
 
-void NSSCertDatabaseChromeOS::ListModules(CryptoModuleList* modules,
-                                          bool need_rw) const {
+void NSSCertDatabaseChromeOS::ListModules(
+    std::vector<crypto::ScopedPK11Slot>* modules,
+    bool need_rw) const {
   NSSCertDatabase::ListModules(modules, need_rw);
 
   size_t pre_size = modules->size();

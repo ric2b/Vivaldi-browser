@@ -66,14 +66,17 @@ bool Editor::handleEditingKeyboardEvent(KeyboardEvent* evt) {
     return false;
   }
   if (!focusedElement->containsIncludingHostElements(
-          *m_frame->selection().start().computeContainerNode())) {
+          *m_frame->selection()
+               .computeVisibleSelectionInDOMTreeDeprecated()
+               .start()
+               .computeContainerNode())) {
     // We should not insert text at selection start if selection doesn't have
     // focus. See http://crbug.com/89026
     return false;
   }
 
   // Return true to prevent default action. e.g. Space key scroll.
-  if (dispatchBeforeInputInsertText(evt->target(), keyEvent->text) !=
+  if (dispatchBeforeInputInsertText(evt->target()->toNode(), keyEvent->text) !=
       DispatchEventResult::NotCanceled)
     return true;
 

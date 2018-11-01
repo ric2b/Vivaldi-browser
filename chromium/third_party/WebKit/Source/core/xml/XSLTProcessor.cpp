@@ -29,8 +29,8 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/xml/DocumentXSLT.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Assertions.h"
@@ -150,13 +150,13 @@ String XSLTProcessor::getParameter(const String& /*namespaceURI*/,
                                    const String& localName) const {
   // FIXME: namespace support?
   // should make a QualifiedName here but we'd have to expose the impl
-  return m_parameters.get(localName);
+  return m_parameters.at(localName);
 }
 
 void XSLTProcessor::removeParameter(const String& /*namespaceURI*/,
                                     const String& localName) {
   // FIXME: namespace support?
-  m_parameters.remove(localName);
+  m_parameters.erase(localName);
 }
 
 void XSLTProcessor::reset() {

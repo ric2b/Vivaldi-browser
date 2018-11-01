@@ -33,10 +33,6 @@
 #include "core/CoreExport.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/WeakIdentifierMap.h"
-#include "core/fetch/ClientHintsPreferences.h"
-#include "core/fetch/RawResource.h"
-#include "core/fetch/ResourceLoaderOptions.h"
-#include "core/fetch/SubstituteData.h"
 #include "core/frame/FrameTypes.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/DocumentLoadTiming.h"
@@ -45,24 +41,29 @@
 #include "core/loader/LinkLoader.h"
 #include "core/loader/NavigationPolicy.h"
 #include "platform/SharedBuffer.h"
+#include "platform/loader/fetch/ClientHintsPreferences.h"
+#include "platform/loader/fetch/RawResource.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/loader/fetch/SubstituteData.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/HashSet.h"
 #include "wtf/RefPtr.h"
+
 #include <memory>
 
 namespace blink {
 
 class ApplicationCacheHost;
+class SubresourceFilter;
 class ResourceFetcher;
 class DocumentInit;
 class LocalFrame;
+class LocalFrameClient;
 class FrameLoader;
-class FrameLoaderClient;
 class ResourceTimingInfo;
-class WebDocumentSubresourceFilter;
 struct ViewportDescriptionWrapper;
 
 class CORE_EXPORT DocumentLoader
@@ -100,8 +101,8 @@ class CORE_EXPORT DocumentLoader
 
   ResourceFetcher* fetcher() const { return m_fetcher.get(); }
 
-  void setSubresourceFilter(std::unique_ptr<WebDocumentSubresourceFilter>);
-  WebDocumentSubresourceFilter* subresourceFilter() const {
+  void setSubresourceFilter(SubresourceFilter*);
+  SubresourceFilter* subresourceFilter() const {
     return m_subresourceFilter.get();
   }
 
@@ -135,6 +136,9 @@ class CORE_EXPORT DocumentLoader
 
   void setSentDidFinishLoad() { m_state = SentDidFinishLoad; }
   bool sentDidFinishLoad() const { return m_state == SentDidFinishLoad; }
+
+  FrameLoadType loadType() const { return m_loadType; }
+  void setLoadType(FrameLoadType loadType) { m_loadType = loadType; }
 
   NavigationType getNavigationType() const { return m_navigationType; }
   void setNavigationType(NavigationType navigationType) {
@@ -187,8 +191,6 @@ class CORE_EXPORT DocumentLoader
                  const SubstituteData&,
                  ClientRedirectPolicy);
 
-  void didRedirect(const KURL& oldURL, const KURL& newURL);
-
   Vector<KURL> m_redirectChain;
 
  private:
@@ -206,7 +208,7 @@ class CORE_EXPORT DocumentLoader
   // Use these method only where it's guaranteed that |m_frame| hasn't been
   // cleared.
   FrameLoader& frameLoader() const;
-  FrameLoaderClient& frameLoaderClient() const;
+  LocalFrameClient& localFrameClient() const;
 
   void commitIfReady();
   void commitData(const char* bytes, size_t length);
@@ -240,11 +242,12 @@ class CORE_EXPORT DocumentLoader
 
   Member<LocalFrame> m_frame;
   Member<ResourceFetcher> m_fetcher;
-  std::unique_ptr<WebDocumentSubresourceFilter> m_subresourceFilter;
 
   Member<RawResource> m_mainResource;
 
   Member<DocumentWriter> m_writer;
+
+  Member<SubresourceFilter> m_subresourceFilter;
 
   // A reference to actual request used to create the data source.
   // The only part of this request that should change is the url, and
@@ -259,6 +262,8 @@ class CORE_EXPORT DocumentLoader
   ResourceRequest m_request;
 
   ResourceResponse m_response;
+
+  FrameLoadType m_loadType;
 
   bool m_isClientRedirect;
   bool m_replacesCurrentHistoryItem;

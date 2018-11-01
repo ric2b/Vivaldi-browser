@@ -22,9 +22,8 @@
 #define EventWithHitTestResults_h
 
 #include "core/layout/HitTestResult.h"
-#include "platform/PlatformEvent.h"
-#include "platform/PlatformMouseEvent.h"
 #include "public/platform/WebGestureEvent.h"
+#include "public/platform/WebMouseEvent.h"
 
 namespace blink {
 
@@ -46,14 +45,16 @@ class EventWithHitTestResults {
   bool isOverLink() const { return m_hitTestResult.isOverLink(); }
   bool isOverWidget() const { return m_hitTestResult.isOverWidget(); }
   Node* innerNode() const { return m_hitTestResult.innerNode(); }
+  const String& canvasRegionId() const {
+    return m_hitTestResult.canvasRegionId();
+  }
 
  private:
   EventType m_event;
   HitTestResult m_hitTestResult;
 };
 
-using MouseEventWithHitTestResults =
-    EventWithHitTestResults<PlatformMouseEvent>;
+using MouseEventWithHitTestResults = EventWithHitTestResults<WebMouseEvent>;
 
 using GestureEventWithHitTestResults = EventWithHitTestResults<WebGestureEvent>;
 

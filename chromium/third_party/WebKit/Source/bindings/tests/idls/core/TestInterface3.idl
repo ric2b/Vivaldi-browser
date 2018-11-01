@@ -34,9 +34,12 @@
 // The more *minor* extended attribute should be put in this file.
 
 [
-    Custom=VisitDOMWrapper, // Conflict with [SetWrapperReferenceTo] and [SetWrapperReferenceFrom]
-    WebModuleAPI,
+    WebAgentAPI,
 ] interface TestInterface3 {
+    // iterable<V> needs a "length" property accompanying the indexed property
+    // getter below.
+    readonly attribute unsigned long length;
+
     [Custom] getter boolean (unsigned long index);
     [Custom] setter boolean (unsigned long index, Node value);
     [Custom] deleter boolean (unsigned long index);
@@ -48,7 +51,6 @@
     void voidMethodDocument(Document document);
 
     [RuntimeEnabled=FeatureName] iterable<any>;
-    [RuntimeEnabled=FeatureName, CallWith=ScriptState, RaisesException, ImplementedAs=iterableKeys] Iterator keys();
 
     stringifier readonly attribute DOMString readonlyStringifierAttribute;
 };

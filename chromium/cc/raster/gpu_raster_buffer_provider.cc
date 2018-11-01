@@ -13,10 +13,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/histograms.h"
+#include "cc/paint/paint_canvas.h"
 #include "cc/playback/image_hijack_canvas.h"
 #include "cc/playback/raster_source.h"
 #include "cc/raster/scoped_gpu_raster.h"
 #include "cc/resources/resource.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/skia/include/core/SkMultiPictureDraw.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
@@ -44,12 +46,14 @@ static void RasterizeSource(
   ResourceProvider::ScopedSkSurfaceProvider scoped_surface(
       context_provider, resource_lock, async_worker_context_enabled,
       use_distance_field_text, raster_source->CanUseLCDText(),
-      raster_source->HasImpliedColorSpace(), msaa_sample_count);
+      msaa_sample_count);
   SkSurface* sk_surface = scoped_surface.sk_surface();
   // Allocating an SkSurface will fail after a lost context.  Pretend we
   // rasterized, as the contents of the resource don't matter anymore.
-  if (!sk_surface)
+  if (!sk_surface) {
+    DLOG(ERROR) << "Failed to allocate raster surface";
     return;
+  }
 
   // Playback
   gfx::Rect playback_rect = raster_full_rect;
@@ -184,6 +188,46 @@ bool GpuRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
   // rects.
   // TODO(crbug.com/629683): See if we can work around this limitation.
   return msaa_sample_count_ == 0;
+}
+
+bool GpuRasterBufferProvider::IsResourceReadyToDraw(
+    ResourceId resource_id) const {
+  if (!async_worker_context_enabled_)
+    return true;
+
+  gpu::SyncToken sync_token =
+      resource_provider_->GetSyncTokenForResources({resource_id});
+  if (!sync_token.HasData())
+    return true;
+
+  // IsSyncTokenSignalled is threadsafe, no need for worker context lock.
+  return worker_context_provider_->ContextSupport()->IsSyncTokenSignalled(
+      sync_token);
+}
+
+uint64_t GpuRasterBufferProvider::SetReadyToDrawCallback(
+    const ResourceProvider::ResourceIdArray& resource_ids,
+    const base::Closure& callback,
+    uint64_t pending_callback_id) const {
+  if (!async_worker_context_enabled_)
+    return 0;
+
+  gpu::SyncToken sync_token =
+      resource_provider_->GetSyncTokenForResources(resource_ids);
+  uint64_t callback_id = sync_token.release_count();
+  DCHECK_NE(callback_id, 0u);
+
+  // If the callback is different from the one the caller is already waiting on,
+  // pass the callback through to SignalSyncToken. Otherwise the request is
+  // redundant.
+  if (callback_id != pending_callback_id) {
+    // Use the compositor context because we want this callback on the impl
+    // thread.
+    compositor_context_provider_->ContextSupport()->SignalSyncToken(sync_token,
+                                                                    callback);
+  }
+
+  return callback_id;
 }
 
 void GpuRasterBufferProvider::Shutdown() {

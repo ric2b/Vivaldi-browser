@@ -38,9 +38,9 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/DocumentUserGestureToken.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/FrameRequestCallback.h"
 #include "core/dom/SandboxFlags.h"
+#include "core/dom/SinkDocument.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/custom/CustomElementRegistry.h"
 #include "core/editing/Editor.h"
@@ -50,14 +50,15 @@
 #include "core/events/PageTransitionEvent.h"
 #include "core/events/PopStateEvent.h"
 #include "core/events/ScopedEventQueue.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/BarProp.h"
 #include "core/frame/DOMVisualViewport.h"
 #include "core/frame/EventHandlerRegistry.h"
+#include "core/frame/External.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/History.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Navigator.h"
 #include "core/frame/Screen.h"
 #include "core/frame/ScrollToOptions.h"
@@ -70,8 +71,6 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/DocumentLoader.h"
-#include "core/loader/FrameLoaderClient.h"
-#include "core/loader/SinkDocument.h"
 #include "core/loader/appcache/ApplicationCache.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/CreateWindow.h"
@@ -81,7 +80,9 @@
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/EventDispatchForbiddenScope.h"
+#include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/Suborigin.h"
 #include "public/platform/Platform.h"
@@ -113,8 +114,7 @@ class PostMessageTimer final
         m_location(std::move(location)),
         m_userGestureToken(userGestureToken),
         m_disposalAllowed(true) {
-    InspectorInstrumentation::asyncTaskScheduled(window.document(),
-                                                 "postMessage", this);
+    probe::asyncTaskScheduled(window.document(), "postMessage", this);
   }
 
   MessageEvent* event() const { return m_event; }
@@ -146,7 +146,7 @@ class PostMessageTimer final
 
  private:
   void fired() override {
-    InspectorInstrumentation::AsyncTask asyncTask(m_window->document(), this);
+    probe::AsyncTask asyncTask(m_window->document(), this);
     m_disposalAllowed = false;
     m_window->postMessageTimerFired(this);
     dispose();
@@ -167,7 +167,7 @@ class PostMessageTimer final
 static void updateSuddenTerminationStatus(
     LocalDOMWindow* domWindow,
     bool addedListener,
-    FrameLoaderClient::SuddenTerminationDisablerType disablerType) {
+    LocalFrameClient::SuddenTerminationDisablerType disablerType) {
   Platform::current()->suddenTerminationChanged(!addedListener);
   if (domWindow->frame() && domWindow->frame()->loader().client())
     domWindow->frame()->loader().client()->suddenTerminationDisablerChanged(
@@ -188,9 +188,10 @@ static DOMWindowSet& windowsWithBeforeUnloadEventListeners() {
 
 static void addUnloadEventListener(LocalDOMWindow* domWindow) {
   DOMWindowSet& set = windowsWithUnloadEventListeners();
-  if (set.isEmpty())
+  if (set.isEmpty()) {
     updateSuddenTerminationStatus(domWindow, true,
-                                  FrameLoaderClient::UnloadHandler);
+                                  LocalFrameClient::UnloadHandler);
+  }
 
   set.add(domWindow);
 }
@@ -201,9 +202,10 @@ static void removeUnloadEventListener(LocalDOMWindow* domWindow) {
   if (it == set.end())
     return;
   set.remove(it);
-  if (set.isEmpty())
+  if (set.isEmpty()) {
     updateSuddenTerminationStatus(domWindow, false,
-                                  FrameLoaderClient::UnloadHandler);
+                                  LocalFrameClient::UnloadHandler);
+  }
 }
 
 static void removeAllUnloadEventListeners(LocalDOMWindow* domWindow) {
@@ -212,16 +214,18 @@ static void removeAllUnloadEventListeners(LocalDOMWindow* domWindow) {
   if (it == set.end())
     return;
   set.removeAll(it);
-  if (set.isEmpty())
+  if (set.isEmpty()) {
     updateSuddenTerminationStatus(domWindow, false,
-                                  FrameLoaderClient::UnloadHandler);
+                                  LocalFrameClient::UnloadHandler);
+  }
 }
 
 static void addBeforeUnloadEventListener(LocalDOMWindow* domWindow) {
   DOMWindowSet& set = windowsWithBeforeUnloadEventListeners();
-  if (set.isEmpty())
+  if (set.isEmpty()) {
     updateSuddenTerminationStatus(domWindow, true,
-                                  FrameLoaderClient::BeforeUnloadHandler);
+                                  LocalFrameClient::BeforeUnloadHandler);
+  }
 
   set.add(domWindow);
 }
@@ -232,9 +236,10 @@ static void removeBeforeUnloadEventListener(LocalDOMWindow* domWindow) {
   if (it == set.end())
     return;
   set.remove(it);
-  if (set.isEmpty())
+  if (set.isEmpty()) {
     updateSuddenTerminationStatus(domWindow, false,
-                                  FrameLoaderClient::BeforeUnloadHandler);
+                                  LocalFrameClient::BeforeUnloadHandler);
+  }
 }
 
 static void removeAllBeforeUnloadEventListeners(LocalDOMWindow* domWindow) {
@@ -243,9 +248,10 @@ static void removeAllBeforeUnloadEventListeners(LocalDOMWindow* domWindow) {
   if (it == set.end())
     return;
   set.removeAll(it);
-  if (set.isEmpty())
+  if (set.isEmpty()) {
     updateSuddenTerminationStatus(domWindow, false,
-                                  FrameLoaderClient::BeforeUnloadHandler);
+                                  LocalFrameClient::BeforeUnloadHandler);
+  }
 }
 
 static bool allowsBeforeUnloadListeners(LocalDOMWindow* window) {
@@ -360,7 +366,8 @@ Document* LocalDOMWindow::installNewDocument(const String& mimeType,
 
   frame()->selection().updateSecureKeyboardEntryIfActive();
 
-  m_document->maybeRecordLoadReason(Created);
+  if (frame()->isCrossOriginSubframe())
+    m_document->recordDeferredLoadReason(Created);
 
   return m_document;
 }
@@ -391,9 +398,9 @@ void LocalDOMWindow::dispatchWindowLoadEvent() {
   // workaround to avoid Editing code crashes.  We should always dispatch
   // 'load' event asynchronously.  crbug.com/569511.
   if (ScopedEventQueue::instance()->shouldQueueEvents() && m_document) {
-    m_document->postTask(
-        TaskType::Networking, BLINK_FROM_HERE,
-        createSameThreadTask(&LocalDOMWindow::dispatchLoadEvent,
+    TaskRunnerHelper::get(TaskType::Networking, m_document)
+        ->postTask(BLINK_FROM_HERE,
+                   WTF::bind(&LocalDOMWindow::dispatchLoadEvent,
                              wrapPersistent(this)));
     return;
   }
@@ -480,14 +487,13 @@ MediaQueryList* LocalDOMWindow::matchMedia(const String& media) {
 }
 
 void LocalDOMWindow::frameDestroyed() {
-  resetLocation();
   removeAllEventListeners();
   disconnectFromFrame();
 }
 
 void LocalDOMWindow::registerEventListenerObserver(
     EventListenerObserver* eventListenerObserver) {
-  m_eventListenerObservers.add(eventListenerObserver);
+  m_eventListenerObservers.insert(eventListenerObserver);
 }
 
 void LocalDOMWindow::reset() {
@@ -532,11 +538,11 @@ void LocalDOMWindow::sendOrientationChangeEvent() {
 int LocalDOMWindow::orientation() const {
   ASSERT(RuntimeEnabledFeatures::orientationEventEnabled());
 
-  if (!frame() || !frame()->host())
+  if (!frame() || !frame()->page())
     return 0;
 
   int orientation =
-      frame()->host()->chromeClient().screenInfo().orientationAngle;
+      frame()->page()->chromeClient().screenInfo().orientationAngle;
   // For backward compatibility, we want to return a value in the range of
   // [-90; 180] instead of [0; 360[ because window.orientation used to behave
   // like that in WebKit (this is a WebKit proprietary API).
@@ -625,7 +631,7 @@ void LocalDOMWindow::schedulePostMessage(MessageEvent* event,
                            UserGestureIndicator::currentToken());
   timer->startOneShot(0, BLINK_FROM_HERE);
   timer->suspendIfNeeded();
-  m_postMessageTimers.add(timer);
+  m_postMessageTimers.insert(timer);
 }
 
 void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer) {
@@ -644,7 +650,7 @@ void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer) {
 }
 
 void LocalDOMWindow::removePostMessageTimer(PostMessageTimer* timer) {
-  m_postMessageTimers.remove(timer);
+  m_postMessageTimers.erase(timer);
 }
 
 void LocalDOMWindow::dispatchMessageEventWithOriginCheck(
@@ -699,8 +705,8 @@ void LocalDOMWindow::print(ScriptState* scriptState) {
   if (!frame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
   if (scriptState &&
@@ -717,7 +723,7 @@ void LocalDOMWindow::print(ScriptState* scriptState) {
                                      UseCounter::CrossOriginWindowPrint);
 
   m_shouldPrintWhenFinishedLoading = false;
-  host->chromeClient().print(frame());
+  page->chromeClient().print(frame());
 }
 
 void LocalDOMWindow::stop() {
@@ -766,14 +772,14 @@ void LocalDOMWindow::alert(ScriptState* scriptState, const String& message) {
 
   document()->updateStyleAndLayoutTree();
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
   UseCounter::countCrossOriginIframe(*document(),
                                      UseCounter::CrossOriginWindowAlert);
 
-  host->chromeClient().openJavaScriptAlert(frame(), message);
+  page->chromeClient().openJavaScriptAlert(frame(), message);
 }
 
 bool LocalDOMWindow::confirm(ScriptState* scriptState, const String& message) {
@@ -816,14 +822,14 @@ bool LocalDOMWindow::confirm(ScriptState* scriptState, const String& message) {
 
   document()->updateStyleAndLayoutTree();
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return false;
 
   UseCounter::countCrossOriginIframe(*document(),
                                      UseCounter::CrossOriginWindowConfirm);
 
-  return host->chromeClient().openJavaScriptConfirm(frame(), message);
+  return page->chromeClient().openJavaScriptConfirm(frame(), message);
 }
 
 String LocalDOMWindow::prompt(ScriptState* scriptState,
@@ -868,12 +874,12 @@ String LocalDOMWindow::prompt(ScriptState* scriptState,
 
   document()->updateStyleAndLayoutTree();
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return String();
 
   String returnValue;
-  if (host->chromeClient().openJavaScriptPrompt(frame(), message, defaultValue,
+  if (page->chromeClient().openJavaScriptPrompt(frame(), message, defaultValue,
                                                 returnValue))
     return returnValue;
 
@@ -912,12 +918,12 @@ int LocalDOMWindow::outerHeight() const {
   if (!frame())
     return 0;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return 0;
 
-  ChromeClient& chromeClient = host->chromeClient();
-  if (host->settings().getReportScreenSizeInPhysicalPixelsQuirk())
+  ChromeClient& chromeClient = page->chromeClient();
+  if (page->settings().getReportScreenSizeInPhysicalPixelsQuirk())
     return lroundf(chromeClient.rootWindowRect().height() *
                    chromeClient.screenInfo().deviceScaleFactor);
   return chromeClient.rootWindowRect().height();
@@ -927,12 +933,12 @@ int LocalDOMWindow::outerWidth() const {
   if (!frame())
     return 0;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return 0;
 
-  ChromeClient& chromeClient = host->chromeClient();
-  if (host->settings().getReportScreenSizeInPhysicalPixelsQuirk())
+  ChromeClient& chromeClient = page->chromeClient();
+  if (page->settings().getReportScreenSizeInPhysicalPixelsQuirk())
     return lroundf(chromeClient.rootWindowRect().width() *
                    chromeClient.screenInfo().deviceScaleFactor);
 
@@ -948,15 +954,19 @@ FloatSize LocalDOMWindow::getViewportSize(
   if (!view)
     return FloatSize();
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return FloatSize();
+
+  // If we have a Page, we must have a FrameHost.
+  FrameHost* host = frame()->host();
+  DCHECK(host);
 
   // The main frame's viewport size depends on the page scale. Since the
   // initial page scale depends on the content width and is set after a
   // layout, perform one now so queries during page load will use the up to
   // date viewport.
-  if (host->settings().getViewportEnabled() && frame()->isMainFrame())
+  if (page->settings().getViewportEnabled() && frame()->isMainFrame())
     document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
   // FIXME: This is potentially too much work. We really only need to know the
@@ -968,7 +978,7 @@ FloatSize LocalDOMWindow::getViewportSize(
           ->updateStyleAndLayoutIgnorePendingStylesheets();
   }
 
-  return frame()->isMainFrame() && !host->settings().getInertVisualViewport()
+  return frame()->isMainFrame() && !page->settings().getInertVisualViewport()
              ? FloatSize(host->visualViewport().visibleRect().size())
              : FloatSize(view->visibleContentRect(scrollbarInclusion).size());
 }
@@ -995,12 +1005,12 @@ int LocalDOMWindow::screenX() const {
   if (!frame())
     return 0;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return 0;
 
-  ChromeClient& chromeClient = host->chromeClient();
-  if (host->settings().getReportScreenSizeInPhysicalPixelsQuirk())
+  ChromeClient& chromeClient = page->chromeClient();
+  if (page->settings().getReportScreenSizeInPhysicalPixelsQuirk())
     return lroundf(chromeClient.rootWindowRect().x() *
                    chromeClient.screenInfo().deviceScaleFactor);
   return chromeClient.rootWindowRect().x();
@@ -1010,22 +1020,22 @@ int LocalDOMWindow::screenY() const {
   if (!frame())
     return 0;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return 0;
 
-  ChromeClient& chromeClient = host->chromeClient();
-  if (host->settings().getReportScreenSizeInPhysicalPixelsQuirk())
+  ChromeClient& chromeClient = page->chromeClient();
+  if (page->settings().getReportScreenSizeInPhysicalPixelsQuirk())
     return lroundf(chromeClient.rootWindowRect().y() *
                    chromeClient.screenInfo().deviceScaleFactor);
   return chromeClient.rootWindowRect().y();
 }
 
 double LocalDOMWindow::scrollX() const {
-  if (!frame() || !frame()->host())
+  if (!frame() || !frame()->page())
     return 0;
 
-  if (!frame()->host()->settings().getInertVisualViewport())
+  if (!frame()->page()->settings().getInertVisualViewport())
     return m_visualViewport->pageX();
 
   FrameView* view = frame()->view();
@@ -1040,10 +1050,10 @@ double LocalDOMWindow::scrollX() const {
 }
 
 double LocalDOMWindow::scrollY() const {
-  if (!frame() || !frame()->host())
+  if (!frame() || !frame()->page())
     return 0;
 
-  if (!frame()->host()->settings().getInertVisualViewport())
+  if (!frame()->page()->settings().getInertVisualViewport())
     return m_visualViewport->pageY();
 
   FrameView* view = frame()->view();
@@ -1089,11 +1099,11 @@ void LocalDOMWindow::setStatus(const String& string) {
   if (!frame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
-  host->chromeClient().setStatusbarText(m_status);
+  page->chromeClient().setStatusbarText(m_status);
 }
 
 void LocalDOMWindow::setDefaultStatus(const String& string) {
@@ -1102,11 +1112,11 @@ void LocalDOMWindow::setDefaultStatus(const String& string) {
   if (!frame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
-  host->chromeClient().setStatusbarText(m_defaultStatus);
+  page->chromeClient().setStatusbarText(m_defaultStatus);
 }
 
 Document* LocalDOMWindow::document() const {
@@ -1168,14 +1178,14 @@ void LocalDOMWindow::scrollBy(double x,
   if (!view)
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
   x = ScrollableArea::normalizeNonFiniteScroll(x);
   y = ScrollableArea::normalizeNonFiniteScroll(y);
 
-  ScrollableArea* viewport = host->settings().getInertVisualViewport()
+  ScrollableArea* viewport = page->settings().getInertVisualViewport()
                                  ? view->layoutViewportScrollableArea()
                                  : view->getScrollableArea();
 
@@ -1208,8 +1218,8 @@ void LocalDOMWindow::scrollTo(double x, double y) const {
   if (!view)
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
   x = ScrollableArea::normalizeNonFiniteScroll(x);
@@ -1222,7 +1232,7 @@ void LocalDOMWindow::scrollTo(double x, double y) const {
 
   ScrollOffset layoutOffset(x * frame()->pageZoomFactor(),
                             y * frame()->pageZoomFactor());
-  ScrollableArea* viewport = host->settings().getInertVisualViewport()
+  ScrollableArea* viewport = page->settings().getInertVisualViewport()
                                  ? view->layoutViewportScrollableArea()
                                  : view->getScrollableArea();
   viewport->setScrollOffset(layoutOffset, ProgrammaticScroll,
@@ -1237,8 +1247,8 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scrollToOptions) const {
   if (!view)
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
   // It is only necessary to have an up-to-date layout if the position may be
@@ -1251,7 +1261,7 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scrollToOptions) const {
   double scaledX = 0.0;
   double scaledY = 0.0;
 
-  ScrollableArea* viewport = host->settings().getInertVisualViewport()
+  ScrollableArea* viewport = page->settings().getInertVisualViewport()
                                  ? view->layoutViewportScrollableArea()
                                  : view->getScrollableArea();
 
@@ -1279,58 +1289,58 @@ void LocalDOMWindow::moveBy(int x, int y) const {
   if (!frame() || !frame()->isMainFrame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
-  IntRect windowRect = host->chromeClient().rootWindowRect();
+  IntRect windowRect = page->chromeClient().rootWindowRect();
   windowRect.saturatedMove(x, y);
   // Security check (the spec talks about UniversalBrowserWrite to disable this
   // check...)
-  host->chromeClient().setWindowRectWithAdjustment(windowRect, *frame());
+  page->chromeClient().setWindowRectWithAdjustment(windowRect, *frame());
 }
 
 void LocalDOMWindow::moveTo(int x, int y) const {
   if (!frame() || !frame()->isMainFrame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
-  IntRect windowRect = host->chromeClient().rootWindowRect();
+  IntRect windowRect = page->chromeClient().rootWindowRect();
   windowRect.setLocation(IntPoint(x, y));
   // Security check (the spec talks about UniversalBrowserWrite to disable this
   // check...)
-  host->chromeClient().setWindowRectWithAdjustment(windowRect, *frame());
+  page->chromeClient().setWindowRectWithAdjustment(windowRect, *frame());
 }
 
 void LocalDOMWindow::resizeBy(int x, int y) const {
   if (!frame() || !frame()->isMainFrame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
-  IntRect fr = host->chromeClient().rootWindowRect();
+  IntRect fr = page->chromeClient().rootWindowRect();
   IntSize dest = fr.size() + IntSize(x, y);
   IntRect update(fr.location(), dest);
-  host->chromeClient().setWindowRectWithAdjustment(update, *frame());
+  page->chromeClient().setWindowRectWithAdjustment(update, *frame());
 }
 
 void LocalDOMWindow::resizeTo(int width, int height) const {
   if (!frame() || !frame()->isMainFrame())
     return;
 
-  FrameHost* host = frame()->host();
-  if (!host)
+  Page* page = frame()->page();
+  if (!page)
     return;
 
-  IntRect fr = host->chromeClient().rootWindowRect();
+  IntRect fr = page->chromeClient().rootWindowRect();
   IntSize dest = IntSize(width, height);
   IntRect update(fr.location(), dest);
-  host->chromeClient().setWindowRectWithAdjustment(update, *frame());
+  page->chromeClient().setWindowRectWithAdjustment(update, *frame());
 }
 
 int LocalDOMWindow::requestAnimationFrame(FrameRequestCallback* callback) {
@@ -1380,6 +1390,20 @@ CustomElementRegistry* LocalDOMWindow::customElements() const {
 
 CustomElementRegistry* LocalDOMWindow::maybeCustomElements() const {
   return m_customElements;
+}
+
+External* LocalDOMWindow::external() {
+  if (!m_external)
+    m_external = new External;
+  return m_external;
+}
+
+bool LocalDOMWindow::isSecureContext() const {
+  if (!frame())
+    return false;
+
+  return document()->isSecureContext(
+      ExecutionContext::StandardSecureContextCheck);
 }
 
 void LocalDOMWindow::addedEventListener(
@@ -1480,7 +1504,7 @@ void LocalDOMWindow::dispatchLoadEvent() {
   TRACE_EVENT_INSTANT1("devtools.timeline", "MarkLoad",
                        TRACE_EVENT_SCOPE_THREAD, "data",
                        InspectorMarkLoadEvent::data(frame()));
-  InspectorInstrumentation::loadEventFired(frame());
+  probe::loadEventFired(frame());
 }
 
 DispatchEventResult LocalDOMWindow::dispatchEvent(Event* event,
@@ -1496,7 +1520,17 @@ DispatchEventResult LocalDOMWindow::dispatchEvent(Event* event,
 
   TRACE_EVENT1("devtools.timeline", "EventDispatch", "data",
                InspectorEventDispatchEvent::data(*event));
-  return fireEventListeners(event);
+  DispatchEventResult result;
+
+  if (frame() && frame()->isMainFrame() &&
+      event->type() == EventTypeNames::resize) {
+    SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.EventListenerDuration.Resize");
+    result = fireEventListeners(event);
+  } else {
+    result = fireEventListeners(event);
+  }
+
+  return result;
 }
 
 void LocalDOMWindow::removeAllEventListeners() {
@@ -1609,6 +1643,7 @@ DEFINE_TRACE(LocalDOMWindow) {
   visitor->trace(m_navigator);
   visitor->trace(m_media);
   visitor->trace(m_customElements);
+  visitor->trace(m_external);
   visitor->trace(m_applicationCache);
   visitor->trace(m_eventQueue);
   visitor->trace(m_postMessageTimers);

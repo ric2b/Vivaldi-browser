@@ -80,6 +80,14 @@ static bool isAcceptableCSSStyleSheetParent(const Node& parentNode) {
 }
 #endif
 
+// static
+const Document* CSSStyleSheet::singleOwnerDocument(
+    const CSSStyleSheet* styleSheet) {
+  if (styleSheet)
+    return StyleSheetContents::singleOwnerDocument(styleSheet->contents());
+  return nullptr;
+}
+
 CSSStyleSheet* CSSStyleSheet::create(StyleSheetContents* sheet,
                                      CSSImportRule* ownerRule) {
   return new CSSStyleSheet(sheet, ownerRule);
@@ -194,8 +202,8 @@ void CSSStyleSheet::setDisabled(bool disabled) {
   didMutate();
 }
 
-void CSSStyleSheet::setMediaQueries(MediaQuerySet* mediaQueries) {
-  m_mediaQueries = mediaQueries;
+void CSSStyleSheet::setMediaQueries(RefPtr<MediaQuerySet> mediaQueries) {
+  m_mediaQueries = std::move(mediaQueries);
   if (m_mediaCSSOMWrapper && m_mediaQueries)
     m_mediaCSSOMWrapper->reattach(m_mediaQueries.get());
 }
@@ -206,7 +214,7 @@ bool CSSStyleSheet::matchesMediaQueries(const MediaQueryEvaluator& evaluator) {
 
   if (!m_mediaQueries)
     return true;
-  return evaluator.eval(m_mediaQueries, &m_viewportDependentMediaQueryResults,
+  return evaluator.eval(*m_mediaQueries, &m_viewportDependentMediaQueryResults,
                         &m_deviceDependentMediaQueryResults);
 }
 
@@ -436,9 +444,6 @@ void CSSStyleSheet::setText(const String& text) {
 
 DEFINE_TRACE(CSSStyleSheet) {
   visitor->trace(m_contents);
-  visitor->trace(m_mediaQueries);
-  visitor->trace(m_viewportDependentMediaQueryResults);
-  visitor->trace(m_deviceDependentMediaQueryResults);
   visitor->trace(m_ownerNode);
   visitor->trace(m_ownerRule);
   visitor->trace(m_mediaCSSOMWrapper);

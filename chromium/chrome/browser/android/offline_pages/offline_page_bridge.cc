@@ -19,6 +19,7 @@
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/offline_page_utils.h"
+#include "chrome/browser/android/offline_pages/recent_tab_helper.h"
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
@@ -28,6 +29,7 @@
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_item.h"
 #include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/recent_tabs/recent_tabs_ui_adapter_delegate.h"
 #include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
@@ -466,10 +468,13 @@ void OfflinePageBridge::SavePageLater(JNIEnv* env,
       offline_pages::RequestCoordinatorFactory::GetInstance()->
           GetForBrowserContext(browser_context_);
 
-  coordinator->SavePageLater(
-      GURL(ConvertJavaStringToUTF8(env, j_url)), client_id,
-      static_cast<bool>(user_requested),
-      RequestCoordinator::RequestAvailability::ENABLED_FOR_OFFLINER);
+  RequestCoordinator::SavePageLaterParams params;
+  params.url = GURL(ConvertJavaStringToUTF8(env, j_url));
+  params.client_id = client_id;
+  params.user_requested = static_cast<bool>(user_requested);
+  params.availability =
+      RequestCoordinator::RequestAvailability::ENABLED_FOR_OFFLINER;
+  coordinator->SavePageLater(params);
 }
 
 ScopedJavaLocalRef<jstring> OfflinePageBridge::GetOfflinePageHeaderForReload(
@@ -567,6 +572,48 @@ void OfflinePageBridge::RemoveRequestsFromQueue(
 
   coordinator->RemoveRequests(
       request_ids, base::Bind(&OnRemoveRequestsDone, j_callback_ref));
+}
+
+void OfflinePageBridge::RegisterRecentTab(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj,
+                                          int tab_id) {
+  RequestCoordinator* request_coordinator =
+      RequestCoordinatorFactory::GetForBrowserContext(browser_context_);
+
+  RecentTabsUIAdapterDelegate* ui_adapter_delegate =
+      RecentTabsUIAdapterDelegate::FromDownloadUIAdapter(
+          RecentTabsUIAdapterDelegate::GetOrCreateRecentTabsUIAdapter(
+              offline_page_model_, request_coordinator));
+  ui_adapter_delegate->RegisterTab(tab_id);
+}
+
+void OfflinePageBridge::WillCloseTab(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_web_contents) {
+  DCHECK(j_web_contents);
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(j_web_contents);
+  DCHECK(web_contents);
+  if (!web_contents)
+    return;
+
+  RecentTabHelper* tab_helper = RecentTabHelper::FromWebContents(web_contents);
+  if (tab_helper)
+    tab_helper->WillCloseTab();
+}
+
+void OfflinePageBridge::UnregisterRecentTab(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj,
+                                            int tab_id) {
+  RequestCoordinator* request_coordinator =
+      RequestCoordinatorFactory::GetForBrowserContext(browser_context_);
+
+  RecentTabsUIAdapterDelegate* ui_adapter_delegate =
+      RecentTabsUIAdapterDelegate::FromDownloadUIAdapter(
+          RecentTabsUIAdapterDelegate::GetOrCreateRecentTabsUIAdapter(
+              offline_page_model_, request_coordinator));
+  ui_adapter_delegate->UnregisterTab(tab_id);
 }
 
 void OfflinePageBridge::NotifyIfDoneLoading() const {

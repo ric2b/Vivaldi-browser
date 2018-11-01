@@ -110,13 +110,12 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
   BitmapImage(const SkBitmap&, ImageObserver* = 0);
   BitmapImage(ImageObserver* = 0);
 
-  void draw(SkCanvas*,
-            const SkPaint&,
+  void draw(PaintCanvas*,
+            const PaintFlags&,
             const FloatRect& dstRect,
             const FloatRect& srcRect,
             RespectImageOrientationEnum,
-            ImageClampingMode,
-            const ColorBehavior&) override;
+            ImageClampingMode) override;
 
   size_t currentFrame() const { return m_currentFrame; }
   size_t frameCount();

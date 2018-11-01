@@ -46,14 +46,13 @@ bool IsValidUserId(const std::string& user_id) {
 namespace extensions {
 
 VivaldiUtilitiesEventRouter::VivaldiUtilitiesEventRouter(Profile* profile)
-    : browser_context_(profile) {
-}
+    : browser_context_(profile) {}
 
-VivaldiUtilitiesEventRouter::~VivaldiUtilitiesEventRouter() {
-}
+VivaldiUtilitiesEventRouter::~VivaldiUtilitiesEventRouter() {}
 
-void VivaldiUtilitiesEventRouter::DispatchEvent(const std::string& event_name,
-                                 std::unique_ptr<base::ListValue> event_args) {
+void VivaldiUtilitiesEventRouter::DispatchEvent(
+    const std::string& event_name,
+    std::unique_ptr<base::ListValue> event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(base::WrapUnique(
@@ -62,17 +61,16 @@ void VivaldiUtilitiesEventRouter::DispatchEvent(const std::string& event_name,
   }
 }
 
-VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext *context)
+VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
     : browser_context_(context) {
   extensions::AppWindowRegistry::Get(context)->AddObserver(this);
 
   EventRouter* event_router = EventRouter::Get(browser_context_);
-  event_router->RegisterObserver(
-      this, vivaldi::utilities::OnScroll::kEventName);
+  event_router->RegisterObserver(this,
+                                 vivaldi::utilities::OnScroll::kEventName);
 }
 
-VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {
-}
+VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {}
 
 void VivaldiUtilitiesAPI::Shutdown() {
   extensions::AppWindowRegistry::Get(browser_context_)->RemoveObserver(this);
@@ -82,13 +80,13 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >
     g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
-BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> *
+BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>*
 VivaldiUtilitiesAPI::GetFactoryInstance() {
   return g_factory.Pointer();
 }
 
-Browser *VivaldiUtilitiesAPI::FindBrowserFromAppWindowId(
-    const std::string &appwindow_id) {
+Browser* VivaldiUtilitiesAPI::FindBrowserFromAppWindowId(
+    const std::string& appwindow_id) {
   WindowIdToAppWindowId::const_iterator iter =
       appwindow_id_to_window_id_.find(appwindow_id);
   if (iter == appwindow_id_to_window_id_.end())
@@ -105,12 +103,13 @@ Browser *VivaldiUtilitiesAPI::FindBrowserFromAppWindowId(
 }
 
 void VivaldiUtilitiesAPI::MapAppWindowIdToWindowId(
-    const std::string &appwindow_id, int window_id) {
+    const std::string& appwindow_id,
+    int window_id) {
   appwindow_id_to_window_id_.insert(std::make_pair(appwindow_id, window_id));
 }
 
 void VivaldiUtilitiesAPI::OnAppWindowActivated(
-    extensions::AppWindow *app_window) {
+    extensions::AppWindow* app_window) {
   Browser* browser = FindBrowserFromAppWindowId(app_window->window_key());
   if (browser) {
     // Activate the found browser but don't call Activate as that will call back
@@ -146,7 +145,7 @@ UtilitiesBasicPrintFunction::~UtilitiesBasicPrintFunction() {}
 
 bool UtilitiesBasicPrintFunction::RunAsync() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  Browser *browser = chrome::FindAnyBrowser(profile, true);
+  Browser* browser = chrome::FindAnyBrowser(profile, true);
   chrome::BasicPrint(browser);
 
   SendResponse(true);
@@ -154,11 +153,10 @@ bool UtilitiesBasicPrintFunction::RunAsync() {
 }
 
 UtilitiesClearAllRecentlyClosedSessionsFunction::
-    ~UtilitiesClearAllRecentlyClosedSessionsFunction() {
-}
+    ~UtilitiesClearAllRecentlyClosedSessionsFunction() {}
 
 bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
-  sessions::TabRestoreService *tab_restore_service =
+  sessions::TabRestoreService* tab_restore_service =
       TabRestoreServiceFactory::GetForProfile(GetProfile());
   bool result = false;
   if (tab_restore_service) {
@@ -170,8 +168,7 @@ bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
   return result;
 }
 
-UtilitiesGetUniqueUserIdFunction::~UtilitiesGetUniqueUserIdFunction() {
-}
+UtilitiesGetUniqueUserIdFunction::~UtilitiesGetUniqueUserIdFunction() {}
 
 bool UtilitiesGetUniqueUserIdFunction::RunAsync() {
   std::unique_ptr<vivaldi::utilities::GetUniqueUserId::Params> params(
@@ -240,7 +237,7 @@ bool UtilitiesIsTabInLastSessionFunction::RunAsync() {
     return false;
 
   bool is_in_session = false;
-  content::WebContents *contents;
+  content::WebContents* contents;
 
   if (!ExtensionTabUtil::GetTabById(tabId, GetProfile(), true, nullptr, nullptr,
                                     &contents, nullptr)) {
@@ -250,7 +247,7 @@ bool UtilitiesIsTabInLastSessionFunction::RunAsync() {
   // Both the profile and navigation entries are marked if they are
   // loaded from a session, so check both.
   if (GetProfile()->restored_last_session()) {
-    content::NavigationEntry *entry =
+    content::NavigationEntry* entry =
         contents->GetController().GetVisibleEntry();
     is_in_session = entry && entry->IsRestored();
   }
@@ -274,11 +271,10 @@ bool UtilitiesIsUrlValidFunction::RunAsync() {
 
   vivaldi::utilities::UrlValidResults result;
   result.url_valid = !params->url.empty() && url.is_valid();
-  result.scheme_valid = URLPattern::IsValidSchemeForExtensions(url.scheme()) ||
-                        url.SchemeIs(url::kJavaScriptScheme) ||
-                        url.SchemeIs(url::kDataScheme) ||
-                        url.SchemeIs(url::kMailToScheme) ||
-                        url.spec() == url::kAboutBlankURL;
+  result.scheme_valid =
+      URLPattern::IsValidSchemeForExtensions(url.scheme()) ||
+      url.SchemeIs(url::kJavaScriptScheme) || url.SchemeIs(url::kDataScheme) ||
+      url.SchemeIs(url::kMailToScheme) || url.spec() == url::kAboutBlankURL;
 
   results_ = vivaldi::utilities::IsUrlValid::Results::Create(result);
 
@@ -301,10 +297,10 @@ bool UtilitiesGetSelectedTextFunction::RunAsync() {
 
   std::string text;
   content::WebContents* web_contents =
-    ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tabId, GetProfile());
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tabId, GetProfile());
   if (web_contents) {
     content::RenderWidgetHostView* rwhv =
-      web_contents->GetRenderWidgetHostView();
+        web_contents->GetRenderWidgetHostView();
     if (rwhv) {
       text = base::UTF16ToUTF8(rwhv->GetSelectedText());
     }
@@ -332,7 +328,7 @@ bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunAsync() {
           *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  VivaldiUtilitiesAPI *api =
+  VivaldiUtilitiesAPI* api =
       VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
 
   api->MapAppWindowIdToWindowId(params->app_window_id, params->window_id);

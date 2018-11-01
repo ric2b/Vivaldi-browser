@@ -85,7 +85,8 @@ class TestWebContentsObserver : public content::WebContentsObserver {
 // Additionally when one of the tabs is destroyed NotifyNavigationStateChanged()
 // is invoked on the other.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabs) {
-  Browser* browser2 = new Browser(Browser::CreateParams(browser()->profile()));
+  Browser* browser2 =
+      new Browser(Browser::CreateParams(browser()->profile(), true));
   chrome::AddTabAt(browser2, GURL(), -1, true);
   chrome::AddTabAt(browser2, GURL(), -1, true);
   TestWebContentsObserver observer(
@@ -97,7 +98,8 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabs) {
 // Same as CloseWithTabs, but activates the first tab, which is the first tab
 // BrowserView will destroy.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabsStartWithActive) {
-  Browser* browser2 = new Browser(Browser::CreateParams(browser()->profile()));
+  Browser* browser2 =
+      new Browser(Browser::CreateParams(browser()->profile(), true));
   chrome::AddTabAt(browser2, GURL(), -1, true);
   chrome::AddTabAt(browser2, GURL(), -1, true);
   browser2->tab_strip_model()->ActivateTabAt(0, true);
@@ -109,7 +111,14 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabsStartWithActive) {
 
 // Verifies that page and devtools WebViews are being correctly layed out
 // when DevTools is opened/closed/updated/undocked.
-IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsUpdatesBrowserWindow) {
+
+// Flaky on Chrome OS.  http://crbug.com/693000
+#if defined(OS_CHROMEOS)
+#define MAYBE_DevToolsUpdatesBrowserWindow DISABLED_DevToolsUpdatesBrowserWindow
+#else
+#define MAYBE_DevToolsUpdatesBrowserWindow DevToolsUpdatesBrowserWindow
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, MAYBE_DevToolsUpdatesBrowserWindow) {
   gfx::Rect full_bounds =
       browser_view()->GetContentsContainerForTest()->GetLocalBounds();
   gfx::Rect small_bounds(10, 20, 30, 40);

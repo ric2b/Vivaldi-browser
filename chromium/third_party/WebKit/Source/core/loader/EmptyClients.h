@@ -29,9 +29,11 @@
 #ifndef EmptyClients_h
 #define EmptyClients_h
 
+#include <memory>
+
 #include "core/CoreExport.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/RemoteFrameClient.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/ContextMenuClient.h"
 #include "core/page/EditorClient.h"
@@ -47,9 +49,8 @@
 #include "platform/text/TextCheckerClient.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebScreenInfo.h"
+#include "v8/include/v8.h"
 #include "wtf/Forward.h"
-#include <memory>
-#include <v8.h>
 
 /*
  This file holds empty Client stubs for use by WebCore.
@@ -167,9 +168,10 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   bool tabsToLinks() override { return false; }
 
   void invalidateRect(const IntRect&) override {}
-  void scheduleAnimation(Widget*) override {}
+  void scheduleAnimation(FrameViewBase*) override {}
 
-  IntRect viewportToScreen(const IntRect& r, const Widget*) const override {
+  IntRect viewportToScreen(const IntRect& r,
+                           const FrameViewBase*) const override {
     return r;
   }
   float windowToViewportScalar(const float s) const override { return s; }
@@ -200,14 +202,16 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override;
   void attachRootLayer(WebLayer*, LocalFrame* localRoot) override {}
 
-  void setEventListenerProperties(WebEventListenerClass,
+  void setEventListenerProperties(LocalFrame*,
+                                  WebEventListenerClass,
                                   WebEventListenerProperties) override {}
   WebEventListenerProperties eventListenerProperties(
-      WebEventListenerClass) const override {
+      LocalFrame*,
+      WebEventListenerClass eventClass) const override {
     return WebEventListenerProperties::Nothing;
   }
-  void setHasScrollEventHandlers(bool) override {}
-  bool hasScrollEventHandlers() const override { return false; }
+  void updateEventRectsForSubframeIfNecessary(LocalFrame* frame) override {}
+  void setHasScrollEventHandlers(LocalFrame*, bool) override {}
 
   void setTouchAction(LocalFrame*, TouchAction) override {}
 
@@ -216,7 +220,13 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void annotatedRegionsChanged() override {}
   String acceptLanguages() override;
 
-  CompositorProxyClient* createCompositorProxyClient(LocalFrame*) override {
+  CompositorWorkerProxyClient* createCompositorWorkerProxyClient(
+      LocalFrame*) override {
+    return nullptr;
+  }
+
+  AnimationWorkletProxyClient* createAnimationWorkletProxyClient(
+      LocalFrame*) override {
     return nullptr;
   }
 
@@ -227,12 +237,12 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
       BlameContext*) override;
 };
 
-class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
-  WTF_MAKE_NONCOPYABLE(EmptyFrameLoaderClient);
+class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
+  WTF_MAKE_NONCOPYABLE(EmptyLocalFrameClient);
 
  public:
-  static EmptyFrameLoaderClient* create() { return new EmptyFrameLoaderClient; }
-  ~EmptyFrameLoaderClient() override {}
+  static EmptyLocalFrameClient* create() { return new EmptyLocalFrameClient; }
+  ~EmptyLocalFrameClient() override {}
 
   bool hasWebView() const override { return true; }  // mainly for assertions
 
@@ -258,7 +268,7 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
   void dispatchDidHandleOnloadEvents() override {}
   void dispatchDidReceiveServerRedirectForProvisionalLoad() override {}
   void dispatchWillCommitProvisionalLoad() override {}
-  void dispatchDidStartProvisionalLoad() override {}
+  void dispatchDidStartProvisionalLoad(DocumentLoader*) override {}
   void dispatchDidReceiveTitle(const String&) override {}
   void dispatchDidChangeIcons(IconType) override {}
   void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override {}
@@ -313,13 +323,13 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
   LocalFrame* createFrame(const FrameLoadRequest&,
                           const AtomicString&,
                           HTMLFrameOwnerElement*) override;
-  Widget* createPlugin(HTMLPlugInElement*,
-                       const KURL&,
-                       const Vector<String>&,
-                       const Vector<String>&,
-                       const String&,
-                       bool,
-                       DetachedPluginPolicy) override;
+  FrameViewBase* createPlugin(HTMLPlugInElement*,
+                              const KURL&,
+                              const Vector<String>&,
+                              const Vector<String>&,
+                              const String&,
+                              bool,
+                              DetachedPluginPolicy) override;
   bool canCreatePluginWithoutRenderer(const String& mimeType) const override {
     return false;
   }
@@ -357,7 +367,7 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
       WebApplicationCacheHostClient*) override;
 
  protected:
-  EmptyFrameLoaderClient() {}
+  EmptyLocalFrameClient() {}
 };
 
 class CORE_EXPORT EmptyTextCheckerClient : public TextCheckerClient {

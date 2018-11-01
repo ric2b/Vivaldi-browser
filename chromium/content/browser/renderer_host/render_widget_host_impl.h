@@ -25,6 +25,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
@@ -37,7 +38,6 @@
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/view_message_enums.h"
-#include "content/public/browser/readback_types.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
@@ -53,10 +53,6 @@ struct FrameHostMsg_HittestData_Params;
 struct ViewHostMsg_SelectionBounds_Params;
 struct ViewHostMsg_UpdateRect_Params;
 
-namespace base {
-class RefCountedBytes;
-}
-
 namespace blink {
 class WebInputEvent;
 class WebMouseEvent;
@@ -70,6 +66,7 @@ class PowerSaveBlocker;
 #endif
 
 namespace gfx {
+class Image;
 class Range;
 }
 
@@ -138,19 +135,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   RenderWidgetHostOwnerDelegate* owner_delegate() { return owner_delegate_; }
 
+  cc::FrameSinkId AllocateFrameSinkId(bool is_guest_view_hack);
+
   // RenderWidgetHost implementation.
   void UpdateTextDirection(blink::WebTextDirection direction) override;
   void NotifyTextDirection() override;
   void Focus() override;
   void Blur() override;
   void SetActive(bool active) override;
-  void CopyFromBackingStore(const gfx::Rect& src_rect,
-                            const gfx::Size& accelerated_dst_size,
-                            const ReadbackRequestCallback& callback,
-                            const SkColorType preferred_color_type) override;
-  bool CanCopyFromBackingStore() override;
-  void LockBackingStore() override;
-  void UnlockBackingStore() override;
   void ForwardMouseEvent(const blink::WebMouseEvent& mouse_event) override;
   void ForwardWheelEvent(const blink::WebMouseWheelEvent& wheel_event) override;
   void ForwardKeyboardEvent(const NativeWebKeyboardEvent& key_event) override;
@@ -191,7 +183,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                           const gfx::Point& screen_pt,
                           blink::WebDragOperationsMask operations_allowed,
                           int key_modifiers) override;
-  void DragTargetDragLeave() override;
+  void DragTargetDragLeave(const gfx::Point& client_point,
+                           const gfx::Point& screen_point) override;
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
   void DragTargetDrop(const DropData& drop_data,
@@ -208,9 +201,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void NotifyScreenInfoChanged();
 
   // Forces redraw in the renderer and when the update reaches the browser
-  // grabs snapshot from the compositor. Returns PNG-encoded snapshot.
+  // grabs snapshot from the compositor. On MacOS, the snapshot is taken from
+  // the Cocoa view for end-to-end testing purposes. Returns a gfx::Image that
+  // is backed by an NSImage on MacOS or by an SkBitmap otherwise. The
+  // gfx::Image may be empty if the snapshot failed.
   using GetSnapshotFromBrowserCallback =
-      base::Callback<void(const unsigned char*, size_t)>;
+      base::Callback<void(const gfx::Image&)>;
   void GetSnapshotFromBrowser(const GetSnapshotFromBrowserCallback& callback);
 
   const NativeWebKeyboardEvent* GetLastKeyboardEvent() const;
@@ -329,8 +325,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void StopHangMonitorTimeout();
 
   // Starts the rendering timeout, which will clear displayed graphics if
-  // a new compositor frame is not received before it expires.
-  void StartNewContentRenderingTimeout();
+  // a new compositor frame is not received before it expires. This also causes
+  // any new compositor frames received with content_source_id less than
+  // |next_source_id| to be discarded.
+  void StartNewContentRenderingTimeout(uint32_t next_source_id);
 
   // Notification that a new compositor frame has been generated following
   // a page load. This stops |new_content_rendering_timeout_|, or prevents
@@ -436,11 +434,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Set the RenderView background transparency.
   void SetBackgroundOpaque(bool opaque);
-
-  // Notifies the renderer that the next key event is bound to one or more
-  // pre-defined edit commands
-  void SetEditCommandsForNextKeyEvent(
-      const std::vector<EditCommand>& commands);
 
   // Executes the edit command.
   void ExecuteEditCommand(const std::string& command,
@@ -600,6 +593,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   base::WeakPtr<RenderWidgetHostViewBase> view_;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostTest, RendererExitedNoDrag);
+
   friend class MockRenderWidgetHost;
   friend class TestRenderViewHost;
 
@@ -702,13 +697,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   void WindowSnapshotReachedScreen(int snapshot_id);
 
-  void OnSnapshotDataReceived(int snapshot_id,
-                              const unsigned char* png,
-                              size_t size);
-
-  void OnSnapshotDataReceivedAsync(
-      int snapshot_id,
-      scoped_refptr<base::RefCountedBytes> png_data);
+  void OnSnapshotReceived(int snapshot_id, const gfx::Image& image);
 
   // 1. Grants permissions to URL (if any)
   // 2. Grants permissions to filenames
@@ -903,6 +892,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // This value indicates how long to wait for a new compositor frame from a
   // renderer process before clearing any previously displayed content.
   base::TimeDelta new_content_rendering_delay_;
+
+  // This identifier tags compositor frames according to the page load with
+  // which they are associated, to prevent an unloaded web page from being
+  // drawn after a navigation to a new page has already committed. This is
+  // a no-op for non-top-level RenderWidgets, as that should always be zero.
+  // TODO(kenrb, fsamuel): We should use SurfaceIDs for this purpose when they
+  // are available in the renderer process. See https://crbug.com/695579.
+  uint32_t current_content_source_id_;
 
 #if defined(OS_MACOSX)
   std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;

@@ -5,36 +5,13 @@
 #include "public/platform/WebCoalescedInputEvent.h"
 
 #include "public/platform/WebGestureEvent.h"
+#include "public/platform/WebKeyboardEvent.h"
 #include "public/platform/WebMouseWheelEvent.h"
+#include "public/platform/WebTouchEvent.h"
 
 namespace blink {
 
 namespace {
-
-WebScopedInputEvent makeWebScopedInputEvent(const blink::WebInputEvent& event) {
-  if (blink::WebInputEvent::isGestureEventType(event.type())) {
-    return WebScopedInputEvent(new blink::WebGestureEvent(
-        static_cast<const blink::WebGestureEvent&>(event)));
-  }
-  if (blink::WebInputEvent::isMouseEventType(event.type())) {
-    return WebScopedInputEvent(new blink::WebMouseEvent(
-        static_cast<const blink::WebMouseEvent&>(event)));
-  }
-  if (blink::WebInputEvent::isTouchEventType(event.type())) {
-    return WebScopedInputEvent(new blink::WebTouchEvent(
-        static_cast<const blink::WebTouchEvent&>(event)));
-  }
-  if (event.type() == blink::WebInputEvent::MouseWheel) {
-    return WebScopedInputEvent(new blink::WebMouseWheelEvent(
-        static_cast<const blink::WebMouseWheelEvent&>(event)));
-  }
-  if (blink::WebInputEvent::isKeyboardEventType(event.type())) {
-    return WebScopedInputEvent(new blink::WebKeyboardEvent(
-        static_cast<const blink::WebKeyboardEvent&>(event)));
-  }
-  NOTREACHED();
-  return WebScopedInputEvent();
-}
 
 struct WebInputEventDelete {
   template <class EventType>
@@ -65,7 +42,8 @@ bool Apply(Operator op, WebInputEvent::Type type, const ArgIn& argIn) {
 }
 }
 
-void WebInputEventDeleter::operator()(WebInputEvent* event) const {
+void WebCoalescedInputEvent::WebInputEventDeleter::operator()(
+    WebInputEvent* event) const {
   if (!event)
     return;
   Apply(WebInputEventDelete(), event->type(), event);
@@ -88,8 +66,9 @@ size_t WebCoalescedInputEvent::coalescedEventSize() const {
   return m_coalescedEvents.size();
 }
 
-const WebInputEvent* WebCoalescedInputEvent::coalescedEvent(int index) const {
-  return m_coalescedEvents[index].get();
+const WebInputEvent& WebCoalescedInputEvent::coalescedEvent(
+    size_t index) const {
+  return *m_coalescedEvents[index].get();
 }
 
 std::vector<const WebInputEvent*>
@@ -100,24 +79,44 @@ WebCoalescedInputEvent::getCoalescedEventsPointers() const {
   return events;
 }
 
-WebCoalescedInputEvent::WebCoalescedInputEvent(WebScopedInputEvent event)
-    : m_event(std::move(event)), m_coalescedEvents() {
-  m_coalescedEvents.push_back(makeWebScopedInputEvent(*(m_event.get())));
-}
-
-WebCoalescedInputEvent::WebCoalescedInputEvent(const WebInputEvent& event)
-    : m_event(), m_coalescedEvents() {
+WebCoalescedInputEvent::WebCoalescedInputEvent(const WebInputEvent& event) {
   m_event = makeWebScopedInputEvent(event);
   m_coalescedEvents.push_back(makeWebScopedInputEvent(event));
 }
 
 WebCoalescedInputEvent::WebCoalescedInputEvent(
     const WebInputEvent& event,
-    const std::vector<const WebInputEvent*>& coalescedEvents)
-    : m_event(), m_coalescedEvents(coalescedEvents.size()) {
+    const std::vector<const WebInputEvent*>& coalescedEvents) {
   m_event = makeWebScopedInputEvent(event);
   for (const auto& coalescedEvent : coalescedEvents)
     m_coalescedEvents.push_back(makeWebScopedInputEvent(*coalescedEvent));
+}
+
+WebCoalescedInputEvent::WebScopedInputEvent
+WebCoalescedInputEvent::makeWebScopedInputEvent(
+    const blink::WebInputEvent& event) {
+  if (blink::WebInputEvent::isGestureEventType(event.type())) {
+    return WebScopedInputEvent(new blink::WebGestureEvent(
+        static_cast<const blink::WebGestureEvent&>(event)));
+  }
+  if (blink::WebInputEvent::isMouseEventType(event.type())) {
+    return WebScopedInputEvent(new blink::WebMouseEvent(
+        static_cast<const blink::WebMouseEvent&>(event)));
+  }
+  if (blink::WebInputEvent::isTouchEventType(event.type())) {
+    return WebScopedInputEvent(new blink::WebTouchEvent(
+        static_cast<const blink::WebTouchEvent&>(event)));
+  }
+  if (event.type() == blink::WebInputEvent::MouseWheel) {
+    return WebScopedInputEvent(new blink::WebMouseWheelEvent(
+        static_cast<const blink::WebMouseWheelEvent&>(event)));
+  }
+  if (blink::WebInputEvent::isKeyboardEventType(event.type())) {
+    return WebScopedInputEvent(new blink::WebKeyboardEvent(
+        static_cast<const blink::WebKeyboardEvent&>(event)));
+  }
+  NOTREACHED();
+  return WebScopedInputEvent();
 }
 
 }  // namespace blink

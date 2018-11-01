@@ -5,6 +5,8 @@
 
 #include "sync/vivaldi_signin_manager_factory.h"
 
+#include <string>
+
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
@@ -82,4 +84,4 @@ void VivaldiSigninManagerFactory::BrowserContextShutdown(
       observer.SigninManagerShutdown(manager);
   BrowserContextKeyedServiceFactory::BrowserContextShutdown(context);
 }
-}
+}  // namespace vivaldi

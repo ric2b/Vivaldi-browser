@@ -5,7 +5,6 @@
 #include "modules/storage/DOMWindowStorage.h"
 
 #include "core/dom/Document.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -43,15 +42,15 @@ DOMWindowStorage& DOMWindowStorage::from(LocalDOMWindow& window) {
 }
 
 // static
-Storage* DOMWindowStorage::sessionStorage(DOMWindow& window,
+Storage* DOMWindowStorage::sessionStorage(LocalDOMWindow& window,
                                           ExceptionState& exceptionState) {
-  return from(toLocalDOMWindow(window)).sessionStorage(exceptionState);
+  return from(window).sessionStorage(exceptionState);
 }
 
 // static
-Storage* DOMWindowStorage::localStorage(DOMWindow& window,
+Storage* DOMWindowStorage::localStorage(LocalDOMWindow& window,
                                         ExceptionState& exceptionState) {
-  return from(toLocalDOMWindow(window)).localStorage(exceptionState);
+  return from(window).localStorage(exceptionState);
 }
 
 Storage* DOMWindowStorage::sessionStorage(
@@ -124,8 +123,8 @@ Storage* DOMWindowStorage::localStorage(ExceptionState& exceptionState) const {
     return m_localStorage;
   }
   // FIXME: Seems this check should be much higher?
-  FrameHost* host = document->frameHost();
-  if (!host || !host->settings().getLocalStorageEnabled())
+  Page* page = document->page();
+  if (!page || !page->settings().getLocalStorageEnabled())
     return nullptr;
   StorageArea* storageArea =
       StorageNamespace::localStorageArea(document->getSecurityOrigin());

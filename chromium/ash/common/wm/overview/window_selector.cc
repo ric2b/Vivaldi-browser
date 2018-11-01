@@ -29,8 +29,7 @@
 #include "ash/root_window_controller.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
-#include "base/metrics/histogram.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "base/metrics/histogram_macros.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -117,8 +116,6 @@ class RoundedContainerView : public views::View {
     gfx::Rect bounds(size());
     path.addRoundRect(gfx::RectToSkRect(bounds), kRadius);
 
-    SkPaint paint;
-    paint.setAntiAlias(true);
     canvas->ClipPath(path, true);
     canvas->DrawColor(background_);
   }
@@ -242,7 +239,7 @@ WindowSelector::~WindowSelector() {
 // calls to restoring_minimized_windows() on a partially constructed object.
 void WindowSelector::Init(const WindowList& windows) {
   if (restore_focus_window_)
-    restore_focus_window_->AddObserver(this);
+    restore_focus_window_->aura_window()->AddObserver(this);
 
   WmShell* shell = WmShell::Get();
 
@@ -263,7 +260,7 @@ void WindowSelector::Init(const WindowList& windows) {
     for (size_t i = 0; i < wm::kSwitchableWindowContainerIdsLength; ++i) {
       WmWindow* container =
           root->GetChildByShellWindowId(wm::kSwitchableWindowContainerIds[i]);
-      container->AddObserver(this);
+      container->aura_window()->AddObserver(this);
       observed_windows_.insert(container);
     }
 
@@ -375,12 +372,12 @@ void WindowSelector::Shutdown() {
 
 void WindowSelector::RemoveAllObservers() {
   for (WmWindow* window : observed_windows_)
-    window->RemoveObserver(this);
+    window->aura_window()->RemoveObserver(this);
 
   WmShell::Get()->RemoveActivationObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
   if (restore_focus_window_)
-    restore_focus_window_->RemoveObserver(this);
+    restore_focus_window_->aura_window()->RemoveObserver(this);
 }
 
 void WindowSelector::CancelSelection() {
@@ -405,6 +402,20 @@ void WindowSelector::OnGridEmpty(WindowGrid* grid) {
   }
   if (grid_list_.empty())
     CancelSelection();
+}
+
+void WindowSelector::IncrementSelection(int increment) {
+  const Direction direction =
+      increment > 0 ? WindowSelector::RIGHT : WindowSelector::LEFT;
+  for (int step = 0; step < abs(increment); ++step)
+    Move(direction, true);
+}
+
+bool WindowSelector::AcceptSelection() {
+  if (!grid_list_[selected_grid_index_]->is_selecting())
+    return false;
+  SelectWindow(grid_list_[selected_grid_index_]->SelectedWindow());
+  return true;
 }
 
 void WindowSelector::SelectWindow(WindowSelectorItem* item) {
@@ -504,15 +515,15 @@ void WindowSelector::OnDisplayMetricsChanged(const display::Display& display,
   RepositionTextFilterOnDisplayMetricsChange();
 }
 
-void WindowSelector::OnWindowTreeChanged(WmWindow* window,
-                                         const TreeChangeParams& params) {
+void WindowSelector::OnWindowHierarchyChanged(
+    const HierarchyChangeParams& params) {
   // Only care about newly added children of |observed_windows_|.
-  if (!observed_windows_.count(window) ||
-      !observed_windows_.count(params.new_parent)) {
+  if (!observed_windows_.count(WmWindow::Get(params.receiver)) ||
+      !observed_windows_.count(WmWindow::Get(params.new_parent))) {
     return;
   }
 
-  WmWindow* new_window = params.target;
+  WmWindow* new_window = WmWindow::Get(params.target);
   if (!IsSelectable(new_window))
     return;
 
@@ -527,10 +538,10 @@ void WindowSelector::OnWindowTreeChanged(WmWindow* window,
   }
 }
 
-void WindowSelector::OnWindowDestroying(WmWindow* window) {
+void WindowSelector::OnWindowDestroying(aura::Window* window) {
   window->RemoveObserver(this);
-  observed_windows_.erase(window);
-  if (window == restore_focus_window_)
+  observed_windows_.erase(WmWindow::Get(window));
+  if (WmWindow::Get(window) == restore_focus_window_)
     restore_focus_window_ = nullptr;
 }
 
@@ -645,7 +656,7 @@ void WindowSelector::ResetFocusRestoreWindow(bool focus) {
   // observed.
   if (observed_windows_.find(restore_focus_window_) ==
       observed_windows_.end()) {
-    restore_focus_window_->RemoveObserver(this);
+    restore_focus_window_->aura_window()->RemoveObserver(this);
   }
   restore_focus_window_ = nullptr;
 }

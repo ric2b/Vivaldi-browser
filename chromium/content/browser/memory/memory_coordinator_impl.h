@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/memory/memory_coordinator_client.h"
+#include "base/memory/memory_coordinator_proxy.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/singleton.h"
 #include "base/single_thread_task_runner.h"
@@ -33,7 +34,8 @@ struct MemoryCoordinatorSingletonTraits;
 // MemoryCoordinatorImpl is an implementation of MemoryCoordinator.
 // The current implementation uses MemoryStateUpdater to update the global
 // memory state. See comments in MemoryStateUpdater for details.
-class CONTENT_EXPORT MemoryCoordinatorImpl : public MemoryCoordinator,
+class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
+                                             public MemoryCoordinator,
                                              public NotificationObserver,
                                              public base::NonThreadSafe {
  public:
@@ -75,10 +77,10 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public MemoryCoordinator,
   // Returns the browser's current memory state. Note that the current state
   // could be different from the global memory state as the browser won't be
   // suspended.
-  MemoryState GetCurrentMemoryState() const;
+  MemoryState GetCurrentMemoryState() const override;
 
   // Sets the global memory state for testing.
-  void SetCurrentMemoryStateForTesting(MemoryState memory_state);
+  void SetCurrentMemoryStateForTesting(MemoryState memory_state) override;
 
   // MemoryCoordinator implementation:
   MemoryState GetStateForProcess(base::ProcessHandle handle) override;
@@ -99,6 +101,9 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public MemoryCoordinator,
   // the state is actually changed.
   bool ChangeStateIfNeeded(MemoryState prev_state, MemoryState next_state);
 
+  // Asks the delegate to discard a tab.
+  void DiscardTab();
+
  protected:
   // Returns the RenderProcessHost which is correspond to the given id.
   // Returns nullptr if there is no corresponding RenderProcessHost.
@@ -109,6 +114,8 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public MemoryCoordinator,
   // Sets a delegate for testing.
   void SetDelegateForTesting(
       std::unique_ptr<MemoryCoordinatorDelegate> delegate);
+
+  MemoryCoordinatorDelegate* delegate() { return delegate_.get(); }
 
   // Adds the given ChildMemoryCoordinator as a child of this coordinator.
   void AddChildForTesting(int dummy_render_process_id,
@@ -172,11 +179,6 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public MemoryCoordinator,
 
   // Notifies a state change to child processes.
   void NotifyStateToChildren();
-
-  // Records metrics. This is called when the global state is changed.
-  void RecordStateChange(MemoryState prev_state,
-                         MemoryState next_state,
-                         base::TimeDelta duration);
 
   std::unique_ptr<MemoryCoordinatorDelegate> delegate_;
   std::unique_ptr<MemoryMonitor> memory_monitor_;

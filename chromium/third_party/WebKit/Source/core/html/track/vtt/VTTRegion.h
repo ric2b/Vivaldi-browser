@@ -32,11 +32,10 @@
 #define VTTRegion_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/ContextLifecycleObserver.h"
-#include "core/html/track/TextTrack.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/heap/Handle.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -55,17 +54,14 @@ class VTTRegion final : public GarbageCollectedFinalized<VTTRegion>,
 
   virtual ~VTTRegion();
 
-  TextTrack* track() const { return m_track; }
-  void setTrack(TextTrack*);
-
   const String& id() const { return m_id; }
   void setId(const String&);
 
   double width() const { return m_width; }
   void setWidth(double, ExceptionState&);
 
-  long height() const { return m_heightInLines; }
-  void setHeight(long, ExceptionState&);
+  int lines() const { return m_lines; }
+  void setLines(int, ExceptionState&);
 
   double regionAnchorX() const { return m_regionAnchor.x(); }
   void setRegionAnchorX(double, ExceptionState&);
@@ -80,11 +76,8 @@ class VTTRegion final : public GarbageCollectedFinalized<VTTRegion>,
   void setViewportAnchorY(double, ExceptionState&);
 
   const AtomicString scroll() const;
-  void setScroll(const AtomicString&, ExceptionState&);
+  void setScroll(const AtomicString&);
 
-  void updateParametersFromRegion(VTTRegion*);
-
-  const String& regionSettings() const { return m_settings; }
   void setRegionSettings(const String&);
 
   bool isScrollingRegion() { return m_scroll; }
@@ -119,14 +112,11 @@ class VTTRegion final : public GarbageCollectedFinalized<VTTRegion>,
   RegionSetting scanSettingName(VTTScanner&);
   void parseSettingValue(RegionSetting, VTTScanner&);
 
-  static const AtomicString& textTrackCueContainerShadowPseudoId();
   static const AtomicString& textTrackCueContainerScrollingClass();
-  static const AtomicString& textTrackRegionShadowPseudoId();
 
   String m_id;
-  String m_settings;
   double m_width;
-  unsigned m_heightInLines;
+  unsigned m_lines;
   FloatPoint m_regionAnchor;
   FloatPoint m_viewportAnchor;
   bool m_scroll;
@@ -136,12 +126,6 @@ class VTTRegion final : public GarbageCollectedFinalized<VTTRegion>,
   Member<HTMLDivElement> m_cueContainer;
   Member<HTMLDivElement> m_regionDisplayTree;
 
-  // The member variable track can be a raw pointer as it will never
-  // reference a destroyed TextTrack, as this member variable
-  // is cleared in the TextTrack destructor and it is generally
-  // set/reset within the addRegion and removeRegion methods.
-  Member<TextTrack> m_track;
-
   // Keep track of the current numeric value of the css "top" property.
   double m_currentTop;
 
@@ -150,7 +134,7 @@ class VTTRegion final : public GarbageCollectedFinalized<VTTRegion>,
   // soon as the animation for rolling out one line has finished, but
   // currently it is used also for non-scrolling regions to use a single
   // code path.
-  Timer<VTTRegion> m_scrollTimer;
+  TaskRunnerTimer<VTTRegion> m_scrollTimer;
 };
 
 }  // namespace blink

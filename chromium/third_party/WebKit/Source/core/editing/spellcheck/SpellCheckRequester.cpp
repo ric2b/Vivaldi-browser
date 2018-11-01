@@ -38,20 +38,14 @@
 
 namespace blink {
 
-SpellCheckRequest::SpellCheckRequest(
-    Range* checkingRange,
-    const String& text,
-    const Vector<uint32_t>& documentMarkersInRange,
-    const Vector<unsigned>& documentMarkerOffsets,
-    int requestNumber)
+SpellCheckRequest::SpellCheckRequest(Range* checkingRange,
+                                     const String& text,
+                                     int requestNumber)
     : m_requester(nullptr),
       m_checkingRange(checkingRange),
       m_rootEditableElement(
           blink::rootEditableElement(*m_checkingRange->startContainer())),
-      m_requestData(unrequestedTextCheckingSequence,
-                    text,
-                    documentMarkersInRange,
-                    documentMarkerOffsets),
+      m_requestData(unrequestedTextCheckingSequence, text),
       m_requestNumber(requestNumber) {
   DCHECK(m_checkingRange);
   DCHECK(m_checkingRange->isConnected());
@@ -83,24 +77,15 @@ SpellCheckRequest* SpellCheckRequest::create(
     return nullptr;
 
   String text =
-      plainText(checkingRange, TextIteratorEmitsObjectReplacementCharacter);
+      plainText(checkingRange, TextIteratorBehavior::Builder()
+                                   .setEmitsObjectReplacementCharacter(true)
+                                   .build());
   if (text.isEmpty())
     return nullptr;
 
   Range* checkingRangeObject = createRange(checkingRange);
 
-  const DocumentMarkerVector& markers =
-      checkingRangeObject->ownerDocument().markers().markersInRange(
-          checkingRange, DocumentMarker::SpellCheckClientMarkers());
-  Vector<uint32_t> hashes(markers.size());
-  Vector<unsigned> offsets(markers.size());
-  for (size_t i = 0; i < markers.size(); ++i) {
-    hashes[i] = markers[i]->hash();
-    offsets[i] = markers[i]->startOffset();
-  }
-
-  return new SpellCheckRequest(checkingRangeObject, text, hashes, offsets,
-                               requestNumber);
+  return new SpellCheckRequest(checkingRangeObject, text, requestNumber);
 }
 
 const TextCheckingRequestData& SpellCheckRequest::data() const {
@@ -249,7 +234,8 @@ void SpellCheckRequester::didCheck(int sequence,
     return;
   }
 
-  frame().spellChecker().markAndReplaceFor(m_processingRequest, results);
+  if (results.size())
+    frame().spellChecker().markAndReplaceFor(m_processingRequest, results);
 
   DCHECK_LT(m_lastProcessedSequence, sequence);
   m_lastProcessedSequence = sequence;

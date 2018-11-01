@@ -25,6 +25,9 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "net/url_request/url_fetcher_delegate.h"
 
+namespace base {
+class SequencedTaskRunner;
+}
 
 namespace net {
 class URLRequestContextGetter;
@@ -57,6 +60,8 @@ class POLICY_EXPORT DeviceManagementRequestJob {
     TYPE_GCM_ID_UPDATE = 11,
     TYPE_ANDROID_MANAGEMENT_CHECK = 12,
     TYPE_CERT_BASED_REGISTRATION = 13,
+    TYPE_ACTIVE_DIRECTORY_ENROLL_PLAY_USER = 14,
+    TYPE_ACTIVE_DIRECTORY_PLAY_ACTIVITY = 15,
   };
 
   typedef base::Callback<

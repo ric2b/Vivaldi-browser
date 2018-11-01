@@ -7,22 +7,23 @@
 
 #include "ios/net/request_tracker.h"
 
+namespace web {
+class NavigationItem;
+class WebStateImpl;
+}
+
 // Exposed private methods for testing purpose.
 @interface Tab ()
 
 - (OpenInController*)openInController;
 - (void)closeThisTab;
-- (CRWSessionEntry*)currentSessionEntry;
+- (web::NavigationItem*)currentNavigationItem;
 - (void)setShouldObserveInfoBarManager:(BOOL)shouldObserveInfoBarManager;
 - (void)setShouldObserveFaviconChanges:(BOOL)shouldObserveFaviconChanges;
 
 @end
 
 @interface Tab (TestingSupport)
-
-// Replaces the existing web state. This method should be called once
-// right after init and before any call to |view|.
-- (void)replaceWebStateImpl:(std::unique_ptr<web::WebStateImpl>)webStateImpl;
 
 // Replaces the existing |externalAppLauncher_|.
 - (void)replaceExternalAppLauncher:(id)externalAppLauncher;

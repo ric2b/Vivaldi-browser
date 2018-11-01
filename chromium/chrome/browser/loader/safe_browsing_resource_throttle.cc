@@ -57,13 +57,10 @@ SafeBrowsingResourceThrottle::SafeBrowsingResourceThrottle(
     const net::URLRequest* request,
     content::ResourceType resource_type,
     safe_browsing::SafeBrowsingService* sb_service)
-    : safe_browsing::BaseResourceThrottle(
-          request,
-          resource_type,
-          safe_browsing::V4FeatureList::IsV4HybridEnabled()
-              ? sb_service->v4_local_database_manager()
-              : sb_service->database_manager(),
-          sb_service->ui_manager()) {}
+    : safe_browsing::BaseResourceThrottle(request,
+                                          resource_type,
+                                          sb_service->database_manager(),
+                                          sb_service->ui_manager()) {}
 
 SafeBrowsingResourceThrottle::~SafeBrowsingResourceThrottle() {}
 
@@ -95,29 +92,7 @@ void SafeBrowsingResourceThrottle::StartDisplayingBlockingPage(
     const security_interstitials::UnsafeResource& resource) {
   content::WebContents* web_contents = resource.web_contents_getter.Run();
   if (web_contents) {
-    // Once activated, the subresource filter will filter subresources, but is
-    // triggered when the main frame document matches Safe Browsing blacklists.
-    if (!resource.is_subresource) {
-      using subresource_filter::ContentSubresourceFilterDriverFactory;
-      ContentSubresourceFilterDriverFactory* driver_factory =
-          ContentSubresourceFilterDriverFactory::FromWebContents(web_contents);
-      DCHECK(driver_factory);
-
-      // For a redirect chain of A -> B -> C, the subresource filter expects C
-      // as the resource URL and [A, B] as redirect URLs.
-      std::vector<GURL> redirect_parent_urls;
-      if (!resource.redirect_urls.empty()) {
-        redirect_parent_urls.push_back(resource.original_url);
-        redirect_parent_urls.insert(redirect_parent_urls.end(),
-                                    resource.redirect_urls.begin(),
-                                    std::prev(resource.redirect_urls.end()));
-      }
-
-      driver_factory->OnMainResourceMatchedSafeBrowsingBlacklist(
-          resource.url, redirect_parent_urls, resource.threat_type,
-          resource.threat_metadata.threat_pattern_type);
-    }
-
+    BaseResourceThrottle::NotifySubresourceFilterOfBlockedResource(resource);
     prerender::PrerenderContents* prerender_contents =
         prerender::PrerenderContents::FromWebContents(web_contents);
     if (prerender_contents) {

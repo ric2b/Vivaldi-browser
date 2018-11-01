@@ -6,9 +6,11 @@
 #define UI_VIVALDI_SESSION_SERVICE_H_
 
 #include <map>
-#include <utility>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
+
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -34,7 +36,7 @@ struct SessionOptions {
 // suitable is risky and requires significant changes.
 class VivaldiSessionService {
  public:
-  typedef std::map<SessionID::id_type, std::pair<int, int> > IdToRange;
+  typedef std::map<SessionID::id_type, std::pair<int, int>> IdToRange;
   typedef sessions::SessionCommand::id_type id_type;
   typedef sessions::SessionCommand::size_type size_type;
 
@@ -45,36 +47,42 @@ class VivaldiSessionService {
   bool ShouldTrackWindow(Browser* browser, Profile* profile);
   void ScheduleCommand(std::unique_ptr<sessions::SessionCommand> command);
   void BuildCommandsForTab(const SessionID& window_id,
-                          content::WebContents* tab, int index_in_window,
-                          bool is_pinned);
+                           content::WebContents* tab,
+                           int index_in_window,
+                           bool is_pinned);
   void BuildCommandsForBrowser(Browser* browser);
   bool Save(const base::FilePath& file_name);
-  bool Load(const base::FilePath &file_name, Browser *browser,
-            SessionOptions &opts);
+  bool Load(const base::FilePath& file_name,
+            Browser* browser,
+            const SessionOptions& opts);
 
  private:
   void ResetFile(const base::FilePath& file_name);
   base::File* OpenAndWriteHeader(const base::FilePath& path);
   bool AppendCommandsToFile(
       base::File* file,
-      const std::vector <std::unique_ptr<sessions::SessionCommand>>& commands);
-  bool Read(std::vector <std::unique_ptr<sessions::SessionCommand>>* commands);
+      const std::vector<std::unique_ptr<sessions::SessionCommand>>& commands);
+  bool Read(std::vector<std::unique_ptr<sessions::SessionCommand>>* commands);
   bool FillBuffer();
   Browser* ProcessSessionWindows(
-    std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
+      std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
       SessionID::id_type active_window_id,
       std::vector<SessionRestoreDelegate::RestoredTab>* created_contents);
   void RestoreTabsToBrowser(
-      const sessions::SessionWindow& window, Browser* browser,
-      int initial_tab_count, int selected_tab_index,
+      const sessions::SessionWindow& window,
+      Browser* browser,
+      int initial_tab_count,
+      int selected_tab_index,
       std::vector<SessionRestoreDelegate::RestoredTab>* created_contents);
   void RemoveUnusedRestoreWindows(
-    std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list);
-  Browser* CreateRestoredBrowser(Browser::Type type, gfx::Rect bounds,
+      std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list);
+  Browser* CreateRestoredBrowser(Browser::Type type,
+                                 gfx::Rect bounds,
                                  ui::WindowShowState show_state,
                                  const std::string& app_name);
   content::WebContents* RestoreTab(const sessions::SessionTab& tab,
-                                   const int tab_index, Browser* browser,
+                                   const int tab_index,
+                                   Browser* browser,
                                    bool is_selected_tab);
   void NotifySessionServiceOfRestoredTabs(Browser* browser, int initial_count);
   void ShowBrowser(Browser* browser, int selected_tab_index);
@@ -90,7 +98,7 @@ class VivaldiSessionService {
     return pending_commands_;
   }
   // Commands we need to send over to the backend.
-  std::vector <std::unique_ptr<sessions::SessionCommand>> pending_commands_;
+  std::vector<std::unique_ptr<sessions::SessionCommand>> pending_commands_;
 
   // Maps from session tab id to the range of navigation entries that has
   // been written to disk.

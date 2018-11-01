@@ -78,6 +78,10 @@
     pointer-events: none;
 }
 
+.shadow-split-widget.vbox > .shadow-split-widget-sidebar.no-default-splitter {
+    border: 0 !important;
+}
+
 .shadow-split-widget.vbox > .shadow-split-widget-sidebar:not(.maximized) {
     border: 0;
     border-top: 1px solid rgb(64%, 64%, 64%);
@@ -96,9 +100,4 @@
 .shadow-split-widget.hbox.shadow-split-widget-first-is-sidebar > .shadow-split-widget-sidebar:not(.maximized) {
     border: 0;
     border-right: 1px solid rgb(64%, 64%, 64%);
-}
-
-
-:host(.root-split-widget) .shadow-split-widget.hbox > .shadow-split-widget-resizer {
-    margin-right: -5px !important;
 }

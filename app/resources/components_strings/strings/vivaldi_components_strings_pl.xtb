@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Pokaż zapisaną (nieaktualną) kopię tej strony.</translation>
 <translation id="1559528461873125649">Podany plik lub folder nie istnieje</translation>
 <translation id="1710259589646384581">System operacyjny</translation>
-<translation id="1838667051080421715">Przeglądasz źródło strony internetowej.</translation>
+<translation id="1728677426644403582">Przeglądasz źródło strony internetowej</translation>
 <translation id="194030505837763158">Przejdź na <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Czy chodziło ci o <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Mniej</translation>
 <translation id="2166378884831602661">Ta witryna nie umożliwia bezpiecznego połączenia</translation>
 <translation id="2292556288342944218">Masz zablokowany dostęp do Internetu</translation>
 <translation id="255002559098805027">Serwer <ph name="HOST_NAME" /> wysłał nieprawidłową odpowiedź.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Odmówiono dostępu do pliku</translation>
 <translation id="2705137772291741111">Kopia tej strony zapisana w pamięci podręcznej jest nieczytelna.</translation>
 <translation id="2784949926578158345">Połączenie zostało zresetowane.</translation>
-<translation id="284702764277384724">Certyfikat serwera <ph name="HOST_NAME" /> wydaje się sfałszowany.</translation>
 <translation id="2909946352844186028">Wykryto zmianę sieci.</translation>
 <translation id="3005723025932146533">Pokaż zapisaną kopię</translation>
 <translation id="3093245981617870298">Jesteś w trybie offline.</translation>
@@ -39,7 +37,6 @@
 <translation id="4021036232240155012">DNS to usługa sieciowa tłumacząca nazwę serwera na jego adres internetowy.</translation>
 <translation id="4432688616882109544">Serwer <ph name="HOST_NAME" /> nie zaakceptował lub nie otrzymał Twojego certyfikatu logowania.</translation>
 <translation id="4522570452068850558">Szczegóły</translation>
-<translation id="4670097147947922288">Przeglądasz stronę rozszerzenia.</translation>
 <translation id="4708268264240856090">Połączenie zostało przerwane</translation>
 <translation id="4744603770635761495">Ścieżka pliku wykonywalnego</translation>
 <translation id="4764776831041365478">Strona internetowa pod adresem <ph name="URL" /> może być tymczasowo niedostępna lub została na stałe przeniesiona pod nowy adres.</translation>
@@ -56,7 +53,6 @@
 <translation id="5675650730144413517">Ta strona nie działa</translation>
 <translation id="5869405914158311789">Ta strona jest nieosiągalna</translation>
 <translation id="5990559369517809815">Żądania do serwera zostały zablokowane przez rozszerzenie.</translation>
-<translation id="6042308850641462728">Więcej</translation>
 <translation id="6146055958333702838">Sprawdź wszystkie kable i uruchom ponownie wszelkie używane routery, modemy
     i inne urządzenia sieciowe.</translation>
 <translation id="6165508094623778733">Więcej informacji</translation>
@@ -65,12 +61,11 @@
 <translation id="6321917430147971392">Sprawdź ustawienia DNS</translation>
 <translation id="6328639280570009161">Spróbuj wyłączyć przewidywanie działań sieciowych</translation>
 <translation id="6433595998831338502">Serwer <ph name="HOST_NAME" /> odrzucił połączenie.</translation>
+<translation id="6569060085658103619">Przeglądasz stronę rozszerzenia</translation>
 <translation id="6711464428925977395">Serwer proxy działa nieprawidłowo albo adres jest błędny.</translation>
 <translation id="6757797048963528358">Twój komputer przeszedł w tryb uśpienia.</translation>
-<translation id="6830600606572693159">Strona internetowa pod adresem <ph name="URL" /> jest obecnie niedostępna. Może być przeciążona lub wyłączona na czas konserwacji.</translation>
 <translation id="6897140037006041989">User agent (id przeglądarki)</translation>
 <translation id="7210863904660874423">Serwer <ph name="HOST_NAME" /> nie spełnia norm bezpieczeństwa.</translation>
-<translation id="7269802741830436641">Ta strona internetowa zawiera pętlę przekierowań</translation>
 <translation id="7353601530677266744">Wiersz poleceń</translation>
 <translation id="7419106976560586862">Ścieżka profilu</translation>
 <translation id="7518003948725431193">Nie znaleziono strony internetowej pod adresem <ph name="URL" /></translation>
@@ -78,8 +73,8 @@
 <translation id="759889825892636187">Serwer <ph name="HOST_NAME" /> nie może teraz obsłużyć tego żądania.</translation>
 <translation id="7716424297397655342">Tej strony nie można załadować z pamięci podręcznej</translation>
 <translation id="7758069387465995638">Połączenie mogło zostać zablokowane przez zaporę sieciową lub program antywirusowy.</translation>
-<translation id="778579833039460630">Nie odebrano żadnych danych</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8089520772729574115">mniej niż 1 MB</translation>
 <translation id="8134994873729925007">Nie udało się znaleźć <ph name="BEGIN_ABBR" />adresu DNS<ph name="END_ABBR" /> serwera <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Wejdź na stronę &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, aby wyświetlić listę zablokowanych adresów URL oraz inne zasady egzekwowane przez administratora twojego systemu.</translation>
 <translation id="8149426793427495338">Twój komputer przeszedł w tryb uśpienia.</translation>

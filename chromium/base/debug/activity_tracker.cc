@@ -8,6 +8,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/atomic_sequence_num.h"
 #include "base/debug/stack_trace.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -17,6 +18,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pending_task.h"
+#include "base/pickle.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/stl_util.h"
@@ -39,10 +41,13 @@ const int kMinStackDepth = 2;
 
 // The amount of memory set aside for holding arbitrary user data (key/value
 // pairs) globally or associated with ActivityData entries.
-const size_t kUserDataSize = 1024;    // bytes
-const size_t kGlobalDataSize = 4096;  // bytes
+const size_t kUserDataSize = 1 << 10;     // 1 KiB
+const size_t kGlobalDataSize = 16 << 10;  // 16 KiB
 const size_t kMaxUserDataNameLength =
     static_cast<size_t>(std::numeric_limits<uint8_t>::max());
+
+// A constant used to indicate that module information is changing.
+const uint32_t kModuleInformationChanging = 0x80000000;
 
 union ThreadRef {
   int64_t as_id;
@@ -116,8 +121,9 @@ ActivityTrackerMemoryAllocator::GetObjectReference() {
     Reference cached = cache_values_[--cache_used_];
     // Change the type of the cached object to the proper type and return it.
     // If the type-change fails that means another thread has taken this from
-    // under us (via the search below) so ignore it and keep trying.
-    if (allocator_->ChangeType(cached, object_type_, object_free_type_))
+    // under us (via the search below) so ignore it and keep trying. Don't
+    // clear the memory because that was done when the type was made "free".
+    if (allocator_->ChangeType(cached, object_type_, object_free_type_, false))
       return cached;
   }
 
@@ -135,7 +141,7 @@ ActivityTrackerMemoryAllocator::GetObjectReference() {
       // Found a free object. Change it to the proper type and return it. If
       // the type-change fails that means another thread has taken this from
       // under us so ignore it and keep trying.
-      if (allocator_->ChangeType(found, object_type_, object_free_type_))
+      if (allocator_->ChangeType(found, object_type_, object_free_type_, false))
         return found;
     }
     if (found == last) {
@@ -156,14 +162,9 @@ ActivityTrackerMemoryAllocator::GetObjectReference() {
 }
 
 void ActivityTrackerMemoryAllocator::ReleaseObjectReference(Reference ref) {
-  // Zero the memory so that it is ready for immediate use if needed later.
-  char* mem_base = allocator_->GetAsArray<char>(
-      ref, object_type_, PersistentMemoryAllocator::kSizeAny);
-  DCHECK(mem_base);
-  memset(mem_base, 0, object_size_);
-
   // Mark object as free.
-  bool success = allocator_->ChangeType(ref, object_free_type_, object_type_);
+  bool success = allocator_->ChangeType(ref, object_free_type_, object_type_,
+                                        /*clear=*/true);
   DCHECK(success);
 
   // Add this reference to our "free" cache if there is space. If not, the type
@@ -249,7 +250,7 @@ ActivityUserData::ValueInfo::ValueInfo() {}
 ActivityUserData::ValueInfo::ValueInfo(ValueInfo&&) = default;
 ActivityUserData::ValueInfo::~ValueInfo() {}
 
-std::atomic<uint32_t> ActivityUserData::next_id_;
+StaticAtomicSequenceNumber ActivityUserData::next_id_;
 
 ActivityUserData::ActivityUserData(void* memory, size_t size)
     : memory_(reinterpret_cast<char*>(memory)),
@@ -264,7 +265,7 @@ ActivityUserData::ActivityUserData(void* memory, size_t size)
     // Generate a new ID and store it in the first 32-bit word of memory_.
     // |id_| must be non-zero for non-sink instances.
     uint32_t id;
-    while ((id = next_id_.fetch_add(1, std::memory_order_relaxed)) == 0)
+    while ((id = next_id_.GetNext()) == 0)
       ;
     id_->store(id, std::memory_order_relaxed);
     DCHECK_NE(0U, id_->load(std::memory_order_relaxed));
@@ -283,7 +284,6 @@ void ActivityUserData::Set(StringPiece name,
                            ValueType type,
                            const void* memory,
                            size_t size) {
-  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_GE(std::numeric_limits<uint8_t>::max(), name.length());
   size = std::min(std::numeric_limits<uint16_t>::max() - (kMemoryAlignment - 1),
                   size);
@@ -478,6 +478,10 @@ const void* ActivityUserData::GetBaseAddress() {
 // the very first time the thread is seen. All fields must be of exact sizes
 // so there is no issue moving between 32 and 64-bit builds.
 struct ThreadActivityTracker::Header {
+  // Defined in .h for analyzer access. Increment this if structure changes!
+  static constexpr uint32_t kPersistentTypeId =
+      GlobalActivityTracker::kTypeIdActivityTracker;
+
   // Expected size for 32/64-bit check.
   static constexpr size_t kExpectedInstanceSize = 80;
 
@@ -891,8 +895,127 @@ size_t ThreadActivityTracker::SizeForStackDepth(int stack_depth) {
   return static_cast<size_t>(stack_depth) * sizeof(Activity) + sizeof(Header);
 }
 
+// The instantiation of the GlobalActivityTracker object.
+// The object held here will obviously not be destructed at process exit
+// but that's best since PersistentMemoryAllocator objects (that underlie
+// GlobalActivityTracker objects) are explicitly forbidden from doing anything
+// essential at exit anyway due to the fact that they depend on data managed
+// elsewhere and which could be destructed first. An AtomicWord is used instead
+// of std::atomic because the latter can create global ctors and dtors.
+subtle::AtomicWord GlobalActivityTracker::g_tracker_ = 0;
 
-GlobalActivityTracker* GlobalActivityTracker::g_tracker_ = nullptr;
+GlobalActivityTracker::ModuleInfo::ModuleInfo() {}
+GlobalActivityTracker::ModuleInfo::ModuleInfo(ModuleInfo&& rhs) = default;
+GlobalActivityTracker::ModuleInfo::ModuleInfo(const ModuleInfo& rhs) = default;
+GlobalActivityTracker::ModuleInfo::~ModuleInfo() {}
+
+GlobalActivityTracker::ModuleInfo& GlobalActivityTracker::ModuleInfo::operator=(
+    ModuleInfo&& rhs) = default;
+GlobalActivityTracker::ModuleInfo& GlobalActivityTracker::ModuleInfo::operator=(
+    const ModuleInfo& rhs) = default;
+
+GlobalActivityTracker::ModuleInfoRecord::ModuleInfoRecord() {}
+GlobalActivityTracker::ModuleInfoRecord::~ModuleInfoRecord() {}
+
+bool GlobalActivityTracker::ModuleInfoRecord::DecodeTo(
+    GlobalActivityTracker::ModuleInfo* info,
+    size_t record_size) const {
+  // Get the current "changes" indicator, acquiring all the other values.
+  uint32_t current_changes = changes.load(std::memory_order_acquire);
+
+  // Copy out the dynamic information.
+  info->is_loaded = loaded != 0;
+  info->address = static_cast<uintptr_t>(address);
+  info->load_time = load_time;
+
+  // Check to make sure no information changed while being read. A "seq-cst"
+  // operation is expensive but is only done during analysis and it's the only
+  // way to ensure this occurs after all the accesses above. If changes did
+  // occur then return a "not loaded" result so that |size| and |address|
+  // aren't expected to be accurate.
+  if ((current_changes & kModuleInformationChanging) != 0 ||
+      changes.load(std::memory_order_seq_cst) != current_changes) {
+    info->is_loaded = false;
+  }
+
+  // Copy out the static information. These never change so don't have to be
+  // protected by the atomic |current_changes| operations.
+  info->size = static_cast<size_t>(size);
+  info->timestamp = timestamp;
+  info->age = age;
+  memcpy(info->identifier, identifier, sizeof(info->identifier));
+
+  if (offsetof(ModuleInfoRecord, pickle) + pickle_size > record_size)
+    return false;
+  Pickle pickler(pickle, pickle_size);
+  PickleIterator iter(pickler);
+  return iter.ReadString(&info->file) && iter.ReadString(&info->debug_file);
+}
+
+bool GlobalActivityTracker::ModuleInfoRecord::EncodeFrom(
+    const GlobalActivityTracker::ModuleInfo& info,
+    size_t record_size) {
+  Pickle pickler;
+  bool okay =
+      pickler.WriteString(info.file) && pickler.WriteString(info.debug_file);
+  if (!okay) {
+    NOTREACHED();
+    return false;
+  }
+  if (offsetof(ModuleInfoRecord, pickle) + pickler.size() > record_size) {
+    NOTREACHED();
+    return false;
+  }
+
+  // These fields never changes and are done before the record is made
+  // iterable so no thread protection is necessary.
+  size = info.size;
+  timestamp = info.timestamp;
+  age = info.age;
+  memcpy(identifier, info.identifier, sizeof(identifier));
+  memcpy(pickle, pickler.data(), pickler.size());
+  pickle_size = pickler.size();
+  changes.store(0, std::memory_order_relaxed);
+
+  // Now set those fields that can change.
+  return UpdateFrom(info);
+}
+
+bool GlobalActivityTracker::ModuleInfoRecord::UpdateFrom(
+    const GlobalActivityTracker::ModuleInfo& info) {
+  // Updates can occur after the record is made visible so make changes atomic.
+  // A "strong" exchange ensures no false failures.
+  uint32_t old_changes = changes.load(std::memory_order_relaxed);
+  uint32_t new_changes = old_changes | kModuleInformationChanging;
+  if ((old_changes & kModuleInformationChanging) != 0 ||
+      !changes.compare_exchange_strong(old_changes, new_changes,
+                                       std::memory_order_acquire,
+                                       std::memory_order_acquire)) {
+    NOTREACHED() << "Multiple sources are updating module information.";
+    return false;
+  }
+
+  loaded = info.is_loaded ? 1 : 0;
+  address = info.address;
+  load_time = Time::Now().ToInternalValue();
+
+  bool success = changes.compare_exchange_strong(new_changes, old_changes + 1,
+                                                 std::memory_order_release,
+                                                 std::memory_order_relaxed);
+  DCHECK(success);
+  return true;
+}
+
+// static
+size_t GlobalActivityTracker::ModuleInfoRecord::EncodedSize(
+    const GlobalActivityTracker::ModuleInfo& info) {
+  PickleSizer sizer;
+  sizer.AddString(info.file);
+  sizer.AddString(info.debug_file);
+
+  return offsetof(ModuleInfoRecord, pickle) + sizeof(Pickle::Header) +
+         sizer.payload_size();
+}
 
 GlobalActivityTracker::ScopedThreadActivity::ScopedThreadActivity(
     const void* program_counter,
@@ -928,6 +1051,19 @@ ActivityUserData& GlobalActivityTracker::ScopedThreadActivity::user_data() {
   return *user_data_;
 }
 
+GlobalActivityTracker::GlobalUserData::GlobalUserData(void* memory, size_t size)
+    : ActivityUserData(memory, size) {}
+
+GlobalActivityTracker::GlobalUserData::~GlobalUserData() {}
+
+void GlobalActivityTracker::GlobalUserData::Set(StringPiece name,
+                                                ValueType type,
+                                                const void* memory,
+                                                size_t size) {
+  AutoLock lock(data_lock_);
+  ActivityUserData::Set(name, type, memory, size);
+}
+
 GlobalActivityTracker::ManagedActivityTracker::ManagedActivityTracker(
     PersistentMemoryAllocator::Reference mem_reference,
     void* base,
@@ -941,7 +1077,7 @@ GlobalActivityTracker::ManagedActivityTracker::~ManagedActivityTracker() {
   // objects of this type must be destructed before |g_tracker_| can be changed
   // (something that only occurs in tests).
   DCHECK(g_tracker_);
-  g_tracker_->ReturnTrackerMemory(this);
+  GlobalActivityTracker::Get()->ReturnTrackerMemory(this);
 }
 
 void GlobalActivityTracker::CreateWithAllocator(
@@ -1022,13 +1158,8 @@ ThreadActivityTracker* GlobalActivityTracker::CreateTrackerForCurrentThread() {
   // TODO(bcwhite): Review this after major compiler releases.
   DCHECK(mem_reference);
   void* mem_base;
-#if 0  // TODO(bcwhite): Update this for new GetAsObject functionality.
-  mem_base = allocator_->GetAsObject<ThreadActivityTracker::Header>(
-      mem_reference, kTypeIdActivityTracker);
-#else
-  mem_base = allocator_->GetAsArray<char>(mem_reference, kTypeIdActivityTracker,
-                                          PersistentMemoryAllocator::kSizeAny);
-#endif
+  mem_base =
+      allocator_->GetAsObject<ThreadActivityTracker::Header>(mem_reference);
 
   DCHECK(mem_base);
   DCHECK_LE(stack_memory_size_, allocator_->GetAllocSize(mem_reference));
@@ -1066,6 +1197,38 @@ void GlobalActivityTracker::RecordLogMessage(StringPiece message) {
   }
 }
 
+void GlobalActivityTracker::RecordModuleInfo(const ModuleInfo& info) {
+  AutoLock lock(modules_lock_);
+  auto found = modules_.find(info.file);
+  if (found != modules_.end()) {
+    ModuleInfoRecord* record = found->second;
+    DCHECK(record);
+
+    // Update the basic state of module information that has been already
+    // recorded. It is assumed that the string information (identifier,
+    // version, etc.) remain unchanged which means that there's no need
+    // to create a new record to accommodate a possibly longer length.
+    record->UpdateFrom(info);
+    return;
+  }
+
+  size_t required_size = ModuleInfoRecord::EncodedSize(info);
+  ModuleInfoRecord* record = allocator_->New<ModuleInfoRecord>(required_size);
+  if (!record)
+    return;
+
+  bool success = record->EncodeFrom(info, required_size);
+  DCHECK(success);
+  allocator_->MakeIterable(record);
+  modules_.insert(std::make_pair(info.file, record));
+}
+
+void GlobalActivityTracker::RecordFieldTrial(const std::string& trial_name,
+                                             StringPiece group_name) {
+  const std::string key = std::string("FieldTrial.") + trial_name;
+  global_data_.SetString(key, group_name);
+}
+
 GlobalActivityTracker::GlobalActivityTracker(
     std::unique_ptr<PersistentMemoryAllocator> allocator,
     int stack_depth)
@@ -1085,7 +1248,7 @@ GlobalActivityTracker::GlobalActivityTracker(
                            kUserDataSize,
                            kCachedUserDataMemories,
                            /*make_iterable=*/false),
-      user_data_(
+      global_data_(
           allocator_->GetAsArray<char>(
               allocator_->Allocate(kGlobalDataSize, kTypeIdGlobalDataRecord),
               kTypeIdGlobalDataRecord,
@@ -1097,18 +1260,23 @@ GlobalActivityTracker::GlobalActivityTracker(
 
   // Ensure that there is no other global object and then make this one such.
   DCHECK(!g_tracker_);
-  g_tracker_ = this;
+  subtle::Release_Store(&g_tracker_, reinterpret_cast<uintptr_t>(this));
 
-  // The global user-data record must be iterable in order to be found by an
-  // analyzer.
+  // The global records must be iterable in order to be found by an analyzer.
   allocator_->MakeIterable(allocator_->GetAsReference(
-      user_data_.GetBaseAddress(), kTypeIdGlobalDataRecord));
+      global_data_.GetBaseAddress(), kTypeIdGlobalDataRecord));
+
+  // Fetch and record all activated field trials.
+  FieldTrial::ActiveGroups active_groups;
+  FieldTrialList::GetActiveFieldTrialGroups(&active_groups);
+  for (auto& group : active_groups)
+    RecordFieldTrial(group.trial_name, group.group_name);
 }
 
 GlobalActivityTracker::~GlobalActivityTracker() {
-  DCHECK_EQ(g_tracker_, this);
+  DCHECK_EQ(Get(), this);
   DCHECK_EQ(0, thread_tracker_count_.load(std::memory_order_relaxed));
-  g_tracker_ = nullptr;
+  subtle::Release_Store(&g_tracker_, 0);
 }
 
 void GlobalActivityTracker::ReturnTrackerMemory(

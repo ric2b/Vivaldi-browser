@@ -81,12 +81,12 @@ static void saveToOriginMap(SecurityOrigin* origin, const KURL& url) {
   //
   // See the definition of the origin of a Blob URL in the File API spec.
   if (origin && BlobURL::getOrigin(url) == "null")
-    originMap()->add(url.getString(), origin);
+    originMap()->insert(url.getString(), origin);
 }
 
 static void removeFromOriginMap(const KURL& url) {
   if (BlobURL::getOrigin(url) == "null")
-    originMap()->remove(url.getString());
+    originMap()->erase(url.getString());
 }
 
 void BlobRegistry::registerBlobData(const String& uuid,
@@ -221,7 +221,7 @@ BlobOriginMap::BlobOriginMap() {
 
 SecurityOrigin* BlobOriginMap::getOrigin(const KURL& url) {
   if (url.protocolIs("blob"))
-    return originMap()->get(url.getString());
+    return originMap()->at(url.getString());
   return 0;
 }
 

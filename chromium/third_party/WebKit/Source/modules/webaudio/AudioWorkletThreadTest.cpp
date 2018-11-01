@@ -9,7 +9,6 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -49,20 +48,13 @@ class TestAudioWorkletReportingProxy : public WorkerReportingProxy {
                             const String& message,
                             SourceLocation*) override {}
   void postMessageToPageInspector(const String&) override {}
-  ParentFrameTaskRunners* getParentFrameTaskRunners() override {
-    return m_parentFrameTaskRunners.get();
-  }
-
   void didEvaluateWorkerScript(bool success) override {}
   void didCloseWorkerGlobalScope() override {}
   void willDestroyWorkerGlobalScope() override {}
   void didTerminateWorkerThread() override {}
 
  private:
-  TestAudioWorkletReportingProxy()
-      : m_parentFrameTaskRunners(ParentFrameTaskRunners::create(nullptr)) {}
-
-  Persistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
+  TestAudioWorkletReportingProxy() {}
 };
 
 }  // namespace
@@ -81,11 +73,13 @@ class AudioWorkletThreadTest : public ::testing::Test {
   std::unique_ptr<AudioWorkletThread> createAudioWorkletThread() {
     std::unique_ptr<AudioWorkletThread> thread =
         AudioWorkletThread::create(nullptr, *m_reportingProxy);
-    thread->start(WorkerThreadStartupData::create(
-        KURL(ParsedURLString, "http://fake.url/"), "fake user agent", "",
-        nullptr, DontPauseWorkerGlobalScopeOnStart, nullptr, "",
-        m_securityOrigin.get(), nullptr, WebAddressSpaceLocal, nullptr, nullptr,
-        WorkerV8Settings::Default()));
+    thread->start(
+        WorkerThreadStartupData::create(
+            KURL(ParsedURLString, "http://fake.url/"), "fake user agent", "",
+            nullptr, DontPauseWorkerGlobalScopeOnStart, nullptr, "",
+            m_securityOrigin.get(), nullptr, WebAddressSpaceLocal, nullptr,
+            nullptr, WorkerV8Settings::Default()),
+        ParentFrameTaskRunners::create(nullptr));
     return thread;
   }
 

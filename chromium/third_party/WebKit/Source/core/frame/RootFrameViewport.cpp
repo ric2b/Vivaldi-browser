@@ -116,6 +116,10 @@ FloatQuad RootFrameViewport::localToVisibleContentQuad(
   return viewportQuad;
 }
 
+RefPtr<WebTaskRunner> RootFrameViewport::getTimerTaskRunner() const {
+  return layoutViewport().getTimerTaskRunner();
+}
+
 int RootFrameViewport::horizontalScrollbarHeight(
     OverlayScrollbarClipBehavior behavior) const {
   return layoutViewport().horizontalScrollbarHeight(behavior);
@@ -444,7 +448,7 @@ void RootFrameViewport::cancelProgrammaticScrollAnimation() {
   visualViewport().cancelProgrammaticScrollAnimation();
 }
 
-Widget* RootFrameViewport::getWidget() {
+FrameViewBase* RootFrameViewport::getWidget() {
   return visualViewport().getWidget();
 }
 

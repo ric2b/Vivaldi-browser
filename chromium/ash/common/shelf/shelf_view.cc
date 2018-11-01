@@ -14,10 +14,10 @@
 #include "ash/common/shelf/overflow_bubble.h"
 #include "ash/common/shelf/overflow_bubble_view.h"
 #include "ash/common/shelf/overflow_button.h"
+#include "ash/common/shelf/shelf_application_menu_model.h"
 #include "ash/common/shelf/shelf_button.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/shelf/shelf_menu_model.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
@@ -26,13 +26,13 @@
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/auto_reset.h"
-#include "base/metrics/histogram.h"
-#include "grit/ash_strings.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -63,33 +63,10 @@ const int SHELF_ALIGNMENT_UMA_ENUM_VALUE_COUNT = 3;
 // Default amount content is inset on the left edge.
 const int kDefaultLeadingInset = 8;
 
-// Additional spacing for the left and right side of icons.
-const int kHorizontalIconSpacing = 2;
-
-// Inset for items which do not have an icon.
-const int kHorizontalNoIconInsetSpacing =
-    kHorizontalIconSpacing + kDefaultLeadingInset;
-
 // The proportion of the shelf space reserved for non-panel icons. Panels
 // may flow into this space but will be put into the overflow bubble if there
 // is contention for the space.
 const float kReservedNonPanelIconProportion = 0.67f;
-
-// This is the command id of the menu item which contains the name of the menu.
-const int kCommandIdOfMenuName = 0;
-
-// The background color of the active item in the list.
-const SkColor kActiveListItemBackgroundColor = SkColorSetRGB(203, 219, 241);
-
-// The background color of the active & hovered item in the list.
-const SkColor kFocusedActiveListItemBackgroundColor =
-    SkColorSetRGB(193, 211, 236);
-
-// The text color of the caption item in a list.
-const SkColor kCaptionItemForegroundColor = SK_ColorBLACK;
-
-// The maximum allowable length of a menu line of an application menu in pixels.
-const int kMaximumAppMenuItemLength = 350;
 
 // The distance of the cursor from the outer rim of the shelf before it
 // separates.
@@ -124,90 +101,6 @@ class BoundsAnimatorDisabler {
 
   DISALLOW_COPY_AND_ASSIGN(BoundsAnimatorDisabler);
 };
-
-// The MenuModelAdapter gets slightly changed to adapt the menu appearance to
-// our requirements.
-// TODO(bruthig): ShelfMenuModelAdapter does not appear to be used, remove it.
-class ShelfMenuModelAdapter : public views::MenuModelAdapter {
- public:
-  explicit ShelfMenuModelAdapter(ShelfMenuModel* menu_model);
-
-  // views::MenuModelAdapter:
-  const gfx::FontList* GetLabelFontList(int command_id) const override;
-  bool IsCommandEnabled(int id) const override;
-  void GetHorizontalIconMargins(int id,
-                                int icon_size,
-                                int* left_margin,
-                                int* right_margin) const override;
-  bool GetForegroundColor(int command_id,
-                          bool is_hovered,
-                          SkColor* override_color) const override;
-  bool GetBackgroundColor(int command_id,
-                          bool is_hovered,
-                          SkColor* override_color) const override;
-  int GetMaxWidthForMenu(views::MenuItemView* menu) override;
-  bool ShouldReserveSpaceForSubmenuIndicator() const override;
-
- private:
-  ShelfMenuModel* menu_model_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShelfMenuModelAdapter);
-};
-
-ShelfMenuModelAdapter::ShelfMenuModelAdapter(ShelfMenuModel* menu_model)
-    : MenuModelAdapter(menu_model), menu_model_(menu_model) {}
-
-const gfx::FontList* ShelfMenuModelAdapter::GetLabelFontList(
-    int command_id) const {
-  if (command_id != kCommandIdOfMenuName)
-    return MenuModelAdapter::GetLabelFontList(command_id);
-
-  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-  return &rb->GetFontList(ui::ResourceBundle::BoldFont);
-}
-
-bool ShelfMenuModelAdapter::IsCommandEnabled(int id) const {
-  return id != kCommandIdOfMenuName;
-}
-
-bool ShelfMenuModelAdapter::GetForegroundColor(int command_id,
-                                               bool is_hovered,
-                                               SkColor* override_color) const {
-  if (command_id != kCommandIdOfMenuName)
-    return false;
-
-  *override_color = kCaptionItemForegroundColor;
-  return true;
-}
-
-bool ShelfMenuModelAdapter::GetBackgroundColor(int command_id,
-                                               bool is_hovered,
-                                               SkColor* override_color) const {
-  if (!menu_model_->IsCommandActive(command_id))
-    return false;
-
-  *override_color = is_hovered ? kFocusedActiveListItemBackgroundColor
-                               : kActiveListItemBackgroundColor;
-  return true;
-}
-
-void ShelfMenuModelAdapter::GetHorizontalIconMargins(int command_id,
-                                                     int icon_size,
-                                                     int* left_margin,
-                                                     int* right_margin) const {
-  *left_margin = kHorizontalIconSpacing;
-  *right_margin = (command_id != kCommandIdOfMenuName)
-                      ? kHorizontalIconSpacing
-                      : -(icon_size + kHorizontalNoIconInsetSpacing);
-}
-
-int ShelfMenuModelAdapter::GetMaxWidthForMenu(views::MenuItemView* menu) {
-  return kMaximumAppMenuItemLength;
-}
-
-bool ShelfMenuModelAdapter::ShouldReserveSpaceForSubmenuIndicator() const {
-  return false;
-}
 
 // Custom FocusSearch used to navigate the shelf in the order items are in
 // the ViewModel.
@@ -405,7 +298,7 @@ void ShelfView::Init() {
   const ShelfItems& items(model_->items());
   for (ShelfItems::const_iterator i = items.begin(); i != items.end(); ++i) {
     views::View* child = CreateViewForItem(*i);
-    child->SetPaintToLayer(true);
+    child->SetPaintToLayer();
     view_model_->Add(child, static_cast<int>(i - items.begin()));
     AddChildView(child);
   }
@@ -542,8 +435,8 @@ void ShelfView::ButtonPressed(views::Button* sender,
                               views::InkDrop* ink_drop) {
   if (sender == overflow_button_) {
     ToggleOverflowBubble();
-    shelf_button_pressed_metric_tracker_.ButtonPressed(
-        event, sender, ShelfItemDelegate::kNoAction);
+    shelf_button_pressed_metric_tracker_.ButtonPressed(event, sender,
+                                                       SHELF_ACTION_NONE);
     return;
   }
 
@@ -590,17 +483,19 @@ void ShelfView::ButtonPressed(views::Button* sender,
       break;
   }
 
-  ShelfItemDelegate::PerformedAction performed_action =
+  const int64_t display_id = window->GetDisplayNearestWindow().id();
+  ShelfAction performed_action =
       model_->GetShelfItemDelegate(model_->items()[last_pressed_index_].id)
-          ->ItemSelected(event);
+          ->ItemSelected(event.type(), event.flags(), display_id,
+                         LAUNCH_FROM_UNKNOWN);
 
   shelf_button_pressed_metric_tracker_.ButtonPressed(event, sender,
                                                      performed_action);
 
   // For the app list menu no TRIGGERED ink drop effect is needed and it
   // handles its own ACTIVATED/DEACTIVATED states.
-  if (performed_action == ShelfItemDelegate::kNewWindowCreated ||
-      (performed_action != ShelfItemDelegate::kAppListMenuShown &&
+  if (performed_action == SHELF_ACTION_NEW_WINDOW_CREATED ||
+      (performed_action != SHELF_ACTION_APP_LIST_SHOWN &&
        !ShowListMenuForView(model_->items()[last_pressed_index_], sender, event,
                             ink_drop))) {
     ink_drop->AnimateToState(views::InkDropState::ACTION_TRIGGERED);
@@ -859,9 +754,9 @@ void ShelfView::LayoutToIdealBounds() {
   overflow_button_->SetBoundsRect(ideal_bounds.overflow_bounds);
 }
 
-void ShelfView::UpdateShelfItemBackground(int alpha) {
-  GetAppListButton()->SetBackgroundAlpha(alpha);
-  overflow_button_->SetBackgroundAlpha(alpha);
+void ShelfView::UpdateShelfItemBackground(SkColor color) {
+  GetAppListButton()->UpdateShelfItemBackground(color);
+  overflow_button_->UpdateShelfItemBackground(color);
 }
 
 void ShelfView::UpdateAllButtonsVisibilityInOverflowMode() {
@@ -891,11 +786,9 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
 
   int x = 0;
   int y = 0;
-  int button_size = GetShelfConstant(SHELF_BUTTON_SIZE);
-  int button_spacing = GetShelfConstant(SHELF_BUTTON_SPACING);
 
-  int w = wm_shelf_->PrimaryAxisValue(button_size, width());
-  int h = wm_shelf_->PrimaryAxisValue(height(), button_size);
+  int w = wm_shelf_->PrimaryAxisValue(kShelfButtonSize, width());
+  int h = wm_shelf_->PrimaryAxisValue(height(), kShelfButtonSize);
   for (int i = 0; i < view_model_->view_size(); ++i) {
     if (i < first_visible_index_) {
       view_model_->set_ideal_bounds(i, gfx::Rect(x, y, 0, 0));
@@ -903,8 +796,8 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
     }
 
     view_model_->set_ideal_bounds(i, gfx::Rect(x, y, w, h));
-    x = wm_shelf_->PrimaryAxisValue(x + w + button_spacing, x);
-    y = wm_shelf_->PrimaryAxisValue(y, y + h + button_spacing);
+    x = wm_shelf_->PrimaryAxisValue(x + w + kShelfButtonSpacing, x);
+    y = wm_shelf_->PrimaryAxisValue(y, y + h + kShelfButtonSpacing);
   }
 
   if (is_overflow_mode()) {
@@ -917,8 +810,8 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
   x = wm_shelf_->PrimaryAxisValue(end_position, 0);
   y = wm_shelf_->PrimaryAxisValue(0, end_position);
   for (int i = view_model_->view_size() - 1; i >= first_panel_index; --i) {
-    x = wm_shelf_->PrimaryAxisValue(x - w - button_spacing, x);
-    y = wm_shelf_->PrimaryAxisValue(y, y - h - button_spacing);
+    x = wm_shelf_->PrimaryAxisValue(x - w - kShelfButtonSpacing, x);
+    y = wm_shelf_->PrimaryAxisValue(y, y - h - kShelfButtonSpacing);
     view_model_->set_ideal_bounds(i, gfx::Rect(x, y, w, h));
     end_position = wm_shelf_->PrimaryAxisValue(x, y);
   }
@@ -929,7 +822,7 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
       wm_shelf_->PrimaryAxisValue(
           view_model_->ideal_bounds(last_button_index).right(),
           view_model_->ideal_bounds(last_button_index).bottom()) +
-      button_spacing;
+      kShelfButtonSpacing;
   int reserved_icon_space = available_size * kReservedNonPanelIconProportion;
   if (last_icon_position < reserved_icon_space)
     end_position = last_icon_position;
@@ -941,7 +834,7 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
                 wm_shelf_->PrimaryAxisValue(height(), h)));
 
   last_visible_index_ =
-      DetermineLastVisibleIndex(end_position - button_spacing);
+      DetermineLastVisibleIndex(end_position - kShelfButtonSpacing);
   last_hidden_index_ = DetermineFirstVisiblePanelIndex(end_position) - 1;
   bool show_overflow = last_visible_index_ < last_button_index ||
                        last_hidden_index_ >= first_panel_index;
@@ -997,8 +890,8 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
     if (last_visible_index_ >= 0) {
       // Add more space between last visible item and overflow button.
       // Without this, two buttons look too close compared with other items.
-      x = wm_shelf_->PrimaryAxisValue(x + button_spacing, x);
-      y = wm_shelf_->PrimaryAxisValue(y, y + button_spacing);
+      x = wm_shelf_->PrimaryAxisValue(x + kShelfButtonSpacing, x);
+      y = wm_shelf_->PrimaryAxisValue(y, y + kShelfButtonSpacing);
     }
 
     // Set all hidden panel icon positions to be on the overflow button.
@@ -1392,7 +1285,7 @@ std::pair<int, int> ShelfView::GetDragRange(int index) {
 }
 
 void ShelfView::ConfigureChildView(views::View* view) {
-  view->SetPaintToLayer(true);
+  view->SetPaintToLayer();
   view->layer()->SetFillsBoundsOpaquely(false);
 }
 
@@ -1722,18 +1615,20 @@ bool ShelfView::ShowListMenuForView(const ShelfItem& item,
                                     const ui::Event& event,
                                     views::InkDrop* ink_drop) {
   ShelfItemDelegate* item_delegate = model_->GetShelfItemDelegate(item.id);
-  std::unique_ptr<ui::MenuModel> list_menu_model(
-      item_delegate->CreateApplicationMenu(event.flags()));
+  ShelfAppMenuItemList items = item_delegate->GetAppMenuItems(event.flags());
 
-  // Make sure we have a menu and it has at least two items in addition to the
-  // application title and the 3 spacing separators.
-  if (!list_menu_model.get() || list_menu_model->GetItemCount() <= 5)
+  // The application list menu should only show for two or more items; return
+  // false here to ensure that other behavior is triggered (eg. activating or
+  // minimizing a single associated window, or launching a pinned shelf item).
+  if (items.size() < 2)
     return false;
 
   ink_drop->AnimateToState(views::InkDropState::ACTIVATED);
   context_menu_id_ = item.id;
-  ShowMenu(std::move(list_menu_model), source, gfx::Point(), false,
-           ui::GetMenuSourceTypeForEvent(event), ink_drop);
+  ShowMenu(base::MakeUnique<ShelfApplicationMenuModel>(
+               item.title, std::move(items), item_delegate),
+           source, gfx::Point(), false, ui::GetMenuSourceTypeForEvent(event),
+           ink_drop);
   return true;
 }
 

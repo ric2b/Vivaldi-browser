@@ -4,6 +4,7 @@
 
 #include "core/css/parser/CSSPropertyParser.h"
 
+#include <memory>
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSBasicShapeValues.h"
 #include "core/css/CSSBorderImage.h"
@@ -41,15 +42,19 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "core/css/parser/CSSVariableParser.h"
 #include "core/css/parser/FontVariantLigaturesParser.h"
+#include "core/css/parser/FontVariantNumericParser.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/properties/CSSPropertyAlignmentUtils.h"
+#include "core/css/properties/CSSPropertyColumnUtils.h"
 #include "core/css/properties/CSSPropertyDescriptor.h"
 #include "core/css/properties/CSSPropertyLengthUtils.h"
+#include "core/css/properties/CSSPropertyMarginUtils.h"
+#include "core/css/properties/CSSPropertyPositionUtils.h"
 #include "core/css/properties/CSSPropertyShapeUtils.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/svg/SVGPathUtilities.h"
 #include "wtf/text/StringBuilder.h"
-#include <memory>
 
 namespace blink {
 
@@ -121,8 +126,8 @@ bool CSSPropertyParser::parseValue(
   }
 
   // This doesn't count UA style sheets
-  if (parseSuccess && context->isUseCounterRecordingEnabled())
-    context->useCounter()->count(context->mode(), unresolvedProperty);
+  if (parseSuccess)
+    context->count(context->mode(), unresolvedProperty);
 
   if (!parseSuccess)
     parsedProperties.shrink(parsedPropertiesSize);
@@ -332,93 +337,6 @@ static CSSValue* consumeFontFeatureSettings(CSSParserTokenRange& range) {
   return settings;
 }
 
-static CSSValue* consumeWebkitHighlight(CSSParserTokenRange& range) {
-  if (range.peek().id() == CSSValueNone)
-    return consumeIdent(range);
-  return consumeString(range);
-}
-
-class FontVariantNumericParser {
-  STACK_ALLOCATED();
-
- public:
-  FontVariantNumericParser()
-      : m_sawNumericFigureValue(false),
-        m_sawNumericSpacingValue(false),
-        m_sawNumericFractionValue(false),
-        m_sawOrdinalValue(false),
-        m_sawSlashedZeroValue(false),
-        m_result(CSSValueList::createSpaceSeparated()) {}
-
-  enum class ParseResult { ConsumedValue, DisallowedValue, UnknownValue };
-
-  ParseResult consumeNumeric(CSSParserTokenRange& range) {
-    CSSValueID valueID = range.peek().id();
-    switch (valueID) {
-      case CSSValueLiningNums:
-      case CSSValueOldstyleNums:
-        if (m_sawNumericFigureValue)
-          return ParseResult::DisallowedValue;
-        m_sawNumericFigureValue = true;
-        break;
-      case CSSValueProportionalNums:
-      case CSSValueTabularNums:
-        if (m_sawNumericSpacingValue)
-          return ParseResult::DisallowedValue;
-        m_sawNumericSpacingValue = true;
-        break;
-      case CSSValueDiagonalFractions:
-      case CSSValueStackedFractions:
-        if (m_sawNumericFractionValue)
-          return ParseResult::DisallowedValue;
-        m_sawNumericFractionValue = true;
-        break;
-      case CSSValueOrdinal:
-        if (m_sawOrdinalValue)
-          return ParseResult::DisallowedValue;
-        m_sawOrdinalValue = true;
-        break;
-      case CSSValueSlashedZero:
-        if (m_sawSlashedZeroValue)
-          return ParseResult::DisallowedValue;
-        m_sawSlashedZeroValue = true;
-        break;
-      default:
-        return ParseResult::UnknownValue;
-    }
-    m_result->append(*consumeIdent(range));
-    return ParseResult::ConsumedValue;
-  }
-
-  CSSValue* finalizeValue() {
-    if (!m_result->length())
-      return CSSIdentifierValue::create(CSSValueNormal);
-    return m_result.release();
-  }
-
- private:
-  bool m_sawNumericFigureValue;
-  bool m_sawNumericSpacingValue;
-  bool m_sawNumericFractionValue;
-  bool m_sawOrdinalValue;
-  bool m_sawSlashedZeroValue;
-  Member<CSSValueList> m_result;
-};
-
-static CSSValue* consumeFontVariantNumeric(CSSParserTokenRange& range) {
-  if (range.peek().id() == CSSValueNormal)
-    return consumeIdent(range);
-
-  FontVariantNumericParser numericParser;
-  do {
-    if (numericParser.consumeNumeric(range) !=
-        FontVariantNumericParser::ParseResult::ConsumedValue)
-      return nullptr;
-  } while (!range.atEnd());
-
-  return numericParser.finalizeValue();
-}
-
 static CSSIdentifierValue* consumeFontVariantCSS21(CSSParserTokenRange& range) {
   return consumeIdent<CSSValueNormal, CSSValueSmallCaps>(range);
 }
@@ -553,113 +471,10 @@ static CSSValue* consumeCounter(CSSParserTokenRange& range, int defaultValue) {
   return list;
 }
 
-static CSSValue* consumeSnapHeight(CSSParserTokenRange& range,
-                                   CSSParserMode cssParserMode) {
-  CSSPrimitiveValue* unit =
-      consumeLength(range, cssParserMode, ValueRangeNonNegative);
-  if (!unit)
-    return nullptr;
-  CSSValueList* list = CSSValueList::createSpaceSeparated();
-  list->append(*unit);
-
-  if (CSSPrimitiveValue* position = consumePositiveInteger(range)) {
-    if (position->getIntValue() > 100)
-      return nullptr;
-    list->append(*position);
-  }
-
-  return list;
-}
-
-static CSSValue* consumeMarginOrOffset(CSSParserTokenRange& range,
-                                       CSSParserMode cssParserMode,
-                                       UnitlessQuirk unitless) {
-  if (range.peek().id() == CSSValueAuto)
-    return consumeIdent(range);
-  return consumeLengthOrPercent(range, cssParserMode, ValueRangeAll, unitless);
-}
-
-static bool consumePan(CSSParserTokenRange& range,
-                       CSSValue*& panX,
-                       CSSValue*& panY,
-                       CSSValue*& pinchZoom) {
-  CSSValueID id = range.peek().id();
-  if ((id == CSSValuePanX || id == CSSValuePanRight || id == CSSValuePanLeft) &&
-      !panX) {
-    if (id != CSSValuePanX &&
-        !RuntimeEnabledFeatures::cssTouchActionPanDirectionsEnabled())
-      return false;
-    panX = consumeIdent(range);
-  } else if ((id == CSSValuePanY || id == CSSValuePanDown ||
-              id == CSSValuePanUp) &&
-             !panY) {
-    if (id != CSSValuePanY &&
-        !RuntimeEnabledFeatures::cssTouchActionPanDirectionsEnabled())
-      return false;
-    panY = consumeIdent(range);
-  } else if (id == CSSValuePinchZoom && !pinchZoom &&
-             RuntimeEnabledFeatures::cssTouchActionPinchZoomEnabled()) {
-    pinchZoom = consumeIdent(range);
-  } else {
-    return false;
-  }
-  return true;
-}
-
-static CSSValue* consumeTouchAction(CSSParserTokenRange& range) {
-  CSSValueList* list = CSSValueList::createSpaceSeparated();
-  CSSValueID id = range.peek().id();
-  if (id == CSSValueAuto || id == CSSValueNone || id == CSSValueManipulation) {
-    list->append(*consumeIdent(range));
-    return list;
-  }
-
-  CSSValue* panX = nullptr;
-  CSSValue* panY = nullptr;
-  CSSValue* pinchZoom = nullptr;
-  if (!consumePan(range, panX, panY, pinchZoom))
-    return nullptr;
-  if (!range.atEnd() && !consumePan(range, panX, panY, pinchZoom))
-    return nullptr;
-  if (!range.atEnd() && !consumePan(range, panX, panY, pinchZoom))
-    return nullptr;
-
-  if (panX)
-    list->append(*panX);
-  if (panY)
-    list->append(*panY);
-  if (pinchZoom)
-    list->append(*pinchZoom);
-  return list;
-}
-
 static CSSValue* consumeLocale(CSSParserTokenRange& range) {
   if (range.peek().id() == CSSValueAuto)
     return consumeIdent(range);
   return consumeString(range);
-}
-
-static CSSValue* consumeColumnWidth(CSSParserTokenRange& range) {
-  if (range.peek().id() == CSSValueAuto)
-    return consumeIdent(range);
-  // Always parse lengths in strict mode here, since it would be ambiguous
-  // otherwise when used in the 'columns' shorthand property.
-  CSSPrimitiveValue* columnWidth =
-      consumeLength(range, HTMLStandardMode, ValueRangeNonNegative);
-  if (!columnWidth ||
-      (!columnWidth->isCalculated() && columnWidth->getDoubleValue() == 0))
-    return nullptr;
-  return columnWidth;
-}
-
-static CSSValue* consumeColumnCount(CSSParserTokenRange& range) {
-  if (range.peek().id() == CSSValueAuto)
-    return consumeIdent(range);
-  return consumePositiveInteger(range);
-}
-
-static CSSValue* consumeColumnSpan(CSSParserTokenRange& range) {
-  return consumeIdent<CSSValueAll, CSSValueNone>(range);
 }
 
 static CSSValue* consumeAnimationIterationCount(CSSParserTokenRange& range) {
@@ -676,8 +491,7 @@ static CSSValue* consumeAnimationName(CSSParserTokenRange& range,
 
   if (allowQuotedName && range.peek().type() == StringToken) {
     // Legacy support for strings in prefixed animations.
-    if (context->isUseCounterRecordingEnabled())
-      context->useCounter()->count(UseCounter::QuotedAnimationName);
+    context->count(UseCounter::QuotedAnimationName);
 
     const CSSParserToken& token = range.consumeIncludingWhitespace();
     if (equalIgnoringASCIICase(token.value(), "none"))
@@ -972,8 +786,7 @@ static CSSFunctionValue* consumeFilterFunction(
     parsedValue = parseSingleShadow(args, context->mode(), false, false);
   } else {
     if (args.atEnd()) {
-      if (context->isUseCounterRecordingEnabled())
-        context->useCounter()->count(UseCounter::CSSFilterFunctionNoArguments);
+      context->count(UseCounter::CSSFilterFunctionNoArguments);
       return filterValue;
     }
     if (filterType == CSSValueBrightness) {
@@ -1099,26 +912,17 @@ static CSSValue* consumeOffsetRotate(CSSParserTokenRange& range) {
   return list;
 }
 
-static CSSValue* consumeOffsetAnchor(CSSParserTokenRange& range,
-                                     CSSParserMode cssParserMode) {
-  CSSValueID id = range.peek().id();
-  if (id == CSSValueAuto)
-    return consumeIdent(range);
-  return consumePosition(range, cssParserMode, UnitlessQuirk::Forbid);
-}
-
 static CSSValue* consumeOffsetPath(CSSParserTokenRange& range,
                                    const CSSParserContext* context,
                                    bool isMotionPath) {
   CSSValue* value = consumePathOrNone(range);
 
   // Count when we receive a valid path other than 'none'.
-  if (context->isUseCounterRecordingEnabled() && value &&
-      !value->isIdentifierValue()) {
+  if (value && !value->isIdentifierValue()) {
     if (isMotionPath) {
-      context->useCounter()->count(UseCounter::CSSMotionInEffect);
+      context->count(UseCounter::CSSMotionInEffect);
     } else {
-      context->useCounter()->count(UseCounter::CSSOffsetInEffect);
+      context->count(UseCounter::CSSOffsetInEffect);
     }
   }
   return value;
@@ -1142,29 +946,10 @@ bool CSSPropertyParser::consumeOffsetShorthand(bool important) {
   return true;
 }
 
-static CSSValue* consumeLineWidth(CSSParserTokenRange& range,
-                                  CSSParserMode cssParserMode,
-                                  UnitlessQuirk unitless) {
-  CSSValueID id = range.peek().id();
-  if (id == CSSValueThin || id == CSSValueMedium || id == CSSValueThick)
-    return consumeIdent(range);
-  return consumeLength(range, cssParserMode, ValueRangeNonNegative, unitless);
-}
-
 static CSSValue* consumeBorderWidth(CSSParserTokenRange& range,
                                     CSSParserMode cssParserMode,
                                     UnitlessQuirk unitless) {
   return consumeLineWidth(range, cssParserMode, unitless);
-}
-
-static CSSValue* consumeTextStrokeWidth(CSSParserTokenRange& range,
-                                        CSSParserMode cssParserMode) {
-  return consumeLineWidth(range, cssParserMode, UnitlessQuirk::Forbid);
-}
-
-static CSSValue* consumeColumnRuleWidth(CSSParserTokenRange& range,
-                                        CSSParserMode cssParserMode) {
-  return consumeLineWidth(range, cssParserMode, UnitlessQuirk::Forbid);
 }
 
 static bool consumeTranslate3d(CSSParserTokenRange& args,
@@ -1211,10 +996,7 @@ static bool consumePerspective(CSSParserTokenRange& args,
     double perspective;
     if (!consumeNumberRaw(args, perspective) || perspective < 0)
       return false;
-    if (context->isUseCounterRecordingEnabled()) {
-      context->useCounter()->count(
-          UseCounter::UnitlessPerspectiveInTransformProperty);
-    }
+    context->count(UseCounter::UnitlessPerspectiveInTransformProperty);
     parsedValue = CSSPrimitiveValue::create(
         perspective, CSSPrimitiveValue::UnitType::Pixels);
   }
@@ -1341,58 +1123,11 @@ static CSSValue* consumeTransform(CSSParserTokenRange& range,
   return list;
 }
 
-template <CSSValueID start, CSSValueID end>
-static CSSValue* consumePositionLonghand(CSSParserTokenRange& range,
-                                         CSSParserMode cssParserMode) {
-  if (range.peek().type() == IdentToken) {
-    CSSValueID id = range.peek().id();
-    int percent;
-    if (id == start)
-      percent = 0;
-    else if (id == CSSValueCenter)
-      percent = 50;
-    else if (id == end)
-      percent = 100;
-    else
-      return nullptr;
-    range.consumeIncludingWhitespace();
-    return CSSPrimitiveValue::create(percent,
-                                     CSSPrimitiveValue::UnitType::Percentage);
-  }
-  return consumeLengthOrPercent(range, cssParserMode, ValueRangeAll);
-}
-
-static CSSValue* consumePositionX(CSSParserTokenRange& range,
-                                  CSSParserMode cssParserMode) {
-  return consumePositionLonghand<CSSValueLeft, CSSValueRight>(range,
-                                                              cssParserMode);
-}
-
-static CSSValue* consumePositionY(CSSParserTokenRange& range,
-                                  CSSParserMode cssParserMode) {
-  return consumePositionLonghand<CSSValueTop, CSSValueBottom>(range,
-                                                              cssParserMode);
-}
-
 static CSSValue* consumeNoneOrURI(CSSParserTokenRange& range,
                                   const CSSParserContext* context) {
   if (range.peek().id() == CSSValueNone)
     return consumeIdent(range);
   return consumeUrl(range, context);
-}
-
-static CSSValue* consumeBaselineShift(CSSParserTokenRange& range) {
-  CSSValueID id = range.peek().id();
-  if (id == CSSValueBaseline || id == CSSValueSub || id == CSSValueSuper)
-    return consumeIdent(range);
-  return consumeLengthOrPercent(range, SVGAttributeMode, ValueRangeAll);
-}
-
-static CSSValue* consumeRxOrRy(CSSParserTokenRange& range) {
-  if (range.peek().id() == CSSValueAuto)
-    return consumeIdent(range);
-  return consumeLengthOrPercent(range, SVGAttributeMode, ValueRangeAll,
-                                UnitlessQuirk::Forbid);
 }
 
 static CSSValue* consumePerspective(CSSParserTokenRange& range,
@@ -1407,10 +1142,7 @@ static CSSValue* consumePerspective(CSSParserTokenRange& range,
     double perspective;
     if (!consumeNumberRaw(range, perspective))
       return nullptr;
-    if (context->isUseCounterRecordingEnabled()) {
-      context->useCounter()->count(
-          UseCounter::UnitlessPerspectiveInPerspectiveProperty);
-    }
+    context->count(UseCounter::UnitlessPerspectiveInPerspectiveProperty);
     parsedValue = CSSPrimitiveValue::create(
         perspective, CSSPrimitiveValue::UnitType::Pixels);
   }
@@ -1436,35 +1168,6 @@ static CSSValue* consumeScrollSnapPoints(CSSParserTokenRange& range,
     }
   }
   return nullptr;
-}
-
-static CSSValue* consumeClipPath(CSSParserTokenRange& range,
-                                 const CSSParserContext* context) {
-  if (range.peek().id() == CSSValueNone)
-    return consumeIdent(range);
-  if (CSSURIValue* url = consumeUrl(range, context))
-    return url;
-  return CSSPropertyShapeUtils::consumeBasicShape(range, context);
-}
-
-static CSSValue* consumeShapeOutside(CSSParserTokenRange& range,
-                                     const CSSParserContext* context) {
-  if (CSSValue* imageValue = consumeImageOrNone(range, context))
-    return imageValue;
-  CSSValueList* list = CSSValueList::createSpaceSeparated();
-  if (CSSValue* boxValue = consumeShapeBox(range))
-    list->append(*boxValue);
-  if (CSSValue* shapeValue =
-          CSSPropertyShapeUtils::consumeBasicShape(range, context)) {
-    list->append(*shapeValue);
-    if (list->length() < 2) {
-      if (CSSValue* boxValue = consumeShapeBox(range))
-        list->append(*boxValue);
-    }
-  }
-  if (!list->length())
-    return nullptr;
-  return list;
 }
 
 static CSSValue* consumeContentDistributionOverflowPosition(
@@ -1694,17 +1397,6 @@ static CSSValue* consumeReflect(CSSParserTokenRange& range,
   return CSSReflectValue::create(direction, offset, mask);
 }
 
-static CSSValue* consumeImageOrientation(CSSParserTokenRange& range) {
-  if (range.peek().id() == CSSValueFromImage)
-    return consumeIdent(range);
-  if (range.peek().type() != NumberToken) {
-    CSSPrimitiveValue* angle = consumeAngle(range);
-    if (angle && angle->getDoubleValue() == 0)
-      return angle;
-  }
-  return nullptr;
-}
-
 static CSSValue* consumeBackgroundBlendMode(CSSParserTokenRange& range) {
   CSSValueID id = range.peek().id();
   if (id == CSSValueNormal || id == CSSValueOverlay ||
@@ -1801,10 +1493,14 @@ static CSSValue* consumeBackgroundComponent(CSSPropertyID unresolvedProperty,
       return consumeImageOrNone(range, context);
     case CSSPropertyBackgroundPositionX:
     case CSSPropertyWebkitMaskPositionX:
-      return consumePositionX(range, context->mode());
+      return CSSPropertyPositionUtils::consumePositionLonghand<CSSValueLeft,
+                                                               CSSValueRight>(
+          range, context->mode());
     case CSSPropertyBackgroundPositionY:
     case CSSPropertyWebkitMaskPositionY:
-      return consumePositionY(range, context->mode());
+      return CSSPropertyPositionUtils::consumePositionLonghand<CSSValueTop,
+                                                               CSSValueBottom>(
+          range, context->mode());
     case CSSPropertyBackgroundSize:
     case CSSPropertyAliasWebkitBackgroundSize:
     case CSSPropertyWebkitMaskSize:
@@ -1844,28 +1540,6 @@ static CSSValue* consumeCommaSeparatedBackgroundComponent(
     addBackgroundValue(result, value);
   } while (consumeCommaIncludingWhitespace(range));
   return result;
-}
-
-static CSSValue* consumeAlignItems(CSSParserTokenRange& range) {
-  // align-items property does not allow the 'auto' value.
-  if (identMatches<CSSValueAuto>(range.peek().id()))
-    return nullptr;
-  return CSSPropertyAlignmentUtils::consumeSelfPositionOverflowPosition(range);
-}
-
-static CSSValue* consumeJustifyItems(CSSParserTokenRange& range) {
-  CSSParserTokenRange rangeCopy = range;
-  CSSIdentifierValue* legacy = consumeIdent<CSSValueLegacy>(rangeCopy);
-  CSSIdentifierValue* positionKeyword =
-      consumeIdent<CSSValueCenter, CSSValueLeft, CSSValueRight>(rangeCopy);
-  if (!legacy)
-    legacy = consumeIdent<CSSValueLegacy>(rangeCopy);
-  if (legacy && positionKeyword) {
-    range = rangeCopy;
-    return CSSValuePair::create(legacy, positionKeyword,
-                                CSSValuePair::DropIdenticalValues);
-  }
-  return CSSPropertyAlignmentUtils::consumeSelfPositionOverflowPosition(range);
 }
 
 static CSSValue* consumeFitContent(CSSParserTokenRange& range,
@@ -2047,7 +1721,7 @@ static bool parseGridTemplateAreasRow(const String& gridRowNames,
 
     NamedGridAreaMap::iterator gridAreaIt = gridAreaMap.find(gridAreaName);
     if (gridAreaIt == gridAreaMap.end()) {
-      gridAreaMap.add(
+      gridAreaMap.insert(
           gridAreaName,
           GridArea(GridSpan::translatedDefiniteGridSpan(rowCount, rowCount + 1),
                    GridSpan::translatedDefiniteGridSpan(currentColumn,
@@ -2319,21 +1993,20 @@ static void countKeywordOnlyPropertyUsage(CSSPropertyID property,
         else
           feature = UseCounter::CSSValueAppearanceOthers;
       }
-      context->useCounter()->count(feature);
+      context->count(feature);
       break;
     }
 
     case CSSPropertyWebkitUserModify: {
       switch (valueID) {
         case CSSValueReadOnly:
-          context->useCounter()->count(UseCounter::CSSValueUserModifyReadOnly);
+          context->count(UseCounter::CSSValueUserModifyReadOnly);
           break;
         case CSSValueReadWrite:
-          context->useCounter()->count(UseCounter::CSSValueUserModifyReadWrite);
+          context->count(UseCounter::CSSValueUserModifyReadWrite);
           break;
         case CSSValueReadWritePlaintextOnly:
-          context->useCounter()->count(
-              UseCounter::CSSValueUserModifyReadWritePlaintextOnly);
+          context->count(UseCounter::CSSValueUserModifyReadWritePlaintextOnly);
           break;
         default:
           NOTREACHED();
@@ -2358,21 +2031,17 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     return consumeIdent(m_range);
   }
 
-  // Gets the parsing function for our current property from the property API.
-  // If it has been implemented, we call this function, otherwise we manually
+  // Gets the parsing method for our current property from the property API.
+  // If it has been implemented, we call this method, otherwise we manually
   // parse this value in the switch statement below. As we implement APIs for
   // other properties, those properties will be taken out of the switch
   // statement.
   const CSSPropertyDescriptor& cssPropertyDesc =
       CSSPropertyDescriptor::get(property);
-  if (cssPropertyDesc.temporaryCanReadValue)
+  if (cssPropertyDesc.parseSingleValue)
     return cssPropertyDesc.parseSingleValue(m_range, m_context);
 
   switch (property) {
-    case CSSPropertyWebkitHighlight:
-      return consumeWebkitHighlight(m_range);
-    case CSSPropertyFontVariantNumeric:
-      return consumeFontVariantNumeric(m_range);
     case CSSPropertyFontFeatureSettings:
       return consumeFontFeatureSettings(m_range);
     case CSSPropertyFontFamily:
@@ -2390,18 +2059,10 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyCounterReset:
       return consumeCounter(m_range,
                             property == CSSPropertyCounterIncrement ? 1 : 0);
-    case CSSPropertySnapHeight:
-      return consumeSnapHeight(m_range, m_context->mode());
     case CSSPropertyMaxWidth:
     case CSSPropertyMaxHeight:
       return CSSPropertyLengthUtils::consumeMaxWidthOrHeight(
           m_range, m_context, UnitlessQuirk::Allow);
-    case CSSPropertyMaxInlineSize:
-    case CSSPropertyMaxBlockSize:
-    case CSSPropertyWebkitMaxLogicalWidth:
-    case CSSPropertyWebkitMaxLogicalHeight:
-      return CSSPropertyLengthUtils::consumeMaxWidthOrHeight(m_range,
-                                                             m_context);
     case CSSPropertyMinWidth:
     case CSSPropertyMinHeight:
     case CSSPropertyWidth:
@@ -2417,47 +2078,13 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyWebkitLogicalWidth:
     case CSSPropertyWebkitLogicalHeight:
       return CSSPropertyLengthUtils::consumeWidthOrHeight(m_range, m_context);
-    case CSSPropertyMarginTop:
-    case CSSPropertyMarginRight:
-    case CSSPropertyMarginBottom:
-    case CSSPropertyMarginLeft:
-    case CSSPropertyBottom:
-    case CSSPropertyLeft:
-    case CSSPropertyRight:
-    case CSSPropertyTop:
-      return consumeMarginOrOffset(m_range, m_context->mode(),
-                                   UnitlessQuirk::Allow);
-    case CSSPropertyWebkitMarginStart:
-    case CSSPropertyWebkitMarginEnd:
-    case CSSPropertyWebkitMarginBefore:
-    case CSSPropertyWebkitMarginAfter:
-      return consumeMarginOrOffset(m_range, m_context->mode(),
-                                   UnitlessQuirk::Forbid);
-    case CSSPropertyPaddingTop:
-    case CSSPropertyPaddingRight:
-    case CSSPropertyPaddingBottom:
-    case CSSPropertyPaddingLeft:
-      return consumeLengthOrPercent(m_range, m_context->mode(),
-                                    ValueRangeNonNegative,
-                                    UnitlessQuirk::Allow);
-    case CSSPropertyTouchAction:
-      return consumeTouchAction(m_range);
     case CSSPropertyScrollSnapDestination:
     case CSSPropertyObjectPosition:
     case CSSPropertyPerspectiveOrigin:
       return consumePosition(m_range, m_context->mode(), UnitlessQuirk::Forbid);
-    case CSSPropertyWebkitFontSizeDelta:
-      return consumeLength(m_range, m_context->mode(), ValueRangeAll,
-                           UnitlessQuirk::Allow);
     case CSSPropertyWebkitHyphenateCharacter:
     case CSSPropertyWebkitLocale:
       return consumeLocale(m_range);
-    case CSSPropertyColumnWidth:
-      return consumeColumnWidth(m_range);
-    case CSSPropertyColumnCount:
-      return consumeColumnCount(m_range);
-    case CSSPropertyColumnSpan:
-      return consumeColumnSpan(m_range);
     case CSSPropertyAnimationDelay:
     case CSSPropertyTransitionDelay:
     case CSSPropertyAnimationDirection:
@@ -2477,27 +2104,10 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyGridRowGap:
       return consumeLengthOrPercent(m_range, m_context->mode(),
                                     ValueRangeNonNegative);
-    case CSSPropertyShapeImageThreshold:
-      return consumeNumber(m_range, ValueRangeAll);
     case CSSPropertyWebkitBoxOrdinalGroup:
     case CSSPropertyOrphans:
     case CSSPropertyWidows:
       return consumePositiveInteger(m_range);
-    case CSSPropertyWebkitTextStrokeWidth:
-      return consumeTextStrokeWidth(m_range, m_context->mode());
-    case CSSPropertyWebkitTextFillColor:
-    case CSSPropertyWebkitTapHighlightColor:
-    case CSSPropertyWebkitTextEmphasisColor:
-    case CSSPropertyWebkitBorderStartColor:
-    case CSSPropertyWebkitBorderEndColor:
-    case CSSPropertyWebkitBorderBeforeColor:
-    case CSSPropertyWebkitBorderAfterColor:
-    case CSSPropertyWebkitTextStrokeColor:
-    case CSSPropertyStopColor:
-    case CSSPropertyFloodColor:
-    case CSSPropertyLightingColor:
-    case CSSPropertyColumnRuleColor:
-      return consumeColor(m_range, m_context->mode());
     case CSSPropertyColor:
     case CSSPropertyBackgroundColor:
       return consumeColor(m_range, m_context->mode(), inQuirksMode());
@@ -2540,8 +2150,6 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyWebkitTextDecorationsInEffect:
     case CSSPropertyTextDecorationLine:
       return consumeTextDecorationLine(m_range);
-    case CSSPropertyOffsetAnchor:
-      return consumeOffsetAnchor(m_range, m_context->mode());
     case CSSPropertyD:
       return consumePathOrNone(m_range);
     case CSSPropertyOffsetPath:
@@ -2554,19 +2162,20 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyOffsetRotate:
     case CSSPropertyOffsetRotation:
       return consumeOffsetRotate(m_range);
-    case CSSPropertyOutlineWidth:
-      return consumeLineWidth(m_range, m_context->mode(),
-                              UnitlessQuirk::Forbid);
     case CSSPropertyTransform:
       return consumeTransform(
           m_range, m_context,
           unresolvedProperty == CSSPropertyAliasWebkitTransform);
     case CSSPropertyWebkitTransformOriginX:
     case CSSPropertyWebkitPerspectiveOriginX:
-      return consumePositionX(m_range, m_context->mode());
+      return CSSPropertyPositionUtils::consumePositionLonghand<CSSValueLeft,
+                                                               CSSValueRight>(
+          m_range, m_context->mode());
     case CSSPropertyWebkitTransformOriginY:
     case CSSPropertyWebkitPerspectiveOriginY:
-      return consumePositionY(m_range, m_context->mode());
+      return CSSPropertyPositionUtils::consumePositionLonghand<CSSValueTop,
+                                                               CSSValueBottom>(
+          m_range, m_context->mode());
     case CSSPropertyMarkerStart:
     case CSSPropertyMarkerMid:
     case CSSPropertyMarkerEnd:
@@ -2575,19 +2184,8 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyFlexGrow:
     case CSSPropertyFlexShrink:
       return consumeNumber(m_range, ValueRangeNonNegative);
-    case CSSPropertyColumnRuleWidth:
-      return consumeColumnRuleWidth(m_range, m_context->mode());
-    case CSSPropertyStrokeOpacity:
-    case CSSPropertyFillOpacity:
-    case CSSPropertyStopOpacity:
-    case CSSPropertyFloodOpacity:
-    case CSSPropertyOpacity:
     case CSSPropertyWebkitBoxFlex:
       return consumeNumber(m_range, ValueRangeAll);
-    case CSSPropertyBaselineShift:
-      return consumeBaselineShift(m_range);
-    case CSSPropertyStrokeMiterlimit:
-      return consumeNumber(m_range, ValueRangeNonNegative);
     case CSSPropertyStrokeWidth:
     case CSSPropertyStrokeDashoffset:
     case CSSPropertyCx:
@@ -2597,24 +2195,11 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyR:
       return consumeLengthOrPercent(m_range, SVGAttributeMode, ValueRangeAll,
                                     UnitlessQuirk::Forbid);
-    case CSSPropertyRx:
-    case CSSPropertyRy:
-      return consumeRxOrRy(m_range);
-    case CSSPropertyListStyleImage:
-    case CSSPropertyBorderImageSource:
-    case CSSPropertyWebkitMaskBoxImageSource:
-      return consumeImageOrNone(m_range, m_context);
     case CSSPropertyPerspective:
       return consumePerspective(m_range, m_context, unresolvedProperty);
     case CSSPropertyScrollSnapPointsX:
     case CSSPropertyScrollSnapPointsY:
       return consumeScrollSnapPoints(m_range, m_context->mode());
-    case CSSPropertyOrder:
-      return consumeInteger(m_range);
-    case CSSPropertyShapeOutside:
-      return consumeShapeOutside(m_range, m_context);
-    case CSSPropertyClipPath:
-      return consumeClipPath(m_range, m_context);
     case CSSPropertyJustifyContent:
     case CSSPropertyAlignContent:
       ASSERT(RuntimeEnabledFeatures::cssGridLayoutEnabled());
@@ -2635,9 +2220,6 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
       return consumeWebkitBorderImage(property, m_range, m_context);
     case CSSPropertyWebkitBoxReflect:
       return consumeReflect(m_range, m_context);
-    case CSSPropertyImageOrientation:
-      ASSERT(RuntimeEnabledFeatures::imageOrientationEnabled());
-      return consumeImageOrientation(m_range);
     case CSSPropertyBackgroundAttachment:
     case CSSPropertyBackgroundBlendMode:
     case CSSPropertyBackgroundClip:
@@ -2661,17 +2243,6 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyWebkitMaskRepeatX:
     case CSSPropertyWebkitMaskRepeatY:
       return nullptr;
-    case CSSPropertyAlignItems:
-      DCHECK(RuntimeEnabledFeatures::cssGridLayoutEnabled());
-      return consumeAlignItems(m_range);
-    case CSSPropertyJustifySelf:
-    case CSSPropertyAlignSelf:
-      ASSERT(RuntimeEnabledFeatures::cssGridLayoutEnabled());
-      return CSSPropertyAlignmentUtils::consumeSelfPositionOverflowPosition(
-          m_range);
-    case CSSPropertyJustifyItems:
-      ASSERT(RuntimeEnabledFeatures::cssGridLayoutEnabled());
-      return consumeJustifyItems(m_range);
     case CSSPropertyGridColumnEnd:
     case CSSPropertyGridColumnStart:
     case CSSPropertyGridRowEnd:
@@ -3144,29 +2715,14 @@ bool CSSPropertyParser::parseViewportDescriptor(CSSPropertyID propId,
   }
 }
 
-static bool consumeColumnWidthOrCount(CSSParserTokenRange& range,
-                                      CSSValue*& columnWidth,
-                                      CSSValue*& columnCount) {
-  if (range.peek().id() == CSSValueAuto) {
-    consumeIdent(range);
-    return true;
-  }
-  if (!columnWidth) {
-    columnWidth = consumeColumnWidth(range);
-    if (columnWidth)
-      return true;
-  }
-  if (!columnCount)
-    columnCount = consumeColumnCount(range);
-  return columnCount;
-}
-
 bool CSSPropertyParser::consumeColumns(bool important) {
   CSSValue* columnWidth = nullptr;
   CSSValue* columnCount = nullptr;
-  if (!consumeColumnWidthOrCount(m_range, columnWidth, columnCount))
+  if (!CSSPropertyColumnUtils::consumeColumnWidthOrCount(m_range, columnWidth,
+                                                         columnCount))
     return false;
-  consumeColumnWidthOrCount(m_range, columnWidth, columnCount);
+  CSSPropertyColumnUtils::consumeColumnWidthOrCount(m_range, columnWidth,
+                                                    columnCount);
   if (!m_range.atEnd())
     return false;
   if (!columnWidth)
@@ -3941,6 +3497,16 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty,
                                        bool important) {
   CSSPropertyID property = resolveCSSPropertyID(unresolvedProperty);
 
+  // Gets the parsing method for our current property from the property API.
+  // If it has been implemented, we call this method, otherwise we manually
+  // parse this value in the switch statement below. As we implement APIs for
+  // other properties, those properties will be taken out of the switch
+  // statement.
+  const CSSPropertyDescriptor& cssPropertyDesc =
+      CSSPropertyDescriptor::get(property);
+  if (cssPropertyDesc.parseShorthand)
+    return cssPropertyDesc.parseShorthand(important, m_range, m_context);
+
   switch (property) {
     case CSSPropertyWebkitMarginCollapse: {
       CSSValueID id = m_range.consumeIncludingWhitespace().id();
@@ -3951,6 +3517,19 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty,
       addProperty(CSSPropertyWebkitMarginBeforeCollapse,
                   CSSPropertyWebkitMarginCollapse, *beforeCollapse, important);
       if (m_range.atEnd()) {
+        addProperty(CSSPropertyWebkitMarginAfterCollapse,
+                    CSSPropertyWebkitMarginCollapse, *beforeCollapse,
+                    important);
+        if (m_range.atEnd()) {
+          addProperty(CSSPropertyWebkitMarginAfterCollapse,
+                      CSSPropertyWebkitMarginCollapse, *beforeCollapse,
+                      important);
+          return true;
+        }
+        id = m_range.consumeIncludingWhitespace().id();
+        if (!CSSParserFastPaths::isValidKeywordPropertyAndValue(
+                CSSPropertyWebkitMarginAfterCollapse, id, m_context->mode()))
+          return false;
         addProperty(CSSPropertyWebkitMarginAfterCollapse,
                     CSSPropertyWebkitMarginCollapse, *beforeCollapse,
                     important);
@@ -3976,11 +3555,13 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty,
 
       CSSValue* overflowXValue = nullptr;
 
-      // FIXME: -webkit-paged-x or -webkit-paged-y only apply to overflow-y. If
+      // FIXME: -webkit-paged-x or -webkit-paged-y only apply to overflow-y.
+      // If
       // this value has been set using the shorthand, then for now overflow-x
       // will default to auto, but once we implement pagination controls, it
       // should default to hidden. If the overflow-y value is anything but
-      // paged-x or paged-y, then overflow-x and overflow-y should have the same
+      // paged-x or paged-y, then overflow-x and overflow-y should have the
+      // same
       // value.
       if (id == CSSValueWebkitPagedX || id == CSSValueWebkitPagedY)
         overflowXValue = CSSIdentifierValue::create(CSSValueAuto);

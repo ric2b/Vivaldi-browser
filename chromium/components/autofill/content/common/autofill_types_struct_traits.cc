@@ -295,6 +295,8 @@ bool StructTraits<mojom::FormFieldDataDataView, FormFieldData>::Read(
     return false;
   if (!data.ReadName(&out->name))
     return false;
+  if (!data.ReadId(&out->id))
+    return false;
   if (!data.ReadValue(&out->value))
     return false;
 
@@ -504,6 +506,11 @@ bool StructTraits<mojom::PasswordFormDataView, PasswordForm>::Read(
 
   out->new_password_value_is_default = data.new_password_value_is_default();
   out->new_password_marked_by_site = data.new_password_marked_by_site();
+
+  if (!data.ReadConfirmationPasswordElement(
+          &out->confirmation_password_element))
+    return false;
+
   out->preferred = data.preferred();
 
   if (!data.ReadDateCreated(&out->date_created) ||

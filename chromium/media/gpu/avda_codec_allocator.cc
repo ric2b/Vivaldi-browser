@@ -16,7 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
-#include "media/base/android/sdk_media_codec_bridge.h"
+#include "media/base/android/media_codec_bridge_impl.h"
 #include "media/base/limits.h"
 #include "media/base/media.h"
 #include "media/base/timestamp_constants.h"
@@ -26,9 +26,6 @@ namespace media {
 
 namespace {
 
-base::LazyInstance<AVDACodecAllocator>::Leaky g_avda_codec_allocator =
-    LAZY_INSTANCE_INITIALIZER;
-
 // Give tasks 800ms before considering them hung. MediaCodec.configure() calls
 // typically take 100-200ms on a N5, so 800ms is expected to very rarely result
 // in false positives. Also, false positives have low impact because we resume
@@ -37,7 +34,7 @@ constexpr base::TimeDelta kHungTaskDetectionTimeout =
     base::TimeDelta::FromMilliseconds(800);
 
 // Delete |codec| and signal |done_event| if it's not null.
-void DeleteMediaCodecAndSignal(std::unique_ptr<VideoCodecBridge> codec,
+void DeleteMediaCodecAndSignal(std::unique_ptr<MediaCodecBridge> codec,
                                base::WaitableEvent* done_event) {
   codec.reset();
   if (done_event)
@@ -75,7 +72,8 @@ bool AVDACodecAllocator::HangDetector::IsThreadLikelyHung() {
 
 // static
 AVDACodecAllocator* AVDACodecAllocator::Instance() {
-  return g_avda_codec_allocator.Pointer();
+  static AVDACodecAllocator* allocator = new AVDACodecAllocator();
+  return allocator;
 }
 
 bool AVDACodecAllocator::StartThread(AVDACodecAllocatorClient* client) {
@@ -236,7 +234,7 @@ void AVDACodecAllocator::OnSurfaceDestroyed(int surface_id) {
     DLOG(WARNING) << __func__ << ": timed out waiting for MediaCodec#release()";
 }
 
-std::unique_ptr<VideoCodecBridge> AVDACodecAllocator::CreateMediaCodecSync(
+std::unique_ptr<MediaCodecBridge> AVDACodecAllocator::CreateMediaCodecSync(
     scoped_refptr<CodecConfig> codec_config) {
   TRACE_EVENT0("media", "AVDA::CreateMediaCodecSync");
 
@@ -247,11 +245,13 @@ std::unique_ptr<VideoCodecBridge> AVDACodecAllocator::CreateMediaCodecSync(
   DCHECK(!codec_config->needs_protected_surface || media_crypto);
 
   const bool require_software_codec = codec_config->task_type == SW_CODEC;
-  std::unique_ptr<VideoCodecBridge> codec(VideoCodecBridge::CreateDecoder(
-      codec_config->codec, codec_config->needs_protected_surface,
-      codec_config->initial_expected_coded_size,
-      codec_config->surface.j_surface().obj(), media_crypto, codec_config->csd0,
-      codec_config->csd1, true, require_software_codec));
+  std::unique_ptr<MediaCodecBridge> codec(
+      MediaCodecBridgeImpl::CreateVideoDecoder(
+          codec_config->codec, codec_config->needs_protected_surface,
+          codec_config->initial_expected_coded_size,
+          codec_config->surface.j_surface().obj(), media_crypto,
+          codec_config->csd0, codec_config->csd1, true,
+          require_software_codec));
 
   return codec;
 }
@@ -267,7 +267,7 @@ void AVDACodecAllocator::CreateMediaCodecAsync(
 }
 
 void AVDACodecAllocator::ReleaseMediaCodec(
-    std::unique_ptr<VideoCodecBridge> media_codec,
+    std::unique_ptr<MediaCodecBridge> media_codec,
     TaskType task_type,
     int surface_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -341,7 +341,7 @@ AVDACodecAllocator::AVDACodecAllocator(base::TickClock* tick_clock,
                                        base::WaitableEvent* stop_event)
     : stop_event_for_testing_(stop_event), weak_this_factory_(this) {
   // We leak the clock we create, but that's okay because we're a singleton.
-  auto clock = tick_clock ? tick_clock : new base::DefaultTickClock();
+  auto* clock = tick_clock ? tick_clock : new base::DefaultTickClock();
 
   // Create threads with names and indices that match up with TaskType.
   threads_.push_back(new ThreadAndHangDetector("AVDAAutoThread", clock));

@@ -36,7 +36,7 @@ Polymer({
 
     if (this.model) {
       this.dialogTitle_ = loadTimeData.getString('onStartupEditPage');
-      this.actionButtonText_ = loadTimeData.getString('onStartupEdit');
+      this.actionButtonText_ = loadTimeData.getString('save');
       this.$.actionButton.disabled = false;
       // Pre-populate the input field.
       this.url_ = this.model.url;
@@ -65,6 +65,15 @@ Polymer({
       // If the URL was invalid, there is nothing to do, just leave the dialog
       // open and let the user fix the URL or cancel.
     }.bind(this));
+  },
+
+  /**
+   * @param {!KeyboardEvent} e
+   * @private
+   */
+  onKeypress_: function(e) {
+    if (e.key == 'Enter' && !this.$.actionButton.disabled)
+      this.onActionButtonTap_();
   },
 
   /** @private */

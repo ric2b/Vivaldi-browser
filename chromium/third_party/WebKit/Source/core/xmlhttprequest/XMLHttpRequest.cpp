@@ -41,10 +41,6 @@
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/Event.h"
 #include "core/events/ProgressEvent.h"
-#include "core/fetch/CrossOriginAccessControl.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchUtils.h"
-#include "core/fetch/ResourceLoaderOptions.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileReaderLoader.h"
@@ -68,6 +64,10 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/blob/BlobData.h"
+#include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchUtils.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/NetworkLog.h"
 #include "platform/network/ParsedContentType.h"
@@ -205,17 +205,18 @@ class XMLHttpRequest::BlobLoader final
 XMLHttpRequest* XMLHttpRequest::create(ScriptState* scriptState) {
   ExecutionContext* context = scriptState->getExecutionContext();
   DOMWrapperWorld& world = scriptState->world();
-  RefPtr<SecurityOrigin> isolatedWorldSecurityOrigin =
-      world.isIsolatedWorld() ? world.isolatedWorldSecurityOrigin() : nullptr;
+  if (!world.isIsolatedWorld())
+    return create(context);
+
   XMLHttpRequest* xmlHttpRequest =
-      new XMLHttpRequest(context, isolatedWorldSecurityOrigin);
+      new XMLHttpRequest(context, true, world.isolatedWorldSecurityOrigin());
   xmlHttpRequest->suspendIfNeeded();
 
   return xmlHttpRequest;
 }
 
 XMLHttpRequest* XMLHttpRequest::create(ExecutionContext* context) {
-  XMLHttpRequest* xmlHttpRequest = new XMLHttpRequest(context, nullptr);
+  XMLHttpRequest* xmlHttpRequest = new XMLHttpRequest(context, false, nullptr);
   xmlHttpRequest->suspendIfNeeded();
 
   return xmlHttpRequest;
@@ -223,6 +224,7 @@ XMLHttpRequest* XMLHttpRequest::create(ExecutionContext* context) {
 
 XMLHttpRequest::XMLHttpRequest(
     ExecutionContext* context,
+    bool isIsolatedWorld,
     PassRefPtr<SecurityOrigin> isolatedWorldSecurityOrigin)
     : SuspendableObject(context),
       m_timeoutMilliseconds(0),
@@ -236,6 +238,7 @@ XMLHttpRequest::XMLHttpRequest(
       m_progressEventThrottle(
           XMLHttpRequestProgressEventThrottle::create(this)),
       m_responseTypeCode(ResponseTypeDefault),
+      m_isIsolatedWorld(isIsolatedWorld),
       m_isolatedWorldSecurityOrigin(isolatedWorldSecurityOrigin),
       m_eventDispatchRecursionLevel(0),
       m_async(true),
@@ -247,7 +250,8 @@ XMLHttpRequest::XMLHttpRequest(
       m_sameOriginRequest(true),
       m_downloadingToFile(false),
       m_responseTextOverflow(false),
-      m_sendFlag(false) {}
+      m_sendFlag(false),
+      m_responseArrayBufferFailure(false) {}
 
 XMLHttpRequest::~XMLHttpRequest() {}
 
@@ -382,14 +386,23 @@ DOMArrayBuffer* XMLHttpRequest::responseArrayBuffer() {
   if (m_error || m_state != kDone)
     return nullptr;
 
-  if (!m_responseArrayBuffer) {
+  if (!m_responseArrayBuffer && !m_responseArrayBufferFailure) {
     if (m_binaryResponseBuilder && m_binaryResponseBuilder->size()) {
-      DOMArrayBuffer* buffer = DOMArrayBuffer::createUninitialized(
+      DOMArrayBuffer* buffer = DOMArrayBuffer::createUninitializedOrNull(
           m_binaryResponseBuilder->size(), 1);
-      m_binaryResponseBuilder->getAsBytes(
-          buffer->data(), static_cast<size_t>(buffer->byteLength()));
-      m_responseArrayBuffer = buffer;
+      if (buffer) {
+        m_binaryResponseBuilder->getAsBytes(
+            buffer->data(), static_cast<size_t>(buffer->byteLength()));
+        m_responseArrayBuffer = buffer;
+      }
+      // https://xhr.spec.whatwg.org/#arraybuffer-response allows clearing
+      // of the 'received bytes' payload when the response buffer allocation
+      // fails.
       m_binaryResponseBuilder.clear();
+      // Mark allocation as failed; subsequent calls to the accessor must
+      // continue to report |null|.
+      //
+      m_responseArrayBufferFailure = !buffer;
     } else {
       m_responseArrayBuffer = DOMArrayBuffer::create(nullptr, 0);
     }
@@ -703,8 +716,7 @@ bool XMLHttpRequest::initSend(ExceptionState& exceptionState) {
 void XMLHttpRequest::send(
     const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormData& body,
     ExceptionState& exceptionState) {
-  InspectorInstrumentation::willSendXMLHttpOrFetchNetworkRequest(
-      getExecutionContext(), url());
+  probe::willSendXMLHttpOrFetchNetworkRequest(getExecutionContext(), url());
 
   if (body.isNull()) {
     send(String(), exceptionState);
@@ -809,7 +821,7 @@ void XMLHttpRequest::send(Blob* body, ExceptionState& exceptionState) {
   if (areMethodAndURLValidForSend()) {
     if (getRequestHeader(HTTPNames::Content_Type).isEmpty()) {
       const String& blobType = body->type();
-      if (!blobType.isEmpty() && isValidContentType(blobType)) {
+      if (!blobType.isEmpty() && ParsedContentType(blobType).isValid()) {
         setRequestHeaderInternal(HTTPNames::Content_Type,
                                  AtomicString(blobType));
       }
@@ -933,8 +945,8 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody,
   // Also, only async requests support upload progress events.
   bool uploadEvents = false;
   if (m_async) {
-    InspectorInstrumentation::asyncTaskScheduled(
-        &executionContext, "XMLHttpRequest.send", this, true);
+    probe::asyncTaskScheduled(&executionContext, "XMLHttpRequest.send", this,
+                              true);
     dispatchProgressEvent(EventTypeNames::loadstart, 0, 0);
     // Event handler could have invalidated this send operation,
     // (re)setting the send flag and/or initiating another send
@@ -948,12 +960,6 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody,
       // See above.
       if (!m_sendFlag || m_loader)
         return;
-    }
-    if (!getExecutionContext()) {
-      handleNetworkError();
-      throwForLoadFailureIfNeeded(exceptionState,
-                                  "Document is already detached.");
-      return;
     }
   }
 
@@ -987,16 +993,15 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody,
   request.setFetchCredentialsMode(
       includeCredentials ? WebURLRequest::FetchCredentialsModeInclude
                          : WebURLRequest::FetchCredentialsModeSameOrigin);
-  request.setSkipServiceWorker(m_isolatedWorldSecurityOrigin.get()
-                                   ? WebURLRequest::SkipServiceWorker::All
-                                   : WebURLRequest::SkipServiceWorker::None);
+  request.setServiceWorkerMode(m_isIsolatedWorld
+                                   ? WebURLRequest::ServiceWorkerMode::None
+                                   : WebURLRequest::ServiceWorkerMode::All);
   request.setExternalRequestStateFromRequestorAddressSpace(
       executionContext.securityContext().addressSpace());
 
-  InspectorInstrumentation::willLoadXHR(
-      &executionContext, this, this, m_method, m_url, m_async,
-      httpBody ? httpBody->deepCopy() : nullptr, m_requestHeaders,
-      includeCredentials);
+  probe::willLoadXHR(&executionContext, this, this, m_method, m_url, m_async,
+                     httpBody ? httpBody->deepCopy() : nullptr,
+                     m_requestHeaders, includeCredentials);
 
   if (httpBody) {
     DCHECK_NE(m_method, HTTPNames::GET);
@@ -1041,33 +1046,25 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody,
   m_exceptionCode = 0;
   m_error = false;
 
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(getExecutionContext());
   if (m_async) {
     UseCounter::count(&executionContext,
                       UseCounter::XMLHttpRequestAsynchronous);
     if (m_upload)
       request.setReportUploadProgress(true);
 
-    // TODO(yhirano): Turn this CHECK into DCHECK once https://crbug.com/667254
-    // is fixed.
-    CHECK(!m_loader);
+    DCHECK(!m_loader);
     DCHECK(m_sendFlag);
     m_loader = ThreadableLoader::create(executionContext, this, options,
-                                        resourceLoaderOptions,
-                                        ThreadableLoader::ClientSpec::kXHR);
+                                        resourceLoaderOptions);
     m_loader->start(request);
 
     return;
   }
 
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_loader);
   // Use count for XHR synchronous requests.
   UseCounter::count(&executionContext, UseCounter::XMLHttpRequestSynchronous);
-  ThreadableLoader::loadResourceSynchronously(
-      executionContext, request, *this, options, resourceLoaderOptions,
-      ThreadableLoader::ClientSpec::kXHR);
+  ThreadableLoader::loadResourceSynchronously(executionContext, request, *this,
+                                              options, resourceLoaderOptions);
 
   throwForLoadFailureIfNeeded(exceptionState, String());
 }
@@ -1105,10 +1102,9 @@ void XMLHttpRequest::abort() {
 }
 
 void XMLHttpRequest::dispose() {
-  if (m_loader) {
-    m_error = true;
-    m_loader->cancel();
-  }
+  probe::detachClientRequest(getExecutionContext(), this);
+  m_progressEventThrottle->stop();
+  internalAbort();
 }
 
 void XMLHttpRequest::clearVariablesForLoading() {
@@ -1129,6 +1125,12 @@ void XMLHttpRequest::clearVariablesForLoading() {
 }
 
 bool XMLHttpRequest::internalAbort() {
+  // Fast path for repeated internalAbort()s; this
+  // will happen if an XHR object is notified of context
+  // destruction followed by finalization.
+  if (m_error && !m_loader)
+    return true;
+
   m_error = true;
 
   if (m_responseDocumentParser && !m_responseDocumentParser->isStopped())
@@ -1183,6 +1185,7 @@ void XMLHttpRequest::clearResponse() {
   // this only when we clear the response holder variables above.
   m_binaryResponseBuilder.clear();
   m_responseArrayBuffer.clear();
+  m_responseArrayBufferFailure = false;
 }
 
 void XMLHttpRequest::clearRequest() {
@@ -1200,11 +1203,11 @@ void XMLHttpRequest::dispatchProgressEvent(const AtomicString& type,
       lengthComputable ? static_cast<unsigned long long>(expectedLength) : 0;
 
   ExecutionContext* context = getExecutionContext();
-  InspectorInstrumentation::AsyncTask asyncTask(context, this, m_async);
+  probe::AsyncTask asyncTask(context, this, m_async);
   m_progressEventThrottle->dispatchProgressEvent(type, lengthComputable, loaded,
                                                  total);
   if (m_async && type == EventTypeNames::loadend)
-    InspectorInstrumentation::asyncTaskCanceled(context, this);
+    probe::asyncTaskCanceled(context, this);
 }
 
 void XMLHttpRequest::dispatchProgressEventFromSnapshot(
@@ -1247,8 +1250,7 @@ void XMLHttpRequest::handleRequestError(ExceptionCode exceptionCode,
                                         long long expectedLength) {
   NETWORK_DVLOG(1) << this << " handleRequestError()";
 
-  InspectorInstrumentation::didFailXHRLoading(getExecutionContext(), this, this,
-                                              m_method, m_url);
+  probe::didFailXHRLoading(getExecutionContext(), this, this, m_method, m_url);
 
   m_sendFlag = false;
   if (!m_async) {
@@ -1622,8 +1624,8 @@ void XMLHttpRequest::notifyParserStopped() {
 }
 
 void XMLHttpRequest::endLoading() {
-  InspectorInstrumentation::didFinishXHRLoading(getExecutionContext(), this,
-                                                this, m_method, m_url);
+  probe::didFinishXHRLoading(getExecutionContext(), this, this, m_method,
+                             m_url);
 
   if (m_loader) {
     // Set |m_error| in order to suppress the cancel notification (see
@@ -1819,16 +1821,14 @@ void XMLHttpRequest::resume() {
 }
 
 void XMLHttpRequest::contextDestroyed(ExecutionContext*) {
-  InspectorInstrumentation::didFailXHRLoading(getExecutionContext(), this, this,
-                                              m_method, m_url);
-  m_progressEventThrottle->stop();
-  internalAbort();
+  dispose();
+
+  // In case we are in the middle of send() function, unset the send flag to
+  // stop the operation.
+  m_sendFlag = false;
 }
 
 bool XMLHttpRequest::hasPendingActivity() const {
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(getExecutionContext() || !m_loader);
-
   // Neither this object nor the JavaScript wrapper should be deleted while
   // a request is in progress because we need to keep the listeners alive,
   // and they are referenced by the JavaScript wrapper.

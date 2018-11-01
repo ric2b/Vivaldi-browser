@@ -22,14 +22,14 @@
 
 #include "core/css/CSSMarkup.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Settings.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/StyleFetchedImage.h"
 #include "core/style/StyleInvalidImage.h"
 #include "platform/CrossOriginAttributeValue.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
@@ -53,6 +53,8 @@ CSSImageValue::~CSSImageValue() {}
 StyleImage* CSSImageValue::cacheImage(const Document& document,
                                       CrossOriginAttributeValue crossOrigin) {
   if (!m_cachedImage) {
+    if (m_absoluteURL.isEmpty())
+      reResolveURL(document);
     FetchRequest request(ResourceRequest(m_absoluteURL),
                          m_initiatorName.isEmpty()
                              ? FetchInitiatorTypeNames::css

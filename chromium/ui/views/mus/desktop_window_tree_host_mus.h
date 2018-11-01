@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/window_observer.h"
 #include "ui/views/mus/mus_client_observer.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
@@ -27,6 +28,7 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
     : public DesktopWindowTreeHost,
       public MusClientObserver,
       public WidgetObserver,
+      public aura::WindowObserver,
       public aura::WindowTreeHostMus,
       public aura::EnvObserver {
  public:
@@ -122,6 +124,7 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   void SizeConstraintsChanged() override;
   bool ShouldUpdateWindowTransparency() const override;
   bool ShouldUseDesktopNativeCursorManager() const override;
+  bool ShouldCreateVisibilityController() const override;
 
   // MusClientObserver:
   void OnWindowManagerFrameValuesChanged() override;
@@ -129,7 +132,12 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   // WidgetObserver:
   void OnWidgetActivationChanged(Widget* widget, bool active) override;
 
-  // WindowTreeHostMus:
+  // aura::WindowObserver:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override;
+
+  // aura::WindowTreeHostMus:
   void ShowImpl() override;
   void HideImpl() override;
   void SetBoundsInPixels(const gfx::Rect& bounds_in_pixels) override;
@@ -142,10 +150,6 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   internal::NativeWidgetDelegate* native_widget_delegate_;
 
   DesktopNativeWidgetAura* desktop_native_widget_aura_;
-
-  // State to restore window to when exiting fullscreen. Only valid if
-  // fullscreen.
-  ui::WindowShowState fullscreen_restore_state_;
 
   // We can optionally have a parent which can order us to close, or own
   // children who we're responsible for closing when we CloseNow().

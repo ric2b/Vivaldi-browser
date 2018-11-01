@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "ui/base/touch/touch_device.h"
@@ -158,7 +159,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool should_print_backgrounds;
   bool should_clear_document_background;
   bool enable_scroll_animator;
-  bool css_variables_enabled;
   bool touch_event_feature_detection_enabled;
   // TODO(mustaq): Nuke when the new API is ready
   bool device_supports_touch;
@@ -228,6 +228,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool fullscreen_supported;
   bool double_tap_to_zoom_enabled;
   bool user_gesture_required_for_media_playback;
+  std::string media_playback_gesture_whitelist_scope;
   GURL default_video_poster_url;
   bool support_deprecated_target_density_dpi;
   bool use_legacy_background_size_shorthand_behavior;
@@ -250,6 +251,9 @@ struct CONTENT_EXPORT WebPreferences {
   bool spellcheck_enabled_by_default;
   // If enabled, when a video goes fullscreen, the orientation should be locked.
   bool video_fullscreen_orientation_lock_enabled;
+  // If enabled, video fullscreen detection will be enabled.
+  bool video_fullscreen_detection_enabled;
+  bool embedded_media_experience_enabled;
 #else  // defined(OS_ANDROID)
   bool cross_origin_media_playback_requires_user_gesture;
 #endif  // defined(OS_ANDROID)
@@ -266,8 +270,32 @@ struct CONTENT_EXPORT WebPreferences {
   // If enabled, disabled video track when the video is in the background.
   bool background_video_track_optimization_enabled;
 
+  // If background video track optimization is enabled, don't disable video
+  // track for videos with the average keyframe distance greater than this
+  // value.
+  // TODO(avayvod, asvitkine): Query the value directly when it is available in
+  // the renderer process. See https://crbug.com/681160.
+  base::TimeDelta max_keyframe_distance_to_disable_background_video;
+
+  // When memory pressure based garbage collection is enabled for MSE, the
+  // |enable_instant_source_buffer_gc| flag controls whether the GC is done
+  // immediately on memory pressure notification or during the next SourceBuffer
+  // append (slower, but is MSE-spec compliant).
+  // TODO(servolk, asvitkine): Query the value directly when it is available in
+  // the renderer process. See https://crbug.com/681160.
+  bool enable_instant_source_buffer_gc;
+
   // Whether it is a presentation receiver.
   bool presentation_receiver;
+
+  // If disabled, media controls should never be used.
+  bool media_controls_enabled;
+
+  // Whether we want to disable updating selection on mutating selection range.
+  // This is to work around Samsung's email app issue. See
+  // https://crbug.com/699943 for details.
+  // TODO(changwan): remove this once we no longer support Android N.
+  bool do_not_update_selection_on_mutating_selection_range;
 
   // We try to keep the default values the same as the default values in
   // chrome, except for the cases where it would require lots of extra work for

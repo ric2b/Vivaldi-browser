@@ -77,8 +77,7 @@ class OzonePlatformX11 : public OzonePlatform {
       PlatformWindowDelegate* delegate,
       const gfx::Rect& bounds) override {
     std::unique_ptr<X11WindowOzone> window = base::MakeUnique<X11WindowOzone>(
-        event_source_.get(), window_manager_.get(), delegate);
-    window->SetBounds(bounds);
+        event_source_.get(), window_manager_.get(), delegate, bounds);
     window->Create();
     window->SetTitle(base::ASCIIToUTF16("Ozone X11"));
     return std::move(window);
@@ -103,6 +102,12 @@ class OzonePlatformX11 : public OzonePlatform {
     if (!event_source_)
       event_source_.reset(new X11EventSourceLibevent(gfx::GetXDisplay()));
     surface_factory_ozone_.reset(new X11SurfaceFactory());
+  }
+
+  base::MessageLoop::Type GetMessageLoopTypeForGpu() override {
+    // When Ozone X11 backend is running use an UI loop to grab Expose events.
+    // See GLSurfaceGLX and https://crbug.com/326995.
+    return base::MessageLoop::TYPE_UI;
   }
 
  private:

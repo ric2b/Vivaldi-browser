@@ -164,7 +164,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                  bool secure,
                                  bool http_only,
                                  CookieSameSite same_site,
-                                 bool enforce_strict_secure,
                                  CookiePriority priority,
                                  const SetCookiesCallback& callback) override;
   void GetCookiesWithOptionsAsync(const GURL& url,
@@ -265,12 +264,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, CookieSourceHistogram);
 
   // For kSafeFromGlobalPurgeDays in CookieStore.
-  FRIEND_TEST_ALL_PREFIXES(CookieMonsterStrictSecureTest, EvictSecureCookies);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, EvictSecureCookies);
 
   // For CookieDeleteEquivalent histogram enum.
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
-                           CookieDeleteEquivalentHistogramTest);
-  FRIEND_TEST_ALL_PREFIXES(CookieMonsterStrictSecureTest,
                            CookieDeleteEquivalentHistogramTest);
 
   // Internal reasons for deletion, used to populate informative histograms
@@ -280,8 +277,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // the CookieStore::ChangeCause mapping inside ChangeCauseMapping.
   // Moreover, these are used as array indexes, so avoid reordering to keep the
   // histogram buckets consistent. New items (if necessary) should be added
-  // at the end of the list, just before DELETE_COOKIE_LAST_ENTRY.
+  // at the end of the list, before DELETE_COOKIE_LAST_ENTRY and the temporary
+  // values added for debugging.
   enum DeletionCause {
+    // DELETE_COOKIE_EXPLICIT is temporarily unused (except for logging to the
+    // histogram) - see values 13-16 below.
     DELETE_COOKIE_EXPLICIT = 0,
     DELETE_COOKIE_OVERWRITE = 1,
     DELETE_COOKIE_EXPIRED = 2,
@@ -313,7 +313,18 @@ class NET_EXPORT CookieMonster : public CookieStore {
     // right after expired cookies.
     DELETE_COOKIE_NON_SECURE = 12,
 
-    DELETE_COOKIE_LAST_ENTRY = 13
+    // The following values are temporary and being used to track down a bug.
+    // They should be treated the same as DELETE_COOKIE_EXPLICIT, and are logged
+    // to the histogram as DELETE_COOKIE_EXPLICIT.
+    DELETE_COOKIE_CREATED_BETWEEN = 13,
+    DELETE_COOKIE_CREATED_BETWEEN_WITH_PREDICATE = 14,
+    DELETE_COOKIE_SINGLE = 15,
+    DELETE_COOKIE_CANONICAL = 16,
+
+    // Do not add new values between DELETE_COOKIE_CREATED_BETWEEN and
+    // DELETE_COOKIE_LAST_ENTRY, as the above values are temporary. Instead, new
+    // values should go before DELETE_COOKIE_CREATED_BETWEEN.
+    DELETE_COOKIE_LAST_ENTRY = 17
   };
 
   // This enum is used to generate a histogramed bitmask measureing the types
@@ -398,7 +409,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
                             bool secure,
                             bool http_only,
                             CookieSameSite same_site,
-                            bool enforce_strict_secure,
                             CookiePriority priority);
 
   CookieList GetAllCookies();
@@ -494,17 +504,15 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // |source_url| is the URL that is attempting to set the cookie.
   // If |skip_httponly| is true, httponly cookies will not be deleted.  The
   // return value will be true if |skip_httponly| skipped an httponly cookie or
-  // |enforce_strict_secure| is true and the cookie to
-  // delete was Secure and the scheme of |ecc| is insecure.  |key| is the key to
-  // find the cookie in cookies_; see the comment before the CookieMap typedef
-  // for details.
+  // the cookie to delete was Secure and the scheme of |ecc| is insecure.  |key|
+  // is the key to find the cookie in cookies_; see the comment before the
+  // CookieMap typedef for details.
   // NOTE: There should never be more than a single matching equivalent cookie.
   bool DeleteAnyEquivalentCookie(const std::string& key,
                                  const CanonicalCookie& ecc,
                                  const GURL& source_url,
                                  bool skip_httponly,
-                                 bool already_expired,
-                                 bool enforce_strict_secure);
+                                 bool already_expired);
 
   // Inserts |cc| into cookies_. Returns an iterator that points to the inserted
   // cookie in cookies_. Guarantee: all iterators to cookies_ remain valid.
@@ -548,9 +556,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // constants for details.
   //
   // Returns the number of cookies deleted (useful for debugging).
-  size_t GarbageCollect(const base::Time& current,
-                        const std::string& key,
-                        bool enforce_strict_secure);
+  size_t GarbageCollect(const base::Time& current, const std::string& key);
 
   // Helper for GarbageCollect(). Deletes up to |purge_goal| cookies with a
   // priority less than or equal to |priority| from |cookies|, while ensuring

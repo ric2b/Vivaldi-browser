@@ -8,6 +8,7 @@
 
 #import "ios/clean/chrome/browser/ui/tab_strip/tab_strip_container_view_controller.h"
 
+#import "base/mac/foundation_util.h"
 #import "ios/clean/chrome/browser/ui/actions/tab_strip_actions.h"
 #import "ios/clean/chrome/browser/ui/ui_types.h"
 
@@ -35,8 +36,9 @@ CGFloat kStripHeight = 200.0;
 
 @property(nonatomic, strong) NSLayoutConstraint* stripHeightConstraint;
 
-// Contained view controller utility methods.
-- (void)removeChildViewController:(UIViewController*)viewController;
+// Contained view controller utility methods. This method cannot be named
+//-removeChildViewController:, as that is a private superclass method.
+- (void)detachChildViewController:(UIViewController*)viewController;
 
 // Called after a new content view controller is set, but before
 // |-didMoveToParentViewController:| is called on that view controller.
@@ -75,7 +77,7 @@ CGFloat kStripHeight = 200.0;
   [NSLayoutConstraint
       deactivateConstraints:self.contentConstraintsWithoutStrip];
   [NSLayoutConstraint deactivateConstraints:self.contentConstraintsWithStrip];
-  [self removeChildViewController:self.contentViewController];
+  [self detachChildViewController:self.contentViewController];
 
   // Add the new content view controller.
   [self addChildViewController:contentViewController];
@@ -94,7 +96,7 @@ CGFloat kStripHeight = 200.0;
   // Remove the current strip view controller, if any.
   [NSLayoutConstraint deactivateConstraints:self.stripConstraints];
   [NSLayoutConstraint deactivateConstraints:self.contentConstraintsWithStrip];
-  [self removeChildViewController:self.tabStripViewController];
+  [self detachChildViewController:self.tabStripViewController];
 
   // Add the new strip view controller.
   [self addChildViewController:tabStripViewController];
@@ -157,14 +159,64 @@ CGFloat kStripHeight = 200.0;
 #pragma mark - TabStripActions
 
 // Action to toggle visibility of tab strip.
-- (void)toggleTabStrip:(id)sender {
-  self.stripHeightConstraint.constant =
-      self.stripHeightConstraint.constant > 0 ? 0.0 : kStripHeight;
+- (void)showTabStrip:(id)sender {
+  self.stripHeightConstraint.constant = kStripHeight;
+}
+
+- (void)hideTabStrip:(id)sender {
+  self.stripHeightConstraint.constant = 0.0f;
+}
+
+#pragma mark - MenuPresentationDelegate
+
+- (CGRect)frameForMenuPresentation:(UIPresentationController*)presentation {
+  CGSize menuSize = presentation.presentedView.frame.size;
+  CGRect menuRect;
+  menuRect.size = menuSize;
+
+  CGRect menuOriginRect = [self rectForZoomWithKey:@"" inView:self.view];
+  if (CGRectIsNull(menuOriginRect)) {
+    menuRect.origin = CGPointMake(50, 50);
+    return menuRect;
+  }
+  // Calculate which corner of the menu the origin rect is in. This is
+  // determined by comparing frames, and thus is RTL-independent.
+  if (CGRectGetMinX(menuOriginRect) - CGRectGetMinX(self.view.bounds) <
+      CGRectGetMaxX(self.view.bounds) - CGRectGetMaxX(menuOriginRect)) {
+    // Origin rect is closer to the left edge of |self.view| than to the right.
+    menuRect.origin.x = CGRectGetMinX(menuOriginRect);
+  } else {
+    // Origin rect is closer to the right edge of |self.view| than to the left.
+    menuRect.origin.x = CGRectGetMaxX(menuOriginRect) - menuSize.width;
+  }
+
+  if (CGRectGetMinY(menuOriginRect) - CGRectGetMinY(self.view.bounds) <
+      CGRectGetMaxY(self.view.bounds) - CGRectGetMaxY(menuOriginRect)) {
+    // Origin rect is closer to the top edge of |self.view| than to the bottom.
+    menuRect.origin.y = CGRectGetMinY(menuOriginRect);
+  } else {
+    // Origin rect is closer to the bottom edge of |self.view| than to the top.
+    menuRect.origin.y = CGRectGetMaxY(menuOriginRect) - menuSize.height;
+  }
+
+  return menuRect;
+}
+
+#pragma mark - ZoomTransitionDelegate
+
+- (CGRect)rectForZoomWithKey:(NSObject*)key inView:(UIView*)view {
+  if ([self.contentViewController
+          conformsToProtocol:@protocol(ZoomTransitionDelegate)]) {
+    return [reinterpret_cast<id<ZoomTransitionDelegate>>(
+        self.contentViewController) rectForZoomWithKey:key
+                                                inView:view];
+  }
+  return CGRectNull;
 }
 
 #pragma mark - Private methods
 
-- (void)removeChildViewController:(UIViewController*)viewController {
+- (void)detachChildViewController:(UIViewController*)viewController {
   if (viewController.parentViewController != self)
     return;
   [viewController willMoveToParentViewController:nil];

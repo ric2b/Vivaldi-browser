@@ -128,6 +128,7 @@ struct HeadlessBrowser::Options {
 
   // Default per-context options, can be specialized on per-context basis.
 
+  std::string product_name_and_version;
   std::string user_agent;
 
   // Address of the HTTP/HTTPS proxy server to use. The system proxy settings
@@ -148,6 +149,20 @@ struct HeadlessBrowser::Options {
 
   // Run a browser context in an incognito mode. Enabled by default.
   bool incognito_mode;
+
+  // Set a callback that is invoked to override WebPreferences for RenderViews
+  // created within the HeadlessBrowser. Called whenever the WebPreferences of a
+  // RenderView change. Executed on the browser main thread.
+  //
+  // WARNING: We cannot provide any guarantees about the stability of the
+  // exposed WebPreferences API, so use with care.
+  base::Callback<void(WebPreferences*)> override_web_preferences_callback;
+
+  // Minidump crash reporter settings. Crash reporting is disabled by default.
+  // By default crash dumps are written to the directory containing the
+  // executable.
+  bool enable_crash_reporter;
+  base::FilePath crash_dumps_dir;
 
   // Reminder: when adding a new field here, do not forget to add it to
   // HeadlessBrowserContextOptions (where appropriate).
@@ -174,12 +189,18 @@ class HeadlessBrowser::Options::Builder {
 
   // Per-context settings.
 
+  Builder& SetProductNameAndVersion(
+      const std::string& product_name_and_version);
   Builder& SetUserAgent(const std::string& user_agent);
   Builder& SetProxyServer(const net::HostPortPair& proxy_server);
   Builder& SetHostResolverRules(const std::string& host_resolver_rules);
   Builder& SetWindowSize(const gfx::Size& window_size);
   Builder& SetUserDataDir(const base::FilePath& user_data_dir);
   Builder& SetIncognitoMode(bool incognito_mode);
+  Builder& SetOverrideWebPreferencesCallback(
+      base::Callback<void(WebPreferences*)> callback);
+  Builder& SetCrashReporterEnabled(bool enabled);
+  Builder& SetCrashDumpsDir(const base::FilePath& dir);
 
   Options Build();
 

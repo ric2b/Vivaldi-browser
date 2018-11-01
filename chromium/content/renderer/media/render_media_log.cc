@@ -18,7 +18,7 @@
 #include "content/public/renderer/render_thread.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/base/pipeline_stats.h"
+#include "platform_media/common/pipeline_stats.h"
 #endif
 
 #ifndef MEDIA_EVENT_LOG_UTILITY
@@ -77,6 +77,12 @@ void RenderMediaLog::AddEvent(std::unique_ptr<media::MediaLogEvent> event) {
         last_buffered_extents_changed_event_.swap(event);
         // SendQueuedMediaEvents() will enqueue the most recent event of this
         // kind, if any, prior to sending the event batch.
+        break;
+
+      case media::MediaLogEvent::DURATION_SET:
+        // Similar to the extents changed message, this may fire many times for
+        // badly muxed media. Suppress within our rate limits here.
+        last_duration_changed_event_.swap(event);
         break;
 
       // Hold onto the most recent PIPELINE_ERROR and MEDIA_LOG_ERROR_ENTRY for
@@ -158,6 +164,11 @@ void RenderMediaLog::SendQueuedMediaEvents() {
     if (last_buffered_extents_changed_event_) {
       queued_media_events_.push_back(*last_buffered_extents_changed_event_);
       last_buffered_extents_changed_event_.reset();
+    }
+
+    if (last_duration_changed_event_) {
+      queued_media_events_.push_back(*last_duration_changed_event_);
+      last_duration_changed_event_.reset();
     }
 
     queued_media_events_.swap(events_to_send);

@@ -5,11 +5,14 @@
 #include "ui/views/focus/focus_manager.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/debug/stack_trace.h"
 #include "base/logging.h"
-#include "build/build_config.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
@@ -25,24 +28,31 @@
 #include "ui/views/widget/widget_delegate.h"
 
 namespace views {
+namespace {
+
+#if defined(OS_CHROMEOS)
+// Crash appears to be specific to chromeos, so only log there.
+bool should_log_focused_view = true;
+#else
+bool should_log_focused_view = false;
+#endif
+
+}  // namespace
 
 bool FocusManager::arrow_key_traversal_enabled_ = false;
 
-FocusManager::FocusManager(Widget* widget, FocusManagerDelegate* delegate)
+FocusManager::FocusManager(Widget* widget,
+                           std::unique_ptr<FocusManagerDelegate> delegate)
     : widget_(widget),
-      delegate_(delegate),
-      focused_view_(NULL),
-      accelerator_manager_(new ui::AcceleratorManager),
-      shortcut_handling_suspended_(false),
-      focus_change_reason_(kReasonDirectFocusChange),
-      is_changing_focus_(false),
-      keyboard_accessible_(false) {
+      delegate_(std::move(delegate)),
+      stored_focused_view_storage_id_(
+          ViewStorage::GetInstance()->CreateStorageID()) {
   DCHECK(widget_);
-  stored_focused_view_storage_id_ =
-      ViewStorage::GetInstance()->CreateStorageID();
 }
 
 FocusManager::~FocusManager() {
+  if (focused_view_)
+    focused_view_->RemoveObserver(this);
 }
 
 bool FocusManager::OnKeyEvent(const ui::KeyEvent& event) {
@@ -59,7 +69,7 @@ bool FocusManager::OnKeyEvent(const ui::KeyEvent& event) {
   if (event.type() == ui::ET_KEY_PRESSED) {
     // If the focused view wants to process the key event as is, let it be.
     if (focused_view_ && focused_view_->SkipDefaultKeyEventProcessing(event) &&
-        !accelerator_manager_->HasPriorityHandler(accelerator))
+        !accelerator_manager_.HasPriorityHandler(accelerator))
       return true;
 
     // Intercept Tab related messages for focus traversal.
@@ -108,16 +118,11 @@ bool FocusManager::OnKeyEvent(const ui::KeyEvent& event) {
   return true;
 }
 
-void FocusManager::ValidateFocusedView() {
-  if (focused_view_ && !ContainsView(focused_view_))
-    ClearFocus();
-}
-
 // Tests whether a view is valid, whether it still belongs to the window
 // hierarchy of the FocusManager.
 bool FocusManager::ContainsView(View* view) {
   Widget* widget = view->GetWidget();
-  return widget ? widget->GetFocusManager() == this : false;
+  return widget && widget->GetFocusManager() == this;
 }
 
 void FocusManager::AdvanceFocus(bool reverse) {
@@ -204,10 +209,10 @@ View* FocusManager::GetNextFocusableView(View* original_starting_view,
                                          Widget* starting_widget,
                                          bool reverse,
                                          bool dont_loop) {
-  FocusTraversable* focus_traversable = NULL;
+  DCHECK(!focused_view_ || ContainsView(focused_view_)) << " focus_view="
+                                                        << focused_view_;
 
-  // Let's revalidate the focused view.
-  ValidateFocusedView();
+  FocusTraversable* focus_traversable = NULL;
 
   View* starting_view = NULL;
   if (original_starting_view) {
@@ -312,6 +317,9 @@ void FocusManager::SetFocusedViewWithReason(
     View* view, FocusChangeReason reason) {
   if (focused_view_ == view)
     return;
+  // TODO(oshima|achuith): This is to diagnose crbug.com/687232.
+  // Change this to DCHECK once it's resolved.
+  CHECK(!view || ContainsView(view));
 
 #if !defined(OS_MACOSX)
   // TODO(warx): There are some AccessiblePaneViewTest failed on macosx.
@@ -328,7 +336,6 @@ void FocusManager::SetFocusedViewWithReason(
   }
 #endif
 
-  base::AutoReset<bool> auto_changing_focus(&is_changing_focus_, true);
   // Update the reason for the focus change (since this is checked by
   // some listeners), then notify all listeners.
   focus_change_reason_ = reason;
@@ -337,14 +344,24 @@ void FocusManager::SetFocusedViewWithReason(
 
   View* old_focused_view = focused_view_;
   focused_view_ = view;
-  if (old_focused_view)
+  if (old_focused_view) {
+    old_focused_view->RemoveObserver(this);
     old_focused_view->Blur();
+  }
   // Also make |focused_view_| the stored focus view. This way the stored focus
   // view is remembered if focus changes are requested prior to a show or while
   // hidden.
   SetStoredFocusView(focused_view_);
-  if (focused_view_)
+  if (focused_view_) {
+    focused_view_->AddObserver(this);
     focused_view_->Focus();
+    if (should_log_focused_view) {
+      stack_when_focused_view_set_ =
+          base::MakeUnique<base::debug::StackTrace>();
+    }
+  } else {
+    stack_when_focused_view_set_.reset();
+  }
 
   for (FocusChangeListener& observer : focus_change_listeners_)
     observer.OnDidChangeFocus(old_focused_view, focused_view_);
@@ -497,20 +514,20 @@ void FocusManager::RegisterAccelerator(
     const ui::Accelerator& accelerator,
     ui::AcceleratorManager::HandlerPriority priority,
     ui::AcceleratorTarget* target) {
-  accelerator_manager_->Register(accelerator, priority, target);
+  accelerator_manager_.Register({accelerator}, priority, target);
 }
 
 void FocusManager::UnregisterAccelerator(const ui::Accelerator& accelerator,
                                          ui::AcceleratorTarget* target) {
-  accelerator_manager_->Unregister(accelerator, target);
+  accelerator_manager_.Unregister(accelerator, target);
 }
 
 void FocusManager::UnregisterAccelerators(ui::AcceleratorTarget* target) {
-  accelerator_manager_->UnregisterAll(target);
+  accelerator_manager_.UnregisterAll(target);
 }
 
 bool FocusManager::ProcessAccelerator(const ui::Accelerator& accelerator) {
-  if (accelerator_manager_->Process(accelerator))
+  if (accelerator_manager_.Process(accelerator))
     return true;
   if (delegate_.get())
     return delegate_->ProcessAccelerator(accelerator);
@@ -519,7 +536,7 @@ bool FocusManager::ProcessAccelerator(const ui::Accelerator& accelerator) {
 
 bool FocusManager::HasPriorityHandler(
     const ui::Accelerator& accelerator) const {
-  return accelerator_manager_->HasPriorityHandler(accelerator);
+  return accelerator_manager_.HasPriorityHandler(accelerator);
 }
 
 // static
@@ -572,6 +589,39 @@ bool FocusManager::IsFocusable(View* view) const {
 #else
   return view->IsAccessibilityFocusable();
 #endif
+}
+
+void FocusManager::OnViewIsDeleting(View* view) {
+  CHECK_EQ(view, focused_view_);
+
+  // Widget forwards the appropriate calls such that we should never end up
+  // here. None-the-less crashes indicate we are. This logs the stack once when
+  // this happens.
+  // TODO(sky): remove when cause of 687232 is found.
+  if (stack_when_focused_view_set_ && should_log_focused_view) {
+    should_log_focused_view = false;
+    size_t stack_size = 0u;
+    const void* const* instruction_pointers =
+        stack_when_focused_view_set_->Addresses(&stack_size);
+    static constexpr size_t kMaxStackSize = 100;
+    const void* instruction_pointers_copy[kMaxStackSize];
+    // Insert markers bracketing the crash to make it easier to locate.
+    memset(&instruction_pointers_copy[0], 0xAB,
+           sizeof(instruction_pointers_copy[0]));
+    const size_t last_marker_index =
+        std::min(kMaxStackSize - 1, stack_size + 1);
+    memset(&instruction_pointers_copy[last_marker_index], 0xAB,
+           sizeof(instruction_pointers_copy[last_marker_index]));
+    std::memcpy(&instruction_pointers_copy[1], instruction_pointers,
+                std::min(kMaxStackSize - 2, stack_size) * sizeof(const void*));
+    base::debug::Alias(&stack_size);
+    base::debug::Alias(&instruction_pointers_copy);
+    base::debug::DumpWithoutCrashing();
+    stack_when_focused_view_set_.reset();
+  }
+
+  focused_view_->RemoveObserver(this);
+  focused_view_ = nullptr;
 }
 
 }  // namespace views

@@ -43,7 +43,7 @@
    clickedOnLink:(id)link
          atIndex:(NSUInteger)charIndex {
   if (self.model)
-    self.model->OnManageLinkClicked();
+    self.model->OnNavigateToPasswordManagerAccountDashboardLinkClicked();
   [self.delegate viewShouldDismiss];
   return YES;
 }
@@ -88,7 +88,9 @@
            withURL:nil
          linkColor:linkColor];
   [confirmationText_ setDelegate:self];
-  [[confirmationText_ textContainer] setLineFragmentPadding:0.0f];
+  // Set the same text inset as in the title.
+  [[confirmationText_ textContainer]
+      setLineFragmentPadding:kConfirmationBubbleContentInset];
   // Force the text to wrap to fit in the bubble size.
   [confirmationText_ setVerticallyResizable:YES];
   [confirmationText_

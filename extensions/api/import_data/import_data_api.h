@@ -3,7 +3,9 @@
 #ifndef EXTENSIONS_API_IMPORT_DATA_IMPORT_DATA_API_H_
 #define EXTENSIONS_API_IMPORT_DATA_IMPORT_DATA_API_H_
 
+#include <memory>
 #include <string>
+
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -24,7 +26,7 @@ namespace extensions {
 class ProfileSingletonFactory {
  public:
   static ProfileSingletonFactory* getInstance();
-  ImporterList *getImporterList();
+  ImporterList* getImporterList();
   bool getProfileRequested();
   void setProfileRequested(bool profileReq);
   ~ProfileSingletonFactory();
@@ -32,7 +34,7 @@ class ProfileSingletonFactory {
  private:
   bool profilesRequested;
   static bool instanceFlag;
-  static ProfileSingletonFactory *single;
+  static ProfileSingletonFactory* single;
   std::unique_ptr<ImporterList> api_importer_list_;
   ProfileSingletonFactory();
 
@@ -63,7 +65,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   explicit ImportDataAPI(content::BrowserContext* context);
   ~ImportDataAPI() override;
 
-  void StartImport(const importer::SourceProfile &source_profile,
+  void StartImport(const importer::SourceProfile& source_profile,
                    uint16_t imported_items);
 
   // importer::ImporterProgressObserver:
@@ -89,9 +91,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   content::BrowserContext* browser_context_;
 
   // BrowserContextKeyedAPI implementation.
-  static const char* service_name() {
-    return "ImportDataAPI";
-  }
+  static const char* service_name() { return "ImportDataAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
 
   // Created lazily upon OnListenerAdded.
@@ -111,8 +111,9 @@ class ImporterApiFunction : public ChromeAsyncExtensionFunction {
   ImporterApiFunction();
   // AsyncExtensionFunction:
   virtual void SendAsyncResponse();
-  ImporterList *api_importer_list;
+  ImporterList* api_importer_list;
   virtual void Finished();
+
  protected:
   ~ImporterApiFunction() override;
 
@@ -121,8 +122,6 @@ class ImporterApiFunction : public ChromeAsyncExtensionFunction {
   virtual void SendResponseToCallback();
   virtual bool RunAsyncImpl() = 0;
 };
-
-
 
 class ImportDataGetProfilesFunction : public ImporterApiFunction {
  public:
@@ -148,7 +147,8 @@ class ImportDataStartImportFunction : public ImporterApiFunction,
 
   struct DialogParams {
     DialogParams()
-        : imported_items(0), importer_type(importer::TYPE_UNKNOWN),
+        : imported_items(0),
+          importer_type(importer::TYPE_UNKNOWN),
           file_dialog(true) {}
 
     // Items to import
@@ -166,19 +166,19 @@ class ImportDataStartImportFunction : public ImporterApiFunction,
 
   // ui::SelectFileDialog::Listener:
   void FileSelected(const base::FilePath& path,
-                            int index,
-                            void* params) override;
+                    int index,
+                    void* params) override;
   void FileSelectionCanceled(void* params) override;
 
-  void StartImport(const importer::SourceProfile &source_profile,
+  void StartImport(const importer::SourceProfile& source_profile,
                    uint16_t imported_items);
-  void ImportData(const base::ListValue *args);
+  void ImportData(const base::ListValue* args);
 
-  void HandleChooseBookmarksFileOrFolder(base::string16 &title,
-                                         const std::string &extension,
+  void HandleChooseBookmarksFileOrFolder(const base::string16& title,
+                                         const std::string& extension,
                                          int imported_items,
                                          importer::ImporterType importer_type,
-                                         base::FilePath& default_file,
+                                         const base::FilePath& default_file,
                                          bool file_selection);
 
  private:
@@ -187,12 +187,11 @@ class ImportDataStartImportFunction : public ImporterApiFunction,
   DISALLOW_COPY_AND_ASSIGN(ImportDataStartImportFunction);
 };
 
-
-class ImportDataSetVivaldiAsDefaultBrowserFunction :
-    public ChromeAsyncExtensionFunction {
+class ImportDataSetVivaldiAsDefaultBrowserFunction
+    : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.setVivaldiAsDefaultBrowser",
-                              IMPORTDATA_SETVIVALDIDEFAULT)
+                             IMPORTDATA_SETVIVALDIDEFAULT)
   ImportDataSetVivaldiAsDefaultBrowserFunction();
 
  protected:
@@ -201,7 +200,7 @@ class ImportDataSetVivaldiAsDefaultBrowserFunction :
       default_browser_worker_;
 
   void OnDefaultBrowserWorkerFinished(
-    shell_integration::DefaultWebClientState state);
+      shell_integration::DefaultWebClientState state);
 
   // ExtensionFunction:
   bool RunAsync() override;
@@ -209,7 +208,7 @@ class ImportDataSetVivaldiAsDefaultBrowserFunction :
  private:
   // Used to get WeakPtr to self for use on the UI thread.
   base::WeakPtrFactory<ImportDataSetVivaldiAsDefaultBrowserFunction>
-        weak_ptr_factory_;
+      weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ImportDataSetVivaldiAsDefaultBrowserFunction);
 };
@@ -218,7 +217,7 @@ class ImportDataIsVivaldiDefaultBrowserFunction
     : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.isVivaldiDefaultBrowser",
-                              IMPORTDATA_ISVIVALDIDEFAULT)
+                             IMPORTDATA_ISVIVALDIDEFAULT)
   ImportDataIsVivaldiDefaultBrowserFunction();
 
  protected:
@@ -228,7 +227,7 @@ class ImportDataIsVivaldiDefaultBrowserFunction
       default_browser_worker_;
 
   void OnDefaultBrowserWorkerFinished(
-    shell_integration::DefaultWebClientState state);
+      shell_integration::DefaultWebClientState state);
 
   // ExtensionFunction:
   bool RunAsync() override;
@@ -236,7 +235,7 @@ class ImportDataIsVivaldiDefaultBrowserFunction
  private:
   // Used to get WeakPtr to self for use on the UI thread.
   base::WeakPtrFactory<ImportDataIsVivaldiDefaultBrowserFunction>
-        weak_ptr_factory_;
+      weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ImportDataIsVivaldiDefaultBrowserFunction);
 };
@@ -250,7 +249,7 @@ class ImportDataLaunchNetworkSettingsFunction
 
  protected:
   ~ImportDataLaunchNetworkSettingsFunction() override;
-// ExtensionFunction:
+  // ExtensionFunction:
   bool RunAsync() override;
 
  private:
@@ -303,8 +302,8 @@ class ImportDataSetVivaldiLanguageFunction
   DISALLOW_COPY_AND_ASSIGN(ImportDataSetVivaldiLanguageFunction);
 };
 
-class ImportDataSetDefaultContentSettingsFunction :
-  public ChromeAsyncExtensionFunction{
+class ImportDataSetDefaultContentSettingsFunction
+    : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.setDefaultContentSettings",
                              IMPORTDATA_SETDEFAULTCONTENTSETTING)
@@ -385,8 +384,8 @@ class ImportDataOpenTaskManagerFunction : public ChromeAsyncExtensionFunction {
 class ImportDataShowDevToolsFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.showDevTools",
-  IMPORTDATA_GET_BLOCKTHIRDPARTYCOOKIES)
-    ImportDataShowDevToolsFunction();
+                             IMPORTDATA_GET_BLOCKTHIRDPARTYCOOKIES)
+  ImportDataShowDevToolsFunction();
 
  protected:
   ~ImportDataShowDevToolsFunction() override;

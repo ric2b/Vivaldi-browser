@@ -29,6 +29,7 @@
 #include "core/CoreExport.h"
 #include "core/clipboard/DataTransferAccessPolicy.h"
 #include "core/editing/EditingBehavior.h"
+#include "core/editing/EditingStyle.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FindOptions.h"
 #include "core/editing/FrameSelection.h"
@@ -54,6 +55,7 @@ class Pasteboard;
 class SpellChecker;
 class StylePropertySet;
 class TextEvent;
+class TypingCommand;
 class UndoStack;
 class UndoStep;
 
@@ -78,6 +80,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   EditorClient& client() const;
 
   CompositeEditCommand* lastEditCommand() { return m_lastEditCommand.get(); }
+  TypingCommand* lastTypingCommandIfStillOpenForTyping() const;
 
   void handleKeyboardEvent(KeyboardEvent*);
   bool handleTextEvent(TextEvent*);
@@ -105,7 +108,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
   void transpose();
 
-  void respondToChangedContents(const VisibleSelection& endingSelection);
+  void respondToChangedContents(const Position&);
 
   bool selectionStartHasStyle(CSSPropertyID, const String& value) const;
   TriState selectionHasStyle(CSSPropertyID, const String& value) const;
@@ -114,7 +117,6 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   void removeFormattingAndStyle();
 
   void registerCommandGroup(CompositeEditCommand* commandGroupWrapper);
-  void clearLastEditCommand();
 
   bool deleteWithDirection(DeleteDirection,
                            TextGranularity,
@@ -167,7 +169,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
     // Returns target ranges for the command, currently only supports delete
     // related commands. Used by InputEvent.
-    RangeVector* getTargetRanges() const;
+    const StaticRangeVector* getTargetRanges() const;
 
     const EditorInternalCommand* m_command;
     EditorCommandSource m_source;
@@ -305,6 +307,10 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   };
   friend class RevealSelectionScope;
 
+  EditingStyle* typingStyle() const;
+  void setTypingStyle(EditingStyle*);
+  void clearTypingStyle();
+
   DECLARE_TRACE();
 
  private:
@@ -319,6 +325,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   bool m_areMarkedTextMatchesHighlighted;
   EditorParagraphSeparator m_defaultParagraphSeparator;
   bool m_overwriteModeEnabled;
+  Member<EditingStyle> m_typingStyle;
 
   explicit Editor(LocalFrame&);
 
@@ -344,7 +351,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   void revealSelectionAfterEditingOperation(
       const ScrollAlignment& = ScrollAlignment::alignCenterIfNeeded,
       RevealExtentOption = DoNotRevealExtent);
-  void changeSelectionAfterCommand(const VisibleSelection& newSelection,
+  void changeSelectionAfterCommand(const SelectionInDOMTree&,
                                    FrameSelection::SetSelectionOptions);
 
   SpellChecker& spellChecker() const;
@@ -366,6 +373,18 @@ inline void Editor::setMark(const VisibleSelection& selection) {
 
 inline bool Editor::markedTextMatchesAreHighlighted() const {
   return m_areMarkedTextMatchesHighlighted;
+}
+
+inline EditingStyle* Editor::typingStyle() const {
+  return m_typingStyle.get();
+}
+
+inline void Editor::clearTypingStyle() {
+  m_typingStyle.clear();
+}
+
+inline void Editor::setTypingStyle(EditingStyle* style) {
+  m_typingStyle = style;
 }
 
 }  // namespace blink

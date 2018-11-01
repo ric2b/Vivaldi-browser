@@ -55,6 +55,9 @@ shared_library("command_buffer_gles2") {
     "COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY",
     "EGLAPIENTRY=",
   ]
+  if (is_android) {
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  }
   if (current_os == "win") {
     defines += [ "EGLAPI=__declspec(dllexport)" ]
   } else {
@@ -105,6 +108,7 @@ static_library("test_support") {
     "command_buffer/client/gles2_interface_stub.h",
     "command_buffer/service/error_state_mock.cc",
     "command_buffer/service/gles2_cmd_decoder_mock.cc",
+    "test_message_loop_type.h",
   ]
 
   public_deps = [
@@ -116,6 +120,9 @@ static_library("test_support") {
     "//testing/gtest",
     "//ui/gl:gl_unittest_utils",
   ]
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
 }
 
 test("gl_tests") {
@@ -168,6 +175,7 @@ test("gl_tests") {
     "command_buffer/tests/texture_image_factory.h",
     "ipc/client/gpu_context_tests.h",
     "ipc/client/gpu_in_process_context_tests.cc",
+    "ipc/service/direct_composition_surface_win_unittest.cc",
   ]
 
   defines = [ "GL_GLEXT_PROTOTYPES" ]

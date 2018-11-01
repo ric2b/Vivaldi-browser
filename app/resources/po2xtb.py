@@ -112,9 +112,11 @@ def main():
                   """<!DOCTYPE translationbundle>\n"""
                   """<translationbundle lang="%s">""" % locale)
     for msgid, nodes in sorted(translations.iteritems()):
-      if "translations" not in nodes:
-        continue
-      text = xml_escape(nodes["translations"].GetRealContent())
+      if "translations" in nodes and type(nodes["translations"]) is tclib.Translation:
+        text = xml_escape(nodes["translations"].GetRealContent())
+      else:
+         continue
+
       # unescape <ph/> and \"
       text = text.replace("&lt;ph", "<ph").replace("/&gt;", "/>").replace('\"', '"')
       try:

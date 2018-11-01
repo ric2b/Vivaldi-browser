@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/cancelable_callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/mru_cache.h"
 #include "base/files/file_path.h"
@@ -44,7 +45,6 @@ class SingleThreadTaskRunner;
 }
 
 namespace history {
-class CommitLaterTask;
 struct DownloadRow;
 class HistoryBackendClient;
 class HistoryBackendDBBaseTest;
@@ -492,7 +492,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
  private:
   friend class base::RefCountedThreadSafe<HistoryBackend>;
-  friend class CommitLaterTask;  // The commit task needs to call Commit().
   friend class HistoryBackendTest;
   friend class HistoryBackendDBBaseTest;  // So the unit tests can poke our
                                           // innards.
@@ -840,10 +839,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   ExpireHistoryBackend expirer_;
 
   // A commit has been scheduled to occur sometime in the future. We can check
-  // non-null-ness to see if there is a commit scheduled in the future, and we
-  // can use the pointer to cancel the scheduled commit. There can be only one
+  // !IsCancelled() to see if there is a commit scheduled in the future (note
+  // that CancelableClosure starts cancelled with the default constructor), and
+  // we can use Cancel() to cancel the scheduled commit. There can be only one
   // scheduled commit at a time (see ScheduleCommit).
-  scoped_refptr<CommitLaterTask> scheduled_commit_;
+  base::CancelableClosure scheduled_commit_;
 
   // Maps recent redirect destination pages to the chain of redirects that
   // brought us to there. Pages that did not have redirects or were not the
@@ -884,10 +884,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // of inheritance from base::SupportsUserData).
   std::unique_ptr<HistoryBackendHelper> supports_user_data_helper_;
 
-  // Used to manage syncing of the typed urls datatype. This will be null before
-  // Init is called.
-  std::unique_ptr<TypedUrlSyncableService> typed_url_syncable_service_;
-
   // Listens for the system being under memory pressure.
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
@@ -901,6 +897,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // List of observers
   base::ObserverList<HistoryBackendObserver> observers_;
+
+  // Used to manage syncing of the typed urls datatype. This will be null before
+  // Init is called. Defined after observers_ because it unregisters itself as
+  // observer during destruction.
+  std::unique_ptr<TypedUrlSyncableService> typed_url_syncable_service_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryBackend);
 };

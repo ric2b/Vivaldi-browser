@@ -7,9 +7,34 @@ import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
 import("//ui/ozone/ozone.gni")
+import("//ui/vector_icons/vector_icons.gni")
 
 config("flags") {
   defines = [ "TOOLKIT_VIEWS=1" ]
+}
+
+aggregate_vector_icons("views_vector_icons") {
+  icon_directory = "vector_icons"
+
+  icons = [
+    "checkbox_active.icon",
+    "checkbox_normal.icon",
+    "menu_check.1x.icon",
+    "menu_check.icon",
+    "menu_radio_empty.icon",
+    "menu_radio_selected.icon",
+    "radio_button_active.icon",
+    "radio_button_normal.icon",
+    "submenu_arrow.1x.icon",
+    "submenu_arrow.icon",
+  ]
+
+  if (is_mac) {
+    icons += [
+      "combobox_arrow_mac_enabled.icon",
+      "combobox_arrow_mac_disabled.icon",
+    ]
+  }
 }
 
 component("views") {
@@ -17,6 +42,8 @@ component("views") {
   sources = [
     "accessibility/native_view_accessibility.cc",
     "accessibility/native_view_accessibility.h",
+    "accessibility/native_view_accessibility_mac.h",
+    "accessibility/native_view_accessibility_mac.mm",
     "accessibility/native_view_accessibility_win.cc",
     "accessibility/native_view_accessibility_win.h",
     "accessible_pane_view.cc",
@@ -62,6 +89,10 @@ component("views") {
     "bubble/bubble_dialog_delegate.h",
     "bubble/bubble_frame_view.cc",
     "bubble/bubble_frame_view.h",
+    "bubble/info_bubble.cc",
+    "bubble/info_bubble.h",
+    "bubble/tooltip_icon.cc",
+    "bubble/tooltip_icon.h",
     "button_drag_utils.cc",
     "button_drag_utils.h",
     "cocoa/bridged_content_view.h",
@@ -136,8 +167,6 @@ component("views") {
     "controls/link.cc",
     "controls/link.h",
     "controls/link_listener.h",
-    "controls/md_slider.cc",
-    "controls/md_slider.h",
     "controls/menu/display_change_listener_mac.cc",
     "controls/menu/menu_config.cc",
     "controls/menu/menu_config.h",
@@ -178,9 +207,8 @@ component("views") {
     "controls/menu/menu_runner_impl_interface.h",
     "controls/menu/menu_scroll_view_container.cc",
     "controls/menu/menu_scroll_view_container.h",
+    "controls/menu/menu_separator.cc",
     "controls/menu/menu_separator.h",
-    "controls/menu/menu_separator_views.cc",
-    "controls/menu/menu_separator_win.cc",
     "controls/menu/menu_types.h",
     "controls/menu/native_menu_win.cc",
     "controls/menu/native_menu_win.h",
@@ -192,8 +220,6 @@ component("views") {
     "controls/native/native_view_host.h",
     "controls/native/native_view_host_mac.h",
     "controls/native/native_view_host_mac.mm",
-    "controls/non_md_slider.cc",
-    "controls/non_md_slider.h",
     "controls/prefix_delegate.h",
     "controls/prefix_selector.cc",
     "controls/prefix_selector.h",
@@ -237,7 +263,6 @@ component("views") {
     "controls/table/table_view.cc",
     "controls/table/table_view.h",
     "controls/table/table_view_observer.h",
-    "controls/table/table_view_row_background_painter.h",
     "controls/textfield/textfield.cc",
     "controls/textfield/textfield.h",
     "controls/textfield/textfield_controller.cc",
@@ -340,8 +365,6 @@ component("views") {
     "views_touch_selection_controller_factory_mac.cc",
     "widget/drop_helper.cc",
     "widget/drop_helper.h",
-    "widget/monitor_win.cc",
-    "widget/monitor_win.h",
     "widget/native_widget.h",
     "widget/native_widget_delegate.h",
     "widget/native_widget_mac.h",
@@ -386,6 +409,8 @@ component("views") {
     "word_lookup_client.h",
   ]
 
+  sources += get_target_outputs(":views_vector_icons")
+
   configs += [
     "//build/config:precompiled_headers",
 
@@ -396,8 +421,10 @@ component("views") {
   defines = [ "VIEWS_IMPLEMENTATION" ]
 
   deps = [
+    ":views_vector_icons",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//cc/paint",
     "//services/ui/public/interfaces",
     "//skia",
     "//third_party/icu",
@@ -408,7 +435,6 @@ component("views") {
     "//ui/resources",
     "//ui/strings",
     "//ui/views/resources",
-    "//ui/views/resources/vector_icons",
     "//url",
   ]
 
@@ -424,6 +450,7 @@ component("views") {
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/vector_icons",
     "//ui/views/resources",
   ]
 
@@ -689,8 +716,6 @@ static_library("test_support_internal") {
     "test/test_layout_manager.cc",
     "test/test_layout_manager.h",
     "test/test_platform_native_widget.h",
-    "test/test_slider.cc",
-    "test/test_slider.h",
     "test/test_views.cc",
     "test/test_views.h",
     "test/test_views_delegate.h",
@@ -762,6 +787,7 @@ static_library("test_support_internal") {
     deps += [
       "//ui/aura",
       "//ui/aura:test_support",
+      "//ui/views/mus",
       "//ui/wm",
     ]
     if (use_x11 && !is_chromeos) {
@@ -861,10 +887,12 @@ source_set("views_unittests_sources") {
     "layout/fill_layout_unittest.cc",
     "layout/grid_layout_unittest.cc",
     "rect_based_targeting_utils_unittest.cc",
+    "test/widget_test_unittest.cc",
     "view_model_unittest.cc",
     "view_model_utils_unittest.cc",
     "view_targeter_unittest.cc",
     "view_unittest.cc",
+    "view_unittest_mac.mm",
     "widget/native_widget_mac_accessibility_unittest.mm",
     "widget/native_widget_mac_unittest.mm",
     "widget/native_widget_unittest.cc",
@@ -886,6 +914,7 @@ source_set("views_unittests_sources") {
     "//base:i18n",
     "//base/test:test_support",
     "//cc",
+    "//cc/paint",
     "//services/ui/public/interfaces",
     "//skia",
     "//testing/gtest",

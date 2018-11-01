@@ -19,7 +19,6 @@
 <translation id="1616206807336925449">এই এক্সটেনশনটির কোনো বিশেষ অনুমতির প্রয়োজন নেই।</translation>
 <translation id="1620510694547887537">ক্যামেরা</translation>
 <translation id="1635033183663317347">আপনার কাস্টডিয়ান দ্বারা এটি ইনস্টল করা হয়েছে।</translation>
-<translation id="1652965563555864525">&amp;নিঃশব্দ</translation>
 <translation id="1723824996674794290">&amp;নতুন উইন্ডো</translation>
 <translation id="1729533290416704613">আপনি Omnibox থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
 <translation id="1789575671122666129">পপআপ</translation>
@@ -28,7 +27,6 @@
 <translation id="1901303067676059328">&amp;সকল নির্বাচন করুন</translation>
 <translation id="1965328510789761112">ব্যক্তিগত স্মৃতি</translation>
 <translation id="1992397118740194946">সেট করা নেই</translation>
-<translation id="2011110593081822050">ওয়েব ওয়ার্কার: <ph name="WORKER_NAME" /></translation>
 <translation id="2076269580855484719">এই প্লাগইনটি লুকান</translation>
 <translation id="2087822576218954668">প্রিন্ট করুন: <ph name="PRINT_NAME" /></translation>
 <translation id="2129825002735785149">প্ল্যাগ ইন আপডেট করুন</translation>
@@ -53,7 +51,6 @@
 <translation id="2482878487686419369">বিজ্ঞপ্তিগুলি</translation>
 <translation id="2501797496290880632">একটি শর্টকাট লিখুন</translation>
 <translation id="2509857212037838238"><ph name="PLUGIN_NAME" /> ইনস্টল করুন</translation>
-<translation id="253434972992662860">&amp;বিরাম</translation>
 <translation id="2550212893339833758">অদলবদল করা মেমরি</translation>
 <translation id="2662876636500006917">Vivaldi  ওয়েব বাজার</translation>
 <translation id="2678063897982469759">পুনঃ সক্ষম</translation>
@@ -96,7 +93,6 @@
 <translation id="3927932062596804919">অস্বীকার</translation>
 <translation id="3936390757709632190">অডিও নতুন ট্যাবে &amp;খুলুন</translation>
 <translation id="3943582379552582368">&amp;ফিরুন</translation>
-<translation id="3954582159466790312">নিঃ&amp;শব্দ মুক্ত করুন</translation>
 <translation id="3979395879372752341">নতুন এক্সটেনশন জোড়া হয়েছে (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">এই এক্সটেনশনটি তৈরি হয়েছে:
@@ -123,16 +119,12 @@
 <translation id="4593021220803146968">&amp;এখানে যান <ph name="URL" /></translation>
 <translation id="4595560905247879544">অ্যাপ্লিকেশান এবং এক্সটেনশানগুলি শুধুমাত্র পরিচালক (<ph name="CUSTODIAN_NAME" />) দ্বারা পরিবর্তন করা যাবে।</translation>
 <translation id="4613271546271159013">আপনি যখন একটি নতুন ট্যাব খুলবেন তখন কি পৃষ্ঠা দেখানো হবে, একটি এক্সটেনশান তার পরিবর্তন করেছে।</translation>
-<translation id="4623537843784569564">এই এক্সটেনশানটি ভুলভাবে আপডেট হয়ে থাকতে পারে৷ আবার ইনস্টল করার চেষ্টা করুন৷</translation>
 <translation id="4677772697204437347">GPU মেমোরি</translation>
 <translation id="4711638718396952945">সেটিংস পুনরুদ্ধার করুন</translation>
 <translation id="4839303808932127586">এইরূপে ভিডিও সংর&amp;ক্ষণ করুন...</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> ইনস্টল করবেন? যেসব প্লাগ ইন আপনি বিশ্বাস করেন শুধুমাত্র সেগুলি ইনস্টল করুন।</translation>
-<translation id="4861833787540810454">&amp;খেলুন</translation>
-<translation id="4883993111890464517">এই এক্সটেনশানটি ক্ষতিগ্রস্ত হয়ে থাকতে পারে৷ আবার ইনস্টল করার চেষ্টা করুন৷</translation>
 <translation id="488785315393301722">বিশদ বিবরণ দেখান</translation>
 <translation id="4911714727432509308">কিবোর্ড শর্টকাটে কোনো এক্সটেনশন ধার্য করা হয়নি৷</translation>
-<translation id="4919987486109157213">এক্সটেনশান ক্ষতিগ্রস্ত হয়েছে৷ আবার ইনস্টল করার চেষ্টা করুন৷</translation>
 <translation id="4927301649992043040">প্যাক এক্সটেনশন</translation>
 <translation id="49896407730300355">ঘড়ির কাঁটার &amp;বিপরীত দিকে ঘোরান</translation>
 <translation id="4989966318180235467">&amp;পশ্চাদপট পৃষ্ঠা পরিদর্শন করুন</translation>
@@ -195,7 +187,6 @@
 <translation id="6787839852456839824">কীবোর্ড শর্টকাটগুলি</translation>
 <translation id="6798954102094737107">প্ল্যাগ ইন: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">পরিবর্তন রাখুন</translation>
-<translation id="6844537474943985871">এই এক্সটেনশানটি ক্ষতিগ্রস্ত হয়েছে বলে মনে হচ্ছে৷ দয়া করে আনইনস্টল এবং পুনরায় ইনস্টল করে চেষ্টা করুন৷</translation>
 <translation id="6863910145616405334">প্লাগ ইন পাওয়া যায়নি</translation>
 <translation id="6886871292305414135">নতুন &amp;ট্যাবে লিঙ্ক খুলুন</translation>
 <translation id="6900284862687837908">পটভূমিতে কাজ করা অ্যাপ্লিকেশান: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -214,7 +205,6 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7554791636758816595">নতুন ট্যাব</translation>
 <translation id="7564847347806291057">সমাপ্তি প্রক্রিয়া</translation>
-<translation id="7618337809041914424">&amp;মুদ্রণ ফ্রেম...</translation>
 <translation id="7629827748548208700">ট্যাব: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">বাতিল</translation>
 <translation id="7663719505383602579">গ্রাহক: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -260,7 +250,6 @@
 <translation id="8916476537757519021">ছদ্মবেশী সাবফ্রেম: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">বিবরণ লুকান</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> কে এন্টারপ্রাইজ নীতি দ্বারা অবরুদ্ধ করা হয়েছে</translation>
-<translation id="9101691533782776290">অ্যাপ্লিকেশান লঞ্চ করুন</translation>
 <translation id="9170848237812810038">&amp;পূর্বাবস্থায় ফিরুন</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" জোড়া হয়েছে</translation>
 <translation id="9219103736887031265">চিত্রগুলি</translation>

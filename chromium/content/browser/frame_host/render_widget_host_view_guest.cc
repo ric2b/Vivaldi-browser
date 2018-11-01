@@ -42,8 +42,13 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "content/public/browser/render_widget_host_view_frame_subscriber.h"
+#include "content/browser/compositor/image_transport_factory.h"
+#include "content/browser/renderer_host/delegated_frame_host.h"
+#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
+#include "components/display_compositor/gl_helper.h"
 #include "renderer/vivaldi_render_messages.h"
+#include "media/base/video_frame.h"
+#include "media/base/video_util.h"
 
 namespace content {
 namespace {
@@ -128,16 +133,8 @@ void RenderWidgetHostViewGuest::Show() {
     // Since we were last shown, our renderer may have had a different surface
     // set (e.g. showing an interstitial), so we resend our current surface to
     // the renderer.
-    if (local_frame_id_.is_valid()) {
-      cc::SurfaceSequence sequence =
-          cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
-      cc::SurfaceId surface_id(frame_sink_id_, local_frame_id_);
-      GetSurfaceManager()
-          ->GetSurfaceForId(surface_id)
-          ->AddDestructionDependency(sequence);
-      guest_->SetChildFrameSurface(surface_id, current_surface_size_,
-                                   current_surface_scale_factor_, sequence);
-    }
+    if (local_surface_id_.is_valid())
+      SendSurfaceInfoToEmbedder();
   }
   // NOTE(andre@vivaldi.com) : The platform view might have gone out of sync
   // with regards to the hidden state. This could mean that the compositor was
@@ -261,10 +258,11 @@ void RenderWidgetHostViewGuest::RenderProcessGone(
 }
 
 void RenderWidgetHostViewGuest::Destroy() {
-  RenderWidgetHostViewChildFrame::Destroy();
-
   if (platform_view_)  // The platform view might have been destroyed already.
     platform_view_->Destroy();
+
+  // RenderWidgetHostViewChildFrame::Destroy destroys this object.
+  RenderWidgetHostViewChildFrame::Destroy();
 }
 
 gfx::Size RenderWidgetHostViewGuest::GetPhysicalBackingSize() const {
@@ -293,67 +291,28 @@ void RenderWidgetHostViewGuest::SetTooltipText(
     guest_->SetTooltipText(tooltip_text);
 }
 
+bool RenderWidgetHostViewGuest::ShouldCreateNewSurfaceId(
+    uint32_t compositor_frame_sink_id,
+    const cc::CompositorFrame& frame) {
+  return (guest_ && guest_->has_attached_since_surface_set()) ||
+         RenderWidgetHostViewChildFrame::ShouldCreateNewSurfaceId(
+             compositor_frame_sink_id, frame);
+}
+
+void RenderWidgetHostViewGuest::SendSurfaceInfoToEmbedderImpl(
+    const cc::SurfaceInfo& surface_info,
+    const cc::SurfaceSequence& sequence) {
+  if (guest_ && !guest_->is_in_destruction())
+    guest_->SetChildFrameSurface(surface_info, sequence);
+}
+
 void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
     uint32_t compositor_frame_sink_id,
     cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
-
-  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
-
-  gfx::Size frame_size = root_pass->output_rect.size();
-  float scale_factor = frame.metadata.device_scale_factor;
-
-  // Check whether we need to recreate the cc::Surface, which means the child
-  // frame renderer has changed its output surface, or size, or scale factor.
-  if (compositor_frame_sink_id != last_compositor_frame_sink_id_ ||
-      frame_size != current_surface_size_ ||
-      scale_factor != current_surface_scale_factor_ ||
-      (guest_ && guest_->has_attached_since_surface_set())) {
-    ClearCompositorSurfaceIfNecessary();
-    // If the renderer changed its frame sink, reset the surface factory to
-    // avoid returning stale resources.
-    if (compositor_frame_sink_id != last_compositor_frame_sink_id_)
-      surface_factory_->Reset();
-    last_compositor_frame_sink_id_ = compositor_frame_sink_id;
-    current_surface_size_ = frame_size;
-    current_surface_scale_factor_ = scale_factor;
-  }
-
-  bool allocated_new_local_frame_id = false;
-  if (!local_frame_id_.is_valid()) {
-    local_frame_id_ = id_allocator_->GenerateId();
-    allocated_new_local_frame_id = true;
-  }
-
-  cc::SurfaceFactory::DrawCallback ack_callback = base::Bind(
-      &RenderWidgetHostViewChildFrame::SurfaceDrawn,
-      RenderWidgetHostViewChildFrame::AsWeakPtr(), compositor_frame_sink_id);
-  ack_pending_count_++;
-  // If this value grows very large, something is going wrong.
-  DCHECK(ack_pending_count_ < 1000);
-  surface_factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
-                                          ack_callback);
-
-  if (allocated_new_local_frame_id) {
-    cc::SurfaceSequence sequence =
-        cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
-    // The renderer process will satisfy this dependency when it creates a
-    // SurfaceLayer.
-    cc::SurfaceManager* manager = GetSurfaceManager();
-    cc::SurfaceId surface_id(frame_sink_id_, local_frame_id_);
-    manager->GetSurfaceForId(surface_id)->AddDestructionDependency(sequence);
-    // TODO(wjmaclean): I'm not sure what it means to create a surface id
-    // without setting it on the child, though since we will in this case be
-    // guaranteed to call ClearCompositorSurfaceIfNecessary() below, I suspect
-    // skipping SetChildFrameSurface() here is irrelevant.
-    if (guest_ && !guest_->is_in_destruction()) {
-      guest_->SetChildFrameSurface(surface_id, frame_size, scale_factor,
-                                   sequence);
-    }
-  }
-  ProcessFrameSwappedCallbacks();
+  ProcessCompositorFrame(compositor_frame_sink_id, std::move(frame));
 
   // If after detaching we are sent a frame, we should finish processing it, and
   // then we should clear the surface so that we are not holding resources we
@@ -551,14 +510,6 @@ void RenderWidgetHostViewGuest::StopSpeaking() {
 }
 #endif  // defined(OS_MACOSX)
 
-void RenderWidgetHostViewGuest::LockCompositingSurface() {
-  NOTIMPLEMENTED();
-}
-
-void RenderWidgetHostViewGuest::UnlockCompositingSurface() {
-  NOTIMPLEMENTED();
-}
-
 RenderWidgetHostViewBase*
 RenderWidgetHostViewGuest::GetOwnerRenderWidgetHostView() const {
   return guest_ ? static_cast<RenderWidgetHostViewBase*>(
@@ -733,13 +684,115 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
   }
 }
 
-bool RenderWidgetHostViewGuest::CanCopyToVideoFrame() const {
-  return platform_view_->CanCopyToVideoFrame();
+void RenderWidgetHostViewGuest::CopyFromSurfaceToVideoFrame(
+  const gfx::Rect& src_rect,
+  scoped_refptr<media::VideoFrame> target,
+  const base::Callback<void(const gfx::Rect&, bool)>& callback) {
+
+
+  std::unique_ptr<cc::CopyOutputRequest> request =
+      cc::CopyOutputRequest::CreateRequest(base::Bind(
+          &RenderWidgetHostViewGuest::DidCopyOutput,
+          std::move(target), callback));
+
+  if (!src_rect.IsEmpty())
+    request->set_area(src_rect);
+
+  RenderWidgetHostViewChildFrame::PassSurfaceCopyRequest(std::move(request));
+}
+
+/*static*/
+void RenderWidgetHostViewGuest::DidCopyOutput(
+    scoped_refptr<media::VideoFrame> video_frame,
+    const base::Callback<void(const gfx::Rect&, bool)>& callback,
+    std::unique_ptr<cc::CopyOutputResult> result) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  bool succeeded = true;
+
+  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+  display_compositor::GLHelper* gl_helper = factory->GetGLHelper();
+  if (!gl_helper) {
+    callback.Run(gfx::Rect(), false);
+  }
+
+  cc::TextureMailbox texture_mailbox;
+  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
+  result->TakeTexture(&texture_mailbox, &release_callback);
+  if (!texture_mailbox.IsTexture()) {
+    callback.Run(gfx::Rect(), false);
+    return;
+  }
+
+  gfx::Rect region_in_frame = media::ComputeLetterboxRegion(
+      video_frame->visible_rect(), result->size());
+  region_in_frame = gfx::Rect(region_in_frame.x() & ~1,
+                              region_in_frame.y() & ~1,
+                              region_in_frame.width() & ~1,
+                              region_in_frame.height() & ~1);
+  if (region_in_frame.IsEmpty()) {
+    succeeded = false;
+  }
+
+  std::unique_ptr<display_compositor::ReadbackYUVInterface>
+      yuv_readback_pipeline_;
+
+  gfx::Rect result_rect(result->size());
+  if (!yuv_readback_pipeline_ ||
+      yuv_readback_pipeline_->scaler()->SrcSize() != result_rect.size() ||
+      yuv_readback_pipeline_->scaler()->SrcSubrect() != result_rect ||
+      yuv_readback_pipeline_->scaler()->DstSize() != region_in_frame.size()) {
+    yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
+        display_compositor::GLHelper::SCALER_QUALITY_GOOD, result_rect.size(),
+        result_rect, region_in_frame.size(), true, true));
+  }
+
+  base::Callback<void(bool result)> finished_callback = base::Bind(
+      &RenderWidgetHostViewGuest::ReadBackDone,
+      video_frame, base::Bind(callback, region_in_frame),
+      base::Passed(&release_callback));
+
+
+  yuv_readback_pipeline_->ReadbackYUV(
+      texture_mailbox.mailbox(), texture_mailbox.sync_token(),
+      video_frame->visible_rect(),
+      video_frame->stride(media::VideoFrame::kYPlane),
+      video_frame->data(media::VideoFrame::kYPlane),
+      video_frame->stride(media::VideoFrame::kUPlane),
+      video_frame->data(media::VideoFrame::kUPlane),
+      video_frame->stride(media::VideoFrame::kVPlane),
+      video_frame->data(media::VideoFrame::kVPlane),
+      region_in_frame.origin(),
+      finished_callback);
+
+  // Clear the non-drawn region.
+  media::LetterboxYUV(video_frame.get(), region_in_frame);
+
+}
+
+/*static*/
+void RenderWidgetHostViewGuest::ReadBackDone(
+    scoped_refptr<media::VideoFrame> video_frame,
+    const base::Callback<void(bool)>& capture_frame_cb,
+    std::unique_ptr<cc::SingleReleaseCallback> release_callback, bool result) {
+  capture_frame_cb.Run(result);
+
+  gpu::SyncToken sync_token;
+  display_compositor::GLHelper* gl_helper =
+      ImageTransportFactory::GetInstance()->GetGLHelper();
+  gl_helper->GenerateSyncToken(&sync_token);
+  if (release_callback) {
+    const bool lost_resource = !sync_token.HasData();
+    release_callback->Run(sync_token, lost_resource);
+  }
+
 }
 
 // Vivaldi addition
 void RenderWidgetHostViewGuest::BeginFrameSubscription(
     std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
+  // NOTE: This is just to get the subscription going. The surface is now
+  // handled in RenderWidgetHostViewChildFrame.
   platform_view_->BeginFrameSubscription(std::move(subscriber));
 }
 

@@ -93,8 +93,9 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
                               const Element&,
                               Namespaces*) override;
   void appendText(StringBuilder& out, Text&) override;
-  bool shouldIgnoreAttribute(const Element&, const Attribute&) override;
-  void appendElement(StringBuilder& out, Element&, Namespaces*) override;
+  bool shouldIgnoreAttribute(const Element&, const Attribute&) const override;
+  bool shouldIgnoreElement(const Element&) const override;
+  void appendElement(StringBuilder& out, const Element&, Namespaces*) override;
   void appendAttribute(StringBuilder& out,
                        const Element&,
                        const Attribute&,
@@ -103,7 +104,6 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
   void appendEndTag(const Element&) override;
 
  private:
-  bool shouldIgnoreElement(const Element&) const;
   void appendAttributeValue(StringBuilder& out, const String& attributeValue);
   void appendRewrittenAttribute(StringBuilder& out,
                                 const Element&,
@@ -145,22 +145,32 @@ void SerializerMarkupAccumulator::appendCustomAttributes(
 
 void SerializerMarkupAccumulator::appendText(StringBuilder& result,
                                              Text& text) {
-  Element* parent = text.parentElement();
-  if (parent && !shouldIgnoreElement(*parent))
-    MarkupAccumulator::appendText(result, text);
+  MarkupAccumulator::appendText(result, text);
 }
 
 bool SerializerMarkupAccumulator::shouldIgnoreAttribute(
     const Element& element,
-    const Attribute& attribute) {
+    const Attribute& attribute) const {
   return m_delegate.shouldIgnoreAttribute(element, attribute);
 }
 
+bool SerializerMarkupAccumulator::shouldIgnoreElement(
+    const Element& element) const {
+  if (isHTMLScriptElement(element))
+    return true;
+  if (isHTMLNoScriptElement(element))
+    return true;
+  if (isHTMLMetaElement(element) &&
+      toHTMLMetaElement(element).computeEncoding().isValid()) {
+    return true;
+  }
+  return m_delegate.shouldIgnoreElement(element);
+}
+
 void SerializerMarkupAccumulator::appendElement(StringBuilder& result,
-                                                Element& element,
+                                                const Element& element,
                                                 Namespaces* namespaces) {
-  if (!shouldIgnoreElement(element))
-    MarkupAccumulator::appendElement(result, element, namespaces);
+  MarkupAccumulator::appendElement(result, element, namespaces);
 
   // TODO(tiger): Refactor MarkupAccumulator so it is easier to append an
   // element like this, without special cases for XHTML
@@ -219,21 +229,7 @@ void SerializerMarkupAccumulator::appendStartTag(Node& node,
 }
 
 void SerializerMarkupAccumulator::appendEndTag(const Element& element) {
-  if (!shouldIgnoreElement(element))
-    MarkupAccumulator::appendEndTag(element);
-}
-
-bool SerializerMarkupAccumulator::shouldIgnoreElement(
-    const Element& element) const {
-  if (isHTMLScriptElement(element))
-    return true;
-  if (isHTMLNoScriptElement(element))
-    return true;
-  if (isHTMLMetaElement(element) &&
-      toHTMLMetaElement(element).computeEncoding().isValid()) {
-    return true;
-  }
-  return m_delegate.shouldIgnoreElement(element);
+  MarkupAccumulator::appendEndTag(element);
 }
 
 void SerializerMarkupAccumulator::appendAttributeValue(
@@ -250,7 +246,7 @@ void SerializerMarkupAccumulator::appendRewrittenAttribute(
     const String& attributeValue) {
   if (m_elementsWithRewrittenLinks.contains(&element))
     return;
-  m_elementsWithRewrittenLinks.add(&element);
+  m_elementsWithRewrittenLinks.insert(&element);
 
   // Append the rewritten attribute.
   // TODO(tiger): Refactor MarkupAccumulator so it is easier to append an
@@ -395,7 +391,7 @@ void FrameSerializer::serializeCSSStyleSheet(CSSStyleSheet& styleSheet,
     m_resources->append(
         SerializedResource(url, String("text/css"),
                            SharedBuffer::create(text.data(), text.length())));
-    m_resourceURLs.add(url);
+    m_resourceURLs.insert(url);
   }
 
   // Sub resources need to be serialized even if the CSS definition doesn't
@@ -478,7 +474,7 @@ void FrameSerializer::addToResources(
   }
 
   m_resources->append(SerializedResource(url, mimeType, std::move(data)));
-  m_resourceURLs.add(url);
+  m_resourceURLs.insert(url);
 }
 
 void FrameSerializer::addImageToResources(ImageResourceContent* image,

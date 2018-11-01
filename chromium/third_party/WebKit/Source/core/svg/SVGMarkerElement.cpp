@@ -158,4 +158,8 @@ bool SVGMarkerElement::selfHasRelativeLengths() const {
          m_markerHeight->currentValue()->isRelative();
 }
 
+bool SVGMarkerElement::layoutObjectIsNeeded(const ComputedStyle&) {
+  return isValid() && hasSVGParent();
+}
+
 }  // namespace blink

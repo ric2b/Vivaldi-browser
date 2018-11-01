@@ -147,9 +147,15 @@
     /** @type {SettingsPrivate} */
     settingsApi_: /** @type {SettingsPrivate} */(chrome.settingsPrivate),
 
+    /** @override */
     created: function() {
       if (!CrSettingsPrefs.deferInitialization)
         this.initialize();
+    },
+
+    /** @override */
+    detached: function() {
+      CrSettingsPrefs.resetForTesting();
     },
 
     /**
@@ -281,8 +287,8 @@
       var parts = path.split('.');
       assert(parts.shift() == 'prefs', "Path doesn't begin with 'prefs'");
 
-      for (let i = 1; i <= parts.length; i++) {
-        let key = parts.slice(0, i).join('.');
+      for (var i = 1; i <= parts.length; i++) {
+        var key = parts.slice(0, i).join('.');
         // The lastPrefValues_ keys match the pref keys.
         if (this.lastPrefValues_.hasOwnProperty(key))
           return key;

@@ -30,6 +30,11 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
     this._headerHeight = 0;
     this._calculator = calculator;
 
+    this._offsetWidth = 0;
+    this._offsetHeight = 0;
+    this._startTime = this._calculator.minimumBoundary();
+    this._endTime = this._calculator.maximumBoundary();
+
     this._popoverHelper = new UI.PopoverHelper(this.element);
     this._popoverHelper.initializeCallbacks(this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
     this._popoverHelper.setTimeout(300, 300);
@@ -138,7 +143,7 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
     var request = this._hoveredNode.request();
     if (!request)
       return;
-    var content = Network.RequestTimingView.createTimingTable(request, this._calculator.minimumBoundary());
+    var content = Network.RequestTimingView.createTimingTable(request, this._calculator);
     popover.showForAnchor(content, anchor);
   }
 
@@ -214,8 +219,10 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
     }
     if (eventDividers !== undefined)
       this._eventDividers = eventDividers;
-    this.element.window().cancelAnimationFrame(this._updateRequestID);
-    this._updateRequestID = null;
+    if (this._updateRequestID) {
+      this.element.window().cancelAnimationFrame(this._updateRequestID);
+      delete this._updateRequestID;
+    }
 
     this._startTime = this._calculator.minimumBoundary();
     this._endTime = this._calculator.maximumBoundary();
@@ -243,7 +250,7 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
   _calculateCanvasSize() {
     this._offsetWidth = this.contentElement.offsetWidth - this._rightPadding;
     this._offsetHeight = this.contentElement.offsetHeight;
-    this._calculator.setDisplayWindow(this._offsetWidth);
+    this._calculator.setDisplayWidth(this._offsetWidth);
     this._canvasPosition = this._canvas.getBoundingClientRect();
   }
 
@@ -307,7 +314,7 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
     for (var i = firstRequestIndex; i < lastRequestIndex; i++) {
       var rowOffset = this._rowHeight * i;
       var node = nodes[i];
-      this._decorateRow(context, node, i, rowOffset - this._scrollTop);
+      this._decorateRow(context, node, rowOffset - this._scrollTop);
       var drawNodes = [];
       if (node.hasChildren() && !node.expanded)
         drawNodes = /** @type {!Array<!Network.NetworkNode>} */ (node.flatChildren());
@@ -596,12 +603,11 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
   /**
    * @param {!CanvasRenderingContext2D} context
    * @param {!Network.NetworkNode} node
-   * @param {number} rowNumber
    * @param {number} y
    */
-  _decorateRow(context, node, rowNumber, y) {
-    var isOddRow = rowNumber % 2 === 1;
-    if (isOddRow && !node.hovered() && !node.isNavigationRequest() && !node.isOnInitiatorPath() &&
+  _decorateRow(context, node, y) {
+    var isStriped = node.isStriped();
+    if (!isStriped && !node.hovered() && !node.isNavigationRequest() && !node.isOnInitiatorPath() &&
         !node.isOnInitiatedPath())
       return;
 
@@ -628,7 +634,7 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
         return this._initiatedColor;
       if (node.isNavigationRequest())
         return this._rowNavigationRequestColor;
-      if (rowNumber % 2 === 1)
+      if (!isStriped)
         return 'transparent';
       return this._rowStripeColor;
     }

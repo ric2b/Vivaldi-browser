@@ -24,11 +24,13 @@ const char kArcApps[] = "arc.apps";
 const char kArcBackupRestoreEnabled[] = "arc.backup_restore.enabled";
 // A preference to indicate that Android's data directory should be removed.
 const char kArcDataRemoveRequested[] = "arc.data.remove_requested";
-// A preference to keep Android apps enabled state.
+// A preference representing whether a user has opted in to use Google Play
+// Store on ARC.
+// TODO(hidehiko): For historical reason, now the preference name does not
+// directly reflect "Google Play Store". We should get and set the values via
+// utility methods (IsArcPlayStoreEnabledForProfile() and
+// SetArcPlayStoreEnabledForProfile()) in chrome/browser/chromeos/arc/arc_util.
 const char kArcEnabled[] = "arc.enabled";
-// A preference that indicated whether Android reported that it's compliant
-// with provided policies. When it's compliant, Android kiosk app will start.
-const char kArcPolicyCompliant[] = "arc.policy_compliant";
 // A preference that indicates that user accepted PlayStore terms.
 const char kArcTermsAccepted[] = "arc.terms.accepted";
 // A preference to keep user's consent to use location service.
@@ -40,6 +42,10 @@ const char kArcSetNotificationsEnabledDeferred[] =
     "arc.set_notifications_enabled_deferred";
 // A preference that indicates status of Android sign-in.
 const char kArcSignedIn[] = "arc.signedin";
+// A preference that indicates an ARC comaptible filesystem was chosen for
+// the user directory (i.e., the user finished required migration.)
+const char kArcCompatibleFilesystemChosen[] =
+    "arc.compatible_filesystem.chosen";
 #endif
 
 // A bool pref that keeps whether the child status for this profile was already
@@ -68,6 +74,10 @@ const char kHomePageIsNewTabPage[] = "homepage_is_newtabpage";
 // This is the URL of the page to load when opening new tabs.
 const char kHomePage[] = "homepage";
 
+// Stores information about the important sites dialog, including the time and
+// frequency it has been ignored.
+const char kImportantSitesDialogHistory[] = "important_sites_dialog";
+
 #if defined(OS_WIN)
 // This is a timestamp of the last time this profile was reset by a third party
 // tool. On Windows, a third party tool may set a registry value that will be
@@ -75,6 +85,9 @@ const char kHomePage[] = "homepage";
 // prompt. See triggered_profile_resetter.h for more information.
 const char kLastProfileResetTimestamp[] = "profile.last_reset_timestamp";
 #endif
+
+// The URL to open the new tab page to. Only set by Group Policy.
+const char kNewTabPageLocationOverride[] = "newtab_page_location_override";
 
 // An integer that keeps track of the profile icon version. This allows us to
 // determine the state of the profile icon for icon format changes.
@@ -176,6 +189,11 @@ const char kSupervisedUserSharedSettings[] = "profile.managed.shared_settings";
 // of the whitelist, the value a dictionary containing whitelist properties
 // (currently the name).
 const char kSupervisedUserWhitelists[] = "profile.managed.whitelists";
+
+#if BUILDFLAG(ENABLE_RLZ)
+// Integer. RLZ ping delay in seconds.
+const char kRlzPingDelaySeconds[] = "rlz_ping_delay";
+#endif  // BUILDFLAG(ENABLE_RLZ)
 
 // The application locale.
 // For OS_CHROMEOS we maintain the kApplicationLocale property in both local
@@ -589,6 +607,10 @@ const char kLanguageXkbAutoRepeatInterval[] =
 const char kAccessibilityLargeCursorEnabled[] =
     "settings.a11y.large_cursor_enabled";
 
+// A integer pref that specifies the size of large cursor for accessibility.
+const char kAccessibilityLargeCursorDipSize[] =
+    "settings.a11y.large_cursor_dip_size";
+
 // A boolean pref which determines whether the sticky keys feature is enabled.
 const char kAccessibilityStickyKeysEnabled[] =
     "settings.a11y.sticky_keys_enabled";
@@ -719,6 +741,14 @@ const char kSessionLengthLimit[] = "session.length_limit";
 // user activity has been observed in a session.
 const char kSessionWaitForInitialUserActivity[] =
     "session.wait_for_initial_user_activity";
+
+// A preference of the last user session type. It is used with the
+// kLastSessionLength pref below to store the last user session info
+// on shutdown so that it could be reported on the next run.
+const char kLastSessionType[] = "session.last_session_type";
+
+// A preference of the last user session length.
+const char kLastSessionLength[] = "session.last_session_length";
 
 // Inactivity time in milliseconds while the system is on AC power before
 // the screen should be dimmed, turned off, or locked, before an
@@ -943,6 +973,10 @@ const char kPinUnlockMinimumLength[] = "pin_unlock_minimum_length";
 const char kPinUnlockMaximumLength[] = "pin_unlock_maximum_length";
 // Boolean pref indicating whether users are allowed to set easy pins.
 const char kPinUnlockWeakPinsAllowed[] = "pin_unlock_weak_pins_allowed";
+
+// Boolean pref indicating whether fingerprint unlock is enabled.
+const char kEnableQuickUnlockFingerprint[] =
+    "settings.enable_quick_unlock_fingerprint";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -1273,9 +1307,6 @@ const char kGpuDriverInfoBuildFingerPrint[] =
 const char kPushMessagingAppIdentifierMap[] =
     "gcm.push_messaging_application_id_map";
 
-// Maps from origin to background budget information.
-const char kBackgroundBudgetMap[] = "push_messaging.background_budget_map";
-
 // A string like "com.chrome.macosx" that should be used as the GCM category
 // when an app_id is sent as a subtype instead of as a category.
 const char kGCMProductCategoryForSubtypes[] =
@@ -1301,11 +1332,6 @@ const char kToolbarIconSurfacingBubbleAcknowledged[] =
     "toolbar_icon_surfacing_bubble_acknowledged";
 const char kToolbarIconSurfacingBubbleLastShowTime[] =
     "toolbar_icon_surfacing_bubble_show_time";
-
-// Used to track component actions in the toolbar that were migrated from
-// extensions.
-const char kToolbarMigratedComponentActionStatus[] =
-    "toolbar_migrated_component_action_status";
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -1550,6 +1576,15 @@ const char kNtpCollapsedSyncPromo[] = "ntp.collapsed_sync_promo";
 // should stop showing them.
 const char kContentSuggestionsConsecutiveIgnoredPrefName[] =
     "ntp.content_suggestions.notifications.consecutive_ignored";
+
+// Tracks how many notifications have been sent today, and what day "today" is,
+// as an integer YYYYMMDD, in wall time in the local timezone.
+// If sent_day changes, sent_count is reset to 0. Allows limiting per-day
+// notification count.
+extern const char kContentSuggestionsNotificationsSentDay[] =
+    "ntp.content_suggestions.notifications.sent_day";
+extern const char kContentSuggestionsNotificationsSentCount[] =
+    "ntp.content_suggestions.notifications.sent_count";
 #endif  // defined(OS_ANDROID)
 
 // Which page should be visible on the new tab page v4
@@ -1970,6 +2005,11 @@ const char kSystemTimezoneAutomaticDetectionPolicy[] =
 #if defined(ENABLE_MEDIA_ROUTER)
 // Pref name for the policy controlling whether to enable Media Router.
 const char kEnableMediaRouter[] = "media_router.enable_media_router";
+#if !defined(OS_ANDROID)
+// Pref name for the policy controlling whether to force the Cast icon to be
+// shown in the toolbar/overflow menu.
+const char kShowCastIconInToolbar[] = "media_router.show_cast_icon_in_toolbar";
+#endif  // !defined(OS_ANDROID)
 #endif  // defined(ENABLE_MEDIA_ROUTER)
 
 // *************** SERVICE PREFS ***************
@@ -2340,6 +2380,9 @@ const char kOriginTrialPublicKey[] = "origin_trials.public_key";
 // A list of origin trial features to disable by policy.
 const char kOriginTrialDisabledFeatures[] = "origin_trials.disabled_features";
 
+// A list of origin trial tokens to disable by policy.
+const char kOriginTrialDisabledTokens[] = "origin_trials.disabled_tokens";
+
 // Policy that indicates the state of updates for the binary components.
 const char kComponentUpdatesEnabled[] =
     "component_updates.component_updates_enabled";
@@ -2371,5 +2414,109 @@ const char kSearchGeolocationPostDisclosureMetricsRecorded[] =
 // A dictionary which stores whether location access is enabled for the current
 // default search engine, if it is the Google search engine.
 const char kGoogleDSEGeolocationSetting[] = "google_dse_geolocation_setting";
+
+// A dictionary of manifest URLs of Web Share Targets to a dictionary containing
+// attributes of its share_target field found in its manifest. Each key in the
+// dictionary is the name of the attribute, and the value is the corresponding
+// value.
+const char kWebShareVisitedTargets[] = "profile.web_share.visited_targets";
+
+#if defined(OS_WIN)
+// True if the user is eligible to recieve "desktop to iOS" promotion. This
+// vlaue is set by a job that access the growth table to check users with iOS
+// devices and phone recovery number and update the eligibility on chrome sync.
+const char kIOSPromotionEligible[] = "ios.desktoptomobileeligible";
+
+// True if the "desktop to iOS" promotion was successful, i.e. user installed
+// the application and signed in on the iOS client after seeing the promotion
+// and receiving the SMS.
+const char kIOSPromotionDone[] = "ios.desktop_ios_promo_done";
+
+// Index of the entry point that last initiated sending the SMS to the user for
+// the "desktop to iOS" promotion (see DesktopIOSPromotion.IOSSigninReason
+// histogram for details).
+const char kIOSPromotionSMSEntryPoint[] =
+    "ios.desktop_ios_promo_sms_entrypoint";
+
+// Bit mask that represents the Indices of all the entry points shown to the
+// user for "desktop to iOS" promotion. Each entry point is represented by
+// 1<<entrypoint_value using the values from the Enum
+// desktop_ios_promotion::PromotionEntryPoint.
+const char kIOSPromotionShownEntryPoints[] =
+    "ios.desktop_ios_promo_shown_entrypoints";
+
+// Timestamp of the last "desktop to iOS" promotion last impression. If the
+// user sends SMS on that impression then we deal with this timestamp as the
+// SMS sending time because after sending the sms the user shouldn't see the
+// promotion again (Accuracy to the minutes and seconds is not important).
+const char kIOSPromotionLastImpression[] =
+    "ios.desktop_ios_promo_last_impression";
+
+// Integer that represents which variation of title and text of the
+// "desktop to iOS" promotion was presented to the user.
+const char kIOSPromotionVariationId[] = "ios.desktop_ios_promo_variation_id";
+
+// Number of times user has seen the "desktop to iOS" save passwords bubble
+// promotion.
+const char kNumberSavePasswordsBubbleIOSPromoShown[] =
+    "savepasswords_bubble_ios_promo_shown_count";
+
+// True if the user has dismissed the "desktop to iOS" save passwords bubble
+// promotion.
+const char kSavePasswordsBubbleIOSPromoDismissed[] =
+    "savepasswords_bubble_ios_promo_dismissed";
+
+// Number of times the user has seen the "desktop to iOS" bookmarks bubble
+// promotion.
+const char kNumberBookmarksBubbleIOSPromoShown[] =
+    "bookmarks_bubble_ios_promo_shown_count";
+
+// True if the user has dismissed the "desktop to iOS" bookmarks bubble
+// promotion.
+const char kBookmarksBubbleIOSPromoDismissed[] =
+    "bookmarks_bubble_ios_promo_dismissed";
+
+// Number of times user has seen the "desktop to iOS" bookmarks foot note
+// promotion.
+const char kNumberBookmarksFootNoteIOSPromoShown[] =
+    "bookmarks_footnote_ios_promo_shown_count";
+
+// True if the user has dismissed the "desktop to iOS" bookmarks foot note
+// promotion.
+const char kBookmarksFootNoteIOSPromoDismissed[] =
+    "bookmarks_footnote_ios_promo_dismissed";
+
+// Number of times user has seen the "desktop to iOS" history page promotion.
+const char kNumberHistoryPageIOSPromoShown[] =
+    "history_page_ios_promo_shown_count";
+
+// True if the user has dismissed the "desktop to iOS" history page promotion.
+const char kHistoryPageIOSPromoDismissed[] = "history_page_ios_promo_dismissed";
+#endif
+
+// An integer that keeps track of prompt waves for the settings reset
+// prompt. Users will be prompted to reset settings at most once per prompt wave
+// for each setting that the prompt targets (default search, startup URLs and
+// homepage). The value is obtained via a feature parameter. When the stored
+// value is different from the feature parameter, a new prompt wave begins.
+const char kSettingsResetPromptPromptWave[] =
+    "settings_reset_prompt.prompt_wave";
+
+// Timestamp of the last time the settings reset prompt was shown during the
+// current prompt wave asking the user if they want to restore their search
+// engine.
+const char kSettingsResetPromptLastTriggeredForDefaultSearch[] =
+    "settings_reset_prompt.last_triggered_for_default_search";
+
+// Timestamp of the last time the settings reset prompt was shown during the
+// current prompt wave asking the user if they want to restore their startup
+// settings.
+const char kSettingsResetPromptLastTriggeredForStartupUrls[] =
+    "settings_reset_prompt.last_triggered_for_startup_urls";
+
+// Timestamp of the last time the settings reset prompt was shown during the
+// current prompt wave asking the user if they want to restore their homepage.
+const char kSettingsResetPromptLastTriggeredForHomepage[] =
+    "settings_reset_prompt.last_triggered_for_homepage";
 
 }  // namespace prefs

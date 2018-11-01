@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/guid.h"
+#include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -23,14 +24,16 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/validation.h"
+#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
 #include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/components_strings.h"
+#include "components/grit/components_scaled_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "third_party/icu/source/i18n/unicode/dtfmtsym.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -48,6 +51,9 @@ const base::char16 kMidlineEllipsis[] = { 0x0020, 0x0020,
 namespace {
 
 const base::char16 kCreditCardObfuscationSymbol = '*';
+// Time format pattern for short month name (3 digits) and day in month (2
+// digits), e.g. in en-US locale, it can be used to generate "Feb 02".
+const char kTimeFormatPatternNoYearShortMonthDate[] = "MMMdd";
 
 bool ConvertYear(const base::string16& year, int* num) {
   // If the |year| is empty, clear the stored value.
@@ -473,7 +479,7 @@ void CreditCard::SetExpirationYear(int expiration_year) {
   // Will normalize 2-digit years to the 4-digit version.
   if (expiration_year > 0 && expiration_year < 100) {
     base::Time::Exploded now_exploded;
-    base::Time::Now().LocalExplode(&now_exploded);
+    AutofillClock::Now().LocalExplode(&now_exploded);
     expiration_year += (now_exploded.year / 100) * 100;
   }
 
@@ -536,6 +542,55 @@ void CreditCard::operator=(const CreditCard& credit_card) {
   set_origin(credit_card.origin());
 }
 
+base::string16 CreditCard::GetLastUsedDateForDisplay(
+    const std::string& app_locale) const {
+  bool show_expiration_date =
+      ShowExpirationDateInAutofillCreditCardLastUsedDate();
+
+  DCHECK(use_count() > 0);
+  // use_count() is initialized as 1 when the card is just added.
+  if (use_count() == 1) {
+    return show_expiration_date
+               ? l10n_util::GetStringFUTF16(
+                     IDS_AUTOFILL_CREDIT_CARD_EXP_AND_ADDED_DATE,
+                     GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR),
+                             app_locale),
+                     base::TimeFormatWithPattern(
+                         use_date(), kTimeFormatPatternNoYearShortMonthDate))
+               : l10n_util::GetStringFUTF16(
+                     IDS_AUTOFILL_CREDIT_CARD_ADDED_DATE,
+                     base::TimeFormatWithPattern(
+                         use_date(), kTimeFormatPatternNoYearShortMonthDate));
+  }
+
+  // use_count() > 1 when the card has been used in autofill.
+
+  // If the card was last used in autofill more than a year ago,
+  // display "last used over a year ago" without showing date detail.
+  if ((AutofillClock::Now() - use_date()).InDays() > 365) {
+    return show_expiration_date
+               ? l10n_util::GetStringFUTF16(
+                     IDS_AUTOFILL_CREDIT_CARD_EXP_AND_LAST_USED_YEAR_AGO,
+                     GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR),
+                             app_locale))
+               : l10n_util::GetStringUTF16(
+                     IDS_AUTOFILL_CREDIT_CARD_LAST_USED_YEAR_AGO);
+  }
+
+  // If the card was last used in autofill within a year, show date information.
+  return show_expiration_date
+             ? l10n_util::GetStringFUTF16(
+                   IDS_AUTOFILL_CREDIT_CARD_EXP_AND_LAST_USED_DATE,
+                   GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR),
+                           app_locale),
+                   base::TimeFormatWithPattern(
+                       use_date(), kTimeFormatPatternNoYearShortMonthDate))
+             : l10n_util::GetStringFUTF16(
+                   IDS_AUTOFILL_CREDIT_CARD_LAST_USED_DATE,
+                   base::TimeFormatWithPattern(
+                       use_date(), kTimeFormatPatternNoYearShortMonthDate));
+}
+
 bool CreditCard::UpdateFromImportedCard(const CreditCard& imported_card,
                                         const std::string& app_locale) {
   if (this->GetInfo(AutofillType(CREDIT_CARD_NUMBER), app_locale) !=
@@ -550,8 +605,8 @@ bool CreditCard::UpdateFromImportedCard(const CreditCard& imported_card,
   if (this->IsVerified() && !imported_card.IsVerified()) {
     // If the original card is expired and the imported card is not, and the
     // name on the cards are identical, update the expiration date.
-    if (this->IsExpired(base::Time::Now()) &&
-        !imported_card.IsExpired(base::Time::Now()) &&
+    if (this->IsExpired(AutofillClock::Now()) &&
+        !imported_card.IsExpired(AutofillClock::Now()) &&
         (name_on_card_ == imported_card.name_on_card_)) {
       DCHECK(imported_card.expiration_month_ && imported_card.expiration_year_);
       expiration_month_ = imported_card.expiration_month_;
@@ -659,52 +714,8 @@ bool CreditCard::IsEmpty(const std::string& app_locale) const {
 
 bool CreditCard::IsValid() const {
   return IsValidCreditCardNumber(number_) &&
-         IsValidCreditCardExpirationDate(
-             expiration_year_, expiration_month_, base::Time::Now());
-}
-
-void CreditCard::GetSupportedTypes(ServerFieldTypeSet* supported_types) const {
-  supported_types->insert(CREDIT_CARD_NAME_FULL);
-  supported_types->insert(CREDIT_CARD_NAME_FIRST);
-  supported_types->insert(CREDIT_CARD_NAME_LAST);
-  supported_types->insert(CREDIT_CARD_NUMBER);
-  supported_types->insert(CREDIT_CARD_TYPE);
-  supported_types->insert(CREDIT_CARD_EXP_MONTH);
-  supported_types->insert(CREDIT_CARD_EXP_2_DIGIT_YEAR);
-  supported_types->insert(CREDIT_CARD_EXP_4_DIGIT_YEAR);
-  supported_types->insert(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR);
-  supported_types->insert(CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR);
-}
-
-base::string16 CreditCard::ExpirationMonthAsString() const {
-  if (expiration_month_ == 0)
-    return base::string16();
-
-  base::string16 month = base::IntToString16(expiration_month_);
-  if (expiration_month_ >= 10)
-    return month;
-
-  base::string16 zero = ASCIIToUTF16("0");
-  zero.append(month);
-  return zero;
-}
-
-base::string16 CreditCard::TypeForFill() const {
-  return ::autofill::TypeForFill(type_);
-}
-
-base::string16 CreditCard::Expiration4DigitYearAsString() const {
-  if (expiration_year_ == 0)
-    return base::string16();
-
-  return base::IntToString16(Expiration4DigitYear());
-}
-
-base::string16 CreditCard::Expiration2DigitYearAsString() const {
-  if (expiration_year_ == 0)
-    return base::string16();
-
-  return base::IntToString16(Expiration2DigitYear());
+         IsValidCreditCardExpirationDate(expiration_year_, expiration_month_,
+                                         AutofillClock::Now());
 }
 
 bool CreditCard::SetExpirationMonthFromString(const base::string16& text,
@@ -774,6 +785,50 @@ void CreditCard::SetExpirationDateFromString(const base::string16& text) {
   SetExpirationYear(num);
 }
 
+void CreditCard::GetSupportedTypes(ServerFieldTypeSet* supported_types) const {
+  supported_types->insert(CREDIT_CARD_NAME_FULL);
+  supported_types->insert(CREDIT_CARD_NAME_FIRST);
+  supported_types->insert(CREDIT_CARD_NAME_LAST);
+  supported_types->insert(CREDIT_CARD_NUMBER);
+  supported_types->insert(CREDIT_CARD_TYPE);
+  supported_types->insert(CREDIT_CARD_EXP_MONTH);
+  supported_types->insert(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  supported_types->insert(CREDIT_CARD_EXP_4_DIGIT_YEAR);
+  supported_types->insert(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR);
+  supported_types->insert(CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR);
+}
+
+base::string16 CreditCard::ExpirationMonthAsString() const {
+  if (expiration_month_ == 0)
+    return base::string16();
+
+  base::string16 month = base::IntToString16(expiration_month_);
+  if (expiration_month_ >= 10)
+    return month;
+
+  base::string16 zero = ASCIIToUTF16("0");
+  zero.append(month);
+  return zero;
+}
+
+base::string16 CreditCard::TypeForFill() const {
+  return ::autofill::TypeForFill(type_);
+}
+
+base::string16 CreditCard::Expiration4DigitYearAsString() const {
+  if (expiration_year_ == 0)
+    return base::string16();
+
+  return base::IntToString16(Expiration4DigitYear());
+}
+
+base::string16 CreditCard::Expiration2DigitYearAsString() const {
+  if (expiration_year_ == 0)
+    return base::string16();
+
+  return base::IntToString16(Expiration2DigitYear());
+}
+
 void CreditCard::SetNumber(const base::string16& number) {
   number_ = number;
 
@@ -785,7 +840,7 @@ void CreditCard::SetNumber(const base::string16& number) {
 
 void CreditCard::RecordAndLogUse() {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.DaysSinceLastUse.CreditCard",
-                            (base::Time::Now() - use_date()).InDays());
+                            (AutofillClock::Now() - use_date()).InDays());
   RecordUse();
 }
 

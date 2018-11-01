@@ -53,9 +53,9 @@ String PublicURLManager::registerURL(ExecutionContext* context,
 
   if (!m_isStopped) {
     RegistryURLMap::ValueType* found =
-        m_registryToURL.add(&registrable->registry(), URLMap()).storedValue;
+        m_registryToURL.insert(&registrable->registry(), URLMap()).storedValue;
     found->key->registerURL(origin, url, registrable);
-    found->value.add(urlString, uuid);
+    found->value.insert(urlString, uuid);
   }
 
   return urlString;
@@ -65,7 +65,7 @@ void PublicURLManager::revoke(const KURL& url) {
   for (auto& registryUrl : m_registryToURL) {
     if (registryUrl.value.contains(url.getString())) {
       registryUrl.key->unregisterURL(url);
-      registryUrl.value.remove(url.getString());
+      registryUrl.value.erase(url.getString());
       break;
     }
   }
@@ -86,7 +86,7 @@ void PublicURLManager::revoke(const String& uuid) {
       }
     }
     for (const auto& url : urlsToRemove)
-      registeredURLs.remove(url);
+      registeredURLs.erase(url);
     urlsToRemove.clear();
   }
 }

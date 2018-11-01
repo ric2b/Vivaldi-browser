@@ -9,16 +9,12 @@
 #include <set>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "content/public/test/test_utils.h"
-#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace content {
-class RenderFrameHost;
 class WebContents;
-struct LoadCommittedDetails;
 
 // For browser_tests, which run on the UI thread, run a second
 // MessageLoop and quit when the navigation completes loading.
@@ -27,9 +23,13 @@ class TestNavigationObserver {
   // Create and register a new TestNavigationObserver against the
   // |web_contents|.
   TestNavigationObserver(WebContents* web_contents,
-                         int number_of_navigations);
+                         int number_of_navigations,
+                         MessageLoopRunner::QuitMode quit_mode =
+                             MessageLoopRunner::QuitMode::IMMEDIATE);
   // Like above but waits for one navigation.
-  explicit TestNavigationObserver(WebContents* web_contents);
+  explicit TestNavigationObserver(WebContents* web_contents,
+                                  MessageLoopRunner::QuitMode quit_mode =
+                                      MessageLoopRunner::QuitMode::IMMEDIATE);
 
   virtual ~TestNavigationObserver();
 
@@ -63,16 +63,8 @@ class TestNavigationObserver {
   void OnDidAttachInterstitialPage(WebContents* web_contents);
   void OnDidStartLoading(WebContents* web_contents);
   void OnDidStopLoading(WebContents* web_contents);
-  void OnDidStartProvisionalLoad(RenderFrameHost* render_frame_host,
-                                 const GURL& validated_url,
-                                 bool is_error_page);
-  void OnDidFailProvisionalLoad(RenderFrameHost* render_frame_host,
-                                const GURL& validated_url,
-                                int error_code,
-                                const base::string16& error_description);
-  void OnDidCommitProvisionalLoadForFrame(RenderFrameHost* render_frame_host,
-                                          const GURL& url,
-                                          ui::PageTransition transition_type);
+  void OnDidStartNavigation();
+  void OnDidFinishNavigation(bool is_error_page, const GURL& url);
 
   // If true the navigation has started.
   bool navigation_started_;

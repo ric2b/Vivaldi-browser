@@ -30,7 +30,6 @@
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Element.h"
-#include "bindings/core/v8/V8EventTarget.h"
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8TextTrack.h"
 #include "bindings/core/v8/V8Uint8Array.h"
@@ -225,34 +224,6 @@ bool DictionaryHelper::get(const Dictionary& dictionary,
       source = V8TextTrack::toImpl(track);
   }
   value = source;
-  return true;
-}
-
-template <>
-bool DictionaryHelper::get(const Dictionary& dictionary,
-                           const StringView& key,
-                           Member<EventTarget>& value) {
-  v8::Local<v8::Value> v8Value;
-  if (!dictionary.get(key, v8Value))
-    return false;
-
-  value = nullptr;
-  // We need to handle a DOMWindow specially, because a DOMWindow wrapper
-  // exists on a prototype chain of v8Value.
-  if (v8Value->IsObject()) {
-    v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::Cast(v8Value);
-    v8::Local<v8::Object> window =
-        V8Window::findInstanceInPrototypeChain(wrapper, dictionary.isolate());
-    if (!window.IsEmpty()) {
-      value = toWrapperTypeInfo(window)->toEventTarget(window);
-      return true;
-    }
-  }
-
-  if (V8DOMWrapper::isWrapper(dictionary.isolate(), v8Value)) {
-    v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::Cast(v8Value);
-    value = toWrapperTypeInfo(wrapper)->toEventTarget(wrapper);
-  }
   return true;
 }
 

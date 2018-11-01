@@ -57,7 +57,7 @@ void SQLTransactionCoordinator::processPendingTransactions(
   if (firstPendingTransaction->isReadOnly()) {
     do {
       firstPendingTransaction = info.pendingTransactions.takeFirst();
-      info.activeReadTransactions.add(firstPendingTransaction);
+      info.activeReadTransactions.insert(firstPendingTransaction);
       firstPendingTransaction->lockAcquired();
     } while (!info.pendingTransactions.isEmpty() &&
              info.pendingTransactions.first()->isReadOnly());
@@ -79,7 +79,7 @@ void SQLTransactionCoordinator::acquireLock(
   if (coordinationInfoIterator == m_coordinationInfoMap.end()) {
     // No pending transactions for this DB
     CoordinationInfo& info =
-        m_coordinationInfoMap.add(dbIdentifier, CoordinationInfo())
+        m_coordinationInfoMap.insert(dbIdentifier, CoordinationInfo())
             .storedValue->value;
     info.pendingTransactions.append(transaction);
     processPendingTransactions(info);
@@ -104,7 +104,7 @@ void SQLTransactionCoordinator::releaseLock(
 
   if (transaction->isReadOnly()) {
     ASSERT(info.activeReadTransactions.contains(transaction));
-    info.activeReadTransactions.remove(transaction);
+    info.activeReadTransactions.erase(transaction);
   } else {
     ASSERT(info.activeWriteTransaction == transaction);
     info.activeWriteTransaction = nullptr;

@@ -261,6 +261,7 @@ bool CanCoalesce(const WebMouseWheelEvent& event_to_coalesce,
          event.scrollByPage == event_to_coalesce.scrollByPage &&
          event.phase == event_to_coalesce.phase &&
          event.momentumPhase == event_to_coalesce.momentumPhase &&
+         event.resendingPluginId == event_to_coalesce.resendingPluginId &&
          event.hasPreciseScrollingDeltas ==
              event_to_coalesce.hasPreciseScrollingDeltas;
 }
@@ -333,8 +334,11 @@ void Coalesce(const WebTouchEvent& event_to_coalesce, WebTouchEvent* event) {
   *event = event_to_coalesce;
   for (unsigned i = 0; i < event->touchesLength; ++i) {
     int i_old = GetIndexOfTouchID(old_event, event->touches[i].id);
-    if (old_event.touches[i_old].state == blink::WebTouchPoint::StateMoved)
+    if (old_event.touches[i_old].state == blink::WebTouchPoint::StateMoved) {
       event->touches[i].state = blink::WebTouchPoint::StateMoved;
+      event->touches[i].movementX += old_event.touches[i_old].movementX;
+      event->touches[i].movementY += old_event.touches[i_old].movementY;
+    }
   }
   event->movedBeyondSlopRegion |= old_event.movedBeyondSlopRegion;
   event->dispatchType = MergeDispatchTypes(old_event.dispatchType,
@@ -344,6 +348,7 @@ void Coalesce(const WebTouchEvent& event_to_coalesce, WebTouchEvent* event) {
 bool CanCoalesce(const WebGestureEvent& event_to_coalesce,
                  const WebGestureEvent& event) {
   if (event.type() != event_to_coalesce.type() ||
+      event.resendingPluginId != event_to_coalesce.resendingPluginId ||
       event.sourceDevice != event_to_coalesce.sourceDevice ||
       event.modifiers() != event_to_coalesce.modifiers())
     return false;
@@ -667,11 +672,17 @@ WebGestureEvent CreateWebGestureEvent(const GestureEventDetails& details,
       gesture.data.scrollBegin.pointerCount = details.touch_points();
       gesture.data.scrollBegin.deltaXHint = details.scroll_x_hint();
       gesture.data.scrollBegin.deltaYHint = details.scroll_y_hint();
+      gesture.data.scrollBegin.deltaHintUnits =
+          static_cast<blink::WebGestureEvent::ScrollUnits>(
+              details.scroll_begin_units());
       break;
     case ET_GESTURE_SCROLL_UPDATE:
       gesture.setType(WebInputEvent::GestureScrollUpdate);
       gesture.data.scrollUpdate.deltaX = details.scroll_x();
       gesture.data.scrollUpdate.deltaY = details.scroll_y();
+      gesture.data.scrollUpdate.deltaUnits =
+          static_cast<blink::WebGestureEvent::ScrollUnits>(
+              details.scroll_update_units());
       gesture.data.scrollUpdate.previousUpdateInSequencePrevented =
           details.previous_scroll_update_in_sequence_prevented();
       break;
@@ -747,10 +758,12 @@ std::unique_ptr<blink::WebInputEvent> TranslateAndScaleWebInputEvent(
     wheel_event->y += delta.y();
     wheel_event->x *= scale;
     wheel_event->y *= scale;
-    wheel_event->deltaX *= scale;
-    wheel_event->deltaY *= scale;
-    wheel_event->wheelTicksX *= scale;
-    wheel_event->wheelTicksY *= scale;
+    if (!wheel_event->scrollByPage) {
+      wheel_event->deltaX *= scale;
+      wheel_event->deltaY *= scale;
+      wheel_event->wheelTicksX *= scale;
+      wheel_event->wheelTicksY *= scale;
+    }
   } else if (blink::WebInputEvent::isMouseEventType(event.type())) {
     blink::WebMouseEvent* mouse_event = new blink::WebMouseEvent;
     scaled_event.reset(mouse_event);
@@ -785,12 +798,18 @@ std::unique_ptr<blink::WebInputEvent> TranslateAndScaleWebInputEvent(
     gesture_event->y *= scale;
     switch (gesture_event->type()) {
       case blink::WebInputEvent::GestureScrollUpdate:
-        gesture_event->data.scrollUpdate.deltaX *= scale;
-        gesture_event->data.scrollUpdate.deltaY *= scale;
+        if (gesture_event->data.scrollUpdate.deltaUnits !=
+            blink::WebGestureEvent::ScrollUnits::Page) {
+          gesture_event->data.scrollUpdate.deltaX *= scale;
+          gesture_event->data.scrollUpdate.deltaY *= scale;
+        }
         break;
       case blink::WebInputEvent::GestureScrollBegin:
-        gesture_event->data.scrollBegin.deltaXHint *= scale;
-        gesture_event->data.scrollBegin.deltaYHint *= scale;
+        if (gesture_event->data.scrollBegin.deltaHintUnits !=
+            blink::WebGestureEvent::ScrollUnits::Page) {
+          gesture_event->data.scrollBegin.deltaXHint *= scale;
+          gesture_event->data.scrollBegin.deltaYHint *= scale;
+        }
         break;
 
       case blink::WebInputEvent::GesturePinchUpdate:

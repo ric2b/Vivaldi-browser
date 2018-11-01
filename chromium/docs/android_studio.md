@@ -4,7 +4,8 @@
 
 ## Usage
 
-Make sure you have followed [android build instructions](android_build_instructions.md) already.
+Make sure you have followed
+[android build instructions](android_build_instructions.md) already.
 
 ```shell
 build/android/gradle/generate_gradle.py
@@ -20,24 +21,28 @@ By default, only common targets are generated. To customize the list of targets
 to generate projects for:
 
 ```shell
-build/android/gradle/generate_gradle.py --target //some:target_apk --target //some/other:target_apk
+build/android/gradle/generate_gradle.py --target //chrome/android:chrome_public_apk --target //android_webview/test:android_webview_apk
 ```
 
 For first-time Android Studio users:
 
 * Avoid running the setup wizard.
-    * The wizard will force you to download unwanted SDK components to `//third_party/android_tools`.
+    * The wizard will force you to download unwanted SDK components to
+      `//third_party/android_tools`.
     * To skip it, select "Cancel" when it comes up.
 
 To import the project:
 
-* Use "Import Project", and select the directory containing the generated project, by default `out-gn/Debug/gradle`.
+* Use "Import Project", and select the directory containing the generated
+  project, by default `out/Debug/gradle`.
 
 You need to re-run `generate_gradle.py` whenever `BUILD.gn` files change.
 
-* After regenerating, Android Studio should prompt you to "Sync". If it doesn't, use:
+* After regenerating, Android Studio should prompt you to "Sync". If it
+  doesn't, use:
+    * Button with two arrows on the right side of the top strip.
     * Help -&gt; Find Action -&gt; "Sync Project with Gradle Files"
-
+    * After `gn clean` you may need to restart Android Studio.
 
 ## How it Works
 
@@ -45,17 +50,13 @@ Android Studio integration works by generating `build.gradle` files based on GN
 targets. Each `android_apk` and `android_library` target produces a separate
 Gradle sub-project.
 
-### Symlinks and .srcjars
+### Excluded files and .srcjars
 
 Gradle supports source directories but not source files. However, some
-`java/src/` directories in Chromium are split amonst multiple GN targets. To
-accommodate this, the script detects such targets and creates a `symlinked-java/`
-directory to point gradle at. Be warned that creating new files from Android
-Studio within these symlink-based projects will cause new files to be created in
-the generated `symlinked-java/` rather than the source tree where you want it.
-
-*** note
-** TLDR:** Always create new files outside of Android Studio.
+directories in Chromium are split amonst multiple GN targets. To accommodate
+this, the script detects such targets and creates exclude patterns to exclude
+files not in the current target. You may still see them when editing, but they
+are excluded in gradle tasks.
 ***
 
 Most generated .java files in GN are stored as `.srcjars`. Android Studio does
@@ -69,12 +70,15 @@ includes `R.java`).
 
 ## Android Studio Tips
 
-* Configuration instructions can be found [here](http://tools.android.com/tech-docs/configuration). One suggestions:
-    * Launch it with more RAM: `STUDIO_VM_OPTIONS=-Xmx2048m /opt/android-studio-stable/bin/studio-launcher.sh`
+* Configuration instructions can be found
+  [here](http://tools.android.com/tech-docs/configuration). One suggestions:
+    * Launch it with more RAM:
+      `STUDIO_VM_OPTIONS=-Xmx2048m /opt/android-studio-stable/bin/studio-launcher.sh`
 * If you ever need to reset it: `rm -r ~/.AndroidStudio*/`
 * Import Android style settings:
-    * Help -&gt; Find Action -&gt; "Code Style" (settings) -&gt; Java -&gt; Manage -&gt; Import
-        * Select `third_party/android_platform/development/ide/intellij/codestyles/AndroidStyle.xml`
+    * Help -&gt; Find Action -&gt; "Code Style" (settings) -&gt; Java -&gt;
+      Manage -&gt; Import
+        * Select `tools/android/android_studio/ChromiumStyle.xml`
 * Turn on automatic import:
     * Help -&gt; Find Action -&gt; "Auto Import"
         * Tick all the boxes under "Java" and change the dropdown to "All".
@@ -97,19 +101,22 @@ includes `R.java`).
 
 ### Building from the Command Line
 
-Gradle builds can be done from the command-line after importing the project into
-Android Studio (importing into the IDE causes the Gradle wrapper to be added).
-This wrapper can also be used to invoke gradle commands.
+Gradle builds can be done from the command-line after importing the project
+into Android Studio (importing into the IDE causes the Gradle wrapper to be
+added). This wrapper can also be used to invoke gradle commands.
 
     cd $GRADLE_PROJECT_DIR && bash gradlew
 
 The resulting artifacts are not terribly useful. They are missing assets,
 resources, native libraries, etc.
 
-* Use a [gradle daemon](https://docs.gradle.org/2.14.1/userguide/gradle_daemon.html) to speed up builds:
-    * Add the line `org.gradle.daemon=true` to `~/.gradle/gradle.properties`, creating it if necessary.
+* Use a
+  [gradle daemon](https://docs.gradle.org/2.14.1/userguide/gradle_daemon.html)
+  to speed up builds using the gradlew script:
+    * Add the line `org.gradle.daemon=true` to `~/.gradle/gradle.properties`,
+      creating it if necessary.
 
-## Status (as of Jan 19, 2017)
+## Status (as of Feb 7th, 2017)
 
 ### What works
 
@@ -117,10 +124,12 @@ resources, native libraries, etc.
 * Java editing and gradle compile works.
 * Instrumentation tests included as androidTest.
 * Symlinks to existing .so files in jniLibs (doesn't generate them).
+* Editing resource xml files.
 
 ### What doesn't work (yet) ([crbug](https://bugs.chromium.org/p/chromium/issues/detail?id=620034))
 
-* Make gradle aware of resources and assets
+* Make gradle aware of assets
+* Layout editor
 * Add a mode in which gradle is responsible for generating `R.java`
 * Add support for native code editing
 * Make the "Make Project" button work correctly

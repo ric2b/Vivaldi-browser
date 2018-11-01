@@ -43,7 +43,7 @@ Constructor
 # [ConstructorCallWith=ExecutionContext] + toDocument(executionContext)
 ConstructorCallWith=ExecutionContext|ScriptState|Document
 CrossOrigin=|Getter|Setter
-Custom=|Getter|Setter|LegacyCallAsFunction|VisitDOMWrapper|PropertyGetter|PropertyEnumerator|PropertyQuery|CallPrologue|CallEpilogue
+Custom=|Getter|Setter|LegacyCallAsFunction|PropertyGetter|PropertyEnumerator|PropertyQuery|CallPrologue|CallEpilogue
 CustomConstructor
 CustomElementCallbacks
 Default=Undefined
@@ -88,16 +88,14 @@ ReflectMissing=*
 ReflectOnly=*
 Replaceable
 # Valid values for [RuntimeEnabled] are the Runtime Enabled Features, listed in
-# Source/platform/RuntimeEnabledFeatures.in
+# Source/platform/RuntimeEnabledFeatures.json5
 RuntimeEnabled=*
 SameObject
 SaveSameObject
 SecureContext
-SetWrapperReferenceFrom=*
-SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|CurrentWindow|EnteredWindow
 TreatNullAs=NullString|EmptyString
 URL
 Unforgeable
 Unscopable
-WebModuleAPI
+WebAgentAPI

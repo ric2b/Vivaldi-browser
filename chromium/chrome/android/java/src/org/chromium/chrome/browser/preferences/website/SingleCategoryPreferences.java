@@ -28,6 +28,7 @@ import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
@@ -464,7 +465,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         if (READ_WRITE_TOGGLE_KEY.equals(preference.getKey())) {
-            if (mCategory.isManaged()) return false;
+            assert !mCategory.isManaged();
 
             if (mCategory.showAutoplaySites()) {
                 PrefServiceBridge.getInstance().setAutoplayEnabled((boolean) newValue);
@@ -609,7 +610,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
         // Configure/hide the notifications vibrate toggle, as needed.
         Preference notificationsVibrate =
                 getPreferenceScreen().findPreference(NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
-        if (mCategory.showNotificationsSites()) {
+        if (mCategory.showNotificationsSites() && !BuildInfo.isAtLeastO()) {
             notificationsVibrate.setOnPreferenceChangeListener(this);
             updateNotificationsVibrateCheckBox();
         } else {
@@ -677,9 +678,19 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 }
                 globalToggle.setSummaryOff(
                         ContentSettingsResources.getDisabledSummary(contentType));
-                if (mCategory.isManaged() && !mCategory.isManagedByCustodian()) {
-                    globalToggle.setIcon(R.drawable.controlled_setting_mandatory);
-                }
+                globalToggle.setManagedPreferenceDelegate(new ManagedPreferenceDelegate() {
+                    @Override
+                    public boolean isPreferenceControlledByPolicy(Preference preference) {
+                        // TODO(bauerb): Align the ManagedPreferenceDelegate and
+                        // SiteSettingsCategory interfaces better to avoid this indirection.
+                        return mCategory.isManaged() && !mCategory.isManagedByCustodian();
+                    }
+
+                    @Override
+                    public boolean isPreferenceControlledByCustodian(Preference preference) {
+                        return mCategory.isManagedByCustodian();
+                    }
+                });
                 if (mCategory.showAutoplaySites()) {
                     globalToggle.setChecked(
                             PrefServiceBridge.getInstance().isAutoplayEnabled());
@@ -727,7 +738,9 @@ public class SingleCategoryPreferences extends PreferenceFragment
         ChromeBaseCheckBoxPreference preference =
                 (ChromeBaseCheckBoxPreference) getPreferenceScreen().findPreference(
                         NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
-        preference.setEnabled(PrefServiceBridge.getInstance().isNotificationsEnabled());
+        if (preference != null) {
+            preference.setEnabled(PrefServiceBridge.getInstance().isNotificationsEnabled());
+        }
     }
 
     private void showManagedToast() {

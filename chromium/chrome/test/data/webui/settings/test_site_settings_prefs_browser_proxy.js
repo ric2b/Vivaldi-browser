@@ -15,6 +15,7 @@ var prefsEmpty = {
     geolocation: '',
     javascript: '',
     mic: '',
+    midiDevices: '',
     notifications: '',
     plugins: '',
     popups: '',
@@ -28,6 +29,7 @@ var prefsEmpty = {
     geolocation: [],
     javascript: [],
     mic: [],
+    midiDevices: [],
     notifications: [],
     plugins: [],
     popups: [],
@@ -48,10 +50,14 @@ var TestSiteSettingsPrefsBrowserProxy = function() {
   settings.TestBrowserProxy.call(this, [
     'fetchUsbDevices',
     'fetchZoomLevels',
+    'getCookieDetails',
     'getDefaultValueForContentType',
     'getExceptionList',
+    'isPatternValid',
     'observeProtocolHandlers',
     'observeProtocolHandlersEnabledState',
+    'reloadCookies',
+    'removeCookie',
     'removeProtocolHandler',
     'removeUsbDevice',
     'removeZoomLevel',
@@ -72,6 +78,12 @@ var TestSiteSettingsPrefsBrowserProxy = function() {
 
   /** @private {!Array<!ProtocolEntry>} */
   this.protocolHandlers_ = [];
+
+  /** @private {?CookieList} */
+  this.cookieDetails_ = null;
+
+  /** @private {boolean} */
+  this.isPatternValid_ = true;
 };
 
 TestSiteSettingsPrefsBrowserProxy.prototype = {
@@ -126,6 +138,19 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
   },
 
   /** @override */
+  getCookieDetails: function(site) {
+    this.methodCalled('getCookieDetails', site);
+    return Promise.resolve(this.cookieDetails_  || {id: '', children: []});
+  },
+
+  /**
+   * @param {!CookieList} cookieList
+   */
+  setCookieDetails: function(cookieList) {
+    this.cookieDetails_ = cookieList;
+  },
+
+  /** @override */
   getDefaultValueForContentType: function(contentType) {
     this.methodCalled('getDefaultValueForContentType', contentType);
 
@@ -146,6 +171,8 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.defaults.javascript;
     } else if (contentType == settings.ContentSettingsTypes.MIC) {
       pref = this.prefs_.defaults.mic;
+    } else if (contentType == settings.ContentSettingsTypes.MIDI_DEVICES) {
+      pref = this.prefs_.defaults.midiDevices;
     } else if (contentType == settings.ContentSettingsTypes.NOTIFICATIONS) {
       pref = this.prefs_.defaults.notifications;
     } else if (contentType == settings.ContentSettingsTypes.PDF_DOCUMENTS) {
@@ -186,12 +213,16 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.exceptions.javascript;
     else if (contentType == settings.ContentSettingsTypes.MIC)
       pref = this.prefs_.exceptions.mic;
+    else if (contentType == settings.ContentSettingsTypes.MIDI_DEVICES)
+      pref = this.prefs_.exceptions.midiDevices;
     else if (contentType == settings.ContentSettingsTypes.NOTIFICATIONS)
       pref = this.prefs_.exceptions.notifications;
     else if (contentType == settings.ContentSettingsTypes.PDF_DOCUMENTS)
       pref = this.prefs_.exceptions.pdf_documents;
     else if (contentType == settings.ContentSettingsTypes.PLUGINS)
       pref = this.prefs_.exceptions.plugins;
+    else if (contentType == settings.ContentSettingsTypes.PROTECTED_CONTENT)
+      pref = this.prefs_.exceptions.protectedContent;
     else if (contentType == settings.ContentSettingsTypes.POPUPS)
       pref = this.prefs_.exceptions.popups;
     else if (contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS)
@@ -201,6 +232,19 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
 
     assert(pref != undefined, 'Pref is missing for ' + contentType);
     return Promise.resolve(pref);
+  },
+
+  /** @override */
+  isPatternValid: function(pattern) {
+    this.methodCalled('isPatternValid', pattern);
+    return Promise.resolve(this.isPatternValid_);
+  },
+
+  /**
+   * Specify whether isPatternValid should succeed or fail.
+   */
+  setIsPatternValid: function(isValid) {
+    this.isPatternValid_ = isValid;
   },
 
   /** @override */
@@ -215,7 +259,7 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
   setCategoryPermissionForOrigin: function(
       primaryPattern, secondaryPattern, contentType, value, incognito) {
     this.methodCalled('setCategoryPermissionForOrigin',
-        [primaryPattern, secondaryPattern, contentType, value]);
+        [primaryPattern, secondaryPattern, contentType, value, incognito]);
     return Promise.resolve();
   },
 
@@ -223,6 +267,16 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
   fetchZoomLevels: function() {
     cr.webUIListenerCallback('onZoomLevelsChanged', this.zoomList_);
     this.methodCalled('fetchZoomLevels');
+  },
+
+  /** @override */
+  reloadCookies: function() {
+    return Promise.resolve({id: null, children: []});
+  },
+
+  /** @override */
+  removeCookie: function(path) {
+    this.methodCalled('removeCookie', path);
   },
 
   /** @override */

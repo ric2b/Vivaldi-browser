@@ -4,6 +4,7 @@
 
 #include "core/editing/FrameSelection.h"
 
+#include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -14,6 +15,7 @@
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/input/EventHandler.h"
+#include "core/layout/LayoutBlock.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/testing/DummyPageHolder.h"
@@ -23,14 +25,13 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/StdLibExtras.h"
-#include <memory>
 
 namespace blink {
 
 class FrameSelectionTest : public EditingTestBase {
  protected:
   const VisibleSelection& visibleSelectionInDOMTree() const {
-    return selection().selection();
+    return selection().computeVisibleSelectionInDOMTreeDeprecated();
   }
   const VisibleSelectionInFlatTree& visibleSelectionInFlatTree() const {
     return selection().selectionInFlatTree();
@@ -39,17 +40,6 @@ class FrameSelectionTest : public EditingTestBase {
   Text* appendTextNode(const String& data);
   int layoutCount() const {
     return dummyPageHolder().frameView().layoutCount();
-  }
-
-  bool isCaretBoundsDirty() const {
-    return selection().m_frameCaret->m_caretRectDirty;
-  }
-
-  bool shouldPaintCaretForTesting() const {
-    return selection().shouldPaintCaretForTesting();
-  }
-  bool isPreviousCaretDirtyForTesting() const {
-    return selection().isPreviousCaretDirtyForTesting();
   }
 
   PositionWithAffinity caretPosition() const {
@@ -73,26 +63,8 @@ TEST_F(FrameSelectionTest, SetValidSelection) {
       SelectionInDOMTree::Builder()
           .setBaseAndExtent(Position(text, 0), Position(text, 5))
           .build());
-  EXPECT_FALSE(selection().isNone());
-}
-
-TEST_F(FrameSelectionTest, InvalidateCaretRect) {
-  Text* text = appendTextNode("Hello, World!");
-  document().view()->updateAllLifecyclePhases();
-
-  selection().setSelection(
-      SelectionInDOMTree::Builder().collapse(Position(text, 0)).build());
-  selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(isCaretBoundsDirty());
-  selection().invalidateCaretRect();
-  EXPECT_FALSE(isCaretBoundsDirty());
-
-  document().body()->removeChild(text);
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-  selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(isCaretBoundsDirty());
-  selection().invalidateCaretRect();
-  EXPECT_FALSE(isCaretBoundsDirty());
+  EXPECT_FALSE(
+      selection().computeVisibleSelectionInDOMTreeDeprecated().isNone());
 }
 
 TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
@@ -106,8 +78,11 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
   selection().setCaretVisible(true);
   selection().setSelection(
       SelectionInDOMTree::Builder().collapse(Position(text, 0)).build());
-  EXPECT_TRUE(selection().isCaret());
-  EXPECT_TRUE(shouldPaintCaretForTesting());
+  document().view()->updateAllLifecyclePhases();
+  EXPECT_TRUE(
+      selection().computeVisibleSelectionInDOMTreeDeprecated().isCaret());
+  EXPECT_TRUE(toLayoutBlock(document().body()->layoutObject())
+                  ->shouldPaintCursorCaret());
 
   int startCount = layoutCount();
   {
@@ -125,58 +100,6 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
   }
   paintController->commitNewDisplayItems();
   EXPECT_EQ(startCount, layoutCount());
-}
-
-TEST_F(FrameSelectionTest, InvalidatePreviousCaretAfterRemovingLastCharacter) {
-  Text* text = appendTextNode("Hello, World!");
-  document().view()->updateAllLifecyclePhases();
-
-  document().body()->setContentEditable("true", ASSERT_NO_EXCEPTION);
-  document().body()->focus();
-  EXPECT_TRUE(document().body()->isFocused());
-
-  selection().setCaretVisible(true);
-  EXPECT_TRUE(selection().isCaret());
-  EXPECT_TRUE(shouldPaintCaretForTesting());
-
-  // Simulate to type "Hello, World!".
-  DisableCompositingQueryAsserts disabler;
-  document().updateStyleAndLayout();
-  selection().setSelection(
-      SelectionInDOMTree::Builder().collapse(selection().end()).build());
-  selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(isCaretBoundsDirty());
-  EXPECT_FALSE(isPreviousCaretDirtyForTesting());
-  selection().invalidateCaretRect();
-  EXPECT_FALSE(isCaretBoundsDirty());
-  EXPECT_TRUE(isPreviousCaretDirtyForTesting());
-
-  // Simulate to remove all except for "H".
-  text->replaceWholeText("H");
-  document().updateStyleAndLayout();
-  selection().setSelection(
-      SelectionInDOMTree::Builder().collapse(selection().end()).build());
-  selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(isCaretBoundsDirty());
-  // "H" remains so early previousCaret invalidation isn't needed.
-  EXPECT_TRUE(isPreviousCaretDirtyForTesting());
-  selection().invalidateCaretRect();
-  EXPECT_FALSE(isCaretBoundsDirty());
-  EXPECT_TRUE(isPreviousCaretDirtyForTesting());
-
-  // Simulate to remove the last character.
-  document().body()->removeChild(text);
-  // This line is the objective of this test.
-  // As removing the last character, early previousCaret invalidation is
-  // executed.
-  EXPECT_FALSE(isPreviousCaretDirtyForTesting());
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-  selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(isCaretBoundsDirty());
-  EXPECT_FALSE(isPreviousCaretDirtyForTesting());
-  selection().invalidateCaretRect();
-  EXPECT_FALSE(isCaretBoundsDirty());
-  EXPECT_TRUE(isPreviousCaretDirtyForTesting());
 }
 
 #define EXPECT_EQ_SELECTED_TEXT(text) \
@@ -248,13 +171,17 @@ TEST_F(FrameSelectionTest, ModifyWithUserTriggered) {
                                   NotUserTriggered))
       << "Selection.modify() returns false for non-user-triggered call when "
          "selection isn't modified.";
-  EXPECT_EQ(endOfText, selection().start()) << "Selection isn't modified";
+  EXPECT_EQ(endOfText,
+            selection().computeVisibleSelectionInDOMTreeDeprecated().start())
+      << "Selection isn't modified";
 
   EXPECT_TRUE(selection().modify(FrameSelection::AlterationMove,
                                  DirectionForward, CharacterGranularity,
                                  UserTriggered))
       << "Selection.modify() returns true for user-triggered call";
-  EXPECT_EQ(endOfText, selection().start()) << "Selection isn't modified";
+  EXPECT_EQ(endOfText,
+            selection().computeVisibleSelectionInDOMTreeDeprecated().start())
+      << "Selection isn't modified";
 }
 
 TEST_F(FrameSelectionTest, MoveRangeSelectionTest) {
@@ -291,58 +218,63 @@ TEST_F(FrameSelectionTest, MoveRangeSelectionTest) {
   EXPECT_EQ_SELECTED_TEXT("Foo Bar");
 }
 
-// TODO(yosin): We should move |SelectionControllerTest" to
-// "SelectionControllerTest.cpp"
-class SelectionControllerTest : public EditingTestBase {
- protected:
-  SelectionControllerTest() = default;
-
-  const VisibleSelection& visibleSelectionInDOMTree() const {
-    return selection().selection();
-  }
-
-  const VisibleSelectionInFlatTree& visibleSelectionInFlatTree() const {
-    return selection().selectionInFlatTree();
-  }
-
-  void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree&,
-                                          TextGranularity);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SelectionControllerTest);
-};
+// For http://crbug.com/695317
+TEST_F(FrameSelectionTest, SelectAllWithInputElement) {
+  setBodyContent("<input>123");
+  Element* const input = document().querySelector("input");
+  Node* const lastChild = document().body()->lastChild();
+  selection().selectAll();
+  const SelectionInDOMTree& resultInDOMTree =
+      selection().computeVisibleSelectionInDOMTree().asSelection();
+  const SelectionInFlatTree& resultInFlatTree =
+      selection().computeVisibleSelectionInFlatTree().asSelection();
+  EXPECT_EQ(SelectionInDOMTree::Builder(resultInDOMTree)
+                .collapse(Position::beforeNode(input))
+                .extend(Position(lastChild, 3))
+                .build(),
+            resultInDOMTree);
+  EXPECT_EQ(SelectionInFlatTree::Builder(resultInFlatTree)
+                .collapse(PositionInFlatTree::beforeNode(input))
+                .extend(PositionInFlatTree(lastChild, 3))
+                .build(),
+            resultInFlatTree);
+}
 
 TEST_F(FrameSelectionTest, SelectAllWithUnselectableRoot) {
   Element* select = document().createElement("select");
   document().replaceChild(select, document().documentElement());
   selection().selectAll();
-  EXPECT_TRUE(selection().isNone()) << "Nothing should be selected if the "
-                                       "content of the documentElement is not "
-                                       "selctable.";
+  EXPECT_TRUE(selection().computeVisibleSelectionInDOMTreeDeprecated().isNone())
+      << "Nothing should be selected if the "
+         "content of the documentElement is not "
+         "selctable.";
 }
 
-TEST_F(FrameSelectionTest, updateIfNeededAndFrameCaret) {
-  setBodyContent("<style id=sample></style>");
-  document().setDesignMode("on");
-  updateAllLifecyclePhases();
+TEST_F(FrameSelectionTest, SelectAllPreservesHandle) {
+  setBodyContent("<div id=sample>abc</div>");
   Element* sample = document().getElementById("sample");
-  selection().setSelection(
-      SelectionInDOMTree::Builder().collapse(Position(sample, 0)).build());
-  EXPECT_EQ(Position(document().body(), 0), selection().start());
-  EXPECT_EQ(selection().start(), caretPosition().position());
-  document().body()->remove();
-  // TODO(yosin): Once lazy canonicalization implemented, selection.start
-  // should be Position(HTML, 0).
-  EXPECT_EQ(Position(document().documentElement(), 1), selection().start());
-  EXPECT_EQ(selection().start(), caretPosition().position());
-  document().updateStyleAndLayout();
-  selection().updateIfNeeded();
+  const Position endOfText(sample->firstChild(), 3);
+  selection().setSelection(SelectionInDOMTree::Builder()
+                               .collapse(endOfText)
+                               .setIsHandleVisible(false)
+                               .build());
+  EXPECT_FALSE(selection().isHandleVisible());
+  selection().selectAll();
+  EXPECT_FALSE(selection().isHandleVisible())
+      << "If handles weren't present before"
+         "selectAll. Then they shouldn't be present"
+         "after it.";
 
-  // TODO(yosin): Once lazy canonicalization implemented, selection.start
-  // should be Position(HTML, 0).
-  EXPECT_EQ(Position(), selection().start())
-      << "updateIfNeeded() makes selection to null.";
-  EXPECT_EQ(selection().start(), caretPosition().position());
+  selection().setSelection(SelectionInDOMTree::Builder()
+                               .collapse(endOfText)
+                               .setIsHandleVisible(true)
+                               .build());
+  EXPECT_TRUE(selection().isHandleVisible());
+  selection().selectAll();
+  EXPECT_TRUE(selection().isHandleVisible())
+      << "If handles were present before"
+         "selectAll. Then they should be present"
+         "after it.";
 }
 
 }  // namespace blink

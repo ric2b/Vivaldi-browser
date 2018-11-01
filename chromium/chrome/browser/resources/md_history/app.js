@@ -33,36 +33,6 @@ Polymer({
       observer: 'selectedPageChanged_',
     },
 
-    // Whether domain-grouped history is enabled.
-    grouped_: {
-      type: Boolean,
-      reflectToAttribute: true,
-    },
-
-    /** @type {!QueryState} */
-    queryState_: {
-      type: Object,
-      value: function() {
-        return {
-          // Whether the most recent query was incremental.
-          incremental: false,
-          // A query is initiated by page load.
-          querying: true,
-          queryingDisabled: false,
-          _range: HistoryRange.ALL_TIME,
-          searchTerm: '',
-          groupedOffset: 0,
-
-          set range(val) {
-            this._range = Number(val);
-          },
-          get range() {
-            return this._range;
-          },
-        };
-      }
-    },
-
     /** @type {!QueryResult} */
     queryResult_: {
       type: Object,
@@ -95,6 +65,9 @@ Polymer({
       },
     },
 
+    /** @type {!QueryState} */
+    queryState_: Object,
+
     // True if the window is narrow enough for the page to have a drawer.
     hasDrawer_: {
       type: Boolean,
@@ -115,7 +88,6 @@ Polymer({
     'history-checkbox-select': 'checkboxSelected',
     'history-close-drawer': 'closeDrawer_',
     'history-view-changed': 'historyViewChanged_',
-    'opened-changed': 'onOpenedChanged_',
     'unselect-all': 'unselectAll',
   },
 
@@ -127,8 +99,6 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.grouped_ = loadTimeData.getBoolean('groupByDomain');
-
     cr.ui.decorate('command', cr.ui.Command);
     this.boundOnCanExecute_ = this.onCanExecute_.bind(this);
     this.boundOnCommand_ = this.onCommand_.bind(this);
@@ -187,15 +157,7 @@ Polymer({
     var drawer = /** @type {!CrDrawerElement} */ (this.$.drawer.get());
     drawer.align = document.documentElement.dir == 'ltr' ? 'left' : 'right';
     drawer.toggle();
-  },
-
-  /**
-   * @param {!CustomEvent} e
-   * @private
-   */
-  onOpenedChanged_: function(e) {
-    if (e.detail.value)
-      this.showMenuPromo_ = false;
+    this.showMenuPromo_ = false;
   },
 
   /**
@@ -205,7 +167,7 @@ Polymer({
    */
   checkboxSelected: function(e) {
     var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
-    toolbar.count = /** @type {HistoryListContainerElement} */ (this.$.history)
+    toolbar.count = /** @type {HistoryListElement} */ (this.$.history)
                         .getSelectedItemCount();
   },
 
@@ -215,10 +177,9 @@ Polymer({
    * @private
    */
   unselectAll: function() {
-    var listContainer =
-        /** @type {HistoryListContainerElement} */ (this.$.history);
+    var list = /** @type {HistoryListElement} */ (this.$.history);
     var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
-    listContainer.unselectAllItems(toolbar.count);
+    list.unselectAllItems();
     toolbar.count = 0;
   },
 
@@ -235,9 +196,8 @@ Polymer({
     this.set('queryState_.querying', false);
     this.set('queryResult_.info', info);
     this.set('queryResult_.results', results);
-    var listContainer =
-        /** @type {HistoryListContainerElement} */ (this.$['history']);
-    listContainer.historyResult(info, results);
+    var list = /** @type {HistoryListElement} */ (this.$['history']);
+    list.historyResult(info, results);
   },
 
   /**
@@ -255,9 +215,6 @@ Polymer({
     e = /** @type {cr.ui.CanExecuteEvent} */ (e);
     switch (e.command.id) {
       case 'find-command':
-      case 'toggle-grouped':
-        e.canExecute = true;
-        break;
       case 'slash-command':
         e.canExecute = !this.$.toolbar.searchField.isSearchFocused();
         break;
@@ -274,10 +231,8 @@ Polymer({
   onCommand_: function(e) {
     if (e.command.id == 'find-command' || e.command.id == 'slash-command')
       this.focusToolbarSearchField();
-    if (e.command.id == 'delete-command')
+    else if (e.command.id == 'delete-command')
       this.deleteSelected();
-    if (e.command.id == 'toggle-grouped')
-      this.grouped_ = !this.grouped_;
   },
 
   /**
@@ -334,9 +289,7 @@ Polymer({
     return hasSyncedResults && selectedPage != 'syncedTabs';
   },
 
-  /**
-   * @private
-   */
+  /** @private */
   selectedPageChanged_: function() {
     this.unselectAll();
     this.historyViewChanged_();
@@ -347,15 +300,7 @@ Polymer({
     // This allows the synced-device-manager to render so that it can be set as
     // the scroll target.
     requestAnimationFrame(function() {
-      md_history.ensureLazyLoaded().then(function() {
-        // <iron-pages> can occasionally end up with no item selected during
-        // tests.
-        if (!this.$.content.selectedItem)
-          return;
-        this.scrollTarget =
-            this.$.content.selectedItem.getContentScrollTarget();
-        this._scrollHandler();
-      }.bind(this));
+      this._scrollHandler();
     }.bind(this));
     this.recordHistoryPageView_();
   },
@@ -398,17 +343,7 @@ Polymer({
             HistoryPageViewHistogram.SIGNIN_PROMO;
         break;
       default:
-        switch (this.queryState_.range) {
-          case HistoryRange.ALL_TIME:
-            histogramValue = HistoryPageViewHistogram.HISTORY;
-            break;
-          case HistoryRange.WEEK:
-            histogramValue = HistoryPageViewHistogram.GROUPED_WEEK;
-            break;
-          case HistoryRange.MONTH:
-            histogramValue = HistoryPageViewHistogram.GROUPED_MONTH;
-            break;
-        }
+        histogramValue = HistoryPageViewHistogram.HISTORY;
         break;
     }
 

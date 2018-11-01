@@ -17,17 +17,21 @@ const char* ThrottledTimeDomain::GetName() const {
   return "ThrottledTimeDomain";
 }
 
-void ThrottledTimeDomain::RequestWakeup(base::TimeTicks now,
-                                        base::TimeDelta delay) {
+void ThrottledTimeDomain::RequestWakeupAt(base::TimeTicks now,
+                                          base::TimeTicks run_time) {
   // We assume the owner (i.e. TaskQueueThrottler) will manage wakeups on our
   // behalf.
+}
+
+void ThrottledTimeDomain::CancelWakeupAt(base::TimeTicks run_time) {
+  // We ignore this because RequestWakeupAt is a NOP.
 }
 
 base::Optional<base::TimeDelta> ThrottledTimeDomain::DelayTillNextTask(
     LazyNow* lazy_now) {
   base::TimeTicks next_run_time;
   if (!NextScheduledRunTime(&next_run_time))
-    return base::Optional<base::TimeDelta>();
+    return base::nullopt;
 
   base::TimeTicks now = lazy_now->Now();
   if (now >= next_run_time)
@@ -35,7 +39,7 @@ base::Optional<base::TimeDelta> ThrottledTimeDomain::DelayTillNextTask(
 
   // We assume the owner (i.e. TaskQueueThrottler) will manage wakeups on our
   // behalf.
-  return base::Optional<base::TimeDelta>();
+  return base::nullopt;
 }
 
 }  // namespace scheduler

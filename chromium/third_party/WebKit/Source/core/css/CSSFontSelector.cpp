@@ -60,12 +60,13 @@ CSSFontSelector::~CSSFontSelector() {}
 
 void CSSFontSelector::registerForInvalidationCallbacks(
     CSSFontSelectorClient* client) {
-  m_clients.add(client);
+  CHECK(client);
+  m_clients.insert(client);
 }
 
 void CSSFontSelector::unregisterForInvalidationCallbacks(
     CSSFontSelectorClient* client) {
-  m_clients.remove(client);
+  m_clients.erase(client);
 }
 
 void CSSFontSelector::dispatchInvalidationCallbacks() {
@@ -73,8 +74,12 @@ void CSSFontSelector::dispatchInvalidationCallbacks() {
 
   HeapVector<Member<CSSFontSelectorClient>> clients;
   copyToVector(m_clients, clients);
-  for (auto& client : clients)
-    client->fontsNeedUpdate(this);
+  for (auto& client : clients) {
+    // This should not be nullptr, but to see if checking nullptr can suppress
+    // crashes. crbug.com/581698
+    if (client)
+      client->fontsNeedUpdate(this);
+  }
 }
 
 void CSSFontSelector::fontFaceInvalidated() {
@@ -153,15 +158,15 @@ void CSSFontSelector::willUseRange(const FontDescription& fontDescription,
     face->willUseRange(fontDescription, rangeSet);
 }
 
-bool CSSFontSelector::isPlatformFontAvailable(
+bool CSSFontSelector::isPlatformFamilyMatchAvailable(
     const FontDescription& fontDescription,
     const AtomicString& passedFamily) {
   AtomicString family = familyNameFromSettings(m_genericFontFamilySettings,
                                                fontDescription, passedFamily);
   if (family.isEmpty())
     family = passedFamily;
-  return FontCache::fontCache()->isPlatformFontAvailable(fontDescription,
-                                                         family);
+  return FontCache::fontCache()->isPlatformFamilyMatchAvailable(fontDescription,
+                                                                family);
 }
 
 void CSSFontSelector::updateGenericFontFamilySettings(Document& document) {

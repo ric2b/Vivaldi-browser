@@ -31,6 +31,8 @@ extern NSString* const kToolsMenuReaderMode;
 extern NSString* const kToolsMenuRequestDesktopId;
 extern NSString* const kToolsMenuSettingsId;
 extern NSString* const kToolsMenuHelpId;
+extern NSString* const kToolsMenuSuggestionsId;
+extern NSString* const kToolsMenuReadingListId;
 
 // Tools Popup Table Delegate Protocol
 @protocol ToolsPopupTableDelegate<NSObject>

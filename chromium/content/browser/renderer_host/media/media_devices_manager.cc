@@ -385,8 +385,7 @@ void MediaDevicesManager::VideoInputDevicesEnumerated(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   MediaDeviceInfoArray snapshot;
   for (const auto& descriptor : descriptors) {
-    snapshot.emplace_back(descriptor.device_id, descriptor.GetNameAndModel(),
-                          std::string());
+    snapshot.emplace_back(descriptor);
   }
   DevicesEnumerated(MEDIA_DEVICE_TYPE_VIDEO_INPUT, snapshot);
 }
@@ -521,7 +520,7 @@ void MediaDevicesManager::NotifyDeviceChangeSubscribers(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(IsValidMediaDeviceType(type));
 
-  for (const auto& subscriber : device_change_subscribers_[type]) {
+  for (auto* subscriber : device_change_subscribers_[type]) {
     subscriber->OnDevicesChanged(type, snapshot);
   }
 }

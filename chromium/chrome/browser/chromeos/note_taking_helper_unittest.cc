@@ -11,13 +11,16 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
+#include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -29,6 +32,8 @@
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/common/intent_helper.mojom.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
+#include "components/crx_file/id_util.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/common/api/app_runtime.h"
@@ -192,6 +197,12 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest {
   scoped_refptr<const extensions::Extension> CreateExtension(
       const extensions::ExtensionId& id,
       const std::string& name) {
+    return CreateExtension(id, name, nullptr);
+  }
+  scoped_refptr<const extensions::Extension> CreateExtension(
+      const extensions::ExtensionId& id,
+      const std::string& name,
+      std::unique_ptr<base::Value> action_handlers) {
     std::unique_ptr<base::DictionaryValue> manifest =
         extensions::DictionaryBuilder()
             .Set("name", name)
@@ -207,6 +218,10 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest {
                               .Build())
                      .Build())
             .Build();
+
+    if (action_handlers)
+      manifest->Set("action_handlers", std::move(action_handlers));
+
     return extensions::ExtensionBuilder()
         .SetManifest(std::move(manifest))
         .SetID(id)
@@ -321,7 +336,7 @@ TEST_F(NoteTakingHelperTest, ListChromeApps) {
       GetAppString(apps[1]));
 
   // Now install a random extension and check that it's ignored.
-  const extensions::ExtensionId kOtherId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const extensions::ExtensionId kOtherId = crx_file::id_util::GenerateId("a");
   const std::string kOtherName = "Some Other App";
   auto other_extension = CreateExtension(kOtherId, kOtherName);
   InstallExtension(other_extension.get(), profile());
@@ -344,6 +359,54 @@ TEST_F(NoteTakingHelperTest, ListChromeApps) {
   EXPECT_EQ(
       GetAppString(NoteTakingHelper::kProdKeepExtensionId, kProdName, true),
       GetAppString(apps[1]));
+}
+
+// Verify the note helper detects apps with "new_note" "action_handler" manifest
+// entries.
+TEST_F(NoteTakingHelperTest, CustomChromeApps) {
+  Init(ENABLE_PALETTE);
+
+  const extensions::ExtensionId kNewNoteId = crx_file::id_util::GenerateId("a");
+  const extensions::ExtensionId kEmptyArrayId =
+      crx_file::id_util::GenerateId("b");
+  const extensions::ExtensionId kEmptyId = crx_file::id_util::GenerateId("c");
+  const std::string kName = "Some App";
+
+  // "action_handlers": ["new_note"]
+  auto has_new_note = CreateExtension(
+      kNewNoteId, kName,
+      extensions::ListBuilder()
+          .Append(app_runtime::ToString(app_runtime::ACTION_TYPE_NEW_NOTE))
+          .Build());
+  InstallExtension(has_new_note.get(), profile());
+  // "action_handlers": []
+  auto empty_array =
+      CreateExtension(kEmptyArrayId, kName, extensions::ListBuilder().Build());
+  InstallExtension(empty_array.get(), profile());
+  // (no action handler entry)
+  auto none = CreateExtension(kEmptyId, kName);
+  InstallExtension(none.get(), profile());
+
+  // Only the "new_note" extension is returned from GetAvailableApps.
+  std::vector<NoteTakingAppInfo> apps = helper()->GetAvailableApps(profile());
+  ASSERT_EQ(1u, apps.size());
+  EXPECT_EQ(GetAppString(kNewNoteId, kName, false), GetAppString(apps[0]));
+}
+
+TEST_F(NoteTakingHelperTest, WhitelistedAndCustomAppsShowOnlyOnce) {
+  Init(ENABLE_PALETTE);
+
+  auto extension = CreateExtension(
+      NoteTakingHelper::kProdKeepExtensionId, "Keep",
+      extensions::ListBuilder()
+          .Append(app_runtime::ToString(app_runtime::ACTION_TYPE_NEW_NOTE))
+          .Build());
+  InstallExtension(extension.get(), profile());
+
+  std::vector<NoteTakingAppInfo> apps = helper()->GetAvailableApps(profile());
+  ASSERT_EQ(1u, apps.size());
+  EXPECT_EQ(GetAppString(NoteTakingHelper::kProdKeepExtensionId, "Keep", false),
+            GetAppString(apps[0]));
 }
 
 TEST_F(NoteTakingHelperTest, LaunchChromeApp) {
@@ -424,6 +487,41 @@ TEST_F(NoteTakingHelperTest, ArcInitiallyDisabled) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(helper()->android_enabled());
   EXPECT_TRUE(helper()->android_apps_received());
+}
+
+TEST_F(NoteTakingHelperTest, AddProfileWithPlayStoreEnabled) {
+  Init(ENABLE_PALETTE);
+  EXPECT_FALSE(helper()->android_enabled());
+  EXPECT_FALSE(helper()->android_apps_received());
+
+  TestObserver observer;
+  ASSERT_EQ(0, observer.num_updates());
+
+  // Add a second profile with the ARC-enabled pref already set. The Play Store
+  // should be immediately regarded as being enabled and the observer should be
+  // notified, since OnArcPlayStoreEnabledChanged() apparently isn't called in
+  // this case: http://crbug.com/700554
+  const char kSecondProfileName[] = "second-profile";
+  auto prefs = base::MakeUnique<sync_preferences::TestingPrefServiceSyncable>();
+  chrome::RegisterUserProfilePrefs(prefs->registry());
+  prefs->SetBoolean(prefs::kArcEnabled, true);
+  profile_manager_->CreateTestingProfile(
+      kSecondProfileName, std::move(prefs), base::ASCIIToUTF16("Second User"),
+      1 /* avatar_id */, std::string() /* supervised_user_id */,
+      TestingProfile::TestingFactories());
+  EXPECT_TRUE(helper()->android_enabled());
+  EXPECT_FALSE(helper()->android_apps_received());
+  EXPECT_EQ(1, observer.num_updates());
+
+  // Notification of updated intent filters should result in the apps being
+  // refreshed.
+  helper()->OnIntentFiltersUpdated();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(helper()->android_enabled());
+  EXPECT_TRUE(helper()->android_apps_received());
+  EXPECT_EQ(2, observer.num_updates());
+
+  profile_manager_->DeleteTestingProfile(kSecondProfileName);
 }
 
 TEST_F(NoteTakingHelperTest, ListAndroidApps) {
@@ -585,15 +683,15 @@ TEST_F(NoteTakingHelperTest, NotifyObserverAboutAndroidApps) {
   EXPECT_EQ(2, observer.num_updates());
   profile()->GetPrefs()->SetBoolean(prefs::kArcEnabled, true);
   EXPECT_EQ(3, observer.num_updates());
+  // Run ARC data removing operation.
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(4, observer.num_updates());
 
   // Update intent filters and check that the observer is notified again after
   // apps are received.
   helper()->OnIntentFiltersUpdated();
-  EXPECT_EQ(4, observer.num_updates());
+  EXPECT_EQ(3, observer.num_updates());
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(5, observer.num_updates());
+  EXPECT_EQ(4, observer.num_updates());
 }
 
 TEST_F(NoteTakingHelperTest, NotifyObserverAboutChromeApps) {
@@ -615,7 +713,7 @@ TEST_F(NoteTakingHelperTest, NotifyObserverAboutChromeApps) {
 
   // Non-whitelisted apps shouldn't trigger notifications.
   auto other_extension =
-      CreateExtension("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Some Other App");
+      CreateExtension(crx_file::id_util::GenerateId("a"), "Some Other App");
   InstallExtension(other_extension.get(), profile());
   EXPECT_EQ(2, observer.num_updates());
   UninstallExtension(other_extension.get(), profile());

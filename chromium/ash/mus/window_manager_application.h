@@ -19,7 +19,6 @@
 #include "services/ui/common/types.h"
 
 namespace aura {
-class MusContextFactory;
 class WindowTreeClient;
 }
 
@@ -37,11 +36,10 @@ namespace views {
 class AuraInit;
 }
 
-namespace ui {
-class Gpu;
-}
-
 namespace ash {
+namespace test {
+class AshTestHelper;
+}
 namespace mus {
 
 class NetworkConnectDelegateMus;
@@ -56,6 +54,7 @@ class WindowManagerApplication : public service_manager::Service {
   WindowManager* window_manager() { return window_manager_.get(); }
 
  private:
+  friend class ash::test::AshTestHelper;
   friend class WmTestBase;
   friend class WmTestHelper;
 
@@ -76,8 +75,6 @@ class WindowManagerApplication : public service_manager::Service {
 
   std::unique_ptr<views::AuraInit> aura_init_;
 
-  std::unique_ptr<ui::Gpu> gpu_;
-  std::unique_ptr<aura::MusContextFactory> compositor_context_factory_;
   std::unique_ptr<WindowManager> window_manager_;
 
   // A blocking pool used by the WindowManager's shell; not used in tests.

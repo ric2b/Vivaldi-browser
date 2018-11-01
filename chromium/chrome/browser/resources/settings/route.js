@@ -102,8 +102,11 @@ cr.define('settings', function() {
 
 // <if expr="chromeos">
   r.INTERNET = r.BASIC.createSection('/internet', 'internet');
+  r.INTERNET_NETWORKS = r.INTERNET.createChild('/networks');
   r.NETWORK_DETAIL = r.INTERNET.createChild('/networkDetail');
   r.KNOWN_NETWORKS = r.INTERNET.createChild('/knownNetworks');
+  r.BLUETOOTH = r.BASIC.createSection('/bluetooth', 'bluetooth');
+  r.BLUETOOTH_DEVICES = r.BLUETOOTH.createChild('/bluetoothDevices');
 // </if>
 
   r.APPEARANCE = r.BASIC.createSection('/appearance', 'appearance');
@@ -130,13 +133,15 @@ cr.define('settings', function() {
   r.CHANGE_PICTURE = r.PEOPLE.createChild('/changePicture');
   r.ACCOUNTS = r.PEOPLE.createChild('/accounts');
   r.LOCK_SCREEN = r.PEOPLE.createChild('/lockScreen');
+  r.FINGERPRINT = r.LOCK_SCREEN.createChild('/lockScreen/fingerprint');
 
   r.DEVICE = r.BASIC.createSection('/device', 'device');
   r.POINTERS = r.DEVICE.createChild('/pointer-overlay');
   r.KEYBOARD = r.DEVICE.createChild('/keyboard-overlay');
-  r.DISPLAY = r.DEVICE.createChild('/display');
   r.STYLUS = r.DEVICE.createChild('/stylus');
+  r.DISPLAY = r.DEVICE.createChild('/display');
   r.STORAGE = r.DEVICE.createChild('/storage');
+  r.POWER = r.DEVICE.createChild('/power');
 // </if>
 
   r.PRIVACY = r.ADVANCED.createSection('/privacy', 'privacy');
@@ -167,13 +172,15 @@ cr.define('settings', function() {
   r.SITE_SETTINGS_POPUPS = r.SITE_SETTINGS.createChild('popups');
   r.SITE_SETTINGS_UNSANDBOXED_PLUGINS =
       r.SITE_SETTINGS.createChild('unsandboxedPlugins');
+  r.SITE_SETTINGS_MIDI_DEVICES = r.SITE_SETTINGS.createChild('midiDevices');
   r.SITE_SETTINGS_USB_DEVICES = r.SITE_SETTINGS.createChild('usbDevices');
   r.SITE_SETTINGS_ZOOM_LEVELS = r.SITE_SETTINGS.createChild('zoomLevels');
   r.SITE_SETTINGS_PDF_DOCUMENTS = r.SITE_SETTINGS.createChild('pdfDocuments');
+  r.SITE_SETTINGS_PROTECTED_CONTENT =
+      r.SITE_SETTINGS.createChild('protectedContent');
 
 // <if expr="chromeos">
   r.DATETIME = r.ADVANCED.createSection('/dateTime', 'dateTime');
-  r.BLUETOOTH = r.ADVANCED.createSection('/bluetooth', 'bluetooth');
 // </if>
 
   r.PASSWORDS =
@@ -301,6 +308,13 @@ cr.define('settings', function() {
     }
   };
 
+  function resetRouteForTesting() {
+    initializeRouteFromUrlCalled_ = false;
+    lastRouteChangeWasPopstate_ = false;
+    currentRoute_ = Route.BASIC;
+    currentQueryParameters_ = new URLSearchParams();
+  }
+
   /**
    * Helper function to set the current route and notify all observers.
    * @param {!settings.Route} route
@@ -312,8 +326,9 @@ cr.define('settings', function() {
     currentRoute_ = route;
     currentQueryParameters_ = queryParameters;
     lastRouteChangeWasPopstate_ = isPopstate;
-    for (var observer of routeObservers_)
+    routeObservers_.forEach(function(observer) {
       observer.currentRouteChanged(currentRoute_, oldRoute);
+    });
   };
 
   /** @return {!settings.Route} */
@@ -384,6 +399,7 @@ cr.define('settings', function() {
     RouteObserverBehavior: RouteObserverBehavior,
     getRouteForPath: getRouteForPath,
     initializeRouteFromUrl: initializeRouteFromUrl,
+    resetRouteForTesting: resetRouteForTesting,
     getCurrentRoute: getCurrentRoute,
     getQueryParameters: getQueryParameters,
     lastRouteChangeWasPopstate: lastRouteChangeWasPopstate,

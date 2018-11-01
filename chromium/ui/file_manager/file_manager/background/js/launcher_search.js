@@ -112,8 +112,8 @@ LauncherSearch.prototype.onQueryStarted_ = function(queryId, query, limit) {
   this.queryId_ = queryId;
 
   // Request an instance of volume manager to ensure that all volumes are
-  // initialized. When user searches while background page of Files.app is not
-  // running, it happens that this method is executed before all volumes are
+  // initialized. When user searches while background page of the Files app is
+  // not running, it happens that this method is executed before all volumes are
   // initialized. In this method, chrome.fileManagerPrivate.searchDriveMetadata
   // resolves url internally, and it fails if filesystem of the url is not
   // initialized.
@@ -186,7 +186,7 @@ LauncherSearch.prototype.onOpenResult_ = function(itemId) {
     util.urlToEntry(itemId).then(function(entry) {
       if (entry.isDirectory) {
         // If it's directory, open the directory with file manager.
-        launchFileManager(
+        launcher.launchFileManager(
             { currentDirectoryURL: entry.toURL() },
             undefined, /* App ID */
             LaunchType.FOCUS_SAME_OR_CREATE);
@@ -245,7 +245,7 @@ LauncherSearch.prototype.onOpenResult_ = function(itemId) {
  */
 LauncherSearch.prototype.openFileManagerWithSelectionURL_ = function(
     selectionURL) {
-  launchFileManager(
+  launcher.launchFileManager(
       {selectionURL: selectionURL},
       undefined, /* App ID */
       LaunchType.FOCUS_SAME_OR_CREATE);

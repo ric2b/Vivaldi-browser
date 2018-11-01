@@ -58,7 +58,7 @@ Vector<char> asciiDebug(StringImpl* impl) {
     } else {
       buffer.push_back('\\');
       buffer.push_back('u');
-      appendUnsignedAsHexFixedSize(ch, buffer, 4);
+      HexNumber::appendUnsignedAsHexFixedSize(ch, buffer, 4);
     }
   }
   buffer.push_back('\0');
@@ -86,15 +86,6 @@ String::String(const char* characters, unsigned length)
     : m_impl(characters ? StringImpl::create(
                               reinterpret_cast<const LChar*>(characters),
                               length)
-                        : nullptr) {}
-
-// Construct a string with latin1 data, from a null-terminated source.
-String::String(const LChar* characters)
-    : m_impl(characters ? StringImpl::create(characters) : nullptr) {}
-
-String::String(const char* characters)
-    : m_impl(characters ? StringImpl::create(
-                              reinterpret_cast<const LChar*>(characters))
                         : nullptr) {}
 
 void String::append(const StringView& string) {
@@ -260,7 +251,7 @@ void String::ensure16Bit() {
     m_impl =
         make16BitFrom8BitSource(m_impl->characters8(), length).releaseImpl();
   else
-    m_impl = StringImpl::empty16Bit();
+    m_impl = StringImpl::empty16Bit;
 }
 
 void String::truncate(unsigned length) {
@@ -301,6 +292,12 @@ String String::upper(const AtomicString& localeIdentifier) const {
   if (!m_impl)
     return String();
   return m_impl->upper(localeIdentifier);
+}
+
+String String::upperASCII() const {
+  if (!m_impl)
+    return String();
+  return m_impl->upperASCII();
 }
 
 String String::stripWhiteSpace() const {
@@ -718,7 +715,7 @@ CString String::utf8(UTF8ConversionMode mode) const {
 
 String String::make8BitFrom16BitSource(const UChar* source, size_t length) {
   if (!length)
-    return emptyString();
+    return emptyString;
 
   LChar* destination;
   String result = String::createUninitialized(length, destination);
@@ -730,7 +727,7 @@ String String::make8BitFrom16BitSource(const UChar* source, size_t length) {
 
 String String::make16BitFrom8BitSource(const LChar* source, size_t length) {
   if (!length)
-    return emptyString16Bit();
+    return emptyString16Bit;
 
   UChar* destination;
   String result = String::createUninitialized(length, destination);
@@ -747,7 +744,7 @@ String String::fromUTF8(const LChar* stringStart, size_t length) {
     return String();
 
   if (!length)
-    return emptyString();
+    return emptyString;
 
   if (charactersAreAllASCII(stringStart, length))
     return StringImpl::create(stringStart, length);
@@ -782,16 +779,6 @@ String String::fromUTF8WithLatin1Fallback(const LChar* string, size_t size) {
   if (!utf8)
     return String(string, size);
   return utf8;
-}
-
-const String& emptyString() {
-  DEFINE_STATIC_LOCAL(String, emptyString, (StringImpl::empty()));
-  return emptyString;
-}
-
-const String& emptyString16Bit() {
-  DEFINE_STATIC_LOCAL(String, emptyString, (StringImpl::empty16Bit()));
-  return emptyString;
 }
 
 std::ostream& operator<<(std::ostream& out, const String& string) {

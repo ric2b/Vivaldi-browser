@@ -30,13 +30,14 @@
 
 #include "web/WebDataSourceImpl.h"
 
+#include <memory>
 #include "core/dom/Document.h"
+#include "core/loader/SubresourceFilter.h"
 #include "public/platform/WebDocumentSubresourceFilter.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebVector.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -74,16 +75,13 @@ void WebDataSourceImpl::appendRedirect(const WebURL& url) {
   DocumentLoader::appendRedirect(url);
 }
 
-void WebDataSourceImpl::updateNavigation(
-    double redirectStartTime,
-    double redirectEndTime,
-    double fetchStartTime,
-    const WebVector<WebURL>& redirectChain) {
+void WebDataSourceImpl::updateNavigation(double redirectStartTime,
+                                         double redirectEndTime,
+                                         double fetchStartTime,
+                                         bool hasRedirect) {
   // Updates the redirection timing if there is at least one redirection
   // (between two URLs).
-  if (redirectChain.size() >= 2) {
-    for (size_t i = 0; i + 1 < redirectChain.size(); ++i)
-      didRedirect(redirectChain[i], redirectChain[i + 1]);
+  if (hasRedirect) {
     timing().setRedirectStart(redirectStartTime);
     timing().setRedirectEnd(redirectEndTime);
   }
@@ -159,7 +157,8 @@ void WebDataSourceImpl::detachFromFrame() {
 
 void WebDataSourceImpl::setSubresourceFilter(
     WebDocumentSubresourceFilter* subresourceFilter) {
-  DocumentLoader::setSubresourceFilter(WTF::wrapUnique(subresourceFilter));
+  DocumentLoader::setSubresourceFilter(
+      SubresourceFilter::create(this, WTF::wrapUnique(subresourceFilter)));
 }
 
 DEFINE_TRACE(WebDataSourceImpl) {

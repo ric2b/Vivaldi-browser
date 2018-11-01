@@ -36,12 +36,12 @@ static HashSet<v8::Isolate*>& isolates() {
 
 static void addWorkerIsolate(v8::Isolate* isolate) {
   MutexLocker lock(isolatesMutex());
-  isolates().add(isolate);
+  isolates().insert(isolate);
 }
 
 static void removeWorkerIsolate(v8::Isolate* isolate) {
   MutexLocker lock(isolatesMutex());
-  isolates().remove(isolate);
+  isolates().erase(isolate);
 }
 
 WorkerBackingThread::WorkerBackingThread(const char* name,
@@ -66,9 +66,6 @@ void WorkerBackingThread::initialize() {
   addWorkerIsolate(m_isolate);
   V8Initializer::initializeWorker(m_isolate);
 
-  std::unique_ptr<V8IsolateInterruptor> interruptor =
-      WTF::makeUnique<V8IsolateInterruptor>(m_isolate);
-  ThreadState::current()->addInterruptor(std::move(interruptor));
   ThreadState::current()->registerTraceDOMWrappers(
       m_isolate, V8GCController::traceDOMWrappers,
       ScriptWrappableVisitor::invalidateDeadObjectsInMarkingDeque,

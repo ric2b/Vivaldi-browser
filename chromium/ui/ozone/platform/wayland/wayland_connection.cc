@@ -25,7 +25,7 @@ const uint32_t kMaxShmVersion = 1;
 const uint32_t kMaxXdgShellVersion = 1;
 }  // namespace
 
-WaylandConnection::WaylandConnection() {}
+WaylandConnection::WaylandConnection() : controller_(FROM_HERE) {}
 
 WaylandConnection::~WaylandConnection() {}
 
@@ -226,6 +226,20 @@ void WaylandConnection::Capabilities(void* data,
     }
   } else if (connection->pointer_) {
     connection->pointer_.reset();
+  }
+  if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
+    if (!connection->keyboard_) {
+      wl_keyboard* keyboard = wl_seat_get_keyboard(connection->seat_.get());
+      if (!keyboard) {
+        LOG(ERROR) << "Failed to get wl_keyboard from seat";
+        return;
+      }
+      connection->keyboard_ = base::MakeUnique<WaylandKeyboard>(
+          keyboard, base::Bind(&WaylandConnection::DispatchUiEvent,
+                               base::Unretained(connection)));
+    }
+  } else if (connection->keyboard_) {
+    connection->keyboard_.reset();
   }
   connection->ScheduleFlush();
 }

@@ -192,7 +192,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSImageSliceInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   if (!value.isBorderImageSliceValue())
     return nullptr;
@@ -219,8 +219,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSImageSliceInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  const ComputedStyle& style = *state.style();
+    const ComputedStyle& style) const {
   return convertImageSlice(
       ImageSlicePropertyFunctions::getImageSlice(cssProperty(), style),
       style.effectiveZoom());

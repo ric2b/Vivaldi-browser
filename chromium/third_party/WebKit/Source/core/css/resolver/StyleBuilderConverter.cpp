@@ -28,6 +28,7 @@
 
 #include "core/css/BasicShapeFunctions.h"
 #include "core/css/CSSBasicShapeValues.h"
+#include "core/css/CSSColorValue.h"
 #include "core/css/CSSContentDistributionValue.h"
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSFontFamilyValue.h"
@@ -154,6 +155,11 @@ FilterOperations StyleBuilderConverter::convertFilterOperations(
     StyleResolverState& state,
     const CSSValue& value) {
   return FilterOperationResolver::createFilterOperations(state, value);
+}
+
+FilterOperations StyleBuilderConverter::convertOffscreenFilterOperations(
+    const CSSValue& value) {
+  return FilterOperationResolver::createOffscreenFilterOperations(value);
 }
 
 static FontDescription::GenericFamilyType convertGenericFamily(
@@ -326,6 +332,36 @@ float StyleBuilderConverter::convertFontSizeAdjust(StyleResolverState& state,
   const CSSPrimitiveValue& primitiveValue = toCSSPrimitiveValue(value);
   ASSERT(primitiveValue.isNumber());
   return primitiveValue.getFloatValue();
+}
+
+double StyleBuilderConverter::convertValueToNumber(
+    const CSSFunctionValue* filter,
+    const CSSPrimitiveValue* value) {
+  switch (filter->functionType()) {
+    case CSSValueGrayscale:
+    case CSSValueSepia:
+    case CSSValueSaturate:
+    case CSSValueInvert:
+    case CSSValueBrightness:
+    case CSSValueContrast:
+    case CSSValueOpacity: {
+      double amount = (filter->functionType() == CSSValueBrightness) ? 0 : 1;
+      if (filter->length() == 1) {
+        amount = value->getDoubleValue();
+        if (value->isPercentage())
+          amount /= 100;
+      }
+      return amount;
+    }
+    case CSSValueHueRotate: {
+      double angle = 0;
+      if (filter->length() == 1)
+        angle = value->computeDegrees();
+      return angle;
+    }
+    default:
+      return 0;
+  }
 }
 
 FontWeight StyleBuilderConverter::convertFontWeight(StyleResolverState& state,
@@ -638,10 +674,10 @@ static void convertGridLineNamesList(
   for (auto& namedGridLineValue : toCSSValueList(value)) {
     String namedGridLine = toCSSCustomIdentValue(*namedGridLineValue).value();
     NamedGridLinesMap::AddResult result =
-        namedGridLines.add(namedGridLine, Vector<size_t>());
+        namedGridLines.insert(namedGridLine, Vector<size_t>());
     result.storedValue->value.push_back(currentNamedGridLine);
     OrderedNamedGridLines::AddResult orderedInsertionResult =
-        orderedNamedGridLines.add(currentNamedGridLine, Vector<String>());
+        orderedNamedGridLines.insert(currentNamedGridLine, Vector<String>());
     orderedInsertionResult.storedValue->value.push_back(namedGridLine);
   }
 }
@@ -726,7 +762,7 @@ void StyleBuilderConverter::convertOrderedNamedGridLinesMapToNamedGridLinesMap(
   for (auto& orderedNamedGridLine : orderedNamedGridLines) {
     for (auto& lineName : orderedNamedGridLine.value) {
       NamedGridLinesMap::AddResult startResult =
-          namedGridLines.add(lineName, Vector<size_t>());
+          namedGridLines.insert(lineName, Vector<size_t>());
       startResult.storedValue->value.push_back(orderedNamedGridLine.key);
     }
   }
@@ -745,15 +781,15 @@ void StyleBuilderConverter::createImplicitNamedGridLinesFromGridArea(
     GridSpan areaSpan = direction == ForRows ? namedGridAreaEntry.value.rows
                                              : namedGridAreaEntry.value.columns;
     {
-      NamedGridLinesMap::AddResult startResult = namedGridLines.add(
+      NamedGridLinesMap::AddResult startResult = namedGridLines.insert(
           namedGridAreaEntry.key + "-start", Vector<size_t>());
       startResult.storedValue->value.push_back(areaSpan.startLine());
       std::sort(startResult.storedValue->value.begin(),
                 startResult.storedValue->value.end());
     }
     {
-      NamedGridLinesMap::AddResult endResult =
-          namedGridLines.add(namedGridAreaEntry.key + "-end", Vector<size_t>());
+      NamedGridLinesMap::AddResult endResult = namedGridLines.insert(
+          namedGridAreaEntry.key + "-end", Vector<size_t>());
       endResult.storedValue->value.push_back(areaSpan.endLine());
       std::sort(endResult.storedValue->value.begin(),
                 endResult.storedValue->value.end());
@@ -1000,25 +1036,48 @@ LengthSize StyleBuilderConverter::convertRadius(StyleResolverState& state,
   return LengthSize(radiusWidth, radiusHeight);
 }
 
-ShadowData StyleBuilderConverter::convertShadow(StyleResolverState& state,
-                                                const CSSValue& value) {
+ShadowData StyleBuilderConverter::convertShadow(
+    const CSSToLengthConversionData& conversionData,
+    StyleResolverState* state,
+    const CSSValue& value) {
   const CSSShadowValue& shadow = toCSSShadowValue(value);
-  float x = shadow.x->computeLength<float>(state.cssToLengthConversionData());
-  float y = shadow.y->computeLength<float>(state.cssToLengthConversionData());
+  float x = shadow.x->computeLength<float>(conversionData);
+  float y = shadow.y->computeLength<float>(conversionData);
   float blur =
-      shadow.blur
-          ? shadow.blur->computeLength<float>(state.cssToLengthConversionData())
-          : 0;
-  float spread = shadow.spread
-                     ? shadow.spread->computeLength<float>(
-                           state.cssToLengthConversionData())
-                     : 0;
+      shadow.blur ? shadow.blur->computeLength<float>(conversionData) : 0;
+  float spread =
+      shadow.spread ? shadow.spread->computeLength<float>(conversionData) : 0;
   ShadowStyle shadowStyle =
       shadow.style && shadow.style->getValueID() == CSSValueInset ? Inset
                                                                   : Normal;
   StyleColor color = StyleColor::currentColor();
-  if (shadow.color)
-    color = convertStyleColor(state, *shadow.color);
+  if (shadow.color) {
+    if (state) {
+      color = convertStyleColor(*state, *shadow.color);
+    } else {
+      // For OffScreen canvas, we default to black and only parse non
+      // Document dependent CSS colors.
+      color = StyleColor(Color::black);
+      if (shadow.color->isColorValue()) {
+        color = toCSSColorValue(*shadow.color).value();
+      } else {
+        CSSValueID valueID = toCSSIdentifierValue(*shadow.color).getValueID();
+        switch (valueID) {
+          case CSSValueInvalid:
+            NOTREACHED();
+          case CSSValueInternalQuirkInherit:
+          case CSSValueWebkitLink:
+          case CSSValueWebkitActivelink:
+          case CSSValueWebkitFocusRingColor:
+          case CSSValueCurrentcolor:
+            break;
+          default:
+            color = StyleColor::colorFromKeyword(valueID);
+        }
+      }
+    }
+  }
+
   return ShadowData(FloatPoint(x, y), blur, spread, shadowStyle, color);
 }
 
@@ -1031,8 +1090,10 @@ PassRefPtr<ShadowList> StyleBuilderConverter::convertShadowList(
   }
 
   ShadowDataVector shadows;
-  for (const auto& item : toCSSValueList(value))
-    shadows.push_back(convertShadow(state, *item));
+  for (const auto& item : toCSSValueList(value)) {
+    shadows.push_back(
+        convertShadow(state.cssToLengthConversionData(), &state, *item));
+  }
 
   return ShadowList::adopt(shadows);
 }
@@ -1206,6 +1267,10 @@ Vector<LengthPoint> StyleBuilderConverter::convertSnapCoordinates(
 PassRefPtr<TranslateTransformOperation> StyleBuilderConverter::convertTranslate(
     StyleResolverState& state,
     const CSSValue& value) {
+  if (value.isIdentifierValue()) {
+    DCHECK_EQ(toCSSIdentifierValue(value).getValueID(), CSSValueNone);
+    return nullptr;
+  }
   const CSSValueList& list = toCSSValueList(value);
   ASSERT(list.length() <= 3);
   Length tx = convertLength(state, list.item(0));
@@ -1222,6 +1287,11 @@ PassRefPtr<TranslateTransformOperation> StyleBuilderConverter::convertTranslate(
 }
 
 Rotation StyleBuilderConverter::convertRotation(const CSSValue& value) {
+  if (value.isIdentifierValue()) {
+    DCHECK_EQ(toCSSIdentifierValue(value).getValueID(), CSSValueNone);
+    return Rotation(FloatPoint3D(0, 0, 1), 0);
+  }
+
   const CSSValueList& list = toCSSValueList(value);
   ASSERT(list.length() == 1 || list.length() == 4);
   double x = 0;
@@ -1240,6 +1310,11 @@ Rotation StyleBuilderConverter::convertRotation(const CSSValue& value) {
 PassRefPtr<RotateTransformOperation> StyleBuilderConverter::convertRotate(
     StyleResolverState& state,
     const CSSValue& value) {
+  if (value.isIdentifierValue()) {
+    DCHECK_EQ(toCSSIdentifierValue(value).getValueID(), CSSValueNone);
+    return nullptr;
+  }
+
   return RotateTransformOperation::create(convertRotation(value),
                                           TransformOperation::Rotate3D);
 }

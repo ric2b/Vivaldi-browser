@@ -39,6 +39,12 @@ function WebViewActionRequest(webViewImpl, event, webViewEvent, interfaceName) {
   }
 }
 
+// Prevent GuestViewEvents inadvertently inheritng code from the global Object,
+// allowing a pathway for unintended execution of user code.
+// TODO(wjmaclean): Use utils.expose() here instead, track down other issues
+// of Object inheritance. https://crbug.com/701034
+WebViewActionRequest.prototype.__proto__ = null;
+
 // Performs the default action for the request.
 WebViewActionRequest.prototype.defaultAction = function() {
   // Do nothing if the action has already been taken or the requester is
@@ -52,13 +58,13 @@ WebViewActionRequest.prototype.defaultAction = function() {
   }
 
   this.actionTaken = true;
-  WebViewInternal.setPermission(this.guestInstanceId, this.requestId,
-                                'default', '', function(allowed) {
+  WebViewInternal.setPermission(this.guestInstanceId, this.requestId, 'default',
+                                '', $Function.bind(function(allowed) {
     if (allowed) {
       return;
     }
     this.showWarningMessage();
-  }.bind(this));
+  }, this));
 };
 
 // Called to handle the action request's event.
@@ -78,7 +84,8 @@ WebViewActionRequest.prototype.handleActionRequestEvent = function() {
   if (defaultPrevented) {
     // Track the lifetime of |request| with the garbage collector.
     var portId = -1;  // (hack) there is no Extension Port to release
-    MessagingNatives.BindToGC(request, this.defaultAction.bind(this), portId);
+    MessagingNatives.BindToGC(
+        request, $Function.bind(this.defaultAction, this), portId);
   } else {
     this.defaultAction();
   }
@@ -120,17 +127,17 @@ Dialog.prototype.__proto__ = WebViewActionRequest.prototype;
 
 Dialog.prototype.getInterfaceObject = function() {
   return {
-    ok: function(user_input) {
+    ok: $Function.bind(function(user_input) {
       this.validateCall();
       user_input = user_input || '';
       WebViewInternal.setPermission(
           this.guestInstanceId, this.requestId, 'allow', user_input);
-    }.bind(this),
-    cancel: function() {
+    }, this),
+    cancel: $Function.bind(function() {
       this.validateCall();
       WebViewInternal.setPermission(
           this.guestInstanceId, this.requestId, 'deny');
-    }.bind(this)
+    }, this)
   };
 };
 
@@ -162,7 +169,7 @@ NewWindow.prototype.__proto__ = WebViewActionRequest.prototype;
 
 NewWindow.prototype.getInterfaceObject = function() {
   return {
-    attach: function(webview) {
+    attach: $Function.bind(function(webview) {
       this.validateCall();
       if (!webview || !webview.tagName || webview.tagName != 'WEBVIEW') {
         throw new Error(ERROR_MSG_WEBVIEW_EXPECTED);
@@ -191,12 +198,12 @@ NewWindow.prototype.getInterfaceObject = function() {
       // up the state created for the new window if attaching fails.
       WebViewInternal.setPermission(this.guestInstanceId, this.requestId,
                                     attached ? 'allow' : 'deny');
-    }.bind(this),
-    accept: function(user_input) {
+    }, this),
+    accept: $Function.bind(function(user_input) {
       this.validateCall();
       WebViewInternal.setPermission(this.guestInstanceId, this.requestId, 'allow', String(user_input));
-    }.bind(this),
-    discard: function() {
+    }, this),
+    discard: $Function.bind(function() {
       this.validateCall();
       if (!this.guestInstanceId) {
         // If the opener is already gone, then we won't have its
@@ -205,7 +212,7 @@ NewWindow.prototype.getInterfaceObject = function() {
       }
       WebViewInternal.setPermission(
           this.guestInstanceId, this.requestId, 'deny');
-    }.bind(this)
+    }, this)
   };
 };
 
@@ -243,8 +250,8 @@ PermissionRequest.prototype.deny = function() {
 
 PermissionRequest.prototype.getInterfaceObject = function() {
   var request = {
-    allow: this.allow.bind(this),
-    deny: this.deny.bind(this)
+    allow: $Function.bind(this.allow, this),
+    deny: $Function.bind(this.deny, this)
   };
 
   // Add on the request information specific to the request type.

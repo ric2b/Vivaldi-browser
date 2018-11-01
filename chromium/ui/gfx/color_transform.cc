@@ -4,14 +4,20 @@
 
 #include "ui/gfx/color_transform.h"
 
-#include <vector>
+#include <algorithm>
+#include <cmath>
+#include <list>
+#include <memory>
+#include <sstream>
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/stringprintf.h"
+#include "third_party/qcms/src/qcms.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/icc_profile.h"
+#include "ui/gfx/skia_color_space_util.h"
 #include "ui/gfx/transform.h"
-#include "third_party/qcms/src/qcms.h"
 
 #ifndef THIS_MUST_BE_INCLUDED_AFTER_QCMS_H
 extern "C" {
@@ -19,228 +25,53 @@ extern "C" {
 };
 #endif
 
+using std::exp;
+using std::log;
+using std::max;
+using std::min;
+using std::pow;
+using std::sqrt;
+
 namespace gfx {
+
+namespace {
+
+void InitStringStream(std::stringstream* ss) {
+  ss->imbue(std::locale::classic());
+  ss->precision(8);
+  *ss << std::scientific;
+}
+
+std::string Str(float f) {
+  std::stringstream ss;
+  InitStringStream(&ss);
+  ss << f;
+  return ss.str();
+}
+
+// Helper for scoped QCMS profiles.
+struct QcmsProfileDeleter {
+  void operator()(qcms_profile* p) {
+    if (p) {
+      qcms_profile_release(p);
+    }
+  }
+};
+using ScopedQcmsProfile = std::unique_ptr<qcms_profile, QcmsProfileDeleter>;
 
 Transform Invert(const Transform& t) {
   Transform ret = t;
   if (!t.GetInverse(&ret)) {
-    LOG(ERROR) << "Inverse should alsways be possible.";
+    LOG(ERROR) << "Inverse should always be possible.";
   }
   return ret;
 }
 
-ColorTransform::TriStim Map(const Transform& t, ColorTransform::TriStim color) {
-  t.TransformPoint(&color);
-  return color;
-}
-
-ColorTransform::TriStim Xy2xyz(float x, float y) {
-  return ColorTransform::TriStim(x, y, 1.0f - x - y);
-}
-
-void GetPrimaries(ColorSpace::PrimaryID id,
-                  ColorTransform::TriStim primaries[4]) {
-  switch (id) {
-    case ColorSpace::PrimaryID::CUSTOM:
-      NOTREACHED();
-
-    case ColorSpace::PrimaryID::RESERVED0:
-    case ColorSpace::PrimaryID::RESERVED:
-    case ColorSpace::PrimaryID::UNSPECIFIED:
-    case ColorSpace::PrimaryID::UNKNOWN:
-    case ColorSpace::PrimaryID::BT709:
-      // BT709 is our default case. Put it after the switch just
-      // in case we somehow get an id which is not listed in the switch.
-      // (We don't want to use "default", because we want the compiler
-      //  to tell us if we forgot some enum values.)
-      break;
-
-    case ColorSpace::PrimaryID::BT470M:
-      // Red
-      primaries[0] = Xy2xyz(0.67f, 0.33f);
-      // Green
-      primaries[1] = Xy2xyz(0.21f, 0.71f);
-      // Blue
-      primaries[2] = Xy2xyz(0.14f, 0.08f);
-      // Whitepoint
-      primaries[3] = Xy2xyz(0.31f, 0.316f);
-      return;
-
-    case ColorSpace::PrimaryID::BT470BG:
-      // Red
-      primaries[0] = Xy2xyz(0.64f, 0.33f);
-      // Green
-      primaries[1] = Xy2xyz(0.29f, 0.60f);
-      // Blue
-      primaries[2] = Xy2xyz(0.15f, 0.06f);
-      // Whitepoint (D65f)
-      primaries[3] = Xy2xyz(0.3127f, 0.3290f);
-      return;
-
-    case ColorSpace::PrimaryID::SMPTE170M:
-    case ColorSpace::PrimaryID::SMPTE240M:
-      // Red
-      primaries[0] = Xy2xyz(0.630f, 0.340f);
-      // Green
-      primaries[1] = Xy2xyz(0.310f, 0.595f);
-      // Blue
-      primaries[2] = Xy2xyz(0.155f, 0.070f);
-      // Whitepoint (D65f)
-      primaries[3] = Xy2xyz(0.3127f, 0.3290f);
-      return;
-
-    case ColorSpace::PrimaryID::FILM:
-      // Red
-      primaries[0] = Xy2xyz(0.681f, 0.319f);
-      // Green
-      primaries[1] = Xy2xyz(0.243f, 0.692f);
-      // Blue
-      primaries[2] = Xy2xyz(0.145f, 0.049f);
-      // Whitepoint (Cf)
-      primaries[3] = Xy2xyz(0.310f, 0.136f);
-      return;
-
-    case ColorSpace::PrimaryID::BT2020:
-      // Red
-      primaries[0] = Xy2xyz(0.708f, 0.292f);
-      // Green
-      primaries[1] = Xy2xyz(0.170f, 0.797f);
-      // Blue
-      primaries[2] = Xy2xyz(0.131f, 0.046f);
-      // Whitepoint (D65f)
-      primaries[3] = Xy2xyz(0.3127f, 0.3290f);
-      return;
-
-    case ColorSpace::PrimaryID::SMPTEST428_1:
-      // X
-      primaries[0] = Xy2xyz(1.0f, 0.0f);
-      // Y
-      primaries[1] = Xy2xyz(0.0f, 1.0f);
-      // Z
-      primaries[2] = Xy2xyz(0.0f, 0.0f);
-      // Whitepoint (Ef)
-      primaries[3] = Xy2xyz(1.0f / 3.0f, 1.0f / 3.0f);
-      return;
-
-    case ColorSpace::PrimaryID::SMPTEST431_2:
-      // Red
-      primaries[0] = Xy2xyz(0.680f, 0.320f);
-      // Green
-      primaries[1] = Xy2xyz(0.265f, 0.690f);
-      // Blue
-      primaries[2] = Xy2xyz(0.150f, 0.060f);
-      // Whitepoint
-      primaries[3] = Xy2xyz(0.314f, 0.351f);
-      return;
-
-    case ColorSpace::PrimaryID::SMPTEST432_1:
-      // Red
-      primaries[0] = Xy2xyz(0.680f, 0.320f);
-      // Green
-      primaries[1] = Xy2xyz(0.265f, 0.690f);
-      // Blue
-      primaries[2] = Xy2xyz(0.150f, 0.060f);
-      // Whitepoint (D65f)
-      primaries[3] = Xy2xyz(0.3127f, 0.3290f);
-      return;
-
-    case ColorSpace::PrimaryID::XYZ_D50:
-      // X
-      primaries[0] = Xy2xyz(1.0f, 0.0f);
-      // Y
-      primaries[1] = Xy2xyz(0.0f, 1.0f);
-      // Z
-      primaries[2] = Xy2xyz(0.0f, 0.0f);
-      // D50
-      primaries[3] = Xy2xyz(0.34567f, 0.35850f);
-      return;
-  }
-
-  // Red
-  primaries[0] = Xy2xyz(0.640f, 0.330f);
-  // Green
-  primaries[1] = Xy2xyz(0.300f, 0.600f);
-  // Blue
-  primaries[2] = Xy2xyz(0.150f, 0.060f);
-  // Whitepoint (D65f)
-  primaries[3] = Xy2xyz(0.3127f, 0.3290f);
-}
-
-GFX_EXPORT Transform GetPrimaryMatrix(ColorSpace::PrimaryID id) {
-  ColorTransform::TriStim primaries[4];
-  GetPrimaries(id, primaries);
-  ColorTransform::TriStim WXYZ(primaries[3].x() / primaries[3].y(), 1.0f,
-                               primaries[3].z() / primaries[3].y());
-
-  Transform ret(
-      primaries[0].x(), primaries[1].x(), primaries[2].x(), 0.0f,  // 1
-      primaries[0].y(), primaries[1].y(), primaries[2].y(), 0.0f,  // 2
-      primaries[0].z(), primaries[1].z(), primaries[2].z(), 0.0f,  // 3
-      0.0f, 0.0f, 0.0f, 1.0f);                                     // 4
-
-  ColorTransform::TriStim conv = Map(Invert(ret), WXYZ);
-  ret.Scale3d(conv.x(), conv.y(), conv.z());
-
-  // Chromatic adaptation.
-  Transform bradford(0.8951000f, 0.2664000f, -0.1614000f, 0.0f,  // 1
-                     -0.7502000f, 1.7135000f, 0.0367000f, 0.0f,  // 2
-                     0.0389000f, -0.0685000f, 1.0296000f, 0.0f,  // 3
-                     0.0f, 0.0f, 0.0f, 1.0f);                    // 4
-
-  ColorTransform::TriStim D50(0.9642f, 1.0f, 0.8249f);
-  ColorTransform::TriStim source_response = Map(bradford, WXYZ);
-  ColorTransform::TriStim dest_response = Map(bradford, D50);
-
-  Transform adapter;
-  adapter.Scale3d(dest_response.x() / source_response.x(),
-                  dest_response.y() / source_response.y(),
-                  dest_response.z() / source_response.z());
-
-  return Invert(bradford) * adapter * bradford * ret;
-}
-
-GFX_EXPORT float FromLinear(ColorSpace::TransferID id, float v) {
+float FromLinear(ColorSpace::TransferID id, float v) {
   switch (id) {
     case ColorSpace::TransferID::SMPTEST2084_NON_HDR:
       // Should already be handled.
-      NOTREACHED();
-    case ColorSpace::TransferID::CUSTOM:
-    // TODO(hubbe): Actually implement custom transfer functions.
-    case ColorSpace::TransferID::RESERVED0:
-    case ColorSpace::TransferID::RESERVED:
-    case ColorSpace::TransferID::UNSPECIFIED:
-    case ColorSpace::TransferID::UNKNOWN:
-    // All unknown values default to BT709
-
-    case ColorSpace::TransferID::BT709:
-    case ColorSpace::TransferID::SMPTE170M:
-    case ColorSpace::TransferID::BT2020_10:
-    case ColorSpace::TransferID::BT2020_12:
-      // BT709 is our "default" cause, so put the code after the switch
-      // to avoid "control reaches end of non-void function" errors.
       break;
-
-    case ColorSpace::TransferID::GAMMA22:
-      v = fmax(0.0f, v);
-      return powf(v, 1.0f / 2.2f);
-
-    case ColorSpace::TransferID::GAMMA28:
-      v = fmax(0.0f, v);
-      return powf(v, 1.0f / 2.8f);
-
-    case ColorSpace::TransferID::SMPTE240M: {
-      v = fmax(0.0f, v);
-      float a = 1.11157219592173128753f;
-      float b = 0.02282158552944503135f;
-      if (v <= b) {
-        return 4.0f * v;
-      } else {
-        return a * powf(v, 0.45f) - (a - 1.0f);
-      }
-    }
-
-    case ColorSpace::TransferID::LINEAR:
-      return v;
 
     case ColorSpace::TransferID::LOG:
       if (v < 0.01f)
@@ -256,11 +87,11 @@ GFX_EXPORT float FromLinear(ColorSpace::TransferID id, float v) {
       float a = 1.099296826809442f;
       float b = 0.018053968510807f;
       if (v < -b) {
-        return -a * powf(-v, 0.45f) + (a - 1.0f);
+        return -a * pow(-v, 0.45f) + (a - 1.0f);
       } else if (v <= b) {
         return 4.5f * v;
       } else {
-        return a * powf(v, 0.45f) - (a - 1.0f);
+        return a * pow(v, 0.45f) - (a - 1.0f);
       }
     }
 
@@ -269,127 +100,67 @@ GFX_EXPORT float FromLinear(ColorSpace::TransferID id, float v) {
       float b = 0.018f;
       float l = 0.0045f;
       if (v < -l) {
-        return -(a * powf(-4.0f * v, 0.45f) + (a - 1.0f)) / 4.0f;
+        return -(a * pow(-4.0f * v, 0.45f) + (a - 1.0f)) / 4.0f;
       } else if (v <= b) {
         return 4.5f * v;
       } else {
-        return a * powf(v, 0.45f) - (a - 1.0f);
+        return a * pow(v, 0.45f) - (a - 1.0f);
       }
     }
 
-    case ColorSpace::TransferID::IEC61966_2_1: {  // SRGB
-      v = fmax(0.0f, v);
-      float a = 1.055f;
-      float b = 0.0031308f;
-      if (v < b) {
-        return 12.92f * v;
-      } else {
-        return a * powf(v, 1.0f / 2.4f) - (a - 1.0f);
-      }
-    }
     case ColorSpace::TransferID::SMPTEST2084: {
       // Go from scRGB levels to 0-1.
       v *= 80.0f / 10000.0f;
-      v = fmax(0.0f, v);
+      v = max(0.0f, v);
       float m1 = (2610.0f / 4096.0f) / 4.0f;
       float m2 = (2523.0f / 4096.0f) * 128.0f;
       float c1 = 3424.0f / 4096.0f;
       float c2 = (2413.0f / 4096.0f) * 32.0f;
       float c3 = (2392.0f / 4096.0f) * 32.0f;
-      return powf((c1 + c2 * powf(v, m1)) / (1.0f + c3 * powf(v, m1)), m2);
+      return pow((c1 + c2 * pow(v, m1)) / (1.0f + c3 * pow(v, m1)), m2);
     }
-
-    case ColorSpace::TransferID::SMPTEST428_1:
-      v = fmax(0.0f, v);
-      return powf(48.0f * v + 52.37f, 1.0f / 2.6f);
 
     // Spec: http://www.arib.or.jp/english/html/overview/doc/2-STD-B67v1_0.pdf
     case ColorSpace::TransferID::ARIB_STD_B67: {
       const float a = 0.17883277f;
       const float b = 0.28466892f;
       const float c = 0.55991073f;
-      v = fmax(0.0f, v);
+      v = max(0.0f, v);
       if (v <= 1)
-        return 0.5f * sqrtf(v);
+        return 0.5f * sqrt(v);
       else
         return a * log(v - b) + c;
     }
 
-    // Chrome-specific values below
-    case ColorSpace::TransferID::GAMMA24:
-      v = fmax(0.0f, v);
-      return powf(v, 1.0f / 2.4f);
+    default:
+      // Handled by SkColorSpaceTransferFn.
+      break;
   }
-
-  v = fmax(0.0f, v);
-  float a = 1.099296826809442f;
-  float b = 0.018053968510807f;
-  if (v <= b) {
-    return 4.5f * v;
-  } else {
-    return a * powf(v, 0.45f) - (a - 1.0f);
-  }
+  NOTREACHED();
+  return 0;
 }
 
-GFX_EXPORT float ToLinear(ColorSpace::TransferID id, float v) {
+float ToLinear(ColorSpace::TransferID id, float v) {
   switch (id) {
-    case ColorSpace::TransferID::CUSTOM:
-    // TODO(hubbe): Actually implement custom transfer functions.
-    case ColorSpace::TransferID::RESERVED0:
-    case ColorSpace::TransferID::RESERVED:
-    case ColorSpace::TransferID::UNSPECIFIED:
-    case ColorSpace::TransferID::UNKNOWN:
-    // All unknown values default to BT709
-
-    case ColorSpace::TransferID::BT709:
-    case ColorSpace::TransferID::SMPTE170M:
-    case ColorSpace::TransferID::BT2020_10:
-    case ColorSpace::TransferID::BT2020_12:
-      // BT709 is our "default" cause, so put the code after the switch
-      // to avoid "control reaches end of non-void function" errors.
-      break;
-
-    case ColorSpace::TransferID::GAMMA22:
-      v = fmax(0.0f, v);
-      return powf(v, 2.2f);
-
-    case ColorSpace::TransferID::GAMMA28:
-      v = fmax(0.0f, v);
-      return powf(v, 2.8f);
-
-    case ColorSpace::TransferID::SMPTE240M: {
-      v = fmax(0.0f, v);
-      float a = 1.11157219592173128753f;
-      float b = 0.02282158552944503135f;
-      if (v <= FromLinear(ColorSpace::TransferID::SMPTE240M, b)) {
-        return v / 4.0f;
-      } else {
-        return powf((v + a - 1.0f) / a, 1.0f / 0.45f);
-      }
-    }
-
-    case ColorSpace::TransferID::LINEAR:
-      return v;
-
     case ColorSpace::TransferID::LOG:
       if (v < 0.0f)
         return 0.0f;
-      return powf(10.0f, (v - 1.0f) * 2.0f);
+      return pow(10.0f, (v - 1.0f) * 2.0f);
 
     case ColorSpace::TransferID::LOG_SQRT:
       if (v < 0.0f)
         return 0.0f;
-      return powf(10.0f, (v - 1.0f) * 2.5f);
+      return pow(10.0f, (v - 1.0f) * 2.5f);
 
     case ColorSpace::TransferID::IEC61966_2_4: {
       float a = 1.099296826809442f;
       float b = 0.018053968510807f;
       if (v < FromLinear(ColorSpace::TransferID::IEC61966_2_4, -a)) {
-        return -powf((a - 1.0f - v) / a, 1.0f / 0.45f);
+        return -pow((a - 1.0f - v) / a, 1.0f / 0.45f);
       } else if (v <= FromLinear(ColorSpace::TransferID::IEC61966_2_4, b)) {
         return v / 4.5f;
       } else {
-        return powf((v + a - 1.0f) / a, 1.0f / 0.45f);
+        return pow((v + a - 1.0f) / a, 1.0f / 0.45f);
       }
     }
 
@@ -398,35 +169,23 @@ GFX_EXPORT float ToLinear(ColorSpace::TransferID id, float v) {
       float b = 0.018f;
       float l = 0.0045f;
       if (v < FromLinear(ColorSpace::TransferID::BT1361_ECG, -l)) {
-        return -powf((1.0f - a - v * 4.0f) / a, 1.0f / 0.45f) / 4.0f;
+        return -pow((1.0f - a - v * 4.0f) / a, 1.0f / 0.45f) / 4.0f;
       } else if (v <= FromLinear(ColorSpace::TransferID::BT1361_ECG, b)) {
         return v / 4.5f;
       } else {
-        return powf((v + a - 1.0f) / a, 1.0f / 0.45f);
-      }
-    }
-
-    case ColorSpace::TransferID::IEC61966_2_1: {  // SRGB
-      v = fmax(0.0f, v);
-      float a = 1.055f;
-      float b = 0.0031308f;
-      if (v < FromLinear(ColorSpace::TransferID::IEC61966_2_1, b)) {
-        return v / 12.92f;
-      } else {
-        return powf((v + a - 1.0f) / a, 2.4f);
+        return pow((v + a - 1.0f) / a, 1.0f / 0.45f);
       }
     }
 
     case ColorSpace::TransferID::SMPTEST2084: {
-      v = fmax(0.0f, v);
+      v = max(0.0f, v);
       float m1 = (2610.0f / 4096.0f) / 4.0f;
       float m2 = (2523.0f / 4096.0f) * 128.0f;
       float c1 = 3424.0f / 4096.0f;
       float c2 = (2413.0f / 4096.0f) * 32.0f;
       float c3 = (2392.0f / 4096.0f) * 32.0f;
-      v = powf(
-          fmax(powf(v, 1.0f / m2) - c1, 0) / (c2 - c3 * powf(v, 1.0f / m2)),
-          1.0f / m1);
+      v = pow(max(pow(v, 1.0f / m2) - c1, 0.0f) / (c2 - c3 * pow(v, 1.0f / m2)),
+              1.0f / m1);
       // This matches the scRGB definition that 1.0 means 80 nits.
       // TODO(hubbe): It would be *nice* if 1.0 meant more than that, but
       // that might be difficult to do right now.
@@ -434,21 +193,13 @@ GFX_EXPORT float ToLinear(ColorSpace::TransferID id, float v) {
       return v;
     }
 
-    case ColorSpace::TransferID::SMPTEST428_1:
-      return (powf(v, 2.6f) - 52.37f) / 48.0f;
-
-    // Chrome-specific values below
-    case ColorSpace::TransferID::GAMMA24:
-      v = fmax(0.0f, v);
-      return powf(v, 2.4f);
-
     case ColorSpace::TransferID::SMPTEST2084_NON_HDR:
-      v = fmax(0.0f, v);
-      return fmin(2.3f * pow(v, 2.8f), v / 5.0f + 0.8f);
+      v = max(0.0f, v);
+      return min(2.3f * pow(v, 2.8f), v / 5.0f + 0.8f);
 
     // Spec: http://www.arib.or.jp/english/html/overview/doc/2-STD-B67v1_0.pdf
     case ColorSpace::TransferID::ARIB_STD_B67: {
-      v = fmax(0.0f, v);
+      v = max(0.0f, v);
       const float a = 0.17883277f;
       const float b = 0.28466892f;
       const float c = 0.55991073f;
@@ -460,211 +211,255 @@ GFX_EXPORT float ToLinear(ColorSpace::TransferID id, float v) {
       }
       return v_;
     }
-  }
 
-  v = fmax(0.0f, v);
-  float a = 1.099296826809442f;
-  float b = 0.018053968510807f;
-  if (v < FromLinear(ColorSpace::TransferID::BT709, b)) {
-    return v / 4.5f;
-  } else {
-    return powf((v + a - 1.0f) / a, 1.0f / 0.45f);
-  }
-}
-
-GFX_EXPORT Transform GetTransferMatrix(ColorSpace::MatrixID id) {
-  // Default values for BT709;
-  float Kr = 0.2126f;
-  float Kb = 0.0722f;
-  switch (id) {
-    case ColorSpace::MatrixID::RGB:
-      return Transform();
-
-    case ColorSpace::MatrixID::BT709:
-    case ColorSpace::MatrixID::UNSPECIFIED:
-    case ColorSpace::MatrixID::RESERVED:
-    case ColorSpace::MatrixID::UNKNOWN:
-      // Default values are already set.
+    default:
+      // Handled by SkColorSpaceTransferFn.
       break;
-
-    case ColorSpace::MatrixID::FCC:
-      Kr = 0.30f;
-      Kb = 0.11f;
-      break;
-
-    case ColorSpace::MatrixID::BT470BG:
-    case ColorSpace::MatrixID::SMPTE170M:
-      Kr = 0.299f;
-      Kb = 0.144f;
-      break;
-
-    case ColorSpace::MatrixID::SMPTE240M:
-      Kr = 0.212f;
-      Kb = 0.087f;
-      break;
-
-    case ColorSpace::MatrixID::YCOCG:
-      return Transform(0.25f, 0.5f, 0.25f, 0.5f,    // 1
-                       -0.25f, 0.5f, -0.25f, 0.5f,  // 2
-                       0.5f, 0.0f, -0.5f, 0.0f,     // 3
-                       0.0f, 0.0f, 0.0f, 1.0f);     // 4
-
-    case ColorSpace::MatrixID::BT2020_NCL:
-      Kr = 0.2627f;
-      Kb = 0.0593f;
-      break;
-
-    // BT2020_CL is a special case.
-    // Basically we return a matrix that transforms RGB values
-    // to RYB values. (We replace the green component with the
-    // the luminance.) Later steps will compute the Cb & Cr values.
-    case ColorSpace::MatrixID::BT2020_CL:
-      Kr = 0.2627f;
-      Kb = 0.0593f;
-      return Transform(1.0f, 0.0f, 0.0f, 0.0f,        // R
-                       Kr, 1.0f - Kr - Kb, Kb, 0.0f,  // Y
-                       0.0f, 0.0f, 1.0f, 0.0f,        // B
-                       0.0f, 0.0f, 0.0f, 1.0f);
-
-    case ColorSpace::MatrixID::YDZDX:
-      return Transform(0.0f, 1.0f, 0.0f, 0.0f,               // 1
-                       0.0f, -0.5f, 0.986566f / 2.0f, 0.5f,  // 2
-                       0.5f, -0.991902f / 2.0f, 0.0f, 0.5f,  // 3
-                       0.0f, 0.0f, 0.0f, 1.0f);              // 4
-  }
-  float u_m = 0.5f / (1.0f - Kb);
-  float v_m = 0.5f / (1.0f - Kr);
-  return Transform(
-      Kr, 1.0f - Kr - Kb, Kb, 0.0f,                                 // 1
-      u_m * -Kr, u_m * -(1.0f - Kr - Kb), u_m * (1.0f - Kb), 0.5f,  // 2
-      v_m * (1.0f - Kr), v_m * -(1.0f - Kr - Kb), v_m * -Kb, 0.5f,  // 3
-      0.0f, 0.0f, 0.0f, 1.0f);                                      // 4
-}
-
-Transform GetRangeAdjustMatrix(ColorSpace::RangeID range,
-                               ColorSpace::MatrixID matrix) {
-  switch (range) {
-    case ColorSpace::RangeID::FULL:
-    case ColorSpace::RangeID::UNSPECIFIED:
-      return Transform();
-
-    case ColorSpace::RangeID::DERIVED:
-    case ColorSpace::RangeID::LIMITED:
-      break;
-  }
-  switch (matrix) {
-    case ColorSpace::MatrixID::RGB:
-    case ColorSpace::MatrixID::YCOCG:
-      // TODO(hubbe): Use Transform:Scale3d / Transform::Translate3d here.
-      return Transform(255.0f / 219.0f, 0.0f, 0.0f, -16.0f / 219.0f,  // 1
-                       0.0f, 255.0f / 219.0f, 0.0f, -16.0f / 219.0f,  // 2
-                       0.0f, 0.0f, 255.0f / 219.0f, -16.0f / 219.0f,  // 3
-                       0.0f, 0.0f, 0.0f, 1.0f);                       // 4
-
-    case ColorSpace::MatrixID::BT709:
-    case ColorSpace::MatrixID::UNSPECIFIED:
-    case ColorSpace::MatrixID::RESERVED:
-    case ColorSpace::MatrixID::FCC:
-    case ColorSpace::MatrixID::BT470BG:
-    case ColorSpace::MatrixID::SMPTE170M:
-    case ColorSpace::MatrixID::SMPTE240M:
-    case ColorSpace::MatrixID::BT2020_NCL:
-    case ColorSpace::MatrixID::BT2020_CL:
-    case ColorSpace::MatrixID::YDZDX:
-    case ColorSpace::MatrixID::UNKNOWN:
-      // TODO(hubbe): Use Transform:Scale3d / Transform::Translate3d here.
-      return Transform(255.0f / 219.0f, 0.0f, 0.0f, -16.0f / 219.0f,  // 1
-                       0.0f, 255.0f / 224.0f, 0.0f, -15.5f / 224.0f,  // 2
-                       0.0f, 0.0f, 255.0f / 224.0f, -15.5f / 224.0f,  // 3
-                       0.0f, 0.0f, 0.0f, 1.0f);                       // 4
   }
   NOTREACHED();
-  return Transform();
+  return 0;
 }
 
+Transform GetTransferMatrix(const gfx::ColorSpace& color_space) {
+  SkMatrix44 transfer_matrix;
+  color_space.GetTransferMatrix(&transfer_matrix);
+  return Transform(transfer_matrix);
+}
+
+Transform GetRangeAdjustMatrix(const gfx::ColorSpace& color_space) {
+  SkMatrix44 range_adjust_matrix;
+  color_space.GetRangeAdjustMatrix(&range_adjust_matrix);
+  return Transform(range_adjust_matrix);
+}
+
+Transform GetPrimaryTransform(const gfx::ColorSpace& color_space) {
+  SkMatrix44 primary_matrix;
+  color_space.GetPrimaryMatrix(&primary_matrix);
+  return Transform(primary_matrix);
+}
+
+}  // namespace
+
 class ColorTransformMatrix;
-class ColorTransformToLinear;
+class ColorTransformSkTransferFn;
 class ColorTransformFromLinear;
 class ColorTransformToBT2020CL;
 class ColorTransformFromBT2020CL;
 class ColorTransformNull;
+class QCMSColorTransform;
 
-class ColorTransformInternal : public ColorTransform {
+class ColorTransformStep {
  public:
-  // Visitor pattern, Prepend() calls return prev->Join(this).
-  virtual bool Prepend(ColorTransformInternal* prev) = 0;
+  ColorTransformStep() {}
+  virtual ~ColorTransformStep() {}
+  virtual ColorTransformFromLinear* GetFromLinear() { return nullptr; }
+  virtual ColorTransformToBT2020CL* GetToBT2020CL() { return nullptr; }
+  virtual ColorTransformFromBT2020CL* GetFromBT2020CL() { return nullptr; }
+  virtual ColorTransformSkTransferFn* GetSkTransferFn() { return nullptr; }
+  virtual ColorTransformMatrix* GetMatrix() { return nullptr; }
+  virtual ColorTransformNull* GetNull() { return nullptr; }
+  virtual QCMSColorTransform* GetQCMS() { return nullptr; }
 
   // Join methods, returns true if the |next| transform was successfully
   // assimilated into |this|.
   // If Join() returns true, |next| is no longer needed and can be deleted.
-  virtual bool Join(const ColorTransformToLinear& next) { return false; }
-  virtual bool Join(const ColorTransformFromLinear& next) { return false; }
-  virtual bool Join(const ColorTransformToBT2020CL& next) { return false; }
-  virtual bool Join(const ColorTransformFromBT2020CL& next) { return false; }
-  virtual bool Join(const ColorTransformMatrix& next) { return false; }
-  virtual bool Join(const ColorTransformNull& next) { return true; }
+  virtual bool Join(ColorTransformStep* next) { return false; }
 
   // Return true if this is a null transform.
   virtual bool IsNull() { return false; }
+  virtual void Transform(ColorTransform::TriStim* color, size_t num) const = 0;
+  virtual bool CanAppendShaderSource() { return false; }
+  virtual void AppendShaderSource(std::stringstream* result) { NOTREACHED(); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ColorTransformStep);
 };
 
-class ColorTransformNull : public ColorTransformInternal {
+class ColorTransformInternal : public ColorTransform {
  public:
-  bool Prepend(ColorTransformInternal* prev) override {
-    return prev->Join(*this);
+  ColorTransformInternal(const ColorSpace& from,
+                         const ColorSpace& to,
+                         Intent intent);
+  ~ColorTransformInternal() override;
+
+  gfx::ColorSpace GetSrcColorSpace() const override { return src_; };
+  gfx::ColorSpace GetDstColorSpace() const override { return dst_; };
+
+  void Transform(TriStim* colors, size_t num) const override {
+    for (const auto& step : steps_)
+      step->Transform(colors, num);
   }
+  bool CanGetShaderSource() const override;
+  std::string GetShaderSource() const override;
+  bool IsIdentity() const override { return steps_.empty(); }
+  size_t NumberOfStepsForTesting() const override { return steps_.size(); }
+
+ private:
+  void AppendColorSpaceToColorSpaceTransform(ColorSpace from,
+                                             const ColorSpace& to,
+                                             ColorTransform::Intent intent);
+  void Simplify();
+
+  // Retrieve the ICC profile from which |color_space| was created, only if that
+  // is a more precise representation of the color space than the primaries and
+  // transfer function in |color_space|.
+  ScopedQcmsProfile GetQCMSProfileIfNecessary(const ColorSpace& color_space);
+
+  std::list<std::unique_ptr<ColorTransformStep>> steps_;
+  gfx::ColorSpace src_;
+  gfx::ColorSpace dst_;
+};
+
+class ColorTransformNull : public ColorTransformStep {
+ public:
+  ColorTransformNull* GetNull() override { return this; }
   bool IsNull() override { return true; }
-  void transform(ColorTransform::TriStim* color, size_t num) override {}
+  void Transform(ColorTransform::TriStim* color, size_t num) const override {}
+  bool CanAppendShaderSource() override { return true; }
+  void AppendShaderSource(std::stringstream* result) override {}
 };
 
-class ColorTransformMatrix : public ColorTransformInternal {
+class ColorTransformMatrix : public ColorTransformStep {
  public:
-  explicit ColorTransformMatrix(const Transform& matrix) : matrix_(matrix) {}
-
-  bool Prepend(ColorTransformInternal* prev) override {
-    return prev->Join(*this);
-  }
-
-  bool Join(const ColorTransformMatrix& next) override {
-    Transform tmp = next.matrix_;
+  explicit ColorTransformMatrix(const class Transform& matrix)
+      : matrix_(matrix) {}
+  ColorTransformMatrix* GetMatrix() override { return this; }
+  bool Join(ColorTransformStep* next_untyped) override {
+    ColorTransformMatrix* next = next_untyped->GetMatrix();
+    if (!next)
+      return false;
+    class Transform tmp = next->matrix_;
     tmp *= matrix_;
     matrix_ = tmp;
     return true;
   }
 
   bool IsNull() override {
-    // Returns true if we're very close to an identity matrix.
-    for (int i = 0; i < 4; i++) {
-      for (int j = 0; j < 4; j++) {
-        float expected = i == j ? 1.0f : 0.0f;
-        if (fabs(matrix_.matrix().get(i, j) - expected) > 0.00001f) {
-          return false;
-        }
-      }
-    }
-    return true;
+    return SkMatrixIsApproximatelyIdentity(matrix_.matrix());
   }
 
-  void transform(ColorTransform::TriStim* colors, size_t num) override {
+  void Transform(ColorTransform::TriStim* colors, size_t num) const override {
     for (size_t i = 0; i < num; i++)
       matrix_.TransformPoint(colors + i);
   }
 
+  bool CanAppendShaderSource() override { return true; }
+
+  void AppendShaderSource(std::stringstream* result) override {
+    const SkMatrix44& m = matrix_.matrix();
+    *result << "  color = mat3(";
+    *result << m.get(0, 0) << ", " << m.get(1, 0) << ", " << m.get(2, 0) << ",";
+    *result << std::endl;
+    *result << "               ";
+    *result << m.get(0, 1) << ", " << m.get(1, 1) << ", " << m.get(2, 1) << ",";
+    *result << std::endl;
+    *result << "               ";
+    *result << m.get(0, 2) << ", " << m.get(1, 2) << ", " << m.get(2, 2) << ")";
+    *result << " * color;" << std::endl;
+
+    // Only print the translational component if it isn't the identity.
+    if (m.get(0, 3) != 0.f || m.get(1, 3) != 0.f || m.get(2, 3) != 0.f) {
+      *result << "  color += vec3(";
+      *result << m.get(0, 3) << ", " << m.get(1, 3) << ", " << m.get(2, 3);
+      *result << ");" << std::endl;
+    }
+  }
+
  private:
-  Transform matrix_;
+  class Transform matrix_;
 };
 
-class ColorTransformFromLinear : public ColorTransformInternal {
+class ColorTransformSkTransferFn : public ColorTransformStep {
+ public:
+  explicit ColorTransformSkTransferFn(const SkColorSpaceTransferFn& fn)
+      : fn_(fn) {}
+  ColorTransformSkTransferFn* GetSkTransferFn() override { return this; }
+
+  bool Join(ColorTransformStep* next_untyped) override {
+    ColorTransformSkTransferFn* next = next_untyped->GetSkTransferFn();
+    if (!next)
+      return false;
+    if (SkTransferFnsApproximatelyCancel(fn_, next->fn_)) {
+      // Set to be the identity.
+      fn_.fA = 1;
+      fn_.fB = 0;
+      fn_.fC = 1;
+      fn_.fD = 0;
+      fn_.fE = 0;
+      fn_.fF = 0;
+      fn_.fG = 1;
+      return true;
+    }
+    return false;
+  }
+
+  bool IsNull() override { return SkTransferFnIsApproximatelyIdentity(fn_); }
+
+  void Transform(ColorTransform::TriStim* colors, size_t num) const override {
+    for (size_t i = 0; i < num; i++) {
+      colors[i].set_x(SkTransferFnEval(fn_, colors[i].x()));
+      colors[i].set_y(SkTransferFnEval(fn_, colors[i].y()));
+      colors[i].set_z(SkTransferFnEval(fn_, colors[i].z()));
+    }
+  }
+
+  bool CanAppendShaderSource() override { return true; }
+
+  void AppendShaderSourceChannel(std::stringstream* result, const char* value) {
+    const float kEpsilon = 1.f / 1024.f;
+
+    // Construct the linear segment
+    //   linear = C * x + F
+    // Elide operations that will be close to the identity.
+    std::string linear = value;
+    if (std::abs(fn_.fC - 1.f) > kEpsilon)
+      linear = Str(fn_.fC) + " * " + linear;
+    if (std::abs(fn_.fF) > kEpsilon)
+      linear = linear + " + " + Str(fn_.fF);
+
+    // Construct the nonlinear segment.
+    //   nonlinear = pow(A * x + B, G) + E
+    // Elide operations (especially the pow) that will be close to the
+    // identity.
+    std::string nonlinear = value;
+    if (std::abs(fn_.fA - 1.f) > kEpsilon)
+      nonlinear = Str(fn_.fA) + " * " + nonlinear;
+    if (std::abs(fn_.fB) > kEpsilon)
+      nonlinear = nonlinear + " + " + Str(fn_.fB);
+    if (std::abs(fn_.fG - 1.f) > kEpsilon)
+      nonlinear = "pow(" + nonlinear + ", " + Str(fn_.fG) + ")";
+    if (std::abs(fn_.fE) > kEpsilon)
+      nonlinear = nonlinear + " + " + Str(fn_.fE);
+
+    // Add both parts, skpping the if clause if possible.
+    if (fn_.fD > kEpsilon) {
+      *result << "  if (" << value << " < " << Str(fn_.fD) << ")" << std::endl;
+      *result << "    " << value << " = " << linear << ";" << std::endl;
+      *result << "  else" << std::endl;
+      *result << "    " << value << " = " << nonlinear << ";" << std::endl;
+    } else {
+      *result << "  " << value << " = " << nonlinear << ";" << std::endl;
+    }
+  }
+
+  void AppendShaderSource(std::stringstream* result) override {
+    // Append the transfer function for each channel.
+    AppendShaderSourceChannel(result, "color.r");
+    AppendShaderSourceChannel(result, "color.g");
+    AppendShaderSourceChannel(result, "color.b");
+  }
+
+ private:
+  SkColorSpaceTransferFn fn_;
+};
+
+class ColorTransformFromLinear : public ColorTransformStep {
  public:
   explicit ColorTransformFromLinear(ColorSpace::TransferID transfer)
       : transfer_(transfer) {}
-  bool Prepend(ColorTransformInternal* prev) override {
-    return prev->Join(*this);
-  }
-
+  ColorTransformFromLinear* GetFromLinear() override { return this; }
   bool IsNull() override { return transfer_ == ColorSpace::TransferID::LINEAR; }
-
-  void transform(ColorTransform::TriStim* colors, size_t num) override {
+  void Transform(ColorTransform::TriStim* colors, size_t num) const override {
     for (size_t i = 0; i < num; i++) {
       colors[i].set_x(FromLinear(transfer_, colors[i].x()));
       colors[i].set_y(FromLinear(transfer_, colors[i].y()));
@@ -677,31 +472,16 @@ class ColorTransformFromLinear : public ColorTransformInternal {
   ColorSpace::TransferID transfer_;
 };
 
-class ColorTransformToLinear : public ColorTransformInternal {
+class ColorTransformToLinear : public ColorTransformStep {
  public:
   explicit ColorTransformToLinear(ColorSpace::TransferID transfer)
       : transfer_(transfer) {}
 
-  bool Prepend(ColorTransformInternal* prev) override {
-    return prev->Join(*this);
-  }
-
-  static bool IsGamma22(ColorSpace::TransferID transfer) {
-    switch (transfer) {
-      // We don't need to check BT709 here because it's been translated into
-      // SRGB in ColorSpaceToColorSpaceTransform::ColorSpaceToLinear below.
-      case ColorSpace::TransferID::GAMMA22:
-      case ColorSpace::TransferID::IEC61966_2_1:  // SRGB
-        return true;
-
-      default:
-        return false;
-    }
-  }
-
-  bool Join(const ColorTransformFromLinear& next) override {
-    if (transfer_ == next.transfer_ ||
-        (IsGamma22(transfer_) && IsGamma22(next.transfer_))) {
+  bool Join(ColorTransformStep* next_untyped) override {
+    ColorTransformFromLinear* next = next_untyped->GetFromLinear();
+    if (!next)
+      return false;
+    if (transfer_ == next->transfer_) {
       transfer_ = ColorSpace::TransferID::LINEAR;
       return true;
     }
@@ -715,7 +495,20 @@ class ColorTransformToLinear : public ColorTransformInternal {
     return c.x() * 0.2627f + c.y() * 0.6780f + c.z() * 0.0593f;
   }
 
-  void transform(ColorTransform::TriStim* colors, size_t num) override {
+  static ColorTransform::TriStim ClipToWhite(ColorTransform::TriStim& c) {
+    float maximum = max(max(c.x(), c.y()), c.z());
+    if (maximum > 1.0f) {
+      float l = Luma(c);
+      c.Scale(1.0f / maximum);
+      ColorTransform::TriStim white(1.0f, 1.0f, 1.0f);
+      white.Scale((1.0f - 1.0f / maximum) * l / Luma(white));
+      ColorTransform::TriStim black(0.0f, 0.0f, 0.0f);
+      c += white - black;
+    }
+    return c;
+  }
+
+  void Transform(ColorTransform::TriStim* colors, size_t num) const override {
     if (transfer_ == ColorSpace::TransferID::SMPTEST2084_NON_HDR) {
       for (size_t i = 0; i < num; i++) {
         ColorTransform::TriStim ret(ToLinear(transfer_, colors[i].x()),
@@ -727,7 +520,7 @@ class ColorTransformToLinear : public ColorTransformInternal {
               ToLinear(ColorSpace::TransferID::SMPTEST2084, colors[i].y()),
               ToLinear(ColorSpace::TransferID::SMPTEST2084, colors[i].z()));
           smpte2084.Scale(Luma(ret) / Luma(smpte2084));
-          ret = smpte2084;
+          ret = ClipToWhite(smpte2084);
         }
         colors[i] = ret;
       }
@@ -757,13 +550,12 @@ class ColorTransformToLinear : public ColorTransformInternal {
 // Then we run the transfer function like normal, and finally
 // this class is inserted as an extra step which takes calculates
 // the U and V values.
-class ColorTransformToBT2020CL : public ColorTransformInternal {
+class ColorTransformToBT2020CL : public ColorTransformStep {
  public:
-  bool Prepend(ColorTransformInternal* prev) override {
-    return prev->Join(*this);
-  }
-
-  bool Join(const ColorTransformFromBT2020CL& next) override {
+  bool Join(ColorTransformStep* next_untyped) override {
+    ColorTransformFromBT2020CL* next = next_untyped->GetFromBT2020CL();
+    if (!next)
+      return false;
     if (null_)
       return false;
     null_ = true;
@@ -772,7 +564,7 @@ class ColorTransformToBT2020CL : public ColorTransformInternal {
 
   bool IsNull() override { return null_; }
 
-  void transform(ColorTransform::TriStim* RYB, size_t num) override {
+  void Transform(ColorTransform::TriStim* RYB, size_t num) const override {
     for (size_t i = 0; i < num; i++) {
       float U, V;
       float B_Y = RYB[i].z() - RYB[i].y();
@@ -796,13 +588,12 @@ class ColorTransformToBT2020CL : public ColorTransformInternal {
 };
 
 // Inverse of ColorTransformToBT2020CL, see comment above for more info.
-class ColorTransformFromBT2020CL : public ColorTransformInternal {
+class ColorTransformFromBT2020CL : public ColorTransformStep {
  public:
-  bool Prepend(ColorTransformInternal* prev) override {
-    return prev->Join(*this);
-  }
-
-  bool Join(const ColorTransformToBT2020CL& next) override {
+  bool Join(ColorTransformStep* next_untyped) override {
+    ColorTransformToBT2020CL* next = next_untyped->GetToBT2020CL();
+    if (!next)
+      return false;
     if (null_)
       return false;
     null_ = true;
@@ -811,7 +602,7 @@ class ColorTransformFromBT2020CL : public ColorTransformInternal {
 
   bool IsNull() override { return null_; }
 
-  void transform(ColorTransform::TriStim* YUV, size_t num) override {
+  void Transform(ColorTransform::TriStim* YUV, size_t num) const override {
     if (null_)
       return;
     for (size_t i = 0; i < num; i++) {
@@ -838,180 +629,145 @@ class ColorTransformFromBT2020CL : public ColorTransformInternal {
   bool null_ = false;
 };
 
-class ChainColorTransform : public ColorTransform {
- public:
-  ChainColorTransform(std::unique_ptr<ColorTransform> a,
-                      std::unique_ptr<ColorTransform> b)
-      : a_(std::move(a)), b_(std::move(b)) {}
-
- private:
-  void transform(TriStim* colors, size_t num) override {
-    a_->transform(colors, num);
-    b_->transform(colors, num);
-  }
-  std::unique_ptr<ColorTransform> a_;
-  std::unique_ptr<ColorTransform> b_;
-};
-
-class TransformBuilder {
- public:
-  void Append(std::unique_ptr<ColorTransformInternal> transform) {
-    if (!disable_optimizations_ && transform->IsNull())
-      return;  // Null transform
-    transforms_.push_back(std::move(transform));
-    if (disable_optimizations_)
-      return;
-    while (transforms_.size() >= 2 &&
-           transforms_.back()->Prepend(
-               transforms_[transforms_.size() - 2].get())) {
-      transforms_.pop_back();
-      if (transforms_.back()->IsNull()) {
-        transforms_.pop_back();
+void ColorTransformInternal::AppendColorSpaceToColorSpaceTransform(
+    ColorSpace from,
+    const ColorSpace& to,
+    ColorTransform::Intent intent) {
+  if (intent == ColorTransform::Intent::INTENT_PERCEPTUAL) {
+    switch (from.transfer_) {
+      case ColorSpace::TransferID::BT709:
+      case ColorSpace::TransferID::SMPTE170M:
+        // SMPTE 1886 suggests that we should be using gamma 2.4 for BT709
+        // content. However, most displays actually use a gamma of 2.2, and
+        // user studies shows that users don't really care. Using the same
+        // gamma as the display will let us optimize a lot more, so lets stick
+        // with using the SRGB transfer function.
+        from.transfer_ = ColorSpace::TransferID::IEC61966_2_1;
         break;
-      }
-    }
-  }
 
-  std::unique_ptr<ColorTransform> GetTransform() {
-    if (transforms_.empty())
-      return base::MakeUnique<ColorTransformNull>();
-    std::unique_ptr<ColorTransform> ret(std::move(transforms_.back()));
-    transforms_.pop_back();
-
-    while (!transforms_.empty()) {
-      ret = std::unique_ptr<ColorTransform>(new ChainColorTransform(
-          std::move(transforms_.back()), std::move(ret)));
-      transforms_.pop_back();
-    }
-
-    return ret;
-  }
-
-  void disable_optimizations() { disable_optimizations_ = true; }
-
- private:
-  bool disable_optimizations_ = false;
-  std::vector<std::unique_ptr<ColorTransformInternal>> transforms_;
-};
-
-class ColorSpaceToColorSpaceTransform {
- public:
-  static Transform GetPrimaryTransform(const ColorSpace& c) {
-    if (c.primaries_ == ColorSpace::PrimaryID::CUSTOM) {
-      return Transform(c.custom_primary_matrix_[0], c.custom_primary_matrix_[1],
-                       c.custom_primary_matrix_[2], c.custom_primary_matrix_[3],
-                       c.custom_primary_matrix_[4], c.custom_primary_matrix_[5],
-                       c.custom_primary_matrix_[6], c.custom_primary_matrix_[7],
-                       c.custom_primary_matrix_[8], c.custom_primary_matrix_[9],
-                       c.custom_primary_matrix_[10],
-                       c.custom_primary_matrix_[11], 0.0f, 0.0f, 0.0f, 1.0f);
-    } else {
-      return GetPrimaryMatrix(c.primaries_);
-    }
-  }
-
-  static void ColorSpaceToColorSpace(ColorSpace from,
-                                     ColorSpace to,
-                                     ColorTransform::Intent intent,
-                                     TransformBuilder* builder) {
-    if (intent == ColorTransform::Intent::INTENT_PERCEPTUAL) {
-      switch (from.transfer_) {
-        case ColorSpace::TransferID::UNSPECIFIED:
-        case ColorSpace::TransferID::BT709:
-        case ColorSpace::TransferID::SMPTE170M:
-          // SMPTE 1886 suggests that we should be using gamma 2.4 for BT709
-          // content. However, most displays actually use a gamma of 2.2, and
-          // user studies shows that users don't really care. Using the same
-          // gamma as the display will let us optimize a lot more, so lets stick
-          // with using the SRGB transfer function.
-          from.transfer_ = ColorSpace::TransferID::IEC61966_2_1;
-          break;
-
-        case ColorSpace::TransferID::SMPTEST2084:
-          // We don't have an HDR display, so replace SMPTE 2084 with something
-          // that returns ranges more or less suitable for a normal display.
+      case ColorSpace::TransferID::SMPTEST2084:
+        if (!to.IsHDR()) {
+          // We don't have an HDR display, so replace SMPTE 2084 with
+          // something that returns ranges more or less suitable for a normal
+          // display.
           from.transfer_ = ColorSpace::TransferID::SMPTEST2084_NON_HDR;
-          break;
+        }
+        break;
 
-        case ColorSpace::TransferID::ARIB_STD_B67:
+      case ColorSpace::TransferID::ARIB_STD_B67:
+        if (!to.IsHDR()) {
           // Interpreting HLG using a gamma 2.4 works reasonably well for SDR
-          // displays. Once we have HDR output capabilies, we'll need to
-          // change this.
+          // displays.
           from.transfer_ = ColorSpace::TransferID::GAMMA24;
-          break;
+        }
+        break;
 
-        default:  // Do nothing
-          break;
-      }
-
-      // TODO(hubbe): shrink gamuts here (never stretch gamuts)
-    }
-    builder->Append(base::MakeUnique<ColorTransformMatrix>(
-        GetRangeAdjustMatrix(from.range_, from.matrix_)));
-    builder->Append(base::MakeUnique<ColorTransformMatrix>(
-        Invert(GetTransferMatrix(from.matrix_))));
-    builder->Append(base::MakeUnique<ColorTransformToLinear>(from.transfer_));
-    if (from.matrix_ == ColorSpace::MatrixID::BT2020_CL) {
-      // BT2020 CL is a special case.
-      builder->Append(base::MakeUnique<ColorTransformFromBT2020CL>());
-    }
-    builder->Append(
-        base::MakeUnique<ColorTransformMatrix>(GetPrimaryTransform(from)));
-
-    builder->Append(base::MakeUnique<ColorTransformMatrix>(
-        Invert(GetPrimaryTransform(to))));
-    if (to.matrix_ == ColorSpace::MatrixID::BT2020_CL) {
-      // BT2020 CL is a special case.
-      builder->Append(base::MakeUnique<ColorTransformToBT2020CL>());
+      default:  // Do nothing
+        break;
     }
 
-    builder->Append(base::MakeUnique<ColorTransformFromLinear>(to.transfer_));
-    builder->Append(
-        base::MakeUnique<ColorTransformMatrix>(GetTransferMatrix(to.matrix_)));
-    builder->Append(base::MakeUnique<ColorTransformMatrix>(
-        Invert(GetRangeAdjustMatrix(to.range_, to.matrix_))));
+    // TODO(hubbe): shrink gamuts here (never stretch gamuts)
   }
-};
 
-class QCMSColorTransform : public ColorTransformInternal {
+  steps_.push_back(
+      base::MakeUnique<ColorTransformMatrix>(GetRangeAdjustMatrix(from)));
+
+  steps_.push_back(
+      base::MakeUnique<ColorTransformMatrix>(Invert(GetTransferMatrix(from))));
+
+  // If the target color space is not defined, just apply the adjust and
+  // tranfer matrices. This path is used by YUV to RGB color conversion
+  // when full color conversion is not enabled.
+  if (!to.IsValid())
+    return;
+
+  SkColorSpaceTransferFn to_linear_fn;
+  if (from.GetTransferFunction(&to_linear_fn)) {
+    steps_.push_back(
+        base::MakeUnique<ColorTransformSkTransferFn>(to_linear_fn));
+  } else {
+    steps_.push_back(base::MakeUnique<ColorTransformToLinear>(from.transfer_));
+  }
+
+  if (from.matrix_ == ColorSpace::MatrixID::BT2020_CL) {
+    // BT2020 CL is a special case.
+    steps_.push_back(base::MakeUnique<ColorTransformFromBT2020CL>());
+  }
+  steps_.push_back(
+      base::MakeUnique<ColorTransformMatrix>(GetPrimaryTransform(from)));
+
+  steps_.push_back(
+      base::MakeUnique<ColorTransformMatrix>(Invert(GetPrimaryTransform(to))));
+  if (to.matrix_ == ColorSpace::MatrixID::BT2020_CL) {
+    // BT2020 CL is a special case.
+    steps_.push_back(base::MakeUnique<ColorTransformToBT2020CL>());
+  }
+
+  SkColorSpaceTransferFn from_linear_fn;
+  if (to.GetInverseTransferFunction(&from_linear_fn)) {
+    steps_.push_back(
+        base::MakeUnique<ColorTransformSkTransferFn>(from_linear_fn));
+  } else {
+    steps_.push_back(base::MakeUnique<ColorTransformFromLinear>(to.transfer_));
+  }
+
+  steps_.push_back(
+      base::MakeUnique<ColorTransformMatrix>(GetTransferMatrix(to)));
+
+  steps_.push_back(
+      base::MakeUnique<ColorTransformMatrix>(Invert(GetRangeAdjustMatrix(to))));
+}
+
+class QCMSColorTransform : public ColorTransformStep {
  public:
   // Takes ownership of the profiles
-  QCMSColorTransform(qcms_profile* from, qcms_profile* to)
-      : from_(from), to_(to) {}
-  ~QCMSColorTransform() override {
-    qcms_profile_release(from_);
-    qcms_profile_release(to_);
-  }
-  bool Prepend(ColorTransformInternal* prev) override {
-    // Not currently optimizable.
+  QCMSColorTransform(ScopedQcmsProfile from, ScopedQcmsProfile to)
+      : from_(std::move(from)), to_(std::move(to)) {}
+  ~QCMSColorTransform() override {}
+  QCMSColorTransform* GetQCMS() override { return this; }
+  bool Join(ColorTransformStep* next_untyped) override {
+    QCMSColorTransform* next = next_untyped->GetQCMS();
+    if (!next)
+      return false;
+    if (qcms_profile_match(to_.get(), next->from_.get())) {
+      to_ = std::move(next->to_);
+      return true;
+    }
     return false;
   }
-  bool IsNull() override { return from_ == to_; }
-  void transform(TriStim* colors, size_t num) override {
-    CHECK(sizeof(TriStim) == sizeof(float[3]));
+  bool IsNull() override {
+    if (qcms_profile_match(from_.get(), to_.get()))
+      return true;
+    return false;
+  }
+  void Transform(ColorTransform::TriStim* colors, size_t num) const override {
+    CHECK(sizeof(ColorTransform::TriStim) == sizeof(float[3]));
     // QCMS doesn't like numbers outside 0..1
     for (size_t i = 0; i < num; i++) {
-      colors[i].set_x(fmin(1.0f, fmax(0.0f, colors[i].x())));
-      colors[i].set_y(fmin(1.0f, fmax(0.0f, colors[i].y())));
-      colors[i].set_z(fmin(1.0f, fmax(0.0f, colors[i].z())));
+      colors[i].set_x(min(1.0f, max(0.0f, colors[i].x())));
+      colors[i].set_y(min(1.0f, max(0.0f, colors[i].y())));
+      colors[i].set_z(min(1.0f, max(0.0f, colors[i].z())));
     }
-    qcms_chain_transform(from_, to_, reinterpret_cast<float*>(colors),
+    qcms_chain_transform(from_.get(), to_.get(),
+                         reinterpret_cast<float*>(colors),
                          reinterpret_cast<float*>(colors), num * 3);
   }
 
  private:
-  qcms_profile *from_, *to_;
+  ScopedQcmsProfile from_;
+  ScopedQcmsProfile to_;
 };
 
-qcms_profile* GetQCMSProfileIfAvailable(const ColorSpace& color_space) {
-  ICCProfile icc_profile = ICCProfile::FromColorSpace(color_space);
-  if (icc_profile.GetData().empty())
+ScopedQcmsProfile ColorTransformInternal::GetQCMSProfileIfNecessary(
+    const ColorSpace& color_space) {
+  ICCProfile icc_profile;
+  if (!ICCProfile::FromId(color_space.icc_profile_id_, true, &icc_profile))
     return nullptr;
-  return qcms_profile_from_memory(icc_profile.GetData().data(),
-                                  icc_profile.GetData().size());
+  return ScopedQcmsProfile(qcms_profile_from_memory(
+      icc_profile.GetData().data(), icc_profile.GetData().size()));
 }
 
-qcms_profile* GetXYZD50Profile() {
+ScopedQcmsProfile GetXYZD50Profile() {
   // QCMS is trixy, it has a datatype called qcms_CIE_xyY, but what it expects
   // is in fact not xyY color coordinates, it just wants the x/y values of the
   // primaries with Y equal to 1.0.
@@ -1029,38 +785,110 @@ qcms_profile* GetXYZD50Profile() {
   w.x = 0.34567f;
   w.y = 0.35850f;
   w.Y = 1.0f;
-  return qcms_profile_create_rgb_with_gamma(w, xyz, 1.0f);
+  return ScopedQcmsProfile(qcms_profile_create_rgb_with_gamma(w, xyz, 1.0f));
 }
 
+ColorTransformInternal::ColorTransformInternal(const ColorSpace& src,
+                                               const ColorSpace& dst,
+                                               Intent intent)
+    : src_(src), dst_(dst) {
+  // If no source color space is specified, do no transformation.
+  // TODO(ccameron): We may want dst assume sRGB at some point in the future.
+  if (!src_.IsValid())
+    return;
+
+  // If the target color space is not defined, just apply the adjust and
+  // tranfer matrices. This path is used by YUV to RGB color conversion
+  // when full color conversion is not enabled.
+  ScopedQcmsProfile src_profile;
+  ScopedQcmsProfile dst_profile;
+  if (dst.IsValid()) {
+    src_profile = GetQCMSProfileIfNecessary(src_);
+    dst_profile = GetQCMSProfileIfNecessary(dst_);
+  }
+  bool has_src_profile = !!src_profile;
+  bool has_dst_profile = !!dst_profile;
+
+  if (src_profile) {
+    steps_.push_back(base::MakeUnique<QCMSColorTransform>(
+        std::move(src_profile), GetXYZD50Profile()));
+  }
+
+  AppendColorSpaceToColorSpaceTransform(
+      has_src_profile ? ColorSpace::CreateXYZD50() : src_,
+      has_dst_profile ? ColorSpace::CreateXYZD50() : dst_, intent);
+
+  if (dst_profile) {
+    steps_.push_back(base::MakeUnique<QCMSColorTransform>(
+        GetXYZD50Profile(), std::move(dst_profile)));
+  }
+
+  if (intent != Intent::TEST_NO_OPT)
+    Simplify();
+}
+
+std::string ColorTransformInternal::GetShaderSource() const {
+  std::stringstream result;
+  InitStringStream(&result);
+  result << "vec3 DoColorConversion(vec3 color) {" << std::endl;
+  for (const auto& step : steps_)
+    step->AppendShaderSource(&result);
+  result << "  return color;" << std::endl;
+  result << "}" << std::endl;
+  return result.str();
+}
+
+bool ColorTransformInternal::CanGetShaderSource() const {
+  for (const auto& step : steps_) {
+    if (!step->CanAppendShaderSource())
+      return false;
+  }
+  return true;
+}
+
+ColorTransformInternal::~ColorTransformInternal() {}
+
+void ColorTransformInternal::Simplify() {
+  for (auto iter = steps_.begin(); iter != steps_.end();) {
+    std::unique_ptr<ColorTransformStep>& this_step = *iter;
+
+    // Try to Join |next_step| into |this_step|. If successful, re-visit the
+    // step before |this_step|.
+    auto iter_next = iter;
+    iter_next++;
+    if (iter_next != steps_.end()) {
+      std::unique_ptr<ColorTransformStep>& next_step = *iter_next;
+      if (this_step->Join(next_step.get())) {
+        steps_.erase(iter_next);
+        if (iter != steps_.begin())
+          --iter;
+        continue;
+      }
+    }
+
+    // If |this_step| step is a no-op, remove it, and re-visit the step before
+    // |this_step|.
+    if (this_step->IsNull()) {
+      iter = steps_.erase(iter);
+      if (iter != steps_.begin())
+        --iter;
+      continue;
+    }
+
+    ++iter;
+  }
+}
+
+// static
 std::unique_ptr<ColorTransform> ColorTransform::NewColorTransform(
     const ColorSpace& from,
     const ColorSpace& to,
     Intent intent) {
-  TransformBuilder builder;
-  if (intent == Intent::TEST_NO_OPT) {
-    builder.disable_optimizations();
-  }
-
-  qcms_profile* from_profile = GetQCMSProfileIfAvailable(from);
-  qcms_profile* to_profile = GetQCMSProfileIfAvailable(to);
-
-  if (from_profile && to_profile) {
-    return std::unique_ptr<ColorTransform>(
-        new QCMSColorTransform(from_profile, to_profile));
-  }
-  if (from_profile) {
-    builder.Append(std::unique_ptr<ColorTransformInternal>(
-        new QCMSColorTransform(from_profile, GetXYZD50Profile())));
-  }
-  ColorSpaceToColorSpaceTransform::ColorSpaceToColorSpace(
-      from_profile ? ColorSpace::CreateXYZD50() : from,
-      to_profile ? ColorSpace::CreateXYZD50() : to, intent, &builder);
-  if (to_profile) {
-    builder.Append(std::unique_ptr<ColorTransformInternal>(
-        new QCMSColorTransform(GetXYZD50Profile(), to_profile)));
-  }
-
-  return builder.GetTransform();
+  return std::unique_ptr<ColorTransform>(
+      new ColorTransformInternal(from, to, intent));
 }
+
+ColorTransform::ColorTransform() {}
+ColorTransform::~ColorTransform() {}
 
 }  // namespace gfx

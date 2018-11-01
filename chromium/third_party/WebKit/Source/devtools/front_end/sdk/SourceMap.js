@@ -374,10 +374,9 @@ SDK.TextSourceMap = class {
       return [];
     var mappings = this.mappings();
     var info = this._sourceInfos.get(sourceURL);
-    if (info.reverseMappings === null) {
-      info.reverseMappings =
-          mappings.filter((mapping) => mapping.sourceURL === sourceURL).sort(sourceMappingComparator);
-    }
+    if (info.reverseMappings === null)
+      info.reverseMappings = mappings.filter(mapping => mapping.sourceURL === sourceURL).sort(sourceMappingComparator);
+
     return info.reverseMappings;
 
     /**
@@ -423,7 +422,7 @@ SDK.TextSourceMap = class {
       var url = Common.ParsedURL.completeURL(this._sourceMappingURL, href) || href;
       var source = sourceMap.sourcesContent && sourceMap.sourcesContent[i];
       if (url === this._compiledURL && source)
-        url += Common.UIString(' [sm]');
+        url += Common.UIString('? [sm]');
       this._sourceInfos.set(url, new SDK.TextSourceMap.SourceInfo(source, null));
       sourcesList.push(url);
     }

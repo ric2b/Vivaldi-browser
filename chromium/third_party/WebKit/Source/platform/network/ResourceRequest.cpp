@@ -58,7 +58,7 @@ ResourceRequest::ResourceRequest(const KURL& url)
       m_downloadToFile(false),
       m_useStreamOnResponse(false),
       m_shouldResetAppCache(false),
-      m_skipServiceWorker(WebURLRequest::SkipServiceWorker::None),
+      m_serviceWorkerMode(WebURLRequest::ServiceWorkerMode::All),
       m_priority(ResourceLoadPriorityLowest),
       m_intraPriorityValue(0),
       m_requestorID(0),
@@ -75,6 +75,7 @@ ResourceRequest::ResourceRequest(const KURL& url)
       m_checkForBrowserSideNavigation(true),
       m_uiStartTime(0),
       m_isExternalRequest(false),
+      m_isSameDocumentNavigation(false),
       m_inputPerfMetricReportPolicy(
           InputToLoadPerfMetricReportPolicy::NoReport),
       m_redirectStatus(RedirectStatus::NoRedirect) {}
@@ -97,7 +98,7 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
   setHasUserGesture(data->m_hasUserGesture);
   setDownloadToFile(data->m_downloadToFile);
   setUseStreamOnResponse(data->m_useStreamOnResponse);
-  setSkipServiceWorker(data->m_skipServiceWorker);
+  setServiceWorkerMode(data->m_serviceWorkerMode);
   setShouldResetAppCache(data->m_shouldResetAppCache);
   setRequestorID(data->m_requestorID);
   setRequestorProcessID(data->m_requestorProcessID);
@@ -145,7 +146,7 @@ std::unique_ptr<CrossThreadResourceRequestData> ResourceRequest::copyData()
   data->m_hasUserGesture = m_hasUserGesture;
   data->m_downloadToFile = m_downloadToFile;
   data->m_useStreamOnResponse = m_useStreamOnResponse;
-  data->m_skipServiceWorker = m_skipServiceWorker;
+  data->m_serviceWorkerMode = m_serviceWorkerMode;
   data->m_shouldResetAppCache = m_shouldResetAppCache;
   data->m_requestorID = m_requestorID;
   data->m_requestorProcessID = m_requestorProcessID;
@@ -182,7 +183,7 @@ void ResourceRequest::setURL(const KURL& url) {
   m_url = url;
 }
 
-void ResourceRequest::removeCredentials() {
+void ResourceRequest::removeUserAndPassFromURL() {
   if (m_url.user().isEmpty() && m_url.pass().isEmpty())
     return;
 

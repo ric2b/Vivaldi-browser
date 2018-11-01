@@ -44,6 +44,7 @@ type_traits = {
     "object": "!Object",
 }
 
+# yapf: disable
 promisified_domains = {
     "Accessibility",
     "Animation",
@@ -52,10 +53,13 @@ promisified_domains = {
     "Emulation",
     "HeapProfiler",
     "Profiler",
-    "LayerTree"
+    "LayerTree",
+    "Tracing"
 }
+# yapf: enable
 
 ref_types = {}
+
 
 def full_qualified_type_id(domain_name, type_id):
     if type_id.find(".") == -1:
@@ -132,11 +136,13 @@ def generate_protocol_externs(output_path, file1, file2):
             for command in domain["commands"]:
                 output_file.write("\n/**\n")
                 params = []
+                param_to_type = {}
                 has_return_value = "returns" in command
                 explicit_parameters = promisified and has_return_value
                 if "parameters" in command:
                     for in_param in command["parameters"]:
                         if "optional" in in_param:
+                            param_to_type[in_param["name"]] = "(%s|undefined)" % param_type(domain_name, in_param)
                             if explicit_parameters:
                                 params.append("%s" % in_param["name"])
                                 output_file.write(" * @param {%s|undefined} %s\n" %
@@ -146,6 +152,7 @@ def generate_protocol_externs(output_path, file1, file2):
                                 output_file.write(" * @param {%s=} opt_%s\n" %
                                                   (param_type(domain_name, in_param), in_param["name"]))
                         else:
+                            param_to_type[in_param["name"]] = param_type(domain_name, in_param)
                             params.append(in_param["name"])
                             output_file.write(" * @param {%s} %s\n" % (param_type(domain_name, in_param), in_param["name"]))
                 returns = []
@@ -170,9 +177,23 @@ def generate_protocol_externs(output_path, file1, file2):
                 params.append("opt_callback")
 
                 output_file.write(" */\n")
-                output_file.write("Protocol.%sAgent.prototype.%s = function(%s) {}\n" % (domain_name, command["name"], ", ".join(params)))
-                output_file.write("/** @param {function(%s):void=} opt_callback */\n" % ", ".join(returns))
-                output_file.write("Protocol.%sAgent.prototype.invoke_%s = function(obj, opt_callback) {}\n" % (domain_name, command["name"]))
+                output_file.write("Protocol.%sAgent.prototype.%s = function(%s) {};\n" %
+                                  (domain_name, command["name"], ", ".join(params)))
+                request_object_properties = []
+                for param in param_to_type:
+                    request_object_properties.append("%s: %s" % (param, param_to_type[param]))
+                if request_object_properties:
+                    output_file.write("/** @typedef {!{%s}} obj */\n" % (", ".join(request_object_properties)))
+                else:
+                    output_file.write("/** @typedef {Object|undefined} obj */\n")
+                request = "Protocol.%sAgent.prototype.%s.Request" % (domain_name, command["name"])
+                output_file.write("%s;\n" % (request))
+                output_file.write("/**\n")
+                output_file.write(" * @param {!%s} obj\n" % (request))
+                output_file.write(" * @param {function(%s):void=} opt_callback\n" % ", ".join(returns))
+                output_file.write(" */\n")
+                output_file.write("Protocol.%sAgent.prototype.invoke_%s = function(obj, opt_callback) {};\n" %
+                                  (domain_name, command["name"]))
 
         if "types" in domain:
             for type in domain["types"]:
@@ -190,15 +211,18 @@ def generate_protocol_externs(output_path, file1, file2):
                             else:
                                 typedef_args.append("%s:(%s%s)" % (property["name"], param_type(domain_name, property), suffix))
                     if (typedef_args):
-                        output_file.write("\n/** @typedef {!{%s}} */\nProtocol.%s.%s;\n" % (", ".join(typedef_args), domain_name, type["id"]))
+                        output_file.write("\n/** @typedef {!{%s}} */\nProtocol.%s.%s;\n" %
+                                          (", ".join(typedef_args), domain_name, type["id"]))
                     else:
                         output_file.write("\n/** @typedef {!Object} */\nProtocol.%s.%s;\n" % (domain_name, type["id"]))
                 elif type["type"] == "string" and "enum" in type:
                     output_file.write(generate_enum("Protocol.%s.%s" % (domain_name, type["id"]), type))
                 elif type["type"] == "array":
-                    output_file.write("\n/** @typedef {!Array<!%s>} */\nProtocol.%s.%s;\n" % (param_type(domain_name, type["items"]), domain_name, type["id"]))
+                    output_file.write("\n/** @typedef {!Array<!%s>} */\nProtocol.%s.%s;\n" %
+                                      (param_type(domain_name, type["items"]), domain_name, type["id"]))
                 else:
-                    output_file.write("\n/** @typedef {%s} */\nProtocol.%s.%s;\n" % (type_traits[type["type"]], domain_name, type["id"]))
+                    output_file.write("\n/** @typedef {%s} */\nProtocol.%s.%s;\n" %
+                                      (type_traits[type["type"]], domain_name, type["id"]))
 
         output_file.write("/** @interface */\n")
         output_file.write("Protocol.%sDispatcher = function() {};\n" % domain_name)
@@ -215,7 +239,8 @@ def generate_protocol_externs(output_path, file1, file2):
                             params.append(param["name"])
                             output_file.write(" * @param {%s} %s\n" % (param_type(domain_name, param), param["name"]))
                     output_file.write(" */\n")
-                output_file.write("Protocol.%sDispatcher.prototype.%s = function(%s) {};\n" % (domain_name, event["name"], ", ".join(params)))
+                output_file.write("Protocol.%sDispatcher.prototype.%s = function(%s) {};\n" %
+                                  (domain_name, event["name"], ", ".join(params)))
 
     for domain in domains:
         domain_name = domain["domain"]
@@ -224,13 +249,14 @@ def generate_protocol_externs(output_path, file1, file2):
             uppercase_length += 1
 
         output_file.write("/** @return {!Protocol.%sAgent}*/\n" % domain_name)
-        output_file.write("Protocol.TargetBase.prototype.%s = function(){};\n" % (domain_name[:uppercase_length].lower() + domain_name[uppercase_length:] + "Agent"))
+        output_file.write("Protocol.TargetBase.prototype.%s = function(){};\n" %
+                          (domain_name[:uppercase_length].lower() + domain_name[uppercase_length:] + "Agent"))
 
         output_file.write("/**\n * @param {!Protocol.%sDispatcher} dispatcher\n */\n" % domain_name)
         output_file.write("Protocol.TargetBase.prototype.register%sDispatcher = function(dispatcher) {}\n" % domain_name)
 
-
     output_file.close()
+
 
 if __name__ == "__main__":
     import sys

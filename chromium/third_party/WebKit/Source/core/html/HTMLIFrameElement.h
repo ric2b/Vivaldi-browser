@@ -26,11 +26,13 @@
 
 #include "core/CoreExport.h"
 #include "core/html/HTMLFrameElementBase.h"
+#include "core/html/HTMLIFrameElementAllow.h"
 #include "core/html/HTMLIFrameElementPermissions.h"
 #include "core/html/HTMLIFrameElementSandbox.h"
 #include "platform/Supplementable.h"
+#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebVector.h"
-#include "public/platform/modules/permissions/WebPermissionType.h"
+#include "public/platform/modules/permissions/permission.mojom-blink.h"
 
 namespace blink {
 
@@ -46,9 +48,11 @@ class CORE_EXPORT HTMLIFrameElement final
   ~HTMLIFrameElement() override;
   DOMTokenList* sandbox() const;
   DOMTokenList* permissions() const;
+  DOMTokenList* allow() const;
 
   void sandboxValueWasSet();
   void permissionsValueWasSet();
+  void allowValueWasSet();
 
  private:
   explicit HTMLIFrameElement(Document&);
@@ -77,8 +81,12 @@ class CORE_EXPORT HTMLIFrameElement final
   bool allowFullscreen() const override { return m_allowFullscreen; }
   bool allowPaymentRequest() const override { return m_allowPaymentRequest; }
   AtomicString csp() const override { return m_csp; }
-  const WebVector<WebPermissionType>& delegatedPermissions() const override {
+  const WebVector<mojom::blink::PermissionName>& delegatedPermissions()
+      const override {
     return m_delegatedPermissions;
+  }
+  const WebVector<WebFeaturePolicyFeature>& allowedFeatures() const override {
+    return m_allowedFeatures;
   }
 
   bool initializePermissionsAttribute();
@@ -90,8 +98,10 @@ class CORE_EXPORT HTMLIFrameElement final
   bool m_allowPaymentRequest;
   Member<HTMLIFrameElementSandbox> m_sandbox;
   Member<HTMLIFrameElementPermissions> m_permissions;
+  Member<HTMLIFrameElementAllow> m_allow;
 
-  WebVector<WebPermissionType> m_delegatedPermissions;
+  WebVector<mojom::blink::PermissionName> m_delegatedPermissions;
+  WebVector<WebFeaturePolicyFeature> m_allowedFeatures;
 
   ReferrerPolicy m_referrerPolicy;
 };

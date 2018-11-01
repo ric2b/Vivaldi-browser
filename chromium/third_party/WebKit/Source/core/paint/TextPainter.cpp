@@ -62,18 +62,17 @@ void TextPainter::setEmphasisMark(const AtomicString& emphasisMark,
 void TextPainter::paint(unsigned startOffset,
                         unsigned endOffset,
                         unsigned length,
-                        const Style& textStyle,
-                        TextBlobPtr* cachedTextBlob) {
+                        const Style& textStyle) {
   GraphicsContextStateSaver stateSaver(m_graphicsContext, false);
   updateGraphicsContext(textStyle, stateSaver);
   if (m_combinedText) {
     m_graphicsContext.save();
     m_combinedText->transformToInlineCoordinates(m_graphicsContext,
                                                  m_textBounds);
-    paintInternal<PaintText>(startOffset, endOffset, length, cachedTextBlob);
+    paintInternal<PaintText>(startOffset, endOffset, length);
     m_graphicsContext.restore();
   } else {
-    paintInternal<PaintText>(startOffset, endOffset, length, cachedTextBlob);
+    paintInternal<PaintText>(startOffset, endOffset, length);
   }
 
   if (!m_emphasisMark.isEmpty()) {
@@ -238,13 +237,10 @@ void TextPainter::paintInternalRun(TextRunPaintInfo& textRunPaintInfo,
 template <TextPainter::PaintInternalStep Step>
 void TextPainter::paintInternal(unsigned startOffset,
                                 unsigned endOffset,
-                                unsigned truncationPoint,
-                                TextBlobPtr* cachedTextBlob) {
+                                unsigned truncationPoint) {
   TextRunPaintInfo textRunPaintInfo(m_run);
   textRunPaintInfo.bounds = FloatRect(m_textBounds);
   if (startOffset <= endOffset) {
-    // FIXME: We should be able to use cachedTextBlob in more cases.
-    textRunPaintInfo.cachedTextBlob = cachedTextBlob;
     paintInternalRun<Step>(textRunPaintInfo, startOffset, endOffset);
   } else {
     if (endOffset > 0)
@@ -265,7 +261,7 @@ void TextPainter::clipDecorationsStripe(float upper,
   Vector<Font::TextIntercept> textIntercepts;
   m_font.getTextIntercepts(
       textRunPaintInfo, m_graphicsContext.deviceScaleFactor(),
-      m_graphicsContext.fillPaint(),
+      m_graphicsContext.fillFlags(),
       std::make_tuple(upper, upper + stripeWidth), textIntercepts);
 
   for (auto intercept : textIntercepts) {

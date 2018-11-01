@@ -6,9 +6,9 @@
 
 #include "core/css/FontFaceSet.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/paint/PaintTiming.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
@@ -122,8 +122,12 @@ void FirstMeaningfulPaintDetector::networkStableTimerFired(TimerBase*) {
       !m_paintTiming->firstContentfulPaint())
     return;
 
-  if (m_provisionalFirstMeaningfulPaint)
-    m_paintTiming->setFirstMeaningfulPaint(m_provisionalFirstMeaningfulPaint);
+  if (m_provisionalFirstMeaningfulPaint) {
+    // Enforce FirstContentfulPaint <= FirstMeaningfulPaint.
+    double timestamp = std::max(m_provisionalFirstMeaningfulPaint,
+                                m_paintTiming->firstContentfulPaint());
+    m_paintTiming->setFirstMeaningfulPaint(timestamp);
+  }
   m_state = Reported;
 }
 

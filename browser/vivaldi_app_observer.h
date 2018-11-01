@@ -1,7 +1,7 @@
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
-#ifndef VIVALDI_APP_OBSERVER_H_
-#define VIVALDI_APP_OBSERVER_H_
+#ifndef BROWSER_VIVALDI_APP_OBSERVER_H_
+#define BROWSER_VIVALDI_APP_OBSERVER_H_
 
 #import <Cocoa/Cocoa.h>
 
@@ -14,7 +14,7 @@ namespace vivaldi {
 class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI,
                            public extensions::AppWindowRegistry::Observer {
  public:
-  VivaldiAppObserver(content::BrowserContext* context);
+  explicit VivaldiAppObserver(content::BrowserContext* context);
   ~VivaldiAppObserver() override;
 
   static extensions::BrowserContextKeyedAPIFactory<VivaldiAppObserver>*
@@ -44,4 +44,4 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI,
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_APP_OBSERVER_H_
+#endif  // BROWSER_VIVALDI_APP_OBSERVER_H_

@@ -34,6 +34,7 @@
 #include "components/autofill/core/browser/phone_number.h"
 #include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/autofill/core/browser/validation.h"
+#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
@@ -53,6 +54,9 @@ namespace {
 using ::i18n::addressinput::AddressField;
 using ::i18n::addressinput::GetStreetAddressLinesAsSingleLine;
 using ::i18n::addressinput::STREET_ADDRESS;
+
+// The length of a local profile GUID.
+const int LOCAL_GUID_LENGTH = 36;
 
 template<typename T>
 class FormGroupMatchesByGUIDFunctor {
@@ -254,15 +258,15 @@ const char kFrecencyFieldTrialName[] = "AutofillProfileOrderByFrecency";
 const char kFrecencyFieldTrialLimitParam[] = "limit";
 
 PersonalDataManager::PersonalDataManager(const std::string& app_locale)
-    : database_(NULL),
+    : database_(nullptr),
       is_data_loaded_(false),
       pending_profiles_query_(0),
       pending_server_profiles_query_(0),
       pending_creditcards_query_(0),
       pending_server_creditcards_query_(0),
       app_locale_(app_locale),
-      pref_service_(NULL),
-      account_tracker_(NULL),
+      pref_service_(nullptr),
+      account_tracker_(nullptr),
       is_off_the_record_(false),
       has_logged_profile_count_(false),
       has_logged_local_credit_card_count_(false),
@@ -373,21 +377,6 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
       } else {
         ReceiveLoadedDbValues(h, result.get(), &pending_server_profiles_query_,
                               &server_profiles_);
-
-        if (!server_profiles_.empty()) {
-          std::string account_id = signin_manager_->GetAuthenticatedAccountId();
-          base::string16 email =
-              base::UTF8ToUTF16(
-                  account_tracker_->GetAccountInfo(account_id).email);
-
-          // User may have signed out during the fulfillment of the web data
-          // request, in which case there is no point updating
-          // |server_profiles_| as it will be cleared.
-          if (!email.empty()) {
-            for (auto& profile : server_profiles_)
-              profile->SetRawInfo(EMAIL_ADDRESS, email);
-          }
-        }
       }
       break;
     case AUTOFILL_CREDITCARDS_RESULT:
@@ -423,6 +412,7 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
 }
 
 void PersonalDataManager::AutofillMultipleChanged() {
+  has_synced_new_data_ = true;
   Refresh();
 }
 
@@ -554,10 +544,16 @@ void PersonalDataManager::UpdateProfile(const AutofillProfile& profile) {
 
 AutofillProfile* PersonalDataManager::GetProfileByGUID(
     const std::string& guid) {
-  const std::vector<AutofillProfile*>& profiles = GetProfiles();
+  return GetProfileFromProfilesByGUID(guid, GetProfiles());
+}
+
+// static
+AutofillProfile* PersonalDataManager::GetProfileFromProfilesByGUID(
+    const std::string& guid,
+    const std::vector<AutofillProfile*>& profiles) {
   std::vector<AutofillProfile*>::const_iterator iter =
       FindElementByGUID<AutofillProfile>(profiles, guid);
-  return (iter != profiles.end()) ? *iter : NULL;
+  return iter != profiles.end() ? *iter : nullptr;
 }
 
 void PersonalDataManager::AddCreditCard(const CreditCard& credit_card) {
@@ -726,7 +722,7 @@ CreditCard* PersonalDataManager::GetCreditCardByGUID(const std::string& guid) {
   const std::vector<CreditCard*>& credit_cards = GetCreditCards();
   std::vector<CreditCard*>::const_iterator iter =
       FindElementByGUID<CreditCard>(credit_cards, guid);
-  return (iter != credit_cards.end()) ? *iter : NULL;
+  return iter != credit_cards.end() ? *iter : nullptr;
 }
 
 void PersonalDataManager::GetNonEmptyTypes(
@@ -752,6 +748,13 @@ std::vector<AutofillProfile*> PersonalDataManager::web_profiles() const {
   return result;
 }
 
+std::vector<AutofillProfile*> PersonalDataManager::GetServerProfiles() const {
+  std::vector<AutofillProfile*> result;
+  for (const auto& profile : server_profiles_)
+    result.push_back(profile.get());
+  return result;
+}
+
 std::vector<CreditCard*> PersonalDataManager::GetLocalCreditCards() const {
   std::vector<CreditCard*> result;
   for (const auto& card : local_credit_cards_)
@@ -770,10 +773,6 @@ const std::vector<CreditCard*>& PersonalDataManager::GetCreditCards() const {
   return credit_cards_;
 }
 
-bool PersonalDataManager::HasServerData() const {
-  return !server_credit_cards_.empty() || !server_profiles_.empty();
-}
-
 void PersonalDataManager::Refresh() {
   LoadProfiles();
   LoadCreditCards();
@@ -784,7 +783,7 @@ const std::vector<AutofillProfile*> PersonalDataManager::GetProfilesToSuggest()
   std::vector<AutofillProfile*> profiles = GetProfiles(true);
 
   // Rank the suggestions by frecency (see AutofillDataModel for details).
-  base::Time comparison_time = base::Time::Now();
+  base::Time comparison_time = AutofillClock::Now();
   std::sort(profiles.begin(), profiles.end(),
             [comparison_time](const AutofillDataModel* a,
                               const AutofillDataModel* b) {
@@ -908,7 +907,7 @@ const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest()
 
   // Rank the cards by frecency (see AutofillDataModel for details). All expired
   // cards should be suggested last, also by frecency.
-  base::Time comparison_time = base::Time::Now();
+  base::Time comparison_time = AutofillClock::Now();
   std::stable_sort(cards_to_suggest.begin(), cards_to_suggest.end(),
                    [comparison_time](const CreditCard* a, const CreditCard* b) {
                      bool a_is_expired = a->IsExpired(comparison_time);
@@ -943,7 +942,7 @@ void PersonalDataManager::SetPrefService(PrefService* pref_service) {
   enabled_pref_.reset(new BooleanPrefMember);
   wallet_enabled_pref_.reset(new BooleanPrefMember);
   pref_service_ = pref_service;
-  // |pref_service_| can be NULL in tests.
+  // |pref_service_| can be nullptr in tests.
   if (pref_service_) {
     enabled_pref_->Init(prefs::kAutofillEnabled, pref_service_,
         base::Bind(&PersonalDataManager::EnabledPrefChanged,
@@ -991,7 +990,7 @@ std::string PersonalDataManager::MergeProfile(
   // verified profiles get deduped among themselves before reaching the verified
   // profiles.
   // TODO(crbug.com/620521): Remove the check for verified from the sort.
-  base::Time comparison_time = base::Time::Now();
+  base::Time comparison_time = AutofillClock::Now();
   std::sort(existing_profiles->begin(), existing_profiles->end(),
             [comparison_time](const std::unique_ptr<AutofillProfile>& a,
                               const std::unique_ptr<AutofillProfile>& b) {
@@ -1024,7 +1023,7 @@ std::string PersonalDataManager::MergeProfile(
       // recently. After writing to the database and refreshing the local copies
       // the profile will have a very slightly newer time reflecting what's
       // actually stored in the database.
-      existing_profile->set_modification_date(base::Time::Now());
+      existing_profile->set_modification_date(AutofillClock::Now());
     }
     merged_profiles->push_back(*existing_profile);
   }
@@ -1034,7 +1033,7 @@ std::string PersonalDataManager::MergeProfile(
     merged_profiles->push_back(new_profile);
     // Similar to updating merged profiles above, set the modification date on
     // new profiles.
-    merged_profiles->back().set_modification_date(base::Time::Now());
+    merged_profiles->back().set_modification_date(AutofillClock::Now());
     AutofillMetrics::LogProfileActionOnFormSubmitted(
         AutofillMetrics::NEW_PROFILE_CREATED);
   }
@@ -1246,15 +1245,6 @@ std::string PersonalDataManager::SaveImportedProfile(
   if (is_off_the_record_)
     return std::string();
 
-  // Don't save a web profile if the data in the profile is a subset of a
-  // server profile, but do record the fact that it was used.
-  for (const auto& profile : server_profiles_) {
-    if (imported_profile.IsSubsetOf(*profile, app_locale_)) {
-      RecordUseOf(*profile);
-      return profile->guid();
-    }
-  }
-
   std::vector<AutofillProfile> profiles;
   std::string guid =
       MergeProfile(imported_profile, &web_profiles_, app_locale_, &profiles);
@@ -1265,6 +1255,13 @@ std::string PersonalDataManager::SaveImportedProfile(
 void PersonalDataManager::NotifyPersonalDataChanged() {
   for (PersonalDataManagerObserver& observer : observers_)
     observer.OnPersonalDataChanged();
+
+  // If new data was synced, try to convert new server profiles and update
+  // server cards.
+  if (has_synced_new_data_) {
+    has_synced_new_data_ = false;
+    ConvertWalletAddressesAndUpdateWalletCards();
+  }
 }
 
 std::string PersonalDataManager::SaveImportedCreditCard(
@@ -1582,10 +1579,6 @@ const std::vector<AutofillProfile*>& PersonalDataManager::GetProfiles(
   profiles_.clear();
   for (const auto& profile : web_profiles_)
     profiles_.push_back(profile.get());
-  if (pref_service_->GetBoolean(prefs::kAutofillWalletImportEnabled)) {
-    for (const auto& profile : server_profiles_)
-      profiles_.push_back(profile.get());
-  }
   return profiles_;
 }
 
@@ -1625,8 +1618,13 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
       // cardholder name. The label should never repeat the value.
       if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
         suggestion->value = credit_card->TypeAndLastFourDigits();
-        suggestion->label = credit_card->GetInfo(
-            AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale_);
+        if (IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled()) {
+          suggestion->label =
+              credit_card->GetLastUsedDateForDisplay(app_locale_);
+        } else {
+          suggestion->label = credit_card->GetInfo(
+              AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale_);
+        }
         if (IsAutofillCreditCardPopupLayoutExperimentEnabled())
           ModifyAutofillCreditCardSuggestion(suggestion);
       } else if (credit_card->number().empty()) {
@@ -1668,7 +1666,8 @@ void PersonalDataManager::ApplyProfileUseDatesFix() {
   bool has_changed_data = false;
   for (AutofillProfile* profile : web_profiles()) {
     if (profile->use_date() == base::Time()) {
-      profile->set_use_date(base::Time::Now() - base::TimeDelta::FromDays(14));
+      profile->set_use_date(AutofillClock::Now() -
+                            base::TimeDelta::FromDays(14));
       has_changed_data = true;
     }
     profiles.push_back(*profile);
@@ -1749,7 +1748,7 @@ void PersonalDataManager::DedupeProfiles(
   // profiles, so the loop can be stopped when we reach those. However they need
   // to be in the vector because an unverified profile trying to merge into a
   // similar verified profile will be discarded.
-  base::Time comparison_time = base::Time::Now();
+  base::Time comparison_time = AutofillClock::Now();
   std::sort(existing_profiles->begin(), existing_profiles->end(),
             [comparison_time](const std::unique_ptr<AutofillProfile>& a,
                               const std::unique_ptr<AutofillProfile>& b) {
@@ -1827,7 +1826,7 @@ void PersonalDataManager::UpdateCardsBillingAddressReference(
       C -> D
   */
 
-  for (auto& credit_card : local_credit_cards_) {
+  for (auto* credit_card : GetCreditCards()) {
     // If the credit card is not associated with a billing address, skip it.
     if (credit_card->billing_address_id().empty())
       break;
@@ -1854,9 +1853,176 @@ void PersonalDataManager::UpdateCardsBillingAddressReference(
 
     // If the card was modified, apply the changes to the database.
     if (was_modified) {
-      database_->UpdateCreditCard(*credit_card);
+      if (credit_card->record_type() == CreditCard::LOCAL_CARD)
+        database_->UpdateCreditCard(*credit_card);
+      else
+        database_->UpdateServerCardMetadata(*credit_card);
     }
   }
+}
+
+void PersonalDataManager::ConvertWalletAddressesAndUpdateWalletCards() {
+  // Copy the local profiles into a vector<AutofillProfile>. Theses are the
+  // existing profiles. Get them sorted in decreasing order of frecency, so the
+  // "best" profiles are checked first. Put the verified profiles last so the
+  // server addresses have a chance to merge into the non-verified local
+  // profiles.
+  std::vector<AutofillProfile> local_profiles;
+  for (AutofillProfile* existing_profile : GetProfilesToSuggest()) {
+    local_profiles.push_back(*existing_profile);
+  }
+
+  // Since we are already iterating on all the server profiles to convert Wallet
+  // addresses and we will need to access them by guid later to update the
+  // Wallet cards, create a map here.
+  std::unordered_map<std::string, AutofillProfile*> server_id_profiles_map;
+
+  // Create the map used to update credit card's billing addresses after the
+  // convertion/merge.
+  std::unordered_map<std::string, std::string> guids_merge_map;
+
+  bool has_converted_addresses = ConvertWalletAddressesToLocalProfiles(
+      &local_profiles, &server_id_profiles_map, &guids_merge_map);
+  bool should_update_cards = UpdateWalletCardsAlreadyConvertedBillingAddresses(
+      &local_profiles, &server_id_profiles_map, &guids_merge_map);
+
+  if (has_converted_addresses) {
+    // Save the local profiles to the DB.
+    SetProfiles(&local_profiles);
+  }
+
+  if (should_update_cards || has_converted_addresses) {
+    // Update the credit cards billing address relationship.
+    UpdateCardsBillingAddressReference(guids_merge_map);
+
+    // Force a reload of the profiles and cards.
+    Refresh();
+  }
+}
+
+bool PersonalDataManager::ConvertWalletAddressesToLocalProfiles(
+    std::vector<AutofillProfile>* local_profiles,
+    std::unordered_map<std::string, AutofillProfile*>* server_id_profiles_map,
+    std::unordered_map<std::string, std::string>* guids_merge_map) {
+  bool has_converted_addresses = false;
+  for (std::unique_ptr<AutofillProfile>& wallet_address : server_profiles_) {
+    // Add the profile to the map.
+    server_id_profiles_map->insert(
+        std::make_pair(wallet_address->server_id(), wallet_address.get()));
+
+    // If the address has not been converted yet, convert it.
+    if (!wallet_address->has_converted()) {
+      // Try to merge the server address into a similar local profile, or create
+      // a new local profile if no similar profile is found.
+      std::string address_guid =
+          MergeServerAddressesIntoProfiles(*wallet_address, local_profiles);
+
+      // Update the map to transfer the billing address relationship from the
+      // server address to the converted/merged local profile.
+      guids_merge_map->insert(std::pair<std::string, std::string>(
+          wallet_address->server_id(), address_guid));
+
+      // Update the wallet addresses metadata to record the conversion.
+      wallet_address->set_has_converted(true);
+      database_->UpdateServerAddressMetadata(*wallet_address);
+
+      has_converted_addresses = true;
+    }
+  }
+
+  return has_converted_addresses;
+}
+
+bool PersonalDataManager::UpdateWalletCardsAlreadyConvertedBillingAddresses(
+    std::vector<AutofillProfile>* local_profiles,
+    std::unordered_map<std::string, AutofillProfile*>* server_id_profiles_map,
+    std::unordered_map<std::string, std::string>* guids_merge_map) {
+  // Look for server cards that still refer to server addresses but for which
+  // there is no mapping. This can happen if it's a new card for which the
+  // billing address has already been converted. This should be a no-op for most
+  // situations. Otherwise, it should affect only one Wallet card, sinces users
+  // do not add a lot of credit cards.
+  AutofillProfileComparator comparator(app_locale_);
+  bool should_update_cards = false;
+  for (std::unique_ptr<CreditCard>& wallet_card : server_credit_cards_) {
+    std::string billing_address_id = wallet_card->billing_address_id();
+
+    // If billing address refers to a server id and that id is not a key in the
+    // guids_merge_map, it means that the card is new but the address was
+    // already converted. Look for the matching converted profile.
+    if (!billing_address_id.empty() &&
+        billing_address_id.length() != LOCAL_GUID_LENGTH &&
+        guids_merge_map->find(billing_address_id) == guids_merge_map->end()) {
+      // Get the profile.
+      auto it = server_id_profiles_map->find(billing_address_id);
+      if (it != server_id_profiles_map->end()) {
+        AutofillProfile* billing_address = it->second;
+
+        // Look for a matching local profile (DO NOT MERGE).
+        bool matching_profile_found = false;
+        for (auto& local_profile : *local_profiles) {
+          if (!matching_profile_found &&
+              comparator.AreMergeable(*billing_address, local_profile)) {
+            matching_profile_found = true;
+
+            // The Wallet address matches this local profile. Add this to the
+            // merge mapping.
+            guids_merge_map->insert(std::pair<std::string, std::string>(
+                billing_address_id, local_profile.guid()));
+            should_update_cards = true;
+          }
+        }
+      }
+    }
+  }
+
+  return should_update_cards;
+}
+
+// TODO(crbug.com/687975): Reuse MergeProfiles in this function.
+std::string PersonalDataManager::MergeServerAddressesIntoProfiles(
+    const AutofillProfile& server_address,
+    std::vector<AutofillProfile>* existing_profiles) {
+  // Set to true if |existing_profiles| already contains an equivalent profile.
+  bool matching_profile_found = false;
+  std::string guid = server_address.guid();
+
+  // If there is already a local profile that is very similar, merge in any
+  // missing values. Only merge with the first match.
+  AutofillProfileComparator comparator(app_locale_);
+  for (auto& local_profile : *existing_profiles) {
+    if (!matching_profile_found &&
+        comparator.AreMergeable(server_address, local_profile) &&
+        local_profile.SaveAdditionalInfo(server_address, app_locale_)) {
+      matching_profile_found = true;
+      local_profile.set_modification_date(AutofillClock::Now());
+      guid = local_profile.guid();
+      AutofillMetrics::LogWalletAddressConversionType(
+          AutofillMetrics::CONVERTED_ADDRESS_MERGED);
+    }
+  }
+
+  // If the server address was not merged with a local profile, add it to the
+  // list.
+  if (!matching_profile_found) {
+    existing_profiles->push_back(server_address);
+    // Set the profile as being local.
+    existing_profiles->back().set_record_type(AutofillProfile::LOCAL_PROFILE);
+    existing_profiles->back().set_modification_date(AutofillClock::Now());
+
+    // Wallet addresses don't have an email address, use the one from the
+    // currently signed-in account.
+    std::string account_id = signin_manager_->GetAuthenticatedAccountId();
+    base::string16 email =
+        base::UTF8ToUTF16(account_tracker_->GetAccountInfo(account_id).email);
+    if (!email.empty())
+      existing_profiles->back().SetRawInfo(EMAIL_ADDRESS, email);
+
+    AutofillMetrics::LogWalletAddressConversionType(
+        AutofillMetrics::CONVERTED_ADDRESS_ADDED);
+  }
+
+  return guid;
 }
 
 }  // namespace autofill

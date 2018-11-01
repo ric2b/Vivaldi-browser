@@ -438,6 +438,8 @@ SkColor ThemeService::GetDefaultColor(int id, bool incognito) const {
       return SkColorSetA(
           GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON, incognito),
           0x33);
+    case ThemeProperties::COLOR_LOCATION_BAR_BORDER:
+      return SkColorSetA(SK_ColorBLACK, 0x4D);
     case ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR:
     case ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_INACTIVE: {
       const SkColor tab_color =
@@ -487,14 +489,6 @@ SkColor ThemeService::GetDefaultColor(int id, bool incognito) const {
       // Use 50% of bookmark text color as separator color.
       return SkColorSetA(
           GetColor(ThemeProperties::COLOR_BOOKMARK_TEXT, incognito), 128);
-    case ThemeProperties::COLOR_NTP_SECTION_HEADER_TEXT:
-      return IncreaseLightness(GetColor(kNtpText, incognito), 0.30);
-    case ThemeProperties::COLOR_NTP_SECTION_HEADER_TEXT_HOVER:
-      return GetColor(kNtpText, incognito);
-    case ThemeProperties::COLOR_NTP_SECTION_HEADER_RULE:
-      return IncreaseLightness(GetColor(kNtpText, incognito), 0.70);
-    case ThemeProperties::COLOR_NTP_SECTION_HEADER_RULE_LIGHT:
-      return IncreaseLightness(GetColor(kNtpText, incognito), 0.86);
     case ThemeProperties::COLOR_NTP_TEXT_LIGHT:
       return IncreaseLightness(GetColor(kNtpText, incognito), 0.40);
     case ThemeProperties::COLOR_TAB_THROBBER_SPINNING:

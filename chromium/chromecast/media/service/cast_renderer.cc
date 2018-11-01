@@ -7,6 +7,8 @@
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "chromecast/base/task_runner_impl.h"
+#include "chromecast/media/base/audio_device_ids.h"
+#include "chromecast/media/base/video_mode_switcher.h"
 #include "chromecast/media/base/video_resolution_policy.h"
 #include "chromecast/media/cdm/cast_cdm_context.h"
 #include "chromecast/media/cma/base/balanced_media_task_runner_factory.h"
@@ -16,10 +18,11 @@
 #include "chromecast/media/cma/pipeline/video_pipeline_client.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "chromecast/public/media/media_pipeline_device_params.h"
+#include "media/audio/audio_device_description.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
-#include "media/base/demuxer_stream_provider.h"
 #include "media/base/media_log.h"
+#include "media/base/media_resource.h"
 #include "media/base/renderer_client.h"
 
 namespace chromecast {
@@ -29,17 +32,30 @@ namespace {
 // Maximum difference between audio frame PTS and video frame PTS
 // for frames read from the DemuxerStream.
 const base::TimeDelta kMaxDeltaFetcher(base::TimeDelta::FromMilliseconds(2000));
+
+void VideoModeSwitchCompletionCb(const ::media::PipelineStatusCB& init_cb,
+                                 bool success) {
+  if (!success) {
+    LOG(ERROR) << "Video mode switch failed.";
+    init_cb.Run(::media::PIPELINE_ERROR_INITIALIZATION_FAILED);
+    return;
+  }
+  VLOG(1) << "Video mode switched successfully.";
+  init_cb.Run(::media::PIPELINE_OK);
+}
 }  // namespace
 
 CastRenderer::CastRenderer(
-    const CreateMediaPipelineBackendCB& create_backend_cb,
+    MediaPipelineBackendFactory* backend_factory,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     const std::string& audio_device_id,
+    VideoModeSwitcher* video_mode_switcher,
     VideoResolutionPolicy* video_resolution_policy,
     MediaResourceTracker* media_resource_tracker)
-    : create_backend_cb_(create_backend_cb),
+    : backend_factory_(backend_factory),
       task_runner_(task_runner),
       audio_device_id_(audio_device_id),
+      video_mode_switcher_(video_mode_switcher),
       video_resolution_policy_(video_resolution_policy),
       media_resource_tracker_(media_resource_tracker),
       client_(nullptr),
@@ -47,6 +63,7 @@ CastRenderer::CastRenderer(
       media_task_runner_factory_(
           new BalancedMediaTaskRunnerFactory(kMaxDeltaFetcher)),
       weak_factory_(this) {
+  DCHECK(backend_factory_);
   CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
 
   if (video_resolution_policy_)
@@ -61,10 +78,9 @@ CastRenderer::~CastRenderer() {
     video_resolution_policy_->RemoveObserver(this);
 }
 
-void CastRenderer::Initialize(
-    ::media::DemuxerStreamProvider* demuxer_stream_provider,
-    ::media::RendererClient* client,
-    const ::media::PipelineStatusCB& init_cb) {
+void CastRenderer::Initialize(::media::MediaResource* media_resource,
+                              ::media::RendererClient* client,
+                              const ::media::PipelineStatusCB& init_cb) {
   CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -78,9 +94,22 @@ void CastRenderer::Initialize(
       (load_type == kLoadTypeMediaStream)
           ? MediaPipelineDeviceParams::kModeIgnorePts
           : MediaPipelineDeviceParams::kModeSyncPts;
-  MediaPipelineDeviceParams params(sync_type, backend_task_runner_.get());
+  std::string device_id = audio_device_id_;
+  if (device_id == "")
+    device_id = ::media::AudioDeviceDescription::kDefaultDeviceId;
+
+  MediaPipelineDeviceParams params(
+      sync_type, MediaPipelineDeviceParams::kAudioStreamNormal, device_id,
+      backend_task_runner_.get());
+
+  if (audio_device_id_ == kTtsAudioDeviceId ||
+      audio_device_id_ ==
+          ::media::AudioDeviceDescription::kCommunicationsDeviceId) {
+    load_type = kLoadTypeCommunication;
+  }
+
   std::unique_ptr<MediaPipelineBackend> backend =
-      create_backend_cb_.Run(params, audio_device_id_);
+      backend_factory_->CreateBackend(params, audio_device_id_);
 
   // Create pipeline.
   MediaPipelineClient pipeline_client;
@@ -92,9 +121,14 @@ void CastRenderer::Initialize(
   pipeline_->SetClient(pipeline_client);
   pipeline_->Initialize(load_type, std::move(backend));
 
-  // Initialize audio.
+  // TODO(servolk): Implement support for multiple streams. For now use the
+  // first enabled audio and video streams to preserve the existing behavior.
   ::media::DemuxerStream* audio_stream =
-      demuxer_stream_provider->GetStream(::media::DemuxerStream::AUDIO);
+      media_resource->GetFirstStream(::media::DemuxerStream::AUDIO);
+  ::media::DemuxerStream* video_stream =
+      media_resource->GetFirstStream(::media::DemuxerStream::VIDEO);
+
+  // Initialize audio.
   if (audio_stream) {
     AvPipelineClient audio_client;
     audio_client.wait_for_key_cb = base::Bind(
@@ -119,8 +153,6 @@ void CastRenderer::Initialize(
   }
 
   // Initialize video.
-  ::media::DemuxerStream* video_stream =
-      demuxer_stream_provider->GetStream(::media::DemuxerStream::VIDEO);
   if (video_stream) {
     VideoPipelineClient video_client;
     video_client.av_pipeline_client.wait_for_key_cb = base::Bind(
@@ -155,9 +187,29 @@ void CastRenderer::Initialize(
   }
 
   client_ = client;
-  init_cb.Run(::media::PIPELINE_OK);
 
-  if (video_stream) {
+  if (video_stream && video_mode_switcher_) {
+    std::vector<::media::VideoDecoderConfig> video_configs;
+    video_configs.push_back(video_stream->video_decoder_config());
+    auto mode_switch_completion_cb =
+        base::Bind(&CastRenderer::OnVideoInitializationFinished,
+                   weak_factory_.GetWeakPtr(), init_cb);
+    video_mode_switcher_->SwitchMode(
+        video_configs,
+        base::Bind(&VideoModeSwitchCompletionCb, mode_switch_completion_cb));
+  } else if (video_stream) {
+    // No mode switch needed.
+    OnVideoInitializationFinished(init_cb, ::media::PIPELINE_OK);
+  } else {
+    init_cb.Run(::media::PIPELINE_OK);
+  }
+}
+
+void CastRenderer::OnVideoInitializationFinished(
+    const ::media::PipelineStatusCB& init_cb,
+    ::media::PipelineStatus status) {
+  init_cb.Run(status);
+  if (status == ::media::PIPELINE_OK) {
     // Force compositor to treat video as opaque (needed for overlay codepath).
     OnVideoOpacityChange(true);
   }
@@ -168,7 +220,7 @@ void CastRenderer::SetCdm(::media::CdmContext* cdm_context,
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(cdm_context);
 
-  auto cast_cdm_context = static_cast<CastCdmContext*>(cdm_context);
+  auto* cast_cdm_context = static_cast<CastCdmContext*>(cdm_context);
 
   if (!pipeline_) {
     // If the pipeline has not yet been created in Initialize(), cache
@@ -241,7 +293,11 @@ void CastRenderer::OnStatisticsUpdate(
 
 void CastRenderer::OnBufferingStateChange(::media::BufferingState state) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  client_->OnBufferingStateChange(state);
+  // TODO(alokp): WebMediaPlayerImpl currently only handles HAVE_ENOUGH.
+  // See WebMediaPlayerImpl::OnPipelineBufferingStateChanged,
+  // http://crbug.com/144683.
+  if (state == ::media::BUFFERING_HAVE_ENOUGH)
+    client_->OnBufferingStateChange(state);
 }
 
 void CastRenderer::OnWaitingForDecryptionKey() {

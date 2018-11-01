@@ -20,11 +20,11 @@ bool OpenedFrameTracker::isEmpty() const {
 }
 
 void OpenedFrameTracker::add(WebFrame* frame) {
-  m_openedFrames.add(frame);
+  m_openedFrames.insert(frame);
 }
 
 void OpenedFrameTracker::remove(WebFrame* frame) {
-  m_openedFrames.remove(frame);
+  m_openedFrames.erase(frame);
 }
 
 void OpenedFrameTracker::transferTo(WebFrame* opener) {

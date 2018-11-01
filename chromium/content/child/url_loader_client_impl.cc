@@ -9,7 +9,6 @@
 #include "content/child/resource_dispatcher.h"
 #include "content/child/url_response_body_consumer.h"
 #include "content/common/resource_messages.h"
-#include "mojo/public/cpp/bindings/associated_group.h"
 #include "net/url_request/redirect_info.h"
 
 namespace content {
@@ -29,10 +28,8 @@ URLLoaderClientImpl::~URLLoaderClientImpl() {
     body_consumer_->Cancel();
 }
 
-void URLLoaderClientImpl::Bind(
-    mojom::URLLoaderClientAssociatedPtrInfo* client_ptr_info,
-    mojo::AssociatedGroup* associated_group) {
-  binding_.Bind(client_ptr_info, associated_group);
+void URLLoaderClientImpl::Bind(mojom::URLLoaderClientPtr* client_ptr) {
+  binding_.Bind(client_ptr, task_runner_);
 }
 
 void URLLoaderClientImpl::SetDefersLoading() {
@@ -176,6 +173,14 @@ void URLLoaderClientImpl::Dispatch(const IPC::Message& message) {
   } else {
     resource_dispatcher_->DispatchMessage(message);
   }
+}
+
+void URLLoaderClientImpl::OnUploadProgress(int64_t current_position,
+                                           int64_t total_size,
+                                           const base::Closure& ack_callback) {
+  Dispatch(
+      ResourceMsg_UploadProgress(request_id_, current_position, total_size));
+  ack_callback.Run();
 }
 
 }  // namespace content

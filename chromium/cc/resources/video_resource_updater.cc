@@ -517,7 +517,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
         ResourceProvider::ScopedWriteLockSoftware lock(
             resource_provider_, plane_resource.resource_id());
-        SkCanvas canvas(lock.sk_bitmap());
+        PaintCanvas canvas(lock.sk_bitmap());
         // This is software path, so canvas and video_frame are always backed
         // by software.
         video_renderer_->Copy(video_frame, &canvas, media::Context3D());
@@ -713,10 +713,10 @@ void VideoResourceUpdater::CopyPlaneTexture(
   gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
   uint32_t src_texture_id = gl->CreateAndConsumeTextureCHROMIUM(
       mailbox_holder.texture_target, mailbox_holder.mailbox.name);
-  gl->CopySubTextureCHROMIUM(src_texture_id, 0, lock.texture_id(), 0, 0, 0, 0,
-                             0, output_plane_resource_size.width(),
-                             output_plane_resource_size.height(), false, false,
-                             false);
+  gl->CopySubTextureCHROMIUM(
+      src_texture_id, 0, GL_TEXTURE_2D, lock.texture_id(), 0, 0, 0, 0, 0,
+      output_plane_resource_size.width(), output_plane_resource_size.height(),
+      false, false, false);
   gl->DeleteTextures(1, &src_texture_id);
 
   // Done with the source video frame texture at this point.

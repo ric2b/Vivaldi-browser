@@ -60,10 +60,17 @@ cr.define('settings_about_page', function() {
       this.updateStatus_ = updateStatus;
     },
 
-    /** @override */
-    pageReady: function() {
-      this.methodCalled('pageReady');
+    sendStatusNoInternet: function() {
+      cr.webUIListenerCallback('update-status-changed', {
+        progress: 0,
+        status: UpdateStatus.FAILED,
+        message: 'offline',
+        connectionTypes: 'no internet',
+      });
     },
+
+    /** @override */
+    pageReady: function() { this.methodCalled('pageReady'); },
 
     /** @override */
     refreshUpdateStatus: function() {
@@ -75,14 +82,10 @@ cr.define('settings_about_page', function() {
     },
 
     /** @override */
-    openFeedbackDialog: function() {
-      this.methodCalled('openFeedbackDialog');
-    },
+    openFeedbackDialog: function() { this.methodCalled('openFeedbackDialog'); },
 
     /** @override */
-    openHelpPage: function() {
-      this.methodCalled('openHelpPage');
-    },
+    openHelpPage: function() { this.methodCalled('openHelpPage'); },
   };
 
   if (cr.isMac) {
@@ -149,11 +152,16 @@ cr.define('settings_about_page', function() {
   function registerAboutPageTests() {
     /**
      * @param {!UpdateStatus} status
-     * @param {number=} opt_progress
+     * @param {{
+     *   progress: number|undefined,
+     *   message: string|undefined
+     * }} opt_options
      */
-    function fireStatusChanged(status, opt_progress) {
+    function fireStatusChanged(status, opt_options) {
+      var options = opt_options || {};
       cr.webUIListenerCallback('update-status-changed', {
-        progress: opt_progress === undefined ? 1 : opt_progress,
+        progress: options.progress === undefined ? 1 : options.progress,
+        message: options.message,
         status: status,
       });
     }
@@ -221,14 +229,14 @@ cr.define('settings_about_page', function() {
         assertNotEquals(previousMessageText, statusMessageEl.textContent);
         previousMessageText = statusMessageEl.textContent;
 
-        fireStatusChanged(UpdateStatus.UPDATING, 0);
+        fireStatusChanged(UpdateStatus.UPDATING, {progress: 0});
         assertEquals(SPINNER_ICON, icon.src);
         assertEquals(null, icon.getAttribute('icon'));
         assertFalse(statusMessageEl.textContent.includes('%'));
         assertNotEquals(previousMessageText, statusMessageEl.textContent);
         previousMessageText = statusMessageEl.textContent;
 
-        fireStatusChanged(UpdateStatus.UPDATING, 1);
+        fireStatusChanged(UpdateStatus.UPDATING, {progress: 1});
         assertNotEquals(previousMessageText, statusMessageEl.textContent);
         assertTrue(statusMessageEl.textContent.includes('%'));
         previousMessageText = statusMessageEl.textContent;
@@ -241,7 +249,7 @@ cr.define('settings_about_page', function() {
 
         fireStatusChanged(UpdateStatus.DISABLED_BY_ADMIN);
         assertEquals(null, icon.src);
-        assertEquals('cr:domain', icon.icon);
+        assertEquals('cr20:domain', icon.icon);
         assertEquals(0, statusMessageEl.textContent.trim().length);
 
         fireStatusChanged(UpdateStatus.FAILED);
@@ -253,6 +261,14 @@ cr.define('settings_about_page', function() {
         assertEquals(null, icon.src);
         assertEquals(null, icon.getAttribute('icon'));
         assertEquals(0, statusMessageEl.textContent.trim().length);
+      });
+
+      test('ErrorMessageWithHtml', function() {
+        var htmlError = 'hello<br>there<br>was<pre>an</pre>error';
+        fireStatusChanged(
+            UpdateStatus.FAILED, {message: htmlError});
+        var statusMessageEl = page.$.updateStatusMessage;
+        assertEquals(htmlError, statusMessageEl.innerHTML);
       });
 
       /**
@@ -350,6 +366,15 @@ cr.define('settings_about_page', function() {
       });
 
       if (cr.isChromeOS) {
+        test('NoInternet', function() {
+          assertTrue(page.$.updateStatusMessage.hidden);
+          aboutBrowserProxy.sendStatusNoInternet();
+          Polymer.dom.flush();
+          assertFalse(page.$.updateStatusMessage.hidden);
+          assertNotEquals(
+              page.$.updateStatusMessage.innerHTML.includes('no internet'));
+        });
+
         /**
          * Test that all buttons update according to incoming
          * 'update-status-changed' events for the case where target and current
@@ -378,6 +403,17 @@ cr.define('settings_about_page', function() {
           fireStatusChanged(UpdateStatus.UPDATED);
           assertFalse(checkForUpdates.hidden);
           assertTrue(relaunch.hidden);
+          assertTrue(relaunchAndPowerwash.hidden);
+
+          // Check that the "Check for updates" button gets hidden for certain
+          // UpdateStatus values, even if the CHECKING state was never
+          // encountered (for example triggering update from crosh command
+          // line).
+          fireStatusChanged(UpdateStatus.UPDATING);
+          assertAllHidden();
+          fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
+          assertTrue(checkForUpdates.hidden);
+          assertFalse(relaunch.hidden);
           assertTrue(relaunchAndPowerwash.hidden);
 
           fireStatusChanged(UpdateStatus.CHECKING);

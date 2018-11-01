@@ -5,7 +5,6 @@
 #include "modules/sensor/SensorProviderProxy.h"
 
 #include "modules/sensor/SensorProxy.h"
-#include "modules/sensor/SensorReading.h"
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
@@ -53,13 +52,11 @@ DEFINE_TRACE(SensorProviderProxy) {
 
 SensorProxy* SensorProviderProxy::createSensorProxy(
     device::mojom::blink::SensorType type,
-    Document* document,
-    std::unique_ptr<SensorReadingFactory> readingFactory) {
+    Page* page) {
   DCHECK(!getSensorProxy(type));
 
-  SensorProxy* sensor =
-      new SensorProxy(type, this, document, std::move(readingFactory));
-  m_sensorProxies.add(sensor);
+  SensorProxy* sensor = new SensorProxy(type, this, page);
+  m_sensorProxies.insert(sensor);
 
   return sensor;
 }
@@ -76,11 +73,6 @@ SensorProxy* SensorProviderProxy::getSensorProxy(
 }
 
 void SensorProviderProxy::onSensorProviderConnectionError() {
-  if (!Platform::current()) {
-    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
-    return;
-  }
-
   m_sensorProvider.reset();
   for (SensorProxy* sensor : m_sensorProxies)
     sensor->handleSensorError();

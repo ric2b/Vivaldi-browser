@@ -7,8 +7,8 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/mutable_profile_oauth2_token_service_delegate.h"
+#include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -46,14 +46,13 @@ VivaldiProfileOAuth2TokenServiceFactory::GetInstance() {
 KeyedService* VivaldiProfileOAuth2TokenServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = static_cast<Profile*>(context);
-  MutableProfileOAuth2TokenServiceDelegate* delegate =
-      new MutableProfileOAuth2TokenServiceDelegate(
-          VivaldiSigninClientFactory::GetInstance()->GetForProfile(profile),
-          SigninErrorControllerFactory::GetInstance()->GetForProfile(profile),
-          AccountTrackerServiceFactory::GetInstance()->GetForProfile(profile));
+  auto delegate = base::MakeUnique<MutableProfileOAuth2TokenServiceDelegate>(
+      VivaldiSigninClientFactory::GetInstance()->GetForProfile(profile),
+      SigninErrorControllerFactory::GetInstance()->GetForProfile(profile),
+      AccountTrackerServiceFactory::GetInstance()->GetForProfile(profile));
   VivaldiProfileOAuth2TokenService* service =
-      new VivaldiProfileOAuth2TokenService(delegate);
+      new VivaldiProfileOAuth2TokenService(std::move(delegate));
   return service;
 }
 
-}  // Namespace
+}  // namespace vivaldi

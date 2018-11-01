@@ -15,8 +15,8 @@ source_set("exo") {
     "compositor_frame_sink_holder.h",
     "display.cc",
     "display.h",
-    "gamepad.cc",
-    "gamepad.h",
+    "gaming_seat.cc",
+    "gaming_seat.h",
     "keyboard.cc",
     "keyboard.h",
     "keyboard_delegate.h",
@@ -37,7 +37,6 @@ source_set("exo") {
     "surface.h",
     "surface_delegate.h",
     "surface_observer.h",
-    "surface_property.h",
     "touch.cc",
     "touch.h",
     "touch_delegate.h",
@@ -51,7 +50,7 @@ source_set("exo") {
 
   deps = [
     "//ash",
-    "//ash/public/cpp",
+    "//ash/public/cpp:ash_public_cpp",
     "//base",
     "//cc",
     "//cc/ipc:interfaces",
@@ -72,6 +71,10 @@ source_set("exo") {
     "//ui/wm",
   ]
 
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+
   if (is_chromeos) {
     deps += [ "//chromeos" ]
   }
@@ -89,7 +92,7 @@ source_set("test_support") {
 
   deps = [
     ":exo",
-    "//ash/public/cpp",
+    "//ash/public/cpp:ash_public_cpp",
     "//ash/test:ash_with_aura_test_support",
     "//ash/test:test_support_without_content",
     "//base",
@@ -110,7 +113,7 @@ source_set("unit_tests") {
   sources = [
     "buffer_unittest.cc",
     "display_unittest.cc",
-    "gamepad_unittest.cc",
+    "gaming_seat_unittest.cc",
     "keyboard_unittest.cc",
     "pointer_unittest.cc",
     "shared_memory_unittest.cc",
@@ -124,7 +127,7 @@ source_set("unit_tests") {
     ":exo",
     ":test_support",
     "//ash",
-    "//ash/public/cpp",
+    "//ash/public/cpp:ash_public_cpp",
     "//base",
     "//base/test:test_support",
     "//cc",
@@ -152,6 +155,8 @@ source_set("unit_tests") {
 
 test("exo_unittests") {
   sources = [
+    "../../ash/test/ash_test_suite.cc",
+    "../../ash/test/ash_test_suite.h",
     "test/run_all_unittests.cc",
   ]
 
@@ -163,10 +168,14 @@ test("exo_unittests") {
     "//base/test:test_support",
     "//device/gamepad:test_helpers",
     "//mojo/edk/embedder:headers",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/gl:test_support",
   ]
 
   data_deps = [
-    "//ash/common/strings:ash_test_strings",
+    "//ash/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
   ]

@@ -1,0 +1,87 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("payment_request") {
+  sources = [
+    "payment_request.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+  ]
+}
+
+mojom("payment_app") {
+  sources = [
+    "payment_app.mojom",
+  ]
+
+  public_deps = [
+    ":payment_request",
+    "//mojo/common:common_custom_types",
+    "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+static_library("payment_request_impl") {
+  sources = [
+    "payment_request.cc",
+    "payment_request.h",
+    "payment_request_delegate.h",
+    "payment_request_dialog.h",
+    "payment_request_web_contents_manager.cc",
+    "payment_request_web_contents_manager.h",
+  ]
+
+  deps = [
+    ":payment_request",
+    ":payment_validation",
+    "//components/autofill/core/browser",
+    "//components/payments/core",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+static_library("payment_validation") {
+  sources = [
+    "payment_details_validation.cc",
+    "payment_details_validation.h",
+    "payments_validators.cc",
+    "payments_validators.h",
+  ]
+
+  deps = [
+    ":payment_request",
+    "//base",
+    "//components/autofill/core/browser",
+    "//components/payments/core",
+    "//third_party/re2",
+    "//url",
+  ]
+
+  public_deps = [
+    "//third_party/icu",
+    "//third_party/libaddressinput",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "payments_validators_test.cc",
+  ]
+
+  deps = [
+    ":payment_validation",
+    "//base",
+    "//base/test:test_support",
+    "//components/autofill/core/browser",
+    "//testing/gtest",
+    "//third_party/icu",
+    "//third_party/libaddressinput:test_support",
+  ]
+}

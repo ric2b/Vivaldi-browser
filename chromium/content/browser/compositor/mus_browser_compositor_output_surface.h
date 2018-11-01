@@ -16,16 +16,13 @@
 
 namespace aura {
 class Window;
-class WindowCompositorFrameSink;
 }
 
 namespace gpu {
 class GpuMemoryBufferManager;
 }
 
-// TODO(mfomitchev): Remove once we complete the switch to Aura-Mus.
 namespace ui {
-class Window;
 class WindowCompositorFrameSink;
 }
 
@@ -38,16 +35,6 @@ class MusBrowserCompositorOutputSurface
     : public GpuBrowserCompositorOutputSurface,
       public cc::CompositorFrameSinkClient {
  public:
-  // TODO(mfomitchev): Remove this constructor once we complete the switch to
-  // Aura-Mus.
-  MusBrowserCompositorOutputSurface(
-      ui::Window* window,
-      scoped_refptr<ui::ContextProviderCommandBuffer> context,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
-      std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
-          overlay_candidate_validator);
-
   MusBrowserCompositorOutputSurface(
       aura::Window* window,
       scoped_refptr<ui::ContextProviderCommandBuffer> context,
@@ -83,12 +70,8 @@ class MusBrowserCompositorOutputSurface
   void FreeResourceId(uint32_t id);
   const gpu::Mailbox& GetMailboxFromResourceId(uint32_t id);
 
-  // TODO(mfomitchev): Remove once we complete the switch to Aura-Mus.
-  ui::Window* ui_window_;
-  std::unique_ptr<ui::WindowCompositorFrameSink> ui_compositor_frame_sink_;
-
   aura::Window* window_;
-  std::unique_ptr<aura::WindowCompositorFrameSink> compositor_frame_sink_;
+  std::unique_ptr<ui::WindowCompositorFrameSink> compositor_frame_sink_;
   std::vector<uint32_t> free_resource_ids_;
   std::vector<gpu::Mailbox> mailboxes_;
   cc::BeginFrameSource* begin_frame_source_;

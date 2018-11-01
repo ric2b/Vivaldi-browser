@@ -17,6 +17,7 @@ import android.webkit.WebSettings.LayoutAlgorithm;
 import android.webkit.WebSettings.PluginState;
 import android.webkit.WebSettings.ZoomDensity;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -94,9 +95,13 @@ public class AwSettings {
     // Although this bit is stored on AwSettings it is actually controlled via the CookieManager.
     private boolean mAcceptThirdPartyCookies;
 
+    // if null, default to AwContentsStatics.getSafeBrowsingEnabled()
+    private Boolean mSafeBrowsingEnabled;
+
     private final boolean mSupportLegacyQuirks;
     private final boolean mAllowEmptyDocumentPersistence;
     private final boolean mAllowGeolocationOnInsecureOrigins;
+    private final boolean mDoNotUpdateSelectionOnMutatingSelectionRange;
 
     private final boolean mPasswordEchoEnabled;
 
@@ -107,7 +112,7 @@ public class AwSettings {
     private int mCacheMode = WebSettings.LOAD_DEFAULT;
     private boolean mShouldFocusFirstNode = true;
     private boolean mGeolocationEnabled = true;
-    private boolean mAutoCompleteEnabled = true;
+    private boolean mAutoCompleteEnabled = !BuildInfo.isAtLeastO();
     private boolean mFullscreenSupported;
     private boolean mSupportZoom = true;
     private boolean mBuiltInZoomControls;
@@ -207,11 +212,10 @@ public class AwSettings {
                 boolean supportsDoubleTapZoom, boolean supportsMultiTouchZoom);
     }
 
-    public AwSettings(Context context,
-            boolean isAccessFromFileURLsGrantedByDefault,
-            boolean supportsLegacyQuirks,
-            boolean allowEmptyDocumentPersistence,
-            boolean allowGeolocationOnInsecureOrigins) {
+    public AwSettings(Context context, boolean isAccessFromFileURLsGrantedByDefault,
+            boolean supportsLegacyQuirks, boolean allowEmptyDocumentPersistence,
+            boolean allowGeolocationOnInsecureOrigins,
+            boolean doNotUpdateSelectionOnMutatingSelectionRange) {
         boolean hasInternetPermission = context.checkPermission(
                 android.Manifest.permission.INTERNET,
                 Process.myPid(),
@@ -242,6 +246,8 @@ public class AwSettings {
             mSupportLegacyQuirks = supportsLegacyQuirks;
             mAllowEmptyDocumentPersistence = allowEmptyDocumentPersistence;
             mAllowGeolocationOnInsecureOrigins = allowGeolocationOnInsecureOrigins;
+            mDoNotUpdateSelectionOnMutatingSelectionRange =
+                    doNotUpdateSelectionOnMutatingSelectionRange;
         }
         // Defer initializing the native side until a native WebContents instance is set.
     }
@@ -331,12 +337,35 @@ public class AwSettings {
     }
 
     /**
+     * Enable/Disable SafeBrowsing per WebView
+     * @param enabled true if this WebView should have SafeBrowsing
+     */
+    public void setSafeBrowsingEnabled(boolean enabled) {
+        synchronized (mAwSettingsLock) {
+            mSafeBrowsingEnabled = enabled;
+        }
+    }
+
+    /**
      * Return whether third party cookies are enabled for an AwContents
      * @return true if accept third party cookies
      */
     public boolean getAcceptThirdPartyCookies() {
         synchronized (mAwSettingsLock) {
             return mAcceptThirdPartyCookies;
+        }
+    }
+
+    /**
+     * Return whether Safe Browsing has been enabled for the current WebView
+     * @return true if SafeBrowsing is enabled
+     */
+    public boolean getSafeBrowsingEnabled() {
+        synchronized (mAwSettingsLock) {
+            if (mSafeBrowsingEnabled == null) {
+                return AwContentsStatics.getSafeBrowsingEnabled();
+            }
+            return mSafeBrowsingEnabled;
         }
     }
 
@@ -1261,6 +1290,12 @@ public class AwSettings {
     private boolean getAllowGeolocationOnInsecureOrigins() {
         assert Thread.holdsLock(mAwSettingsLock);
         return mAllowGeolocationOnInsecureOrigins;
+    }
+
+    @CalledByNative
+    private boolean getDoNotUpdateSelectionOnMutatingSelectionRange() {
+        assert Thread.holdsLock(mAwSettingsLock);
+        return mDoNotUpdateSelectionOnMutatingSelectionRange;
     }
 
     /**

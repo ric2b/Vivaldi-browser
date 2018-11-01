@@ -36,14 +36,10 @@ namespace blink {
 
 MediaStreamAudioSourceHandler::MediaStreamAudioSourceHandler(
     AudioNode& node,
-    MediaStream& mediaStream,
-    MediaStreamTrack* audioTrack,
     std::unique_ptr<AudioSourceProvider> audioSourceProvider)
     : AudioHandler(NodeTypeMediaStreamAudioSource,
                    node,
                    node.context()->sampleRate()),
-      m_mediaStream(mediaStream),
-      m_audioTrack(audioTrack),
       m_audioSourceProvider(std::move(audioSourceProvider)),
       m_sourceNumberOfChannels(0) {
   // Default to stereo. This could change depending on the format of the
@@ -55,11 +51,9 @@ MediaStreamAudioSourceHandler::MediaStreamAudioSourceHandler(
 
 PassRefPtr<MediaStreamAudioSourceHandler> MediaStreamAudioSourceHandler::create(
     AudioNode& node,
-    MediaStream& mediaStream,
-    MediaStreamTrack* audioTrack,
     std::unique_ptr<AudioSourceProvider> audioSourceProvider) {
-  return adoptRef(new MediaStreamAudioSourceHandler(
-      node, mediaStream, audioTrack, std::move(audioSourceProvider)));
+  return adoptRef(
+      new MediaStreamAudioSourceHandler(node, std::move(audioSourceProvider)));
 }
 
 MediaStreamAudioSourceHandler::~MediaStreamAudioSourceHandler() {
@@ -69,11 +63,11 @@ MediaStreamAudioSourceHandler::~MediaStreamAudioSourceHandler() {
 void MediaStreamAudioSourceHandler::setFormat(size_t numberOfChannels,
                                               float sourceSampleRate) {
   if (numberOfChannels != m_sourceNumberOfChannels ||
-      sourceSampleRate != sampleRate()) {
+      sourceSampleRate != context()->sampleRate()) {
     // The sample-rate must be equal to the context's sample-rate.
     if (!numberOfChannels ||
         numberOfChannels > BaseAudioContext::maxNumberOfChannels() ||
-        sourceSampleRate != sampleRate()) {
+        sourceSampleRate != context()->sampleRate()) {
       // process() will generate silence for these uninitialized values.
       DLOG(ERROR) << "setFormat(" << numberOfChannels << ", "
                   << sourceSampleRate << ") - unhandled format change";
@@ -104,8 +98,7 @@ void MediaStreamAudioSourceHandler::process(size_t numberOfFrames) {
     return;
   }
 
-  if (!getMediaStream() ||
-      m_sourceNumberOfChannels != outputBus->numberOfChannels()) {
+  if (m_sourceNumberOfChannels != outputBus->numberOfChannels()) {
     outputBus->zero();
     return;
   }
@@ -129,9 +122,9 @@ MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(
     MediaStream& mediaStream,
     MediaStreamTrack* audioTrack,
     std::unique_ptr<AudioSourceProvider> audioSourceProvider)
-    : AudioSourceNode(context) {
+    : AudioNode(context), m_audioTrack(audioTrack), m_mediaStream(mediaStream) {
   setHandler(MediaStreamAudioSourceHandler::create(
-      *this, mediaStream, audioTrack, std::move(audioSourceProvider)));
+      *this, std::move(audioSourceProvider)));
 }
 
 MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::create(
@@ -180,8 +173,10 @@ MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::create(
 }
 
 DEFINE_TRACE(MediaStreamAudioSourceNode) {
+  visitor->trace(m_audioTrack);
+  visitor->trace(m_mediaStream);
   AudioSourceProviderClient::trace(visitor);
-  AudioSourceNode::trace(visitor);
+  AudioNode::trace(visitor);
 }
 
 MediaStreamAudioSourceHandler&
@@ -190,7 +185,7 @@ MediaStreamAudioSourceNode::mediaStreamAudioSourceHandler() const {
 }
 
 MediaStream* MediaStreamAudioSourceNode::getMediaStream() const {
-  return mediaStreamAudioSourceHandler().getMediaStream();
+  return m_mediaStream;
 }
 
 void MediaStreamAudioSourceNode::setFormat(size_t numberOfChannels,

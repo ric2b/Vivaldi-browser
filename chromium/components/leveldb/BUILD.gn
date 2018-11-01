@@ -2,8 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/cpp/service.gni")
 import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
 static_library("lib") {
@@ -48,10 +50,6 @@ service("leveldb") {
     "//services/service_manager/public/cpp",
     "//services/tracing/public/cpp",
   ]
-
-  data_deps = [
-    ":manifest",
-  ]
 }
 
 service_manifest("manifest") {
@@ -59,11 +57,13 @@ service_manifest("manifest") {
   source = "manifest.json"
 }
 
-test("leveldb_service_unittests") {
+service_test("leveldb_service_unittests") {
   sources = [
     "leveldb_service_unittest.cc",
     "remote_iterator_unittest.cc",
   ]
+
+  catalog = ":leveldb_service_unittests_catalog"
 
   deps = [
     "//base",
@@ -75,12 +75,10 @@ test("leveldb_service_unittests") {
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp:service_test_support",
     "//services/service_manager/public/cpp:sources",
-    "//services/service_manager/public/cpp/test:run_all_service_tests",
     "//third_party/leveldatabase",
   ]
 
   data_deps = [
-    ":test_manifest",
     ":leveldb",
     "//components/filesystem:filesystem",
   ]
@@ -89,4 +87,12 @@ test("leveldb_service_unittests") {
 service_manifest("test_manifest") {
   name = "leveldb_service_unittests"
   source = "test_manifest.json"
+}
+
+catalog("leveldb_service_unittests_catalog") {
+  embedded_services = [ ":test_manifest" ]
+  standalone_services = [
+    ":manifest",
+    "//components/filesystem:manifest",
+  ]
 }

@@ -4,21 +4,26 @@
 
 #include "core/layout/LayoutTestHelper.h"
 
-#include "core/fetch/MemoryCache.h"
+#include "bindings/core/v8/StringOrArrayBufferOrArrayBufferView.h"
+#include "core/css/FontFaceDescriptors.h"
+#include "core/css/FontFaceSet.h"
+#include "core/dom/DOMArrayBuffer.h"
 #include "core/frame/FrameHost.h"
 #include "core/html/HTMLIFrameElement.h"
+#include "platform/loader/fetch/MemoryCache.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "platform/testing/UnitTestHelpers.h"
 
 namespace blink {
 
-LocalFrame* SingleChildFrameLoaderClient::createFrame(
+LocalFrame* SingleChildLocalFrameClient::createFrame(
     const FrameLoadRequest&,
     const AtomicString& name,
     HTMLFrameOwnerElement* ownerElement) {
   DCHECK(!m_child) << "This test helper only supports one child frame.";
 
   LocalFrame* parentFrame = ownerElement->document().frame();
-  auto* childClient = FrameLoaderClientWithParent::create(parentFrame);
+  auto* childClient = LocalFrameClientWithParent::create(parentFrame);
   m_child = LocalFrame::create(childClient, parentFrame->host(), ownerElement);
   m_child->createView(IntSize(500, 500), Color(), true /* transparent */);
   m_child->init();
@@ -26,8 +31,8 @@ LocalFrame* SingleChildFrameLoaderClient::createFrame(
   return m_child.get();
 }
 
-void FrameLoaderClientWithParent::detached(FrameDetachType) {
-  static_cast<SingleChildFrameLoaderClient*>(parent()->client())
+void LocalFrameClientWithParent::detached(FrameDetachType) {
+  static_cast<SingleChildLocalFrameClient*>(parent()->client())
       ->didDetachChild();
 }
 
@@ -36,15 +41,15 @@ ChromeClient& RenderingTest::chromeClient() const {
   return client;
 }
 
-RenderingTest::RenderingTest(FrameLoaderClient* frameLoaderClient)
-    : m_frameLoaderClient(frameLoaderClient) {}
+RenderingTest::RenderingTest(LocalFrameClient* localFrameClient)
+    : m_localFrameClient(localFrameClient) {}
 
 void RenderingTest::SetUp() {
   Page::PageClients pageClients;
   fillWithEmptyClients(pageClients);
   pageClients.chromeClient = &chromeClient();
   m_pageHolder = DummyPageHolder::create(
-      IntSize(800, 600), &pageClients, m_frameLoaderClient, settingOverrider());
+      IntSize(800, 600), &pageClients, m_localFrameClient, settingOverrider());
 
   Settings::setMockScrollbarsEnabled(true);
   RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(true);
@@ -69,6 +74,21 @@ void RenderingTest::TearDown() {
 void RenderingTest::setChildFrameHTML(const String& html) {
   childDocument().setBaseURLOverride(KURL(ParsedURLString, "http://test.com"));
   childDocument().body()->setInnerHTML(html, ASSERT_NO_EXCEPTION);
+}
+
+void RenderingTest::loadAhem() {
+  RefPtr<SharedBuffer> sharedBuffer =
+      testing::readFromFile(testing::webTestDataPath("Ahem.ttf"));
+  StringOrArrayBufferOrArrayBufferView buffer =
+      StringOrArrayBufferOrArrayBufferView::fromArrayBuffer(
+          DOMArrayBuffer::create(sharedBuffer->data(), sharedBuffer->size()));
+  FontFace* ahem =
+      FontFace::create(&document(), "Ahem", buffer, FontFaceDescriptors());
+
+  ScriptState* scriptState = ScriptState::forMainWorld(&m_pageHolder->frame());
+  DummyExceptionStateForTesting exceptionState;
+  FontFaceSet::from(document())
+      ->addForBinding(scriptState, ahem, exceptionState);
 }
 
 }  // namespace blink

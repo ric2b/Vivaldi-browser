@@ -5,7 +5,7 @@
 #ifndef MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_WIN_H_
 #define MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_WIN_H_
 
-#include <d3d11.h>
+#include <d3d11_1.h>
 #include <d3d9.h>
 #include <initguid.h>
 #include <stdint.h>
@@ -275,8 +275,8 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // the decoder thread. Thread safe.
   State GetState();
 
-  // Starts the thread used for decoding.
-  void StartDecoderThread();
+  // Starts the thread used for decoding. Returns true on success.
+  bool StartDecoderThread();
 
   // Returns if we have output samples waiting to be processed. We only
   // allow one output sample to be present in the output queue at any given
@@ -317,7 +317,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
       ID3D11Texture2D* dest_texture,
       base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
       uint64_t keyed_mutex_value,
-      base::win::ScopedComPtr<IMFSample> video_frame,
+      base::win::ScopedComPtr<IMFSample> input_sample,
       int picture_buffer_id,
       int input_buffer_id);
 
@@ -334,12 +334,11 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // before reusing it.
   void WaitForOutputBuffer(int32_t picture_buffer_id, int count);
 
-  // Initializes the DX11 Video format converter media types.
+  // Initialize the DX11 video processor.
   // Returns true on success.
-  bool InitializeDX11VideoFormatConverterMediaType(
-      int width,
-      int height,
-      const gfx::ColorSpace& color_space);
+  bool InitializeID3D11VideoProcessor(int width,
+                                      int height,
+                                      const gfx::ColorSpace& color_space);
 
   // Returns the output video frame dimensions (width, height).
   // |sample| :- This is the output sample containing the video frame.
@@ -362,7 +361,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // Checks if the resolution, bitrate etc of the stream changed. We do this
   // by keeping track of the SPS/PPS frames and if they change we assume
   // that the configuration changed.
-  // Returns S_OK or S_FALSE on succcess.
+  // Returns S_OK or S_FALSE on success.
   // The |config_changed| parameter is set to true if we detect a change in the
   // stream.
   HRESULT CheckConfigChanged(IMFSample* sample, bool* config_changed);
@@ -377,7 +376,6 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   VideoDecodeAccelerator::Client* client_;
 
   base::win::ScopedComPtr<IMFTransform> decoder_;
-  base::win::ScopedComPtr<IMFTransform> video_format_converter_mft_;
 
   base::win::ScopedComPtr<IDirect3D9Ex> d3d9_;
   base::win::ScopedComPtr<IDirect3DDevice9Ex> d3d9_device_ex_;
@@ -390,6 +388,14 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   base::win::ScopedComPtr<ID3D10Multithread> multi_threaded_;
   base::win::ScopedComPtr<ID3D11DeviceContext> d3d11_device_context_;
   base::win::ScopedComPtr<ID3D11Query> d3d11_query_;
+
+  base::win::ScopedComPtr<ID3D11VideoDevice> video_device_;
+  base::win::ScopedComPtr<ID3D11VideoContext> video_context_;
+  base::win::ScopedComPtr<ID3D11VideoProcessorEnumerator> enumerator_;
+  base::win::ScopedComPtr<ID3D11VideoProcessor> d3d11_processor_;
+
+  int processor_width_ = 0;
+  int processor_height_ = 0;
 
   base::win::ScopedComPtr<IDirectXVideoProcessorService>
       video_processor_service_;
@@ -511,6 +517,9 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // Copy NV12 texture to another NV12 texture.
   bool copy_nv12_textures_;
 
+  // Copy video to FP16 scRGB textures.
+  bool use_fp16_ = false;
+
   // When converting YUV to RGB, make sure we tell the blitter about the input
   // color space so that it can convert it correctly.
   bool use_color_info_ = true;
@@ -526,12 +535,11 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // contexts.
   bool use_keyed_mutex_;
 
-  // Set to true if the DX11 video format converter input media types need to
-  // be initialized. Defaults to true.
-  bool dx11_video_format_converter_media_type_needs_init_;
-
   // Color spaced used when initializing the dx11 format converter.
   gfx::ColorSpace dx11_converter_color_space_;
+
+  // Outputs from the dx11 format converter will be in this color space.
+  gfx::ColorSpace dx11_converter_output_color_space_;
 
   // Set to true if we are sharing ANGLE's device.
   bool using_angle_device_;

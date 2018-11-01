@@ -1,5 +1,8 @@
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+#ifndef BROWSER_WIN_VIVALDI_STANDALONE_H_
+#define BROWSER_WIN_VIVALDI_STANDALONE_H_
+
 namespace vivaldi {
 
 #if defined(OS_WIN)
@@ -12,3 +15,5 @@ bool IsStandalone();
 #endif
 
 }  // namespace vivaldi
+
+#endif  // BROWSER_WIN_VIVALDI_STANDALONE_H_

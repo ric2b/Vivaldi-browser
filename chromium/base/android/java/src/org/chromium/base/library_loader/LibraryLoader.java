@@ -13,6 +13,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
@@ -297,8 +298,13 @@ public class LibraryLoader {
                             Log.i(TAG, "Loading " + library);
                         }
 
-                        // Load the library using this Linker. May throw UnsatisfiedLinkError.
-                        loadLibrary(linker, zipFilePath, libFilePath);
+                        try {
+                            // Load the library using this Linker. May throw UnsatisfiedLinkError.
+                            loadLibrary(linker, zipFilePath, libFilePath);
+                        } catch (UnsatisfiedLinkError e) {
+                            Log.e(TAG, "Unable to load library: " + library);
+                            throw(e);
+                        }
                     }
 
                     linker.finishLibraryLoad();
@@ -308,7 +314,12 @@ public class LibraryLoader {
                     }
                     // Load libraries using the system linker.
                     for (String library : NativeLibraries.LIBRARIES) {
-                        System.loadLibrary(library);
+                        try {
+                            System.loadLibrary(library);
+                        } catch (UnsatisfiedLinkError e) {
+                            Log.e(TAG, "Unable to load library: " + library);
+                            throw(e);
+                        }
                     }
                 }
 
@@ -441,6 +452,15 @@ public class LibraryLoader {
     public static int getLibraryProcessType() {
         if (sInstance == null) return LibraryProcessType.PROCESS_UNINITIALIZED;
         return sInstance.mLibraryProcessType;
+    }
+
+    /**
+     * Override the library loader (normally with a mock) for testing.
+     * @param loader the mock library loader.
+     */
+    @VisibleForTesting
+    public static void setLibraryLoaderForTesting(LibraryLoader loader) {
+        sInstance = loader;
     }
 
     private native void nativeInitCommandLine(String[] initCommandLine);

@@ -12,11 +12,11 @@
 #include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/gcm/fake_gcm_profile_service.h"
+#include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
-#include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
-#include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
@@ -25,7 +25,10 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
+#import "chrome/browser/ui/cocoa/info_bubble_view.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
+#include "chrome/browser/ui/cocoa/test/scoped_force_rtl_mac.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/signin/core/browser/fake_account_fetcher_service.h"
@@ -249,6 +252,25 @@ TEST_F(ProfileChooserControllerTest, InitialLayoutWithNewMenu) {
   NSTextField* promo = base::mac::ObjCCast<NSTextField>(
       [linksSubviews objectAtIndex:1]);
   EXPECT_GT([[promo stringValue] length], 0U);
+}
+
+// Check to see if the bubble is aligned properly in LTR and RTL format.
+TEST_F(ProfileChooserControllerTest, BubbleAlignment) {
+  // Test the LTR format.
+  StartProfileChooserController();
+  EXPECT_EQ(info_bubble::kAlignTrailingEdgeToAnchorEdge,
+            [[controller() bubble] alignment]);
+  [controller() close];
+
+  // Force to RTL format
+  cocoa_l10n_util::ScopedForceRTLMac rtl;
+  StartProfileChooserController();
+  info_bubble::BubbleAlignment expected_alignment =
+      cocoa_l10n_util::ShouldFlipWindowControlsInRTL()
+          ? info_bubble::kAlignTrailingEdgeToAnchorEdge
+          : info_bubble::kAlignLeadingEdgeToAnchorEdge;
+  EXPECT_EQ(expected_alignment, [[controller() bubble] alignment]);
+  [controller() close];
 }
 
 TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterWelcome) {

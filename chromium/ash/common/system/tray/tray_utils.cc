@@ -41,16 +41,13 @@ void SetTrayImageItemBorder(views::View* tray_view, ShelfAlignment alignment) {
   if (MaterialDesignController::IsShelfMaterial())
     return;
 
-  const int tray_image_item_padding = GetTrayConstant(TRAY_IMAGE_ITEM_PADDING);
   if (IsHorizontalAlignment(alignment)) {
-    tray_view->SetBorder(views::CreateEmptyBorder(0, tray_image_item_padding, 0,
-                                                  tray_image_item_padding));
+    tray_view->SetBorder(
+        views::CreateEmptyBorder(gfx::Insets(0, kTrayImageItemPadding)));
   } else {
-    tray_view->SetBorder(views::CreateEmptyBorder(
-        tray_image_item_padding,
-        kTrayImageItemHorizontalPaddingVerticalAlignment,
-        tray_image_item_padding,
-        kTrayImageItemHorizontalPaddingVerticalAlignment));
+    tray_view->SetBorder(views::CreateEmptyBorder(gfx::Insets(
+        kTrayImageItemPadding,
+        kTrayImageItemHorizontalPaddingVerticalAlignment)));
   }
 }
 
@@ -72,23 +69,6 @@ void SetTrayLabelItemBorder(TrayItemView* tray_view, ShelfAlignment alignment) {
         kTrayLabelItemVerticalPaddingVerticalAlignment, horizontal_padding,
         kTrayLabelItemVerticalPaddingVerticalAlignment, horizontal_padding));
   }
-}
-
-void GetAccessibleLabelFromDescendantViews(
-    views::View* view,
-    std::vector<base::string16>& out_labels) {
-  ui::AXNodeData temp_node_data;
-  view->GetAccessibleNodeData(&temp_node_data);
-  if (!temp_node_data.GetStringAttribute(ui::AX_ATTR_NAME).empty())
-    out_labels.push_back(temp_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
-
-  // Do not descend into static text labels which may compute their own labels
-  // recursively.
-  if (temp_node_data.role == ui::AX_ROLE_STATIC_TEXT)
-    return;
-
-  for (int i = 0; i < view->child_count(); ++i)
-    GetAccessibleLabelFromDescendantViews(view->child_at(i), out_labels);
 }
 
 }  // namespace ash

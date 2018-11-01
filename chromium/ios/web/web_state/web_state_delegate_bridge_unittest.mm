@@ -8,14 +8,22 @@
 
 #include <memory>
 
+#include "base/mac/bind_objc_block.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/utf_string_conversions.h"
+#import "ios/web/public/test/crw_mock_web_state_delegate.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #import "ios/web/public/web_state/context_menu_params.h"
-#import "ios/web/web_state/web_state_delegate_stub.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/gtest_support.h"
 #include "ui/base/page_transition_types.h"
+
+// Class which conforms to CRWWebStateDelegate protocol, but does not implement
+// any optional methods.
+@interface TestEmptyWebStateDelegate : NSObject<CRWWebStateDelegate>
+@end
+@implementation TestEmptyWebStateDelegate
+@end
 
 namespace web {
 
@@ -27,10 +35,13 @@ class WebStateDelegateBridgeTest : public PlatformTest {
 
     id originalMockDelegate =
         [OCMockObject niceMockForProtocol:@protocol(CRWWebStateDelegate)];
-    delegate_.reset([[CRWWebStateDelegateStub alloc]
+    delegate_.reset([[CRWMockWebStateDelegate alloc]
         initWithRepresentedObject:originalMockDelegate]);
+    empty_delegate_.reset([[TestEmptyWebStateDelegate alloc] init]);
 
     bridge_.reset(new WebStateDelegateBridge(delegate_.get()));
+    empty_delegate_bridge_.reset(
+        new WebStateDelegateBridge(empty_delegate_.get()));
   }
 
   void TearDown() override {
@@ -39,7 +50,9 @@ class WebStateDelegateBridgeTest : public PlatformTest {
   }
 
   base::scoped_nsprotocol<id> delegate_;
+  base::scoped_nsprotocol<id> empty_delegate_;
   std::unique_ptr<WebStateDelegateBridge> bridge_;
+  std::unique_ptr<WebStateDelegateBridge> empty_delegate_bridge_;
   web::TestWebState test_web_state_;
 };
 
@@ -67,13 +80,6 @@ TEST_F(WebStateDelegateBridgeTest, OpenURLFromWebState) {
   EXPECT_EQ(params.is_renderer_initiated, result_params->is_renderer_initiated);
 }
 
-// Tests |LoadProgressChanged| forwarding.
-TEST_F(WebStateDelegateBridgeTest, LoadProgressChanged) {
-  ASSERT_EQ(0.0, [delegate_ changedProgress]);
-  bridge_->LoadProgressChanged(nullptr, 1.0);
-  EXPECT_EQ(1.0, [delegate_ changedProgress]);
-}
-
 // Tests |HandleContextMenu| forwarding.
 TEST_F(WebStateDelegateBridgeTest, HandleContextMenu) {
   EXPECT_EQ(nil, [delegate_ contextMenuParams]);
@@ -95,6 +101,28 @@ TEST_F(WebStateDelegateBridgeTest, HandleContextMenu) {
   EXPECT_EQ(context_menu_params.view, result_params->view);
   EXPECT_EQ(context_menu_params.location.x, result_params->location.x);
   EXPECT_EQ(context_menu_params.location.y, result_params->location.y);
+}
+
+// Tests |ShowRepostFormWarningDialog| forwarding.
+TEST_F(WebStateDelegateBridgeTest, ShowRepostFormWarningDialog) {
+  EXPECT_FALSE([delegate_ repostFormWarningRequested]);
+  EXPECT_FALSE([delegate_ webState]);
+  base::Callback<void(bool)> callback;
+  bridge_->ShowRepostFormWarningDialog(&test_web_state_, callback);
+  EXPECT_TRUE([delegate_ repostFormWarningRequested]);
+  EXPECT_EQ(&test_web_state_, [delegate_ webState]);
+}
+
+// Tests |ShowRepostFormWarningDialog| forwarding to delegate which does not
+// implement |webState:runRepostFormDialogWithCompletionHandler:| method.
+TEST_F(WebStateDelegateBridgeTest, ShowRepostFormWarningWithNoDelegateMethod) {
+  __block bool callback_called = false;
+  empty_delegate_bridge_->ShowRepostFormWarningDialog(
+      nullptr, base::BindBlock(^(bool should_repost) {
+        EXPECT_TRUE(should_repost);
+        callback_called = true;
+      }));
+  EXPECT_TRUE(callback_called);
 }
 
 // Tests |GetJavaScriptDialogPresenter| forwarding.

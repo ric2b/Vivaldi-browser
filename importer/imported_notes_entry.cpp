@@ -4,10 +4,9 @@
 
 ImportedNotesEntry::ImportedNotesEntry() = default;
 
-ImportedNotesEntry::ImportedNotesEntry(const ImportedNotesEntry &) = default;
+ImportedNotesEntry::ImportedNotesEntry(const ImportedNotesEntry&) = default;
 
-ImportedNotesEntry::~ImportedNotesEntry() {
-}
+ImportedNotesEntry::~ImportedNotesEntry() {}
 
 bool ImportedNotesEntry::operator==(const ImportedNotesEntry& other) const {
   return (is_folder == other.is_folder && url == other.url &&

@@ -116,6 +116,7 @@ public class ImeAdapter {
     private String mLastText;
     private int mLastCompositionStart;
     private int mLastCompositionEnd;
+    private boolean mRestartInputOnNextStateUpdate;
 
     /**
      * @param wrapper InputMethodManagerWrapper that should receive all the call directed to
@@ -255,46 +256,13 @@ public class ImeAdapter {
     }
 
     /**
-     * Shows or hides the keyboard based on passed parameters.
+     * Updates internal representation of the text being edited and its selection and composition
+     * properties.
+     *
      * @param textInputType Text input type for the currently focused field in renderer.
      * @param textInputFlags Text input flags.
      * @param textInputMode Text input mode.
      * @param showIfNeeded Whether the keyboard should be shown if it is currently hidden.
-     */
-    public void updateKeyboardVisibility(
-            int textInputType, int textInputFlags, int textInputMode, boolean showIfNeeded) {
-        if (DEBUG_LOGS) {
-            Log.w(TAG, "updateKeyboardVisibility: type [%d->%d], flags [%d], show [%b], ",
-                    mTextInputType, textInputType, textInputFlags, showIfNeeded);
-        }
-        boolean needsRestart = false;
-        mTextInputFlags = textInputFlags;
-        if (mTextInputMode != textInputMode) {
-            mTextInputMode = textInputMode;
-            needsRestart = true;
-        }
-
-        if (mTextInputType != textInputType) {
-            mTextInputType = textInputType;
-            // No need to restart if we are going to hide anyways.
-            if (textInputType != TextInputType.NONE) needsRestart = true;
-        }
-
-        if (needsRestart) restartInput();
-
-        // There is no API for us to get notified of user's dismissal of keyboard.
-        // Therefore, we should try to show keyboard even when text input type hasn't changed.
-        if (textInputType != TextInputType.NONE) {
-            if (showIfNeeded) showSoftKeyboard();
-        } else {
-            hideKeyboard();
-        }
-    }
-
-    /**
-     * Updates internal representation of the text being edited and its selection and composition
-     * properties.
-     *
      * @param text The String contents of the field being edited.
      * @param selectionStart The character offset of the selection start, or the caret position if
      *                       there is no selection.
@@ -306,8 +274,26 @@ public class ImeAdapter {
      *                       selection.
      * @param replyToRequest True when the update was requested by IME.
      */
-    public void updateState(String text, int selectionStart, int selectionEnd, int compositionStart,
-            int compositionEnd, boolean replyToRequest) {
+    public void updateState(int textInputType, int textInputFlags, int textInputMode,
+            boolean showIfNeeded, String text, int selectionStart, int selectionEnd,
+            int compositionStart, int compositionEnd, boolean replyToRequest) {
+        Log.w(TAG, "updateState: type [%d->%d], flags [%d], show [%b], ", mTextInputType,
+                textInputType, textInputFlags, showIfNeeded);
+        boolean needsRestart = false;
+        if (mRestartInputOnNextStateUpdate) {
+            needsRestart = true;
+            mRestartInputOnNextStateUpdate = false;
+        }
+
+        mTextInputFlags = textInputFlags;
+        if (mTextInputMode != textInputMode) {
+            mTextInputMode = textInputMode;
+            needsRestart = true;
+        }
+        if (mTextInputType != textInputType) {
+            mTextInputType = textInputType;
+            needsRestart = true;
+        }
         if (mCursorAnchorInfoController != null && (!TextUtils.equals(mLastText, text)
                 || mLastSelectionStart != selectionStart || mLastSelectionEnd != selectionEnd
                 || mLastCompositionStart != compositionStart
@@ -319,6 +305,15 @@ public class ImeAdapter {
         mLastSelectionEnd = selectionEnd;
         mLastCompositionStart = compositionStart;
         mLastCompositionEnd = compositionEnd;
+
+        if (textInputType == TextInputType.NONE) {
+            hideKeyboard();
+        } else {
+            if (needsRestart) restartInput();
+            // There is no API for us to get notified of user's dismissal of keyboard.
+            // Therefore, we should try to show keyboard even when text input type hasn't changed.
+            if (showIfNeeded) showSoftKeyboard();
+        }
 
         if (mInputConnection == null) return;
         boolean singleLine = mTextInputType != TextInputType.TEXT_AREA
@@ -378,9 +373,7 @@ public class ImeAdapter {
             restartInput();  // resets mInputConnection
             // crbug.com/666982: Restart input may not happen if view is detached from window, but
             // we need to unblock in any case. We want to call this after restartInput() to
-            // ensure that there is no additional IME operation in the queue, except for
-            // moveCursorToSelectionEnd(), which block the IME thread unnecessarily and need
-            // refactoring anyways. (crbug.com/662908)
+            // ensure that there is no additional IME operation in the queue.
             inputConnection.unblockOnUiThread();
         }
     }
@@ -421,7 +414,7 @@ public class ImeAdapter {
     }
 
     /**
-     * Call this when view is detached from window
+     * Call this when view is attached to window.
      */
     public void onViewAttachedToWindow() {
         if (mInputConnectionFactory != null) {
@@ -430,7 +423,7 @@ public class ImeAdapter {
     }
 
     /**
-     * Call this when view is detached from window
+     * Call this when view is detached from window.
      */
     public void onViewDetachedFromWindow() {
         resetAndHideKeyboard();
@@ -442,21 +435,13 @@ public class ImeAdapter {
     /**
      * Call this when view's focus has changed.
      * @param gainFocus True if we're gaining focus.
+     * @param hideKeyboardOnBlur True if we should hide soft keyboard when losing focus.
      */
-    public void onViewFocusChanged(boolean gainFocus) {
+    public void onViewFocusChanged(boolean gainFocus, boolean hideKeyboardOnBlur) {
         if (DEBUG_LOGS) Log.w(TAG, "onViewFocusChanged: gainFocus [%b]", gainFocus);
+        if (!gainFocus && hideKeyboardOnBlur) resetAndHideKeyboard();
         if (mInputConnectionFactory != null) {
             mInputConnectionFactory.onViewFocusChanged(gainFocus);
-        }
-    }
-
-    /**
-     * Move cursor to the end of the current selection.
-     */
-    public void moveCursorToSelectionEnd() {
-        if (DEBUG_LOGS) Log.w(TAG, "movecursorToEnd");
-        if (mInputConnection != null) {
-            mInputConnection.moveCursorToSelectionEndOnUiThread();
         }
     }
 
@@ -491,6 +476,7 @@ public class ImeAdapter {
         mTextInputType = TextInputType.NONE;
         mTextInputFlags = 0;
         mTextInputMode = WebTextInputMode.kDefault;
+        mRestartInputOnNextStateUpdate = false;
         // This will trigger unblocking if necessary.
         hideKeyboard();
     }
@@ -635,6 +621,26 @@ public class ImeAdapter {
     }
 
     /**
+     * Send a request to the native counterpart to delete a given range of characters.
+     * @param beforeLength Number of code points to extend the selection by before the existing
+     *                     selection.
+     * @param afterLength Number of code points to extend the selection by after the existing
+     *                    selection.
+     * @return Whether the native counterpart of ImeAdapter received the call.
+     */
+    boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
+        mViewEmbedder.onImeEvent();
+        if (mNativeImeAdapterAndroid == 0) return false;
+        nativeSendKeyEvent(mNativeImeAdapterAndroid, null, WebInputEventType.RawKeyDown, 0,
+                SystemClock.uptimeMillis(), COMPOSITION_KEY_CODE, 0, false, 0);
+        nativeDeleteSurroundingTextInCodePoints(
+                mNativeImeAdapterAndroid, beforeLength, afterLength);
+        nativeSendKeyEvent(mNativeImeAdapterAndroid, null, WebInputEventType.KeyUp, 0,
+                SystemClock.uptimeMillis(), COMPOSITION_KEY_CODE, 0, false, 0);
+        return true;
+    }
+
+    /**
      * Send a request to the native counterpart to set the selection to given range.
      * @param start Selection start index.
      * @param end Selection end index.
@@ -672,7 +678,7 @@ public class ImeAdapter {
         }
 
         if (mTextInputType != TextInputType.NONE && mInputConnection != null && isEditable) {
-            restartInput();
+            mRestartInputOnNextStateUpdate = true;
         }
     }
 
@@ -785,6 +791,8 @@ public class ImeAdapter {
     private native void nativeSetComposingRegion(long nativeImeAdapterAndroid, int start, int end);
     private native void nativeDeleteSurroundingText(long nativeImeAdapterAndroid,
             int before, int after);
+    private native void nativeDeleteSurroundingTextInCodePoints(
+            long nativeImeAdapterAndroid, int before, int after);
     private native void nativeResetImeAdapter(long nativeImeAdapterAndroid);
     private native boolean nativeRequestTextInputStateUpdate(long nativeImeAdapterAndroid);
     private native void nativeRequestCursorUpdate(long nativeImeAdapterAndroid,

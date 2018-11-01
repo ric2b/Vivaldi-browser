@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -48,7 +49,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "media/filters/ipc_media_pipeline_host.h"
+#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -75,6 +76,7 @@ class Thread;
 namespace cc {
 class BeginFrameSource;
 class CompositorFrameSink;
+class FrameSinkId;
 class TaskGraphRunner;
 }
 
@@ -132,7 +134,6 @@ class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
 class RendererGpuVideoAcceleratorFactories;
 class ResourceDispatchThrottler;
-class ThreadSafeAssociatedInterfacePtrProvider;
 class VideoCaptureImplManager;
 
 #if defined(OS_ANDROID)
@@ -222,7 +223,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // CompositorDependencies implementation.
   bool IsGpuRasterizationForced() override;
-  bool IsGpuRasterizationEnabled() override;
   bool IsAsyncWorkerContextEnabled() override;
   int GetGpuRasterizationMSAASampleCount() override;
   bool IsLcdTextEnabled() override;
@@ -240,6 +240,7 @@ class CONTENT_EXPORT RenderThreadImpl
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   bool AreImageDecodeTasksEnabled() override;
   bool IsThreadedAnimationEnabled() override;
+  bool IsScrollAnimatorEnabled() override;
 
   // blink::scheduler::RendererScheduler::RAILModeObserver implementation.
   void OnRAILModeChanged(v8::RAILMode rail_mode) override;
@@ -504,6 +505,10 @@ class CONTENT_EXPORT RenderThreadImpl
   };
   void GetRendererMemoryMetrics(RendererMemoryMetrics* memory_metrics) const;
 
+  bool NeedsToRecordFirstActivePaint() const {
+    return needs_to_record_first_active_paint_;
+  }
+
  protected:
   RenderThreadImpl(
       const InProcessChildThreadParams& params,
@@ -520,7 +525,6 @@ class CONTENT_EXPORT RenderThreadImpl
   // ChildThread
   bool OnControlMessageReceived(const IPC::Message& msg) override;
   void OnProcessBackgrounded(bool backgrounded) override;
-  void OnProcessResume() override;
   void OnProcessPurgeAndSuspend() override;
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
@@ -529,6 +533,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // base::MemoryCoordinatorClient implementation:
   void OnMemoryStateChange(base::MemoryState state) override;
+  void OnPurgeMemory() override;
 
   void ClearMemory();
 
@@ -635,8 +640,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // Used on the render thread.
   std::unique_ptr<VideoCaptureImplManager> vc_manager_;
-  std::unique_ptr<ThreadSafeAssociatedInterfacePtrProvider>
-      thread_safe_associated_interface_ptr_provider_;
 
   std::unique_ptr<ChildSharedBitmapManager> shared_bitmap_manager_;
 
@@ -678,7 +681,8 @@ class CONTENT_EXPORT RenderThreadImpl
   // TODO(dcastagna): This should be just one scoped_ptr once
   // http://crbug.com/580386 is fixed.
   // NOTE(dcastagna): At worst this accumulates a few bytes per context lost.
-  ScopedVector<content::RendererGpuVideoAcceleratorFactories> gpu_factories_;
+  std::vector<std::unique_ptr<RendererGpuVideoAcceleratorFactories>>
+      gpu_factories_;
 
   // Thread for running multimedia operations (e.g., video decoding).
   std::unique_ptr<base::Thread> media_thread_;
@@ -722,7 +726,6 @@ class CONTENT_EXPORT RenderThreadImpl
       main_thread_compositor_task_runner_;
 
   // Compositor settings.
-  bool is_gpu_rasterization_enabled_;
   bool is_gpu_rasterization_forced_;
   bool is_async_worker_context_enabled_;
   int gpu_rasterization_msaa_sample_count_;
@@ -735,6 +738,7 @@ class CONTENT_EXPORT RenderThreadImpl
   cc::BufferToTextureTargetMap buffer_to_texture_target_map_;
   bool are_image_decode_tasks_enabled_;
   bool is_threaded_animation_enabled_;
+  bool is_scroll_animator_enabled_;
 
   class PendingFrameCreate : public base::RefCounted<PendingFrameCreate> {
    public:
@@ -779,6 +783,7 @@ class CONTENT_EXPORT RenderThreadImpl
   base::CancelableClosure record_purge_suspend_metric_closure_;
   RendererMemoryMetrics purge_and_suspend_memory_metrics_;
   base::CancelableClosure record_purge_suspend_growth_metric_closure_;
+  bool needs_to_record_first_active_paint_;
 
   int32_t client_id_;
 

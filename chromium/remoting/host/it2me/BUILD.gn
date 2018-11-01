@@ -4,7 +4,7 @@
 
 import("//build/config/features.gni")
 import("//media/media_options.gni")
-import("//remoting/remoting_enable.gni")
+import("//remoting/remoting_options.gni")
 import("//remoting/remoting_locales.gni")
 import("//remoting/remoting_version.gni")
 
@@ -227,7 +227,7 @@ if (!is_chromeos && enable_remoting_host) {
       }
 
       if (enable_webrtc) {
-        deps += [ "//third_party/libjingle/webrtc:libjingle_webrtc" ]
+        deps += [ "//third_party/webrtc_overrides:init_webrtc" ]
       }
 
       if (is_desktop_linux) {

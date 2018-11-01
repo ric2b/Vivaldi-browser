@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <algorithm>
+#include <limits>
 #include <new>
 #include <type_traits>
 
@@ -30,8 +31,11 @@ using base::allocator::AllocatorDispatch;
 
 ThreadLocalStorage::StaticSlot g_thread_allocator_usage = TLS_INITIALIZER;
 
-ThreadHeapUsage* const kInitializingSentinel =
-    reinterpret_cast<ThreadHeapUsage*>(-1);
+const uintptr_t kSentinelMask = std::numeric_limits<uintptr_t>::max() - 1;
+ThreadHeapUsage* const kInitializationSentinel =
+    reinterpret_cast<ThreadHeapUsage*>(kSentinelMask);
+ThreadHeapUsage* const kTeardownSentinel =
+    reinterpret_cast<ThreadHeapUsage*>(kSentinelMask | 1);
 
 bool g_heap_tracking_enabled = false;
 
@@ -39,20 +43,25 @@ bool g_heap_tracking_enabled = false;
 // lower shim.
 ThreadHeapUsage* GetOrCreateThreadUsage();
 
-size_t GetAllocSizeEstimate(const AllocatorDispatch* next, void* ptr) {
+size_t GetAllocSizeEstimate(const AllocatorDispatch* next,
+                            void* ptr,
+                            void* context) {
   if (ptr == nullptr)
     return 0U;
 
-  return next->get_size_estimate_function(next, ptr);
+  return next->get_size_estimate_function(next, ptr, context);
 }
 
-void RecordAlloc(const AllocatorDispatch* next, void* ptr, size_t size) {
+void RecordAlloc(const AllocatorDispatch* next,
+                 void* ptr,
+                 size_t size,
+                 void* context) {
   ThreadHeapUsage* usage = GetOrCreateThreadUsage();
   if (usage == nullptr)
     return;
 
   usage->alloc_ops++;
-  size_t estimate = GetAllocSizeEstimate(next, ptr);
+  size_t estimate = GetAllocSizeEstimate(next, ptr, context);
   if (size && estimate) {
     // Only keep track of the net number of bytes allocated in the scope if the
     // size estimate function returns sane values, e.g. non-zero.
@@ -71,86 +80,132 @@ void RecordAlloc(const AllocatorDispatch* next, void* ptr, size_t size) {
   }
 }
 
-void RecordFree(const AllocatorDispatch* next, void* ptr) {
+void RecordFree(const AllocatorDispatch* next, void* ptr, void* context) {
   ThreadHeapUsage* usage = GetOrCreateThreadUsage();
   if (usage == nullptr)
     return;
 
-  size_t estimate = GetAllocSizeEstimate(next, ptr);
+  size_t estimate = GetAllocSizeEstimate(next, ptr, context);
   usage->free_ops++;
   usage->free_bytes += estimate;
 }
 
-void* AllocFn(const AllocatorDispatch* self, size_t size) {
-  void* ret = self->next->alloc_function(self->next, size);
+void* AllocFn(const AllocatorDispatch* self, size_t size, void* context) {
+  void* ret = self->next->alloc_function(self->next, size, context);
   if (ret != nullptr)
-    RecordAlloc(self->next, ret, size);
+    RecordAlloc(self->next, ret, size, context);
 
   return ret;
 }
 
 void* AllocZeroInitializedFn(const AllocatorDispatch* self,
                              size_t n,
-                             size_t size) {
-  void* ret = self->next->alloc_zero_initialized_function(self->next, n, size);
+                             size_t size,
+                             void* context) {
+  void* ret =
+      self->next->alloc_zero_initialized_function(self->next, n, size, context);
   if (ret != nullptr)
-    RecordAlloc(self->next, ret, size);
+    RecordAlloc(self->next, ret, size, context);
 
   return ret;
 }
 
 void* AllocAlignedFn(const AllocatorDispatch* self,
                      size_t alignment,
-                     size_t size) {
-  void* ret = self->next->alloc_aligned_function(self->next, alignment, size);
+                     size_t size,
+                     void* context) {
+  void* ret =
+      self->next->alloc_aligned_function(self->next, alignment, size, context);
   if (ret != nullptr)
-    RecordAlloc(self->next, ret, size);
+    RecordAlloc(self->next, ret, size, context);
 
   return ret;
 }
 
-void* ReallocFn(const AllocatorDispatch* self, void* address, size_t size) {
+void* ReallocFn(const AllocatorDispatch* self,
+                void* address,
+                size_t size,
+                void* context) {
   if (address != nullptr)
-    RecordFree(self->next, address);
+    RecordFree(self->next, address, context);
 
-  void* ret = self->next->realloc_function(self->next, address, size);
+  void* ret = self->next->realloc_function(self->next, address, size, context);
   if (ret != nullptr && size != 0)
-    RecordAlloc(self->next, ret, size);
+    RecordAlloc(self->next, ret, size, context);
 
   return ret;
 }
 
-void FreeFn(const AllocatorDispatch* self, void* address) {
+void FreeFn(const AllocatorDispatch* self, void* address, void* context) {
   if (address != nullptr)
-    RecordFree(self->next, address);
-  self->next->free_function(self->next, address);
+    RecordFree(self->next, address, context);
+  self->next->free_function(self->next, address, context);
 }
 
-size_t GetSizeEstimateFn(const AllocatorDispatch* self, void* address) {
-  return self->next->get_size_estimate_function(self->next, address);
+size_t GetSizeEstimateFn(const AllocatorDispatch* self,
+                         void* address,
+                         void* context) {
+  return self->next->get_size_estimate_function(self->next, address, context);
+}
+
+unsigned BatchMallocFn(const AllocatorDispatch* self,
+                       size_t size,
+                       void** results,
+                       unsigned num_requested,
+                       void* context) {
+  unsigned count = self->next->batch_malloc_function(self->next, size, results,
+                                                     num_requested, context);
+  for (unsigned i = 0; i < count; ++i) {
+    RecordAlloc(self->next, results[i], size, context);
+  }
+  return count;
+}
+
+void BatchFreeFn(const AllocatorDispatch* self,
+                 void** to_be_freed,
+                 unsigned num_to_be_freed,
+                 void* context) {
+  for (unsigned i = 0; i < num_to_be_freed; ++i) {
+    if (to_be_freed[i] != nullptr) {
+      RecordFree(self->next, to_be_freed[i], context);
+    }
+  }
+  self->next->batch_free_function(self->next, to_be_freed, num_to_be_freed,
+                                  context);
+}
+
+void FreeDefiniteSizeFn(const AllocatorDispatch* self,
+                        void* ptr,
+                        size_t size,
+                        void* context) {
+  if (ptr != nullptr)
+    RecordFree(self->next, ptr, context);
+  self->next->free_definite_size_function(self->next, ptr, size, context);
 }
 
 // The allocator dispatch used to intercept heap operations.
-AllocatorDispatch allocator_dispatch = {
-    &AllocFn, &AllocZeroInitializedFn, &AllocAlignedFn, &ReallocFn,
-    &FreeFn,  &GetSizeEstimateFn,      nullptr};
+AllocatorDispatch allocator_dispatch = {&AllocFn,
+                                        &AllocZeroInitializedFn,
+                                        &AllocAlignedFn,
+                                        &ReallocFn,
+                                        &FreeFn,
+                                        &GetSizeEstimateFn,
+                                        &BatchMallocFn,
+                                        &BatchFreeFn,
+                                        &FreeDefiniteSizeFn,
+                                        nullptr};
 
 ThreadHeapUsage* GetOrCreateThreadUsage() {
-  ThreadHeapUsage* allocator_usage =
-      static_cast<ThreadHeapUsage*>(g_thread_allocator_usage.Get());
-  if (allocator_usage == kInitializingSentinel)
+  auto tls_ptr = reinterpret_cast<uintptr_t>(g_thread_allocator_usage.Get());
+  if ((tls_ptr & kSentinelMask) == kSentinelMask)
     return nullptr;  // Re-entrancy case.
 
+  auto* allocator_usage = reinterpret_cast<ThreadHeapUsage*>(tls_ptr);
   if (allocator_usage == nullptr) {
     // Prevent reentrancy due to the allocation below.
-    g_thread_allocator_usage.Set(kInitializingSentinel);
+    g_thread_allocator_usage.Set(kInitializationSentinel);
 
-    // Delegate the allocation of the per-thread structure to the underlying
-    // heap shim, for symmetry with the deallocation. Otherwise interposing
-    // shims may mis-attribute or mis-direct this allocation.
-    const AllocatorDispatch* next = allocator_dispatch.next;
-    allocator_usage = new (next->alloc_function(next, sizeof(ThreadHeapUsage)))
-        ThreadHeapUsage();
+    allocator_usage = new ThreadHeapUsage();
     static_assert(std::is_pod<ThreadHeapUsage>::value,
                   "AllocatorDispatch must be POD");
     memset(allocator_usage, 0, sizeof(*allocator_usage));
@@ -261,12 +316,22 @@ ThreadHeapUsageTracker::GetDispatchForTesting() {
 
 void ThreadHeapUsageTracker::EnsureTLSInitialized() {
   if (!g_thread_allocator_usage.initialized()) {
-    g_thread_allocator_usage.Initialize([](void* allocator_usage) {
-      // Delegate the freeing of the per-thread structure to the next-lower
-      // heap shim. Otherwise this free will re-initialize the TLS on thread
-      // exit.
-      allocator_dispatch.next->free_function(allocator_dispatch.next,
-                                             allocator_usage);
+    g_thread_allocator_usage.Initialize([](void* thread_heap_usage) {
+      // This destructor will be called twice. Once to destroy the actual
+      // ThreadHeapUsage instance and a second time, immediately after, for the
+      // sentinel. Re-setting the TLS slow (below) does re-initialize the TLS
+      // slot. The ThreadLocalStorage code is designed to deal with this use
+      // case (see comments in ThreadHeapUsageTracker::EnsureTLSInitialized) and
+      // will re-call the destructor with the kTeardownSentinel as arg.
+      if (thread_heap_usage == kTeardownSentinel)
+        return;
+      DCHECK(thread_heap_usage != kInitializationSentinel);
+
+      // Deleting the ThreadHeapUsage TLS object will re-enter the shim and hit
+      // RecordFree() above. The sentinel prevents RecordFree() from re-creating
+      // another ThreadHeapUsage object.
+      g_thread_allocator_usage.Set(kTeardownSentinel);
+      delete static_cast<ThreadHeapUsage*>(thread_heap_usage);
     });
   }
 }

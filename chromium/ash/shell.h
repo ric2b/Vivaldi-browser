@@ -25,6 +25,7 @@
 
 namespace aura {
 class RootWindow;
+class UserActivityForwarder;
 class Window;
 class WindowManagerClient;
 class WindowTreeClient;
@@ -72,6 +73,7 @@ class WindowModalityController;
 namespace ash {
 
 class AcceleratorControllerDelegateAura;
+class AppListDelegateImpl;
 class AshNativeCursorManager;
 class AutoclickController;
 class BluetoothNotificationController;
@@ -107,6 +109,7 @@ class ScreenPositionController;
 class SessionStateDelegate;
 struct ShellInitParams;
 class ShutdownObserver;
+class SmsObserver;
 class StickyKeysController;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
@@ -129,6 +132,7 @@ class WindowWatcher;
 
 namespace test {
 class ShellTestApi;
+class SmsObserverTest;
 }
 
 // Shell is a singleton object that presents the Shell API and implements the
@@ -384,6 +388,8 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // returned object.
   ash::FirstRunHelper* CreateFirstRunHelper();
 
+  void SetLargeCursorSizeInDip(int large_cursor_size_in_dip);
+
   // Toggles cursor compositing on/off. Native cursor is disabled when cursor
   // compositing is enabled, and vice versa.
   void SetCursorCompositingEnabled(bool enabled);
@@ -405,6 +411,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   friend class RootWindowController;
   friend class test::ShellTestApi;
   friend class shell::WindowWatcher;
+  friend class SmsObserverTest;
 
   explicit Shell(std::unique_ptr<WmShell> wm_shell);
   ~Shell() override;
@@ -498,6 +505,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   std::unique_ptr<ScreenPinningController> screen_pinning_controller_;
 
+  // Forwards user activity ui::mojom::UserActivityMonitor to
+  // |user_activity_detector_|. Only initialized for mash.
+  std::unique_ptr<aura::UserActivityForwarder> user_activity_forwarder_;
+
   std::unique_ptr<PowerEventObserver> power_event_observer_;
   std::unique_ptr<ui::UserActivityPowerManagerNotifier> user_activity_notifier_;
   std::unique_ptr<VideoActivityNotifier> video_activity_notifier_;
@@ -520,7 +531,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Listens for shutdown and updates DisplayConfigurator.
   std::unique_ptr<ShutdownObserver> shutdown_observer_;
 
-  // Implements content::ScreenOrientationController for ChromeOS
+  // Listens for new sms messages and shows notifications.
+  std::unique_ptr<SmsObserver> sms_observer_;
+
+  // Implements content::ScreenOrientationController for Chrome OS.
   std::unique_ptr<ScreenOrientationController> screen_orientation_controller_;
   std::unique_ptr<ScreenLayoutObserver> screen_layout_observer_;
 
@@ -536,7 +550,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // pointer to vend to test code.
   AshNativeCursorManager* native_cursor_manager_;
 
-  // Cursor may be hidden on certain key events in ChromeOS, whereas we never
+  // Cursor may be hidden on certain key events in Chrome OS, whereas we never
   // hide the cursor on Windows.
   std::unique_ptr<::wm::CursorManager> cursor_manager_;
 
@@ -549,6 +563,8 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<GPUSupport> gpu_support_;
 
   std::unique_ptr<ImmersiveHandlerFactoryAsh> immersive_handler_factory_;
+
+  std::unique_ptr<AppListDelegateImpl> app_list_delegate_impl_;
 
   DISALLOW_COPY_AND_ASSIGN(Shell);
 };

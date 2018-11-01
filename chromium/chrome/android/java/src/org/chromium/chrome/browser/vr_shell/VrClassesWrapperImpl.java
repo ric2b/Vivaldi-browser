@@ -5,13 +5,15 @@
 package org.chromium.chrome.browser.vr_shell;
 
 import android.app.Activity;
+import android.content.Context;
 import android.os.StrictMode;
 
 import com.google.vr.ndk.base.AndroidCompat;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.UsedByReflection;
-import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 
 /**
  * Builder class to create all VR related classes. These VR classes are behind the same build time
@@ -20,18 +22,15 @@ import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 @UsedByReflection("VrShellDelegate.java")
 public class VrClassesWrapperImpl implements VrClassesWrapper {
     private static final String TAG = "VrClassesWrapperImpl";
-    private final Activity mActivity;
 
     @UsedByReflection("VrShellDelegate.java")
-    public VrClassesWrapperImpl(Activity activity) {
-        mActivity = activity;
-    }
+    public VrClassesWrapperImpl() {}
 
     @Override
-    public NonPresentingGvrContext createNonPresentingGvrContext() {
+    public NonPresentingGvrContext createNonPresentingGvrContext(ChromeActivity activity) {
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
-            return new NonPresentingGvrContextImpl(mActivity);
+            return new NonPresentingGvrContextImpl(activity);
         } catch (Exception ex) {
             Log.e(TAG, "Unable to instantiate NonPresentingGvrContextImpl", ex);
             return null;
@@ -41,10 +40,11 @@ public class VrClassesWrapperImpl implements VrClassesWrapper {
     }
 
     @Override
-    public VrShell createVrShell(CompositorViewHolder compositorViewHolder) {
+    public VrShell createVrShell(
+            ChromeActivity activity, VrShellDelegate delegate, TabModelSelector tabModelSelector) {
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
-            return new VrShellImpl(mActivity, compositorViewHolder);
+            return new VrShellImpl(activity, delegate, tabModelSelector);
         } catch (Exception ex) {
             Log.e(TAG, "Unable to instantiate VrShellImpl", ex);
             return null;
@@ -54,8 +54,13 @@ public class VrClassesWrapperImpl implements VrClassesWrapper {
     }
 
     @Override
-    public VrDaydreamApi createVrDaydreamApi() {
-        return new VrDaydreamApiImpl(mActivity);
+    public VrDaydreamApi createVrDaydreamApi(Activity activity) {
+        return new VrDaydreamApiImpl(activity);
+    }
+
+    @Override
+    public VrDaydreamApi createVrDaydreamApi(Context context) {
+        return new VrDaydreamApiImpl(context);
     }
 
     @Override
@@ -64,7 +69,7 @@ public class VrClassesWrapperImpl implements VrClassesWrapper {
     }
 
     @Override
-    public void setVrModeEnabled(boolean enabled) {
-        AndroidCompat.setVrModeEnabled(mActivity, enabled);
+    public void setVrModeEnabled(Activity activity, boolean enabled) {
+        AndroidCompat.setVrModeEnabled(activity, enabled);
     }
 }

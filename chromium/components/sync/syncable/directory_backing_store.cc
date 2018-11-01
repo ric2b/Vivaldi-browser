@@ -1682,7 +1682,7 @@ bool DirectoryBackingStore::CreateShareInfoTableVersion71(
 bool DirectoryBackingStore::VerifyReferenceIntegrity(
     const Directory::MetahandlesMap* handles_map) {
   TRACE_EVENT0("sync", "SyncDatabaseIntegrityCheck");
-  typedef std::unordered_set<std::string> IdsSet;
+  using IdsSet = std::unordered_set<std::string>;
 
   IdsSet ids_set;
   bool is_ok = true;

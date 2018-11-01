@@ -37,6 +37,7 @@ class CONTENT_EXPORT ChildMemoryCoordinatorImpl
 
   // mojom::ChildMemoryCoordinator implementations:
   void OnStateChange(mojom::MemoryState state) override;
+  void PurgeMemory() override;
 
  protected:
   ChildMemoryCoordinatorDelegate* delegate() { return delegate_; }

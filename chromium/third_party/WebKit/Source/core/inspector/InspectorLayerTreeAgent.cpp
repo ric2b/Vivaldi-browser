@@ -49,7 +49,6 @@
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/PictureSnapshot.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
 #include "platform/image-encoders/PNGImageEncoder.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "public/platform/WebFloatPoint.h"
@@ -237,7 +236,7 @@ InspectorLayerTreeAgent::buildLayerTree() {
                              ->id();
   bool haveBlockingWheelEventHandlers =
       m_inspectedFrames->root()->chromeClient().eventListenerProperties(
-          WebEventListenerClass::MouseWheel) ==
+          m_inspectedFrames->root(), WebEventListenerClass::MouseWheel) ==
       WebEventListenerProperties::Blocking;
 
   gatherGraphicsLayers(rootGraphicsLayer(), layerIdToNodeIdMap, layers,
@@ -249,7 +248,7 @@ void InspectorLayerTreeAgent::buildLayerIdToNodeIdMap(
     PaintLayer* root,
     LayerIdToNodeIdMap& layerIdToNodeIdMap) {
   if (root->hasCompositedLayerMapping()) {
-    if (Node* node = root->layoutObject()->generatingNode()) {
+    if (Node* node = root->layoutObject().generatingNode()) {
       GraphicsLayer* graphicsLayer =
           root->compositedLayerMapping()->childForSuperlayers();
       layerIdToNodeIdMap.set(graphicsLayer->platformLayer()->id(),
@@ -259,10 +258,10 @@ void InspectorLayerTreeAgent::buildLayerIdToNodeIdMap(
   for (PaintLayer* child = root->firstChild(); child;
        child = child->nextSibling())
     buildLayerIdToNodeIdMap(child, layerIdToNodeIdMap);
-  if (!root->layoutObject()->isLayoutIFrame())
+  if (!root->layoutObject().isLayoutIFrame())
     return;
   FrameView* childFrameView =
-      toFrameView(toLayoutPart(root->layoutObject())->widget());
+      toFrameView(toLayoutPart(root->layoutObject()).widget());
   LayoutViewItem childLayoutViewItem = childFrameView->layoutViewItem();
   if (!childLayoutViewItem.isNull()) {
     if (PaintLayerCompositor* childCompositor =
@@ -281,7 +280,7 @@ void InspectorLayerTreeAgent::gatherGraphicsLayers(
   if (m_pageOverlayLayerIds.find(layerId) != WTF::kNotFound)
     return;
   layers->addItem(buildObjectForLayer(
-      root, layerIdToNodeIdMap.get(layerId),
+      root, layerIdToNodeIdMap.at(layerId),
       hasWheelEventHandlers && layerId == scrollingLayerId));
   for (size_t i = 0, size = root->children().size(); i < size; ++i)
     gatherGraphicsLayers(root->children()[i], layerIdToNodeIdMap, layers,
@@ -373,10 +372,10 @@ Response InspectorLayerTreeAgent::makeSnapshot(const String& layerId,
   context.beginRecording(interestRect);
   layer->getPaintController().paintArtifact().replay(context);
   RefPtr<PictureSnapshot> snapshot =
-      adoptRef(new PictureSnapshot(context.endRecording()));
+      adoptRef(new PictureSnapshot(ToSkPicture(context.endRecording())));
 
   *snapshotId = String::number(++s_lastSnapshotId);
-  bool newEntry = m_snapshotById.add(*snapshotId, snapshot).isNewEntry;
+  bool newEntry = m_snapshotById.insert(*snapshotId, snapshot).isNewEntry;
   DCHECK(newEntry);
   return Response::OK();
 }
@@ -402,7 +401,7 @@ Response InspectorLayerTreeAgent::loadSnapshot(
     return Response::Error("Empty snapshot");
 
   *snapshotId = String::number(++s_lastSnapshotId);
-  bool newEntry = m_snapshotById.add(*snapshotId, snapshot).isNewEntry;
+  bool newEntry = m_snapshotById.insert(*snapshotId, snapshot).isNewEntry;
   DCHECK(newEntry);
   return Response::OK();
 }

@@ -12,8 +12,13 @@
 #include "media/base/decode_status.h"
 #include "media/mojo/interfaces/video_decoder.mojom.h"
 
+namespace gpu {
+struct SyncToken;
+};
+
 namespace media {
 
+class DecoderBuffer;
 class MojoDecoderBufferReader;
 class MojoMediaClient;
 class VideoDecoder;
@@ -36,6 +41,8 @@ class MojoVideoDecoderService : public mojom::VideoDecoder {
   void Decode(mojom::DecoderBufferPtr buffer,
               const DecodeCallback& callback) final;
   void Reset(const ResetCallback& callback) final;
+  void OnReleaseMailbox(const base::UnguessableToken& release_token,
+                        const gpu::SyncToken& release_sync_token) final;
 
  private:
   // Helper methods so that we can bind them with a weak pointer to avoid

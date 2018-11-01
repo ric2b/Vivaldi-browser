@@ -5,8 +5,10 @@
 
 #include "notes/notes_codec.h"
 
-#include "base/files/file_util.h"
+#include <memory>
+
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/path_service.h"

@@ -6,9 +6,9 @@
 #define ImageResourceInfo_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourceStatus.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
+#include "platform/loader/fetch/ResourceStatus.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Forward.h"
 
@@ -46,9 +46,8 @@ class CORE_EXPORT ImageResourceInfo : public GarbageCollectedMixin {
   virtual bool hasCacheControlNoStoreHeader() const = 0;
   virtual const ResourceError& resourceError() const = 0;
 
-  // Like Resource::error(), decodeError() makes corresponding ImageResource
-  // (if any) DecodeError and finishes loading.
-  virtual void decodeError(bool allDataReceived) = 0;
+  // TODO(hiroshige): Remove this.
+  virtual void setIsPlaceholder(bool) = 0;
 
   // TODO(hiroshige): Remove this once MemoryCache becomes further weaker.
   virtual void setDecodedSize(size_t) = 0;

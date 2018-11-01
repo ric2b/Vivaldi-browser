@@ -23,18 +23,18 @@ SignInScreenController::SignInScreenController(
   DCHECK(!instance_);
   instance_ = this;
 
-  gaia_screen_->SetScreenHandler(oobe_ui_->GetGaiaScreenActor());
+  gaia_screen_->set_view(oobe_ui_->GetGaiaScreenView());
   std::string display_type = oobe_ui->display_type();
   user_selection_screen_.reset(new ChromeUserSelectionScreen(display_type));
   user_selection_screen_->SetLoginDisplayDelegate(login_display_delegate);
 
-  user_board_view_ = oobe_ui_->GetUserBoardScreenActor()->GetWeakPtr();
+  user_board_view_ = oobe_ui_->GetUserBoardView()->GetWeakPtr();
   user_selection_screen_->SetView(user_board_view_.get());
   // TODO(jdufault): Bind and Unbind should be controlled by either the
   // Model/View which are then each responsible for automatically unbinding the
   // other associated View/Model instance. Then we can eliminate this exposed
   // WeakPtr logic. See crbug.com/685287.
-  user_board_view_->Bind(*user_selection_screen_);
+  user_board_view_->Bind(user_selection_screen_.get());
 
   registrar_.Add(this, chrome::NOTIFICATION_SESSION_STARTED,
                  content::NotificationService::AllSources());
@@ -91,7 +91,6 @@ void SignInScreenController::CheckUserStatus(const AccountId& account_id) {
 void SignInScreenController::SetWebUIHandler(
     LoginDisplayWebUIHandler* webui_handler) {
   webui_handler_ = webui_handler;
-  gaia_screen_->SetLegacyHandler(webui_handler_);
   user_selection_screen_->SetHandler(webui_handler_);
 }
 

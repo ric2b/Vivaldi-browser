@@ -5,16 +5,18 @@
 package org.chromium.chrome.browser.offlinepages;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 
 import android.os.Bundle;
 
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeBackgroundService;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
-import org.junit.Test;
-import org.junit.runner.RunWith;
 
 /** Unit tests for {@link TaskExtrasPacker}. */
 @RunWith(LocalRobolectricTestRunner.class)
@@ -29,6 +31,14 @@ public class TaskExtrasPackerTest {
         long scheduledTimeMillis = TaskExtrasPacker.unpackTimeFromBundle(taskExtras);
         assertTrue(scheduledTimeMillis >= beforeMillis);
         assertTrue(scheduledTimeMillis <= afterMillis);
+    }
+
+    @Test
+    @Feature({"OfflinePages"})
+    public void testHoldWakelock() {
+        Bundle taskExtras = new Bundle();
+        assertFalse(taskExtras.getBoolean(ChromeBackgroundService.HOLD_WAKELOCK, false));
+        TaskExtrasPacker.packHoldWakelock(taskExtras);
         assertTrue(taskExtras.getBoolean(ChromeBackgroundService.HOLD_WAKELOCK, false));
     }
 
@@ -54,6 +64,7 @@ public class TaskExtrasPackerTest {
     public void testTriggerConditionsExtraDefaults() {
         TriggerConditions unpackedConditionsFromEmptyBundle =
                 TaskExtrasPacker.unpackTriggerConditionsFromBundle(new Bundle());
+
         // Verify conservative defaults:
         assertTrue(unpackedConditionsFromEmptyBundle.requirePowerConnected());
         assertEquals(100, unpackedConditionsFromEmptyBundle.getMinimumBatteryPercentage());

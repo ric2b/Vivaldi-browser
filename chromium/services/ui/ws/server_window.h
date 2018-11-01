@@ -60,17 +60,19 @@ class ServerWindow {
 
   // Creates a new CompositorFrameSink of the specified type, replacing the
   // existing.
-  void CreateDisplayCompositorFrameSink(
+  void CreateRootCompositorFrameSink(
       gfx::AcceleratedWidget widget,
-      cc::mojom::MojoCompositorFrameSinkRequest request,
+      cc::mojom::MojoCompositorFrameSinkAssociatedRequest sink_request,
       cc::mojom::MojoCompositorFrameSinkClientPtr client,
-      cc::mojom::DisplayPrivateRequest display_private_request);
+      cc::mojom::DisplayPrivateAssociatedRequest display_request);
 
-  void CreateOffscreenCompositorFrameSink(
+  void CreateCompositorFrameSink(
       cc::mojom::MojoCompositorFrameSinkRequest request,
       cc::mojom::MojoCompositorFrameSinkClientPtr client);
 
   const WindowId& id() const { return id_; }
+
+  const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
   void Add(ServerWindow* child);
   void Remove(ServerWindow* child);
@@ -164,8 +166,12 @@ class ServerWindow {
   void set_can_focus(bool can_focus) { can_focus_ = can_focus; }
   bool can_focus() const { return can_focus_; }
 
-  void set_can_accept_events(bool value) { can_accept_events_ = value; }
-  bool can_accept_events() const { return can_accept_events_; }
+  void set_event_targeting_policy(mojom::EventTargetingPolicy policy) {
+    event_targeting_policy_ = policy;
+  }
+  mojom::EventTargetingPolicy event_targeting_policy() const {
+    return event_targeting_policy_;
+  }
 
   // Returns true if this window is attached to a root and all ancestors are
   // visible.
@@ -197,7 +203,7 @@ class ServerWindow {
   // Called when the window is no longer an embed root.
   void OnEmbeddedAppDisconnected();
 
-#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+#if DCHECK_IS_ON()
   std::string GetDebugWindowHierarchy() const;
   std::string GetDebugWindowInfo() const;
   void BuildDebugInfo(const std::string& depth, std::string* result) const;
@@ -206,10 +212,6 @@ class ServerWindow {
  private:
   // Implementation of removing a window. Doesn't send any notification.
   void RemoveImpl(ServerWindow* window);
-
-  // Called when the root window changes from |old_root| to |new_root|. This is
-  // called after the window is moved from |old_root| to |new_root|.
-  void ProcessRootChanged(ServerWindow* old_root, ServerWindow* new_root);
 
   // Called when this window's stacking order among its siblings is changed.
   void OnStackingChanged();
@@ -224,6 +226,7 @@ class ServerWindow {
 
   ServerWindowDelegate* delegate_;
   const WindowId id_;
+  cc::FrameSinkId frame_sink_id_;
   ServerWindow* parent_;
   Windows children_;
 
@@ -245,7 +248,8 @@ class ServerWindow {
   mojom::Cursor non_client_cursor_id_;
   float opacity_;
   bool can_focus_;
-  bool can_accept_events_;
+  mojom::EventTargetingPolicy event_targeting_policy_ =
+      mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS;
   gfx::Transform transform_;
   ui::TextInputState text_input_state_;
 

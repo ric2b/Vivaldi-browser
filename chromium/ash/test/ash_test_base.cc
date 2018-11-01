@@ -44,11 +44,6 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#include "ui/platform_window/win/win_window.h"
-#endif
-
 #if defined(USE_X11)
 #include "ui/gfx/x/x11_connection.h"  // nogncheck
 #endif
@@ -68,9 +63,9 @@ class AshEventGeneratorDelegate
       const gfx::Point& point_in_screen) const override {
     display::Screen* screen = display::Screen::GetScreen();
     display::Display display = screen->GetDisplayNearestPoint(point_in_screen);
-    return Shell::GetInstance()
-        ->window_tree_host_manager()
+    return WmShell::Get()
         ->GetRootWindowForDisplayId(display.id())
+        ->aura_window()
         ->GetHost();
   }
 
@@ -94,10 +89,7 @@ class AshEventGeneratorDelegate
 /////////////////////////////////////////////////////////////////////////////
 
 AshTestBase::AshTestBase()
-    : setup_called_(false),
-      teardown_called_(false),
-      start_session_(true),
-      material_mode_(MaterialDesignController::Mode::UNINITIALIZED) {
+    : setup_called_(false), teardown_called_(false), start_session_(true) {
 #if defined(USE_X11)
   // This is needed for tests which use this base class but are run in browser
   // test binaries so don't get the default initialization in the unit test
@@ -134,18 +126,17 @@ void AshTestBase::SetUp() {
     command_line->AppendSwitchASCII(::switches::kHostWindowBounds,
                                     "1+1-800x600");
   }
-#if defined(OS_WIN)
-  ui::test::SetUsePopupAsRootWindowForTest(true);
-#endif
 
-  ash_test_helper_->SetUp(start_session_, material_mode_);
+  ash_test_helper_->SetUp(start_session_);
 
   Shell::GetPrimaryRootWindow()->Show();
   Shell::GetPrimaryRootWindow()->GetHost()->Show();
   // Move the mouse cursor to far away so that native events doesn't
   // interfere test expectations.
   Shell::GetPrimaryRootWindow()->MoveCursorTo(gfx::Point(-1000, -1000));
-  Shell::GetInstance()->cursor_manager()->EnableMouseEvents();
+  // TODO: mash needs to support CursorManager. http://crbug.com/637853.
+  if (!WmShell::Get()->IsRunningInMash())
+    Shell::GetInstance()->cursor_manager()->EnableMouseEvents();
 
   // Changing GestureConfiguration shouldn't make tests fail. These values
   // prevent unexpected events from being generated during tests. Such as
@@ -164,9 +155,6 @@ void AshTestBase::TearDown() {
   RunAllPendingInMessageLoop();
 
   ash_test_helper_->TearDown();
-#if defined(OS_WIN)
-  ui::test::SetUsePopupAsRootWindowForTest(false);
-#endif
 
   event_generator_.reset();
   // Some tests set an internal display id,
@@ -209,14 +197,14 @@ display::Display::Rotation AshTestBase::GetCurrentInternalDisplayRotation() {
 }
 
 // static
-bool AshTestBase::SupportsMultipleDisplays() {
-  return AshTestHelper::SupportsMultipleDisplays();
-}
-
-// static
 void AshTestBase::UpdateDisplay(const std::string& display_specs) {
-  display::test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
-      .UpdateDisplay(display_specs);
+  if (WmShell::Get()->IsRunningInMash()) {
+    ash_test_helper_->UpdateDisplayForMash(display_specs);
+  } else {
+    display::test::DisplayManagerTestApi(
+        Shell::GetInstance()->display_manager())
+        .UpdateDisplay(display_specs);
+  }
 }
 
 aura::Window* AshTestBase::CurrentContext() {
@@ -283,9 +271,8 @@ aura::Window* AshTestBase::CreateTestWindowInShellWithDelegateAndType(
   } else {
     display::Display display =
         display::Screen::GetScreen()->GetDisplayMatching(bounds);
-    aura::Window* root = Shell::GetInstance()
-                             ->window_tree_host_manager()
-                             ->GetRootWindowForDisplayId(display.id());
+    aura::Window* root =
+        WmShell::Get()->GetRootWindowForDisplayId(display.id())->aura_window();
     gfx::Point origin = bounds.origin();
     ::wm::ConvertPointFromScreen(root, &origin);
     window->SetBounds(gfx::Rect(origin, bounds.size()));
@@ -405,6 +392,10 @@ void AshTestBase::SwapPrimaryDisplay() {
     return;
   Shell::GetInstance()->window_tree_host_manager()->SetPrimaryDisplayId(
       display_manager()->GetSecondaryDisplay().id());
+}
+
+display::Display AshTestBase::GetSecondaryDisplay() {
+  return ash_test_helper_->GetSecondaryDisplay();
 }
 
 }  // namespace test

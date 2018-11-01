@@ -6,7 +6,9 @@
 
 #include "ash/common/system/chromeos/palette/palette_utils.h"
 #include "base/bind.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "ui/events/devices/input_device_manager.h"
 
 namespace chromeos {
@@ -44,6 +46,9 @@ void StylusHandler::RegisterMessages() {
       "setPreferredNoteTakingApp",
       base::Bind(&StylusHandler::SetPreferredNoteTakingApp,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "showPlayStoreApps",
+      base::Bind(&StylusHandler::ShowPlayStoreApps, base::Unretained(this)));
 }
 
 void StylusHandler::OnAvailableNoteTakingAppsUpdated() {
@@ -66,7 +71,7 @@ void StylusHandler::UpdateNoteTakingApps() {
     waiting_for_android = true;
   } else {
     std::vector<NoteTakingAppInfo> available_apps =
-        NoteTakingHelper::Get()->GetAvailableApps(Profile::FromWebUI(web_ui()));
+        helper->GetAvailableApps(Profile::FromWebUI(web_ui()));
     for (const NoteTakingAppInfo& info : available_apps) {
       auto dict = base::MakeUnique<base::DictionaryValue>();
       dict->SetString(kAppNameKey, info.name);
@@ -79,9 +84,9 @@ void StylusHandler::UpdateNoteTakingApps() {
   }
 
   AllowJavascript();
-  CallJavascriptFunction(
-      "cr.webUIListenerCallback", base::StringValue("onNoteTakingAppsUpdated"),
-      apps_list, base::FundamentalValue(waiting_for_android));
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("onNoteTakingAppsUpdated"),
+                         apps_list, base::Value(waiting_for_android));
 }
 
 void StylusHandler::RequestApps(const base::ListValue* unused_args) {
@@ -111,9 +116,21 @@ void StylusHandler::HandleInitialize(const base::ListValue* args) {
 void StylusHandler::SendHasStylus() {
   DCHECK(ui::InputDeviceManager::GetInstance()->AreDeviceListsComplete());
   AllowJavascript();
-  CallJavascriptFunction(
-      "cr.webUIListenerCallback", base::StringValue("has-stylus-changed"),
-      base::FundamentalValue(ash::palette_utils::HasStylusInput()));
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("has-stylus-changed"),
+                         base::Value(ash::palette_utils::HasStylusInput()));
+}
+
+void StylusHandler::ShowPlayStoreApps(const base::ListValue* args) {
+  std::string apps_url;
+  args->GetString(0, &apps_url);
+  Profile* profile = Profile::FromWebUI(web_ui());
+  if (!arc::IsArcAllowedForProfile(profile)) {
+    VLOG(1) << "ARC is not enabled for this profile";
+    return;
+  }
+
+  arc::LaunchPlayStoreWithUrl(apps_url);
 }
 
 }  // namespace settings

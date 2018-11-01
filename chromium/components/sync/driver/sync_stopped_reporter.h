@@ -25,7 +25,7 @@ class SyncStoppedReporter : public net::URLFetcherDelegate {
  public:
   enum Result { RESULT_SUCCESS, RESULT_ERROR, RESULT_TIMEOUT };
 
-  typedef base::Callback<void(const Result&)> ResultCallback;
+  using ResultCallback = base::Callback<void(const Result&)>;
 
   SyncStoppedReporter(
       const GURL& sync_service_url,
@@ -42,10 +42,6 @@ class SyncStoppedReporter : public net::URLFetcherDelegate {
 
   // net::URLFetcherDelegate implementation.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
-
-  // Override the timer's task runner so it can be triggered in tests.
-  void SetTimerTaskRunnerForTest(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
  private:
   // Convert the base sync URL into the sync event URL.

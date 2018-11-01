@@ -21,24 +21,25 @@ class FakeVRDevice : public VRDevice {
   void InitBasicDevice();
 
   void SetVRDevice(const mojom::VRDisplayInfoPtr& device);
-  void SetPose(const mojom::VRPosePtr& state);
 
-  mojom::VRDisplayInfoPtr GetVRDevice() override;
-  mojom::VRPosePtr GetPose() override;
+  // VRDevice
+  void GetVRDevice(
+      const base::Callback<void(mojom::VRDisplayInfoPtr)>& callback) override;
   void ResetPose() override;
 
   void RequestPresent(const base::Callback<void(bool)>& callback) override;
   void SetSecureOrigin(bool secure_origin) override;
   void ExitPresent() override;
   void SubmitFrame(mojom::VRPosePtr pose) override;
-  void UpdateLayerBounds(mojom::VRLayerBoundsPtr leftBounds,
+  void UpdateLayerBounds(int16_t frame_index,
+                         mojom::VRLayerBoundsPtr leftBounds,
                          mojom::VRLayerBoundsPtr rightBounds) override;
+  void GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) override;
 
  private:
   mojom::VREyeParametersPtr InitEye(float fov, float offset, uint32_t size);
 
   mojom::VRDisplayInfoPtr device_;
-  mojom::VRPosePtr pose_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeVRDevice);
 };

@@ -12,7 +12,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ResourceId;
-import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
+import org.chromium.chrome.browser.preferences.autofill.AutofillAndPaymentsPreferences;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
@@ -72,6 +72,14 @@ public class PersonalDataManager {
          */
         @CalledByNative("NormalizedAddressRequestDelegate")
         void onAddressNormalized(AutofillProfile profile);
+
+        /**
+         * Called when the address could not be normalized.
+         *
+         * @param profile The non normalized profile.
+         */
+        @CalledByNative("NormalizedAddressRequestDelegate")
+        void onCouldNotNormalize(AutofillProfile profile);
     }
 
     /**
@@ -131,7 +139,7 @@ public class PersonalDataManager {
          * locale. All other fields are empty strings, because JNI does not handle null strings.
          */
         public AutofillProfile() {
-            this("" /* guid */, AutofillPreferences.SETTINGS_ORIGIN /* origin */,
+            this("" /* guid */, AutofillAndPaymentsPreferences.SETTINGS_ORIGIN /* origin */,
                     true /* isLocal */, "" /* fullName */, "" /* companyName */,
                     "" /* streetAddress */, "" /* region */, "" /* locality */,
                     "" /* dependentLocality */, "" /* postalCode */, "" /* sortingCode */,
@@ -373,10 +381,11 @@ public class PersonalDataManager {
         }
 
         public CreditCard() {
-            this("" /* guid */, AutofillPreferences.SETTINGS_ORIGIN /*origin */, true /* isLocal */,
-                    false /* isCached */, "" /* name */, "" /* number */, "" /* obfuscatedNumber */,
-                    "" /* month */, "" /* year */, "" /* basicCardPaymentType */,
-                    0 /* issuerIconDrawableId */, "" /* billingAddressId */, "" /* serverId */);
+            this("" /* guid */, AutofillAndPaymentsPreferences.SETTINGS_ORIGIN /*origin */,
+                    true /* isLocal */, false /* isCached */, "" /* name */, "" /* number */,
+                    "" /* obfuscatedNumber */, "" /* month */, "" /* year */,
+                    "" /* basicCardPaymentType */, 0 /* issuerIconDrawableId */,
+                    "" /* billingAddressId */, "" /* serverId */);
         }
 
         /** TODO(estade): remove this constructor. */
@@ -511,7 +520,7 @@ public class PersonalDataManager {
         return sManager;
     }
 
-    private static int sNormalizationTimeoutMs = 5000;
+    private static int sNormalizationTimeoutSeconds = 5;
 
     private final long mPersonalDataManagerAndroid;
     private final List<PersonalDataManagerObserver> mDataObservers =
@@ -802,28 +811,39 @@ public class PersonalDataManager {
     }
 
     /**
-     * Normalizes the address of the profile associated with the {@code guid} if the rules
-     * associated with the {@code regionCode} are done loading. Otherwise sets up the callback to
-     * start normalizing the address when the rules are loaded. The normalized profile will be sent
-     * to the {@code delegate}.
+     * Normalizes the address of the {@code profile} if the rules associated with the
+     * {@code regionCode} are done loading. Otherwise sets up the callback to start normalizing the
+     * address when the rules are loaded. The normalized profile will be sent to the
+     * {@code delegate}. If the profile is not normalized in the specified
+     * {@code sNormalizationTimeoutSeconds}, the {@code delegate} will be notified.
      *
-     * @param guid The GUID of the profile to normalize.
+     * @param profile The profile to normalize.
      * @param regionCode The region code indicating which rules to use for normalization.
      * @param delegate The object requesting the normalization.
-     *
-     * @return Whether the normalization will happen asynchronously.
      */
-    public boolean normalizeAddress(
-            String guid, String regionCode, NormalizedAddressRequestDelegate delegate) {
+    public void normalizeAddress(
+            AutofillProfile profile, String regionCode, NormalizedAddressRequestDelegate delegate) {
         ThreadUtils.assertOnUiThread();
-        return nativeStartAddressNormalization(
-                mPersonalDataManagerAndroid, guid, regionCode, delegate);
+        nativeStartAddressNormalization(mPersonalDataManagerAndroid, profile, regionCode,
+                sNormalizationTimeoutSeconds, delegate);
     }
 
-    /** Cancels the pending address normalizations. */
-    public void cancelPendingAddressNormalizations() {
-        ThreadUtils.assertOnUiThread();
-        nativeCancelPendingAddressNormalizations(mPersonalDataManagerAndroid);
+    /**
+     * Checks whether the Autofill PersonalDataManager has profiles.
+     *
+     * @return True If there are profiles.
+     */
+    public boolean hasProfiles() {
+        return nativeHasProfiles(mPersonalDataManagerAndroid);
+    }
+
+    /**
+     * Checks whether the Autofill PersonalDataManager has credit cards.
+     *
+     * @return True If there are credit cards.
+     */
+    public boolean hasCreditCards() {
+        return nativeHasCreditCards(mPersonalDataManagerAndroid);
     }
 
     /**
@@ -863,16 +883,9 @@ public class PersonalDataManager {
         nativeSetPaymentsIntegrationEnabled(enable);
     }
 
-    /**
-     * @return The timeout value for normalization.
-     */
-    public static int getNormalizationTimeoutMS() {
-        return sNormalizationTimeoutMs;
-    }
-
     @VisibleForTesting
     public static void setNormalizationTimeoutForTesting(int timeout) {
-        sNormalizationTimeoutMs = timeout;
+        sNormalizationTimeoutSeconds = timeout;
     }
 
     private native long nativeInit();
@@ -936,10 +949,11 @@ public class PersonalDataManager {
             WebContents webContents, CreditCard card, FullCardRequestDelegate delegate);
     private native void nativeLoadRulesForRegion(
             long nativePersonalDataManagerAndroid, String regionCode);
-    private native boolean nativeStartAddressNormalization(long nativePersonalDataManagerAndroid,
-            String guid, String regionCode, NormalizedAddressRequestDelegate delegate);
-    private native void nativeCancelPendingAddressNormalizations(
-            long nativePersonalDataManagerAndroid);
+    private native void nativeStartAddressNormalization(long nativePersonalDataManagerAndroid,
+            AutofillProfile profile, String regionCode, int timeoutSeconds,
+            NormalizedAddressRequestDelegate delegate);
+    private static native boolean nativeHasProfiles(long nativePersonalDataManagerAndroid);
+    private static native boolean nativeHasCreditCards(long nativePersonalDataManagerAndroid);
     private static native boolean nativeIsAutofillEnabled();
     private static native void nativeSetAutofillEnabled(boolean enable);
     private static native boolean nativeIsAutofillManaged();

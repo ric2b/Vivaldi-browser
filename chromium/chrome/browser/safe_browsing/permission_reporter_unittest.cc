@@ -13,10 +13,7 @@
 #include "chrome/browser/safe_browsing/mock_permission_report_sender.h"
 #include "chrome/common/safe_browsing/permission_report.pb.h"
 #include "components/variations/active_field_trials.h"
-#include "content/public/browser/permission_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using content::PermissionType;
 
 namespace safe_browsing {
 
@@ -31,9 +28,11 @@ const int kMaximumReportsPerOriginPerPermissionPerMinute = 5;
 
 const char kDummyOriginOne[] = "http://example.test/";
 const char kDummyOriginTwo[] = "http://example2.test/";
-const PermissionType kDummyPermissionOne = PermissionType::GEOLOCATION;
-const PermissionType kDummyPermissionTwo = PermissionType::NOTIFICATIONS;
-const PermissionAction kDummyAction = GRANTED;
+const ContentSettingsType kDummyPermissionOne =
+    CONTENT_SETTINGS_TYPE_GEOLOCATION;
+const ContentSettingsType kDummyPermissionTwo =
+    CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+const PermissionAction kDummyAction = PermissionAction::GRANTED;
 const PermissionSourceUI kDummySourceUI = PermissionSourceUI::PROMPT;
 const PermissionRequestGestureType kDummyGestureType =
     PermissionRequestGestureType::GESTURE;
@@ -47,18 +46,18 @@ const char kDummyGroupOne[] = "group one";
 const char kDummyTrialTwo[] = "trial two";
 const char kDummyGroupTwo[] = "group two";
 
-const char kFeatureOnByDefaultName[] = "OnByDefault";
+constexpr char kFeatureOnByDefaultName[] = "OnByDefault";
 struct base::Feature kFeatureOnByDefault {
   kFeatureOnByDefaultName, base::FEATURE_ENABLED_BY_DEFAULT
 };
 
-const char kFeatureOffByDefaultName[] = "OffByDefault";
+constexpr char kFeatureOffByDefaultName[] = "OffByDefault";
 struct base::Feature kFeatureOffByDefault {
   kFeatureOffByDefaultName, base::FEATURE_DISABLED_BY_DEFAULT
 };
 
 PermissionReportInfo BuildDummyReportInfo(const char* requesting_origin,
-                                          PermissionType permission) {
+                                          ContentSettingsType permission) {
   PermissionReportInfo info(GURL(requesting_origin), permission, kDummyAction,
       kDummySourceUI, kDummyGestureType, kDummyPersistDecision,
       kDummyNumPriorDismissals, kDummyNumPriorIgnores);

@@ -6,7 +6,7 @@
 
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "grit/ash_strings.h"
+#include "ash/strings/grit/ash_strings.h"
 
 namespace ash {
 namespace shell {

@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
 #include "mojo/public/cpp/bindings/lib/serialization.h"
 #include "mojo/public/cpp/bindings/lib/validation_util.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/interfaces/bindings/interface_control_messages.mojom.h"
 
 namespace mojo {
@@ -23,9 +24,9 @@ namespace internal {
 namespace {
 
 bool ValidateControlResponse(Message* message) {
-  ValidationContext validation_context(
-      message->data(), message->data_num_bytes(), message->handles()->size(),
-      message, "ControlResponseValidator");
+  ValidationContext validation_context(message->payload(),
+                                       message->payload_num_bytes(), 0, 0,
+                                       message, "ControlResponseValidator");
   if (!ValidateMessageIsResponse(message, &validation_context))
     return false;
 
@@ -78,7 +79,8 @@ void SendRunMessage(MessageReceiverWithResponder* receiver,
   params_ptr->input = std::move(input_ptr);
   size_t size = PrepareToSerialize<interface_control::RunMessageParamsDataView>(
       params_ptr, &context);
-  RequestMessageBuilder builder(interface_control::kRunMessageId, size);
+  MessageBuilder builder(interface_control::kRunMessageId,
+                         Message::kFlagExpectsResponse, size, 0);
 
   interface_control::internal::RunMessageParams_Data* params = nullptr;
   Serialize<interface_control::RunMessageParamsDataView>(
@@ -98,7 +100,8 @@ Message ConstructRunOrClosePipeMessage(
   size_t size = PrepareToSerialize<
       interface_control::RunOrClosePipeMessageParamsDataView>(params_ptr,
                                                               &context);
-  MessageBuilder builder(interface_control::kRunOrClosePipeMessageId, size);
+  MessageBuilder builder(interface_control::kRunOrClosePipeMessageId, 0, size,
+                         0);
 
   interface_control::internal::RunOrClosePipeMessageParams_Data* params =
       nullptr;
@@ -170,14 +173,6 @@ void ControlMessageProxy::FlushForTesting() {
   run_loop.Run();
 }
 
-void ControlMessageProxy::SendDisconnectReason(uint32_t custom_reason,
-                                               const std::string& description) {
-  Message message =
-      ConstructDisconnectReasonMessage(custom_reason, description);
-  bool ok = receiver_->Accept(&message);
-  ALLOW_UNUSED_LOCAL(ok);
-}
-
 void ControlMessageProxy::RunFlushForTestingClosure() {
   DCHECK(!run_loop_quit_closure_.is_null());
   base::ResetAndReturn(&run_loop_quit_closure_).Run();
@@ -187,18 +182,6 @@ void ControlMessageProxy::OnConnectionError() {
   encountered_error_ = true;
   if (!run_loop_quit_closure_.is_null())
     RunFlushForTestingClosure();
-}
-
-// static
-Message ControlMessageProxy::ConstructDisconnectReasonMessage(
-    uint32_t custom_reason,
-    const std::string& description) {
-  auto send_disconnect_reason = interface_control::SendDisconnectReason::New();
-  send_disconnect_reason->custom_reason = custom_reason;
-  send_disconnect_reason->description = description;
-  auto input_ptr = interface_control::RunOrClosePipeInput::New();
-  input_ptr->set_send_disconnect_reason(std::move(send_disconnect_reason));
-  return ConstructRunOrClosePipeMessage(std::move(input_ptr));
 }
 
 }  // namespace internal

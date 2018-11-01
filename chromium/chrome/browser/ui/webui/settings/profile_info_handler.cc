@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -21,7 +22,6 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
 #else
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profile_statistics_factory.h"
@@ -153,7 +153,7 @@ void ProfileInfoHandler::PushProfileStatsCount(
   // the Promise callback approach.
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue(kProfileStatsCountReadyEventName),
-                         base::FundamentalValue(count));
+                         base::Value(count));
 }
 #endif
 
@@ -165,8 +165,8 @@ void ProfileInfoHandler::HandleGetProfileManagesSupervisedUsers(
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 
-  ResolveJavascriptCallback(
-      *callback_id, base::FundamentalValue(IsProfileManagingSupervisedUsers()));
+  ResolveJavascriptCallback(*callback_id,
+                            base::Value(IsProfileManagingSupervisedUsers()));
 }
 
 void ProfileInfoHandler::PushProfileInfo() {
@@ -179,7 +179,7 @@ void ProfileInfoHandler::PushProfileManagesSupervisedUsersStatus() {
   CallJavascriptFunction(
       "cr.webUIListenerCallback",
       base::StringValue(kProfileManagesSupervisedUsersChangedEventName),
-      base::FundamentalValue(IsProfileManagingSupervisedUsers()));
+      base::Value(IsProfileManagingSupervisedUsers()));
 }
 
 std::unique_ptr<base::DictionaryValue>
@@ -189,18 +189,23 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
 
 #if defined(OS_CHROMEOS)
   name = profile_->GetProfileUserName();
+  std::string user_email;
   if (name.empty()) {
+    // User is not associated with a gaia account, use the display name.
     const user_manager::User* user =
         chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
-    if (user && (user->GetType() != user_manager::USER_TYPE_GUEST))
-      name = user->GetAccountId().GetUserEmail();
-  }
-  if (!name.empty())
+    // Note: We don't show the User section in Guest mode.
+    DCHECK(user && (user->GetType() != user_manager::USER_TYPE_GUEST));
+    name = base::UTF16ToUTF8(user->GetDisplayName());
+    user_email = user->GetAccountId().GetUserEmail();
+  } else {
     name = gaia::SanitizeEmail(gaia::CanonicalizeEmail(name));
+    user_email = name;
+  }
 
   // Get image as data URL instead of using chrome://userimage source to avoid
   // issues with caching.
-  const AccountId account_id(AccountId::FromUserEmail(name));
+  const AccountId account_id(AccountId::FromUserEmail(user_email));
   scoped_refptr<base::RefCountedMemory> image =
       chromeos::options::UserImageSource::GetUserImage(account_id);
   icon_url = webui::GetPngDataUrl(image->front(), image->size());

@@ -8,7 +8,7 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "components/payments/payment_request.mojom-blink.h"
+#include "components/payments/content/payment_request.mojom-blink.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "modules/ModulesExport.h"
@@ -29,6 +29,7 @@
 namespace blink {
 
 class ExceptionState;
+class ExecutionContext;
 class PaymentAddress;
 class ScriptPromiseResolver;
 class ScriptState;
@@ -45,11 +46,11 @@ class MODULES_EXPORT PaymentRequest final
   WTF_MAKE_NONCOPYABLE(PaymentRequest);
 
  public:
-  static PaymentRequest* create(Document&,
+  static PaymentRequest* create(ExecutionContext*,
                                 const HeapVector<PaymentMethodData>&,
                                 const PaymentDetails&,
                                 ExceptionState&);
-  static PaymentRequest* create(Document&,
+  static PaymentRequest* create(ExecutionContext*,
                                 const HeapVector<PaymentMethodData>&,
                                 const PaymentDetails&,
                                 const PaymentOptions&,
@@ -88,7 +89,7 @@ class MODULES_EXPORT PaymentRequest final
   void onCompleteTimeoutForTesting();
 
  private:
-  PaymentRequest(Document&,
+  PaymentRequest(ExecutionContext*,
                  const HeapVector<PaymentMethodData>&,
                  const PaymentDetails&,
                  const PaymentOptions&,
@@ -123,7 +124,7 @@ class MODULES_EXPORT PaymentRequest final
   Member<ScriptPromiseResolver> m_canMakePaymentResolver;
   payments::mojom::blink::PaymentRequestPtr m_paymentProvider;
   mojo::Binding<payments::mojom::blink::PaymentRequestClient> m_clientBinding;
-  Timer<PaymentRequest> m_completeTimer;
+  TaskRunnerTimer<PaymentRequest> m_completeTimer;
 };
 
 }  // namespace blink

@@ -24,65 +24,55 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @unrestricted
- */
-Resources.DOMStorageItemsView = class extends UI.SimpleView {
+Resources.DOMStorageItemsView = class extends Resources.StorageItemsView {
+  /**
+   * @param {!Resources.DOMStorage} domStorage
+   */
   constructor(domStorage) {
-    super(Common.UIString('DOM Storage'));
+    super(Common.UIString('DOM Storage'), 'domStoragePanel');
 
-    this.domStorage = domStorage;
+    this._domStorage = domStorage;
 
     this.element.classList.add('storage-view', 'table');
 
-    this.deleteButton = new UI.ToolbarButton(Common.UIString('Delete'), 'largeicon-delete');
-    this.deleteButton.setVisible(false);
-    this.deleteButton.addEventListener(UI.ToolbarButton.Events.Click, this._deleteButtonClicked, this);
-
-    this.refreshButton = new UI.ToolbarButton(Common.UIString('Refresh'), 'largeicon-refresh');
-    this.refreshButton.addEventListener(UI.ToolbarButton.Events.Click, this._refreshButtonClicked, this);
-
-    this.domStorage.addEventListener(
-        Resources.DOMStorage.Events.DOMStorageItemsCleared, this._domStorageItemsCleared, this);
-    this.domStorage.addEventListener(
-        Resources.DOMStorage.Events.DOMStorageItemRemoved, this._domStorageItemRemoved, this);
-    this.domStorage.addEventListener(Resources.DOMStorage.Events.DOMStorageItemAdded, this._domStorageItemAdded, this);
-    this.domStorage.addEventListener(
-        Resources.DOMStorage.Events.DOMStorageItemUpdated, this._domStorageItemUpdated, this);
+    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([
+      {id: 'key', title: Common.UIString('Key'), sortable: false, editable: true, weight: 50},
+      {id: 'value', title: Common.UIString('Value'), sortable: false, editable: true, weight: 50}
+    ]);
+    this._dataGrid = new DataGrid.DataGrid(columns, this._editingCallback.bind(this), this._deleteCallback.bind(this));
+    this._dataGrid.setName('DOMStorageItemsView');
+    this._dataGrid.asWidget().show(this.element);
+    /** @type {!Array<!Common.EventTarget.EventDescriptorStruct>} */
+    this._listeners = [];
+    this.setStorage(domStorage);
   }
 
   /**
-   * @override
-   * @return {!Array.<!UI.ToolbarItem>}
+   * @param {!Resources.DOMStorage} domStorage
    */
-  syncToolbarItems() {
-    return [this.refreshButton, this.deleteButton];
+  setStorage(domStorage) {
+    Common.EventTarget.removeEventListeners(this._listeners);
+    this._domStorage = domStorage;
+    this._listeners = [
+      this._domStorage.addEventListener(
+          Resources.DOMStorage.Events.DOMStorageItemsCleared, this._domStorageItemsCleared, this),
+      this._domStorage.addEventListener(
+          Resources.DOMStorage.Events.DOMStorageItemRemoved, this._domStorageItemRemoved, this),
+      this._domStorage.addEventListener(
+          Resources.DOMStorage.Events.DOMStorageItemAdded, this._domStorageItemAdded, this),
+      this._domStorage.addEventListener(
+          Resources.DOMStorage.Events.DOMStorageItemUpdated, this._domStorageItemUpdated, this),
+    ];
+    this.refreshItems();
   }
 
-  /**
-   * @override
-   */
-  wasShown() {
-    this._update();
-  }
-
-  /**
-   * @override
-   */
-  willHide() {
-    this.deleteButton.setVisible(false);
-  }
-
-  /**
-   * @param {!Common.Event} event
-   */
-  _domStorageItemsCleared(event) {
+  _domStorageItemsCleared() {
     if (!this.isShowing() || !this._dataGrid)
       return;
 
     this._dataGrid.rootNode().removeChildren();
     this._dataGrid.addCreationNode(false);
-    this.deleteButton.setVisible(false);
+    this.setCanDeleteSelected(false);
   }
 
   /**
@@ -100,7 +90,7 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
       var childNode = children[i];
       if (childNode.data.key === storageData.key) {
         rootNode.removeChild(childNode);
-        this.deleteButton.setVisible(children.length > 1);
+        this.setCanDeleteSelected(children.length > 1);
         return;
       }
     }
@@ -117,7 +107,7 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     var rootNode = this._dataGrid.rootNode();
     var children = rootNode.children;
 
-    this.deleteButton.setVisible(true);
+    this.setCanDeleteSelected(true);
 
     for (var i = 0; i < children.length; ++i) {
       if (children[i].data.key === storageData.key)
@@ -154,59 +144,48 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
           childNode.select();
           childNode.reveal();
         }
-        this.deleteButton.setVisible(true);
+        this.setCanDeleteSelected(true);
       }
     }
   }
 
-  _update() {
-    this.detachChildWidgets();
-    this.domStorage.getItems(this._showDOMStorageItems.bind(this));
-  }
-
+  /**
+   * @param {?string} error
+   * @param {!Array<!Array<string>>} items
+   */
   _showDOMStorageItems(error, items) {
     if (error)
       return;
-
-    this._dataGrid = this._dataGridForDOMStorageItems(items);
-    this._dataGrid.asWidget().show(this.element);
-    this.deleteButton.setVisible(this._dataGrid.rootNode().children.length > 1);
-  }
-
-  _dataGridForDOMStorageItems(items) {
-    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([
-      {id: 'key', title: Common.UIString('Key'), sortable: false, editable: true, weight: 50},
-      {id: 'value', title: Common.UIString('Value'), sortable: false, editable: true, weight: 50}
-    ]);
-
-    var nodes = [];
-
-    var keys = [];
-    var length = items.length;
-    for (var i = 0; i < items.length; i++) {
-      var key = items[i][0];
-      var value = items[i][1];
+    var rootNode = this._dataGrid.rootNode();
+    var selectedKey = null;
+    for (var node of rootNode.children) {
+      if (!node.selected)
+        continue;
+      selectedKey = node.data.key;
+      break;
+    }
+    rootNode.removeChildren();
+    var selectedNode = null;
+    var filteredItems = item => `${item[0]} ${item[1]}`;
+    for (var item of this.filter(items, filteredItems)) {
+      var key = item[0];
+      var value = item[1];
       var node = new DataGrid.DataGridNode({key: key, value: value}, false);
       node.selectable = true;
-      nodes.push(node);
-      keys.push(key);
+      rootNode.appendChild(node);
+      if (!selectedNode || key === selectedKey)
+        selectedNode = node;
     }
-
-    var dataGrid = new DataGrid.DataGrid(columns, this._editingCallback.bind(this), this._deleteCallback.bind(this));
-    dataGrid.setName('DOMStorageItemsView');
-    length = nodes.length;
-    for (var i = 0; i < length; ++i)
-      dataGrid.rootNode().appendChild(nodes[i]);
-    dataGrid.addCreationNode(false);
-    if (length > 0)
-      nodes[0].selected = true;
-    return dataGrid;
+    if (selectedNode)
+      selectedNode.selected = true;
+    this._dataGrid.addCreationNode(false);
+    this.setCanDeleteSelected(!!selectedNode);
   }
 
   /**
-   * @param {!Common.Event} event
+   * @override
    */
-  _deleteButtonClicked(event) {
+  deleteSelectedItem() {
     if (!this._dataGrid || !this._dataGrid.selectedNode)
       return;
 
@@ -214,14 +193,23 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
   }
 
   /**
-   * @param {!Common.Event} event
+   * @override
    */
-  _refreshButtonClicked(event) {
-    this._update();
+  refreshItems() {
+    this._domStorage.getItems((error, items) => this._showDOMStorageItems(error, items));
+  }
+
+  /**
+   * @override
+   */
+  deleteAllItems() {
+    this._domStorage.clear();
+    // explicitly clear the view because the event won't be fired when it has no items
+    this._domStorageItemsCleared();
   }
 
   _editingCallback(editingNode, columnIdentifier, oldText, newText) {
-    var domStorage = this.domStorage;
+    var domStorage = this._domStorage;
     if (columnIdentifier === 'key') {
       if (typeof oldText === 'string')
         domStorage.removeItem(oldText);
@@ -249,7 +237,7 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     if (!node || node.isCreationNode)
       return;
 
-    if (this.domStorage)
-      this.domStorage.removeItem(node.data.key);
+    if (this._domStorage)
+      this._domStorage.removeItem(node.data.key);
   }
 };

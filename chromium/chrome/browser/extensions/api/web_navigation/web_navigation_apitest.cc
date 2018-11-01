@@ -129,7 +129,7 @@ class TestNavigationListener
     auto throttle = base::MakeUnique<Throttle>();
     throttle->set_url(url);
     throttles_.push_back(throttle->AsWeakPtr());
-    return throttle;
+    return std::move(throttle);
   }
 
  private:
@@ -266,11 +266,9 @@ class StartProvisionalLoadObserver : public content::WebContentsObserver {
         message_loop_runner_(new content::MessageLoopRunner) {}
   ~StartProvisionalLoadObserver() override {}
 
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page) override {
-    if (validated_url == url_) {
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (navigation_handle->GetURL() == url_) {
       url_seen_ = true;
       message_loop_runner_->Quit();
     }
@@ -401,12 +399,8 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
       << message_;
 }
 
-#if defined(OS_LINUX)  // http://crbug.com/660288
-#define MAYBE_ServerRedirect DISABLED_ServerRedirect
-#else
-#define MAYBE_ServerRedirect ServerRedirect
-#endif
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_ServerRedirect) {
+// http://crbug.com/660288
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_ServerRedirect) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/serverRedirect"))
       << message_;

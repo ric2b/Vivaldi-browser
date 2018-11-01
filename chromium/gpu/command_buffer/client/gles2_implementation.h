@@ -189,7 +189,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // ContextSupport implementation.
   void Swap() override;
-  void SwapWithDamage(const gfx::Rect& damage) override;
+  void SwapWithBounds(const std::vector<gfx::Rect>& rects) override;
   void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
   void CommitOverlayPlanes() override;
   void ScheduleOverlayPlane(int plane_z_order,
@@ -534,10 +534,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                                    GLsizei height,
                                    GLenum internalformat);
   void DestroyImageCHROMIUMHelper(GLuint image_id);
-  GLuint CreateGpuMemoryBufferImageCHROMIUMHelper(GLsizei width,
-                                                  GLsizei height,
-                                                  GLenum internalformat,
-                                                  GLenum usage);
 
   // Helper for GetVertexAttrib
   bool GetVertexAttribHelper(GLuint index, GLenum pname, uint32_t* param);

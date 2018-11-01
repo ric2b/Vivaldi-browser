@@ -1,6 +1,6 @@
 
-// included by the class definition in "extensions/browser/guest_view/web_view/web_view_guest.h"
-
+// included by the class definition in
+// "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 // namespace extensions {
 
@@ -11,7 +11,6 @@
   void InitListeners();
   bool OnMouseEvent(const blink::WebMouseEvent& mouse_event);
 
-
   void ShowPageInfo(gfx::Point pos);
 
   void ExtendedLoadProgressChanged(content::WebContents* source,
@@ -21,22 +20,21 @@
                                    int total_elements) override;
 
   bool EmbedsFullscreenWidget() const override;
-  void NavigationStateChanged(content::WebContents *source,
+  void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
-  void UpdateTargetURL(content::WebContents *source, const GURL &url) override;
-  void CreateSearch(const base::ListValue & search) override;
-  void PasteAndGo(const base::ListValue & search) override;
-  void SimpleAction(const base::ListValue & search);
-  void ToggleFullscreenModeForTab(content::WebContents *web_contents,
+  void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
+  void CreateSearch(const base::ListValue& search) override;
+  void PasteAndGo(const base::ListValue& search) override;
+  void SimpleAction(const base::ListValue& search);
+  void ToggleFullscreenModeForTab(content::WebContents* web_contents,
                                   bool enter_fullscreen);
-  void ShowValidationMessage(content::WebContents *web_contents,
-                             const gfx::Rect &anchor_in_root_view,
-                             const base::string16 &main_text,
-                             const base::string16 &sub_text) override;
-  void HideValidationMessage(content::WebContents *web_contents) override;
-  void MoveValidationMessage(content::WebContents *web_contents,
-                             const gfx::Rect &anchor_in_root_view) override;
-
+  void ShowValidationMessage(content::WebContents* web_contents,
+                             const gfx::Rect& anchor_in_root_view,
+                             const base::string16& main_text,
+                             const base::string16& sub_text) override;
+  void HideValidationMessage(content::WebContents* web_contents) override;
+  void MoveValidationMessage(content::WebContents* web_contents,
+                             const gfx::Rect& anchor_in_root_view) override;
 
   // Vivaldi customs below
   bool IsVivaldiWebPanel();
@@ -61,7 +59,7 @@
 
   // contentblocking handling
   void OnContentBlocked(ContentSettingsType settings_type,
-                        const base::string16 &details);
+                        const base::string16& details);
   void AllowRunningInsecureContent();
 
   // Note(andre@vivaldi.com):
@@ -75,7 +73,9 @@
   void OnMouseEnter();
   void OnMouseLeave();
 
-  void ResetGestureState() { gesture_recording_ = false; }
+  void ResetGestureState() {
+    gesture_recording_ = false;
+  }
 
  private:
   void VisibleSecurityStateChanged(content::WebContents* source) override;
@@ -93,9 +93,10 @@
                                bool activePage = true);
 
   content::WebContents::CreateParams GetWebContentsCreateParams(
-    content::BrowserContext* context, const GURL site);
+      content::BrowserContext* context,
+      const GURL site);
 
-  //vivaldi addition:
+  // vivaldi addition:
   bool GetMousegesturesEnabled();
   bool IsRockerGesturesEnabled() const;
 
@@ -122,7 +123,7 @@
 
 #ifdef VIVALDI_BUILD
   TabAlertState media_state_;
-#endif //VIVALDI_BUILD
+#endif  // VIVALDI_BUILD
   bool is_visible_;
   bool is_fullscreen_;
   int window_state_prior_to_fullscreen_;
@@ -139,31 +140,29 @@
   // based on a timer. The cursor will be shown by the CompoundEventFilter on
   // mouse events, but this class will hide the cursor on a beat in fullscreen.
   class CursorHider {
-  public:
-    static std::unique_ptr<CursorHider> Create(aura::Window *window) {
+   public:
+    static std::unique_ptr<CursorHider> Create(aura::Window* window) {
       return std::unique_ptr<CursorHider>(
           base::WrapUnique(new CursorHider(window)));
     }
 
     void Hide() { cursor_client_->HideCursor(); }
 
-    CursorHider(aura::Window *window) {
+    CursorHider(aura::Window* window) {
       cursor_client_ = aura::client::GetCursorClient(window);
-      hide_timer_.Start(
-          FROM_HERE, base::TimeDelta::FromMilliseconds(TIME_BEFORE_HIDING_MS),
-          this, &CursorHider::Hide);
+      hide_timer_.Start(FROM_HERE,
+                        base::TimeDelta::FromMilliseconds(TIME_BEFORE_HIDING_MS),
+                        this, &CursorHider::Hide);
     }
 
     ~CursorHider() { cursor_client_->ShowCursor(); }
 
     // Reset and stop the hide timer.
-    void Reset() {
-      hide_timer_.Reset();
-    }
+    void Reset() { hide_timer_.Reset(); }
     void Stop() { hide_timer_.Stop(); }
 
-  private:
-    aura::client::CursorClient *cursor_client_;
+   private:
+    aura::client::CursorClient* cursor_client_;
 
     // A timer to delay hiding the mouse.
     base::RepeatingTimer hide_timer_;
@@ -173,10 +172,9 @@
 
   // The object to hide cursor when going into fullscreen mode.
   std::unique_ptr<CursorHider> cursor_hider_;
-#endif // USE_AURA
+#endif  // USE_AURA
 
-private:
-
+ private:
   content::RenderWidgetHost::MouseEventCallback mouseevent_callback_;
 
 // };

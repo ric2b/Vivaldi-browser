@@ -49,8 +49,7 @@ void HistoryLoginHandler::ProfileInfoChanged() {
     signin_callback_.Run();
 
   if (IsJavascriptAllowed()) {
-    CallJavascriptFunction("updateSignInState",
-                           base::FundamentalValue(signed_in));
+    CallJavascriptFunction("updateSignInState", base::Value(signed_in));
   }
 }
 
@@ -59,7 +58,6 @@ void HistoryLoginHandler::HandleStartSignInFlow(
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
   browser->window()->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
-      signin::ManageAccountsParams(),
-      signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS);
+      BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN, signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, false);
 }

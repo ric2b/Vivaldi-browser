@@ -17,9 +17,14 @@
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/web_state.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace chrome_test_util {
 
-id ExecuteJavaScript(NSString* javascript, NSError** out_error) {
+id ExecuteJavaScript(NSString* javascript,
+                     NSError* __unsafe_unretained* out_error) {
   __block bool did_complete = false;
   __block id result = nil;
   __block NSError* temp_error = nil;
@@ -41,10 +46,11 @@ id ExecuteJavaScript(NSString* javascript, NSError** out_error) {
   [condition waitWithTimeout:testing::kWaitForJSCompletionTimeout];
   if (!did_complete)
     return nil;
-  [temp_error autorelease];
-  if (out_error)
-    *out_error = temp_error;
-  return [result autorelease];
+  if (out_error) {
+    NSError* __autoreleasing auto_released_error = temp_error;
+    *out_error = auto_released_error;
+  }
+  return result;
 }
 
 }  // namespace chrome_test_util
@@ -87,10 +93,8 @@ id ExecuteJavaScript(NSString* javascript, NSError** out_error) {
   BOOL success =
       web::test::TapWebViewElementWithId(chrome_test_util::GetCurrentWebState(),
                                          base::SysNSStringToUTF8(elementID));
-  GREYAssertTrue(
-      success,
-      [NSString stringWithFormat:@"Failed to tap web view element with ID: %@",
-                                 elementID]);
+  GREYAssertTrue(success, @"Failed to tap web view element with ID: %@",
+                 elementID);
 }
 
 @end

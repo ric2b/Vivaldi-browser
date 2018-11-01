@@ -6,10 +6,8 @@
 
 #include <algorithm>
 
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -37,7 +35,9 @@ const int kShelfViewLeadingInset = 8;
 }  // namespace
 
 OverflowBubbleView::OverflowBubbleView(WmShelf* wm_shelf)
-    : wm_shelf_(wm_shelf), shelf_view_(nullptr) {}
+    : wm_shelf_(wm_shelf), shelf_view_(nullptr) {
+  DCHECK(wm_shelf_);
+}
 
 OverflowBubbleView::~OverflowBubbleView() {}
 
@@ -48,29 +48,21 @@ void OverflowBubbleView::InitOverflowBubble(views::View* anchor,
   SetAnchorView(anchor);
   set_arrow(GetBubbleArrow());
   set_mirror_arrow_in_rtl(false);
-  set_background(NULL);
-  SkColor color = MaterialDesignController::IsShelfMaterial()
-                      ? kShelfBaseColor
-                      : SkColorSetA(kShelfBaseColor,
-                                    GetShelfConstant(SHELF_BACKGROUND_ALPHA));
-  set_color(color);
+  set_background(nullptr);
+  set_color(kShelfDefaultBaseColor);
   set_margins(gfx::Insets(kPadding, kPadding, kPadding, kPadding));
   // Overflow bubble should not get focus. If it get focus when it is shown,
   // active state item is changed to running state.
   set_can_activate(false);
 
   // Makes bubble view has a layer and clip its children layers.
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetMasksToBounds(true);
 
   // Calls into OnBeforeBubbleWidgetInit to set the window parent container.
   views::BubbleDialogDelegateView::CreateBubble(this);
   AddChildView(shelf_view_);
-}
-
-bool OverflowBubbleView::IsHorizontalAlignment() const {
-  return ::ash::IsHorizontalAlignment(wm_shelf_->GetAlignment());
 }
 
 const gfx::Size OverflowBubbleView::GetContentsSize() const {
@@ -120,7 +112,7 @@ gfx::Size OverflowBubbleView::GetPreferredSize() const {
           ->GetDisplayNearestPoint(GetAnchorRect().CenterPoint())
           .work_area();
   if (!monitor_rect.IsEmpty()) {
-    if (IsHorizontalAlignment()) {
+    if (wm_shelf_->IsHorizontalAlignment()) {
       preferred_size.set_width(
           std::min(preferred_size.width(),
                    static_cast<int>(monitor_rect.width() *
@@ -147,7 +139,7 @@ void OverflowBubbleView::ChildPreferredSizeChanged(views::View* child) {
   SizeToContents();
 
   // Ensures |shelf_view_| is still visible.
-  if (IsHorizontalAlignment())
+  if (wm_shelf_->IsHorizontalAlignment())
     ScrollByXOffset(0);
   else
     ScrollByYOffset(0);
@@ -159,7 +151,7 @@ bool OverflowBubbleView::OnMouseWheel(const ui::MouseWheelEvent& event) {
   // recently, but the behavior of this function was retained to continue
   // using Y offsets only. Might be good to simply scroll in both
   // directions as in OverflowBubbleView::OnScrollEvent.
-  if (IsHorizontalAlignment())
+  if (wm_shelf_->IsHorizontalAlignment())
     ScrollByXOffset(-event.y_offset());
   else
     ScrollByYOffset(-event.y_offset());

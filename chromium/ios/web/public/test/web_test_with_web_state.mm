@@ -30,7 +30,7 @@ WebTestWithWebState::~WebTestWithWebState() {}
 void WebTestWithWebState::SetUp() {
   WebTest::SetUp();
   std::unique_ptr<WebStateImpl> web_state(new WebStateImpl(GetBrowserState()));
-  web_state->GetNavigationManagerImpl().InitializeSession(nil, nil, NO, 0);
+  web_state->GetNavigationManagerImpl().InitializeSession(NO);
   web_state->SetWebUsageEnabled(true);
   web_state_.reset(web_state.release());
 
@@ -39,7 +39,7 @@ void WebTestWithWebState::SetUp() {
 }
 
 void WebTestWithWebState::TearDown() {
-  web_state_.reset();
+  DestroyWebState();
   WebTest::TearDown();
 }
 
@@ -130,6 +130,10 @@ id WebTestWithWebState::ExecuteJavaScript(NSString* script) {
     return executionCompleted;
   });
   return [[executionResult retain] autorelease];
+}
+
+void WebTestWithWebState::DestroyWebState() {
+  web_state_.reset();
 }
 
 std::string WebTestWithWebState::BaseUrl() const {

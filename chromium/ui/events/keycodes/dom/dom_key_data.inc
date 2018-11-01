@@ -279,6 +279,7 @@ DOM_KEY_MAP_DECLARATION {
   DOM_KEY_MAP("MailForward",          MAIL_FORWARD,             0x0A02),
   DOM_KEY_MAP("MailReply",            MAIL_REPLY,               0x0A03),
   DOM_KEY_MAP("MailSend",             MAIL_SEND,                0x0A04),
+  DOM_KEY_MAP("MediaClose",           MEDIA_CLOSE,              0x0D5B),
   DOM_KEY_MAP("MediaFastForward",     MEDIA_FAST_FORWARD,       0x0D2C),
   DOM_KEY_MAP("MediaPause",           MEDIA_PAUSE,              0x0D2E),
   DOM_KEY_MAP("MediaPlay",            MEDIA_PLAY,               0x0D2F),
@@ -316,11 +317,9 @@ DOM_KEY_MAP_DECLARATION {
   //          Key                     Enum                      Value
   DOM_KEY_MAP("AudioBalanceLeft",     AUDIO_BALANCE_LEFT,       0x0D01),
   DOM_KEY_MAP("AudioBalanceRight",    AUDIO_BALANCE_RIGHT,      0x0D02),
-  DOM_KEY_MAP("AudioBassDown",        AUDIO_BASS_DOWN,          0x0E01),
   DOM_KEY_MAP("AudioBassBoostDown",   AUDIO_BASS_BOOST_DOWN,    0x0D03),
   DOM_KEY_MAP("AudioBassBoostToggle", AUDIO_BASS_BOOST_TOGGLE,  0x0E02),
   DOM_KEY_MAP("AudioBassBoostUp",     AUDIO_BASS_BOOST_UP,      0x0D04),
-  DOM_KEY_MAP("AudioBassUp",          AUDIO_BASS_UP,            0x0E03),
   DOM_KEY_MAP("AudioFaderFront",      AUDIO_FADER_FRONT,        0x0D05),
   DOM_KEY_MAP("AudioFaderRear",       AUDIO_FADER_REAR,         0x0D06),
   DOM_KEY_MAP("AudioSurroundModeNext",AUDIO_SURROUND_MODE_NEXT, 0x0D07),
@@ -349,15 +348,13 @@ DOM_KEY_MAP_DECLARATION {
   // ======================================================
 
   //          Key                     Enum                      Value
-  //          "LaunchCalculator" is equivalent to "Launch Application 2":
-  DOM_KEY_MAP("LaunchCalculator",     LAUNCH_CALCULATOR,        0x0B01),
+  DOM_KEY_MAP("LaunchApplication1",   LAUNCH_MY_COMPUTER,       0x0B06),
+  DOM_KEY_MAP("LaunchApplication2",   LAUNCH_CALCULATOR,        0x0B01),
   DOM_KEY_MAP("LaunchCalendar",       LAUNCH_CALENDAR,          0x0B02),
   DOM_KEY_MAP("LaunchContacts",       LAUNCH_CONTACTS,          0x0B0C),
   DOM_KEY_MAP("LaunchMail",           LAUNCH_MAIL,              0x0B03),
   DOM_KEY_MAP("LaunchMediaPlayer",    LAUNCH_MEDIA_PLAYER,      0x0B04),
   DOM_KEY_MAP("LaunchMusicPlayer",    LAUNCH_MUSIC_PLAYER,      0x0B05),
-  //          "LaunchMyComputer" is equivalent to "Launch Application 1":
-  DOM_KEY_MAP("LaunchMyComputer",     LAUNCH_MY_COMPUTER,       0x0B06),
   DOM_KEY_MAP("LaunchPhone",          LAUNCH_PHONE,             0x0B0D),
   DOM_KEY_MAP("LaunchScreenSaver",    LAUNCH_SCREEN_SAVER,      0x0B07),
   DOM_KEY_MAP("LaunchSpreadsheet",    LAUNCH_SPREADSHEET,       0x0B08),

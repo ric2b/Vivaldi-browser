@@ -98,7 +98,7 @@ InterpolationValue CSSFontWeightInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSFontWeightInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState& state,
+    const StyleResolverState* state,
     ConversionCheckers& conversionCheckers) const {
   if (!value.isIdentifierValue())
     return nullptr;
@@ -112,7 +112,8 @@ InterpolationValue CSSFontWeightInterpolationType::maybeConvertValue(
 
     case CSSValueBolder:
     case CSSValueLighter: {
-      FontWeight inheritedFontWeight = state.parentStyle()->fontWeight();
+      DCHECK(state);
+      FontWeight inheritedFontWeight = state->parentStyle()->fontWeight();
       conversionCheckers.push_back(
           InheritedFontWeightChecker::create(inheritedFontWeight));
       if (keyword == CSSValueBolder)
@@ -129,8 +130,8 @@ InterpolationValue CSSFontWeightInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSFontWeightInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  return createFontWeightValue(state.style()->fontWeight());
+    const ComputedStyle& style) const {
+  return createFontWeightValue(style.fontWeight());
 }
 
 void CSSFontWeightInterpolationType::applyStandardPropertyValue(

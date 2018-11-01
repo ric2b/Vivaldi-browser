@@ -56,23 +56,21 @@ declare_args() {
 
   enable_supervised_users = !is_ios && !is_chromecast
 
-  # Enables vr shell (enabled on same architectures as webvr).
-  # TODO(amp): Collapse webvr and vr shell build flags into a single vr flag.
-  enable_vr_shell =
-      is_android && (current_cpu == "arm" || current_cpu == "arm64")
-
   # Enables vr shell UI development on local or remote page.
   enable_vr_shell_ui_dev = false
 
   # Enable native notifications via XPC services (mac only).
-  enable_xpc_notifications = false
+  # TODO(miguelg): remove this.
+  enable_xpc_notifications = true
 
   # Indicates if the build is using PGO.
   pgo_build = chrome_pgo_phase > 0
 
-  # Use vulcanized HTML/CSS/JS resources to speed up WebUI (chrome://)
-  # pages. https://github.com/polymer/vulcanize
-  use_vulcanize = true
+  # Optimize parts of Chrome's UI written with web technologies (HTML/CSS/JS)
+  # for runtime performance purposes. This does more work at compile time for
+  # speed benefits at runtime (so we skip in debug builds). TODO(dbeam): rename
+  # this flag "optimize_web_uis" because we run more than vulcanize these days.
+  use_vulcanize = !is_debug
 }
 
 # Use brlapi from brltty for braille display support.
@@ -93,7 +91,6 @@ chrome_grit_defines = [
   "enable_print_preview=$enable_print_preview",
   "enable_printing=$_enable_printing",
   "enable_service_discovery=$enable_service_discovery",
-  "enable_vr_shell=$enable_vr_shell",
   "enable_webrtc=$enable_webrtc",
   "enable_webvr=$enable_webvr",
   "mac_views_browser=$mac_views_browser",

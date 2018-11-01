@@ -101,6 +101,19 @@ class MostVisitedSites : public history::TopSitesObserver,
 
   ~MostVisitedSites() override;
 
+  // Returns true if this object was created with a non-null provider for the
+  // given NTP tile source. That source may or may not actually provide tiles,
+  // depending on its configuration and the priority of different sources.
+  bool DoesSourceExist(NTPTileSource source) const;
+
+  // Returns the corresponding object passed at construction.
+  history::TopSites* top_sites() { return top_sites_.get(); }
+  suggestions::SuggestionsService* suggestions() {
+    return suggestions_service_;
+  }
+  PopularSites* popular_sites() { return popular_sites_.get(); }
+  MostVisitedSitesSupervisor* supervisor() { return supervisor_.get(); }
+
   // Sets the observer, and immediately fetches the current suggestions.
   // Does not take ownership of |observer|, which must outlive this object and
   // must not be null.
@@ -125,8 +138,6 @@ class MostVisitedSites : public history::TopSitesObserver,
                                    NTPTilesVector popular_tiles);
 
  private:
-  void BuildCurrentTiles();
-
   // Initialize the query to Top Sites. Called if the SuggestionsService
   // returned no data.
   void InitiateTopSitesQuery();
@@ -138,8 +149,16 @@ class MostVisitedSites : public history::TopSitesObserver,
   void OnMostVisitedURLsAvailable(
       const history::MostVisitedURLList& visited_list);
 
-  // Callback for when data is available from the SuggestionsService.
-  void OnSuggestionsProfileAvailable(
+  // Callback for when an update is reported by the SuggestionsService.
+  void OnSuggestionsProfileChanged(
+      const suggestions::SuggestionsProfile& suggestions_profile);
+
+  // Builds the current tileset based on available caches and notifies the
+  // observer.
+  void BuildCurrentTiles();
+
+  // Same as above the SuggestionsProfile is provided, no need to read cache.
+  void BuildCurrentTilesGivenSuggestionsProfile(
       const suggestions::SuggestionsProfile& suggestions_profile);
 
   // Takes the personal suggestions and creates whitelist entry point
@@ -162,7 +181,7 @@ class MostVisitedSites : public history::TopSitesObserver,
 
   void OnPopularSitesDownloaded(bool success);
 
-  void OnIconMadeAvailable(const GURL& site_url, bool newly_available);
+  void OnIconMadeAvailable(const GURL& site_url);
 
   // history::TopSitesObserver implementation.
   void TopSitesLoaded(history::TopSites* top_sites) override;

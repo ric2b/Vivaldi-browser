@@ -41,6 +41,14 @@ function returnOsVersion(osVersion) {
 }
 
 /**
+ * Callback from the backend with the firmware version to display.
+ * @param {string} firmwareVersion
+ */
+function returnOsFirmwareVersion(firmwareVersion) {
+  $('firmware_version').textContent = firmwareVersion;
+}
+
+/**
  * Callback from the backend with the ARC version to display.
  * @param {string} arcVersion The ARC version to display.
  */
@@ -63,9 +71,10 @@ function returnCustomizationId(response) {
 /* All the work we do onload. */
 function onLoadWork() {
   chrome.send('requestVersionInfo');
-  $('arc_holder').hidden = true;
-  if (cr.isChromeOS)
+  if (cr.isChromeOS) {
+    $('arc_holder').hidden = true;
     chrome.chromeosInfoPrivate.get(['customizationId'], returnCustomizationId);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', onLoadWork);

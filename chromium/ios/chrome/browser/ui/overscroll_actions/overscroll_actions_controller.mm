@@ -10,12 +10,13 @@
 #include "base/logging.h"
 #include "base/mac/objc_property_releaser.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_view.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
+#include "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/voice/voice_search_notification_names.h"
 #import "ios/web/public/web_state/crw_web_view_proxy.h"
 
@@ -679,6 +680,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
         dispatch_async(dispatch_get_main_queue(), ^{
           [self recordMetricForTriggeredAction:self.overscrollActionView
                                                    .selectedAction];
+          TriggerHapticFeedbackForAction();
           [self.delegate overscrollActionsController:self
                                     didTriggerAction:self.overscrollActionView
                                                          .selectedAction];
@@ -894,9 +896,16 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   [self scrollView].panGestureRecognizer.enabled = NO;
   [self scrollView].panGestureRecognizer.enabled = YES;
   [self startBounceWithInitialVelocity:CGPointZero];
+
+  TriggerHapticFeedbackForAction();
   [self.delegate
       overscrollActionsController:self
                  didTriggerAction:self.overscrollActionView.selectedAction];
+}
+
+- (void)overscrollActionsView:(OverscrollActionsView*)view
+      selectedActionDidChange:(OverscrollAction)newAction {
+  TriggerHapticFeedbackForSelectionChange();
 }
 
 @end

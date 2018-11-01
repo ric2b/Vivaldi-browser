@@ -21,6 +21,7 @@
 
 #include <AppKit/NSGraphicsContext.h>
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/mac/ThemeMac.h"
 #include "platform_canvas.h"
 
@@ -43,12 +44,12 @@ static IntRect clampRect(int size, const IntRect& rect) {
 static const int kMaxDirtyRectPixelSize = 10000;
 
 LocalCurrentGraphicsContext::LocalCurrentGraphicsContext(
-    SkCanvas* canvas,
+    PaintCanvas* canvas,
     float deviceScaleFactor,
     const IntRect& dirtyRect)
     : m_didSetGraphicsContext(false),
       m_inflatedDirtyRect(ThemeMac::inflateRectForAA(dirtyRect)),
-      m_skiaBitLocker(canvas, m_inflatedDirtyRect, deviceScaleFactor) {
+      m_graphicsContextCanvas(canvas, m_inflatedDirtyRect, deviceScaleFactor) {
   m_savedCanvas = canvas;
   canvas->save();
 
@@ -86,7 +87,7 @@ LocalCurrentGraphicsContext::~LocalCurrentGraphicsContext() {
 CGContextRef LocalCurrentGraphicsContext::cgContext() {
   // This synchronizes the CGContext to reflect the current SkCanvas state.
   // The implementation may not return the same CGContext each time.
-  CGContextRef cgContext = m_skiaBitLocker.cgContext();
+  CGContextRef cgContext = m_graphicsContextCanvas.cgContext();
 
   return cgContext;
 }

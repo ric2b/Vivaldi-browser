@@ -23,22 +23,24 @@
 
 #include "core/loader/resource/ImageResource.h"
 
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceClient.h"
-#include "core/fetch/ResourceFetcher.h"
-#include "core/fetch/ResourceLoader.h"
-#include "core/fetch/ResourceLoadingLog.h"
+#include <memory>
+
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/loader/resource/ImageResourceInfo.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceClient.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoader.h"
+#include "platform/loader/fetch/ResourceLoadingLog.h"
+#include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "public/platform/Platform.h"
+#include "v8/include/v8.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/StdLibExtras.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 namespace {
@@ -76,9 +78,7 @@ class ImageResource::ImageResourceInfoImpl final
   const ResourceResponse& response() const override {
     return m_resource->response();
   }
-  Resource::Status getStatus() const override {
-    return m_resource->getStatus();
-  }
+  ResourceStatus getStatus() const override { return m_resource->getStatus(); }
   bool isPlaceholder() const override { return m_resource->isPlaceholder(); }
   bool isCacheValidator() const override {
     return m_resource->isCacheValidator();
@@ -101,8 +101,8 @@ class ImageResource::ImageResourceInfoImpl final
     return m_resource->resourceError();
   }
 
-  void decodeError(bool allDataReceived) override {
-    m_resource->decodeError(allDataReceived);
+  void setIsPlaceholder(bool isPlaceholder) override {
+    m_resource->m_isPlaceholder = isPlaceholder;
   }
   void setDecodedSize(size_t size) override {
     m_resource->setDecodedSize(size);
@@ -157,7 +157,11 @@ ImageResource* ImageResource::fetch(FetchRequest& request,
     if (requestURL.isValid()) {
       ResourceRequestBlockedReason blockReason = fetcher->context().canRequest(
           Resource::Image, request.resourceRequest(), requestURL,
-          request.options(), request.forPreload(),
+          request.options(),
+          /* Don't send security violation reports for speculative preloads */
+          request.isSpeculativePreload()
+              ? SecurityViolationReportingPolicy::SuppressReporting
+              : SecurityViolationReportingPolicy::Report,
           request.getOriginRestriction());
       if (blockReason == ResourceRequestBlockedReason::None)
         fetcher->context().sendImagePing(requestURL);
@@ -239,8 +243,7 @@ void ImageResource::didAddClient(ResourceClient* client) {
 void ImageResource::destroyDecodedDataForFailedRevalidation() {
   // Clears the image, as we must create a new image for the failed
   // revalidation response.
-  getContent()->updateImage(nullptr, ImageResourceContent::ClearAndUpdateImage,
-                            false);
+  updateImage(nullptr, ImageResourceContent::ClearAndUpdateImage, false);
   setDecodedSize(0);
 }
 
@@ -285,8 +288,7 @@ void ImageResource::appendData(const char* data, size_t length) {
 
     // Update the image immediately if needed.
     if (getContent()->shouldUpdateImageImmediately()) {
-      getContent()->updateImage(this->data(), ImageResourceContent::UpdateImage,
-                                false);
+      updateImage(this->data(), ImageResourceContent::UpdateImage, false);
       return;
     }
 
@@ -314,8 +316,7 @@ void ImageResource::flushImageIfNeeded(TimerBase*) {
   // to call |updateImage()|.
   if (isLoading()) {
     m_lastFlushTime = WTF::monotonicallyIncreasingTime();
-    getContent()->updateImage(this->data(), ImageResourceContent::UpdateImage,
-                              false);
+    updateImage(this->data(), ImageResourceContent::UpdateImage, false);
   }
 }
 
@@ -329,19 +330,25 @@ void ImageResource::decodeError(bool allDataReceived) {
   clearData();
   setEncodedSize(0);
   if (!errorOccurred())
-    setStatus(DecodeError);
+    setStatus(ResourceStatus::DecodeError);
 
+  // Finishes loading if needed, and notifies observers.
   if (!allDataReceived && loader()) {
+    // Observers are notified via ImageResource::finish().
     // TODO(hiroshige): Do not call didFinishLoading() directly.
     loader()->didFinishLoading(monotonicallyIncreasingTime(), size, size);
+  } else {
+    auto result = getContent()->updateImage(
+        nullptr, ImageResourceContent::ClearImageAndNotifyObservers,
+        allDataReceived);
+    DCHECK_EQ(result, ImageResourceContent::UpdateImageResult::NoDecodeError);
   }
 
   memoryCache()->remove(this);
 }
 
 void ImageResource::updateImageAndClearBuffer() {
-  getContent()->updateImage(data(), ImageResourceContent::ClearAndUpdateImage,
-                            true);
+  updateImage(data(), ImageResourceContent::ClearAndUpdateImage, true);
   clearData();
 }
 
@@ -351,7 +358,7 @@ void ImageResource::finish(double loadFinishTime) {
     if (data())
       updateImageAndClearBuffer();
   } else {
-    getContent()->updateImage(data(), ImageResourceContent::UpdateImage, true);
+    updateImage(data(), ImageResourceContent::UpdateImage, true);
     // As encoded image data can be created from m_image  (see
     // ImageResource::resourceBuffer(), we don't have to keep m_data. Let's
     // clear this. As for the lifetimes of m_image and m_data, see this
@@ -369,8 +376,8 @@ void ImageResource::error(const ResourceError& error) {
   // is really needed, or remove it otherwise.
   setEncodedSize(0);
   Resource::error(error);
-  getContent()->updateImage(
-      nullptr, ImageResourceContent::ClearImageAndNotifyObservers, true);
+  updateImage(nullptr, ImageResourceContent::ClearImageAndNotifyObservers,
+              true);
 }
 
 void ImageResource::responseReceived(
@@ -442,11 +449,11 @@ void ImageResource::reloadIfLoFiOrPlaceholderImage(
   } else {
     clearData();
     setEncodedSize(0);
-    getContent()->updateImage(
-        nullptr, ImageResourceContent::ClearImageAndNotifyObservers, false);
+    updateImage(nullptr, ImageResourceContent::ClearImageAndNotifyObservers,
+                false);
   }
 
-  setStatus(NotStarted);
+  setStatus(ResourceStatus::NotStarted);
 
   DCHECK(m_isSchedulingReload);
   m_isSchedulingReload = false;
@@ -470,7 +477,7 @@ void ImageResource::onePartInMultipartReceived(
     m_multipartParsingState = MultipartParsingState::FinishedParsingFirstPart;
     // Notify finished when the first part ends.
     if (!errorOccurred())
-      setStatus(Cached);
+      setStatus(ResourceStatus::Cached);
     // We notify clients and observers of finish in checkNotify() and
     // updateImageAndClearBuffer(), respectively, and they will not be
     // notified again in Resource::finish()/error().
@@ -511,6 +518,31 @@ const ImageResourceContent* ImageResource::getContent() const {
 
 ResourcePriority ImageResource::priorityFromObservers() {
   return getContent()->priorityFromObservers();
+}
+
+void ImageResource::updateImage(
+    PassRefPtr<SharedBuffer> sharedBuffer,
+    ImageResourceContent::UpdateImageOption updateImageOption,
+    bool allDataReceived) {
+  auto result = getContent()->updateImage(std::move(sharedBuffer),
+                                          updateImageOption, allDataReceived);
+  if (result == ImageResourceContent::UpdateImageResult::ShouldDecodeError) {
+    // In case of decode error, we call imageNotifyFinished() iff we don't
+    // initiate reloading:
+    // [(a): when this is in the middle of loading, or (b): otherwise]
+    // 1. The updateImage() call above doesn't call notifyObservers().
+    // 2. notifyObservers(ShouldNotifyFinish) is called
+    //    (a) via updateImage() called in ImageResource::finish()
+    //        called via didFinishLoading() called in decodeError(), or
+    //    (b) via updateImage() called in decodeError().
+    //    imageNotifyFinished() is called here iff we will not initiate
+    //    reloading in Step 3 due to notifyObservers()'s
+    //    schedulingReloadOrShouldReloadBrokenPlaceholder() check.
+    // 3. reloadIfLoFiOrPlaceholderImage() is called via ResourceFetcher
+    //    (a) via didFinishLoading() called in decodeError(), or
+    //    (b) after returning ImageResource::updateImage().
+    decodeError(allDataReceived);
+  }
 }
 
 }  // namespace blink

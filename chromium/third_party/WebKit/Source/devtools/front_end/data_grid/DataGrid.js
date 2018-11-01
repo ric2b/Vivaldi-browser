@@ -168,7 +168,9 @@ DataGrid.DataGrid = class extends Common.Object {
     if (column.sortable) {
       cell.addEventListener('click', this._clickInHeaderCell.bind(this), false);
       cell.classList.add('sortable');
-      cell.createChild('div', 'sort-order-icon-container').createChild('div', 'sort-order-icon');
+      var icon = UI.Icon.create('', 'sort-order-icon');
+      cell.createChild('div', 'sort-order-icon-container').appendChild(icon);
+      cell[DataGrid.DataGrid._sortIconSymbol] = icon;
     }
   }
 
@@ -244,11 +246,12 @@ DataGrid.DataGrid = class extends Common.Object {
    * @protected
    */
   setVerticalPadding(top, bottom) {
-    this._topFillerRow.style.height = top + 'px';
-    if (top || bottom)
-      this._bottomFillerRow.style.height = bottom + 'px';
-    else
-      this._bottomFillerRow.style.height = 'auto';
+    var topPx = top + 'px';
+    var bottomPx = (top || bottom) ? bottom + 'px' : 'auto';
+    if (this._topFillerRow.style.height === topPx && this._bottomFillerRow.style.height === bottomPx)
+      return;
+    this._topFillerRow.style.height = topPx;
+    this._bottomFillerRow.style.height = bottomPx;
     this.dispatchEventToListeners(DataGrid.DataGrid.Events.PaddingChanged);
   }
 
@@ -304,7 +307,19 @@ DataGrid.DataGrid = class extends Common.Object {
 
     var element = this._editingNode._element.children[cellIndex];
     UI.InplaceEditor.startEditing(element, this._startEditingConfig(element));
-    element.getComponentSelection().setBaseAndExtent(element, 0, element, 1);
+    element.getComponentSelection().selectAllChildren(element);
+  }
+
+  /**
+   * @param {!DataGrid.DataGridNode} node
+   * @param {string} columnIdentifier
+   */
+  startEditingNextEditableColumnOfDataGridNode(node, columnIdentifier) {
+    const column = this._columns[columnIdentifier];
+    const cellIndex = this._visibleColumnsArray.indexOf(column);
+    const nextEditableColumn = this._nextEditableColumn(cellIndex);
+    if (nextEditableColumn !== -1)
+      this._startEditingColumnOfDataGridNode(node, nextEditableColumn);
   }
 
   /**
@@ -331,7 +346,7 @@ DataGrid.DataGrid = class extends Common.Object {
     this._editing = true;
     UI.InplaceEditor.startEditing(element, this._startEditingConfig(element));
 
-    element.getComponentSelection().setBaseAndExtent(element, 0, element, 1);
+    element.getComponentSelection().selectAllChildren(element);
   }
 
   renderInline() {
@@ -365,7 +380,7 @@ DataGrid.DataGrid = class extends Common.Object {
     }
     var column = this._columns[columnId];
     var cellIndex = this._visibleColumnsArray.indexOf(column);
-    var textBeforeEditing = /** @type {string} */ (this._editingNode.data[columnId]);
+    var textBeforeEditing = /** @type {string} */ (this._editingNode.data[columnId] || '');
     var currentEditingNode = this._editingNode;
 
     /**
@@ -903,6 +918,9 @@ DataGrid.DataGrid = class extends Common.Object {
     this._sortColumnCell = cell;
 
     cell.classList.add(sortOrder);
+    var icon = cell[DataGrid.DataGrid._sortIconSymbol];
+    icon.setIconType(
+        sortOrder === DataGrid.DataGrid.Order.Ascending ? 'smallicon-triangle-up' : 'smallicon-triangle-down');
 
     this.dispatchEventToListeners(DataGrid.DataGrid.Events.SortingChanged);
   }
@@ -1186,6 +1204,7 @@ DataGrid.DataGrid.Align = {
 
 DataGrid.DataGrid._preferredWidthSymbol = Symbol('preferredWidth');
 DataGrid.DataGrid._columnIdSymbol = Symbol('columnId');
+DataGrid.DataGrid._sortIconSymbol = Symbol('sortIcon');
 
 DataGrid.DataGrid.ColumnResizePadding = 24;
 DataGrid.DataGrid.CenterResizerOverBorderAdjustment = 3;
@@ -1215,6 +1234,10 @@ DataGrid.DataGridNode = class extends Common.Object {
     this._expanded = false;
     /** @type {boolean} */
     this._selected = false;
+    /** @type {boolean} */
+    this._dirty = false;
+    /** @type {boolean} */
+    this._inactive = false;
     /** @type {number|undefined} */
     this._depth;
     /** @type {boolean|undefined} */
@@ -1276,6 +1299,10 @@ DataGrid.DataGridNode = class extends Common.Object {
       this._element.classList.add('selected');
     if (this.revealed)
       this._element.classList.add('revealed');
+    if (this.dirty)
+      this._element.classList.add('dirty');
+    if (this.inactive)
+      this._element.classList.add('inactive');
     return this._element;
   }
 
@@ -1355,6 +1382,51 @@ DataGrid.DataGridNode = class extends Common.Object {
 
     for (var i = 0; i < this.children.length; ++i)
       this.children[i].revealed = x && this.expanded;
+  }
+
+  /**
+   * @return {boolean}
+   */
+  isDirty() {
+    return this._dirty;
+  }
+
+  /**
+   * @param {boolean} dirty
+   */
+  setDirty(dirty) {
+    if (this._dirty === dirty)
+      return;
+    this._dirty = dirty;
+    if (!this._element)
+      return;
+    if (dirty)
+      this._element.classList.add('dirty');
+    else
+      this._element.classList.remove('dirty');
+  }
+
+
+  /**
+   * @return {boolean}
+   */
+  isInactive() {
+    return this._inactive;
+  }
+
+  /**
+   * @param {boolean} inactive
+   */
+  setInactive(inactive) {
+    if (this._inactive === inactive)
+      return;
+    this._inactive = inactive;
+    if (!this._element)
+      return;
+    if (inactive)
+      this._element.classList.add('inactive');
+    else
+      this._element.classList.remove('inactive');
   }
 
   /**
@@ -1514,7 +1586,7 @@ DataGrid.DataGridNode = class extends Common.Object {
    * @return {number}
    */
   nodeSelfHeight() {
-    return 16;
+    return 20;
   }
 
   /**

@@ -121,6 +121,8 @@ class LayerTreeHostImplClient {
   virtual void OnDrawForCompositorFrameSink(
       bool resourceless_software_draw) = 0;
 
+  virtual void NeedsImplSideInvalidation() = 0;
+
  protected:
   virtual ~LayerTreeHostImplClient() {}
 };
@@ -233,6 +235,7 @@ class CC_EXPORT LayerTreeHostImpl
     DISALLOW_COPY_AND_ASSIGN(FrameData);
   };
 
+  virtual void DidSendBeginMainFrame() {}
   virtual void BeginMainFrameAborted(
       CommitEarlyOutReason reason,
       std::vector<std::unique_ptr<SwapPromise>> swap_promises);
@@ -248,6 +251,11 @@ class CC_EXPORT LayerTreeHostImpl
   void DidAnimateScrollOffset();
   void SetFullViewportDamage();
   void SetViewportDamage(const gfx::Rect& damage_rect);
+
+  // Analogous to a commit, this function is used to create a sync tree and
+  // add impl-side invalidations to it.
+  // virtual for testing.
+  virtual void InvalidateContentOnImplSide();
 
   void SetTreeLayerFilterMutated(ElementId element_id,
                                  LayerTreeImpl* tree,
@@ -312,6 +320,10 @@ class CC_EXPORT LayerTreeHostImpl
   // immediately if any notifications had been blocked while blocking.
   virtual void BlockNotifyReadyToActivateForTesting(bool block);
 
+  // Prevents notifying the |client_| when an impl side invalidation request is
+  // made. When unblocked, the disabled request will immediately be called.
+  virtual void BlockImplSideInvalidationRequestsForTesting(bool block);
+
   // Resets all of the trees to an empty state.
   void ResetTreesForTesting();
 
@@ -343,6 +355,7 @@ class CC_EXPORT LayerTreeHostImpl
       TreePriority tree_priority) override;
   void SetIsLikelyToRequireADraw(bool is_likely_to_require_a_draw) override;
   gfx::ColorSpace GetTileColorSpace() const override;
+  void RequestImplSideInvalidation() override;
 
   // ScrollbarAnimationControllerClient implementation.
   void PostDelayedScrollbarAnimationTask(const base::Closure& task,
@@ -427,10 +440,12 @@ class CC_EXPORT LayerTreeHostImpl
   virtual void CreatePendingTree();
   virtual void ActivateSyncTree();
 
-  // Shortcuts to layers on the active tree.
+  // Shortcuts to layers/nodes on the active tree.
   LayerImpl* InnerViewportScrollLayer() const;
   LayerImpl* OuterViewportScrollLayer() const;
-  LayerImpl* CurrentlyScrollingLayer() const;
+  ScrollNode* OuterViewportScrollNode() const;
+  ScrollNode* CurrentlyScrollingNode();
+  const ScrollNode* CurrentlyScrollingNode() const;
 
   bool scroll_affects_scroll_handler() const {
     return scroll_affects_scroll_handler_;
@@ -629,6 +644,11 @@ class CC_EXPORT LayerTreeHostImpl
 
   void AnimateInternal(bool active_tree);
 
+  // The function is called to update state on the sync tree after a commit
+  // finishes or after the sync tree was created to invalidate content on the
+  // impl thread.
+  void UpdateSyncTreeAfterCommitOrImplSideInvalidation();
+
   // Returns true if status changed.
   bool UpdateGpuRasterizationStatus();
   void UpdateTreeResourcesForGpuRasterizationIfNeeded();
@@ -637,8 +657,9 @@ class CC_EXPORT LayerTreeHostImpl
 
   InputHandler::ScrollStatus ScrollBeginImpl(
       ScrollState* scroll_state,
-      LayerImpl* scrolling_layer_impl,
+      ScrollNode* scrolling_node,
       InputHandler::ScrollInputType type);
+  bool IsInitialScrollHitTestReliable(LayerImpl* layer, const gfx::PointF&);
   void DistributeScrollDelta(ScrollState* scroll_state);
 
   bool AnimatePageScale(base::TimeTicks monotonic_time);
@@ -655,7 +676,7 @@ class CC_EXPORT LayerTreeHostImpl
   // the frame should be drawn.
   DrawResult CalculateRenderPasses(FrameData* frame);
 
-  void ClearCurrentlyScrollingLayer();
+  void ClearCurrentlyScrollingNode();
 
   LayerImpl* FindScrollLayerForDeviceViewportPoint(
       const gfx::PointF& device_viewport_point,
@@ -675,8 +696,6 @@ class CC_EXPORT LayerTreeHostImpl
   void NotifySwapPromiseMonitorsOfForwardingToMainThread();
 
   void UpdateRootLayerStateForSynchronousInputHandler();
-
-  void ScrollAnimationAbort(LayerImpl* layer_impl);
 
   bool ScrollAnimationUpdateTarget(ScrollNode* scroll_node,
                                    const gfx::Vector2dF& scroll_delta,
@@ -732,6 +751,7 @@ class CC_EXPORT LayerTreeHostImpl
   bool wheel_scrolling_;
   bool scroll_affects_scroll_handler_;
   int scroll_layer_id_mouse_currently_over_;
+  int scroll_layer_id_mouse_currently_captured_;
 
   std::vector<std::unique_ptr<SwapPromise>>
       swap_promises_for_main_thread_scroll_update_;
@@ -754,7 +774,7 @@ class CC_EXPORT LayerTreeHostImpl
   gfx::Vector2dF accumulated_root_overscroll_;
 
   bool pinch_gesture_active_;
-  bool pinch_gesture_end_should_clear_scrolling_layer_;
+  bool pinch_gesture_end_should_clear_scrolling_node_;
 
   std::unique_ptr<BrowserControlsOffsetManager>
       browser_controls_offset_manager_;

@@ -11,12 +11,6 @@ namespace switches {
 
 const char kDisableThreadedAnimation[] = "disable-threaded-animation";
 
-// Disables the use of a cached picture for raster in the renderer,
-// making raster go directly from the display item list (this is the data
-// structure surfaced to tracing). This is useful for debugging to remove
-// the cached picture from the pipeline to narrow down bugs.
-const char kDisableCachedPictureRaster[] = "disable-cached-picture-raster";
-
 // Disables layer-edge anti-aliasing in the compositor.
 const char kDisableCompositedAntialiasing[] =
     "disable-composited-antialiasing";
@@ -29,6 +23,9 @@ const char kDisableMainFrameBeforeActivation[] =
 // Enables sending the next BeginMainFrame before the previous commit activates.
 const char kEnableMainFrameBeforeActivation[] =
     "enable-main-frame-before-activation";
+
+// Enables defering image decodes to the image decode service.
+const char kEnableCheckerImaging[] = "enable-checker-imaging";
 
 // Percentage of the browser controls need to be hidden before they will auto
 // hide.
@@ -56,9 +53,6 @@ const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
 // Force all rasterization and compositing to be done in linear color space,
 // with physically correct blending and interpolation.
 const char kEnableTrueColorRendering[] = "enable-true-color-rendering";
-
-// Enables CHECKs to ensure that tile priorities are not inverted.
-const char kCheckTilePriorityInversion[] = "check-tile-priority-inversion";
 
 // Renders a border around compositor layers to help debug and study
 // layer compositing.

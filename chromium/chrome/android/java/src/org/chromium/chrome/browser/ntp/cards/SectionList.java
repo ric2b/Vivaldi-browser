@@ -6,15 +6,15 @@ package org.chromium.chrome.browser.ntp.cards;
 
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus.CategoryStatusEnum;
+import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 
@@ -42,7 +42,6 @@ public class SectionList
         mUiDelegate.getSuggestionsSource().setObserver(this);
         mUiDelegate.getMetricsReporter().setRanker(mSuggestionsRanker);
         mOfflinePageBridge = offlinePageBridge;
-        resetSections(/* alwaysAllowEmptySections = */ false);
 
         mUiDelegate.addDestructionObserver(new DestructionObserver() {
             @Override
@@ -57,7 +56,7 @@ public class SectionList
      * @param alwaysAllowEmptySections Whether sections are always allowed to be displayed when
      *     they are empty, even when they are normally not.
      */
-    public void resetSections(boolean alwaysAllowEmptySections) {
+    private void resetSections(boolean alwaysAllowEmptySections) {
         removeAllSections();
 
         SuggestionsSource suggestionsSource = mUiDelegate.getSuggestionsSource();
@@ -76,6 +75,7 @@ public class SectionList
             ++categoryIndex;
         }
 
+        maybeHideArticlesHeader();
         mUiDelegate.getMetricsReporter().onPageShown(categories, suggestionsPerCategory);
     }
 
@@ -182,6 +182,14 @@ public class SectionList
 
     @Override
     public void onFullRefreshRequired() {
+        refreshSuggestions();
+    }
+
+    /**
+     * Resets all the sections, getting the current list of categories and the associated
+     * suggestions from the backend.
+     */
+    public void refreshSuggestions() {
         resetSections(/* alwaysAllowEmptySections = */false);
     }
 
@@ -222,8 +230,6 @@ public class SectionList
      */
     @Override
     public void dismissSection(SuggestionsSection section) {
-        assert SnippetsConfig.isSectionDismissalEnabled();
-
         mUiDelegate.getSuggestionsSource().dismissCategory(section.getCategory());
         removeSection(section);
     }
@@ -237,6 +243,17 @@ public class SectionList
     private void removeAllSections() {
         mSections.clear();
         removeChildren();
+    }
+
+    /** Hides the header for the {@link KnownCategories#ARTICLES} section when necessary. */
+    private void maybeHideArticlesHeader() {
+        // If there is more than a section we want to show the headers for disambiguation purposes.
+        if (mSections.size() != 1) return;
+
+        SuggestionsSection articlesSection = mSections.get(KnownCategories.ARTICLES);
+        if (articlesSection == null) return;
+
+        articlesSection.setHeaderVisibility(false);
     }
 
     /**

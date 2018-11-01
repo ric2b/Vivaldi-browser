@@ -6,7 +6,9 @@
 #include "sync/glue/notes_change_processor.h"
 
 #include <map>
+#include <memory>
 #include <stack>
+#include <utility>
 #include <vector>
 
 #include "base/location.h"
@@ -15,16 +17,16 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/driver/sync_client.h"
+#include "components/sync/syncable/change_record.h"
+#include "components/sync/syncable/entry.h"
+#include "components/sync/syncable/read_node.h"
+#include "components/sync/syncable/syncable_write_transaction.h"
+#include "components/sync/syncable/write_node.h"
+#include "components/sync/syncable/write_transaction.h"
 #include "content/public/browser/browser_thread.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notesnode.h"
-#include "components/sync/syncable/change_record.h"
-#include "components/sync/syncable/read_node.h"
-#include "components/sync/syncable/write_node.h"
-#include "components/sync/syncable/write_transaction.h"
-#include "components/sync/syncable/entry.h"
-#include "components/sync/syncable/syncable_write_transaction.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image_util.h"
 
@@ -87,8 +89,8 @@ void NotesChangeProcessor::UpdateSyncNodeProperties(
     notes_specifics.set_url(src->GetURL().spec());
     notes_specifics.set_content(base::UTF16ToUTF8(src->GetContent()));
     notes_specifics.clear_attachments();
-    for (auto it: src->GetAttachments()) {
-      auto attachment = notes_specifics.add_attachments();
+    for (auto it : src->GetAttachments()) {
+      auto* attachment = notes_specifics.add_attachments();
       attachment->set_filename(base::UTF16ToUTF8(it.filename));
       attachment->set_content_type(base::UTF16ToUTF8(it.content_type));
       attachment->set_content(it.content);
@@ -99,7 +101,7 @@ void NotesChangeProcessor::UpdateSyncNodeProperties(
   notes_specifics.set_creation_time_us(
       src->GetCreationTime().ToInternalValue());
   notes_specifics.set_content(base::UTF16ToUTF8(src->GetContent()));
-  //notes_specifics.
+  // notes_specifics.
   dst->SetNotesSpecifics(notes_specifics);
 }
 
@@ -636,7 +638,7 @@ void NotesChangeProcessor::ApplyChangesFromSyncModel(
   // When we added or updated notes in the previous loop, we placed them to
   // the far right position.  Now we iterate over all these modified items in
   // sync order, left to right, moving them into their proper positions.
-  for (auto it: to_reposition) {
+  for (auto it : to_reposition) {
     const Notes_Node* parent = it.second->parent();
     model->Move(it.second, parent, it.first);
   }
@@ -691,12 +693,12 @@ void NotesChangeProcessor::UpdateNoteWithAttachmentData(
   Notes_Node* mutable_node = AsMutable(node);
   std::vector<Notes_attachment> new_attachments;
   if (!node->is_folder() && specifics.attachments_size()) {
-    for (auto it: specifics.attachments()) {
+    for (auto it : specifics.attachments()) {
       Notes_attachment attachment;
       if (it.has_filename())
         attachment.filename = base::UTF8ToUTF16(it.filename());
       if (it.has_content_type())
-        attachment.content_type= base::UTF8ToUTF16(it.content_type());
+        attachment.content_type = base::UTF8ToUTF16(it.content_type());
       if (it.has_content())
         attachment.content = it.content();
       new_attachments.push_back(std::move(attachment));
@@ -704,12 +706,12 @@ void NotesChangeProcessor::UpdateNoteWithAttachmentData(
   }
   mutable_node->SetAttachments(new_attachments);
   if (specifics.has_special_node_type()) {
-    switch(specifics.special_node_type()) {
-    case sync_pb::NotesSpecifics::TRASH_NODE:
-      mutable_node->SetType(Notes_Node::TRASH);
-      break;
-    default:
-      break;
+    switch (specifics.special_node_type()) {
+      case sync_pb::NotesSpecifics::TRASH_NODE:
+        mutable_node->SetType(Notes_Node::TRASH);
+        break;
+      default:
+        break;
     }
   }
 }

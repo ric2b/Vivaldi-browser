@@ -6,6 +6,7 @@
 #define ASH_COMMON_SHELF_OVERFLOW_BUTTON_H_
 
 #include "base/macros.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/custom_button.h"
 
@@ -24,8 +25,8 @@ class OverflowButton : public views::CustomButton {
   void OnOverflowBubbleShown();
   void OnOverflowBubbleHidden();
 
-  // Sets alpha value of the background and schedules a paint.
-  void SetBackgroundAlpha(int alpha);
+  // Updates background and schedules a paint.
+  void UpdateShelfItemBackground(SkColor color);
 
  private:
   // views::CustomButton:
@@ -41,22 +42,11 @@ class OverflowButton : public views::CustomButton {
   void PaintBackground(gfx::Canvas* canvas, const gfx::Rect& bounds);
   void PaintForeground(gfx::Canvas* canvas, const gfx::Rect& bounds);
 
-  // Returns the id of the asset to use for the button backgound based on the
-  // current shelf state.
-  // TODO(tdanderson): Remove this once the material design shelf is enabled
-  // by default. See crbug.com/614453.
-  int NonMaterialBackgroundImageId() const;
-
   // Calculates the bounds of the overflow button based on the shelf alignment.
   gfx::Rect CalculateButtonBounds() const;
 
-  // Used for bottom shelf alignment. |bottom_image_| points to
-  // |bottom_image_md_| for material design, otherwise it is points to a
-  // resource owned by the ResourceBundle.
-  // TODO(tdanderson): Remove the non-md code once the material design shelf is
-  // enabled by default. See crbug.com/614453.
-  const gfx::ImageSkia* bottom_image_;
-  gfx::ImageSkia bottom_image_md_;
+  // Used for bottom shelf alignment.
+  gfx::ImageSkia bottom_image_;
 
   // Cached rotations of |bottom_image_| used for left and right shelf
   // alignments.
@@ -66,8 +56,8 @@ class OverflowButton : public views::CustomButton {
   ShelfView* shelf_view_;
   WmShelf* wm_shelf_;
 
-  // Alpha value used to paint the background.
-  int background_alpha_;
+  // Color used to paint the background.
+  SkColor background_color_;
 
   DISALLOW_COPY_AND_ASSIGN(OverflowButton);
 };

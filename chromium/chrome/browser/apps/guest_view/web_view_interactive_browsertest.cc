@@ -515,6 +515,7 @@ class WebViewInteractiveTest : public WebViewInteractiveTestBase,
 
 class WebViewDragDropInteractiveTest : public WebViewInteractiveTest {};
 class WebViewNewWindowInteractiveTest : public WebViewInteractiveTest {};
+class WebViewFocusInteractiveTest : public WebViewInteractiveTest {};
 class WebViewPointerLockInteractiveTest : public WebViewInteractiveTest {};
 
 // The tests below aren't needed in --use-cross-process-frames-for-guests.
@@ -523,7 +524,6 @@ class WebViewContextMenuInteractiveTest : public WebViewInteractiveTestBase {};
 // The following class of tests do not work for OOPIF <webview>.
 // TODO(ekaramad): Make this tests work with OOPIF and replace the test classes
 // with WebViewInteractiveTest (see crbug.com/582562).
-class WebViewFocusInteractiveTest : public WebViewInteractiveTestBase {};
 class WebViewPopupInteractiveTest : public WebViewInteractiveTestBase {};
 
 INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
@@ -536,6 +536,10 @@ INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
 
 INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
                         WebViewNewWindowInteractiveTest,
+                        testing::Bool());
+
+INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
+                        WebViewFocusInteractiveTest,
                         testing::Bool());
 
 INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
@@ -652,17 +656,21 @@ IN_PROC_BROWSER_TEST_P(WebViewPointerLockInteractiveTest,
 
 // Tests that if a <webview> is focused before navigation then the guest starts
 // off focused.
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest,
                        Focus_FocusBeforeNavigation) {
+  // TODO(avallee): Determine if test is relevant with OOPIF or fix the bug.
+  // http://crbug.com/672947
+  if (GetParam())
+    return;
   TestHelper("testFocusBeforeNavigation", "web_view/focus", NO_TEST_SERVER);
 }
 
 // Tests that setting focus on the <webview> sets focus on the guest.
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusEvent) {
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest, Focus_FocusEvent) {
   TestHelper("testFocusEvent", "web_view/focus", NO_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusTracksEmbedder) {
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest, Focus_FocusTracksEmbedder) {
   content::WebContents* embedder_web_contents = NULL;
 
   std::unique_ptr<ExtensionTestMessageListener> done_listener(
@@ -682,7 +690,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusTracksEmbedder) {
   ASSERT_TRUE(next_step_listener.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
   content::WebContents* embedder_web_contents = NULL;
 
   {
@@ -695,9 +703,16 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
   {
     ExtensionTestMessageListener listener("button1-focused", false);
     listener.set_failure_message("TEST_FAILED");
-    SimulateRWHMouseClick(
-        embedder_web_contents->GetRenderViewHost()->GetWidget(),
-        blink::WebMouseEvent::Button::Left, 200, 20);
+
+    // In oopif-webview, the click it directly routed to the guest.
+    content::WebContents* guest =
+        GetParam() ? GetGuestViewManager()->WaitForSingleGuestCreated()
+                   : nullptr;
+
+    SimulateRWHMouseClick((guest ? guest : embedder_web_contents)
+                              ->GetRenderViewHost()
+                              ->GetWidget(),
+                          blink::WebMouseEvent::Button::Left, 200, 20);
     content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
                               ui::DomCode::TAB, ui::VKEY_TAB, false, false,
                               false, false);
@@ -728,7 +743,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
 }
 
 // Tests that blurring <webview> also blurs the guest.
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_BlurEvent) {
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest, Focus_BlurEvent) {
   TestHelper("testBlurEvent", "web_view/focus", NO_TEST_SERVER);
 }
 
@@ -1114,16 +1129,8 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, Navigation_BackForwardKeys) {
   ASSERT_TRUE(done_listener.WaitUntilSatisfied());
 }
 
-// Flaky on Linux: crbug.com/678267
-#if defined(OS_LINUX)
-#define MAYBE_PointerLock_PointerLockLostWithFocus \
-  DISABLED_PointerLock_PointerLockLostWithFocus
-#else
-#define MAYBE_PointerLock_PointerLockLostWithFocus \
-  PointerLock_PointerLockLostWithFocus
-#endif
 IN_PROC_BROWSER_TEST_P(WebViewPointerLockInteractiveTest,
-                       MAYBE_PointerLock_PointerLockLostWithFocus) {
+                       PointerLock_PointerLockLostWithFocus) {
   TestHelper("testPointerLockLostWithFocus",
              "web_view/pointerlock",
              NO_TEST_SERVER);
@@ -1171,7 +1178,7 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest,
 // Now we need to make sure TextInputTypeChanged fires properly for the guest's
 // view upon step #3. We simply read the input type's state after #3 to
 // make sure it's not TEXT_INPUT_TYPE_NONE.
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusRestored) {
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest, Focus_FocusRestored) {
   TestHelper("testFocusRestored", "web_view/focus", NO_TEST_SERVER);
   content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
   ASSERT_TRUE(embedder_web_contents);
@@ -1341,32 +1348,40 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, TextSelection) {
 }
 #endif
 
-// Flaky on MacOS builders. https://crbug.com/670008
-#if defined(OS_MACOSX)
-#define MAYBE_FocusAndVisibility DISABLED_FocusAndVisibility
-#else
-#define MAYBE_FocusAndVisibility FocusAndVisibility
-#endif
-
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, MAYBE_FocusAndVisibility) {
+IN_PROC_BROWSER_TEST_P(WebViewFocusInteractiveTest, FocusAndVisibility) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   LoadAndLaunchPlatformApp("web_view/focus_visibility",
                            "WebViewInteractiveTest.LOADED");
   ExtensionTestMessageListener test_init_listener(
       "WebViewInteractiveTest.WebViewInitialized", false);
-  SendMessageToEmbedder("init");
+  SendMessageToEmbedder(GetParam() ? "init-oopif" : "init");
   test_init_listener.WaitUntilSatisfied();
+
   // Send several tab-keys. The button inside webview should receive focus at
   // least once.
-  for (size_t i = 0; i < 4; ++i)
+  ExtensionTestMessageListener key_processed_listener(
+      "WebViewInteractiveTest.KeyUp", false);
+#if defined(OS_MACOSX)
+  // On mac, the event listener seems one key event behind and deadlocks. Send
+  // an extra tab to get things unblocked. See http://crbug.com/685281 when
+  // fixed, this can be removed.
+  SendKeyPressToPlatformApp(ui::VKEY_TAB);
+#endif
+  for (size_t i = 0; i < 4; ++i) {
+    key_processed_listener.Reset();
     SendKeyPressToPlatformApp(ui::VKEY_TAB);
+    EXPECT_TRUE(key_processed_listener.WaitUntilSatisfied());
+  }
+
+  // Verify that the button in the guest receives focus.
   ExtensionTestMessageListener webview_button_focused_listener(
       "WebViewInteractiveTest.WebViewButtonWasFocused", false);
   webview_button_focused_listener.set_failure_message(
       "WebViewInteractiveTest.WebViewButtonWasNotFocused");
   SendMessageToEmbedder("verify");
   EXPECT_TRUE(webview_button_focused_listener.WaitUntilSatisfied());
-  // Now make the <webview> invisible.
+
+  // Reset the test and now make the <webview> invisible.
   ExtensionTestMessageListener reset_listener("WebViewInteractiveTest.DidReset",
                                               false);
   SendMessageToEmbedder("reset");
@@ -1375,10 +1390,15 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, MAYBE_FocusAndVisibility) {
       "WebViewInteractiveTest.DidHideWebView", false);
   SendMessageToEmbedder("hide-webview");
   did_hide_webview_listener.WaitUntilSatisfied();
+
+
   // Send the same number of keys and verify that the webview button was not
   // this time.
-  for (size_t i = 0; i < 4; ++i)
+  for (size_t i = 0; i < 4; ++i) {
+    key_processed_listener.Reset();
     SendKeyPressToPlatformApp(ui::VKEY_TAB);
+    EXPECT_TRUE(key_processed_listener.WaitUntilSatisfied());
+  }
   ExtensionTestMessageListener webview_button_not_focused_listener(
       "WebViewInteractiveTest.WebViewButtonWasNotFocused", false);
   webview_button_not_focused_listener.set_failure_message(

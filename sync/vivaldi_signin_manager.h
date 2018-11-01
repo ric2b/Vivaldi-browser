@@ -13,8 +13,8 @@
 // TokenService.
 // TODO(tim): Bug 92948, 226464. ClientLogin is all but gone from use.
 
-#ifndef VIVALDI_SYNC_VIVALDI_SIGNIN_MANAGER_H_
-#define VIVALDI_SYNC_VIVALDI_SIGNIN_MANAGER_H_
+#ifndef SYNC_VIVALDI_SIGNIN_MANAGER_H_
+#define SYNC_VIVALDI_SIGNIN_MANAGER_H_
 
 #include <set>
 #include <string>
@@ -141,5 +141,5 @@ class VivaldiSigninManager : public SigninManagerBase,
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiSigninManager);
 };
-}
-#endif  // VIVALDI_SYNC_VIVALDI_SIGNIN_MANAGER_H_
+}  // namespace vivaldi
+#endif  // SYNC_VIVALDI_SIGNIN_MANAGER_H_

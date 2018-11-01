@@ -7,9 +7,13 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile_manager.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/test/fake_policy_instance.h"
 #include "components/policy/core/common/mock_policy_service.h"
@@ -17,6 +21,8 @@
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "components/safe_json/testing_json_parser.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -51,7 +57,6 @@ constexpr char kFakeONC[] =
     "]}";
 
 constexpr char kPolicyCompliantResponse[] = "{ \"policyCompliant\": true }";
-constexpr char kPolicyNonCompliantResponse[] = "{ \"policyCompliant\": false }";
 
 // Helper class to define callbacks that verify that they were run.
 // Wraps a bool initially set to |false| and verifies that it's been set to
@@ -76,16 +81,27 @@ void ExpectString(std::unique_ptr<CheckedBoolean> was_run,
   was_run->set_value(true);
 }
 
+void ExpectStringWithClosure(base::Closure quit_closure,
+                             std::unique_ptr<CheckedBoolean> was_run,
+                             const std::string& expected,
+                             const std::string& received) {
+  EXPECT_EQ(expected, received);
+  was_run->set_value(true);
+  quit_closure.Run();
+}
+
 arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
     const std::string& expected) {
-  std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean());
+  auto was_run = base::MakeUnique<CheckedBoolean>();
   return base::Bind(&ExpectString, base::Passed(&was_run), expected);
 }
 
 arc::ArcPolicyBridge::ReportComplianceCallback PolicyComplianceCallback(
+    base::Closure quit_closure,
     const std::string& expected) {
-  std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean);
-  return base::Bind(&ExpectString, base::Passed(&was_run), expected);
+  auto was_run = base::MakeUnique<CheckedBoolean>();
+  return base::Bind(&ExpectStringWithClosure, quit_closure,
+                    base::Passed(&was_run), expected);
 }
 
 }  // namespace
@@ -114,17 +130,36 @@ class ArcPolicyBridgeTest : public testing::Test {
 
     policy_instance_ = base::MakeUnique<FakePolicyInstance>();
     bridge_service_->policy()->SetInstance(policy_instance_.get());
+
+    // Setting up user profile for ReportCompliance() tests.
+    chromeos::FakeChromeUserManager* const fake_user_manager =
+        new chromeos::FakeChromeUserManager();
+    user_manager_enabler_ =
+        base::MakeUnique<chromeos::ScopedUserManagerEnabler>(fake_user_manager);
+    const AccountId account_id(
+        AccountId::FromUserEmailGaiaId("user@gmail.com", "1111111111"));
+    fake_user_manager->AddUser(account_id);
+    fake_user_manager->LoginUser(account_id);
+    testing_profile_manager_ = base::MakeUnique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
+    ASSERT_TRUE(testing_profile_manager_->SetUp());
+    ASSERT_TRUE(
+        testing_profile_manager_->CreateTestingProfile("user@gmail.com"));
   }
 
  protected:
   ArcPolicyBridge* policy_bridge() { return policy_bridge_.get(); }
   FakePolicyInstance* policy_instance() { return policy_instance_.get(); }
   policy::PolicyMap& policy_map() { return policy_map_; }
+  base::RunLoop& run_loop() { return run_loop_; }
 
  private:
-  // Not an unused variable. Unit tests do not have a message loop by themselves
-  // and mojo needs a message loop for communication.
-  base::MessageLoop loop_;
+  safe_json::TestingJsonParser::ScopedFactoryOverride factory_override_;
+  content::TestBrowserThreadBundle thread_bundle_;
+  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
+  base::RunLoop run_loop_;
+
   std::unique_ptr<ArcBridgeService> bridge_service_;
   std::unique_ptr<ArcPolicyBridge> policy_bridge_;
   // Always keep policy_instance_ below bridge_service_, so that
@@ -185,7 +220,7 @@ TEST_F(ArcPolicyBridgeTest, DisableScreenshotsTest) {
   policy_map().Set(policy::key::kDisableScreenshots,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(true), nullptr);
+                   base::MakeUnique<base::Value>(true), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"screenCaptureDisabled\":true}"));
 }
@@ -194,7 +229,7 @@ TEST_F(ArcPolicyBridgeTest, VideoCaptureAllowedTest) {
   policy_map().Set(policy::key::kVideoCaptureAllowed,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(false), nullptr);
+                   base::MakeUnique<base::Value>(false), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"cameraDisabled\":true}"));
 }
@@ -203,7 +238,7 @@ TEST_F(ArcPolicyBridgeTest, AudioCaptureAllowedTest) {
   policy_map().Set(policy::key::kAudioCaptureAllowed,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(false), nullptr);
+                   base::MakeUnique<base::Value>(false), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"unmuteMicrophoneDisabled\":true}"));
 }
@@ -212,19 +247,19 @@ TEST_F(ArcPolicyBridgeTest, DefaultGeolocationSettingTest) {
   policy_map().Set(policy::key::kDefaultGeolocationSetting,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(1), nullptr);
+                   base::MakeUnique<base::Value>(1), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"shareLocationDisabled\":false}"));
   policy_map().Set(policy::key::kDefaultGeolocationSetting,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(2), nullptr);
+                   base::MakeUnique<base::Value>(2), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"shareLocationDisabled\":true}"));
   policy_map().Set(policy::key::kDefaultGeolocationSetting,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(3), nullptr);
+                   base::MakeUnique<base::Value>(3), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"shareLocationDisabled\":false}"));
 }
@@ -233,39 +268,30 @@ TEST_F(ArcPolicyBridgeTest, ExternalStorageDisabledTest) {
   policy_map().Set(policy::key::kExternalStorageDisabled,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(true), nullptr);
+                   base::MakeUnique<base::Value>(true), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"mountPhysicalMediaDisabled\":true}"));
 }
 
-TEST_F(ArcPolicyBridgeTest, URLBlacklistTest) {
-  base::ListValue blacklist;
-  blacklist.AppendString("www.blacklist1.com");
-  blacklist.AppendString("www.blacklist2.com");
-  policy_map().Set(policy::key::kURLBlacklist, policy::POLICY_LEVEL_MANDATORY,
+TEST_F(ArcPolicyBridgeTest, WallpaperImageSetTest) {
+  base::DictionaryValue dict;
+  dict.SetString("url", "https://example.com/wallpaper.jpg");
+  dict.SetString("hash", "somehash");
+  policy_map().Set(policy::key::kWallpaperImage, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   blacklist.CreateDeepCopy(), nullptr);
+                   dict.CreateDeepCopy(), nullptr);
   policy_bridge()->GetPolicies(
-      PolicyStringCallback("{\"globalAppRestrictions\":"
-                           "{\"com.android.browser:URLBlacklist\":"
-                           "[\"www.blacklist1.com\","
-                           "\"www.blacklist2.com\""
-                           "]}}"));
+      PolicyStringCallback("{\"setWallpaperDisabled\":true}"));
 }
 
-TEST_F(ArcPolicyBridgeTest, URLWhitelistTest) {
-  base::ListValue whitelist;
-  whitelist.AppendString("www.whitelist1.com");
-  whitelist.AppendString("www.whitelist2.com");
-  policy_map().Set(policy::key::kURLWhitelist, policy::POLICY_LEVEL_MANDATORY,
+TEST_F(ArcPolicyBridgeTest, WallpaperImageSet_NotCompletePolicyTest) {
+  base::DictionaryValue dict;
+  dict.SetString("url", "https://example.com/wallpaper.jpg");
+  // "hash" attribute is missing, so the policy shouldn't be set
+  policy_map().Set(policy::key::kWallpaperImage, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   whitelist.CreateDeepCopy(), nullptr);
-  policy_bridge()->GetPolicies(
-      PolicyStringCallback("{\"globalAppRestrictions\":"
-                           "{\"com.android.browser:URLWhitelist\":"
-                           "[\"www.whitelist1.com\","
-                           "\"www.whitelist2.com\""
-                           "]}}"));
+                   dict.CreateDeepCopy(), nullptr);
+  policy_bridge()->GetPolicies(PolicyStringCallback("{}"));
 }
 
 TEST_F(ArcPolicyBridgeTest, CaCertificateTest) {
@@ -273,8 +299,7 @@ TEST_F(ArcPolicyBridgeTest, CaCertificateTest) {
   policy_map().Set(
       policy::key::kArcCertificatesSyncMode, policy::POLICY_LEVEL_MANDATORY,
       policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-      base::MakeUnique<base::FundamentalValue>(ArcCertsSyncMode::COPY_CA_CERTS),
-      nullptr);
+      base::MakeUnique<base::Value>(ArcCertsSyncMode::COPY_CA_CERTS), nullptr);
   policy_map().Set(policy::key::kOpenNetworkConfiguration,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
@@ -293,8 +318,7 @@ TEST_F(ArcPolicyBridgeTest, CaCertificateTest) {
   policy_map().Set(
       policy::key::kArcCertificatesSyncMode, policy::POLICY_LEVEL_MANDATORY,
       policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-      base::MakeUnique<base::FundamentalValue>(ArcCertsSyncMode::SYNC_DISABLED),
-      nullptr);
+      base::MakeUnique<base::Value>(ArcCertsSyncMode::SYNC_DISABLED), nullptr);
   policy_bridge()->GetPolicies(PolicyStringCallback("{}"));
 }
 
@@ -302,7 +326,7 @@ TEST_F(ArcPolicyBridgeTest, DeveloperToolsDisabledTest) {
   policy_map().Set(policy::key::kDeveloperToolsDisabled,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(true), nullptr);
+                   base::MakeUnique<base::Value>(true), nullptr);
   policy_bridge()->GetPolicies(
       PolicyStringCallback("{\"debuggingFeaturesDisabled\":true}"));
 }
@@ -327,7 +351,7 @@ TEST_F(ArcPolicyBridgeTest, MultiplePoliciesTest) {
   policy_map().Set(policy::key::kVideoCaptureAllowed,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                    policy::POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::FundamentalValue>(false), nullptr);
+                   base::MakeUnique<base::Value>(false), nullptr);
   policy_bridge()->GetPolicies(PolicyStringCallback(
       "{\"applications\":"
       "[{\"installType\":\"REQUIRED\","
@@ -340,27 +364,37 @@ TEST_F(ArcPolicyBridgeTest, MultiplePoliciesTest) {
       "}"));
 }
 
-// Disabled due to memory leak https://crbug.com/666371.
-// TODO(poromov): Fix leak and re-enable.
-TEST_F(ArcPolicyBridgeTest, DISABLED_EmptyReportComplianceTest) {
+TEST_F(ArcPolicyBridgeTest, EmptyReportComplianceTest) {
   policy_bridge()->ReportCompliance(
-      "", PolicyComplianceCallback(kPolicyCompliantResponse));
+      "{}", PolicyComplianceCallback(run_loop().QuitClosure(),
+                                     kPolicyCompliantResponse));
+  run_loop().Run();
 }
 
-// Disabled due to memory leak https://crbug.com/666371.
-// TODO(poromov): Fix leak and re-enable.
-TEST_F(ArcPolicyBridgeTest, DISABLED_ParsableReportComplianceTest) {
+TEST_F(ArcPolicyBridgeTest, ParsableReportComplianceTest) {
   policy_bridge()->ReportCompliance(
       "{\"nonComplianceDetails\" : []}",
-      PolicyComplianceCallback(kPolicyCompliantResponse));
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyCompliantResponse));
+  run_loop().Run();
 }
 
-// Disabled due to memory leak https://crbug.com/666371.
-// TODO(poromov): Fix leak and re-enable.
-TEST_F(ArcPolicyBridgeTest, DISABLED_NonParsableReportComplianceTest) {
+TEST_F(ArcPolicyBridgeTest, NonParsableReportComplianceTest) {
   policy_bridge()->ReportCompliance(
       "\"nonComplianceDetails\" : [}",
-      PolicyComplianceCallback(kPolicyNonCompliantResponse));
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyCompliantResponse));
+  run_loop().Run();
+}
+
+TEST_F(ArcPolicyBridgeTest, ReportComplianceTest_WithNonCompliantDetails) {
+  policy_bridge()->ReportCompliance(
+      "{\"nonComplianceDetails\" : "
+      "[{\"fieldPath\":\"\",\"nonComplianceReason\":0,\"packageName\":\"\","
+      "\"settingName\":\"someSetting\",\"cachedSize\":-1}]}",
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyCompliantResponse));
+  run_loop().Run();
 }
 
 // This and the following test send the policies through a mojo connection

@@ -9,9 +9,9 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
-#include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -30,15 +30,16 @@
 
 // UMA keys need to be statically initialized so plain function would not
 // work. Use macros instead.
-#define PERMISSION_ACTION_UMA(secure_origin, permission, permission_secure, \
-                              permission_insecure, action)                  \
-  UMA_HISTOGRAM_ENUMERATION(permission, action, PERMISSION_ACTION_NUM);     \
-  if (secure_origin) {                                                      \
-    UMA_HISTOGRAM_ENUMERATION(permission_secure, action,                    \
-                              PERMISSION_ACTION_NUM);                       \
-  } else {                                                                  \
-    UMA_HISTOGRAM_ENUMERATION(permission_insecure, action,                  \
-                              PERMISSION_ACTION_NUM);                       \
+#define PERMISSION_ACTION_UMA(secure_origin, permission, permission_secure,  \
+                              permission_insecure, action)                   \
+  UMA_HISTOGRAM_ENUMERATION(permission, static_cast<int>(action),            \
+                            static_cast<int>(PermissionAction::NUM));        \
+  if (secure_origin) {                                                       \
+    UMA_HISTOGRAM_ENUMERATION(permission_secure, static_cast<int>(action),   \
+                              static_cast<int>(PermissionAction::NUM));      \
+  } else {                                                                   \
+    UMA_HISTOGRAM_ENUMERATION(permission_insecure, static_cast<int>(action), \
+                              static_cast<int>(PermissionAction::NUM));      \
   }
 
 #define PERMISSION_BUBBLE_TYPE_UMA(metric_name, permission_bubble_type) \
@@ -62,23 +63,23 @@ using content::PermissionType;
 
 namespace {
 
-const std::string GetRapporMetric(PermissionType permission,
+const std::string GetRapporMetric(ContentSettingsType permission,
                                   PermissionAction action) {
   std::string action_str;
   switch (action) {
-    case GRANTED:
+    case PermissionAction::GRANTED:
       action_str = "Granted";
       break;
-    case DENIED:
+    case PermissionAction::DENIED:
       action_str = "Denied";
       break;
-    case DISMISSED:
+    case PermissionAction::DISMISSED:
       action_str = "Dismissed";
       break;
-    case IGNORED:
+    case PermissionAction::IGNORED:
       action_str = "Ignored";
       break;
-    case REVOKED:
+    case PermissionAction::REVOKED:
       action_str = "Revoked";
       break;
     default:
@@ -89,53 +90,45 @@ const std::string GetRapporMetric(PermissionType permission,
   std::string permission_str = PermissionUtil::GetPermissionString(permission);
   if (permission_str.empty())
     return "";
-  return base::StringPrintf("ContentSettings.PermissionActions_%s.%s.Url",
+  return base::StringPrintf("ContentSettings.PermissionActions_%s.%s.Url2",
                             permission_str.c_str(), action_str.c_str());
 }
 
-void RecordPermissionRequest(PermissionType permission,
+void RecordPermissionRequest(ContentSettingsType content_type,
                              const GURL& requesting_origin,
                              const GURL& embedding_origin,
                              Profile* profile) {
   rappor::RapporServiceImpl* rappor_service =
       g_browser_process->rappor_service();
   if (rappor_service) {
-    if (permission == PermissionType::GEOLOCATION) {
-      // TODO(dominickn): remove this deprecated metric - crbug.com/605836.
-      rappor::SampleDomainAndRegistryFromGURL(
-          rappor_service, "ContentSettings.PermissionRequested.Geolocation.Url",
-          requesting_origin);
+    if (content_type == CONTENT_SETTINGS_TYPE_GEOLOCATION) {
       rappor_service->RecordSampleString(
           "ContentSettings.PermissionRequested.Geolocation.Url2",
           rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
           rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    } else if (permission == PermissionType::NOTIFICATIONS) {
-      // TODO(dominickn): remove this deprecated metric - crbug.com/605836.
-      rappor::SampleDomainAndRegistryFromGURL(
-          rappor_service,
-          "ContentSettings.PermissionRequested.Notifications.Url",
-          requesting_origin);
+    } else if (content_type == CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
       rappor_service->RecordSampleString(
           "ContentSettings.PermissionRequested.Notifications.Url2",
           rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
           rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    } else if (permission == PermissionType::MIDI ||
-               permission == PermissionType::MIDI_SYSEX) {
-      // TODO(dominickn): remove this deprecated metric - crbug.com/605836.
-      rappor::SampleDomainAndRegistryFromGURL(
-          rappor_service, "ContentSettings.PermissionRequested.Midi.Url",
-          requesting_origin);
+    } else if (content_type == CONTENT_SETTINGS_TYPE_MIDI ||
+               content_type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
       rappor_service->RecordSampleString(
           "ContentSettings.PermissionRequested.Midi.Url2",
           rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
           rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    } else if (permission == PermissionType::PROTECTED_MEDIA_IDENTIFIER) {
+    } else if (content_type ==
+               CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER) {
       rappor_service->RecordSampleString(
           "ContentSettings.PermissionRequested.ProtectedMedia.Url2",
           rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
           rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
     }
   }
+
+  PermissionType permission;
+  bool success = PermissionUtil::GetPermissionType(content_type, &permission);
+  DCHECK(success);
 
   bool secure_origin = content::IsOriginSecure(requesting_origin);
   UMA_HISTOGRAM_ENUMERATION(
@@ -153,33 +146,6 @@ void RecordPermissionRequest(PermissionType permission,
         static_cast<base::HistogramBase::Sample>(permission),
         static_cast<base::HistogramBase::Sample>(PermissionType::NUM));
   }
-
-  // In order to gauge the compatibility risk of implementing an improved
-  // iframe permissions security model, we would like to know the ratio of
-  // same-origin to cross-origin permission requests. Our estimate of this
-  // ratio could be somewhat biased by repeated requests coming from a
-  // single frame, but we expect this to be insignificant.
-  if (requesting_origin.GetOrigin() != embedding_origin.GetOrigin()) {
-    content::PermissionManager* manager = profile->GetPermissionManager();
-    if (!manager)
-      return;
-    blink::mojom::PermissionStatus embedding_permission_status =
-        manager->GetPermissionStatus(permission, embedding_origin,
-                                     embedding_origin);
-
-    base::HistogramBase* histogram = base::LinearHistogram::FactoryGet(
-        "Permissions.Requested.CrossOrigin_" +
-            PermissionUtil::GetPermissionString(permission),
-        1, static_cast<int>(blink::mojom::PermissionStatus::LAST),
-        static_cast<int>(blink::mojom::PermissionStatus::LAST) + 1,
-        base::HistogramBase::kUmaTargetedHistogramFlag);
-    histogram->Add(static_cast<int>(embedding_permission_status));
-  } else {
-    UMA_HISTOGRAM_ENUMERATION(
-        "Permissions.Requested.SameOrigin",
-        static_cast<base::HistogramBase::Sample>(permission),
-        static_cast<base::HistogramBase::Sample>(PermissionType::NUM));
-  }
 }
 
 }  // anonymous namespace
@@ -187,7 +153,7 @@ void RecordPermissionRequest(PermissionType permission,
 // PermissionReportInfo -------------------------------------------------------
 PermissionReportInfo::PermissionReportInfo(
     const GURL& origin,
-    PermissionType permission,
+    ContentSettingsType permission,
     PermissionAction action,
     PermissionSourceUI source_ui,
     PermissionRequestGestureType gesture_type,
@@ -258,104 +224,152 @@ const char
 
 // Make sure you update histograms.xml permission histogram_suffix if you
 // add new permission
-void PermissionUmaUtil::PermissionRequested(PermissionType permission,
+void PermissionUmaUtil::PermissionRequested(ContentSettingsType content_type,
                                             const GURL& requesting_origin,
                                             const GURL& embedding_origin,
                                             Profile* profile) {
-  RecordPermissionRequest(permission, requesting_origin, embedding_origin,
+  RecordPermissionRequest(content_type, requesting_origin, embedding_origin,
                           profile);
 }
 
 void PermissionUmaUtil::PermissionGranted(
-    PermissionType permission,
+    ContentSettingsType permission,
     PermissionRequestGestureType gesture_type,
     const GURL& requesting_origin,
     Profile* profile) {
-  RecordPermissionAction(permission, GRANTED, PermissionSourceUI::PROMPT,
-                         gesture_type, requesting_origin, profile);
+  PermissionDecisionAutoBlocker* autoblocker =
+      PermissionDecisionAutoBlocker::GetForProfile(profile);
+  RecordPermissionAction(permission, PermissionAction::GRANTED,
+                         PermissionSourceUI::PROMPT, gesture_type,
+                         requesting_origin, profile);
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptAcceptedPriorDismissCountPrefix,
-      PermissionDecisionAutoBlocker::GetDismissCount(requesting_origin,
-                                                     permission, profile));
+      autoblocker->GetDismissCount(requesting_origin, permission));
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptAcceptedPriorIgnoreCountPrefix,
-      PermissionDecisionAutoBlocker::GetIgnoreCount(requesting_origin,
-                                                    permission, profile));
+      autoblocker->GetIgnoreCount(requesting_origin, permission));
 }
 
 void PermissionUmaUtil::PermissionDenied(
-    PermissionType permission,
+    ContentSettingsType permission,
     PermissionRequestGestureType gesture_type,
     const GURL& requesting_origin,
     Profile* profile) {
-  RecordPermissionAction(permission, DENIED, PermissionSourceUI::PROMPT,
-                         gesture_type, requesting_origin, profile);
+  PermissionDecisionAutoBlocker* autoblocker =
+      PermissionDecisionAutoBlocker::GetForProfile(profile);
+  RecordPermissionAction(permission, PermissionAction::DENIED,
+                         PermissionSourceUI::PROMPT, gesture_type,
+                         requesting_origin, profile);
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptDeniedPriorDismissCountPrefix,
-      PermissionDecisionAutoBlocker::GetDismissCount(requesting_origin,
-                                                     permission, profile));
+      autoblocker->GetDismissCount(requesting_origin, permission));
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptDeniedPriorIgnoreCountPrefix,
-      PermissionDecisionAutoBlocker::GetIgnoreCount(requesting_origin,
-                                                    permission, profile));
+      autoblocker->GetIgnoreCount(requesting_origin, permission));
 }
 
 void PermissionUmaUtil::PermissionDismissed(
-    PermissionType permission,
+    ContentSettingsType permission,
     PermissionRequestGestureType gesture_type,
     const GURL& requesting_origin,
     Profile* profile) {
-  RecordPermissionAction(permission, DISMISSED, PermissionSourceUI::PROMPT,
-                         gesture_type, requesting_origin, profile);
+  PermissionDecisionAutoBlocker* autoblocker =
+      PermissionDecisionAutoBlocker::GetForProfile(profile);
+  RecordPermissionAction(permission, PermissionAction::DISMISSED,
+                         PermissionSourceUI::PROMPT, gesture_type,
+                         requesting_origin, profile);
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptDismissedPriorDismissCountPrefix,
-      PermissionDecisionAutoBlocker::GetDismissCount(requesting_origin,
-                                                     permission, profile));
+      autoblocker->GetDismissCount(requesting_origin, permission));
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptDismissedPriorIgnoreCountPrefix,
-      PermissionDecisionAutoBlocker::GetIgnoreCount(requesting_origin,
-                                                    permission, profile));
+      autoblocker->GetIgnoreCount(requesting_origin, permission));
 }
 
 void PermissionUmaUtil::PermissionIgnored(
-    PermissionType permission,
+    ContentSettingsType permission,
     PermissionRequestGestureType gesture_type,
     const GURL& requesting_origin,
     Profile* profile) {
-  RecordPermissionAction(permission, IGNORED, PermissionSourceUI::PROMPT,
-                         gesture_type, requesting_origin, profile);
+  PermissionDecisionAutoBlocker* autoblocker =
+      PermissionDecisionAutoBlocker::GetForProfile(profile);
+  RecordPermissionAction(permission, PermissionAction::IGNORED,
+                         PermissionSourceUI::PROMPT, gesture_type,
+                         requesting_origin, profile);
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptIgnoredPriorDismissCountPrefix,
-      PermissionDecisionAutoBlocker::GetDismissCount(requesting_origin,
-                                                     permission, profile));
+      autoblocker->GetDismissCount(requesting_origin, permission));
   RecordPermissionPromptPriorCount(
       permission, kPermissionsPromptIgnoredPriorIgnoreCountPrefix,
-      PermissionDecisionAutoBlocker::GetIgnoreCount(requesting_origin,
-                                                    permission, profile));
+      autoblocker->GetIgnoreCount(requesting_origin, permission));
 
   // RecordPermission* methods need to be called before RecordIgnore in the
   // blocker because they record the number of prior ignore and dismiss values,
   // and we don't want to include the current ignore.
-  PermissionDecisionAutoBlocker::RecordIgnore(requesting_origin, permission,
-                                              profile);
+  autoblocker->RecordIgnore(requesting_origin, permission);
 }
 
-void PermissionUmaUtil::PermissionRevoked(PermissionType permission,
+void PermissionUmaUtil::PermissionRevoked(ContentSettingsType permission,
                                           PermissionSourceUI source_ui,
                                           const GURL& revoked_origin,
                                           Profile* profile) {
   // TODO(tsergeant): Expand metrics definitions for revocation to include all
   // permissions.
-  if (permission == PermissionType::NOTIFICATIONS ||
-      permission == PermissionType::GEOLOCATION ||
-      permission == PermissionType::AUDIO_CAPTURE ||
-      permission == PermissionType::VIDEO_CAPTURE) {
+  if (permission == CONTENT_SETTINGS_TYPE_NOTIFICATIONS ||
+      permission == CONTENT_SETTINGS_TYPE_GEOLOCATION ||
+      permission == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
+      permission == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
     // An unknown gesture type is passed in since gesture type is only
     // applicable in prompt UIs where revocations are not possible.
-    RecordPermissionAction(permission, REVOKED, source_ui,
+    RecordPermissionAction(permission, PermissionAction::REVOKED, source_ui,
                            PermissionRequestGestureType::UNKNOWN,
                            revoked_origin, profile);
   }
+}
+
+void PermissionUmaUtil::RecordEmbargoPromptSuppression(
+    PermissionEmbargoStatus embargo_status) {
+  UMA_HISTOGRAM_ENUMERATION("Permissions.AutoBlocker.EmbargoPromptSuppression",
+                            static_cast<int>(embargo_status),
+                            static_cast<int>(PermissionEmbargoStatus::NUM));
+}
+
+void PermissionUmaUtil::RecordEmbargoPromptSuppressionFromSource(
+    PermissionStatusSource source) {
+  // Explicitly switch to ensure that any new PermissionStatusSource values are
+  // dealt with appropriately.
+  switch (source) {
+    case PermissionStatusSource::MULTIPLE_DISMISSALS:
+      PermissionUmaUtil::RecordEmbargoPromptSuppression(
+          PermissionEmbargoStatus::REPEATED_DISMISSALS);
+      break;
+    case PermissionStatusSource::SAFE_BROWSING_BLACKLIST:
+      PermissionUmaUtil::RecordEmbargoPromptSuppression(
+          PermissionEmbargoStatus::PERMISSIONS_BLACKLISTING);
+      break;
+    case PermissionStatusSource::UNSPECIFIED:
+    case PermissionStatusSource::KILL_SWITCH:
+      // The permission wasn't under embargo, so don't record anything. We may
+      // embargo it later.
+      break;
+  }
+}
+
+void PermissionUmaUtil::RecordEmbargoStatus(
+    PermissionEmbargoStatus embargo_status) {
+  UMA_HISTOGRAM_ENUMERATION("Permissions.AutoBlocker.EmbargoStatus",
+                            static_cast<int>(embargo_status),
+                            static_cast<int>(PermissionEmbargoStatus::NUM));
+}
+
+void PermissionUmaUtil::RecordSafeBrowsingResponse(
+    base::TimeDelta response_time,
+    SafeBrowsingResponse response) {
+  UMA_HISTOGRAM_TIMES("Permissions.AutoBlocker.SafeBrowsingResponseTime",
+                      response_time);
+  UMA_HISTOGRAM_ENUMERATION("Permissions.AutoBlocker.SafeBrowsingResponse",
+                            static_cast<int>(response),
+                            static_cast<int>(SafeBrowsingResponse::NUM));
 }
 
 void PermissionUmaUtil::PermissionPromptShown(
@@ -459,14 +473,12 @@ void PermissionUmaUtil::RecordPermissionPromptDenied(
 }
 
 void PermissionUmaUtil::RecordPermissionPromptPriorCount(
-    content::PermissionType permission,
+    ContentSettingsType permission,
     const std::string& prefix,
     int count) {
-  // The user is not prompted for these permissions, thus there is no prompt
+  // The user is not prompted for this permissions, thus there is no prompt
   // event to record a prior count for.
-  DCHECK_NE(PermissionType::MIDI, permission);
-  DCHECK_NE(PermissionType::BACKGROUND_SYNC, permission);
-  DCHECK_NE(PermissionType::NUM, permission);
+  DCHECK_NE(CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC, permission);
 
   // Expand UMA_HISTOGRAM_COUNTS_100 so that we can use a dynamically suffixed
   // histogram name.
@@ -477,54 +489,52 @@ void PermissionUmaUtil::RecordPermissionPromptPriorCount(
 }
 
 void PermissionUmaUtil::PermissionPromptAcceptedWithPersistenceToggle(
-    content::PermissionType permission,
+    ContentSettingsType permission,
     bool toggle_enabled) {
   switch (permission) {
-    case PermissionType::GEOLOCATION:
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.Geolocation",
                             toggle_enabled);
       break;
-    case PermissionType::NOTIFICATIONS:
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.Notifications",
           toggle_enabled);
       break;
-    case PermissionType::MIDI_SYSEX:
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.MidiSysEx",
                             toggle_enabled);
       break;
-    case PermissionType::PUSH_MESSAGING:
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.PushMessaging",
           toggle_enabled);
       break;
-    case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.ProtectedMedia",
           toggle_enabled);
       break;
-    case PermissionType::DURABLE_STORAGE:
+    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.DurableStorage",
           toggle_enabled);
       break;
-    case PermissionType::AUDIO_CAPTURE:
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.AudioCapture", toggle_enabled);
       break;
-    case PermissionType::VIDEO_CAPTURE:
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.VideoCapture", toggle_enabled);
       break;
-    case PermissionType::FLASH:
+    case CONTENT_SETTINGS_TYPE_PLUGINS:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.Flash",
                             toggle_enabled);
       break;
     // The user is not prompted for these permissions, thus there is no accept
     // recorded for them.
-    case PermissionType::MIDI:
-    case PermissionType::BACKGROUND_SYNC:
-    case PermissionType::NUM:
+    default:
       NOTREACHED() << "PERMISSION "
                    << PermissionUtil::GetPermissionString(permission)
                    << " not accounted for";
@@ -532,50 +542,48 @@ void PermissionUmaUtil::PermissionPromptAcceptedWithPersistenceToggle(
 }
 
 void PermissionUmaUtil::PermissionPromptDeniedWithPersistenceToggle(
-    content::PermissionType permission,
+    ContentSettingsType permission,
     bool toggle_enabled) {
   switch (permission) {
-    case PermissionType::GEOLOCATION:
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Geolocation",
                             toggle_enabled);
       break;
-    case PermissionType::NOTIFICATIONS:
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Notifications",
                             toggle_enabled);
       break;
-    case PermissionType::MIDI_SYSEX:
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.MidiSysEx",
                             toggle_enabled);
       break;
-    case PermissionType::PUSH_MESSAGING:
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.PushMessaging",
                             toggle_enabled);
       break;
-    case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Denied.Persisted.ProtectedMedia", toggle_enabled);
       break;
-    case PermissionType::DURABLE_STORAGE:
+    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Denied.Persisted.DurableStorage", toggle_enabled);
       break;
-    case PermissionType::AUDIO_CAPTURE:
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.AudioCapture",
                             toggle_enabled);
       break;
-    case PermissionType::VIDEO_CAPTURE:
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.VideoCapture",
                             toggle_enabled);
       break;
-    case PermissionType::FLASH:
+    case CONTENT_SETTINGS_TYPE_PLUGINS:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Flash",
                             toggle_enabled);
       break;
     // The user is not prompted for these permissions, thus there is no deny
     // recorded for them.
-    case PermissionType::MIDI:
-    case PermissionType::BACKGROUND_SYNC:
-    case PermissionType::NUM:
+    default:
       NOTREACHED() << "PERMISSION "
                    << PermissionUtil::GetPermissionString(permission)
                    << " not accounted for";
@@ -621,21 +629,22 @@ bool PermissionUmaUtil::IsOptedIntoPermissionActionReporting(Profile* profile) {
 }
 
 void PermissionUmaUtil::RecordPermissionAction(
-    PermissionType permission,
+    ContentSettingsType permission,
     PermissionAction action,
     PermissionSourceUI source_ui,
     PermissionRequestGestureType gesture_type,
     const GURL& requesting_origin,
     Profile* profile) {
   if (IsOptedIntoPermissionActionReporting(profile)) {
+    PermissionDecisionAutoBlocker* autoblocker =
+        PermissionDecisionAutoBlocker::GetForProfile(profile);
     // TODO(kcarattini): Pass in the actual persist decision when it becomes
     // available.
-    PermissionReportInfo report_info(requesting_origin, permission, action,
-        source_ui, gesture_type, PermissionPersistDecision::UNSPECIFIED,
-        PermissionDecisionAutoBlocker::GetDismissCount(
-            requesting_origin, permission, profile),
-        PermissionDecisionAutoBlocker::GetIgnoreCount(
-            requesting_origin, permission, profile));
+    PermissionReportInfo report_info(
+        requesting_origin, permission, action, source_ui, gesture_type,
+        PermissionPersistDecision::UNSPECIFIED,
+        autoblocker->GetDismissCount(requesting_origin, permission),
+        autoblocker->GetIgnoreCount(requesting_origin, permission));
     g_browser_process->safe_browsing_service()
         ->ui_manager()->ReportPermissionAction(report_info);
   }
@@ -643,81 +652,68 @@ void PermissionUmaUtil::RecordPermissionAction(
   bool secure_origin = content::IsOriginSecure(requesting_origin);
 
   switch (permission) {
-    case PermissionType::GEOLOCATION:
-      PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.Geolocation",
-                            "Permissions.Action.SecureOrigin.Geolocation",
-                            "Permissions.Action.InsecureOrigin.Geolocation",
-                            action);
+    // Geolocation, MidiSysEx, Push, Durable Storage, and Media permissions are
+    // disabled on insecure origins, so there's no need to record metrics for
+    // secure/insecue.
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
+      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.Geolocation",
+                                static_cast<int>(action),
+                                static_cast<int>(PermissionAction::NUM));
       break;
-    case PermissionType::NOTIFICATIONS:
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
       PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.Notifications",
                             "Permissions.Action.SecureOrigin.Notifications",
                             "Permissions.Action.InsecureOrigin.Notifications",
                             action);
       break;
-    case PermissionType::MIDI_SYSEX:
-      PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.MidiSysEx",
-                            "Permissions.Action.SecureOrigin.MidiSysEx",
-                            "Permissions.Action.InsecureOrigin.MidiSysEx",
-                            action);
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
+      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.MidiSysEx",
+                                static_cast<int>(action),
+                                static_cast<int>(PermissionAction::NUM));
       break;
-    case PermissionType::PUSH_MESSAGING:
-      PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.PushMessaging",
-                            "Permissions.Action.SecureOrigin.PushMessaging",
-                            "Permissions.Action.InsecureOrigin.PushMessaging",
-                            action);
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
+      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.PushMessaging",
+                                static_cast<int>(action),
+                                static_cast<int>(PermissionAction::NUM));
       break;
-    case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.ProtectedMedia",
                             "Permissions.Action.SecureOrigin.ProtectedMedia",
                             "Permissions.Action.InsecureOrigin.ProtectedMedia",
                             action);
       break;
-    case PermissionType::DURABLE_STORAGE:
-      PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.DurableStorage",
-                            "Permissions.Action.SecureOrigin.DurableStorage",
-                            "Permissions.Action.InsecureOrigin.DurableStorage",
-                            action);
+    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
+      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.DurableStorage",
+                                static_cast<int>(action),
+                                static_cast<int>(PermissionAction::NUM));
       break;
-    case PermissionType::AUDIO_CAPTURE:
-      // Media permissions are disabled on insecure origins, so there's no
-      // need to record metrics for secure/insecue.
-      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.AudioCapture", action,
-                                PERMISSION_ACTION_NUM);
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
+      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.AudioCapture",
+                                static_cast<int>(action),
+                                static_cast<int>(PermissionAction::NUM));
       break;
-    case PermissionType::VIDEO_CAPTURE:
-      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.VideoCapture", action,
-                                PERMISSION_ACTION_NUM);
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
+      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.VideoCapture",
+                                static_cast<int>(action),
+                                static_cast<int>(PermissionAction::NUM));
       break;
-    case PermissionType::FLASH:
+    case CONTENT_SETTINGS_TYPE_PLUGINS:
       PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.Flash",
                             "Permissions.Action.SecureOrigin.Flash",
                             "Permissions.Action.InsecureOrigin.Flash", action);
       break;
     // The user is not prompted for these permissions, thus there is no
     // permission action recorded for them.
-    case PermissionType::MIDI:
-    case PermissionType::BACKGROUND_SYNC:
-    case PermissionType::NUM:
+    default:
       NOTREACHED() << "PERMISSION "
                    << PermissionUtil::GetPermissionString(permission)
                    << " not accounted for";
   }
 
-  // Retrieve the name of the RAPPOR metric. Currently, the new metric name is
-  // the deprecated name with "2" on the end, e.g.
-  // ContentSettings.PermissionActions_Geolocation.Granted.Url2. For simplicity,
-  // we retrieve the deprecated name and append the "2" for the new name.
-  // TODO(dominickn): remove the deprecated metric and replace it solely with
-  // the new one in GetRapporMetric - crbug.com/605836.
-  const std::string deprecated_metric = GetRapporMetric(permission, action);
+  const std::string rappor_metric = GetRapporMetric(permission, action);
   rappor::RapporServiceImpl* rappor_service =
       g_browser_process->rappor_service();
-  if (!deprecated_metric.empty() && rappor_service) {
-    rappor::SampleDomainAndRegistryFromGURL(rappor_service, deprecated_metric,
-                                            requesting_origin);
-
-    std::string rappor_metric = deprecated_metric + "2";
+  if (!rappor_metric.empty() && rappor_service) {
     rappor_service->RecordSampleString(
         rappor_metric, rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
         rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));

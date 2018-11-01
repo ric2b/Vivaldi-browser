@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -540,7 +541,7 @@ void TestPrerender::OnPrerenderStop(PrerenderContents* contents) {
 FirstContentfulPaintManagerWaiter* FirstContentfulPaintManagerWaiter::Create(
     PrerenderManager* manager) {
   auto fcp_waiter = base::WrapUnique(new FirstContentfulPaintManagerWaiter());
-  auto fcp_waiter_ptr = fcp_waiter.get();
+  auto* fcp_waiter_ptr = fcp_waiter.get();
   manager->AddObserver(std::move(fcp_waiter));
   return fcp_waiter_ptr;
 }

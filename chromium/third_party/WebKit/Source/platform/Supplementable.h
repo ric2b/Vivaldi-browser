@@ -146,14 +146,14 @@ class Supplementable : public virtual GarbageCollectedMixin {
 #if DCHECK_IS_ON()
     DCHECK_EQ(m_creationThreadId, currentThread());
 #endif
-    this->m_supplements.remove(key);
+    this->m_supplements.erase(key);
   }
 
   Supplement<T>* requireSupplement(const char* key) {
 #if DCHECK_IS_ON()
     DCHECK_EQ(m_attachedThreadId, currentThread());
 #endif
-    return this->m_supplements.get(key);
+    return this->m_supplements.at(key);
   }
 
   void reattachThread() {

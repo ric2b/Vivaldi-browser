@@ -59,6 +59,7 @@ class MODULES_EXPORT EventSource final
       public EventSourceParser::Client {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(EventSource);
+  USING_PRE_FINALIZER(EventSource, dispose);
 
  public:
   static EventSource* create(ExecutionContext*,
@@ -102,6 +103,8 @@ class MODULES_EXPORT EventSource final
  private:
   EventSource(ExecutionContext*, const KURL&, const EventSourceInit&);
 
+  void dispose();
+
   void didReceiveResponse(unsigned long,
                           const ResourceResponse&,
                           std::unique_ptr<WebDataConsumerHandle>) override;
@@ -134,7 +137,7 @@ class MODULES_EXPORT EventSource final
 
   Member<EventSourceParser> m_parser;
   Member<ThreadableLoader> m_loader;
-  Timer<EventSource> m_connectTimer;
+  TaskRunnerTimer<EventSource> m_connectTimer;
 
   unsigned long long m_reconnectDelay;
   String m_eventStreamOrigin;

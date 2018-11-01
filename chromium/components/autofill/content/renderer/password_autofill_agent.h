@@ -30,6 +30,10 @@ class WebSecurityOrigin;
 
 namespace autofill {
 
+// Names of HTML attributes to show form and field signatures for debugging.
+const char kDebugAttributeForFormSignature[] = "form_signature";
+const char kDebugAttributeForFieldSignature[] = "field_signature";
+
 class RendererSavePasswordProgressLogger;
 
 // This class is responsible for filling password forms.
@@ -82,6 +86,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // found for the form.
   bool DidClearAutofillSelection(
       const blink::WebFormControlElement& control_element);
+
+  // If the form is non-secure, show the "Not Secure" warning on username and
+  // password input fields.
+  bool ShouldShowNotSecureWarning(const blink::WebInputElement& element);
 
   // Shows an Autofill popup with username suggestions for |element|. If
   // |show_all| is |true|, will show all possible suggestions for that element,
@@ -188,7 +196,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void DidFinishDocumentLoad() override;
   void DidFinishLoad() override;
   void FrameDetached() override;
-  void DidStartProvisionalLoad() override;
+  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
   void WillCommitProvisionalLoad() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_page_navigation) override;

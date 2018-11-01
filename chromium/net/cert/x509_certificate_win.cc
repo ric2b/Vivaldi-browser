@@ -151,7 +151,7 @@ void X509Certificate::Initialize() {
       reinterpret_cast<char*>(serial_bytes.get()), serial->cbData);
 }
 
-void X509Certificate::GetSubjectAltName(
+bool X509Certificate::GetSubjectAltName(
     std::vector<std::string>* dns_names,
     std::vector<std::string>* ip_addrs) const {
   if (dns_names)
@@ -160,28 +160,39 @@ void X509Certificate::GetSubjectAltName(
     ip_addrs->clear();
 
   if (!cert_handle_)
-    return;
+    return false;
 
   std::unique_ptr<CERT_ALT_NAME_INFO, base::FreeDeleter> alt_name_info;
   GetCertSubjectAltName(cert_handle_, &alt_name_info);
   CERT_ALT_NAME_INFO* alt_name = alt_name_info.get();
-  if (alt_name) {
-    int num_entries = alt_name->cAltEntry;
-    for (int i = 0; i < num_entries; i++) {
-      // dNSName is an ASN.1 IA5String representing a string of ASCII
-      // characters, so we can use UTF16ToASCII here.
-      const CERT_ALT_NAME_ENTRY& entry = alt_name->rgAltEntry[i];
+  if (!alt_name)
+    return false;
 
-      if (dns_names && entry.dwAltNameChoice == CERT_ALT_NAME_DNS_NAME) {
+  bool has_san = false;
+  for (DWORD i = 0, num_entries = alt_name->cAltEntry; i < num_entries; i++) {
+    // dNSName is an ASN.1 IA5String representing a string of ASCII
+    // characters, so we can use UTF16ToASCII here.
+    const CERT_ALT_NAME_ENTRY& entry = alt_name->rgAltEntry[i];
+
+    if (entry.dwAltNameChoice == CERT_ALT_NAME_DNS_NAME) {
+      has_san = true;
+      if (dns_names)
         dns_names->push_back(base::UTF16ToASCII(entry.pwszDNSName));
-      } else if (ip_addrs &&
-                 entry.dwAltNameChoice == CERT_ALT_NAME_IP_ADDRESS) {
+    } else if (entry.dwAltNameChoice == CERT_ALT_NAME_IP_ADDRESS) {
+      has_san = true;
+      if (ip_addrs) {
         ip_addrs->push_back(std::string(
             reinterpret_cast<const char*>(entry.IPAddress.pbData),
             entry.IPAddress.cbData));
       }
     }
+    // Fast path: Found at least one subjectAltName and the caller doesn't
+    // need the actual values.
+    if (has_san && !ip_addrs && !dns_names)
+      return true;
   }
+
+  return has_san;
 }
 
 PCCERT_CONTEXT X509Certificate::CreateOSCertChainForCert() const {
@@ -419,33 +430,6 @@ void X509Certificate::GetPublicKeyInfo(OSCertHandle cert_handle,
       *type = kPublicKeyTypeECDH;
       break;
   }
-}
-
-X509Certificate::SignatureHashAlgorithm
-X509Certificate::GetSignatureHashAlgorithm(OSCertHandle cert_handle) {
-  const char* algorithm = cert_handle->pCertInfo->SignatureAlgorithm.pszObjId;
-  if (strcmp(algorithm, szOID_RSA_MD5RSA) == 0) {
-    // md5WithRSAEncryption: 1.2.840.113549.1.1.4
-    return kSignatureHashAlgorithmMd5;
-  }
-  if (strcmp(algorithm, szOID_RSA_MD2RSA) == 0) {
-    // md2WithRSAEncryption: 1.2.840.113549.1.1.2
-    return kSignatureHashAlgorithmMd2;
-  }
-  if (strcmp(algorithm, szOID_RSA_MD4RSA) == 0) {
-    // md4WithRSAEncryption: 1.2.840.113549.1.1.3
-    return kSignatureHashAlgorithmMd4;
-  }
-  if (strcmp(algorithm, szOID_RSA_SHA1RSA) == 0 ||
-      strcmp(algorithm, szOID_X957_SHA1DSA) == 0 ||
-      strcmp(algorithm, szOID_ECDSA_SHA1) == 0) {
-    // sha1WithRSAEncryption: 1.2.840.113549.1.1.5
-    // id-dsa-with-sha1: 1.2.840.10040.4.3
-    // ecdsa-with-SHA1: 1.2.840.10045.4.1
-    return kSignatureHashAlgorithmSha1;
-  }
-
-  return kSignatureHashAlgorithmOther;
 }
 
 bool X509Certificate::IsIssuedByEncoded(

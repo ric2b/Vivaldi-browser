@@ -11,6 +11,7 @@
 #include "chrome/browser/chromeos/login/screens/eula_view.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chromeos/tpm/tpm_password_fetcher.h"
+#include "components/login/secure_module_util_chromeos.h"
 #include "content/public/browser/web_ui.h"
 
 namespace base {
@@ -19,16 +20,16 @@ class DictionaryValue;
 
 namespace chromeos {
 
-class CoreOobeActor;
+class CoreOobeView;
 class HelpAppLauncher;
 
-// WebUI implementation of EulaScreenActor. It is used to interact
+// WebUI implementation of EulaScreenView. It is used to interact
 // with the eula part of the JS page.
 class EulaScreenHandler : public EulaView,
                           public BaseScreenHandler,
                           public TpmPasswordFetcherDelegate {
  public:
-  explicit EulaScreenHandler(CoreOobeActor* core_oobe_actor);
+  explicit EulaScreenHandler(CoreOobeView* core_oobe_view);
   ~EulaScreenHandler() override;
 
   // EulaView implementation:
@@ -52,14 +53,18 @@ class EulaScreenHandler : public EulaView,
   void HandleOnChromeOSCredits();
   void HandleOnInstallationSettingsPopupOpened();
 
+  void UpdateLocalizedValues(::login::SecureModuleUsed secure_module_used);
+
   EulaScreen* screen_ = nullptr;
-  CoreOobeActor* core_oobe_actor_ = nullptr;
+  CoreOobeView* core_oobe_view_ = nullptr;
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;
 
   // Keeps whether screen should be shown right after initialization.
   bool show_on_init_ = false;
+
+  base::WeakPtrFactory<EulaScreenHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(EulaScreenHandler);
 };

@@ -278,93 +278,20 @@ namespace blink {
 class TestGCScope {
  public:
   explicit TestGCScope(BlinkGC::StackState state)
-      : m_state(ThreadState::current()),
-        m_safePointScope(state),
-        m_parkedAllThreads(false) {
+      : m_state(ThreadState::current()), m_safePointScope(state) {
     ASSERT(m_state->checkThread());
-    if (LIKELY(m_state->heap().park())) {
-      m_state->heap().preGC();
-      m_parkedAllThreads = true;
-    }
+    m_state->heap().preGC();
   }
 
-  bool allThreadsParked() { return m_parkedAllThreads; }
-
   ~TestGCScope() {
-    // Only cleanup if we parked all threads in which case the GC happened
-    // and we need to resume the other threads.
-    if (LIKELY(m_parkedAllThreads)) {
-      m_state->heap().postGC(BlinkGC::GCWithSweep);
-      m_state->heap().preSweep(BlinkGC::GCWithSweep);
-      m_state->heap().resume();
-    }
+    m_state->heap().postGC(BlinkGC::GCWithSweep);
+    m_state->heap().preSweep(BlinkGC::GCWithSweep);
   }
 
  private:
   ThreadState* m_state;
   SafePointScope m_safePointScope;
-  bool m_parkedAllThreads;  // False if we fail to park all threads
 };
-
-#define DEFINE_VISITOR_METHODS(Type)                               \
-  void mark(const Type* object, TraceCallback callback) override { \
-    if (object)                                                    \
-      m_count++;                                                   \
-  }                                                                \
-  bool isMarked(const Type*) override { return false; }            \
-  bool ensureMarked(const Type* objectPointer) override {          \
-    return ensureMarked(objectPointer);                            \
-  }
-
-class CountingVisitor : public Visitor {
- public:
-  explicit CountingVisitor(ThreadState* state)
-      : Visitor(state, VisitorMarkingMode::ThreadLocalMarking),
-        m_scope(&state->heap().stackFrameDepth()),
-        m_count(0) {}
-
-  void mark(const void* object, TraceCallback) override {
-    if (object)
-      m_count++;
-  }
-
-  void markHeader(HeapObjectHeader* header, TraceCallback callback) override {
-    ASSERT(header->payload());
-    m_count++;
-  }
-
-  void registerDelayedMarkNoTracing(const void*) override {}
-  void registerWeakMembers(const void*, const void*, WeakCallback) override {}
-  void registerWeakTable(const void*,
-                         EphemeronCallback,
-                         EphemeronCallback) override {}
-#if DCHECK_IS_ON()
-  bool weakTableRegistered(const void*) override { return false; }
-#endif
-  void registerWeakCellWithCallback(void**, WeakCallback) override {}
-  bool ensureMarked(const void* objectPointer) override {
-    if (!objectPointer ||
-        HeapObjectHeader::fromPayload(objectPointer)->isMarked())
-      return false;
-    markNoTracing(objectPointer);
-    return true;
-  }
-
-  void registerMovingObjectReference(MovableReference*) override {}
-
-  void registerMovingObjectCallback(MovableReference,
-                                    MovingObjectCallback,
-                                    void*) override {}
-
-  size_t count() { return m_count; }
-  void reset() { m_count = 0; }
-
- private:
-  StackFrameDepthScope m_scope;
-  size_t m_count;
-};
-
-#undef DEFINE_VISITOR_METHODS
 
 class SimpleObject : public GarbageCollected<SimpleObject> {
  public:
@@ -497,7 +424,6 @@ class ThreadedTesterBase {
           crossThreadBind(threadFunc, crossThreadUnretained(tester)));
     }
     while (tester->m_threadsToFinish) {
-      SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
       testing::yieldCurrentThread();
     }
     delete tester;
@@ -571,7 +497,6 @@ class ThreadedHeapTester : public ThreadedTesterBase {
 
     int gcCount = 0;
     while (!done()) {
-      ThreadState::current()->safePoint(BlinkGC::NoHeapPointersOnStack);
       {
         Persistent<IntWrapper> wrapper;
 
@@ -583,7 +508,6 @@ class ThreadedHeapTester : public ThreadedTesterBase {
           if (!(i % 10)) {
             globalPersistent = createGlobalPersistent(0x0ed0cabb);
           }
-          SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
           testing::yieldCurrentThread();
         }
 
@@ -602,7 +526,6 @@ class ThreadedHeapTester : public ThreadedTesterBase {
         EXPECT_EQ(wrapper->value(), 0x0bbac0de);
         EXPECT_EQ((*globalPersistent)->value(), 0x0ed0cabb);
       }
-      SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
       testing::yieldCurrentThread();
     }
 
@@ -621,16 +544,14 @@ class ThreadedWeaknessTester : public ThreadedTesterBase {
 
     int gcCount = 0;
     while (!done()) {
-      ThreadState::current()->safePoint(BlinkGC::NoHeapPointersOnStack);
       {
         Persistent<HeapHashMap<ThreadMarker, WeakMember<IntWrapper>>> weakMap =
             new HeapHashMap<ThreadMarker, WeakMember<IntWrapper>>;
         PersistentHeapHashMap<ThreadMarker, WeakMember<IntWrapper>> weakMap2;
 
         for (int i = 0; i < numberOfAllocations; i++) {
-          weakMap->add(static_cast<unsigned>(i), IntWrapper::create(0));
-          weakMap2.add(static_cast<unsigned>(i), IntWrapper::create(0));
-          SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
+          weakMap->insert(static_cast<unsigned>(i), IntWrapper::create(0));
+          weakMap2.insert(static_cast<unsigned>(i), IntWrapper::create(0));
           testing::yieldCurrentThread();
         }
 
@@ -649,7 +570,6 @@ class ThreadedWeaknessTester : public ThreadedTesterBase {
         EXPECT_TRUE(weakMap->isEmpty());
         EXPECT_TRUE(weakMap2.isEmpty());
       }
-      SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
       testing::yieldCurrentThread();
     }
     ThreadState::detachCurrentThread();
@@ -1027,58 +947,6 @@ class RefCountedAndGarbageCollected2
 
 int RefCountedAndGarbageCollected2::s_destructorCalls = 0;
 
-#define DEFINE_VISITOR_METHODS(Type)                               \
-  void mark(const Type* object, TraceCallback callback) override { \
-    mark(object);                                                  \
-  }
-
-class RefCountedGarbageCollectedVisitor : public CountingVisitor {
- public:
-  RefCountedGarbageCollectedVisitor(ThreadState* state,
-                                    int expected,
-                                    void** objects)
-      : CountingVisitor(state),
-        m_count(0),
-        m_expectedCount(expected),
-        m_expectedObjects(objects) {}
-
-  void mark(const void* ptr) { markNoTrace(ptr); }
-
-  virtual void markNoTrace(const void* ptr) {
-    if (!ptr)
-      return;
-    if (m_count < m_expectedCount)
-      EXPECT_TRUE(expectedObject(ptr));
-    else
-      EXPECT_FALSE(expectedObject(ptr));
-    m_count++;
-  }
-
-  void mark(const void* ptr, TraceCallback) override { mark(ptr); }
-
-  void markHeader(HeapObjectHeader* header, TraceCallback callback) override {
-    mark(header->payload());
-  }
-
-  bool validate() { return m_count >= m_expectedCount; }
-  void reset() { m_count = 0; }
-
- private:
-  bool expectedObject(const void* ptr) {
-    for (int i = 0; i < m_expectedCount; i++) {
-      if (m_expectedObjects[i] == ptr)
-        return true;
-    }
-    return false;
-  }
-
-  int m_count;
-  int m_expectedCount;
-  void** m_expectedObjects;
-};
-
-#undef DEFINE_VISITOR_METHODS
-
 class Weak : public Bar {
  public:
   static Weak* create(Bar* strong, Bar* weak) { return new Weak(strong, weak); }
@@ -1292,7 +1160,7 @@ class FinalizationObserverWithHashMap {
 
   static ObserverMap& observe(Observable& target) {
     ObserverMap& map = observers();
-    ObserverMap::AddResult result = map.add(&target, nullptr);
+    ObserverMap::AddResult result = map.insert(&target, nullptr);
     if (result.isNewEntry) {
       result.storedValue->value =
           WTF::makeUnique<FinalizationObserverWithHashMap>(target);
@@ -2145,7 +2013,7 @@ TEST(HeapTest, HashMapOfMembers) {
     IntWrapper* one(IntWrapper::create(1));
     IntWrapper* anotherOne(IntWrapper::create(1));
 
-    map->add(one, one);
+    map->insert(one, one);
 
     size_t afterOneAdd = heap.objectPayloadSizeForTesting();
     EXPECT_TRUE(afterOneAdd > afterGC);
@@ -2155,7 +2023,7 @@ TEST(HeapTest, HashMapOfMembers) {
     ++it;
     ++it2;
 
-    map->add(anotherOne, one);
+    map->insert(anotherOne, one);
 
     // The addition above can cause an allocation of a new
     // backing store. We therefore garbage collect before
@@ -2173,7 +2041,7 @@ TEST(HeapTest, HashMapOfMembers) {
     EXPECT_TRUE(map->contains(one));
     EXPECT_TRUE(map->contains(anotherOne));
 
-    IntWrapper* gotten(map->get(one));
+    IntWrapper* gotten(map->at(one));
     EXPECT_EQ(gotten->value(), one->value());
     EXPECT_EQ(gotten, one);
 
@@ -2185,14 +2053,14 @@ TEST(HeapTest, HashMapOfMembers) {
     for (int i = 1; i < 1000; i++) {  // 999 iterations.
       IntWrapper* iWrapper(IntWrapper::create(i));
       IntWrapper* iSquared(IntWrapper::create(i * i));
-      map->add(iWrapper, iSquared);
+      map->insert(iWrapper, iSquared);
       if (i == 12)
         dozen = iWrapper;
     }
     size_t afterAdding1000 = heap.objectPayloadSizeForTesting();
     EXPECT_TRUE(afterAdding1000 > afterGC2);
 
-    IntWrapper* gross(map->get(dozen));
+    IntWrapper* gross(map->at(dozen));
     EXPECT_EQ(gross->value(), 144);
 
     // This should clear out any junk backings created by all the adds.
@@ -2538,23 +2406,23 @@ TEST(HeapTest, HeapCollectionTypes) {
       IntWrapper* fiveF(IntWrapper::create(5));
 
       // Member Collections.
-      memberMember2->add(one, two);
-      memberMember2->add(two, three);
-      memberMember2->add(three, four);
-      memberMember2->add(four, one);
-      primitiveMember->add(1, two);
-      primitiveMember->add(2, three);
-      primitiveMember->add(3, four);
-      primitiveMember->add(4, one);
-      memberPrimitive->add(one, 2);
-      memberPrimitive->add(two, 3);
-      memberPrimitive->add(three, 4);
-      memberPrimitive->add(four, 1);
-      set2->add(one);
-      set2->add(two);
-      set2->add(three);
-      set2->add(four);
-      set->add(oneB);
+      memberMember2->insert(one, two);
+      memberMember2->insert(two, three);
+      memberMember2->insert(three, four);
+      memberMember2->insert(four, one);
+      primitiveMember->insert(1, two);
+      primitiveMember->insert(2, three);
+      primitiveMember->insert(3, four);
+      primitiveMember->insert(4, one);
+      memberPrimitive->insert(one, 2);
+      memberPrimitive->insert(two, 3);
+      memberPrimitive->insert(three, 4);
+      memberPrimitive->insert(four, 1);
+      set2->insert(one);
+      set2->insert(two);
+      set2->insert(three);
+      set2->insert(four);
+      set->insert(oneB);
       set3->add(oneB);
       set3->add(oneB);
       vector->push_back(oneB);
@@ -2658,18 +2526,18 @@ TEST(HeapTest, HeapCollectionTypes) {
       memberMember3->swap(containedMap);
       memberMember3->swap(*memberMember);
 
-      EXPECT_TRUE(memberMember->get(one) == two);
-      EXPECT_TRUE(memberMember->get(two) == three);
-      EXPECT_TRUE(memberMember->get(three) == four);
-      EXPECT_TRUE(memberMember->get(four) == one);
-      EXPECT_TRUE(primitiveMember->get(1) == two);
-      EXPECT_TRUE(primitiveMember->get(2) == three);
-      EXPECT_TRUE(primitiveMember->get(3) == four);
-      EXPECT_TRUE(primitiveMember->get(4) == one);
-      EXPECT_EQ(1, memberPrimitive->get(four));
-      EXPECT_EQ(2, memberPrimitive->get(one));
-      EXPECT_EQ(3, memberPrimitive->get(two));
-      EXPECT_EQ(4, memberPrimitive->get(three));
+      EXPECT_TRUE(memberMember->at(one) == two);
+      EXPECT_TRUE(memberMember->at(two) == three);
+      EXPECT_TRUE(memberMember->at(three) == four);
+      EXPECT_TRUE(memberMember->at(four) == one);
+      EXPECT_TRUE(primitiveMember->at(1) == two);
+      EXPECT_TRUE(primitiveMember->at(2) == three);
+      EXPECT_TRUE(primitiveMember->at(3) == four);
+      EXPECT_TRUE(primitiveMember->at(4) == one);
+      EXPECT_EQ(1, memberPrimitive->at(four));
+      EXPECT_EQ(2, memberPrimitive->at(one));
+      EXPECT_EQ(3, memberPrimitive->at(two));
+      EXPECT_EQ(4, memberPrimitive->at(three));
       EXPECT_TRUE(set->contains(one));
       EXPECT_TRUE(set->contains(two));
       EXPECT_TRUE(set->contains(three));
@@ -2726,11 +2594,11 @@ TEST(HeapTest, HeapCollectionTypes) {
     EXPECT_EQ(3u, dequeUW->size());
     EXPECT_EQ(1u, deque2->size());
 
-    EXPECT_TRUE(memberMember->get(one) == two);
-    EXPECT_TRUE(primitiveMember->get(1) == two);
-    EXPECT_TRUE(primitiveMember->get(4) == one);
-    EXPECT_EQ(2, memberPrimitive->get(one));
-    EXPECT_EQ(3, memberPrimitive->get(two));
+    EXPECT_TRUE(memberMember->at(one) == two);
+    EXPECT_TRUE(primitiveMember->at(1) == two);
+    EXPECT_TRUE(primitiveMember->at(4) == one);
+    EXPECT_EQ(2, memberPrimitive->at(one));
+    EXPECT_EQ(3, memberPrimitive->at(two));
     EXPECT_TRUE(set->contains(one));
     EXPECT_TRUE(set->contains(two));
     EXPECT_FALSE(set->contains(oneB));
@@ -2911,15 +2779,15 @@ TEST(HeapTest, PersistentSet) {
   Persistent<IntWrapper> six(IntWrapper::create(6));
   {
     PersistentSet set;
-    set.add(one);
-    set.add(two);
+    set.insert(one);
+    set.insert(two);
     conservativelyCollectGarbage();
     EXPECT_TRUE(set.contains(one));
     EXPECT_TRUE(set.contains(one2));
     EXPECT_TRUE(set.contains(two));
 
-    set.add(three);
-    set.add(four);
+    set.insert(three);
+    set.insert(four);
     conservativelyCollectGarbage();
     EXPECT_TRUE(set.contains(one));
     EXPECT_TRUE(set.contains(two));
@@ -2937,8 +2805,8 @@ TEST(HeapTest, PersistentSet) {
     PersistentSet set1;
     PersistentSet set2;
 
-    set1.add(one);
-    set2.add(two);
+    set1.insert(one);
+    set2.insert(two);
     set1.swap(set2);
     conservativelyCollectGarbage();
     EXPECT_TRUE(set1.contains(two));
@@ -2962,15 +2830,15 @@ TEST(HeapTest, CrossThreadPersistentSet) {
   CrossThreadPersistent<IntWrapper> six(IntWrapper::create(6));
   {
     CrossThreadPersistentSet set;
-    set.add(one);
-    set.add(two);
+    set.insert(one);
+    set.insert(two);
     conservativelyCollectGarbage();
     EXPECT_TRUE(set.contains(one));
     EXPECT_TRUE(set.contains(one2));
     EXPECT_TRUE(set.contains(two));
 
-    set.add(three);
-    set.add(four);
+    set.insert(three);
+    set.insert(four);
     conservativelyCollectGarbage();
     EXPECT_TRUE(set.contains(one));
     EXPECT_TRUE(set.contains(two));
@@ -2988,8 +2856,8 @@ TEST(HeapTest, CrossThreadPersistentSet) {
     CrossThreadPersistentSet set1;
     CrossThreadPersistentSet set2;
 
-    set1.add(one);
-    set2.add(two);
+    set1.insert(one);
+    set2.insert(two);
     set1.swap(set2);
     conservativelyCollectGarbage();
     EXPECT_TRUE(set1.contains(two));
@@ -3021,7 +2889,7 @@ TEST(HeapTest, HeapHashMapWithInlinedObject) {
   HeapHashMap<int, NonTrivialObject> map;
   for (int num = 1; num < 1000; num++) {
     NonTrivialObject object(num);
-    map.add(num, object);
+    map.insert(num, object);
   }
 }
 
@@ -3075,14 +2943,14 @@ TEST(HeapTest, HeapWeakCollectionSimple) {
   keepNumbersAlive.push_back(IntWrapper::create(10));
 
   {
-    weakStrong->add(IntWrapper::create(1), two);
-    strongWeak->add(two, IntWrapper::create(1));
-    weakWeak->add(two, IntWrapper::create(42));
-    weakWeak->add(IntWrapper::create(42), two);
-    weakSet->add(IntWrapper::create(0));
-    weakSet->add(two);
-    weakSet->add(keepNumbersAlive[0]);
-    weakSet->add(keepNumbersAlive[1]);
+    weakStrong->insert(IntWrapper::create(1), two);
+    strongWeak->insert(two, IntWrapper::create(1));
+    weakWeak->insert(two, IntWrapper::create(42));
+    weakWeak->insert(IntWrapper::create(42), two);
+    weakSet->insert(IntWrapper::create(0));
+    weakSet->insert(two);
+    weakSet->insert(keepNumbersAlive[0]);
+    weakSet->insert(keepNumbersAlive[1]);
     weakCountedSet->add(IntWrapper::create(0));
     weakCountedSet->add(two);
     weakCountedSet->add(two);
@@ -3126,13 +2994,13 @@ void orderedSetHelper(bool strong) {
   keepNumbersAlive.push_back(IntWrapper::create(103));
   keepNumbersAlive.push_back(IntWrapper::create(10));
 
-  set1->add(IntWrapper::create(0));
-  set1->add(keepNumbersAlive[0]);
-  set1->add(keepNumbersAlive[1]);
-  set1->add(keepNumbersAlive[2]);
+  set1->insert(IntWrapper::create(0));
+  set1->insert(keepNumbersAlive[0]);
+  set1->insert(keepNumbersAlive[1]);
+  set1->insert(keepNumbersAlive[2]);
 
   set2->clear();
-  set2->add(IntWrapper::create(42));
+  set2->insert(IntWrapper::create(42));
   set2->clear();
 
   EXPECT_EQ(4u, set1->size());
@@ -3279,11 +3147,11 @@ static void heapMapDestructorHelper(bool clearMaps) {
     preciselyCollectGarbage();
     preciselyCollectGarbage();
 
-    stackMap.add(IntWrapper::create(42), ThingWithDestructor(1729));
-    stackMap.add(luck, ThingWithDestructor(8128));
-    stackRefMap.add(IntWrapper::create(42),
-                    RefCountedAndGarbageCollected::create());
-    stackRefMap.add(luck, RefCountedAndGarbageCollected::create());
+    stackMap.insert(IntWrapper::create(42), ThingWithDestructor(1729));
+    stackMap.insert(luck, ThingWithDestructor(8128));
+    stackRefMap.insert(IntWrapper::create(42),
+                       RefCountedAndGarbageCollected::create());
+    stackRefMap.insert(luck, RefCountedAndGarbageCollected::create());
 
     baseLine = ThingWithDestructor::s_liveThingsWithDestructor;
     refBaseLine = RefCountedAndGarbageCollected::s_destructorCalls;
@@ -3303,10 +3171,11 @@ static void heapMapDestructorHelper(bool clearMaps) {
   // Now use maps kept alive with persistents. Here we don't expect any
   // destructors to be called before there have been GCs.
 
-  map->add(IntWrapper::create(42), ThingWithDestructor(1729));
-  map->add(luck, ThingWithDestructor(8128));
-  refMap->add(IntWrapper::create(42), RefCountedAndGarbageCollected::create());
-  refMap->add(luck, RefCountedAndGarbageCollected::create());
+  map->insert(IntWrapper::create(42), ThingWithDestructor(1729));
+  map->insert(luck, ThingWithDestructor(8128));
+  refMap->insert(IntWrapper::create(42),
+                 RefCountedAndGarbageCollected::create());
+  refMap->insert(luck, RefCountedAndGarbageCollected::create());
 
   baseLine = ThingWithDestructor::s_liveThingsWithDestructor;
   refBaseLine = RefCountedAndGarbageCollected::s_destructorCalls;
@@ -3428,14 +3297,14 @@ void weakPairsHelper() {
 
   Persistent<IntWrapper> two = IntWrapper::create(2);
 
-  weakStrong->add(PairWeakStrong(IntWrapper::create(1), &*two));
-  weakStrong->add(PairWeakStrong(&*two, &*two));
-  strongWeak->add(PairStrongWeak(&*two, IntWrapper::create(1)));
-  strongWeak->add(PairStrongWeak(&*two, &*two));
-  weakUnwrapped->add(PairWeakUnwrapped(IntWrapper::create(1), 2));
-  weakUnwrapped->add(PairWeakUnwrapped(&*two, 2));
-  unwrappedWeak->add(PairUnwrappedWeak(2, IntWrapper::create(1)));
-  unwrappedWeak->add(PairUnwrappedWeak(2, &*two));
+  weakStrong->insert(PairWeakStrong(IntWrapper::create(1), &*two));
+  weakStrong->insert(PairWeakStrong(&*two, &*two));
+  strongWeak->insert(PairStrongWeak(&*two, IntWrapper::create(1)));
+  strongWeak->insert(PairStrongWeak(&*two, &*two));
+  weakUnwrapped->insert(PairWeakUnwrapped(IntWrapper::create(1), 2));
+  weakUnwrapped->insert(PairWeakUnwrapped(&*two, 2));
+  unwrappedWeak->insert(PairUnwrappedWeak(2, IntWrapper::create(1)));
+  unwrappedWeak->insert(PairUnwrappedWeak(2, &*two));
 
   checkPairSets<WSSet, SWSet, WUSet, UWSet>(
       weakStrong, strongWeak, weakUnwrapped, unwrappedWeak, true, two);
@@ -3520,11 +3389,11 @@ TEST(HeapTest, HeapWeakCollectionTypes) {
         IntWrapper* wrapped2 = IntWrapper::create(i + 1);
         keepNumbersAlive.push_back(wrapped);
         keepNumbersAlive.push_back(wrapped2);
-        weakStrong->add(wrapped, wrapped2);
-        strongWeak->add(wrapped2, wrapped);
-        weakWeak->add(wrapped, wrapped2);
-        weakSet->add(wrapped);
-        weakOrderedSet->add(wrapped);
+        weakStrong->insert(wrapped, wrapped2);
+        strongWeak->insert(wrapped2, wrapped);
+        weakWeak->insert(wrapped, wrapped2);
+        weakSet->insert(wrapped);
+        weakOrderedSet->insert(wrapped);
       }
 
       EXPECT_EQ(64u, weakStrong->size());
@@ -3546,9 +3415,9 @@ TEST(HeapTest, HeapWeakCollectionTypes) {
       for (int i = 0; i < 128; i += 2) {
         IntWrapper* wrapped = keepNumbersAlive[i];
         IntWrapper* wrapped2 = keepNumbersAlive[i + 1];
-        EXPECT_EQ(wrapped2, weakStrong->get(wrapped));
-        EXPECT_EQ(wrapped, strongWeak->get(wrapped2));
-        EXPECT_EQ(wrapped2, weakWeak->get(wrapped));
+        EXPECT_EQ(wrapped2, weakStrong->at(wrapped));
+        EXPECT_EQ(wrapped, strongWeak->at(wrapped2));
+        EXPECT_EQ(wrapped2, weakWeak->at(wrapped));
         EXPECT_TRUE(weakSet->contains(wrapped));
         EXPECT_TRUE(weakOrderedSet->contains(wrapped));
       }
@@ -3622,7 +3491,7 @@ TEST(HeapTest, HeapWeakCollectionTypes) {
           } else if (collectionNumber == weakSetIndex && firstAlive) {
             ASSERT_TRUE(weakSet->contains(keepNumbersAlive[i]));
             if (deleteAfterwards)
-              weakSet->remove(keepNumbersAlive[i]);
+              weakSet->erase(keepNumbersAlive[i]);
             else
               count++;
           } else if (collectionNumber == weakOrderedSetIndex && firstAlive) {
@@ -3637,11 +3506,11 @@ TEST(HeapTest, HeapWeakCollectionTypes) {
           for (int i = 1000; i < 1100; i++) {
             IntWrapper* wrapped = IntWrapper::create(i);
             keepNumbersAlive.push_back(wrapped);
-            weakStrong->add(wrapped, wrapped);
-            strongWeak->add(wrapped, wrapped);
-            weakWeak->add(wrapped, wrapped);
-            weakSet->add(wrapped);
-            weakOrderedSet->add(wrapped);
+            weakStrong->insert(wrapped, wrapped);
+            strongWeak->insert(wrapped, wrapped);
+            weakWeak->insert(wrapped, wrapped);
+            weakSet->insert(wrapped);
+            weakOrderedSet->insert(wrapped);
           }
         }
         if (collectionNumber == weakStrongIndex)
@@ -3752,69 +3621,6 @@ TEST(HeapTest, RefCountedGarbageCollected) {
   EXPECT_EQ(2, RefCountedAndGarbageCollected::s_destructorCalls);
 }
 
-TEST(HeapTest, RefCountedGarbageCollectedWithStackPointers) {
-  RefCountedAndGarbageCollected::s_destructorCalls = 0;
-  RefCountedAndGarbageCollected2::s_destructorCalls = 0;
-  {
-    RefCountedAndGarbageCollected* pointer1 = 0;
-    RefCountedAndGarbageCollected2* pointer2 = 0;
-    {
-      Persistent<RefCountedAndGarbageCollected> object1 =
-          RefCountedAndGarbageCollected::create();
-      Persistent<RefCountedAndGarbageCollected2> object2 =
-          RefCountedAndGarbageCollected2::create();
-      pointer1 = object1.get();
-      pointer2 = object2.get();
-      void* objects[2] = {object1.get(), object2.get()};
-      ThreadState::GCForbiddenScope gcScope(ThreadState::current());
-      RefCountedGarbageCollectedVisitor visitor(ThreadState::current(), 2,
-                                                objects);
-      ThreadState::current()->visitPersistents(&visitor);
-      EXPECT_TRUE(visitor.validate());
-    }
-    conservativelyCollectGarbage();
-    EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
-    EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
-
-    conservativelyCollectGarbage();
-    EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
-    EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
-
-    {
-      // At this point, the reference counts of object1 and object2 are 0.
-      // Only pointer1 and pointer2 keep references to object1 and object2.
-      void* objects[] = {0};
-      ThreadState::GCForbiddenScope gcScope(ThreadState::current());
-      RefCountedGarbageCollectedVisitor visitor(ThreadState::current(), 0,
-                                                objects);
-      ThreadState::current()->visitPersistents(&visitor);
-      EXPECT_TRUE(visitor.validate());
-    }
-
-    {
-      Persistent<RefCountedAndGarbageCollected> object1(pointer1);
-      Persistent<RefCountedAndGarbageCollected2> object2(pointer2);
-      void* objects[2] = {object1.get(), object2.get()};
-      ThreadState::GCForbiddenScope gcScope(ThreadState::current());
-      RefCountedGarbageCollectedVisitor visitor(ThreadState::current(), 2,
-                                                objects);
-      ThreadState::current()->visitPersistents(&visitor);
-      EXPECT_TRUE(visitor.validate());
-    }
-    conservativelyCollectGarbage();
-    EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
-    EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
-
-    conservativelyCollectGarbage();
-    EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
-    EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
-  }
-
-  preciselyCollectGarbage();
-  EXPECT_EQ(1, RefCountedAndGarbageCollected::s_destructorCalls);
-  EXPECT_EQ(1, RefCountedAndGarbageCollected2::s_destructorCalls);
-}
-
 TEST(HeapTest, WeakMembers) {
   Bar::s_live = 0;
   {
@@ -3918,7 +3724,21 @@ TEST(HeapTest, Comparisons) {
   EXPECT_TRUE(barPersistent == fooPersistent);
 }
 
+#if DCHECK_IS_ON()
+namespace {
+
+static size_t s_checkMarkCount = 0;
+
+bool reportMarkedPointer(HeapObjectHeader*) {
+  s_checkMarkCount++;
+  // Do not try to mark the located heap object.
+  return true;
+}
+}
+#endif
+
 TEST(HeapTest, CheckAndMarkPointer) {
+#if DCHECK_IS_ON()
   ThreadHeap& heap = ThreadState::current()->heap();
   clearOutOldGarbage();
 
@@ -3946,20 +3766,22 @@ TEST(HeapTest, CheckAndMarkPointer) {
   {
     TestGCScope scope(BlinkGC::HeapPointersOnStack);
     ThreadState::GCForbiddenScope gcScope(ThreadState::current());
-    CountingVisitor visitor(ThreadState::current());
-    EXPECT_TRUE(scope.allThreadsParked());  // Fail the test if we could not
-                                            // park all threads.
+    Visitor visitor(ThreadState::current(), Visitor::GlobalMarking);
     heap.flushHeapDoesNotContainCache();
     for (size_t i = 0; i < objectAddresses.size(); i++) {
-      EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, objectAddresses[i]));
-      EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, endAddresses[i]));
+      EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, objectAddresses[i],
+                                           reportMarkedPointer));
+      EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, endAddresses[i],
+                                           reportMarkedPointer));
     }
-    EXPECT_EQ(objectAddresses.size() * 2, visitor.count());
-    visitor.reset();
-    EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, largeObjectAddress));
-    EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, largeObjectEndAddress));
-    EXPECT_EQ(2ul, visitor.count());
-    visitor.reset();
+    EXPECT_EQ(objectAddresses.size() * 2, s_checkMarkCount);
+    s_checkMarkCount = 0;
+    EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, largeObjectAddress,
+                                         reportMarkedPointer));
+    EXPECT_TRUE(heap.checkAndMarkPointer(&visitor, largeObjectEndAddress,
+                                         reportMarkedPointer));
+    EXPECT_EQ(2ul, s_checkMarkCount);
+    s_checkMarkCount = 0ul;
   }
   // This forces a GC without stack scanning which results in the objects
   // being collected. This will also rebuild the above mentioned freelists,
@@ -3968,8 +3790,7 @@ TEST(HeapTest, CheckAndMarkPointer) {
   {
     TestGCScope scope(BlinkGC::HeapPointersOnStack);
     ThreadState::GCForbiddenScope gcScope(ThreadState::current());
-    CountingVisitor visitor(ThreadState::current());
-    EXPECT_TRUE(scope.allThreadsParked());
+    Visitor visitor(ThreadState::current(), Visitor::GlobalMarking);
     heap.flushHeapDoesNotContainCache();
     for (size_t i = 0; i < objectAddresses.size(); i++) {
       // We would like to assert that checkAndMarkPointer returned false
@@ -3979,17 +3800,20 @@ TEST(HeapTest, CheckAndMarkPointer) {
       // whether it points at a valid object (this ensures the
       // correctness of the page-based on-heap address caches), so we
       // can't make that assert.
-      heap.checkAndMarkPointer(&visitor, objectAddresses[i]);
-      heap.checkAndMarkPointer(&visitor, endAddresses[i]);
+      heap.checkAndMarkPointer(&visitor, objectAddresses[i],
+                               reportMarkedPointer);
+      heap.checkAndMarkPointer(&visitor, endAddresses[i], reportMarkedPointer);
     }
-    EXPECT_EQ(0ul, visitor.count());
-    heap.checkAndMarkPointer(&visitor, largeObjectAddress);
-    heap.checkAndMarkPointer(&visitor, largeObjectEndAddress);
-    EXPECT_EQ(0ul, visitor.count());
+    EXPECT_EQ(0ul, s_checkMarkCount);
+    heap.checkAndMarkPointer(&visitor, largeObjectAddress, reportMarkedPointer);
+    heap.checkAndMarkPointer(&visitor, largeObjectEndAddress,
+                             reportMarkedPointer);
+    EXPECT_EQ(0ul, s_checkMarkCount);
   }
   // This round of GC is important to make sure that the object start
   // bitmap are cleared out and that the free lists are rebuild.
   clearOutOldGarbage();
+#endif
 }
 
 TEST(HeapTest, PersistentHeapCollectionTypes) {
@@ -4039,11 +3863,11 @@ TEST(HeapTest, PersistentHeapCollectionTypes) {
     pVec.push_back(two);
     pVec.push_back(three);
 
-    pSet.add(four);
-    pListSet.add(eight);
-    pLinkedSet.add(nine);
-    pMap.add(five, six);
-    wpMap.add(ten, eleven);
+    pSet.insert(four);
+    pListSet.insert(eight);
+    pLinkedSet.insert(nine);
+    pMap.insert(five, six);
+    wpMap.insert(ten, eleven);
 
     // Collect |vec| and |one|.
     vec = 0;
@@ -4071,10 +3895,10 @@ TEST(HeapTest, PersistentHeapCollectionTypes) {
     EXPECT_TRUE(pLinkedSet.contains(nine));
 
     EXPECT_EQ(1u, pMap.size());
-    EXPECT_EQ(six, pMap.get(five));
+    EXPECT_EQ(six, pMap.at(five));
 
     EXPECT_EQ(1u, wpMap.size());
-    EXPECT_EQ(eleven, wpMap.get(ten));
+    EXPECT_EQ(eleven, wpMap.at(ten));
     ten.clear();
     preciselyCollectGarbage();
     EXPECT_EQ(0u, wpMap.size());
@@ -4098,33 +3922,33 @@ TEST(HeapTest, CollectionNesting) {
   static_assert(WTF::IsTraceable<IntDeque>::value,
                 "Failed to recognize HeapDeque as traceable");
 
-  map->add(key, IntVector());
-  map2->add(key, IntDeque());
+  map->insert(key, IntVector());
+  map2->insert(key, IntDeque());
 
   HeapHashMap<void*, IntVector>::iterator it = map->find(key);
-  EXPECT_EQ(0u, map->get(key).size());
+  EXPECT_EQ(0u, map->at(key).size());
 
   HeapHashMap<void*, IntDeque>::iterator it2 = map2->find(key);
-  EXPECT_EQ(0u, map2->get(key).size());
+  EXPECT_EQ(0u, map2->at(key).size());
 
   it->value.push_back(IntWrapper::create(42));
-  EXPECT_EQ(1u, map->get(key).size());
+  EXPECT_EQ(1u, map->at(key).size());
 
   it2->value.append(IntWrapper::create(42));
-  EXPECT_EQ(1u, map2->get(key).size());
+  EXPECT_EQ(1u, map2->at(key).size());
 
   Persistent<HeapHashMap<void*, IntVector>> keepAlive(map);
   Persistent<HeapHashMap<void*, IntDeque>> keepAlive2(map2);
 
   for (int i = 0; i < 100; i++) {
-    map->add(key + 1 + i, IntVector());
-    map2->add(key + 1 + i, IntDeque());
+    map->insert(key + 1 + i, IntVector());
+    map2->insert(key + 1 + i, IntDeque());
   }
 
   preciselyCollectGarbage();
 
-  EXPECT_EQ(1u, map->get(key).size());
-  EXPECT_EQ(1u, map2->get(key).size());
+  EXPECT_EQ(1u, map->at(key).size());
+  EXPECT_EQ(1u, map2->at(key).size());
   EXPECT_EQ(0, IntWrapper::s_destructorCalls);
 
   keepAlive = nullptr;
@@ -4146,7 +3970,7 @@ TEST(HeapTest, GarbageCollectedMixin) {
   EXPECT_EQ(2, UseMixin::s_traceCount);
 
   PersistentHeapHashSet<WeakMember<Mixin>> weakMap;
-  weakMap.add(UseMixin::create());
+  weakMap.insert(UseMixin::create());
   preciselyCollectGarbage();
   EXPECT_EQ(0u, weakMap.size());
 }
@@ -4158,17 +3982,17 @@ TEST(HeapTest, CollectionNesting2) {
   typedef HeapHashSet<Member<IntWrapper>> IntSet;
   HeapHashMap<void*, IntSet>* map = new HeapHashMap<void*, IntSet>();
 
-  map->add(key, IntSet());
+  map->insert(key, IntSet());
 
   HeapHashMap<void*, IntSet>::iterator it = map->find(key);
-  EXPECT_EQ(0u, map->get(key).size());
+  EXPECT_EQ(0u, map->at(key).size());
 
-  it->value.add(IntWrapper::create(42));
-  EXPECT_EQ(1u, map->get(key).size());
+  it->value.insert(IntWrapper::create(42));
+  EXPECT_EQ(1u, map->at(key).size());
 
   Persistent<HeapHashMap<void*, IntSet>> keepAlive(map);
   preciselyCollectGarbage();
-  EXPECT_EQ(1u, map->get(key).size());
+  EXPECT_EQ(1u, map->at(key).size());
   EXPECT_EQ(0, IntWrapper::s_destructorCalls);
 }
 
@@ -4644,7 +4468,7 @@ TEST(HeapTest, DestructorsCalled) {
   HeapHashMap<Member<IntWrapper>, std::unique_ptr<SimpleClassWithDestructor>>
       map;
   SimpleClassWithDestructor* hasDestructor = new SimpleClassWithDestructor();
-  map.add(IntWrapper::create(1), WTF::wrapUnique(hasDestructor));
+  map.insert(IntWrapper::create(1), WTF::wrapUnique(hasDestructor));
   SimpleClassWithDestructor::s_wasDestructed = false;
   map.clear();
   EXPECT_TRUE(SimpleClassWithDestructor::s_wasDestructed);
@@ -4809,11 +4633,11 @@ void setWithCustomWeaknessHandling() {
   {
     Set set2;
     Set* set3 = new Set();
-    set2.add(
+    set2.insert(
         PairWithWeakHandling(IntWrapper::create(0), IntWrapper::create(1)));
-    set3->add(
+    set3->insert(
         PairWithWeakHandling(IntWrapper::create(2), IntWrapper::create(3)));
-    set1->add(
+    set1->insert(
         PairWithWeakHandling(IntWrapper::create(4), IntWrapper::create(5)));
     conservativelyCollectGarbage();
     // The first set is pointed to from a persistent, so it's referenced, but
@@ -4838,15 +4662,15 @@ void setWithCustomWeaknessHandling() {
   }
   preciselyCollectGarbage();
   EXPECT_EQ(0u, set1->size());
-  set1->add(PairWithWeakHandling(IntWrapper::create(103), livingInt));
+  set1->insert(PairWithWeakHandling(IntWrapper::create(103), livingInt));
   // This one gets zapped at GC time because nothing holds the 103 alive.
-  set1->add(PairWithWeakHandling(livingInt, IntWrapper::create(103)));
-  set1->add(PairWithWeakHandling(
+  set1->insert(PairWithWeakHandling(livingInt, IntWrapper::create(103)));
+  set1->insert(PairWithWeakHandling(
       IntWrapper::create(103),
       IntWrapper::create(103)));  // This one gets zapped too.
-  set1->add(PairWithWeakHandling(livingInt, livingInt));
+  set1->insert(PairWithWeakHandling(livingInt, livingInt));
   // This one is identical to the previous and doesn't add anything.
-  set1->add(PairWithWeakHandling(livingInt, livingInt));
+  set1->insert(PairWithWeakHandling(livingInt, livingInt));
   EXPECT_EQ(4u, set1->size());
   preciselyCollectGarbage();
   EXPECT_EQ(2u, set1->size());
@@ -4874,12 +4698,13 @@ TEST(HeapTest, MapWithCustomWeaknessHandling) {
   {
     Map map2;
     Map* map3 = new Map();
-    map2.add(PairWithWeakHandling(IntWrapper::create(0), IntWrapper::create(1)),
-             OffHeapInt::create(1001));
-    map3->add(
+    map2.insert(
+        PairWithWeakHandling(IntWrapper::create(0), IntWrapper::create(1)),
+        OffHeapInt::create(1001));
+    map3->insert(
         PairWithWeakHandling(IntWrapper::create(2), IntWrapper::create(3)),
         OffHeapInt::create(1002));
-    map1->add(
+    map1->insert(
         PairWithWeakHandling(IntWrapper::create(4), IntWrapper::create(5)),
         OffHeapInt::create(1003));
     EXPECT_EQ(0, OffHeapInt::s_destructorCalls);
@@ -4915,19 +4740,20 @@ TEST(HeapTest, MapWithCustomWeaknessHandling) {
 
   OffHeapInt::s_destructorCalls = 0;
 
-  map1->add(PairWithWeakHandling(IntWrapper::create(103), livingInt),
-            OffHeapInt::create(2000));
-  map1->add(PairWithWeakHandling(livingInt, IntWrapper::create(103)),
-            OffHeapInt::create(2001));  // This one gets zapped at GC time
-                                        // because nothing holds the 103 alive.
-  map1->add(
+  map1->insert(PairWithWeakHandling(IntWrapper::create(103), livingInt),
+               OffHeapInt::create(2000));
+  map1->insert(PairWithWeakHandling(livingInt, IntWrapper::create(103)),
+               OffHeapInt::create(2001));  // This one gets zapped at GC time
+  // because nothing holds the 103 alive.
+  map1->insert(
       PairWithWeakHandling(IntWrapper::create(103), IntWrapper::create(103)),
       OffHeapInt::create(2002));  // This one gets zapped too.
   RefPtr<OffHeapInt> dupeInt(OffHeapInt::create(2003));
-  map1->add(PairWithWeakHandling(livingInt, livingInt), dupeInt);
-  map1->add(PairWithWeakHandling(livingInt, livingInt),
-            dupeInt);  // This one is identical to the previous and doesn't add
-                       // anything.
+  map1->insert(PairWithWeakHandling(livingInt, livingInt), dupeInt);
+  map1->insert(
+      PairWithWeakHandling(livingInt, livingInt),
+      dupeInt);  // This one is identical to the previous and doesn't add
+                 // anything.
   dupeInt.clear();
 
   EXPECT_EQ(0, OffHeapInt::s_destructorCalls);
@@ -4955,13 +4781,13 @@ TEST(HeapTest, MapWithCustomWeaknessHandling2) {
   {
     Map map2;
     Map* map3 = new Map();
-    map2.add(
+    map2.insert(
         OffHeapInt::create(1001),
         PairWithWeakHandling(IntWrapper::create(0), IntWrapper::create(1)));
-    map3->add(
+    map3->insert(
         OffHeapInt::create(1002),
         PairWithWeakHandling(IntWrapper::create(2), IntWrapper::create(3)));
-    map1->add(
+    map1->insert(
         OffHeapInt::create(1003),
         PairWithWeakHandling(IntWrapper::create(4), IntWrapper::create(5)));
     EXPECT_EQ(0, OffHeapInt::s_destructorCalls);
@@ -4997,19 +4823,19 @@ TEST(HeapTest, MapWithCustomWeaknessHandling2) {
 
   OffHeapInt::s_destructorCalls = 0;
 
-  map1->add(OffHeapInt::create(2000),
-            PairWithWeakHandling(IntWrapper::create(103), livingInt));
+  map1->insert(OffHeapInt::create(2000),
+               PairWithWeakHandling(IntWrapper::create(103), livingInt));
   // This one gets zapped at GC time because nothing holds the 103 alive.
-  map1->add(OffHeapInt::create(2001),
-            PairWithWeakHandling(livingInt, IntWrapper::create(103)));
-  map1->add(OffHeapInt::create(2002),
-            PairWithWeakHandling(
-                IntWrapper::create(103),
-                IntWrapper::create(103)));  // This one gets zapped too.
+  map1->insert(OffHeapInt::create(2001),
+               PairWithWeakHandling(livingInt, IntWrapper::create(103)));
+  map1->insert(OffHeapInt::create(2002),
+               PairWithWeakHandling(
+                   IntWrapper::create(103),
+                   IntWrapper::create(103)));  // This one gets zapped too.
   RefPtr<OffHeapInt> dupeInt(OffHeapInt::create(2003));
-  map1->add(dupeInt, PairWithWeakHandling(livingInt, livingInt));
+  map1->insert(dupeInt, PairWithWeakHandling(livingInt, livingInt));
   // This one is identical to the previous and doesn't add anything.
-  map1->add(dupeInt, PairWithWeakHandling(livingInt, livingInt));
+  map1->insert(dupeInt, PairWithWeakHandling(livingInt, livingInt));
   dupeInt.clear();
 
   EXPECT_EQ(0, OffHeapInt::s_destructorCalls);
@@ -5029,7 +4855,7 @@ static void addElementsToWeakMap(
     HeapHashMap<int, WeakMember<IntWrapper>>* map) {
   // Key cannot be zero in hashmap.
   for (int i = 1; i < 11; i++)
-    map->add(i, IntWrapper::create(i));
+    map->insert(i, IntWrapper::create(i));
 }
 
 // crbug.com/402426
@@ -5039,7 +4865,7 @@ TEST(HeapTest, RegressNullIsStrongified) {
       new HeapHashMap<int, WeakMember<IntWrapper>>();
   addElementsToWeakMap(map);
   HeapHashMap<int, WeakMember<IntWrapper>>::AddResult result =
-      map->add(800, nullptr);
+      map->insert(800, nullptr);
   conservativelyCollectGarbage();
   result.storedValue->value = IntWrapper::create(42);
 }
@@ -5116,17 +4942,17 @@ TEST(HeapTest, RemoveEmptySets) {
                       HashTraits<Key>, EmptyClearingHashSetTraits>
       Map;
   Persistent<Map> map(new Map());
-  map->add(OffHeapInt::create(1), WeakSet());
+  map->insert(OffHeapInt::create(1), WeakSet());
   {
     WeakSet& set = map->begin()->value;
-    set.add(IntWrapper::create(103));  // Weak set can't hold this long.
-    set.add(livingInt);  // This prevents the set from being emptied.
+    set.insert(IntWrapper::create(103));  // Weak set can't hold this long.
+    set.insert(livingInt);  // This prevents the set from being emptied.
     EXPECT_EQ(2u, set.size());
   }
 
   // The set we add here is empty, so the entry will be removed from the map
   // at the next GC.
-  map->add(OffHeapInt::create(2), WeakSet());
+  map->insert(OffHeapInt::create(2), WeakSet());
   EXPECT_EQ(2u, map->size());
 
   preciselyCollectGarbage();
@@ -5151,19 +4977,19 @@ TEST(HeapTest, EphemeronsInEphemerons) {
       Persistent<OuterMap> outer = new OuterMap();
       Persistent<IntWrapper> one = IntWrapper::create(1);
       Persistent<IntWrapper> two = IntWrapper::create(2);
-      outer->add(one, InnerMap());
-      outer->begin()->value.add(two, IntWrapper::create(3));
-      EXPECT_EQ(1u, outer->get(one).size());
+      outer->insert(one, InnerMap());
+      outer->begin()->value.insert(two, IntWrapper::create(3));
+      EXPECT_EQ(1u, outer->at(one).size());
       if (!keepOuterAlive)
         one.clear();
       if (!keepInnerAlive)
         two.clear();
       preciselyCollectGarbage();
       if (keepOuterAlive) {
-        const InnerMap& inner = outer->get(one);
+        const InnerMap& inner = outer->at(one);
         if (keepInnerAlive) {
           EXPECT_EQ(1u, inner.size());
-          IntWrapper* three = inner.get(two);
+          IntWrapper* three = inner.at(two);
           EXPECT_EQ(3, three->value());
         } else {
           EXPECT_EQ(0u, inner.size());
@@ -5180,17 +5006,18 @@ TEST(HeapTest, EphemeronsInEphemerons) {
       for (int i = 0; i < 10000; i++) {
         IntWrapper* value = IntWrapper::create(i);
         keepAlive->push_back(value);
-        OuterMap::AddResult newEntry = outer->add(value, InnerMap());
-        newEntry.storedValue->value.add(deep, home);
-        newEntry.storedValue->value.add(composite, home);
+        OuterMap::AddResult newEntry = outer->insert(value, InnerMap());
+        newEntry.storedValue->value.insert(deep, home);
+        newEntry.storedValue->value.insert(composite, home);
       }
       composite.clear();
       preciselyCollectGarbage();
       EXPECT_EQ(10000u, outer->size());
       for (int i = 0; i < 10000; i++) {
         IntWrapper* value = keepAlive->at(i);
-        EXPECT_EQ(1u, outer->get(value)
-                          .size());  // Other one was deleted by weak handling.
+        EXPECT_EQ(1u,
+                  outer->at(value)
+                      .size());  // Other one was deleted by weak handling.
         if (i & 1)
           keepAlive->at(i) = nullptr;
       }
@@ -5220,10 +5047,10 @@ TEST(HeapTest, EphemeronsPointToEphemerons) {
     EphemeronWrapper* oldHead = chain;
     chain = new EphemeronWrapper();
     if (i == 50)
-      chain->getMap().add(key2, oldHead);
+      chain->getMap().insert(key2, oldHead);
     else
-      chain->getMap().add(key, oldHead);
-    chain->getMap().add(IntWrapper::create(103), new EphemeronWrapper());
+      chain->getMap().insert(key, oldHead);
+    chain->getMap().insert(IntWrapper::create(103), new EphemeronWrapper());
   }
 
   preciselyCollectGarbage();
@@ -5232,9 +5059,9 @@ TEST(HeapTest, EphemeronsPointToEphemerons) {
   for (int i = 0; i < 100; i++) {
     EXPECT_EQ(1u, wrapper->getMap().size());
     if (i == 49)
-      wrapper = wrapper->getMap().get(key2);
+      wrapper = wrapper->getMap().at(key2);
     else
-      wrapper = wrapper->getMap().get(key);
+      wrapper = wrapper->getMap().at(key);
   }
   EXPECT_EQ(nullptr, wrapper);
 
@@ -5244,7 +5071,7 @@ TEST(HeapTest, EphemeronsPointToEphemerons) {
   wrapper = chain;
   for (int i = 0; i < 50; i++) {
     EXPECT_EQ(i == 49 ? 0u : 1u, wrapper->getMap().size());
-    wrapper = wrapper->getMap().get(key);
+    wrapper = wrapper->getMap().at(key);
   }
   EXPECT_EQ(nullptr, wrapper);
 
@@ -5273,28 +5100,28 @@ TEST(HeapTest, Ephemeron) {
   Persistent<IntWrapper> pw1 = IntWrapper::create(3);
   Persistent<IntWrapper> pw2 = IntWrapper::create(4);
 
-  weakPairMap->add(wp1, PairWithWeakHandling(wp1, wp1));
-  weakPairMap->add(wp2, PairWithWeakHandling(wp1, wp1));
-  weakPairMap2->add(wp1, PairWithWeakHandling(wp1, wp2));
-  weakPairMap2->add(wp2, PairWithWeakHandling(wp1, wp2));
+  weakPairMap->insert(wp1, PairWithWeakHandling(wp1, wp1));
+  weakPairMap->insert(wp2, PairWithWeakHandling(wp1, wp1));
+  weakPairMap2->insert(wp1, PairWithWeakHandling(wp1, wp2));
+  weakPairMap2->insert(wp2, PairWithWeakHandling(wp1, wp2));
   // The map from wp1 to (wp2, wp1) would mark wp2 live, so we skip that.
-  weakPairMap3->add(wp2, PairWithWeakHandling(wp2, wp1));
-  weakPairMap4->add(wp1, PairWithWeakHandling(wp2, wp2));
-  weakPairMap4->add(wp2, PairWithWeakHandling(wp2, wp2));
+  weakPairMap3->insert(wp2, PairWithWeakHandling(wp2, wp1));
+  weakPairMap4->insert(wp1, PairWithWeakHandling(wp2, wp2));
+  weakPairMap4->insert(wp2, PairWithWeakHandling(wp2, wp2));
 
-  pairWeakMap->add(PairWithWeakHandling(pw1, pw1), pw1);
-  pairWeakMap->add(PairWithWeakHandling(pw1, pw2), pw1);
+  pairWeakMap->insert(PairWithWeakHandling(pw1, pw1), pw1);
+  pairWeakMap->insert(PairWithWeakHandling(pw1, pw2), pw1);
   // The map from (pw2, pw1) to pw1 would make pw2 live, so we skip that.
-  pairWeakMap->add(PairWithWeakHandling(pw2, pw2), pw1);
-  pairWeakMap2->add(PairWithWeakHandling(pw1, pw1), pw2);
-  pairWeakMap2->add(PairWithWeakHandling(pw1, pw2), pw2);
-  pairWeakMap2->add(PairWithWeakHandling(pw2, pw1), pw2);
-  pairWeakMap2->add(PairWithWeakHandling(pw2, pw2), pw2);
+  pairWeakMap->insert(PairWithWeakHandling(pw2, pw2), pw1);
+  pairWeakMap2->insert(PairWithWeakHandling(pw1, pw1), pw2);
+  pairWeakMap2->insert(PairWithWeakHandling(pw1, pw2), pw2);
+  pairWeakMap2->insert(PairWithWeakHandling(pw2, pw1), pw2);
+  pairWeakMap2->insert(PairWithWeakHandling(pw2, pw2), pw2);
 
-  set->add(wp1);
-  set->add(wp2);
-  set->add(pw1);
-  set->add(pw2);
+  set->insert(wp1);
+  set->insert(wp2);
+  set->insert(pw1);
+  set->insert(pw2);
 
   preciselyCollectGarbage();
 
@@ -5353,17 +5180,17 @@ TEST(HeapTest, IndirectStrongToWeak) {
   Persistent<IntWrapper> deadObject =
       IntWrapper::create(100);  // Named for "Drowning by Numbers" (1988).
   Persistent<IntWrapper> lifeObject = IntWrapper::create(42);
-  map->add(deadObject, new Link1(deadObject));
-  map->add(lifeObject, new Link1(lifeObject));
+  map->insert(deadObject, new Link1(deadObject));
+  map->insert(lifeObject, new Link1(lifeObject));
   EXPECT_EQ(2u, map->size());
   preciselyCollectGarbage();
   EXPECT_EQ(2u, map->size());
-  EXPECT_EQ(deadObject, map->get(deadObject)->link());
-  EXPECT_EQ(lifeObject, map->get(lifeObject)->link());
+  EXPECT_EQ(deadObject, map->at(deadObject)->link());
+  EXPECT_EQ(lifeObject, map->at(lifeObject)->link());
   deadObject.clear();  // Now it can live up to its name.
   preciselyCollectGarbage();
   EXPECT_EQ(1u, map->size());
-  EXPECT_EQ(lifeObject, map->get(lifeObject)->link());
+  EXPECT_EQ(lifeObject, map->at(lifeObject)->link());
   lifeObject.clear();  // Despite its name.
   preciselyCollectGarbage();
   EXPECT_EQ(0u, map->size());
@@ -5439,10 +5266,7 @@ class ThreadedStrongificationTester {
     wakeWorkerThread();
 
     // Wait for the worker thread to sweep its heaps before checking.
-    {
-      SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
-      parkMainThread();
-    }
+    parkMainThread();
   }
 
  private:
@@ -5460,26 +5284,19 @@ class ThreadedStrongificationTester {
     Persistent<IntWrapper> wrapper5 = IntWrapper::create(32);
     Persistent<IntWrapper> wrapper6 = IntWrapper::create(32);
     Persistent<WeakCollectionType> weakCollection = new WeakCollectionType;
-    weakCollection->add(wrapper1, wrapper1);
-    weakCollection->add(wrapper2, wrapper2);
-    weakCollection->add(wrapper3, wrapper3);
-    weakCollection->add(wrapper4, wrapper4);
-    weakCollection->add(wrapper5, wrapper5);
-    weakCollection->add(wrapper6, wrapper6);
+    weakCollection->insert(wrapper1, wrapper1);
+    weakCollection->insert(wrapper2, wrapper2);
+    weakCollection->insert(wrapper3, wrapper3);
+    weakCollection->insert(wrapper4, wrapper4);
+    weakCollection->insert(wrapper5, wrapper5);
+    weakCollection->insert(wrapper6, wrapper6);
 
     // Signal the main thread that the worker is done with its allocation.
     wakeMainThread();
 
-    {
-      // Wait for the main thread to do two GCs without sweeping
-      // this thread heap. The worker waits within a safepoint,
-      // but there is no sweeping until leaving the safepoint
-      // scope. If the weak collection backing is marked dead
-      // because of this we will not get strongification in the
-      // GC we force when we continue.
-      SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
-      parkWorkerThread();
-    }
+    // Wait for the main thread to do two GCs without sweeping
+    // this thread heap.
+    parkWorkerThread();
 
     return weakCollection;
   }
@@ -5589,7 +5406,7 @@ class DestructorLockingObject
   }
 
   virtual ~DestructorLockingObject() {
-    SafePointAwareMutexLocker lock(recursiveMutex());
+    MutexLocker lock(recursiveMutex());
     ++s_destructorCalls;
   }
 
@@ -5632,45 +5449,6 @@ class PartObject {
  private:
   Member<SimpleObject> m_obj;
 };
-
-TEST(HeapTest, TraceIfNeeded) {
-  ThreadState::GCForbiddenScope scope(ThreadState::current());
-  CountingVisitor visitor(ThreadState::current());
-
-  {
-    TraceIfNeededTester<RefPtr<OffHeapInt>>* m_offHeap =
-        TraceIfNeededTester<RefPtr<OffHeapInt>>::create(OffHeapInt::create(42));
-    visitor.reset();
-    m_offHeap->trace(&visitor);
-    EXPECT_EQ(0u, visitor.count());
-  }
-
-  {
-    TraceIfNeededTester<PartObject>* m_part =
-        TraceIfNeededTester<PartObject>::create();
-    visitor.reset();
-    m_part->trace(&visitor);
-    EXPECT_EQ(1u, visitor.count());
-  }
-
-  {
-    TraceIfNeededTester<Member<SimpleObject>>* m_obj =
-        TraceIfNeededTester<Member<SimpleObject>>::create(
-            Member<SimpleObject>(SimpleObject::create()));
-    visitor.reset();
-    m_obj->trace(&visitor);
-    EXPECT_EQ(1u, visitor.count());
-  }
-
-  {
-    TraceIfNeededTester<HeapVector<Member<SimpleObject>>>* m_vec =
-        TraceIfNeededTester<HeapVector<Member<SimpleObject>>>::create();
-    m_vec->obj().push_back(SimpleObject::create());
-    visitor.reset();
-    m_vec->trace(&visitor);
-    EXPECT_EQ(2u, visitor.count());
-  }
-}
 
 class AllocatesOnAssignment {
  public:
@@ -5764,10 +5542,10 @@ TEST(HeapTest, GCInHashMapOperations) {
   typedef HeapHashMap<AllocatesOnAssignment, AllocatesOnAssignment> Map;
   Map* map = new Map();
   IntWrapper* key = new IntWrapper(42);
-  map->add(key, AllocatesOnAssignment(103));
-  map->remove(key);
+  map->insert(key, AllocatesOnAssignment(103));
+  map->erase(key);
   for (int i = 0; i < 10; i++)
-    map->add(AllocatesOnAssignment(i), AllocatesOnAssignment(i));
+    map->insert(AllocatesOnAssignment(i), AllocatesOnAssignment(i));
   for (Map::iterator it = map->begin(); it != map->end(); ++it)
     EXPECT_EQ(it->key.value(), it->value.value());
 }
@@ -6308,13 +6086,12 @@ TEST(HeapTest, CrossThreadWeakPersistent) {
       object);
   object = nullptr;
   {
-    SafePointAwareMutexLocker recursiveMutexLocker(recursiveMutex());
+    MutexLocker recursiveMutexLocker(recursiveMutex());
     EXPECT_EQ(0, DestructorLockingObject::s_destructorCalls);
   }
 
   {
     // Pretend we have no pointers on stack during the step 4.
-    SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
     wakeWorkerThread();
     parkMainThread();
   }
@@ -6322,7 +6099,7 @@ TEST(HeapTest, CrossThreadWeakPersistent) {
   // Step 5: Make sure the weak persistent is cleared.
   EXPECT_FALSE(crossThreadWeakPersistent.get());
   {
-    SafePointAwareMutexLocker recursiveMutexLocker(recursiveMutex());
+    MutexLocker recursiveMutexLocker(recursiveMutex());
     EXPECT_EQ(1, DestructorLockingObject::s_destructorCalls);
   }
 
@@ -6444,7 +6221,7 @@ class ThreadedClearOnShutdownTester::HeapObject final
     // object. Done while terminating the test thread, so
     // verify that this brings about the release of the
     // persistent also.
-    heapObjectSet().add(create(false));
+    heapObjectSet().insert(create(false));
   }
 
   DEFINE_INLINE_TRACE() {}
@@ -6478,7 +6255,7 @@ ThreadedClearOnShutdownTester::heapObjectSet() {
 void ThreadedClearOnShutdownTester::runWhileAttached() {
   EXPECT_EQ(42, threadSpecificIntWrapper().value());
   // Creates a thread-specific singleton to a weakly held object.
-  weakHeapObjectSet().add(HeapObject::create(true));
+  weakHeapObjectSet().insert(HeapObject::create(true));
 }
 
 }  // namespace

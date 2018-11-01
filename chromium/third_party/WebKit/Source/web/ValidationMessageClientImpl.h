@@ -60,6 +60,7 @@ class ValidationMessageClientImpl final
                              TextDirection subMessageDir) override;
   void hideValidationMessage(const Element& anchor) override;
   bool isValidationMessageVisible(const Element& anchor) override;
+  void willUnloadDocument(const Document&) override;
   void documentDetached(const Document&) override;
   void willBeDestroyed() override;
 
@@ -69,7 +70,7 @@ class ValidationMessageClientImpl final
   IntRect m_lastAnchorRectInScreen;
   float m_lastPageScaleFactor;
   double m_finishTime;
-  Timer<ValidationMessageClientImpl> m_timer;
+  std::unique_ptr<TimerBase> m_timer;
 };
 
 }  // namespace blink

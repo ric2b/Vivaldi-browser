@@ -35,13 +35,13 @@ class TouchPointView : public views::View,
   explicit TouchPointView(views::Widget* parent_widget)
       : circle_center_(kPointRadius + 1, kPointRadius + 1),
         gradient_center_(SkPoint::Make(kPointRadius + 1, kPointRadius + 1)) {
-    SetPaintToLayer(true);
+    SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
 
     SetSize(gfx::Size(2 * kPointRadius + 2, 2 * kPointRadius + 2));
 
-    stroke_paint_.setStyle(SkPaint::kStroke_Style);
-    stroke_paint_.setColor(kProjectionStrokeColor);
+    stroke_flags_.setStyle(cc::PaintFlags::kStroke_Style);
+    stroke_flags_.setColor(kProjectionStrokeColor);
 
     gradient_colors_[0] = kProjectionFillColor;
     gradient_colors_[1] = kProjectionStrokeColor;
@@ -82,16 +82,16 @@ class TouchPointView : public views::View,
     int alpha = kProjectionAlpha;
     if (fadeout_)
       alpha = static_cast<int>(fadeout_->CurrentValueBetween(alpha, 0));
-    fill_paint_.setAlpha(alpha);
-    stroke_paint_.setAlpha(alpha);
-    fill_paint_.setShader(SkGradientShader::MakeRadial(
+    fill_flags_.setAlpha(alpha);
+    stroke_flags_.setAlpha(alpha);
+    fill_flags_.setShader(SkGradientShader::MakeRadial(
         gradient_center_, SkIntToScalar(kPointRadius), gradient_colors_,
         gradient_pos_, arraysize(gradient_colors_),
         SkShader::kMirror_TileMode));
     canvas->DrawCircle(circle_center_, SkIntToScalar(kPointRadius),
-                       fill_paint_);
+                       fill_flags_);
     canvas->DrawCircle(circle_center_, SkIntToScalar(kPointRadius),
-                       stroke_paint_);
+                       stroke_flags_);
   }
 
   // Overridden from gfx::AnimationDelegate.
@@ -120,8 +120,8 @@ class TouchPointView : public views::View,
   const gfx::Point circle_center_;
   const SkPoint gradient_center_;
 
-  SkPaint fill_paint_;
-  SkPaint stroke_paint_;
+  cc::PaintFlags fill_flags_;
+  cc::PaintFlags stroke_flags_;
   SkColor gradient_colors_[2];
   SkScalar gradient_pos_[2];
 
@@ -145,12 +145,12 @@ void TouchHudRenderer::Clear() {
 void TouchHudRenderer::HandleTouchEvent(const ui::LocatedEvent& event) {
   int id = 0;
   if (event.IsTouchEvent()) {
-    id = event.AsTouchEvent()->touch_id();
+    id = event.AsTouchEvent()->pointer_details().id;
   } else {
     DCHECK(event.IsPointerEvent());
     DCHECK(event.AsPointerEvent()->pointer_details().pointer_type ==
            ui::EventPointerType::POINTER_TYPE_TOUCH);
-    id = event.AsPointerEvent()->pointer_id();
+    id = event.AsPointerEvent()->pointer_details().id;
   }
   if (event.type() == ui::ET_TOUCH_PRESSED ||
       event.type() == ui::ET_POINTER_DOWN) {

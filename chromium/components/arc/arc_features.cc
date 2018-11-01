@@ -6,7 +6,7 @@
 
 namespace arc {
 
-// Controls if Arc should use silent auth code request API.
+// Controls if ARC should use silent auth code request API.
 const base::Feature kArcUseAuthEndpointFeature {
     "ArcUseAuthEndpoint", base::FEATURE_ENABLED_BY_DEFAULT
 };
@@ -15,6 +15,11 @@ const base::Feature kArcUseAuthEndpointFeature {
 // When disabled, third party apps will not receive this broadcast.
 const base::Feature kBootCompletedBroadcastFeature {
     "ArcBootCompletedBroadcast", base::FEATURE_ENABLED_BY_DEFAULT
+};
+
+// Controls whether we show ARC Files app in Chrome launcher.
+const base::Feature kShowArcFilesAppFeature {
+    "ShowArcFilesApp", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
 }  // namespace arc

@@ -44,13 +44,14 @@
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel_mojo.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "ui/gfx/buffer_format_util.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 // Need to disable IPC Audio for these tests, or the tests will hang
-#include "media/filters/ipc_audio_decoder.h"
+#include "platform_media/renderer/decoders/ipc_audio_decoder.h"
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 // IPC messages for testing ----------------------------------------------------
@@ -184,8 +185,9 @@ class RenderThreadImplBrowserTest : public testing::Test {
 
     InitializeMojo();
     shell_context_.reset(new TestServiceManagerContext);
+    mojo::edk::PendingProcessConnection process_connection;
     child_connection_.reset(new ChildConnection(
-        mojom::kRendererServiceName, "test", mojo::edk::GenerateRandomToken(),
+        mojom::kRendererServiceName, "test", &process_connection,
         ServiceManagerConnection::GetForProcess()->GetConnector(),
         io_task_runner));
 

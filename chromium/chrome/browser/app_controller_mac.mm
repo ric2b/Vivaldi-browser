@@ -815,7 +815,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
         // downloads page if the user chooses to wait.
         Browser* browser = chrome::FindBrowserWithProfile(profiles[i]);
         if (!browser) {
-          browser = new Browser(Browser::CreateParams(profiles[i]));
+          browser = new Browser(Browser::CreateParams(profiles[i], true));
           browser->window()->Show();
         }
         DCHECK(browser);
@@ -1520,7 +1520,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   // if no browser window exists then create one with no tabs to be filled in
   if (!browser) {
-    browser = new Browser(Browser::CreateParams([self lastProfile]));
+    browser = new Browser(Browser::CreateParams([self lastProfile], true));
     browser->window()->Show();
   }
 

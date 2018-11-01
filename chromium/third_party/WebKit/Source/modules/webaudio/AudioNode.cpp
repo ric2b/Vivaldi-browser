@@ -45,7 +45,6 @@ AudioHandler::AudioHandler(NodeType nodeType, AudioNode& node, float sampleRate)
       m_nodeType(NodeTypeUnknown),
       m_node(&node),
       m_context(node.context()),
-      m_sampleRate(sampleRate),
       m_lastProcessingTime(-1),
       m_lastNonSilentTime(-1),
       m_connectionRefCount(0),
@@ -323,10 +322,11 @@ void AudioHandler::processIfNecessary(size_t framesToProcess) {
     pullInputs(framesToProcess);
 
     bool silentInputs = inputsAreSilent();
-    if (!silentInputs)
+    if (!silentInputs) {
       m_lastNonSilentTime =
           (context()->currentSampleFrame() + framesToProcess) /
-          static_cast<double>(m_sampleRate);
+          static_cast<double>(context()->sampleRate());
+    }
 
     if (silentInputs && propagatesSilence()) {
       silenceOutputs();
@@ -429,9 +429,14 @@ void AudioHandler::disableOutputsIfNecessary() {
     // This needs to be handled more generally where AudioNodes have a tailTime
     // attribute. Then the AudioNode only needs to remain "active" for tailTime
     // seconds after there are no longer any active connections.
+    //
+    // The analyser node also requires special handling because we
+    // need the internal state to be updated for the time and FFT data
+    // even if it has no connections.
     if (getNodeType() != NodeTypeConvolver && getNodeType() != NodeTypeDelay &&
         getNodeType() != NodeTypeBiquadFilter &&
-        getNodeType() != NodeTypeIIRFilter) {
+        getNodeType() != NodeTypeIIRFilter &&
+        getNodeType() != NodeTypeAnalyser) {
       m_isDisabled = true;
       clearInternalStateWhenDisabled();
       for (auto& output : m_outputs)
@@ -644,7 +649,7 @@ AudioNode* AudioNode::connect(AudioNode* destination,
       .connect(handler().output(outputIndex));
   if (!m_connectedNodes[outputIndex])
     m_connectedNodes[outputIndex] = new HeapHashSet<Member<AudioNode>>();
-  m_connectedNodes[outputIndex]->add(destination);
+  m_connectedNodes[outputIndex]->insert(destination);
 
   // Let context know that a connection has been made.
   context()->incrementConnectionCount();
@@ -687,7 +692,7 @@ void AudioNode::connect(AudioParam* param,
   param->handler().connect(handler().output(outputIndex));
   if (!m_connectedParams[outputIndex])
     m_connectedParams[outputIndex] = new HeapHashSet<Member<AudioParam>>();
-  m_connectedParams[outputIndex]->add(param);
+  m_connectedParams[outputIndex]->insert(param);
 }
 
 void AudioNode::disconnectAllFromOutput(unsigned outputIndex) {
@@ -705,7 +710,7 @@ bool AudioNode::disconnectFromOutputIfConnected(
   if (!output.isConnectedToInput(input))
     return false;
   output.disconnectInput(input);
-  m_connectedNodes[outputIndex]->remove(&destination);
+  m_connectedNodes[outputIndex]->erase(&destination);
   return true;
 }
 
@@ -715,7 +720,7 @@ bool AudioNode::disconnectFromOutputIfConnected(unsigned outputIndex,
   if (!output.isConnectedToAudioParam(param.handler()))
     return false;
   output.disconnectAudioParam(param.handler());
-  m_connectedParams[outputIndex]->remove(&param);
+  m_connectedParams[outputIndex]->erase(&param);
   return true;
 }
 

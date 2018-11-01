@@ -26,6 +26,7 @@
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/web_preferences.h"
+#include "content/shell/common/layout_test.mojom.h"
 #include "content/shell/common/leak_detection_result.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -179,6 +180,11 @@ class BlinkTestController : public base::NonThreadSafe,
   // GpuDataManagerObserver implementation.
   void OnGpuProcessCrashed(base::TerminationStatus exit_code) override;
 
+  const base::DictionaryValue& accumulated_layout_test_runtime_flags_changes()
+      const {
+    return accumulated_layout_test_runtime_flags_changes_;
+  }
+
  private:
   enum TestPhase {
     BETWEEN_TESTS,
@@ -215,6 +221,8 @@ class BlinkTestController : public base::NonThreadSafe,
   void OnGetBluetoothManualChooserEvents();
   void OnSendBluetoothManualChooserEvent(const std::string& event,
                                          const std::string& argument);
+  mojom::LayoutTestControl* GetLayoutTestControlPtr(RenderFrameHost* frame);
+  void HandleLayoutTestControlError(RenderFrameHost* frame);
 
   std::unique_ptr<BlinkTestResultPrinter> printer_;
 
@@ -278,6 +286,9 @@ class BlinkTestController : public base::NonThreadSafe,
   // renderer created while test is in progress).
   base::DictionaryValue accumulated_layout_test_runtime_flags_changes_;
 
+  // Map from one frame to one mojo pipe.
+  std::map<RenderFrameHost*, mojom::LayoutTestControlAssociatedPtr>
+      layout_test_control_map_;
 #if defined(OS_ANDROID)
   // Because of the nested message pump implementation, Android needs to allow
   // waiting on the UI thread while layout tests are being ran.

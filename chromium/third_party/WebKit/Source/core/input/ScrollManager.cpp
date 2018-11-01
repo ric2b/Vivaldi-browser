@@ -4,6 +4,7 @@
 
 #include "core/input/ScrollManager.h"
 
+#include <memory>
 #include "core/dom/DOMNodeIds.h"
 #include "core/events/GestureEvent.h"
 #include "core/frame/BrowserControls.h"
@@ -22,8 +23,8 @@
 #include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -360,13 +361,15 @@ WebInputEventResult ScrollManager::passScrollGestureEventToWidget(
       !layoutObject->isLayoutPart())
     return WebInputEventResult::NotHandled;
 
-  Widget* widget = toLayoutPart(layoutObject)->widget();
+  FrameViewBase* frameViewBase = toLayoutPart(layoutObject)->widget();
 
-  if (!widget || !widget->isFrameView())
+  if (!frameViewBase || !frameViewBase->isFrameView())
     return WebInputEventResult::NotHandled;
 
-  return toFrameView(widget)->frame().eventHandler().handleGestureScrollEvent(
-      gestureEvent);
+  return toFrameView(frameViewBase)
+      ->frame()
+      .eventHandler()
+      .handleGestureScrollEvent(gestureEvent);
 }
 
 bool ScrollManager::isViewportScrollingElement(const Element& element) const {
@@ -382,6 +385,9 @@ WebInputEventResult ScrollManager::handleGestureScrollEvent(
     const WebGestureEvent& gestureEvent) {
   if (!m_frame->view())
     return WebInputEventResult::NotHandled;
+
+  bool enableTouchpadScrollLatching =
+      RuntimeEnabledFeatures::touchpadAndWheelScrollLatchingEnabled();
 
   Node* eventTarget = nullptr;
   Scrollbar* scrollbar = nullptr;
@@ -415,11 +421,23 @@ WebInputEventResult ScrollManager::handleGestureScrollEvent(
 
   if (scrollbar) {
     bool shouldUpdateCapture = false;
+    // scrollbar->gestureEvent always returns true for touchpad based GSB
+    // events. Therefore, while mouse is over a fully scrolled scrollbar, GSB
+    // won't propagate to the next scrollable layer.
     if (scrollbar->gestureEvent(gestureEvent, &shouldUpdateCapture)) {
       if (shouldUpdateCapture)
         m_scrollbarHandlingScrollGesture = scrollbar;
       return WebInputEventResult::HandledSuppressed;
     }
+
+    // When touchpad scroll latching is enabled and mouse is over a scrollbar,
+    // GSU events will always latch to the scrollbar even when it hits the
+    // scroll content.
+    if (enableTouchpadScrollLatching &&
+        gestureEvent.type() == WebInputEvent::GestureScrollUpdate) {
+      return WebInputEventResult::NotHandled;
+    }
+
     m_scrollbarHandlingScrollGesture = nullptr;
   }
 
@@ -506,11 +524,12 @@ bool ScrollManager::inResizeMode() const {
   return m_resizeScrollableArea && m_resizeScrollableArea->inResizeMode();
 }
 
-void ScrollManager::resize(const PlatformMouseEvent& evt) {
-  if (evt.type() == PlatformEvent::MouseMoved) {
+void ScrollManager::resize(const WebMouseEvent& evt) {
+  if (evt.type() == WebInputEvent::MouseMove) {
     if (!m_frame->eventHandler().mousePressed())
       return;
-    m_resizeScrollableArea->resize(evt.position(), m_offsetFromResizeCorner);
+    m_resizeScrollableArea->resize(flooredIntPoint(evt.positionInRootFrame()),
+                                   m_offsetFromResizeCorner);
   }
 }
 

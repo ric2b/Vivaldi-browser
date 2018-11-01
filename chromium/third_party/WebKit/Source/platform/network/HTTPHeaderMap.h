@@ -66,15 +66,15 @@ class PLATFORM_EXPORT HTTPHeaderMap final {
   void clear() { m_headers.clear(); }
   bool contains(const AtomicString& k) const { return m_headers.contains(k); }
   const AtomicString& get(const AtomicString& k) const {
-    return m_headers.get(k);
+    return m_headers.at(k);
   }
   AddResult set(const AtomicString& k, const AtomicString& v) {
     return m_headers.set(k, v);
   }
   AddResult add(const AtomicString& k, const AtomicString& v) {
-    return m_headers.add(k, v);
+    return m_headers.insert(k, v);
   }
-  void remove(const AtomicString& k) { m_headers.remove(k); }
+  void remove(const AtomicString& k) { m_headers.erase(k); }
   bool operator!=(const HTTPHeaderMap& rhs) const {
     return m_headers != rhs.m_headers;
   }

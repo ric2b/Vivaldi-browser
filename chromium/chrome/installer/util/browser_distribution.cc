@@ -101,10 +101,6 @@ const AppRegistrationData& BrowserDistribution::GetAppRegistrationData() const {
   return *app_reg_data_;
 }
 
-base::string16 BrowserDistribution::GetAppGuid() const {
-  return app_reg_data_->GetAppGuid();
-}
-
 base::string16 BrowserDistribution::GetStateKey() const {
   return app_reg_data_->GetStateKey();
 }
@@ -188,13 +184,17 @@ base::string16 BrowserDistribution::GetAppDescription() {
   return L"Browse the web";
 }
 
-// Vivaldi customization. For standalone installs, add the --user-data-dir argument.
+// Vivaldi customization. For standalone installs,
+// add the --user-data-dir argument.
 base::string16 BrowserDistribution::GetArguments()
 {
   base::string16 arguments;
-  const base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(installer::switches::kVivaldiStandalone) && command_line.HasSwitch(installer::switches::kVivaldiInstallDir)) {
-    base::FilePath install_path = command_line.GetSwitchValuePath(installer::switches::kVivaldiInstallDir).Append(L"User Data");
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(installer::switches::kVivaldiStandalone) &&
+      command_line.HasSwitch(installer::switches::kVivaldiInstallDir)) {
+    base::FilePath install_path = command_line.GetSwitchValuePath(
+        installer::switches::kVivaldiInstallDir).Append(L"User Data");
     arguments.assign(L"--user-data-dir=").append(install_path.value());
   }
   return arguments;
@@ -229,10 +229,6 @@ BrowserDistribution::DefaultBrowserControlPolicy
 
 bool BrowserDistribution::CanCreateDesktopShortcuts() {
   return true;
-}
-
-bool BrowserDistribution::GetChromeChannel(base::string16* channel) {
-  return false;
 }
 
 base::string16 BrowserDistribution::GetCommandExecuteImplClsid() {

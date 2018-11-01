@@ -19,7 +19,7 @@
 
 #include "modules/vibration/NavigatorVibration.h"
 
-#include "bindings/core/v8/ConditionalFeatures.h"
+#include "bindings/core/v8/ConditionalFeaturesForCore.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -105,7 +105,7 @@ bool NavigatorVibration::vibrate(Navigator& navigator,
 // static
 void NavigatorVibration::collectHistogramMetrics(const LocalFrame& frame) {
   NavigatorVibrationType type;
-  bool userGesture = UserGestureIndicator::processingUserGesture();
+  bool userGesture = frame.hasReceivedUserGesture();
   UseCounter::count(&frame, UseCounter::NavigatorVibrate);
   if (!frame.isMainFrame()) {
     UseCounter::count(&frame, UseCounter::NavigatorVibrateSubFrame);

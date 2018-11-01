@@ -27,16 +27,16 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
-#include "core/frame/FrameHost.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/LayoutBox.h"
 #include "core/loader/FrameLoadRequest.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/PingLoader.h"
 #include "core/page/ChromeClient.h"
+#include "core/page/Page.h"
 #include "platform/network/NetworkHints.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/WebNavigationHintType.h"
@@ -177,7 +177,7 @@ bool HTMLAnchorElement::isKeyboardFocusable() const {
   if (isFocusable() && Element::supportsFocus())
     return HTMLElement::isKeyboardFocusable();
 
-  if (isLink() && !document().frameHost()->chromeClient().tabsToLinks())
+  if (isLink() && !document().page()->chromeClient().tabsToLinks())
     return false;
   return HTMLElement::isKeyboardFocusable();
 }
@@ -412,8 +412,9 @@ void HTMLAnchorElement::handleClick(Event* event) {
 
   ReferrerPolicy policy;
   if (hasAttribute(referrerpolicyAttr) &&
-      SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-          fastGetAttribute(referrerpolicyAttr), &policy) &&
+      SecurityPolicy::referrerPolicyFromString(
+          fastGetAttribute(referrerpolicyAttr),
+          SupportReferrerPolicyLegacyKeywords, &policy) &&
       !hasRel(RelationNoReferrer)) {
     UseCounter::count(document(),
                       UseCounter::HTMLAnchorElementReferrerPolicyAttribute);
@@ -460,9 +461,8 @@ bool isLinkClick(Event* event) {
   return (event->type() == EventTypeNames::click ||
           event->type() == EventTypeNames::auxclick) &&
          (!event->isMouseEvent() ||
-          (toMouseEvent(event)->button() !=
-               static_cast<short>(WebPointerProperties::Button::Right) &&
-           toMouseEvent(event)->detail() <= 1));
+          toMouseEvent(event)->button() !=
+              static_cast<short>(WebPointerProperties::Button::Right));
 }
 
 bool HTMLAnchorElement::willRespondToMouseClickEvents() {

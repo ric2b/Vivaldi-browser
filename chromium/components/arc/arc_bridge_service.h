@@ -5,15 +5,8 @@
 #ifndef COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 #define COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 
-#include <memory>
-
 #include "base/macros.h"
-#include "base/observer_list.h"
 #include "components/arc/instance_holder.h"
-
-namespace base {
-class CommandLine;
-}  // namespace base
 
 namespace arc {
 
@@ -21,6 +14,7 @@ namespace mojom {
 
 // Instead of including components/arc/common/arc_bridge.mojom.h, list all the
 // instance classes here for faster build.
+class AccessibilityHelperInstance;
 class AppInstance;
 class AudioInstance;
 class AuthInstance;
@@ -55,18 +49,9 @@ class ArcBridgeService {
   ArcBridgeService();
   ~ArcBridgeService();
 
-  // Returns true if ARC has been enabled through a commandline switch.
-  static bool GetEnabled(const base::CommandLine* command_line);
-
-  // Returns true if ARC Kiosk has been enabled through a commandline switch.
-  static bool GetKioskEnabled(const base::CommandLine* command_line);
-
-  // Returns true if ARC Kiosk session is started.
-  static bool GetKioskStarted(const base::CommandLine* command_line);
-
-  // Returns true if ARC is available on the current board.
-  static bool GetAvailable(const base::CommandLine* command_line);
-
+  InstanceHolder<mojom::AccessibilityHelperInstance>* accessibility_helper() {
+    return &accessibility_helper_;
+  }
   InstanceHolder<mojom::AppInstance>* app() { return &app_; }
   InstanceHolder<mojom::AudioInstance>* audio() { return &audio_; }
   InstanceHolder<mojom::AuthInstance>* auth() { return &auth_; }
@@ -109,6 +94,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::WallpaperInstance>* wallpaper() { return &wallpaper_; }
 
  private:
+  InstanceHolder<mojom::AccessibilityHelperInstance> accessibility_helper_;
   InstanceHolder<mojom::AppInstance> app_;
   InstanceHolder<mojom::AudioInstance> audio_;
   InstanceHolder<mojom::AuthInstance> auth_;

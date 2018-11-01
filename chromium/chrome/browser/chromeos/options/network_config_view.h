@@ -144,8 +144,11 @@ class ChildNetworkConfigView : public views::View {
   // Returns 'true' if the dialog is for configuration only (default is false).
   virtual bool IsConfigureDialog();
 
-  // Minimum with of input fields / combo boxes.
+  // Minimum width of input fields / combo boxes.
   static const int kInputFieldMinWidth;
+
+  // The height of input fields /combo boxes.
+  static const int kInputFieldHeight;
 
  protected:
   // Gets the default network share state for the current login state.

@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">Näytä tallennettu (eli vanhentuneeksi tiedetty) kopio tästä sivusta.</translation>
 <translation id="1559528461873125649">Tiedostoa tai hakemistoa ei ole olemassa</translation>
 <translation id="1710259589646384581">Käyttöjärjestelmä</translation>
-<translation id="1838667051080421715">Katselet verkkosivun lähdekoodia.</translation>
 <translation id="194030505837763158">Siirry osoitteeseen <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Tarkoititko: <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Vähemmän</translation>
 <translation id="2166378884831602661">Tämä sivusto ei voi tarjota suojattua yhteyttä</translation>
 <translation id="2292556288342944218">Internetyhteytesi on estetty</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> lähetti virheellisen vastauksen.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">Tiedoston käyttöoikeus evättiin</translation>
 <translation id="2705137772291741111">Tämän sivuston välimuistiin tallennettu kopio oli lukukelvoton.</translation>
 <translation id="2784949926578158345">Yhteys katkaistiin.</translation>
-<translation id="284702764277384724">Sivustolla <ph name="HOST_NAME" /> oleva palvelimen varmenne vaikuttaa väärennökseltä.</translation>
 <translation id="2909946352844186028">Verkossa havaittiin muutos.</translation>
 <translation id="3005723025932146533">Näytä tallennettu kopio</translation>
 <translation id="3109728660330352905">Sinulla ei ole oikeutta tarkastella tätä sivua.</translation>
@@ -39,7 +36,6 @@
 <translation id="4021036232240155012">DNS on verkkopalvelu, joka kääntää verkkosivuston nimen sen internetosoitteeksi.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ei hyväksynyt kirjautumisvarmennettasi, tai varmennetta ei annettu.</translation>
 <translation id="4522570452068850558">Tiedot</translation>
-<translation id="4670097147947922288">Katselet laajennussivua.</translation>
 <translation id="4708268264240856090">Yhteys keskeytyi</translation>
 <translation id="4744603770635761495">Suoritettavan tiedoston polku</translation>
 <translation id="4764776831041365478">Osoitteessa <ph name="URL" /> oleva sivu saattaa olla väliaikaisesti pois käytöstä tai se on voitu siirtää pysyvästi uuteen osoitteeseen.</translation>
@@ -56,7 +52,6 @@
 <translation id="5675650730144413517">Sivu ei toimi</translation>
 <translation id="5869405914158311789">Sivustoon ei saada yhteyttä</translation>
 <translation id="5990559369517809815">Laajennus esti palvelinpyynnöt.</translation>
-<translation id="6042308850641462728">Lisää</translation>
 <translation id="6146055958333702838">Tarkista kaikki kaapelit ja käynnistä uudelleen reitittimet, modeemit ja muut
     käytössä olevat verkkolaitteet.</translation>
 <translation id="6165508094623778733">Lisätietoja</translation>
@@ -66,10 +61,8 @@
 <translation id="6328639280570009161">Kokeile verkon ennakoinnin poistamista käytöstä.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> kieltäytyi muodostamasta yhteyttä.</translation>
 <translation id="6711464428925977395">Välityspalvelimessa on jotain vikaa tai osoite on virheellinen.</translation>
-<translation id="6830600606572693159">Verkkosivusto osoitteessa <ph name="URL" /> ei ole juuri nyt käytettävissä. Se saattaa olla ylikuormitettu tai suljettuna ylläpitotoimien vuoksi.</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata tietoturvastandardeja.</translation>
-<translation id="7269802741830436641">Tällä verkkosivulla on uudelleenohjaussilmukka</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
 <translation id="7518003948725431193">Verkkosivua ei löytynyt osoitteelle: <ph name="URL" /></translation>
@@ -77,7 +70,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ei voi käsitellä tätä pyyntöä tällä hetkellä.</translation>
 <translation id="7716424297397655342">Tätä sivustoa ei voi ladata välimuistista</translation>
 <translation id="7758069387465995638">Palomuuri tai virustorjuntaohjelmisto on saattanut estää yhteyden.</translation>
-<translation id="778579833039460630">Ei tietoja</translation>
 <translation id="7951415247503192394">(32-bittinen)</translation>
 <translation id="8134994873729925007">Isäntänimen <ph name="HOST_NAME" /> palvelimen <ph name="BEGIN_ABBR" />DNS-osoitetta<ph name="END_ABBR" /> ei löytynyt.</translation>
 <translation id="8142868475871995937">Voit lukea listan kielletyistä URL-osoitteista ja muut järjestelmänvalvojasi määräämät käytännöt osoitteessa &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>

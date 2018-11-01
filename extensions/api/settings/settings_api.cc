@@ -2,14 +2,20 @@
 
 #include "extensions/api/settings/settings_api.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
@@ -19,6 +25,7 @@
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/settings.h"
 #include "prefs/vivaldi_browser_prefs.h"
@@ -26,11 +33,9 @@
 
 namespace vivaldi {
 
-NativeSettingsObserverDelegate::~NativeSettingsObserverDelegate() {
+NativeSettingsObserverDelegate::~NativeSettingsObserverDelegate() {}
 
-}
-
-} // namespace vivaldi
+}  // namespace vivaldi
 
 namespace extensions {
 
@@ -42,80 +47,87 @@ struct PrefsMapping {
 };
 
 struct PrefsMapping kPrefsValues[] {
-  { prefs::kAlternateErrorPagesEnabled, booleanPreftype },
-  { prefs::kSafeBrowsingExtendedReportingEnabled, booleanPreftype },
-  { prefs::kSafeBrowsingEnabled, booleanPreftype },
-  { prefs::kEnableDoNotTrack, booleanPreftype },
-  { prefs::kSearchSuggestEnabled, booleanPreftype },
-  { prefs::kWebKitMinimumFontSize, integerPreftype },
-  { prefs::kDefaultCharset, stringPreftype },
-  { password_manager::prefs::kPasswordManagerSavingEnabled, booleanPreftype },
-  { password_manager::prefs::kCredentialsEnableService, booleanPreftype },
+  // clang-format off
+    {prefs::kAlternateErrorPagesEnabled, booleanPreftype},
+    {prefs::kSafeBrowsingExtendedReportingEnabled, booleanPreftype},
+    {prefs::kSafeBrowsingEnabled, booleanPreftype},
+    {prefs::kEnableDoNotTrack, booleanPreftype},
+    {prefs::kSearchSuggestEnabled, booleanPreftype},
+    {prefs::kWebKitMinimumFontSize, integerPreftype},
+    {prefs::kDefaultCharset, stringPreftype},
+    {password_manager::prefs::kPasswordManagerSavingEnabled, booleanPreftype},
+    {password_manager::prefs::kCredentialsEnableService, booleanPreftype},
 
-  // Download preferences
-  { prefs::kDownloadDefaultDirectory, stringPreftype },
+    // Download preferences
+    {prefs::kDownloadDefaultDirectory, stringPreftype},
 
-  // Privacy preferences
-  { prefs::kWebRTCIPHandlingPolicy, stringPreftype },
+    // Extensions preferences
+    {ExtensionWebUI::kExtensionURLOverrides, dictionaryPreftype},
 
-  // vivaldi preferences
-  { vivaldiprefs::kMousegesturesEnabled, booleanPreftype },
-  { vivaldiprefs::kRockerGesturesEnabled, booleanPreftype },
-  { vivaldiprefs::kSmoothScrollingEnabled, booleanPreftype },
-  // Controls if zoom values are re-used in tab when navigating between hosts
-  { vivaldiprefs::kVivaldiTabZoom, booleanPreftype },
-  { vivaldiprefs::kVivaldiHomepage, stringPreftype },
-  { vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, numberPreftype },
+    // Privacy preferences
+    {prefs::kWebRTCIPHandlingPolicy, stringPreftype},
 
-  // Plugin preferences
-  { prefs::kPluginsAlwaysOpenPdfExternally, booleanPreftype },
-  { vivaldiprefs::kPluginsWidevideEnabled, booleanPreftype },
+    // vivaldi preferences
+    {vivaldiprefs::kMousegesturesEnabled, booleanPreftype},
+    {vivaldiprefs::kRockerGesturesEnabled, booleanPreftype},
+    {vivaldiprefs::kSmoothScrollingEnabled, booleanPreftype},
+    {vivaldiprefs::kVivaldiCaptureDirectory, stringPreftype},
+    // Controls if zoom values are re-used in tab when navigating between
+    // hosts
+    {vivaldiprefs::kVivaldiTabZoom, booleanPreftype},
+    {vivaldiprefs::kVivaldiHomepage, stringPreftype},
+    {vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, numberPreftype},
 
-  // Control if tab only cycles input fields and tab index fields or not.
-  { vivaldiprefs::kVivaldiTabsToLinks, booleanPreftype },
+    // Plugin preferences
+    {prefs::kPluginsAlwaysOpenPdfExternally, booleanPreftype},
+    {vivaldiprefs::kPluginsWidevideEnabled, booleanPreftype},
 
-  // Wait until a restored tab is activated before loading the page.
-  { vivaldiprefs::kDeferredTabLoadingAfterRestore, booleanPreftype },
-  // Always load restored pinned tabs.
-  { vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore, booleanPreftype },
-  // Enable autoupdate.
-  { vivaldiprefs::kAutoUpdateEnabled, booleanPreftype },
+    // Control if tab only cycles input fields and tab index fields or not.
+    {vivaldiprefs::kVivaldiTabsToLinks, booleanPreftype},
 
-  // Startup preferences:
-  // An integer pref. Holds one of several values:
-  // 0: (deprecated) open the homepage on startup.
-  // 1: restore the last session.
-  // 2: this was used to indicate a specific session should be restored. It is
-  //    no longer used, but saved to avoid conflict with old preferences.
-  // 3: unused, previously indicated the user wants to restore a saved session.
-  // 4: restore the URLs defined in kURLsToRestoreOnStartup.
-  // 5: open the New Tab Page on startup.
-  //
-  // Mostly the same as chrome.importData.getStartupAction().
-  { prefs::kRestoreOnStartup, numberPreftype },
-  { prefs::kURLsToRestoreOnStartup, arrayPreftype },
+    // Wait until a restored tab is activated before loading the page.
+    {vivaldiprefs::kDeferredTabLoadingAfterRestore, booleanPreftype},
+    // Always load restored pinned tabs.
+    {vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore, booleanPreftype},
+    // Enable autoupdate.
+    {vivaldiprefs::kAutoUpdateEnabled, booleanPreftype},
 
-  // Used to store active feature flags (experimental features).
-  { vivaldiprefs::kVivaldiExperiments, arrayPreftype },
+    // Startup preferences:
+    // An integer pref. Holds one of several values:
+    // 0: (deprecated) open the homepage on startup.
+    // 1: restore the last session.
+    // 2: this was used to indicate a specific session should be restored. It
+    // is
+    //    no longer used, but saved to avoid conflict with old preferences.
+    // 3: unused, previously indicated the user wants to restore a saved
+    // session. 4: restore the URLs defined in kURLsToRestoreOnStartup. 5:
+    // open the New Tab Page on startup.
+    //
+    // Mostly the same as chrome.importData.getStartupAction().
+    {prefs::kRestoreOnStartup, numberPreftype},
+    {prefs::kURLsToRestoreOnStartup, arrayPreftype},
+
+    // Used to store active feature flags (experimental features).
+    {vivaldiprefs::kVivaldiExperiments, arrayPreftype},
 
 #if defined(USE_AURA)
-  { vivaldiprefs::kHideMouseCursorInFullscreen, booleanPreftype },
-#endif //USE_AURA
+    {vivaldiprefs::kHideMouseCursorInFullscreen, booleanPreftype},
+#endif  // USE_AURA
 
 #if defined(OS_MACOSX)
-  { vivaldiprefs::kAppleKeyboardUIMode, numberPreftype },
-  { vivaldiprefs::kAppleMiniaturizeOnDoubleClick, booleanPreftype },
-  { vivaldiprefs::kAppleAquaColorVariant, numberPreftype },
-  { vivaldiprefs::kAppleInterfaceStyle, stringPreftype },
-  { vivaldiprefs::kAppleActionOnDoubleClick, stringPreftype },
-  { vivaldiprefs::kSwipeScrollDirection, booleanPreftype },
+    {vivaldiprefs::kAppleKeyboardUIMode, numberPreftype},
+    {vivaldiprefs::kAppleMiniaturizeOnDoubleClick, booleanPreftype},
+    {vivaldiprefs::kAppleAquaColorVariant, numberPreftype},
+    {vivaldiprefs::kAppleInterfaceStyle, stringPreftype},
+    {vivaldiprefs::kAppleActionOnDoubleClick, stringPreftype},
+    {vivaldiprefs::kSwipeScrollDirection, booleanPreftype},
 #endif
+  // clang-format on
 };
 
 namespace {
-std::unique_ptr<vivaldi::settings::PreferenceItem> GetPref(Profile* profile,
-                                                  const std::string prefName,
-                                                  PrefType type) {
+std::unique_ptr<vivaldi::settings::PreferenceItem>
+GetPref(Profile* profile, const std::string prefName, PrefType type) {
   std::unique_ptr<vivaldi::settings::PreferenceItem> prefItem(
       new vivaldi::settings::PreferenceItem);
 
@@ -160,6 +172,15 @@ std::unique_ptr<vivaldi::settings::PreferenceItem> GetPref(Profile* profile,
       }
       prefItem->preference_type = vivaldi::settings::PREFERENCE_TYPE_ENUM_ARRAY;
     } break;
+    case dictionaryPreftype: {
+      const base::DictionaryValue* overrides =
+          profile->GetPrefs()->GetDictionary(prefName);
+      std::string json_string;
+      base::JSONWriter::WriteWithOptions(*overrides, 0, &json_string);
+      prefItem->preference_key = prefName;
+      prefItem->preference_value.json.reset(new std::string(json_string));
+      prefItem->preference_type = vivaldi::settings::PREFERENCE_TYPE_ENUM_JSON;
+    } break;
     default:
     case unknownPreftype: {
       // Should never happen.
@@ -183,7 +204,7 @@ PrefType FindTypeForPrefsName(const std::string& name) {
 /*static*/
 void VivaldiSettingsApiNotification::BroadcastEvent(
     const std::string& eventname,
-    std::unique_ptr<base::ListValue>& args,
+    std::unique_ptr<base::ListValue> args,
     content::BrowserContext* context) {
   std::unique_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
@@ -203,31 +224,35 @@ void VivaldiSettingsApiNotification::OnChanged(
 
     std::unique_ptr<base::ListValue> args =
         vivaldi::settings::OnChanged::Create(*item.release());
-    BroadcastEvent(vivaldi::settings::OnChanged::kEventName, args,
+    BroadcastEvent(vivaldi::settings::OnChanged::kEventName, std::move(args),
                    profile_);
   }
 }
 
 VivaldiSettingsApiNotification::VivaldiSettingsApiNotification(Profile* profile)
-    : profile_(profile),
-      weak_ptr_factory_(this) {
+    : profile_(profile), weak_ptr_factory_(this) {
   prefs_registrar_.Init(profile->GetPrefs());
+
+  // NOTE(andre@vivaldi.com) : Make sure the ExtensionPrefs has been created in
+  // the ExtensionPrefsFactory-map in case another extension changes a setting
+  // that we are observing. This could cause a race-condition and hitting a
+  // DCHECK. See VB-27642.
+  ExtensionPrefs::Get(profile);
+
+  auto onchange_callback = base::Bind(
+      &VivaldiSettingsApiNotification::OnChanged, base::Unretained(this));
+
   for (size_t i = 0; i < arraysize(kPrefsValues); i++) {
-    prefs_registrar_.Add(
-        kPrefsValues[i].prefs_name,
-        base::Bind(&VivaldiSettingsApiNotification::OnChanged,
-                   base::Unretained(this)));
+    prefs_registrar_.Add(kPrefsValues[i].prefs_name, onchange_callback);
   }
   native_settings_observer_.reset(
       ::vivaldi::NativeSettingsObserver::Create(this));
 }
 
 VivaldiSettingsApiNotification::VivaldiSettingsApiNotification()
-    : profile_(nullptr), weak_ptr_factory_(this) {
-}
+    : profile_(nullptr), weak_ptr_factory_(this) {}
 
-VivaldiSettingsApiNotification::~VivaldiSettingsApiNotification() {
-}
+VivaldiSettingsApiNotification::~VivaldiSettingsApiNotification() {}
 
 // NativeSettingsObserverDelegate
 void VivaldiSettingsApiNotification::SetPref(const char* name,
@@ -257,12 +282,10 @@ VivaldiSettingsApiNotificationFactory::GetInstance() {
 VivaldiSettingsApiNotificationFactory::VivaldiSettingsApiNotificationFactory()
     : BrowserContextKeyedServiceFactory(
           "VivaldiSettingsApiNotification",
-          BrowserContextDependencyManager::GetInstance()) {
-}
+          BrowserContextDependencyManager::GetInstance()) {}
 
 VivaldiSettingsApiNotificationFactory::
-    ~VivaldiSettingsApiNotificationFactory() {
-}
+    ~VivaldiSettingsApiNotificationFactory() {}
 
 KeyedService* VivaldiSettingsApiNotificationFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
@@ -287,19 +310,37 @@ VivaldiSettingsApiNotificationFactory::GetBrowserContextToUse(
 }
 
 void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
-      user_prefs::PrefRegistrySyncable* registry)
-{
-  registry->RegisterBooleanPref(vivaldiprefs::kMousegesturesEnabled, true,
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kMousegesturesEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-  registry->RegisterBooleanPref(vivaldiprefs::kRockerGesturesEnabled, true,
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kRockerGesturesEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabsToLinks, false,
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiTabsToLinks, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabZoom, true,
-    user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiTabZoom, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  std::string path_string;
+  base::FilePath path;
+  PathService::Get(chrome::DIR_USER_PICTURES, &path);
+  path = path.AppendASCII("Vivaldi Captures");
+
+#if defined(OS_POSIX)
+  path_string.assign(path.value());
+#elif defined(OS_WIN)
+  path_string.assign(base::WideToUTF8(path.value()));
+#endif
+
+  registry->RegisterStringPref(vivaldiprefs::kVivaldiCaptureDirectory,
+                               path_string,
+                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   registry->RegisterStringPref(vivaldiprefs::kVivaldiHomepage,
                                "https://vivaldi.com",
@@ -324,21 +365,18 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
   ::vivaldi::RegisterPlatformPrefs(registry);
 }
 
+SettingsTogglePreferenceFunction::~SettingsTogglePreferenceFunction() {}
 
-SettingsTogglePreferenceFunction::~SettingsTogglePreferenceFunction() {
-}
-
-SettingsTogglePreferenceFunction::SettingsTogglePreferenceFunction() {
-}
+SettingsTogglePreferenceFunction::SettingsTogglePreferenceFunction() {}
 
 bool SettingsTogglePreferenceFunction::RunAsync() {
   std::unique_ptr<vivaldi::settings::TogglePreference::Params> params(
-    vivaldi::settings::TogglePreference::Params::Create(*args_));
+      vivaldi::settings::TogglePreference::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   Profile* profile = GetProfile();
   std::string pref = params->value;
-  bool currentValue = profile->GetPrefs()->GetBoolean(pref.c_str() );
+  bool currentValue = profile->GetPrefs()->GetBoolean(pref.c_str());
 
   profile->GetPrefs()->SetBoolean(pref.c_str(), !currentValue);
   results_ =
@@ -347,15 +385,13 @@ bool SettingsTogglePreferenceFunction::RunAsync() {
   return true;
 }
 
-SettingsGetPreferenceFunction::~SettingsGetPreferenceFunction() {
-}
+SettingsGetPreferenceFunction::~SettingsGetPreferenceFunction() {}
 
-SettingsGetPreferenceFunction::SettingsGetPreferenceFunction() {
-}
+SettingsGetPreferenceFunction::SettingsGetPreferenceFunction() {}
 
 bool SettingsGetPreferenceFunction::RunAsync() {
   std::unique_ptr<vivaldi::settings::GetPreference::Params> params(
-    vivaldi::settings::GetPreference::Params::Create(*args_));
+      vivaldi::settings::GetPreference::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   Profile* profile = GetProfile();
   PrefType type = FindTypeForPrefsName(params->pref_name);
@@ -369,7 +405,6 @@ bool SettingsGetPreferenceFunction::RunAsync() {
   SendResponse(true);
   return true;
 }
-
 
 SettingsSetPreferenceFunction::SettingsSetPreferenceFunction() {}
 
@@ -421,7 +456,7 @@ bool SettingsSetPreferenceFunction::SetPref(
     case vivaldi::settings::PREFERENCE_TYPE_ENUM_INTEGER: {
       if (item->preference_value.integer) {
         prefs->SetInteger(item->preference_key.c_str(),
-                         *item->preference_value.integer);
+                          *item->preference_value.integer);
         status = true;
       } else {
         status = false;
@@ -449,11 +484,9 @@ bool SettingsSetPreferenceFunction::SetPref(
   return status;
 }
 
-SettingsGetAllPreferencesFunction::~SettingsGetAllPreferencesFunction() {
-}
+SettingsGetAllPreferencesFunction::~SettingsGetAllPreferencesFunction() {}
 
-SettingsGetAllPreferencesFunction::SettingsGetAllPreferencesFunction() {
-}
+SettingsGetAllPreferencesFunction::SettingsGetAllPreferencesFunction() {}
 
 bool SettingsGetAllPreferencesFunction::RunAsync() {
   std::vector<vivaldi::settings::PreferenceItem> nodes;
@@ -468,6 +501,5 @@ bool SettingsGetAllPreferencesFunction::RunAsync() {
   SendResponse(true);
   return true;
 }
-
 
 }  // namespace extensions

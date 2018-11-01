@@ -79,7 +79,12 @@ Elements.ElementsPanel = class extends UI.Panel {
 
     /** @type {!Array.<!Elements.ElementsTreeOutline>} */
     this._treeOutlines = [];
+    /** @type {!Map<!Elements.ElementsTreeOutline, !Element>} */
+    this._treeOutlineHeaders = new Map();
     SDK.targetManager.observeTargets(this);
+    SDK.targetManager.addEventListener(
+        SDK.TargetManager.Events.NameChanged,
+        event => this._targetNameChanged(/** @type {!SDK.Target} */ (event.data)));
     Common.moduleSetting('showUAShadowDOM').addChangeListener(this._showUAShadowDOMChanged.bind(this));
     SDK.targetManager.addModelListener(
         SDK.DOMModel, SDK.DOMModel.Events.DocumentUpdated, this._documentUpdatedEvent, this);
@@ -112,6 +117,7 @@ Elements.ElementsPanel = class extends UI.Panel {
     var filterContainerElement = hbox.createChild('div', 'styles-sidebar-pane-filter-box');
     var filterInput = Elements.StylesSidebarPane.createPropertyFilterElement(
         Common.UIString('Filter'), hbox, this._stylesWidget.onFilterChanged.bind(this._stylesWidget));
+    UI.ARIAUtils.setAccessibleName(filterInput, Common.UIString('Filter Styles'));
     filterContainerElement.appendChild(filterInput);
     var toolbar = new UI.Toolbar('styles-pane-toolbar', hbox);
     toolbar.makeToggledGray();
@@ -216,6 +222,10 @@ Elements.ElementsPanel = class extends UI.Panel {
         Elements.ElementsTreeOutline.Events.ElementsTreeUpdated, this._updateBreadcrumbIfNeeded, this);
     new Elements.ElementsTreeElementHighlighter(treeOutline);
     this._treeOutlines.push(treeOutline);
+    if (target.parentTarget()) {
+      this._treeOutlineHeaders.set(treeOutline, createElementWithClass('div', 'elements-tree-header'));
+      this._targetNameChanged(target);
+    }
 
     // Perform attach if necessary.
     if (this.isShowing())
@@ -233,7 +243,29 @@ Elements.ElementsPanel = class extends UI.Panel {
     var treeOutline = Elements.ElementsTreeOutline.forDOMModel(domModel);
     treeOutline.unwireFromDOMModel();
     this._treeOutlines.remove(treeOutline);
+    var header = this._treeOutlineHeaders.get(treeOutline);
+    if (header)
+      header.remove();
+    this._treeOutlineHeaders.delete(treeOutline);
     treeOutline.element.remove();
+  }
+
+  /**
+   * @param {!SDK.Target} target
+   */
+  _targetNameChanged(target) {
+    var domModel = SDK.DOMModel.fromTarget(target);
+    if (!domModel)
+      return;
+    var treeOutline = Elements.ElementsTreeOutline.forDOMModel(domModel);
+    if (!treeOutline)
+      return;
+    var header = this._treeOutlineHeaders.get(treeOutline);
+    if (!header)
+      return;
+    header.removeChildren();
+    header.createChild('div', 'elements-tree-header-frame').textContent = Common.UIString('Frame');
+    header.appendChild(Components.Linkifier.linkifyURL(target.inspectedURL(), target.name()));
   }
 
   _updateTreeOutlineVisibleWidth() {
@@ -274,8 +306,12 @@ Elements.ElementsPanel = class extends UI.Panel {
     for (var i = 0; i < this._treeOutlines.length; ++i) {
       var treeOutline = this._treeOutlines[i];
       // Attach heavy component lazily
-      if (treeOutline.element.parentElement !== this._contentElement)
+      if (treeOutline.element.parentElement !== this._contentElement) {
+        var header = this._treeOutlineHeaders.get(treeOutline);
+        if (header)
+          this._contentElement.appendChild(header);
         this._contentElement.appendChild(treeOutline.element);
+      }
     }
     super.wasShown();
     this._breadcrumbs.update();
@@ -306,6 +342,9 @@ Elements.ElementsPanel = class extends UI.Panel {
       treeOutline.setVisible(false);
       // Detach heavy component on hide
       this._contentElement.removeChild(treeOutline.element);
+      var header = this._treeOutlineHeaders.get(treeOutline);
+      if (header)
+        this._contentElement.removeChild(header);
     }
     if (this._popoverHelper)
       this._popoverHelper.hidePopover();
@@ -444,7 +483,7 @@ Elements.ElementsPanel = class extends UI.Panel {
    * @override
    */
   searchCanceled() {
-    delete this._searchQuery;
+    delete this._searchConfig;
     this._hideSearchHighlights();
 
     this._searchableView.updateSearchMatchesCount(0);
@@ -463,14 +502,17 @@ Elements.ElementsPanel = class extends UI.Panel {
    */
   performSearch(searchConfig, shouldJump, jumpBackwards) {
     var query = searchConfig.query;
-    // Call searchCanceled since it will reset everything we need before doing a new search.
-    this.searchCanceled();
 
     const whitespaceTrimmedQuery = query.trim();
     if (!whitespaceTrimmedQuery.length)
       return;
 
-    this._searchQuery = query;
+    if (!this._searchConfig || this._searchConfig.query !== query)
+      this.searchCanceled();
+    else
+      this._hideSearchHighlights();
+
+    this._searchConfig = searchConfig;
 
     var promises = [];
     var domModels = SDK.DOMModel.instances();
@@ -497,10 +539,18 @@ Elements.ElementsPanel = class extends UI.Panel {
       this._searchableView.updateSearchMatchesCount(this._searchResults.length);
       if (!this._searchResults.length)
         return;
-      this._currentSearchResultIndex = -1;
+      if (this._currentSearchResultIndex >= this._searchResults.length)
+        this._currentSearchResultIndex = undefined;
 
-      if (shouldJump)
-        this._jumpToSearchResult(jumpBackwards ? -1 : 0);
+      var index = this._currentSearchResultIndex;
+
+      if (shouldJump) {
+        if (this._currentSearchResultIndex === undefined)
+          index = jumpBackwards ? -1 : 0;
+        else
+          index = jumpBackwards ? index - 1 : index + 1;
+        this._jumpToSearchResult(index);
+      }
     }
   }
 
@@ -552,7 +602,6 @@ Elements.ElementsPanel = class extends UI.Panel {
   }
 
   _jumpToSearchResult(index) {
-    this._hideSearchHighlights();
     this._currentSearchResultIndex = (index + this._searchResults.length) % this._searchResults.length;
     this._highlightCurrentSearchResult();
   }
@@ -563,7 +612,7 @@ Elements.ElementsPanel = class extends UI.Panel {
   jumpToNextSearchResult() {
     if (!this._searchResults)
       return;
-    this._jumpToSearchResult(this._currentSearchResultIndex + 1);
+    this.performSearch(this._searchConfig, true);
   }
 
   /**
@@ -572,7 +621,7 @@ Elements.ElementsPanel = class extends UI.Panel {
   jumpToPreviousSearchResult() {
     if (!this._searchResults)
       return;
-    this._jumpToSearchResult(this._currentSearchResultIndex - 1);
+    this.performSearch(this._searchConfig, true, true);
   }
 
   /**
@@ -620,7 +669,7 @@ Elements.ElementsPanel = class extends UI.Panel {
 
     var treeElement = this._treeElementForNode(searchResult.node);
     if (treeElement) {
-      treeElement.highlightSearchResults(this._searchQuery);
+      treeElement.highlightSearchResults(this._searchConfig.query);
       treeElement.reveal();
       var matches = treeElement.listItemElement.getElementsByClassName(UI.highlightedSearchResultClassName);
       if (matches.length)
@@ -629,7 +678,7 @@ Elements.ElementsPanel = class extends UI.Panel {
   }
 
   _hideSearchHighlights() {
-    if (!this._searchResults || !this._searchResults.length || this._currentSearchResultIndex < 0)
+    if (!this._searchResults || !this._searchResults.length || this._currentSearchResultIndex === undefined)
       return;
     var searchResult = this._searchResults[this._currentSearchResultIndex];
     if (!searchResult.node)

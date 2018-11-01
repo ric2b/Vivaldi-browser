@@ -18,7 +18,6 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/ws/display.h"
 #include "services/ui/ws/gpu_host_delegate.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/operation.h"
@@ -33,6 +32,7 @@ namespace ui {
 namespace ws {
 
 class AccessPolicy;
+class Display;
 class DisplayManager;
 class GpuHost;
 class ServerWindow;
@@ -123,7 +123,7 @@ class WindowServer : public ServerWindowDelegate,
   // Returns true if OnTreeMessagedClient() was invoked for id.
   bool DidTreeMessageClient(ClientSpecificId id) const;
 
-  // Returns the WindowTree that has |id| as a root.
+  // Returns the WindowTree that has |window| as a root.
   WindowTree* GetTreeWithRoot(const ServerWindow* window) {
     return const_cast<WindowTree*>(
         const_cast<const WindowServer*>(this)->GetTreeWithRoot(window));
@@ -195,7 +195,8 @@ class WindowServer : public ServerWindowDelegate,
   void SendToPointerWatchers(const ui::Event& event,
                              const UserId& user_id,
                              ServerWindow* target_window,
-                             WindowTree* ignore_tree);
+                             WindowTree* ignore_tree,
+                             int64_t display_id);
 
   // Sets a callback to be called whenever a ServerWindow is scheduled for
   // a [re]paint. This should only be called in a test configuration.
@@ -281,6 +282,13 @@ class WindowServer : public ServerWindowDelegate,
   void UpdateNativeCursorIfOver(ServerWindow* window);
 
   bool IsUserInHighContrastMode(const UserId& user) const;
+
+  // Finds the parent client that will embed |surface_id| and claims ownership
+  // of the temporary reference. If no parent client is found then tell GPU to
+  // immediately drop the temporary reference. |window| is the ServerWindow
+  // that corresponds to |surface_id|.
+  void HandleTemporaryReferenceForNewSurface(const cc::SurfaceId& surface_id,
+                                             ServerWindow* window);
 
   // Overridden from ServerWindowDelegate:
   ServerWindow* GetRootWindow(const ServerWindow* window) override;

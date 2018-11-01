@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/platform_window_defaults.h"
 #include "ui/base/x/x11_window_event_manager.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event.h"
@@ -30,8 +31,6 @@ const char* kAtomsToCache[] = {"UTF8_STRING",  "WM_DELETE_WINDOW",
                                "_NET_WM_NAME", "_NET_WM_PID",
                                "_NET_WM_PING", NULL};
 
-bool g_override_redirect = false;
-
 XID FindXEventTarget(const XEvent& xev) {
   XID target = xev.xany.window;
   if (xev.type == GenericEvent)
@@ -41,12 +40,14 @@ XID FindXEventTarget(const XEvent& xev) {
 
 }  // namespace
 
-X11WindowBase::X11WindowBase(PlatformWindowDelegate* delegate)
+X11WindowBase::X11WindowBase(PlatformWindowDelegate* delegate,
+                             const gfx::Rect& bounds)
     : delegate_(delegate),
       xdisplay_(gfx::GetXDisplay()),
       xwindow_(None),
       xroot_window_(DefaultRootWindow(xdisplay_)),
-      atom_cache_(xdisplay_, kAtomsToCache) {
+      atom_cache_(xdisplay_, kAtomsToCache),
+      bounds_(bounds) {
   DCHECK(delegate_);
   TouchFactory::SetTouchDeviceListFromCommandLine();
 }
@@ -70,19 +71,21 @@ void X11WindowBase::Destroy() {
 }
 
 void X11WindowBase::Create() {
+  DCHECK(!bounds_.size().IsEmpty());
+
   XSetWindowAttributes swa;
   memset(&swa, 0, sizeof(swa));
   swa.background_pixmap = None;
   swa.bit_gravity = NorthWestGravity;
-  swa.override_redirect = g_override_redirect;
-  xwindow_ = XCreateWindow(
-      xdisplay_, xroot_window_, requested_bounds_.x(), requested_bounds_.y(),
-      requested_bounds_.width(), requested_bounds_.height(),
-      0,               // border width
-      CopyFromParent,  // depth
-      InputOutput,
-      CopyFromParent,  // visual
-      CWBackPixmap | CWBitGravity | CWOverrideRedirect, &swa);
+  swa.override_redirect = UseTestConfigForPlatformWindows();
+  xwindow_ =
+      XCreateWindow(xdisplay_, xroot_window_, bounds_.x(), bounds_.y(),
+                    bounds_.width(), bounds_.height(),
+                    0,               // border width
+                    CopyFromParent,  // depth
+                    InputOutput,
+                    CopyFromParent,  // visual
+                    CWBackPixmap | CWBitGravity | CWOverrideRedirect, &swa);
 
   // Setup XInput event mask.
   long event_mask = ButtonPressMask | ButtonReleaseMask | FocusChangeMask |
@@ -135,8 +138,8 @@ void X11WindowBase::Create() {
   // will ignore toplevel XMoveWindow commands.
   XSizeHints size_hints;
   size_hints.flags = PPosition | PWinGravity;
-  size_hints.x = requested_bounds_.x();
-  size_hints.y = requested_bounds_.y();
+  size_hints.x = bounds_.x();
+  size_hints.y = bounds_.y();
   // Set StaticGravity so that the window position is not affected by the
   // frame width when running with window manager.
   size_hints.win_gravity = StaticGravity;
@@ -174,20 +177,30 @@ void X11WindowBase::Close() {
 }
 
 void X11WindowBase::SetBounds(const gfx::Rect& bounds) {
-  requested_bounds_ = bounds;
-  if (!window_mapped_ || bounds == confirmed_bounds_)
+  if (bounds == bounds_)
     return;
-  XWindowChanges changes = {0};
-  unsigned value_mask = CWX | CWY | CWWidth | CWHeight;
-  changes.x = bounds.x();
-  changes.y = bounds.y();
-  changes.width = bounds.width();
-  changes.height = bounds.height();
-  XConfigureWindow(xdisplay_, xwindow_, value_mask, &changes);
+
+  if (window_mapped_) {
+    XWindowChanges changes = {0};
+    unsigned value_mask = CWX | CWY | CWWidth | CWHeight;
+    changes.x = bounds.x();
+    changes.y = bounds.y();
+    changes.width = bounds.width();
+    changes.height = bounds.height();
+    XConfigureWindow(xdisplay_, xwindow_, value_mask, &changes);
+  }
+
+  // Assume that the resize will go through as requested, which should be the
+  // case if we're running without a window manager.  If there's a window
+  // manager, it can modify or ignore the request, but (per ICCCM) we'll get a
+  // (possibly synthetic) ConfigureNotify about the actual size and correct
+  // |bounds_| later.
+  bounds_ = bounds;
+  delegate_->OnBoundsChanged(bounds_);
 }
 
 gfx::Rect X11WindowBase::GetBounds() {
-  return confirmed_bounds_;
+  return bounds_;
 }
 
 void X11WindowBase::SetTitle(const base::string16& title) {
@@ -222,8 +235,7 @@ void X11WindowBase::Restore() {}
 
 void X11WindowBase::MoveCursorTo(const gfx::Point& location) {
   XWarpPointer(xdisplay_, None, xroot_window_, 0, 0, 0, 0,
-               confirmed_bounds_.x() + location.x(),
-               confirmed_bounds_.y() + location.y());
+               bounds_.x() + location.x(), bounds_.y() + location.y());
 }
 
 void X11WindowBase::ConfineCursorToBounds(const gfx::Rect& bounds) {}
@@ -266,9 +278,9 @@ void X11WindowBase::ProcessXWindowEvent(XEvent* xev) {
       }
       gfx::Rect bounds(translated_x_in_pixels, translated_y_in_pixels,
                        xev->xconfigure.width, xev->xconfigure.height);
-      if (confirmed_bounds_ != bounds) {
-        confirmed_bounds_ = bounds;
-        delegate_->OnBoundsChanged(confirmed_bounds_);
+      if (bounds_ != bounds) {
+        bounds_ = bounds;
+        delegate_->OnBoundsChanged(bounds_);
       }
       break;
     }
@@ -291,11 +303,4 @@ void X11WindowBase::ProcessXWindowEvent(XEvent* xev) {
   }
 }
 
-namespace test {
-
-void SetUseOverrideRedirectWindowByDefault(bool override_redirect) {
-  g_override_redirect = override_redirect;
-}
-
-}  // namespace test
 }  // namespace ui

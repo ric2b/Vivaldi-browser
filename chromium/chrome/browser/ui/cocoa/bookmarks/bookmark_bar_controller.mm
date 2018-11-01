@@ -12,6 +12,7 @@
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/bookmark_stats.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
@@ -57,6 +58,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/omnibox/browser/vector_icons.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
@@ -73,7 +75,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 
 using base::UserMetricsAction;
@@ -229,9 +230,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 // then show the no items label.
 - (void)reconfigureBookmarkBar;
 
-- (void)addNode:(const BookmarkNode*)child toMenu:(NSMenu*)menu;
-- (void)addFolderNode:(const BookmarkNode*)node toMenu:(NSMenu*)menu;
-- (void)tagEmptyMenu:(NSMenu*)menu;
 - (void)clearMenuTagMap;
 - (int)preferredHeight;
 - (void)addButtonsToView;
@@ -288,14 +286,11 @@ void RecordAppLaunch(Profile* profile, GURL url) {
         rb.GetNativeImageNamed(IDR_BOOKMARK_BAR_FOLDER_WHITE).CopyNSImage());
 
     const int kIconSize = 16;
-    defaultImage_.reset([NSImageFromImageSkia(
-        gfx::CreateVectorIcon(gfx::VectorIconId::OMNIBOX_HTTP,
-                              kIconSize,
-                              gfx::kChromeIconGrey)) retain]);
-    defaultImageIncognito_.reset([NSImageFromImageSkia(
-        gfx::CreateVectorIcon(gfx::VectorIconId::OMNIBOX_HTTP,
-                              kIconSize,
-                              SkColorSetA(SK_ColorWHITE, 0xCC))) retain]);
+    defaultImage_.reset([NSImageFromImageSkia(gfx::CreateVectorIcon(
+        omnibox::kHttpIcon, kIconSize, gfx::kChromeIconGrey)) retain]);
+    defaultImageIncognito_.reset([NSImageFromImageSkia(gfx::CreateVectorIcon(
+        omnibox::kHttpIcon, kIconSize, SkColorSetA(SK_ColorWHITE, 0xCC)))
+        retain]);
 
     innerContentAnimationsEnabled_ = YES;
     stateAnimationsEnabled_ = YES;
@@ -890,9 +885,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   SkColor vectorIconColor = forDarkMode ? SkColorSetA(SK_ColorWHITE, 0xCC)
                                         : gfx::kChromeIconGrey;
   return NSImageFromImageSkia(
-      gfx::CreateVectorIcon(gfx::VectorIconId::OVERFLOW_CHEVRON,
-                            kIconSize,
-                            vectorIconColor));
+      gfx::CreateVectorIcon(kOverflowChevronIcon, kIconSize, vectorIconColor));
 }
 
 #pragma mark Private Methods
@@ -1121,65 +1114,6 @@ void RecordAppLaunch(Profile* profile, GURL url) {
     case BookmarkBar::HIDDEN:
       return 0;
   }
-}
-
-// Recursively add the given bookmark node and all its children to
-// menu, one menu item per node.
-- (void)addNode:(const BookmarkNode*)child toMenu:(NSMenu*)menu {
-  NSString* title = [BookmarkMenuCocoaController menuTitleForNode:child];
-  NSMenuItem* item = [[[NSMenuItem alloc] initWithTitle:title
-                                                 action:nil
-                                          keyEquivalent:@""] autorelease];
-  [menu addItem:item];
-  [item setImage:[self faviconForNode:child forADarkTheme:NO]];
-  if (child->is_folder()) {
-    NSMenu* submenu = [[[NSMenu alloc] initWithTitle:title] autorelease];
-    [menu setSubmenu:submenu forItem:item];
-    if (!child->empty()) {
-      [self addFolderNode:child toMenu:submenu];  // potentially recursive
-    } else {
-      [self tagEmptyMenu:submenu];
-    }
-  } else {
-    [item setTarget:self];
-    [item setAction:@selector(openBookmarkMenuItem:)];
-    [item setTag:[self menuTagFromNodeId:child->id()]];
-    if (child->is_url())
-      [item setToolTip:[BookmarkMenuCocoaController tooltipForNode:child]];
-  }
-}
-
-// Empty menus are odd; if empty, add something to look at.
-// Matches windows behavior.
-- (void)tagEmptyMenu:(NSMenu*)menu {
-  NSString* empty_menu_title = l10n_util::GetNSString(IDS_MENU_EMPTY_SUBMENU);
-  [menu addItem:[[[NSMenuItem alloc] initWithTitle:empty_menu_title
-                                            action:NULL
-                                     keyEquivalent:@""] autorelease]];
-}
-
-// Add the children of the given bookmark node (and their children...)
-// to menu, one menu item per node.
-- (void)addFolderNode:(const BookmarkNode*)node toMenu:(NSMenu*)menu {
-  for (int i = 0; i < node->child_count(); i++) {
-    const BookmarkNode* child = node->GetChild(i);
-    [self addNode:child toMenu:menu];
-  }
-}
-
-// Return an autoreleased NSMenu that represents the given bookmark
-// folder node.
-- (NSMenu *)menuForFolderNode:(const BookmarkNode*)node {
-  if (!node->is_folder())
-    return nil;
-  NSString* title = base::SysUTF16ToNSString(node->GetTitle());
-  NSMenu* menu = [[[NSMenu alloc] initWithTitle:title] autorelease];
-  [self addFolderNode:node toMenu:menu];
-
-  if (![menu numberOfItems]) {
-    [self tagEmptyMenu:menu];
-  }
-  return menu;
 }
 
 // Return an appropriate width for the given bookmark button cell.

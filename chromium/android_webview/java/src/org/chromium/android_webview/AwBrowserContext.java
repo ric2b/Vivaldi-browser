@@ -9,7 +9,6 @@ import android.content.SharedPreferences;
 
 import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
 import org.chromium.components.safe_browsing.SafeBrowsingApiHandler;
-import org.chromium.content.browser.AppWebMessagePortService;
 import org.chromium.content.browser.ContentViewStatics;
 
 /**
@@ -26,7 +25,6 @@ public class AwBrowserContext {
 
     private AwGeolocationPermissions mGeolocationPermissions;
     private AwFormDatabase mFormDatabase;
-    private AppWebMessagePortService mMessagePortService;
     private AwServiceWorkerController mServiceWorkerController;
     private Context mApplicationContext;
 
@@ -34,9 +32,7 @@ public class AwBrowserContext {
         mSharedPreferences = sharedPreferences;
         mApplicationContext = applicationContext;
 
-        if (AwContentsStatics.getSafeBrowsingEnabled()) {
-            initSafeBrowsingApiHandler();
-        }
+        initSafeBrowsingApiHandler();
     }
 
     public AwGeolocationPermissions getGeolocationPermissions() {
@@ -51,13 +47,6 @@ public class AwBrowserContext {
             mFormDatabase = new AwFormDatabase();
         }
         return mFormDatabase;
-    }
-
-    public AppWebMessagePortService getMessagePortService() {
-        if (mMessagePortService == null) {
-            mMessagePortService = new AppWebMessagePortService();
-        }
-        return mMessagePortService;
     }
 
     public AwServiceWorkerController getServiceWorkerController() {
@@ -90,7 +79,7 @@ public class AwBrowserContext {
         try {
             Class<? extends SafeBrowsingApiHandler> cls =
                     (Class<? extends SafeBrowsingApiHandler>) Class.forName(safeBrowsingApiHandler);
-            SafeBrowsingApiBridge.setSafeBrowingHandlerType(cls);
+            SafeBrowsingApiBridge.setSafeBrowsingHandlerType(cls);
         } catch (ClassNotFoundException e) {
             // This is not an error; it just means this device doesn't have specialized services.
         }

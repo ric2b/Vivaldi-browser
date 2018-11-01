@@ -6,7 +6,6 @@
 
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/system_tray.h"
@@ -17,14 +16,13 @@
 #include "ash/common/system/tray/tray_details_view.h"
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
-#include "ash/common/system/tray/tray_popup_label_button.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/strings/utf_string_conversions.h"
-#include "grit/ash_resources.h"
-#include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
@@ -39,10 +37,6 @@
 
 namespace ash {
 namespace {
-
-bool UseMdMenu() {
-  return MaterialDesignController::IsSystemTrayMenuMaterial();
-}
 
 enum AccessibilityState {
   A11Y_NONE = 0,
@@ -86,15 +80,9 @@ namespace tray {
 class DefaultAccessibilityView : public TrayItemMore {
  public:
   explicit DefaultAccessibilityView(SystemTrayItem* owner)
-      : TrayItemMore(owner, true) {
-    ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    if (!MaterialDesignController::UseMaterialDesignSystemIcons()) {
-      // The icon doesn't change in non-md.
-      SetImage(*bundle.GetImageNamed(IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK)
-                    .ToImageSkia());
-    }
+      : TrayItemMore(owner) {
     base::string16 label =
-        bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY);
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY);
     SetLabel(label);
     SetAccessibleName(label);
     set_id(test::kAccessibilityTrayItemViewId);
@@ -106,10 +94,6 @@ class DefaultAccessibilityView : public TrayItemMore {
   // TrayItemMore:
   void UpdateStyle() override {
     TrayItemMore::UpdateStyle();
-
-    if (!UseMdMenu())
-      return;
-
     std::unique_ptr<TrayPopupItemStyle> style = CreateStyle();
     SetImage(gfx::CreateVectorIcon(kSystemMenuAccessibilityIcon,
                                    style->GetIconColor()));
@@ -122,9 +106,8 @@ class DefaultAccessibilityView : public TrayItemMore {
 ////////////////////////////////////////////////////////////////////////////////
 // ash::tray::AccessibilityPopupView
 
-AccessibilityPopupView::AccessibilityPopupView(SystemTrayItem* owner,
-                                               uint32_t enabled_state_bits)
-    : TrayNotificationView(owner, IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK),
+AccessibilityPopupView::AccessibilityPopupView(uint32_t enabled_state_bits)
+    : TrayNotificationView(IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK),
       label_(CreateLabel(enabled_state_bits)) {
   InitView(label_);
 }
@@ -171,14 +154,8 @@ AccessibilityDetailedView::AccessibilityDetailedView(SystemTrayItem* owner,
       virtual_keyboard_enabled_(false),
       login_(login) {
   Reset();
-
   AppendAccessibilityList();
-
-  if (!UseMdMenu())
-    AppendHelpEntries();
-
   CreateTitleRow(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_TITLE);
-
   Layout();
 }
 
@@ -234,63 +211,30 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
                         kSystemMenuKeyboardIcon);
 }
 
-void AccessibilityDetailedView::AppendHelpEntries() {
-  DCHECK(!UseMdMenu());
-  // Currently the help page requires a browser window.
-  // TODO(yoshiki): show this even on login/lock screen. crbug.com/158286
-  if (!TrayPopupUtils::CanOpenWebUISettings(login_))
-    return;
-
-  views::View* bottom_row = new View();
-  views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, kTrayMenuBottomRowPadding,
-      kTrayMenuBottomRowPadding, kTrayMenuBottomRowPaddingBetweenItems);
-  layout->SetDefaultFlex(1);
-  bottom_row->SetLayoutManager(layout);
-
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-
-  TrayPopupLabelButton* help = new TrayPopupLabelButton(
-      this,
-      bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_LEARN_MORE));
-  bottom_row->AddChildView(help);
-  help_view_ = help;
-
-  TrayPopupLabelButton* settings = new TrayPopupLabelButton(
-      this,
-      bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SETTINGS));
-  bottom_row->AddChildView(settings);
-  settings_view_ = settings;
-
-  AddChildView(bottom_row);
-}
-
 HoverHighlightView* AccessibilityDetailedView::AddScrollListItem(
     const base::string16& text,
     bool highlight,
     bool checked,
     const gfx::VectorIcon& icon) {
   HoverHighlightView* container = new HoverHighlightView(this);
-  if (UseMdMenu()) {
-    gfx::ImageSkia image = CreateVectorIcon(icon, kMenuIconColor);
-    const int padding = (kMenuButtonSize - image.width()) / 2;
-    container->AddIconAndLabelCustomSize(
-        image, text, highlight,
-        image.width() + kMenuSeparatorVerticalPadding * 2, padding, padding);
-    if (checked) {
-      gfx::ImageSkia check_mark = CreateVectorIcon(
-          gfx::VectorIconId::CHECK_CIRCLE, gfx::kGoogleGreen700);
-      container->AddRightIcon(check_mark, check_mark.width());
-      container->SetRightViewVisible(true);
-      container->SetAccessiblityState(
-          HoverHighlightView::AccessibilityState::CHECKED_CHECKBOX);
-    } else {
-      container->SetAccessiblityState(
-          HoverHighlightView::AccessibilityState::UNCHECKED_CHECKBOX);
-    }
+  gfx::ImageSkia image = CreateVectorIcon(icon, kMenuIconColor);
+  const int padding = (kMenuButtonSize - image.width()) / 2;
+  container->AddIconAndLabelCustomSize(
+      image, text, highlight, image.width() + kMenuSeparatorVerticalPadding * 2,
+      padding, padding);
+
+  if (checked) {
+    gfx::ImageSkia check_mark =
+        CreateVectorIcon(gfx::VectorIconId::CHECK_CIRCLE, gfx::kGoogleGreen700);
+    container->AddRightIcon(check_mark, check_mark.width());
+    container->SetRightViewVisible(true);
+    container->SetAccessiblityState(
+        HoverHighlightView::AccessibilityState::CHECKED_CHECKBOX);
   } else {
-    container->AddCheckableLabel(text, highlight, checked);
+    container->SetAccessiblityState(
+        HoverHighlightView::AccessibilityState::UNCHECKED_CHECKBOX);
   }
+
   scroll_content()->AddChildView(container);
   return container;
 }
@@ -343,17 +287,16 @@ void AccessibilityDetailedView::HandleButtonPressed(views::Button* sender,
 }
 
 void AccessibilityDetailedView::CreateExtraTitleRowButtons() {
-  if (UseMdMenu()) {
-    DCHECK(!help_view_);
-    DCHECK(!settings_view_);
+  DCHECK(!help_view_);
+  DCHECK(!settings_view_);
 
-    tri_view()->SetContainerVisible(TriView::Container::END, true);
+  tri_view()->SetContainerVisible(TriView::Container::END, true);
 
-    help_view_ = CreateHelpButton(login_);
-    settings_view_ = CreateSettingsButton(login_);
-    tri_view()->AddView(TriView::Container::END, help_view_);
-    tri_view()->AddView(TriView::Container::END, settings_view_);
-  }
+  help_view_ = CreateHelpButton(login_);
+  settings_view_ =
+      CreateSettingsButton(login_, IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SETTINGS);
+  tri_view()->AddView(TriView::Container::END, help_view_);
+  tri_view()->AddView(TriView::Container::END, settings_view_);
 }
 
 void AccessibilityDetailedView::ShowSettings() {
@@ -377,7 +320,7 @@ void AccessibilityDetailedView::ShowHelp() {
 
 TrayAccessibility::TrayAccessibility(SystemTray* system_tray)
     : TrayImageItem(system_tray,
-                    IDR_AURA_UBER_TRAY_ACCESSIBILITY,
+                    kSystemTrayAccessibilityIcon,
                     UMA_ACCESSIBILITY),
       default_(NULL),
       detailed_popup_(NULL),
@@ -438,7 +381,7 @@ views::View* TrayAccessibility::CreateDetailedView(LoginStatus status) {
 
   if (request_popup_view_state_) {
     detailed_popup_ =
-        new tray::AccessibilityPopupView(this, request_popup_view_state_);
+        new tray::AccessibilityPopupView(request_popup_view_state_);
     request_popup_view_state_ = A11Y_NONE;
     return detailed_popup_;
   } else {

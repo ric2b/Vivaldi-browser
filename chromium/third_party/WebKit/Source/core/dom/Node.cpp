@@ -296,7 +296,7 @@ Node::Node(TreeScope* treeScope, ConstructionType type)
 Node::~Node() {
   // With Oilpan, the rare data finalizer also asserts for
   // this condition (we cannot directly access it here.)
-  RELEASE_ASSERT(hasRareData() || !layoutObject());
+  CHECK(hasRareData() || !layoutObject());
   InstanceCounters::decrementNodeCounter();
 }
 
@@ -684,7 +684,7 @@ void Node::setIsLink(bool isLink) {
 }
 
 void Node::setNeedsStyleInvalidation() {
-  DCHECK(isElementNode() || isShadowRoot());
+  DCHECK(isContainerNode());
   setFlag(NeedsStyleInvalidationFlag);
   markAncestorsWithChildNeedsStyleInvalidation();
 }
@@ -1911,12 +1911,12 @@ static EventTargetDataMap& eventTargetDataMap() {
 }
 
 EventTargetData* Node::eventTargetData() {
-  return hasEventTargetData() ? eventTargetDataMap().get(this) : nullptr;
+  return hasEventTargetData() ? eventTargetDataMap().at(this) : nullptr;
 }
 
 EventTargetData& Node::ensureEventTargetData() {
   if (hasEventTargetData())
-    return *eventTargetDataMap().get(this);
+    return *eventTargetDataMap().at(this);
   DCHECK(!eventTargetDataMap().contains(this));
   setHasEventTargetData(true);
   EventTargetData* data = new EventTargetData;
@@ -1961,7 +1961,7 @@ static inline void collectMatchingObserversForMutation(
           registration->deliveryOptions();
       HeapHashMap<Member<MutationObserver>,
                   MutationRecordDeliveryOptions>::AddResult result =
-          observers.add(&registration->observer(), deliveryOptions);
+          observers.insert(&registration->observer(), deliveryOptions);
       if (!result.isNewEntry)
         result.storedValue->value |= deliveryOptions;
     }
@@ -2119,7 +2119,7 @@ DispatchEventResult Node::dispatchDOMActivateEvent(int detail,
 }
 
 void Node::createAndDispatchPointerEvent(const AtomicString& mouseEventName,
-                                         const PlatformMouseEvent& mouseEvent,
+                                         const WebMouseEvent& mouseEvent,
                                          LocalDOMWindow* view) {
   AtomicString pointerEventName;
   if (mouseEventName == EventTypeNames::mousemove)
@@ -2137,22 +2137,22 @@ void Node::createAndDispatchPointerEvent(const AtomicString& mouseEventName,
   pointerEventInit.setPointerType("mouse");
   pointerEventInit.setIsPrimary(true);
   pointerEventInit.setButtons(
-      MouseEvent::platformModifiersToButtons(mouseEvent.getModifiers()));
+      MouseEvent::webInputEventModifiersToButtons(mouseEvent.modifiers()));
 
   pointerEventInit.setBubbles(true);
   pointerEventInit.setCancelable(true);
   pointerEventInit.setComposed(true);
   pointerEventInit.setDetail(0);
 
-  pointerEventInit.setScreenX(mouseEvent.globalPosition().x());
-  pointerEventInit.setScreenY(mouseEvent.globalPosition().y());
+  pointerEventInit.setScreenX(mouseEvent.globalX);
+  pointerEventInit.setScreenY(mouseEvent.globalY);
 
   IntPoint locationInFrameZoomed;
   if (view && view->frame() && view->frame()->view()) {
     LocalFrame* frame = view->frame();
     FrameView* frameView = frame->view();
-    IntPoint locationInContents =
-        frameView->rootFrameToContents(mouseEvent.position());
+    IntPoint locationInContents = frameView->rootFrameToContents(
+        flooredIntPoint(mouseEvent.positionInRootFrame()));
     locationInFrameZoomed = frameView->contentsToFrame(locationInContents);
     float scaleFactor = 1 / frame->pageZoomFactor();
     locationInFrameZoomed.scale(scaleFactor, scaleFactor);
@@ -2164,28 +2164,30 @@ void Node::createAndDispatchPointerEvent(const AtomicString& mouseEventName,
 
   if (pointerEventName == EventTypeNames::pointerdown ||
       pointerEventName == EventTypeNames::pointerup) {
-    pointerEventInit.setButton(
-        static_cast<int>(mouseEvent.pointerProperties().button));
+    pointerEventInit.setButton(static_cast<int>(mouseEvent.button));
   } else {
     pointerEventInit.setButton(
         static_cast<int>(WebPointerProperties::Button::NoButton));
   }
 
-  UIEventWithKeyState::setFromPlatformModifiers(pointerEventInit,
-                                                mouseEvent.getModifiers());
+  UIEventWithKeyState::setFromWebInputEventModifiers(
+      pointerEventInit,
+      static_cast<WebInputEvent::Modifiers>(mouseEvent.modifiers()));
   pointerEventInit.setView(view);
 
   dispatchEvent(PointerEvent::create(pointerEventName, pointerEventInit));
 }
 
-void Node::dispatchMouseEvent(const PlatformMouseEvent& nativeEvent,
+void Node::dispatchMouseEvent(const WebMouseEvent& nativeEvent,
                               const AtomicString& mouseEventType,
                               int detail,
+                              const String& canvasRegionId,
                               Node* relatedTarget) {
   createAndDispatchPointerEvent(mouseEventType, nativeEvent,
                                 document().domWindow());
   dispatchEvent(MouseEvent::create(mouseEventType, document().domWindow(),
-                                   nativeEvent, detail, relatedTarget));
+                                   nativeEvent, detail, canvasRegionId,
+                                   relatedTarget));
 }
 
 void Node::dispatchSimulatedClick(Event* underlyingEvent,

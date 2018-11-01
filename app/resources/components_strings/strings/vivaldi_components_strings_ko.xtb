@@ -8,10 +8,8 @@
 <translation id="1506687042165942984">오래된 것으로 알려진 이 페이지의 저장된 사본을 표시합니다.</translation>
 <translation id="1559528461873125649">해당 파일이나 디렉토리가 없습니다.</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">지금 웹페이지의 소스를 보고 있습니다.</translation>
 <translation id="194030505837763158"><ph name="LINK" />(으)로 이동</translation>
 <translation id="2030481566774242610"><ph name="LINK" />을(를) 찾으셨나요?</translation>
-<translation id="2089090684895656482">숨기기</translation>
 <translation id="2166378884831602661">사이트에 보안 연결할 수 없음</translation>
 <translation id="2292556288342944218">인터넷 액세스가 차단됨</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />에서 잘못된 응답을 전송했습니다.</translation>
@@ -19,7 +17,6 @@
 <translation id="2650446666397867134">파일 액세스 거부됨</translation>
 <translation id="2705137772291741111">사이트의 저장된(캐시된) 사본을 읽을 수 없습니다.</translation>
 <translation id="2784949926578158345">연결이 재설정되었습니다.</translation>
-<translation id="284702764277384724"><ph name="HOST_NAME" />의 서버 인증서가 위조된 것 같습니다.</translation>
 <translation id="2909946352844186028">네트워크 변경이 감지되었습니다.</translation>
 <translation id="3005723025932146533">저장된 사본 표시</translation>
 <translation id="3109728660330352905">이 페이지를 볼 수 있는 권한이 없습니다.</translation>
@@ -38,7 +35,6 @@
 <translation id="4021036232240155012">DNS는 웹사이트 이름을 인터넷 주소로 변환하는 네트워크 서비스입니다.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />에서 로그인 인증서를 승인하지 않았거나 로그인 인증서가 제공되지 않았을 수 있습니다.</translation>
 <translation id="4522570452068850558">세부정보</translation>
-<translation id="4670097147947922288">지금 확장 프로그램 페이지를 보고 있습니다.</translation>
 <translation id="4708268264240856090">연결이 끊김</translation>
 <translation id="4744603770635761495">실행 가능 경로</translation>
 <translation id="4764776831041365478"><ph name="URL" />의 웹페이지가 일시적으로 다운되었거나 새 웹 주소로 완전히 이동했을 수 있습니다.</translation>
@@ -55,7 +51,6 @@
 <translation id="5675650730144413517">페이지가 작동하지 않습니다.</translation>
 <translation id="5869405914158311789">사이트에 연결할 수 없음</translation>
 <translation id="5990559369517809815">서버에 대한 요청이 확장 프로그램에 의해 차단되었습니다.</translation>
-<translation id="6042308850641462728">더보기</translation>
 <translation id="6146055958333702838">케이블을 확인하고 사용 중인 라우터, 모뎀 또는 기타 네트워크 기기를
     재부팅하시기 바랍니다.</translation>
 <translation id="6165508094623778733">자세히 알아보기</translation>
@@ -65,10 +60,8 @@
 <translation id="6328639280570009161">네트워크 예측을 사용 중지해 보세요.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />에서 연결을 거부했습니다.</translation>
 <translation id="6711464428925977395">프록시 서버에 문제가 발생했거나 주소가 잘못되었습니다.</translation>
-<translation id="6830600606572693159"><ph name="URL" />의 웹페이지는 현재 사용할 수 없습니다.  웹페이지가 오버로드되었거나 유지보수를 위해 다운되었을 수 있습니다.</translation>
 <translation id="6897140037006041989">사용자 에이전트</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />에서 보안 기준을 준수하지 않습니다.</translation>
-<translation id="7269802741830436641">이 웹페이지에 리디렉션 순환 오류가 있습니다</translation>
 <translation id="7353601530677266744">명령줄</translation>
 <translation id="7419106976560586862">프로필 경로</translation>
 <translation id="7518003948725431193">다음 웹 주소(<ph name="URL" />)에 대해 발견된 웹페이지가 없습니다.</translation>
@@ -76,7 +69,6 @@
 <translation id="759889825892636187">현재 <ph name="HOST_NAME" />에서 요청을 처리할 수 없습니다.</translation>
 <translation id="7716424297397655342">이 사이트를 캐시에서 로드할 수 없음</translation>
 <translation id="7758069387465995638">방화벽이나 바이러스 백신 소프트웨어가 연결을 차단했을 수 있습니다.</translation>
-<translation id="778579833039460630">수신된 데이터 없음</translation>
 <translation id="7951415247503192394">(32비트)</translation>
 <translation id="8134994873729925007"><ph name="HOST_NAME" />의 서버 <ph name="BEGIN_ABBR" />DNS 주소<ph name="END_ABBR" />를 찾을 수 없습니다.</translation>
 <translation id="8142868475871995937">차단된 URL 및 시스템 관리자가 설정한 기타 정책 목록을 확인하려면 &lt;strong&gt;vivaldi://policy&lt;/strong&gt;를 방문하세요.</translation>

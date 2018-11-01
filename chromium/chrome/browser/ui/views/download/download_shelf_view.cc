@@ -30,8 +30,8 @@
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -115,7 +115,7 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
   AddChildView(show_all_view_);
 
   views::VectorIconButton* close_button = new views::VectorIconButton(this);
-  close_button->SetIcon(gfx::VectorIconId::BAR_CLOSE);
+  close_button->SetIcon(ui::kCloseIcon);
   close_button_ = close_button;
   close_button_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
@@ -375,7 +375,7 @@ bool DownloadShelfView::IsClosing() const {
   return shelf_animation_.IsClosing();
 }
 
-void DownloadShelfView::DoShow() {
+void DownloadShelfView::DoOpen() {
   SetVisible(true);
   shelf_animation_.Show();
 }
@@ -392,6 +392,18 @@ void DownloadShelfView::DoClose(CloseReason reason) {
   parent_->SetDownloadShelfVisible(false);
   }
   shelf_animation_.Hide();
+}
+
+void DownloadShelfView::DoHide() {
+  SetVisible(false);
+  parent_->ToolbarSizeChanged(false);
+  parent_->SetDownloadShelfVisible(false);
+}
+
+void DownloadShelfView::DoUnhide() {
+  SetVisible(true);
+  parent_->ToolbarSizeChanged(true);
+  parent_->SetDownloadShelfVisible(true);
 }
 
 Browser* DownloadShelfView::browser() const {

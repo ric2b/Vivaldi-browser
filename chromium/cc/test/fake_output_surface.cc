@@ -38,20 +38,12 @@ void FakeOutputSurface::Reshape(const gfx::Size& size,
   } else {
     software_device()->Resize(size, device_scale_factor);
   }
+  last_reshape_color_space_ = color_space;
 }
 
 void FakeOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
   last_sent_frame_.reset(new OutputSurfaceFrame(std::move(frame)));
   ++num_sent_frames_;
-
-  if (context_provider()) {
-    last_swap_rect_ = last_sent_frame_->sub_buffer_rect;
-    last_swap_rect_valid_ = true;
-  } else {
-    // Unknown for direct software frames.
-    last_swap_rect_ = gfx::Rect();
-    last_swap_rect_valid_ = false;
-  }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&FakeOutputSurface::SwapBuffersAck,
@@ -64,6 +56,10 @@ void FakeOutputSurface::SwapBuffersAck() {
 
 void FakeOutputSurface::BindFramebuffer() {
   context_provider_->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+}
+
+void FakeOutputSurface::SetDrawRectangle(const gfx::Rect& rect) {
+  last_set_draw_rectangle_ = rect;
 }
 
 uint32_t FakeOutputSurface::GetFramebufferCopyTextureFormat() {

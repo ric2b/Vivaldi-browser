@@ -33,11 +33,9 @@
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SuspendableObject.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/Event.h"
-#include "core/fetch/MemoryCache.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
@@ -51,7 +49,9 @@
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/InstanceCounters.h"
+#include "platform/loader/fetch/MemoryCache.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -134,7 +134,7 @@ void WorkerGlobalScope::registerEventListener(
     V8AbstractEventListener* eventListener) {
   // TODO(sof): remove once crbug.com/677654 has been diagnosed.
   CHECK(&ThreadState::fromObject(this)->heap() == &ThreadState::fromObject(eventListener)->heap());
-  bool newEntry = m_eventListeners.add(eventListener).isNewEntry;
+  bool newEntry = m_eventListeners.insert(eventListener).isNewEntry;
   CHECK(newEntry);
 }
 
@@ -142,7 +142,7 @@ void WorkerGlobalScope::deregisterEventListener(
     V8AbstractEventListener* eventListener) {
   auto it = m_eventListeners.find(eventListener);
   CHECK(it != m_eventListeners.end() || m_closing);
-  m_eventListeners.remove(it);
+  m_eventListeners.erase(it);
 }
 
 WorkerLocation* WorkerGlobalScope::location() const {
@@ -204,8 +204,8 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
       return;
     }
 
-    InspectorInstrumentation::scriptImported(
-        &executionContext, scriptLoader->identifier(), scriptLoader->script());
+    probe::scriptImported(&executionContext, scriptLoader->identifier(),
+                          scriptLoader->script());
 
     ErrorEvent* errorEvent = nullptr;
     std::unique_ptr<Vector<char>> cachedMetaData(
@@ -350,9 +350,10 @@ void WorkerGlobalScope::exceptionThrown(ErrorEvent* event) {
 }
 
 void WorkerGlobalScope::removeURLFromMemoryCache(const KURL& url) {
-  m_thread->workerLoaderProxy()->postTaskToLoader(
-      BLINK_FROM_HERE,
-      createCrossThreadTask(&removeURLFromMemoryCacheInternal, url));
+  m_thread->getParentFrameTaskRunners()
+      ->get(TaskType::Networking)
+      ->postTask(BLINK_FROM_HERE,
+                 crossThreadBind(&removeURLFromMemoryCacheInternal, url));
 }
 
 KURL WorkerGlobalScope::virtualCompleteURL(const String& url) const {

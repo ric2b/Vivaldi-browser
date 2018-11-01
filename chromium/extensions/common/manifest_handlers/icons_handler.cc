@@ -16,7 +16,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handler_helpers.h"
-#include "grit/extensions_strings.h"
+#include "extensions/strings/grit/extensions_strings.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace extensions {
@@ -69,7 +69,7 @@ bool IconsHandler::Parse(Extension* extension, base::string16* error) {
     return false;
   }
 
-  extension->SetManifestData(keys::kIcons, icons_info.release());
+  extension->SetManifestData(keys::kIcons, std::move(icons_info));
   return true;
 }
 

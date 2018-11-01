@@ -69,6 +69,12 @@ class SimpleFontData;
 
 enum ShouldRetain { Retain, DoNotRetain };
 enum PurgeSeverity { PurgeIfNeeded, ForcePurge };
+enum class AlternateFontName {
+  AllowAlternate,
+  NoAlternate,
+  LocalUniqueFace,
+  LastResort
+};
 
 class PLATFORM_EXPORT FontCache {
   friend class FontCachePurgePreventer;
@@ -92,14 +98,30 @@ class PLATFORM_EXPORT FontCache {
   // Also implemented by the platform.
   void platformInit();
 
-  PassRefPtr<SimpleFontData> getFontData(const FontDescription&,
-                                         const AtomicString&,
-                                         bool checkingAlternateName = false,
-                                         ShouldRetain = Retain);
+  PassRefPtr<SimpleFontData> getFontData(
+      const FontDescription&,
+      const AtomicString&,
+      AlternateFontName = AlternateFontName::AllowAlternate,
+      ShouldRetain = Retain);
   PassRefPtr<SimpleFontData> getLastResortFallbackFont(const FontDescription&,
                                                        ShouldRetain = Retain);
   SimpleFontData* getNonRetainedLastResortFallbackFont(const FontDescription&);
-  bool isPlatformFontAvailable(const FontDescription&, const AtomicString&);
+
+  // Should be used in determining whether family names listed in font-family:
+  // ... are available locally. Only returns true if family name matches.
+  bool isPlatformFamilyMatchAvailable(const FontDescription&,
+                                      const AtomicString& family);
+
+  // Should be used in determining whether the <abc> argument to local in
+  // @font-face { ... src: local(<abc>) } are available locally, which should
+  // match Postscript name or full font name. Compare
+  // https://drafts.csswg.org/css-fonts-3/#src-desc
+  // TODO crbug.com/627143 complete this and actually look at the right
+  // namerecords.
+  bool isPlatformFontUniqueNameMatchAvailable(
+      const FontDescription&,
+      const AtomicString& uniqueFontName);
+
   static String firstAvailableOrFirst(const String&);
 
   // Returns the ShapeCache instance associated with the given cache key.
@@ -191,6 +213,8 @@ class PLATFORM_EXPORT FontCache {
 
   void invalidateShapeCache();
 
+  static void crashWithFontInfo(const FontDescription*);
+
   // Memory reporting
   void dumpFontPlatformDataCache(base::trace_event::ProcessMemoryDump*);
   void dumpShapeResultCache(base::trace_event::ProcessMemoryDump*);
@@ -209,9 +233,10 @@ class PLATFORM_EXPORT FontCache {
   }
 
   // FIXME: This method should eventually be removed.
-  FontPlatformData* getFontPlatformData(const FontDescription&,
-                                        const FontFaceCreationParams&,
-                                        bool checkingAlternateName = false);
+  FontPlatformData* getFontPlatformData(
+      const FontDescription&,
+      const FontFaceCreationParams&,
+      AlternateFontName = AlternateFontName::AllowAlternate);
 #if !OS(MACOSX)
   FontPlatformData* systemFontPlatformData(const FontDescription&);
 #endif
@@ -220,7 +245,8 @@ class PLATFORM_EXPORT FontCache {
   std::unique_ptr<FontPlatformData> createFontPlatformData(
       const FontDescription&,
       const FontFaceCreationParams&,
-      float fontSize);
+      float fontSize,
+      AlternateFontName = AlternateFontName::AllowAlternate);
   std::unique_ptr<FontPlatformData> scaleFontPlatformData(
       const FontPlatformData&,
       const FontDescription&,

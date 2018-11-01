@@ -7,6 +7,10 @@
 Network.NetworkConfigView = class extends UI.VBox {
   constructor() {
     super(true);
+    /** @type {!Element} */
+    this._autoCheckbox;
+    /** @type {!{input: !Element, select: !Element}} */
+    this._customSelectAndInput;
     this.registerRequiredCSS('network/networkConfigView.css');
     this.contentElement.classList.add('network-config');
 
@@ -109,7 +113,7 @@ Network.NetworkConfigView = class extends UI.VBox {
 
   _createNetworkThrottlingSection() {
     var section = this._createSection(Common.UIString('Network throttling'), 'network-config-throttling');
-    Components.NetworkConditionsSelector.decorateSelect(
+    NetworkConditions.NetworkConditionsSelector.decorateSelect(
         /** @type {!HTMLSelectElement} */ (section.createChild('select', 'chrome-select')));
   }
 

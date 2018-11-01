@@ -17,6 +17,7 @@
 <translation id="1434626383986940139">Chrome కెనరీ అనువర్తనాలు</translation>
 <translation id="1457721931618994305">Google Chromeని నవీకరిస్తోంది...</translation>
 <translation id="1469002951682717133">Chrome అనువర్తన లాంచర్</translation>
+<translation id="1475773083554142432">Chrome దీన్ని <ph name="SAVED_PASSWORD_LINK" />తో నిల్వ చేస్తుంది మరియు మీకు అవసరమయ్యే తదుపరి సారి దీన్ని గుర్తు పెట్టుకుంటుంది.</translation>
 <translation id="1480489203462860648">దీన్ని ప్రయత్నించండి, ఇది ఇప్పటికే ఇన్‌స్టాల్ చేయబడింది</translation>
 <translation id="1553358976309200471">Chromeని నవీకరించు</translation>
 <translation id="1587223624401073077">Google Chrome మీ కెమెరాను ఉపయోగిస్తోంది.</translation>
@@ -32,6 +33,7 @@
 <translation id="1759301979429102118">Chromeలో ఫారమ్‌లను మరింత శీఘ్రంగా పూరించడానికి మీ పరిచయాల్లోని వివరాలు మీకు సహాయపడవచ్చు.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Chrome OSని ఉపయోగించి సహాయాన్ని పొందండి</translation>
+<translation id="1795405610103747296">మీ ఫోన్‌లో Chromeను ఇన్‌స్టాల్ చేయండి. మేము మీ ఫోన్ నంబర్‌కు SMSను పంపుతాము: <ph name="PHONE_NUMBER" /></translation>
 <translation id="1818142563254268765">Chrome దానికదే తాజా సంస్కరణకు నవీకరించబడదు, కనుక మీరు అద్భుతమైన కొత్త లక్షణాలను మరియు భద్రతా పరిష్కారాలను కోల్పోతున్నారు. మీరు Chromeను నవీకరించాలి.</translation>
 <translation id="1877026089748256423">Chrome కాలం చెల్లినది</translation>
 <translation id="2063848847527508675">నవీకరణను వర్తింపజేయడానికి Chrome OSని పునఃప్రారంభించాలి.</translation>
@@ -39,6 +41,7 @@
 <translation id="2084710999043359739">Chromeకి జోడించు</translation>
 <translation id="2120620239521071941">ఇది ఈ పరికరం నుండి <ph name="ITEMS_COUNT" /> అంశాలను తొలగిస్తుంది. మీ డేటాను తర్వాత తిరిగి పొందడానికి, Chromeకి <ph name="USER_EMAIL" /> వలె సైన్ ఇన్ చేయండి.</translation>
 <translation id="2147651015520127414">Chrome ఈ వెబ్‌సైట్ ప్రమాణపత్రాన్ని <ph name="ISSUER" /> జారీ చేసినట్లు ధృవీకరించింది.</translation>
+<translation id="216054706567564023">మీ ఫోన్‌లో Chromeను ఇన్‌స్టాల్ చేయండి. మేము మీ ఖాతా పునరుద్ధరణ ఫోన్ నంబర్‌కు SMSను పంపుతాము.</translation>
 <translation id="2246246234298806438">అంతర్నిర్మిత PDF వ్యూవర్ లేనప్పుడు Google Chrome ముద్రణ పరిదృశ్యాన్ని చూపించదు.</translation>
 <translation id="2252923619938421629">ప్రస్తుత సెట్టింగ్‌లను నివేదించడం ద్వారా Google Chromeను మెరుగుపరచడంలో సహాయపడండి</translation>
 <translation id="2286950485307333924">మీరు ఇప్పుడు Chromeకి సైన్ ఇన్ చేసారు</translation>
@@ -61,7 +64,6 @@
 <translation id="2664962310688259219">Chrome OS ఓపెన్ సోర్స్ లైసెన్స్‌లు</translation>
 <translation id="2665296953892887393">Googleకు వినియోగ గణాంకాలు మరియు <ph name="UMA_LINK" />ను పంపడం ద్వారా Google Chromeను మెరుగుపరచడంలో సహాయపడండి</translation>
 <translation id="2689103672227170538">ఈ పొడిగింపు మీరు Chromeని ప్రారంభించినప్పుడు చూపబడే పేజీని మార్చింది.</translation>
-<translation id="2748463065602559597">మీరు సురక్షితమైన Google Chrome పేజీని వీక్షిస్తున్నారు.</translation>
 <translation id="2769762047821873045">Google Chrome మీ డిఫాల్ట్ బ్రౌజర్ కాదు.</translation>
 <translation id="2770231113462710648">డిఫాల్ట్ బ్రౌజర్‌ను దీనికి మార్చు:</translation>
 <translation id="2799223571221894425">మళ్లీ ప్రారంభించు</translation>
@@ -116,7 +118,6 @@
 <translation id="4458285410772214805">దయచేసి ఈ మార్పు ప్రభావవంతం కావడానికి సైన్ అవుట్ చేసి, మళ్లీ సైన్ ఇన్ చేయండి.</translation>
 <translation id="4458462641685292929">Google Chromeలో మరొక వ్యవస్థాపన జరుగుతోంది. దయచేసి తర్వాత మళ్లీ ప్రయత్నించండి.</translation>
 <translation id="4480040274068703980">సైన్ ఇన్ చేయడంలో లోపం సంభవించినందున Chrome OS మీ డేటాను సమకాలీకరించలేకపోయింది.</translation>
-<translation id="4519152997629025674">Google Chrome మీ బ్రౌజింగ్ అనుభవాన్ని మెరుగుపరచడానికి <ph name="BEGIN_LINK" />వెబ్ సేవలు<ph name="END_LINK" /> ఉపయోగించవచ్చు. మీరు ఐచ్ఛికంగా ఎప్పుడైనా ఈ సేవలను నిలిపివేయవచ్చు.</translation>
 <translation id="4561051373932531560">Google Chrome వెబ్‌లో మిమ్మళ్ని ఫోన్ నంబర్ క్లిక్ చెయ్యనిస్తుంది మరియు Skypeతో కాల్ చేస్తుంది!</translation>
 <translation id="4567424176335768812">మీరు <ph name="USER_EMAIL_ADDRESS" />గా సైన్ ఇన్ చేసారు. ఇప్పుడు మీరు మీ సైన్ ఇన్ చేసిన అన్ని పరికరాల్లో మీ బుక్‌మార్క్‌లు, చరిత్ర మరియు ఇతర సెట్టింగ్‌లను ప్రాప్యత చేయవచ్చు.</translation>
 <translation id="4631713731678262610">Chrome మెనులో దాచండి</translation>
@@ -139,7 +140,6 @@
 <translation id="5028489144783860647">Google Chrome మీ డేటాను సమకాలీకరించలేకపోయింది. దయచేసి మీ సమకాలీకరణ రహస్య పదబంధాన్ని నవీకరించండి.</translation>
 <translation id="5037239767309817516">దయచేసి ఈ మార్పు అమలులోకి రావడానికి అన్ని Google Chrome విండోలను మూసివేయండి మరియు దీన్ని మళ్ళీ ప్రారంభించండి.</translation>
 <translation id="5132929315877954718">Google Chrome కోసం గొప్ప అనువర్తనాలు, ఆటలు, పొడిగింపులు మరియు థీమ్‌లను కనుగొనండి.</translation>
-<translation id="5148419164691878332">Chrome దీన్ని మీ <ph name="SAVED_PASSWORDS_LINK" />లో నిల్వ చేస్తుంది మరియు మీకు అవసరమయ్యే తదుపరి సారి దీన్ని గుర్తు పెట్టుకుంటుంది.</translation>
 <translation id="5170938038195470297">మీ ప్రొఫైల్ ఉపయోగించబడదు ఎందుకంటే ఇది ఒక క్రొత్త Google Chrome సంస్కరణ నుండి తీసుకోబడింది. కొన్ని లక్షణాలు అందుబాటులో ఉండకపోవచ్చు. దయచేసి వేరొక ప్రొఫైల్ డైరెక్టరీని పేర్కొనండి లేదా Chrome యొక్క క్రొత్త సంస్కరణను ఉపయోగించండి.</translation>
 <translation id="5176234269072261959">ప్రస్తుత సెట్టింగ్‌లను నివేదించడం ద్వారా Chromeను మెరుగుపరచడంలో సహాయపడండి.</translation>
 <translation id="5193136243808726294">Google Chrome OS ఈ పేజీని తెరవలేదు.</translation>
@@ -244,6 +244,7 @@
 <translation id="8030318113982266900">మీ పరికరాన్ని <ph name="CHANNEL_NAME" /> ఛానెల్‌కి నవీకరిస్తోంది...</translation>
 <translation id="8032142183999901390">Chrome నుండి మీ ఖాతాను తీసివేసిన తర్వాత, ప్రభావవంతం కావడానికి మీరు మీ తెరిచిన ట్యాబ్‌లను మళ్లీ లోడ్ చేయాల్సి రావచ్చు.</translation>
 <translation id="8129812357326543296">&amp;Google Chrome గురించి</translation>
+<translation id="8179874765710681175">మీ ఫోన్‌లో Chromeని ఇన్‌స్టాల్ చేయండి. మేము మీ ఫోన్‌కు SMSను పంపుతాము.</translation>
 <translation id="8183957050892517584">Chrome మీ వ్యక్తిగత వివరాలను సురక్షితంగా నిల్వ చేస్తుంది కాబట్టి మీరు వాటిని మళ్లీ టైప్ చేయాల్సిన అవసరం లేదు.</translation>
 <translation id="8211929904040702368">దీని వలన ఈ పరికరం నుండి కనీసం <ph name="TOTAL_COUNT" /> అంశాలు శాశ్వతంగా తొలగించబడతాయి. మీ డేటాను తర్వాత తిరిగి పొందడానికి, Chromeకి $2 వలె సైన్ ఇన్ చేయండి.</translation>
 <translation id="8255190535488645436">Google Chrome మీ కెమెరా మరియు మైక్రోఫోన్‌ని ఉపయోగిస్తోంది.</translation>
@@ -252,10 +253,12 @@
 <translation id="8342675569599923794">ఈ ఫైల్ అపాయకరమైనది, కాబట్టి Chrome దీన్ని బ్లాక్ చేసింది.</translation>
 <translation id="8406086379114794905">Chromeని మెరుగుపరచడంలో సహాయపడండి</translation>
 <translation id="8455999171311319804">ఐచ్ఛికం: విశ్లేషణ మరియు వినియోగ డేటాను స్వయంచాలకంగా Googleకి పంపడం ద్వారా Chrome OSని మెరుగుపరచడంలో సహాయం అందించండి.</translation>
+<translation id="8478823064122749032">మీ ఫోన్‌లో Chromeను ఇన్‌స్టాల్ చేయండి. మేము మీ ఖాతా పునరుద్ధరణ ఫోన్ నంబర్‌కు SMSను పంపుతాము: <ph name="PHONE_NUMBER" /></translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Chrome అనువర్తన లాంచర్ కెనరీ</translation>
 <translation id="8556340503434111824">Google Chrome యొక్క క్రొత్త సంస్కరణ అందుబాటులో ఉంది, ఇది ఎప్పటి కంటే వేగంగా ఉంది.</translation>
 <translation id="8568392309447938879">మీరు అనువర్తనాలను ఉపయోగించడానికి Chromeకు సైన్ ఇన్ చేయాలి. ఇది పరికరాల్లో మీ అనువర్తనాలు, బుక్‌మార్క్‌లు, చరిత్ర, పాస్‌వర్డ్‌లు మరియు ఇతర సెట్టింగ్‌లను సమకాలీకరించడానికి Chromeను అనుమతిస్తుంది.</translation>
+<translation id="8606668294522778825">Google Chrome మీ బ్రౌజింగ్ అనుభవాన్ని మెరుగుపరచడానికి వెబ్ సేవలను ఉపయోగించవచ్చు. మీరు ఈ సేవలను ఐచ్ఛికంగా నిలిపివేయవచ్చు. <ph name="BEGIN_LINK" />మరింత తెలుసుకోండి<ph name="END_LINK" /></translation>
 <translation id="8614913330719544658">Google Chrome స్పందించడం లేదు. ఇప్పుడే పునఃప్రారంభించాలా?</translation>
 <translation id="8667808506758191620">మీ <ph name="DEVICE_TYPE" /> ఆధునికంగా ఉంది.</translation>
 <translation id="8669527147644353129">Google Chrome సహాయకారుడు</translation>

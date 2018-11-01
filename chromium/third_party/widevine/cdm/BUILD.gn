@@ -34,11 +34,15 @@ if (is_android) {
     widevine_cdm_binary_files = [
       "win/$widevine_arch/widevinecdm.dll",
       "win/$widevine_arch/widevinecdm.dll.lib",
+      "win/$widevine_arch/widevinecdm.dll.sig",
     ]
     widevine_cdm_manifest_file = [ "win/$widevine_arch/manifest.json" ]
   } else if (is_mac) {
     widevine_cdm_version_h_file = "mac/$widevine_arch/widevine_cdm_version.h"
-    widevine_cdm_binary_files = [ "mac/$widevine_arch/libwidevinecdm.dylib" ]
+    widevine_cdm_binary_files = [
+      "mac/$widevine_arch/libwidevinecdm.dylib",
+      "mac/$widevine_arch/libwidevinecdm.dylib.sig",
+    ]
     widevine_cdm_manifest_file = [ "mac/$widevine_arch/manifest.json" ]
   } else {
     # Other platforms, use the default one.
@@ -73,6 +77,7 @@ source_set("headers") {
 
   public_deps = [
     ":version_h",  # Forward permission to use version header.
+    "//media:media_features",
     "//ppapi/features",
   ]
 }
@@ -194,5 +199,20 @@ source_set("widevine_test_license_server") {
       # This target should be removed and targets should have data_deps on this target:
       #"//third_party/widevine/test/license_server/license_server.gyp:test_license_server"
     ]
+  }
+}
+
+if (is_chrome_branded) {
+  copy("widevine_signature_scripts") {
+    sources = [
+      "../scripts/signature_generator.py",
+      "../scripts/signer.py",
+    ]
+    outputs = [
+      "$root_out_dir/installer/widevine/{{source_file_part}}",
+    ]
+  }
+} else {
+  group("widevine_signature_scripts") {
   }
 }

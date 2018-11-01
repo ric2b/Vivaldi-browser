@@ -77,9 +77,9 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   // Also pass through to ChromeExtensionsNetworkDelegate::set_profile().
   void set_profile(void* profile);
 
-  // |profile_path| is used to locate the "Downloads" folder on Chrome OS. If it
-  // is set, the location of the Downloads folder for the profile is added to
-  // the whitelist for accesses via file: scheme.
+  // |profile_path| is used to locate profile specific paths such as the
+  // "Downloads" folder on Chrome OS. If it is set, folders like Downloads
+  // for the profile are added to the whitelist for accesses via file: scheme.
   void set_profile_path(const base::FilePath& profile_path) {
     profile_path_ = profile_path;
   }
@@ -129,9 +129,10 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
       StringPrefMember* allowed_domains_for_apps,
       PrefService* pref_service);
 
-  // When called, all file:// URLs will now be accessible.  If this is not
-  // called, then some platforms restrict access to file:// paths.
-  static void AllowAccessToAllFiles();
+  // Returns true if access to |path| is allowed. |profile_path| is used to
+  // locate certain paths on Chrome OS. See set_profile_path() for details.
+  static bool IsAccessAllowed(const base::FilePath& path,
+                              const base::FilePath& profile_path);
 
  private:
   // NetworkDelegate implementation.
@@ -177,7 +178,6 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
       const GURL& url,
       const GURL& first_party_for_cookies) const override;
   bool OnAreExperimentalCookieFeaturesEnabled() const override;
-  bool OnAreStrictSecureCookiesEnabled() const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const net::URLRequest& request,
       const GURL& target_url,
@@ -206,9 +206,6 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   const policy::URLBlacklistManager* url_blacklist_manager_;
   std::unique_ptr<domain_reliability::DomainReliabilityMonitor>
       domain_reliability_monitor_;
-
-  // When true, allow access to all file:// URLs.
-  static bool g_allow_file_access_;
 
   bool experimental_web_platform_features_enabled_;
 

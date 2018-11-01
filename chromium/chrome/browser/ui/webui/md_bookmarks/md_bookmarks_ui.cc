@@ -54,7 +54,12 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   AddLocalizedString(source, "menuEdit", IDS_EDIT);
   AddLocalizedString(source, "menuExport", IDS_MD_BOOKMARK_MANAGER_MENU_EXPORT);
   AddLocalizedString(source, "menuImport", IDS_MD_BOOKMARK_MANAGER_MENU_IMPORT);
+  AddLocalizedString(source, "menuRename", IDS_MD_BOOKMARK_MANAGER_MENU_RENAME);
   AddLocalizedString(source, "menuSort", IDS_MD_BOOKMARK_MANAGER_MENU_SORT);
+  AddLocalizedString(source, "noSearchResults",
+                     IDS_MD_BOOKMARK_MANAGER_NO_SEARCH_RESULTS);
+  AddLocalizedString(source, "renameFolderTitle",
+                     IDS_MD_BOOKMARK_MANAGER_FOLDER_RENAME_TITLE);
   AddLocalizedString(source, "searchPrompt",
                      IDS_BOOKMARK_MANAGER_SEARCH_BUTTON);
   AddLocalizedString(source, "saveEdit", IDS_SAVE);
@@ -72,6 +77,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   source->AddResourcePath("item.js", IDR_MD_BOOKMARKS_ITEM_JS);
   source->AddResourcePath("list.html", IDR_MD_BOOKMARKS_LIST_HTML);
   source->AddResourcePath("list.js", IDR_MD_BOOKMARKS_LIST_JS);
+  source->AddResourcePath("router.html", IDR_MD_BOOKMARKS_ROUTER_HTML);
+  source->AddResourcePath("router.js", IDR_MD_BOOKMARKS_ROUTER_JS);
   source->AddResourcePath("shared_style.html",
                           IDR_MD_BOOKMARKS_SHARED_STYLE_HTML);
   source->AddResourcePath("shared_vars.html",

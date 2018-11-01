@@ -18,6 +18,7 @@ source_set("application_delegate") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "app_state_unittest.mm",
@@ -132,6 +133,7 @@ source_set("application_delegate_internal") {
 }
 
 source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "app_state_testing.h",

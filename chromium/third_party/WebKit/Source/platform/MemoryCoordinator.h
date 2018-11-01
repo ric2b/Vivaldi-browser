@@ -22,6 +22,8 @@ class PLATFORM_EXPORT MemoryCoordinatorClient : public GarbageCollectedMixin {
   virtual void onMemoryPressure(WebMemoryPressureLevel) {}
 
   virtual void onMemoryStateChange(MemoryState) {}
+
+  virtual void onPurgeMemory() {}
 };
 
 // MemoryCoordinator listens to some events which could be opportunities
@@ -50,6 +52,8 @@ class PLATFORM_EXPORT MemoryCoordinator final
   void onMemoryPressure(WebMemoryPressureLevel);
 
   void onMemoryStateChange(MemoryState);
+
+  void onPurgeMemory();
 
   DECLARE_TRACE();
 

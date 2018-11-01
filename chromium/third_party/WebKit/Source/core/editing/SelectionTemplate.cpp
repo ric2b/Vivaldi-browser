@@ -16,7 +16,8 @@ SelectionTemplate<Strategy>::SelectionTemplate(const SelectionTemplate& other)
       m_affinity(other.m_affinity),
       m_granularity(other.m_granularity),
       m_hasTrailingWhitespace(other.m_hasTrailingWhitespace),
-      m_isDirectional(other.m_isDirectional)
+      m_isDirectional(other.m_isDirectional),
+      m_isHandleVisible(other.m_isHandleVisible)
 #if DCHECK_IS_ON()
       ,
       m_domTreeVersion(other.m_domTreeVersion)
@@ -45,13 +46,20 @@ bool SelectionTemplate<Strategy>::operator==(
          m_affinity == other.m_affinity &&
          m_granularity == other.m_granularity &&
          m_hasTrailingWhitespace == other.m_hasTrailingWhitespace &&
-         m_isDirectional == other.m_isDirectional;
+         m_isDirectional == other.m_isDirectional &&
+         m_isHandleVisible == other.m_isHandleVisible;
 }
 
 template <typename Strategy>
 bool SelectionTemplate<Strategy>::operator!=(
     const SelectionTemplate& other) const {
   return !operator==(other);
+}
+
+template <typename Strategy>
+DEFINE_TRACE(SelectionTemplate<Strategy>) {
+  visitor->trace(m_base);
+  visitor->trace(m_extent);
 }
 
 template <typename Strategy>
@@ -123,6 +131,32 @@ void SelectionTemplate<Strategy>::showTreeForThis() const {
             << m_extent.toAnchorTypeAndOffsetString().utf8().data();
 }
 #endif
+
+template <typename Strategy>
+const PositionTemplate<Strategy>&
+SelectionTemplate<Strategy>::computeEndPosition() const {
+  if (m_base == m_extent)
+    return m_base;
+  return m_base < m_extent ? m_extent : m_base;
+}
+
+template <typename Strategy>
+const PositionTemplate<Strategy>&
+SelectionTemplate<Strategy>::computeStartPosition() const {
+  if (m_base == m_extent)
+    return m_base;
+  return m_base < m_extent ? m_base : m_extent;
+}
+
+template <typename Strategy>
+SelectionType SelectionTemplate<Strategy>::selectionTypeWithLegacyGranularity()
+    const {
+  if (m_base.isNull())
+    return NoSelection;
+  if (m_base == m_extent && m_granularity == CharacterGranularity)
+    return CaretSelection;
+  return RangeSelection;
+}
 
 template <typename Strategy>
 void SelectionTemplate<Strategy>::printTo(std::ostream* ostream,
@@ -282,6 +316,13 @@ template <typename Strategy>
 typename SelectionTemplate<Strategy>::Builder&
 SelectionTemplate<Strategy>::Builder::setIsDirectional(bool isDirectional) {
   m_selection.m_isDirectional = isDirectional;
+  return *this;
+}
+
+template <typename Strategy>
+typename SelectionTemplate<Strategy>::Builder&
+SelectionTemplate<Strategy>::Builder::setIsHandleVisible(bool isHandleVisible) {
+  m_selection.m_isHandleVisible = isHandleVisible;
   return *this;
 }
 

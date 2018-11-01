@@ -66,7 +66,7 @@ String CSSStyleRule::generateSelectorText() const {
 String CSSStyleRule::selectorText() const {
   if (hasCachedSelectorText()) {
     ASSERT(selectorTextCache().contains(this));
-    return selectorTextCache().get(this);
+    return selectorTextCache().at(this);
   }
 
   ASSERT(!selectorTextCache().contains(this));
@@ -90,7 +90,7 @@ void CSSStyleRule::setSelectorText(const String& selectorText) {
   m_styleRule->wrapperAdoptSelectorList(std::move(selectorList));
 
   if (hasCachedSelectorText()) {
-    selectorTextCache().remove(this);
+    selectorTextCache().erase(this);
     setHasCachedSelectorText(false);
   }
 }

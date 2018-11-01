@@ -34,6 +34,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.chrome.browser.instantapps.AuthenticatedProxyActivity;
@@ -58,10 +59,6 @@ import java.util.List;
  * The main implementation of the {@link ExternalNavigationDelegate}.
  */
 public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegate {
-    // Instant Apps system resolver activity on N-MR1+.
-    @VisibleForTesting
-    static final String EPHEMERAL_INSTALLER_CLASS =
-            "com.google.android.gms.instantapps.routing.EphemeralInstallerActivity";
     private static final String PDF_VIEWER = "com.google.android.apps.docs";
     private static final String PDF_MIME = "application/pdf";
     private static final String PDF_SUFFIX = ".pdf";
@@ -286,7 +283,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
             }
 
             if (info.activityInfo != null) {
-                if (EPHEMERAL_INSTALLER_CLASS.equals(info.activityInfo.name)) {
+                if (InstantAppsHandler.getInstance().isInstantAppResolveInfo(info)) {
                     // Don't consider the Instant Apps resolver a specialized application.
                     continue;
                 }
@@ -421,12 +418,12 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
 
         // If the url points inside of Chromium's data directory, no permissions are necessary.
         // This is required to prevent permission prompt when uses wants to access offline pages.
-        if (url.startsWith("file://" + PathUtils.getDataDirectory())) {
+        if (url.startsWith(UrlConstants.FILE_URL_PREFIX + PathUtils.getDataDirectory())) {
             return false;
         }
 
-        return !tab.getWindowAndroid().hasPermission(permission.WRITE_EXTERNAL_STORAGE)
-                && tab.getWindowAndroid().canRequestPermission(permission.WRITE_EXTERNAL_STORAGE);
+        return !tab.getWindowAndroid().hasPermission(permission.READ_EXTERNAL_STORAGE)
+                && tab.getWindowAndroid().canRequestPermission(permission.READ_EXTERNAL_STORAGE);
     }
 
     @Override
@@ -449,7 +446,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
             }
         };
         tab.getWindowAndroid().requestPermissions(
-                new String[] {permission.WRITE_EXTERNAL_STORAGE}, permissionCallback);
+                new String[] {permission.READ_EXTERNAL_STORAGE}, permissionCallback);
     }
 
     private void loadIntent(Intent intent, String referrerUrl, String fallbackUrl, Tab tab,
@@ -579,13 +576,13 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         Intent intent = tab.getTabRedirectHandler() != null
                 ? tab.getTabRedirectHandler().getInitialIntent() : null;
         // TODO(mariakhomenko): consider also handling NDEF_DISCOVER action redirects.
-        if (isIncomingRedirect && intent != null && intent.getAction() == Intent.ACTION_VIEW) {
+        if (isIncomingRedirect && intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
             // Set the URL the redirect was resolved to for checking the existence of the
             // instant app inside handleIncomingIntent().
             Intent resolvedIntent = new Intent(intent);
             resolvedIntent.setData(Uri.parse(url));
             return handler.handleIncomingIntent(getAvailableContext(), resolvedIntent,
-                    ChromeLauncherActivity.isCustomTabIntent(resolvedIntent));
+                    ChromeLauncherActivity.isCustomTabIntent(resolvedIntent), true);
         } else if (!isIncomingRedirect) {
             // Check if the navigation is coming from SERP and skip instant app handling.
             if (isSerpReferrer(tab)) return false;

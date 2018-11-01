@@ -41,6 +41,7 @@
 #include "core/animation/InvalidatableInterpolation.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/animation/LegacyStyleInterpolation.h"
+#include "core/animation/TransitionInterpolation.h"
 #include "core/animation/animatable/AnimatableValue.h"
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 #include "core/animation/css/CSSAnimations.h"
@@ -90,14 +91,13 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/GeneratedChildren.h"
 #include "core/style/StyleInheritedVariables.h"
-#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGElement.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/StdLibExtras.h"
 
-namespace {
+namespace blink {
 
-using namespace blink;
+namespace {
 
 void setAnimationUpdateIfNeeded(StyleResolverState& state, Element& element) {
   // If any changes to CSS Animations were detected, stash the update away for
@@ -140,8 +140,6 @@ bool cacheCustomPropertiesForApplyAtRules(StyleResolverState& state,
 }
 
 }  // namespace
-
-namespace blink {
 
 using namespace HTMLNames;
 
@@ -564,13 +562,13 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForDocument(Document& document) {
   // document element so that the common case doesn't need to create a new
   // ComputedStyle in Document::inheritHtmlAndBodyElementStyles.
   documentStyle->setDisplay(EDisplay::Block);
-  documentStyle->setPosition(AbsolutePosition);
+  documentStyle->setPosition(EPosition::kAbsolute);
 
   // Document::inheritHtmlAndBodyElementStyles will set the final overflow
   // style values, but they should initially be auto to avoid premature
   // scrollbar removal in PaintLayerScrollableArea::updateAfterStyleChange.
-  documentStyle->setOverflowX(EOverflow::Auto);
-  documentStyle->setOverflowY(EOverflow::Auto);
+  documentStyle->setOverflowX(EOverflow::kAuto);
+  documentStyle->setOverflowY(EOverflow::kAuto);
 
   document.setupFontBuilder(*documentStyle);
 
@@ -579,8 +577,11 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForDocument(Document& document) {
 
 void StyleResolver::adjustComputedStyle(StyleResolverState& state,
                                         Element* element) {
+  DCHECK(state.layoutParentStyle());
+  DCHECK(state.parentStyle());
   StyleAdjuster::adjustComputedStyle(state.mutableStyleRef(),
-                                     *state.parentStyle(), element);
+                                     *state.parentStyle(),
+                                     *state.layoutParentStyle(), element);
 }
 
 // Start loading resources referenced by this style.
@@ -622,6 +623,7 @@ static void updateBaseComputedStyle(StyleResolverState& state,
 PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
     Element* element,
     const ComputedStyle* defaultParent,
+    const ComputedStyle* defaultLayoutParent,
     StyleSharingBehavior sharingBehavior,
     RuleMatchingBehavior matchingBehavior) {
   DCHECK(document().frame());
@@ -658,15 +660,18 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
       return sharedStyle.release();
   }
 
-  StyleResolverState state(document(), elementContext, defaultParent);
+  StyleResolverState state(document(), elementContext, defaultParent,
+                           defaultLayoutParent);
 
   const ComputedStyle* baseComputedStyle =
       calculateBaseComputedStyle(state, element);
 
   if (baseComputedStyle) {
     state.setStyle(ComputedStyle::clone(*baseComputedStyle));
-    if (!state.parentStyle())
+    if (!state.parentStyle()) {
       state.setParentStyle(initialStyleForElement());
+      state.setLayoutParentStyle(state.parentStyle());
+    }
   } else {
     if (state.parentStyle()) {
       RefPtr<ComputedStyle> style = ComputedStyle::create();
@@ -678,6 +683,7 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
     } else {
       state.setStyle(initialStyleForElement());
       state.setParentStyle(ComputedStyle::clone(*state.style()));
+      state.setLayoutParentStyle(state.parentStyle());
     }
   }
 
@@ -691,11 +697,11 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
   }
 
   if (element->isLink()) {
-    state.style()->setIsLink(true);
+    state.style()->setIsLink();
     EInsideLink linkState = state.elementLinkState();
     if (linkState != EInsideLink::kNotInsideLink) {
-      bool forceVisited = InspectorInstrumentation::forcePseudoState(
-          element, CSSSelector::PseudoVisited);
+      bool forceVisited =
+          probe::forcePseudoState(element, CSSSelector::PseudoVisited);
       if (forceVisited)
         linkState = EInsideLink::kInsideVisitedLink;
     }
@@ -792,7 +798,8 @@ PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(
     const CSSValue* value) {
   // TODO(alancutter): Avoid creating a StyleResolverState just to apply a
   // single value on a ComputedStyle.
-  StyleResolverState state(element.document(), &element, parentStyle);
+  StyleResolverState state(element.document(), &element, parentStyle,
+                           parentStyle);
   state.setStyle(ComputedStyle::clone(baseStyle));
   if (value) {
     StyleBuilder::applyProperty(property, state, *value);
@@ -840,7 +847,7 @@ PseudoElement* StyleResolver::createPseudoElementIfNeeded(Element& parent,
     return createPseudoElement(&parent, pseudoId);
   }
 
-  StyleResolverState state(document(), &parent, parentStyle);
+  StyleResolverState state(document(), &parent, parentStyle, parentStyle);
   if (!pseudoStyleForElementInternal(parent, pseudoId, parentStyle, state))
     return nullptr;
   RefPtr<ComputedStyle> style = state.takeStyle();
@@ -941,12 +948,14 @@ bool StyleResolver::pseudoStyleForElementInternal(
 PassRefPtr<ComputedStyle> StyleResolver::pseudoStyleForElement(
     Element* element,
     const PseudoStyleRequest& pseudoStyleRequest,
-    const ComputedStyle* parentStyle) {
+    const ComputedStyle* parentStyle,
+    const ComputedStyle* parentLayoutObjectStyle) {
   DCHECK(parentStyle);
   if (!element)
     return nullptr;
 
-  StyleResolverState state(document(), element, parentStyle);
+  StyleResolverState state(document(), element, parentStyle,
+                           parentLayoutObjectStyle);
   if (!pseudoStyleForElementInternal(*element, pseudoStyleRequest, parentStyle,
                                      state)) {
     if (pseudoStyleRequest.type == PseudoStyleRequest::ForRenderer)
@@ -1184,9 +1193,10 @@ void StyleResolver::applyAnimatedProperties(
       CSSInterpolationTypesMap map(state.document().propertyRegistry());
       InterpolationEnvironment environment(map, state);
       InvalidatableInterpolation::applyStack(entry.value, environment);
+    } else if (interpolation.isTransitionInterpolation()) {
+      toTransitionInterpolation(interpolation).apply(state);
     } else {
-      // TODO(alancutter): Remove this old code path once animations have
-      // completely migrated to InterpolationTypes.
+      // TODO(alancutter): Move CustomCompositorAnimations off AnimatableValues.
       toLegacyStyleInterpolation(interpolation).apply(state);
     }
   }
@@ -1912,7 +1922,7 @@ void StyleResolver::computeFont(ComputedStyle* style,
   };
 
   // TODO(timloh): This is weird, the style is being used as its own parent
-  StyleResolverState state(document(), nullptr, style);
+  StyleResolverState state(document(), nullptr, style, style);
   state.setStyle(style);
 
   for (CSSPropertyID property : properties) {

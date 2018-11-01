@@ -4,14 +4,14 @@
 
 #import "ios/chrome/browser/payments/payment_items_display_view_controller.h"
 
-#import "base/ios/weak_nsobject.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/payments/core/currency_formatter.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/payments/payment_request_utils.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
+#import "ios/chrome/browser/payments/cells/price_item.h"
+#import "ios/chrome/browser/payments/payment_items_display_view_controller_actions.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
@@ -22,9 +22,13 @@
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
 #include "ui/base/l10n/l10n_util.h"
 
-NSString* const kPaymentItemsDisplayCollectionViewId =
-    @"kPaymentItemsDisplayCollectionViewId";
-NSString* const kPaymentItemsDisplayItemId = @"kPaymentItemsDisplayItemId";
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
+NSString* const kPaymentItemsDisplayCollectionViewID =
+    @"kPaymentItemsDisplayCollectionViewID";
+NSString* const kPaymentItemsDisplayItemID = @"kPaymentItemsDisplayItemID";
 
 namespace {
 
@@ -42,30 +46,28 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 }  // namespace
 
-@interface PaymentItemsDisplayViewController () {
-  base::WeakNSProtocol<id<PaymentItemsDisplayViewControllerDelegate>> _delegate;
-  base::scoped_nsobject<MDCFlatButton> _payButton;
+@interface PaymentItemsDisplayViewController ()<
+    PaymentItemsDisplayViewControllerActions> {
+  MDCFlatButton* _payButton;
+
+  // The PaymentRequest object owning an instance of web::PaymentRequest as
+  // provided by the page invoking the Payment Request API. This is a weak
+  // pointer and should outlive this class.
+  PaymentRequest* _paymentRequest;
 }
-
-// Called when the user presses the return button.
-- (void)onReturn;
-
-// Called when the user presses the pay button.
-- (void)onConfirm;
 
 @end
 
 @implementation PaymentItemsDisplayViewController
+@synthesize delegate = _delegate;
 
-@synthesize total = _total;
-@synthesize paymentItems = _paymentItems;
-
-- (instancetype)initWithPayButtonEnabled:(BOOL)payButtonEnabled {
+- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+                      payButtonEnabled:(BOOL)payButtonEnabled {
+  DCHECK(paymentRequest);
   if ((self = [super initWithStyle:CollectionViewControllerStyleAppBar])) {
-    [self setTitle:l10n_util::GetNSString(
-                       IDS_IOS_PAYMENT_REQUEST_PAYMENT_ITEMS_TITLE)];
+    [self setTitle:l10n_util::GetNSString(IDS_PAYMENTS_ORDER_SUMMARY_LABEL)];
 
-    // Set up left (return) button.
+    // Set up leading (return) button.
     UIBarButtonItem* returnButton =
         [ChromeIcon templateBarButtonItemWithImage:[ChromeIcon backIcon]
                                             target:nil
@@ -74,11 +76,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
         setAccessibilityLabel:l10n_util::GetNSString(IDS_ACCNAME_BACK)];
     [self navigationItem].leftBarButtonItem = returnButton;
 
-    // Set up right (pay) button.
-    _payButton.reset([[MDCFlatButton alloc] init]);
-    [_payButton
-        setTitle:l10n_util::GetNSString(IDS_IOS_PAYMENT_REQUEST_PAY_BUTTON)
-        forState:UIControlStateNormal];
+    // Set up trailing (pay) button.
+    _payButton = [[MDCFlatButton alloc] init];
+    [_payButton setTitle:l10n_util::GetNSString(IDS_PAYMENTS_PAY_BUTTON)
+                forState:UIControlStateNormal];
     [_payButton setBackgroundColor:[[MDCPalette cr_bluePalette] tint500]
                           forState:UIControlStateNormal];
     [_payButton setInkColor:[UIColor colorWithWhite:1 alpha:0.2]];
@@ -97,8 +98,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     // height of the bar. We don't want that for the button so we use a UIView
     // here to contain the button instead and the button is vertically centered
     // inside the full bar height.
-    UIView* buttonView =
-        [[[UIView alloc] initWithFrame:CGRectZero] autorelease];
+    UIView* buttonView = [[UIView alloc] initWithFrame:CGRectZero];
     [buttonView addSubview:_payButton];
     // Navigation bar button items are aligned with the trailing edge of the
     // screen. Make the enclosing view larger here. The pay button will be
@@ -110,18 +110,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
     buttonView.bounds = buttonViewBounds;
 
     UIBarButtonItem* payButtonItem =
-        [[[UIBarButtonItem alloc] initWithCustomView:buttonView] autorelease];
+        [[UIBarButtonItem alloc] initWithCustomView:buttonView];
     [self navigationItem].rightBarButtonItem = payButtonItem;
+
+    _paymentRequest = paymentRequest;
   }
   return self;
-}
-
-- (id<PaymentItemsDisplayViewControllerDelegate>)delegate {
-  return _delegate.get();
-}
-
-- (void)setDelegate:(id<PaymentItemsDisplayViewControllerDelegate>)delegate {
-  _delegate.reset(delegate);
 }
 
 - (void)onReturn {
@@ -142,34 +136,32 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierPayment];
 
   // Add the total entry.
-  CollectionViewDetailItem* totalItem = [[[CollectionViewDetailItem alloc]
-      initWithType:ItemTypePaymentItemTotal] autorelease];
-  totalItem.accessibilityIdentifier = kPaymentItemsDisplayItemId;
-  totalItem.text = base::SysUTF16ToNSString(_total.label);
-
-  NSString* currencyCode = base::SysUTF16ToNSString(_total.amount.currency);
-  NSDecimalNumber* value = [NSDecimalNumber
-      decimalNumberWithString:SysUTF16ToNSString(_total.amount.value)];
-  totalItem.detailText =
-      payment_request_utils::FormattedCurrencyString(value, currencyCode);
+  PriceItem* totalItem =
+      [[PriceItem alloc] initWithType:ItemTypePaymentItemTotal];
+  totalItem.accessibilityIdentifier = kPaymentItemsDisplayItemID;
+  totalItem.item =
+      base::SysUTF16ToNSString(_paymentRequest->payment_details().total.label);
+  payments::CurrencyFormatter* currencyFormatter =
+      _paymentRequest->GetOrCreateCurrencyFormatter();
+  totalItem.price = SysUTF16ToNSString(l10n_util::GetStringFUTF16(
+      IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
+      base::UTF8ToUTF16(currencyFormatter->formatted_currency_code()),
+      currencyFormatter->Format(base::UTF16ToASCII(
+          _paymentRequest->payment_details().total.amount.value))));
 
   [model addItem:totalItem toSectionWithIdentifier:SectionIdentifierPayment];
 
   // Add the line item entries.
-  for (size_t i = 0; i < _paymentItems.size(); ++i) {
-    web::PaymentItem paymentItem = _paymentItems[i];
-    CollectionViewDetailItem* paymentItemItem =
-        [[[CollectionViewDetailItem alloc] initWithType:ItemTypePaymentItem]
-            autorelease];
-    paymentItemItem.accessibilityIdentifier = kPaymentItemsDisplayItemId;
-    paymentItemItem.text = base::SysUTF16ToNSString(paymentItem.label);
-
-    NSString* currencyCode =
-        base::SysUTF16ToNSString(paymentItem.amount.currency);
-    NSDecimalNumber* value = [NSDecimalNumber
-        decimalNumberWithString:SysUTF16ToNSString(paymentItem.amount.value)];
-    paymentItemItem.detailText =
-        payment_request_utils::FormattedCurrencyString(value, currencyCode);
+  for (const auto& paymentItem :
+       _paymentRequest->payment_details().display_items) {
+    PriceItem* paymentItemItem =
+        [[PriceItem alloc] initWithType:ItemTypePaymentItem];
+    paymentItemItem.accessibilityIdentifier = kPaymentItemsDisplayItemID;
+    paymentItemItem.item = base::SysUTF16ToNSString(paymentItem.label);
+    payments::CurrencyFormatter* currencyFormatter =
+        _paymentRequest->GetOrCreateCurrencyFormatter();
+    paymentItemItem.price = SysUTF16ToNSString(currencyFormatter->Format(
+        base::UTF16ToASCII(paymentItem.amount.value)));
     [model addItem:paymentItemItem
         toSectionWithIdentifier:SectionIdentifierPayment];
   }
@@ -178,7 +170,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.collectionView.accessibilityIdentifier =
-      kPaymentItemsDisplayCollectionViewId;
+      kPaymentItemsDisplayCollectionViewID;
 
   // Customize collection view settings.
   self.styler.cellStyle = MDCCollectionViewCellStyleCard;
@@ -196,26 +188,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.collectionViewModel itemTypeForIndexPath:indexPath];
   switch (itemType) {
     case ItemTypePaymentItemTotal: {
-      CollectionViewDetailCell* detailCell =
-          base::mac::ObjCCastStrict<CollectionViewDetailCell>(cell);
-      detailCell.textLabel.font =
+      PriceCell* priceCell = base::mac::ObjCCastStrict<PriceCell>(cell);
+      priceCell.itemLabel.font =
           [[MDFRobotoFontLoader sharedInstance] boldFontOfSize:14];
-      detailCell.textLabel.textColor = [[MDCPalette greyPalette] tint600];
-      detailCell.detailTextLabel.font =
+      priceCell.itemLabel.textColor = [[MDCPalette greyPalette] tint600];
+      priceCell.priceLabel.font =
           [[MDFRobotoFontLoader sharedInstance] boldFontOfSize:14];
-      detailCell.detailTextLabel.textColor = [[MDCPalette greyPalette] tint900];
+      priceCell.priceLabel.textColor = [[MDCPalette greyPalette] tint900];
       break;
     }
     case ItemTypePaymentItem: {
-      CollectionViewDetailCell* detailCell =
-          base::mac::ObjCCastStrict<CollectionViewDetailCell>(cell);
-      detailCell.textLabel.font =
+      PriceCell* priceCell = base::mac::ObjCCastStrict<PriceCell>(cell);
+      priceCell.itemLabel.font =
           [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:14];
-      detailCell.textLabel.textColor = [[MDCPalette greyPalette] tint900];
+      priceCell.itemLabel.textColor = [[MDCPalette greyPalette] tint900];
 
-      detailCell.detailTextLabel.font =
+      priceCell.priceLabel.font =
           [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:14];
-      detailCell.detailTextLabel.textColor = [[MDCPalette greyPalette] tint900];
+      priceCell.priceLabel.textColor = [[MDCPalette greyPalette] tint900];
       break;
     }
     default:

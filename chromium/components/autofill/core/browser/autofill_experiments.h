@@ -25,11 +25,13 @@ namespace autofill {
 struct Suggestion;
 
 extern const base::Feature kAutofillCreditCardAssist;
-extern const base::Feature kAutofillCreditCardSigninPromo;
 extern const base::Feature kAutofillScanCardholderName;
 extern const base::Feature kAutofillCreditCardPopupLayout;
+extern const base::Feature kAutofillCreditCardLastUsedDateDisplay;
+extern const base::Feature kAutofillUkmLogging;
 extern const char kCreditCardSigninPromoImpressionLimitParamKey[];
 extern const char kAutofillCreditCardPopupSettingsSuggestionValueKey[];
+extern const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[];
 
 // Returns true if autofill should be enabled. See also
 // IsInAutofillSuggestionsDisabledExperiment below.
@@ -41,15 +43,8 @@ bool IsAutofillEnabled(const PrefService* pref_service);
 // disables providing suggestions.
 bool IsInAutofillSuggestionsDisabledExperiment();
 
-// Returns whether the Autofill credit card signin promo should be shown.
-bool IsAutofillCreditCardSigninPromoEnabled();
-
 // Returns whether the Autofill credit card assist infobar should be shown.
 bool IsAutofillCreditCardAssistEnabled();
-
-// Returns the maximum number of impressions of the credit card signin promo, or
-// 0 if there are no limits.
-int GetCreditCardSigninPromoImpressionLimit();
 
 // Returns true if the user should be offered to locally store unmasked cards.
 // This controls whether the option is presented at all rather than the default
@@ -66,6 +61,13 @@ bool IsCreditCardUploadEnabled(const PrefService* pref_service,
 // Returns whether the new Autofill credit card popup layout experiment is
 // enabled.
 bool IsAutofillCreditCardPopupLayoutExperimentEnabled();
+
+// Returns whether Autofill credit card last used date display experiment is
+// enabled.
+bool IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled();
+
+// Returns whether Autofill credit card last used date shows expiration date.
+bool ShowExpirationDateInAutofillCreditCardLastUsedDate();
 
 // Returns the background color for credit card autofill popup, or
 // |SK_ColorTRANSPARENT| if the new credit card autofill popup layout experiment
@@ -98,6 +100,9 @@ void ModifyAutofillCreditCardSuggestion(struct Suggestion* suggestion);
 // if the margin isn't configured in an experiment to tweak autofill popup
 // layout.
 unsigned int GetPopupMargin();
+
+// Returns whether the feature to log UKMs is enabled.
+bool IsUkmLoggingEnabled();
 
 }  // namespace autofill
 

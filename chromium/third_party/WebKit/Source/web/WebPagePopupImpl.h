@@ -76,13 +76,14 @@ class WebPagePopupImpl final : public WebPagePopup,
 
  private:
   // WebWidget functions
+  void setSuppressFrameRequestsWorkaroundFor704763Only(bool) final;
   void beginFrame(double lastFrameTimeMonotonic) override;
   void updateAllLifecyclePhases() override;
   void willCloseLayerTreeView() override;
   void paint(WebCanvas*, const WebRect&) override;
   void resize(const WebSize&) override;
   void close() override;
-  WebInputEventResult handleInputEvent(const WebInputEvent&) override;
+  WebInputEventResult handleInputEvent(const WebCoalescedInputEvent&) override;
   void setFocus(bool) override;
   bool isPagePopup() const override { return true; }
   bool isAcceleratedCompositingActive() const override {

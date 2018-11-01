@@ -14,6 +14,7 @@
 #include "chrome/browser/chromeos/printing/cups_print_job.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
+#include "chrome/browser/chromeos/printing/cups_print_job_notification_manager.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
@@ -59,9 +60,12 @@ class CupsPrintJobNotificationDelegate : public NotificationDelegate {
 
 }  // namespace
 
-CupsPrintJobNotification::CupsPrintJobNotification(CupsPrintJob* print_job,
-                                                   Profile* profile)
-    : notification_id_(print_job->GetUniqueId()),
+CupsPrintJobNotification::CupsPrintJobNotification(
+    CupsPrintJobNotificationManager* manager,
+    CupsPrintJob* print_job,
+    Profile* profile)
+    : notification_manager_(manager),
+      notification_id_(print_job->GetUniqueId()),
       print_job_(print_job),
       delegate_(new CupsPrintJobNotificationDelegate(this)),
       profile_(profile) {
@@ -84,6 +88,10 @@ CupsPrintJobNotification::CupsPrintJobNotification(CupsPrintJob* print_job,
 CupsPrintJobNotification::~CupsPrintJobNotification() {}
 
 void CupsPrintJobNotification::OnPrintJobStatusUpdated() {
+  // After cancellation, ignore all updates.
+  if (cancelled_by_user_)
+    return;
+
   UpdateNotification();
 }
 
@@ -91,6 +99,10 @@ void CupsPrintJobNotification::CloseNotificationByUser() {
   closed_in_middle_ = true;
   g_browser_process->message_center()->RemoveNotification(GetNotificationId(),
                                                           true /* by_user */);
+  if (!print_job_ ||
+      print_job_->state() == CupsPrintJob::State::STATE_SUSPENDED) {
+    notification_manager_->OnPrintJobNotificationRemoved(this);
+  }
 }
 
 void CupsPrintJobNotification::ClickOnNotificationButton(int button_index) {
@@ -109,9 +121,8 @@ void CupsPrintJobNotification::ClickOnNotificationButton(int button_index) {
         // only clean up the nofitication if cancel was successful.
         g_browser_process->notification_ui_manager()->CancelById(
             GetNotificationId(), profile_id);
-        // |print_job_| is deleted by CupsPrintManager when the print job is
-        // cancelled, thus set it to nullptr.
-        print_job_ = nullptr;
+        cancelled_by_user_ = true;
+        notification_manager_->OnPrintJobNotificationRemoved(this);
       }
       break;
     case ButtonCommand::PAUSE_PRINTING:
@@ -130,8 +141,6 @@ const std::string& CupsPrintJobNotification::GetNotificationId() {
 }
 
 void CupsPrintJobNotification::UpdateNotification() {
-  DCHECK(print_job_->state() != CupsPrintJob::State::STATE_CANCELLED);
-
   UpdateNotificationTitle();
   UpdateNotificationIcon();
   UpdateNotificationBodyMessage();
@@ -160,6 +169,11 @@ void CupsPrintJobNotification::UpdateNotification() {
         GetNotificationId(), profile_id);
     g_browser_process->notification_ui_manager()->Add(*notification_, profile_);
   }
+
+  // |print_job_| will be deleted by CupsPrintJobManager if the job is finished
+  // and we are not supposed to get any notification update after that.
+  if (print_job_->IsJobFinished())
+    print_job_ = nullptr;
 }
 
 void CupsPrintJobNotification::UpdateNotificationTitle() {
@@ -184,11 +198,11 @@ void CupsPrintJobNotification::UpdateNotificationIcon() {
       notification_->set_icon(
           bundle.GetImageNamed(IDR_PRINT_NOTIFICATION_DONE));
       break;
+    case CupsPrintJob::State::STATE_CANCELLED:
     case CupsPrintJob::State::STATE_ERROR:
       notification_->set_icon(
           bundle.GetImageNamed(IDR_PRINT_NOTIFICATION_ERROR));
-      break;
-    default:
+    case CupsPrintJob::State::STATE_NONE:
       break;
   }
 }
@@ -220,6 +234,7 @@ void CupsPrintJobNotification::UpdateNotificationBodyMessage() {
           base::IntToString16(print_job_->total_page_number()),
           base::UTF8ToUTF16(print_job_->printer().display_name()));
       break;
+    case CupsPrintJob::State::STATE_CANCELLED:
     case CupsPrintJob::State::STATE_ERROR:
       message = l10n_util::GetStringFUTF16(
           IDS_PRINT_JOB_ERROR_NOTIFICATION_MESSAGE,
@@ -246,7 +261,7 @@ void CupsPrintJobNotification::UpdateNotificationType() {
     case CupsPrintJob::State::STATE_WAITING:
     case CupsPrintJob::State::STATE_DOCUMENT_DONE:
     case CupsPrintJob::State::STATE_ERROR:
-    default:
+    case CupsPrintJob::State::STATE_CANCELLED:
       notification_->set_type(message_center::NOTIFICATION_TYPE_SIMPLE);
       break;
   }
@@ -280,6 +295,7 @@ CupsPrintJobNotification::GetButtonCommands() const {
       commands->push_back(ButtonCommand::CANCEL_PRINTING);
       break;
     case CupsPrintJob::State::STATE_ERROR:
+    case CupsPrintJob::State::STATE_CANCELLED:
       commands->push_back(ButtonCommand::GET_HELP);
       break;
     default:

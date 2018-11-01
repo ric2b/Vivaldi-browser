@@ -133,17 +133,15 @@ static int calcScrollbarThicknessUsing(SizeType sizeType,
 }
 
 void LayoutScrollbarPart::computeScrollbarWidth() {
-  if (!m_scrollbar->owningLayoutObject())
+  if (!m_scrollbar->styleSource())
     return;
   // FIXME: We are querying layout information but nothing guarantees that it's
   // up to date, especially since we are called at style change.
   // FIXME: Querying the style's border information doesn't work on table cells
   // with collapsing borders.
-  int visibleSize =
-      (m_scrollbar->owningLayoutObject()->size().width() -
-       m_scrollbar->owningLayoutObject()->style()->borderLeftWidth() -
-       m_scrollbar->owningLayoutObject()->style()->borderRightWidth())
-          .toInt();
+  int visibleSize = m_scrollbar->styleSource()->size().width() -
+                    m_scrollbar->styleSource()->style()->borderLeftWidth() -
+                    m_scrollbar->styleSource()->style()->borderRightWidth();
   int w = calcScrollbarThicknessUsing(MainOrPreferredSize, style()->width(),
                                       visibleSize);
   int minWidth =
@@ -163,17 +161,15 @@ void LayoutScrollbarPart::computeScrollbarWidth() {
 }
 
 void LayoutScrollbarPart::computeScrollbarHeight() {
-  if (!m_scrollbar->owningLayoutObject())
+  if (!m_scrollbar->styleSource())
     return;
   // FIXME: We are querying layout information but nothing guarantees that it's
   // up to date, especially since we are called at style change.
   // FIXME: Querying the style's border information doesn't work on table cells
   // with collapsing borders.
-  int visibleSize =
-      (m_scrollbar->owningLayoutObject()->size().height() -
-       m_scrollbar->owningLayoutObject()->style()->borderTopWidth() -
-       m_scrollbar->owningLayoutObject()->style()->borderBottomWidth())
-          .toInt();
+  int visibleSize = m_scrollbar->styleSource()->size().height() -
+                    m_scrollbar->styleSource()->style()->borderTopWidth() -
+                    m_scrollbar->styleSource()->style()->borderBottomWidth();
   int h = calcScrollbarThicknessUsing(MainOrPreferredSize, style()->height(),
                                       visibleSize);
   int minHeight =
@@ -215,7 +211,7 @@ void LayoutScrollbarPart::styleDidChange(StyleDifference diff,
   setInline(false);
   clearPositionedState();
   setFloating(false);
-  if (oldStyle && (diff.needsPaintInvalidation() || diff.needsLayout()))
+  if (oldStyle && (diff.needsFullPaintInvalidation() || diff.needsLayout()))
     setNeedsPaintInvalidation();
 }
 
@@ -225,8 +221,8 @@ void LayoutScrollbarPart::imageChanged(WrappedImagePtr image,
   LayoutBlock::imageChanged(image, rect);
 }
 
-LayoutObject* LayoutScrollbarPart::layoutObjectOwningScrollbar() const {
-  return (!m_scrollbar) ? nullptr : m_scrollbar->owningLayoutObject();
+LayoutObject* LayoutScrollbarPart::scrollbarStyleSource() const {
+  return (!m_scrollbar) ? nullptr : m_scrollbar->styleSource();
 }
 
 void LayoutScrollbarPart::setNeedsPaintInvalidation() {
@@ -245,12 +241,6 @@ void LayoutScrollbarPart::setNeedsPaintInvalidation() {
   }
 
   m_scrollableArea->setScrollCornerNeedsPaintInvalidation();
-}
-
-LayoutRect LayoutScrollbarPart::visualRect() const {
-  // This returns the combined bounds of all scrollbar parts, which is
-  // sufficient for correctness but not as tight as it could be.
-  return m_scrollableArea->visualRectForScrollbarParts();
 }
 
 }  // namespace blink

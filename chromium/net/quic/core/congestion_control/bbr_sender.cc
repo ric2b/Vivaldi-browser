@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <sstream>
 
-#include "base/stl_util.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
@@ -26,8 +25,6 @@ const QuicByteCount kMinimumCongestionWindow = 4 * kMaxSegmentSize;
 const float kHighGain = 2.885f;
 // The gain used to drain the queue after the slow start.
 const float kDrainGain = 1.f / kHighGain;
-// The gain used to set the congestion window during most of the modes.
-const float kCongestionWindowGain = 2;
 // The cycle of gains used during the PROBE_BW stage.
 const float kPacingGain[] = {1.25, 0.75, 1, 1, 1, 1, 1, 1};
 
@@ -61,7 +58,8 @@ BbrSender::DebugState::DebugState(const BbrSender& sender)
       min_rtt_timestamp(sender.min_rtt_timestamp_),
       recovery_state(sender.recovery_state_),
       recovery_window(sender.recovery_window_),
-      last_sample_is_app_limited(sender.last_sample_is_app_limited_) {}
+      last_sample_is_app_limited(sender.last_sample_is_app_limited_),
+      end_of_app_limited_phase(sender.sampler_.end_of_app_limited_phase()) {}
 
 BbrSender::DebugState::DebugState(const DebugState& state) = default;
 
@@ -88,6 +86,10 @@ BbrSender::BbrSender(const RttStats* rtt_stats,
       pacing_rate_(QuicBandwidth::Zero()),
       pacing_gain_(1),
       congestion_window_gain_(1),
+      congestion_window_gain_constant_(
+          static_cast<float>(base::GetFlag(FLAGS_quic_bbr_cwnd_gain))),
+      rtt_variance_weight_(static_cast<float>(
+          base::GetFlag(FLAGS_quic_bbr_rtt_variation_weight))),
       cycle_current_offset_(0),
       last_cycle_start_(QuicTime::Zero()),
       is_at_full_bandwidth_(false),
@@ -99,9 +101,7 @@ BbrSender::BbrSender(const RttStats* rtt_stats,
       last_sample_is_app_limited_(false),
       recovery_state_(NOT_IN_RECOVERY),
       end_recovery_at_(0),
-      recovery_window_(max_congestion_window_),
-      enforce_startup_pacing_rate_increase_(
-          FLAGS_quic_reloadable_flag_quic_bbr_faster_startup) {
+      recovery_window_(max_congestion_window_) {
   EnterStartupMode();
 }
 
@@ -244,7 +244,7 @@ void BbrSender::EnterStartupMode() {
 
 void BbrSender::EnterProbeBandwidthMode(QuicTime now) {
   mode_ = PROBE_BW;
-  congestion_window_gain_ = kCongestionWindowGain;
+  congestion_window_gain_ = congestion_window_gain_constant_;
 
   // Pick a random offset for the gain cycle out of {0, 2..7} range. 1 is
   // excluded because in that case increased gain and decreased gain would not
@@ -457,23 +457,21 @@ void BbrSender::CalculatePacingRate() {
   }
 
   QuicBandwidth target_rate = pacing_gain_ * BandwidthEstimate();
-
-  // Ensure that the pacing rate does not drop too low during the startup.
-  if (!is_at_full_bandwidth_ && enforce_startup_pacing_rate_increase_) {
-    // Pace at the rate of initial_window / RTT as soon as RTT measurements are
-    // available.
-    if (pacing_rate_.IsZero() && !rtt_stats_->min_rtt().IsZero()) {
-      pacing_rate_ = QuicBandwidth::FromBytesAndTimeDelta(
-          initial_congestion_window_, rtt_stats_->min_rtt());
-      return;
-    }
-
-    // Do not decrease the pacing rate during the startup.
-    pacing_rate_ = std::max(pacing_rate_, target_rate);
+  if (is_at_full_bandwidth_) {
+    pacing_rate_ = target_rate;
     return;
   }
 
-  pacing_rate_ = target_rate;
+  // Pace at the rate of initial_window / RTT as soon as RTT measurements are
+  // available.
+  if (pacing_rate_.IsZero() && !rtt_stats_->min_rtt().IsZero()) {
+    pacing_rate_ = QuicBandwidth::FromBytesAndTimeDelta(
+        initial_congestion_window_, rtt_stats_->min_rtt());
+    return;
+  }
+
+  // Do not decrease the pacing rate during the startup.
+  pacing_rate_ = std::max(pacing_rate_, target_rate);
 }
 
 void BbrSender::CalculateCongestionWindow(QuicByteCount bytes_acked) {
@@ -483,6 +481,11 @@ void BbrSender::CalculateCongestionWindow(QuicByteCount bytes_acked) {
 
   QuicByteCount target_window =
       GetTargetCongestionWindow(congestion_window_gain_);
+
+  if (rtt_variance_weight_ > 0.f && !BandwidthEstimate().IsZero()) {
+    target_window += rtt_variance_weight_ * rtt_stats_->mean_deviation() *
+                     BandwidthEstimate();
+  }
 
   // Instead of immediately setting the target CWND as the new one, BBR grows
   // the CWND towards |target_window| by only increasing it |bytes_acked| at a

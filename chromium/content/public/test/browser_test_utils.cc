@@ -1128,6 +1128,10 @@ bool IsWebContentsBrowserPluginFocused(content::WebContents* web_contents) {
   return browser_plugin_guest ? browser_plugin_guest->focused() : false;
 }
 
+RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents) {
+  return static_cast<WebContentsImpl*>(web_contents)->GetMouseLockWidget();
+}
+
 #if defined(USE_AURA)
 void SendRoutedTouchTapSequence(content::WebContents* web_contents,
                                 gfx::Point point) {
@@ -1167,13 +1171,18 @@ void SendRoutedGestureTapSequence(content::WebContents* web_contents,
 // should probably merge these.
 namespace {
 
-bool ContainsSurfaceId(cc::SurfaceId container_surface_id,
+bool ContainsSurfaceId(const cc::SurfaceId& container_surface_id,
                        RenderWidgetHostViewChildFrame* target_view) {
   if (!container_surface_id.is_valid())
     return false;
-  for (cc::SurfaceId id :
-       GetSurfaceManager()->GetSurfaceForId(container_surface_id)
-           ->referenced_surfaces()) {
+
+  cc::Surface* container_surface =
+      GetSurfaceManager()->GetSurfaceForId(container_surface_id);
+  if (!container_surface || !container_surface->active_referenced_surfaces())
+    return false;
+
+  for (const cc::SurfaceId& id :
+       *container_surface->active_referenced_surfaces()) {
     if (id == target_view->SurfaceIdForTesting() ||
         ContainsSurfaceId(id, target_view))
       return true;
@@ -1854,6 +1863,17 @@ void PwnMessageHelper::FileSystemWrite(RenderProcessHost* process,
   // If this started an async operation, wait for it to complete.
   if (waiter.did_start_update())
     waiter.WaitForEndUpdate();
+}
+
+void PwnMessageHelper::LockMouse(RenderProcessHost* process,
+                                 int routing_id,
+                                 bool user_gesture,
+                                 bool last_unlocked_by_target,
+                                 bool privileged) {
+  IPC::IpcSecurityTestUtil::PwnMessageReceived(
+      process->GetChannel(),
+      ViewHostMsg_LockMouse(routing_id, user_gesture, last_unlocked_by_target,
+                            privileged));
 }
 
 }  // namespace content

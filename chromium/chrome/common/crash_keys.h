@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_keys.h"
-#include "third_party/kasko/kasko_features.h"
 
 namespace base {
 class CommandLine;
@@ -101,8 +100,8 @@ extern const char kHungRendererReason[];
 extern const char kThirdPartyModulesLoaded[];
 extern const char kThirdPartyModulesNotLoaded[];
 
-// Whether the machine is domain joined is only sent on Windows.
-extern const char kEnrolledToDomain[];
+// Whether the machine is enterprise managed (only sent on Windows).
+extern const char kIsEnterpriseManaged[];
 #endif
 
 // Number of input event send IPC failures. Added to debug
@@ -145,13 +144,11 @@ extern const char kSendAction[];
 // In the CrApplication, records information about the current event.
 extern const char kNSEvent[];
 
-}  // namespace mac
-#endif
+// TEMPORARY: Information about Toolbar.nib, stored right after it's supposed
+// to have loaded.  https://crbug.com/685985
+extern const char kToolbarNibInfo[];
 
-#if BUILDFLAG(ENABLE_KASKO)
-// Used to correlate a report sent via Kasko with one sent via Breakpad.
-extern const char kKaskoGuid[];
-extern const char kKaskoEquivalentGuid[];
+}  // namespace mac
 #endif
 
 // Numbers of active views.

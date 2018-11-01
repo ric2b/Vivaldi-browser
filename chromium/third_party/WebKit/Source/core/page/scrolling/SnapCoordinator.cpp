@@ -65,10 +65,10 @@ void SnapCoordinator::snapContainerDidChange(LayoutBox& snapContainer,
   if (scrollSnapType == ScrollSnapTypeNone) {
     // TODO(majidvp): Track and report these removals to CompositorWorker
     // instance responsible for snapping
-    m_snapContainers.remove(&snapContainer);
+    m_snapContainers.erase(&snapContainer);
     snapContainer.clearSnapAreas();
   } else {
-    m_snapContainers.add(&snapContainer);
+    m_snapContainers.insert(&snapContainer);
   }
 
   // TODO(majidvp): Add logic to correctly handle orphaned snap areas here.

@@ -33,6 +33,7 @@
 #include "content/shell/renderer/layout_test/layout_test_content_renderer_client.h"
 #include "content/shell/renderer/shell_content_renderer_client.h"
 #include "content/shell/utility/shell_content_utility_client.h"
+#include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
 #include "media/base/mime_util.h"
 #include "net/cookies/cookie_monster.h"
@@ -41,6 +42,7 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
+#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
@@ -166,11 +168,12 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
     command_line.AppendSwitch(switches::kProcessPerTab);
     command_line.AppendSwitch(switches::kEnableLogging);
     command_line.AppendSwitch(switches::kAllowFileAccessFromFiles);
-    // only default to osmesa if the flag isn't already specified.
+    // only default to a software GL if the flag isn't already specified.
     if (!command_line.HasSwitch(switches::kUseGpuInTests) &&
         !command_line.HasSwitch(switches::kUseGL)) {
-      command_line.AppendSwitchASCII(switches::kUseGL,
-                                     gl::kGLImplementationOSMesaName);
+      command_line.AppendSwitchASCII(
+          switches::kUseGL,
+          gl::GetGLImplementationName(gl::GetSoftwareGLImplementation()));
     }
     command_line.AppendSwitch(switches::kSkipGpuDataLoading);
     command_line.AppendSwitchASCII(

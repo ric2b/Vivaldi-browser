@@ -16,12 +16,27 @@ struct URLRequestRedirectInfo;
 [Native]
 struct URLLoaderStatus;
 
+// This enum corresponds to net::RequestPriority. See its comments for details.
+enum RequestPriority {
+  kThrottled = 0,
+  kIdle,
+  kLowest,
+  kLow,
+  kMedium,
+  kHighest
+};
+
 // Destroying a URLLoader will cancel the associated request.
 interface URLLoader {
   // If the associated request has |auto_follow_redirects| set to false,
   // then upon receiving an URLResponse with a non-NULL |redirect_url| field,
   // |FollowRedirect| may be called to load the URL indicated by the redirect.
   FollowRedirect();
+
+  // Sets the request priority.
+  // |intra_priority_value| is a lesser priority which is used to prioritize
+  // requests within a given priority level.
+  SetPriority(RequestPriority priority, int32 intra_priority_value);
 };
 
 // Opaque handle passed from the browser process to a child process to manage
@@ -35,7 +50,8 @@ interface DownloadedTempFile {
 interface URLLoaderClient {
   // Called when the response head is received. |downloaded_file| is non-null in
   // the 'download_to_file' case.
-  OnReceiveResponse(URLResponseHead head, DownloadedTempFile? downloaded_file);
+  OnReceiveResponse(URLResponseHead head,
+                    DownloadedTempFile? downloaded_file);
 
   // Called when the request has been redirected. The receiver is expected to
   // call FollowRedirect or cancel the request.
@@ -47,6 +63,12 @@ interface URLLoaderClient {
   // TODO(yhirano): Remove |encoded_length| and use OnTransferSizeUpdated
   // instead.
   OnDataDownloaded(int64 data_length, int64 encoded_length);
+
+  // Called when the service made some progress on the file upload. This is
+  // called only when the request has an upload data.
+  // The implementation should call the response closure when the client is
+  // ready to receive the next upload progress.
+  OnUploadProgress(int64 current_position, int64 total_size) => ();
 
   // Called when cached metadata from a resource request is ready.
   OnReceiveCachedMetadata(array<uint8> data);

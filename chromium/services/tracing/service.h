@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -38,7 +38,7 @@ class Service : public service_manager::Service,
   // service_manager::Service implementation.
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) override;
-  bool OnStop() override;
+  bool OnServiceManagerConnectionLost() override;
 
   // service_manager::InterfaceFactory<mojom::Factory>:
   void Create(const service_manager::Identity& remote_identity,
@@ -75,7 +75,7 @@ class Service : public service_manager::Service,
 
   mojo::BindingSet<mojom::Factory> bindings_;
   std::unique_ptr<DataSink> sink_;
-  ScopedVector<Recorder> recorder_impls_;
+  std::vector<std::unique_ptr<Recorder>> recorder_impls_;
   mojo::InterfacePtrSet<mojom::Provider> provider_ptrs_;
   mojo::Binding<mojom::Collector> collector_binding_;
   mojo::BindingSet<mojom::StartupPerformanceDataCollector>

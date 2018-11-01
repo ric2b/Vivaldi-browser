@@ -31,11 +31,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/compositor.h"
 
-#if defined(OS_ANDROID)
-#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
-#include "content/test/mock_gpu_channel_establish_factory.h"
-#endif
-
 namespace content {
 namespace {
 class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
@@ -51,26 +46,19 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
 
 class MockCrossProcessFrameConnector : public CrossProcessFrameConnector {
  public:
-  MockCrossProcessFrameConnector()
-      : CrossProcessFrameConnector(nullptr), last_scale_factor_received_(0.f) {}
+  MockCrossProcessFrameConnector() : CrossProcessFrameConnector(nullptr) {}
   ~MockCrossProcessFrameConnector() override {}
 
-  void SetChildFrameSurface(const cc::SurfaceId& surface_id,
-                            const gfx::Size& frame_size,
-                            float scale_factor,
+  void SetChildFrameSurface(const cc::SurfaceInfo& surface_info,
                             const cc::SurfaceSequence& sequence) override {
-    last_surface_id_received_ = surface_id;
-    last_frame_size_received_ = frame_size;
-    last_scale_factor_received_ = scale_factor;
+    last_surface_info_ = surface_info;
   }
 
   RenderWidgetHostViewBase* GetParentRenderWidgetHostView() override {
     return nullptr;
   }
 
-  cc::SurfaceId last_surface_id_received_;
-  gfx::Size last_frame_size_received_;
-  float last_scale_factor_received_;
+  cc::SurfaceInfo last_surface_info_;
 };
 
 }  // namespace
@@ -86,10 +74,6 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
 #if !defined(OS_ANDROID)
     ImageTransportFactory::InitializeForUnitTests(
         base::WrapUnique(new NoTransportImageTransportFactory));
-#else
-    ContextProviderFactoryImpl::Initialize(&gpu_channel_factory_);
-    ui::ContextProviderFactory::SetInstance(
-        ContextProviderFactoryImpl::GetInstance());
 #endif
 
     MockRenderProcessHost* process_host =
@@ -116,14 +100,11 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
 #if !defined(OS_ANDROID)
     ImageTransportFactory::Terminate();
-#else
-    ui::ContextProviderFactory::SetInstance(nullptr);
-    ContextProviderFactoryImpl::Terminate();
 #endif
   }
 
   cc::SurfaceId GetSurfaceId() const {
-    return cc::SurfaceId(view_->frame_sink_id_, view_->local_frame_id_);
+    return cc::SurfaceId(view_->frame_sink_id_, view_->local_surface_id_);
   }
 
  protected:
@@ -136,10 +117,6 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   RenderWidgetHostImpl* widget_host_;
   RenderWidgetHostViewChildFrame* view_;
   MockCrossProcessFrameConnector* test_frame_connector_;
-
-#if defined(OS_ANDROID)
-  MockGpuChannelEstablishFactory gpu_channel_factory_;
-#endif
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrameTest);
@@ -157,7 +134,16 @@ cc::CompositorFrame CreateDelegatedFrame(float scale_factor,
   return frame;
 }
 
-TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
+// http://crbug.com/696919
+#if defined(OS_WIN)
+#define MAYBE_VisibilityTest DISABLED_VisibilityTest
+#define MAYBE_SwapCompositorFrame DISABLED_SwapCompositorFrame
+#else
+#define MAYBE_VisibilityTest VisibilityTest
+#define MAYBE_SwapCompositorFrame SwapCompositorFrame
+#endif
+
+TEST_F(RenderWidgetHostViewChildFrameTest, MAYBE_VisibilityTest) {
   view_->Show();
   ASSERT_TRUE(view_->IsShowing());
 
@@ -167,7 +153,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
 
 // Verify that OnSwapCompositorFrame behavior is correct when a delegated
 // frame is received from a renderer process.
-TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
+TEST_F(RenderWidgetHostViewChildFrameTest, MAYBE_SwapCompositorFrame) {
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
   float scale_factor = 1.f;
@@ -192,9 +178,8 @@ TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
 
     // Surface ID should have been passed to CrossProcessFrameConnector to
     // be sent to the embedding renderer.
-    EXPECT_EQ(id, test_frame_connector_->last_surface_id_received_);
-    EXPECT_EQ(view_size, test_frame_connector_->last_frame_size_received_);
-    EXPECT_EQ(scale_factor, test_frame_connector_->last_scale_factor_received_);
+    EXPECT_EQ(cc::SurfaceInfo(id, scale_factor, view_size),
+              test_frame_connector_->last_surface_info_);
   }
 }
 

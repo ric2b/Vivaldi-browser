@@ -16,7 +16,6 @@ NativeSettingsObserverWin::NativeSettingsObserverWin(
   DCHECK(delegate_);
 }
 
-NativeSettingsObserverWin::~NativeSettingsObserverWin() {
-}
+NativeSettingsObserverWin::~NativeSettingsObserverWin() {}
 
 }  // namespace vivaldi

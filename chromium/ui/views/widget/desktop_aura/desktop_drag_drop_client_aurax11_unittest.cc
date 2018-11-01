@@ -395,7 +395,6 @@ class DesktopDragDropClientAuraX11Test : public ViewsTestBase {
     drag_bitmap.eraseARGB(0xFF, 0, 0, 0);
     gfx::ImageSkia drag_image(gfx::ImageSkia::CreateFrom1xBitmap(drag_bitmap));
     data.provider().SetDragImage(drag_image, gfx::Vector2d());
-    bool cancelled;
 
     return client_->StartDragAndDrop(
         data,
@@ -403,8 +402,7 @@ class DesktopDragDropClientAuraX11Test : public ViewsTestBase {
         widget_->GetNativeWindow(),
         gfx::Point(),
         ui::DragDropTypes::DRAG_COPY,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
-        cancelled);
+        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
   }
 
   // ViewsTestBase:
@@ -873,7 +871,6 @@ class DesktopDragDropClientAuraX11ChromeSourceTargetTest
   int StartDragAndDrop() {
     ui::OSExchangeData data;
     data.SetString(base::ASCIIToUTF16("Test"));
-    bool cancelled;
 
     return client_->StartDragAndDrop(
         data,
@@ -881,8 +878,7 @@ class DesktopDragDropClientAuraX11ChromeSourceTargetTest
         widget_->GetNativeWindow(),
         gfx::Point(),
         ui::DragDropTypes::DRAG_COPY,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
-        cancelled);
+        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
   }
 
   // ViewsTestBase:

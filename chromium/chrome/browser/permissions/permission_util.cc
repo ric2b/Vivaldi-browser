@@ -15,60 +15,84 @@
 
 using content::PermissionType;
 
-std::size_t PermissionTypeHash::operator()(
-    const content::PermissionType& type) const {
-  return static_cast<size_t>(type);
-}
-
 // The returned strings must match the RAPPOR metrics in rappor.xml,
 // and any Field Trial configs for the Permissions kill switch e.g.
 // Permissions.Action.Geolocation etc..
 std::string PermissionUtil::GetPermissionString(
-    content::PermissionType permission) {
-  switch (permission) {
-    case content::PermissionType::GEOLOCATION:
+    ContentSettingsType content_type) {
+  switch (content_type) {
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
       return "Geolocation";
-    case content::PermissionType::NOTIFICATIONS:
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
       return "Notifications";
-    case content::PermissionType::MIDI_SYSEX:
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       return "MidiSysEx";
-    case content::PermissionType::PUSH_MESSAGING:
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
       return "PushMessaging";
-    case content::PermissionType::DURABLE_STORAGE:
+    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
       return "DurableStorage";
-    case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       return "ProtectedMediaIdentifier";
-    case content::PermissionType::AUDIO_CAPTURE:
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
       return "AudioCapture";
-    case content::PermissionType::VIDEO_CAPTURE:
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
       return "VideoCapture";
-    case content::PermissionType::MIDI:
+    case CONTENT_SETTINGS_TYPE_MIDI:
       return "Midi";
-    case content::PermissionType::BACKGROUND_SYNC:
+    case CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC:
       return "BackgroundSync";
-    case content::PermissionType::FLASH:
+    case CONTENT_SETTINGS_TYPE_PLUGINS:
       return "Flash";
-    case content::PermissionType::NUM:
+    default:
       break;
   }
   NOTREACHED();
   return std::string();
 }
 
-PermissionRequestType PermissionUtil::GetRequestType(
-    content::PermissionType type) {
+std::string PermissionUtil::ConvertContentSettingsTypeToSafeBrowsingName(
+    ContentSettingsType permission_type) {
+  switch (permission_type) {
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
+      return "GEOLOCATION";
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
+      return "NOTIFICATIONS";
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
+      return "MIDI_SYSEX";
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
+      return "PUSH_MESSAGING";
+    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
+      return "DURABLE_STORAGE";
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
+      return "PROTECTED_MEDIA_IDENTIFIER";
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
+      return "AUDIO_CAPTURE";
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
+      return "VIDEO_CAPTURE";
+    case CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC:
+      return "BACKGROUND_SYNC";
+    case CONTENT_SETTINGS_TYPE_PLUGINS:
+      return "FLASH";
+    default:
+      break;
+  }
+  NOTREACHED();
+  return std::string();
+}
+
+PermissionRequestType PermissionUtil::GetRequestType(ContentSettingsType type) {
   switch (type) {
-    case content::PermissionType::GEOLOCATION:
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
       return PermissionRequestType::PERMISSION_GEOLOCATION;
-    case content::PermissionType::NOTIFICATIONS:
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
       return PermissionRequestType::PERMISSION_NOTIFICATIONS;
-    case content::PermissionType::MIDI_SYSEX:
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       return PermissionRequestType::PERMISSION_MIDI_SYSEX;
-    case content::PermissionType::PUSH_MESSAGING:
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
       return PermissionRequestType::PERMISSION_PUSH_MESSAGING;
-    case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       return PermissionRequestType::PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
-    case content::PermissionType::FLASH:
+    case CONTENT_SETTINGS_TYPE_PLUGINS:
       return PermissionRequestType::PERMISSION_FLASH;
     default:
       NOTREACHED();
@@ -87,6 +111,10 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::GEOLOCATION;
   } else if (type == CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
     *out = PermissionType::NOTIFICATIONS;
+  } else if (type == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING) {
+    *out = PermissionType::PUSH_MESSAGING;
+  } else if (type == CONTENT_SETTINGS_TYPE_MIDI) {
+    *out = PermissionType::MIDI;
   } else if (type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
     *out = PermissionType::MIDI_SYSEX;
   } else if (type == CONTENT_SETTINGS_TYPE_DURABLE_STORAGE) {
@@ -97,6 +125,8 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::AUDIO_CAPTURE;
   } else if (type == CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC) {
     *out = PermissionType::BACKGROUND_SYNC;
+  } else if (type == CONTENT_SETTINGS_TYPE_PLUGINS) {
+    *out = PermissionType::FLASH;
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   } else if (type == CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER) {
     *out = PermissionType::PROTECTED_MEDIA_IDENTIFIER;
@@ -158,10 +188,7 @@ PermissionUtil::ScopedRevocationReporter::~ScopedRevocationReporter() {
   ContentSetting final_content_setting = settings_map->GetContentSetting(
       primary_url_, secondary_url_, content_type_, std::string());
   if (final_content_setting != CONTENT_SETTING_ALLOW) {
-    PermissionType permission_type;
-    if (PermissionUtil::GetPermissionType(content_type_, &permission_type)) {
-      PermissionUmaUtil::PermissionRevoked(permission_type, source_ui_,
-                                           primary_url_, profile_);
-    }
+    PermissionUmaUtil::PermissionRevoked(content_type_, source_ui_,
+                                         primary_url_, profile_);
   }
 }

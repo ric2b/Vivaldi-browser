@@ -33,14 +33,14 @@
 // For non-debug builds, everything is disabled by default, except for the
 // RELEASE_ASSERT family of macros.
 
-#include "base/allocator/oom.h"
+#include <stdarg.h>
+#include "base/allocator/partition_allocator/oom.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "wtf/Compiler.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/WTFExport.h"
 #include "wtf/build_config.h"
-#include <stdarg.h>
 
 #if OS(WIN)
 #include <windows.h>
@@ -50,16 +50,8 @@
 #define LOG_DISABLED !DCHECK_IS_ON()
 #endif
 
-// These helper functions are always declared, but not necessarily always
-// defined if the corresponding function is disabled.
-
-WTF_EXPORT void WTFReportAssertionFailure(const char* file,
-                                          int line,
-                                          const char* function,
-                                          const char* assertion);
 // WTFLogAlways() is deprecated. crbug.com/638849
 WTF_EXPORT PRINTF_FORMAT(1, 2) void WTFLogAlways(const char* format, ...);
-WTF_EXPORT void WTFReportBacktrace(int framesToShow = 31);
 
 namespace WTF {
 

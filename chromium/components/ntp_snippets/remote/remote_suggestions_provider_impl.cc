@@ -8,13 +8,12 @@
 #include <iterator>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -22,30 +21,29 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "components/history/core/browser/history_service.h"
 #include "components/image_fetcher/image_decoder.h"
 #include "components/image_fetcher/image_fetcher.h"
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
+#include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
 #include "components/ntp_snippets/switches.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/variations/variations_associated_data.h"
-#include "grit/components_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "components/strings/grit/components_strings.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 
 namespace ntp_snippets {
 
 namespace {
 
-// Number of snippets requested to the server. Consider replacing sparse UMA
+// Number of suggestions requested to the server. Consider replacing sparse UMA
 // histograms with COUNTS() if this number increases beyond 50.
-const int kMaxSnippetCount = 10;
+const int kMaxSuggestionCount = 10;
 
-// Number of archived snippets we keep around in memory.
-const int kMaxArchivedSnippetCount = 200;
+// Number of archived suggestions we keep around in memory.
+const int kMaxArchivedSuggestionCount = 200;
 
 // Keys for storing CategoryContent info in prefs.
 const char kCategoryContentId[] = "id";
@@ -53,15 +51,12 @@ const char kCategoryContentTitle[] = "title";
 const char kCategoryContentProvidedByServer[] = "provided_by_server";
 const char kCategoryContentAllowFetchingMore[] = "allow_fetching_more";
 
-// TODO(treib): Remove after M57.
-const char kDeprecatedSnippetHostsPref[] = "ntp_snippets.hosts";
-
-template<typename SnippetPtrContainer>
-std::unique_ptr<std::vector<std::string>> GetSnippetIDVector(
-    const SnippetPtrContainer& snippets) {
+template <typename SuggestionPtrContainer>
+std::unique_ptr<std::vector<std::string>> GetSuggestionIDVector(
+    const SuggestionPtrContainer& suggestions) {
   auto result = base::MakeUnique<std::vector<std::string>>();
-  for (const auto& snippet : snippets) {
-    result->push_back(snippet->id());
+  for (const auto& suggestion : suggestions) {
+    result->push_back(suggestion->id());
   }
   return result;
 }
@@ -76,77 +71,81 @@ bool HasIntersection(const std::vector<std::string>& a,
   return false;
 }
 
-void EraseByPrimaryID(NTPSnippet::PtrVector* snippets,
+void EraseByPrimaryID(RemoteSuggestion::PtrVector* suggestions,
                       const std::vector<std::string>& ids) {
   std::set<std::string> ids_lookup(ids.begin(), ids.end());
-  snippets->erase(
-      std::remove_if(snippets->begin(), snippets->end(),
-                     [&ids_lookup](const std::unique_ptr<NTPSnippet>& snippet) {
-                       return base::ContainsValue(ids_lookup, snippet->id());
-                     }),
-      snippets->end());
-}
-
-void EraseMatchingSnippets(NTPSnippet::PtrVector* snippets,
-                           const NTPSnippet::PtrVector& compare_against) {
-  std::set<std::string> compare_against_ids;
-  for (const std::unique_ptr<NTPSnippet>& snippet : compare_against) {
-    const std::vector<std::string>& snippet_ids = snippet->GetAllIDs();
-    compare_against_ids.insert(snippet_ids.begin(), snippet_ids.end());
-  }
-  snippets->erase(
+  suggestions->erase(
       std::remove_if(
-          snippets->begin(), snippets->end(),
-          [&compare_against_ids](const std::unique_ptr<NTPSnippet>& snippet) {
-            return HasIntersection(snippet->GetAllIDs(), compare_against_ids);
+          suggestions->begin(), suggestions->end(),
+          [&ids_lookup](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+            return base::ContainsValue(ids_lookup, suggestion->id());
           }),
-      snippets->end());
+      suggestions->end());
 }
 
-void RemoveNullPointers(NTPSnippet::PtrVector* snippets) {
-  snippets->erase(
-      std::remove_if(
-          snippets->begin(), snippets->end(),
-          [](const std::unique_ptr<NTPSnippet>& snippet) { return !snippet; }),
-      snippets->end());
+void EraseMatchingSuggestions(
+    RemoteSuggestion::PtrVector* suggestions,
+    const RemoteSuggestion::PtrVector& compare_against) {
+  std::set<std::string> compare_against_ids;
+  for (const std::unique_ptr<RemoteSuggestion>& suggestion : compare_against) {
+    const std::vector<std::string>& suggestion_ids = suggestion->GetAllIDs();
+    compare_against_ids.insert(suggestion_ids.begin(), suggestion_ids.end());
+  }
+  suggestions->erase(
+      std::remove_if(suggestions->begin(), suggestions->end(),
+                     [&compare_against_ids](
+                         const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                       return HasIntersection(suggestion->GetAllIDs(),
+                                              compare_against_ids);
+                     }),
+      suggestions->end());
 }
 
-void RemoveIncompleteSnippets(NTPSnippet::PtrVector* snippets) {
+void RemoveNullPointers(RemoteSuggestion::PtrVector* suggestions) {
+  suggestions->erase(
+      std::remove_if(suggestions->begin(), suggestions->end(),
+                     [](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                       return !suggestion;
+                     }),
+      suggestions->end());
+}
+
+void RemoveIncompleteSuggestions(RemoteSuggestion::PtrVector* suggestions) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAddIncompleteSnippets)) {
     return;
   }
-  int num_snippets = snippets->size();
-  // Remove snippets that do not have all the info we need to display it to
+  int num_suggestions = suggestions->size();
+  // Remove suggestions that do not have all the info we need to display it to
   // the user.
-  snippets->erase(
-      std::remove_if(snippets->begin(), snippets->end(),
-                     [](const std::unique_ptr<NTPSnippet>& snippet) {
-                       return !snippet->is_complete();
+  suggestions->erase(
+      std::remove_if(suggestions->begin(), suggestions->end(),
+                     [](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                       return !suggestion->is_complete();
                      }),
-      snippets->end());
-  int num_snippets_removed = num_snippets - snippets->size();
+      suggestions->end());
+  int num_suggestions_removed = num_suggestions - suggestions->size();
   UMA_HISTOGRAM_BOOLEAN("NewTabPage.Snippets.IncompleteSnippetsAfterFetch",
-                        num_snippets_removed > 0);
-  if (num_snippets_removed > 0) {
+                        num_suggestions_removed > 0);
+  if (num_suggestions_removed > 0) {
     UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumIncompleteSnippets",
-                                num_snippets_removed);
+                                num_suggestions_removed);
   }
 }
 
 std::vector<ContentSuggestion> ConvertToContentSuggestions(
     Category category,
-    const NTPSnippet::PtrVector& snippets) {
+    const RemoteSuggestion::PtrVector& suggestions) {
   std::vector<ContentSuggestion> result;
-  for (const std::unique_ptr<NTPSnippet>& snippet : snippets) {
-    // TODO(sfiera): if a snippet is not going to be displayed, move it
+  for (const std::unique_ptr<RemoteSuggestion>& suggestion : suggestions) {
+    // TODO(sfiera): if a suggestion is not going to be displayed, move it
     // directly to content.dismissed on fetch. Otherwise, we might prune
-    // other snippets to get down to kMaxSnippetCount, only to hide one of the
-    // incomplete ones we kept.
-    if (!snippet->is_complete()) {
+    // other suggestions to get down to kMaxSuggestionCount, only to hide one of
+    // the incomplete ones we kept.
+    if (!suggestion->is_complete()) {
       continue;
     }
-    result.emplace_back(snippet->ToContentSuggestion(category));
+    result.emplace_back(suggestion->ToContentSuggestion(category));
   }
   return result;
 }
@@ -176,7 +175,7 @@ CachedImageFetcher::CachedImageFetcher(
   if (image_fetcher_) {
     image_fetcher_->SetImageFetcherDelegate(this);
     image_fetcher_->SetDataUseServiceName(
-        data_use_measurement::DataUseUserData::NTP_SNIPPETS);
+        data_use_measurement::DataUseUserData::NTP_SNIPPETS_THUMBNAILS);
   }
 }
 
@@ -188,12 +187,12 @@ void CachedImageFetcher::FetchSuggestionImage(
     const ImageFetchedCallback& callback) {
   database_->LoadImage(
       suggestion_id.id_within_category(),
-      base::Bind(&CachedImageFetcher::OnSnippetImageFetchedFromDatabase,
+      base::Bind(&CachedImageFetcher::OnImageFetchedFromDatabase,
                  base::Unretained(this), callback, suggestion_id, url));
 }
 
 // This function gets only called for caching the image data received from the
-// network. The actual decoding is done in OnSnippetImageDecodedFromDatabase().
+// network. The actual decoding is done in OnImageDecodedFromDatabase().
 void CachedImageFetcher::OnImageDataFetched(
     const std::string& id_within_category,
     const std::string& image_data) {
@@ -210,23 +209,26 @@ void CachedImageFetcher::OnImageDecodingDone(
   callback.Run(image);
 }
 
-void CachedImageFetcher::OnSnippetImageFetchedFromDatabase(
+void CachedImageFetcher::OnImageFetchedFromDatabase(
     const ImageFetchedCallback& callback,
     const ContentSuggestion::ID& suggestion_id,
     const GURL& url,
-    std::string data) {  // SnippetImageCallback requires nonconst reference.
+    std::string data) {  // SnippetImageCallback requires by-value.
   // |image_decoder_| is null in tests.
   if (image_decoder_ && !data.empty()) {
     image_decoder_->DecodeImage(
-        data, base::Bind(&CachedImageFetcher::OnSnippetImageDecodedFromDatabase,
-                         base::Unretained(this), callback, suggestion_id, url));
+        data,
+        // We're not dealing with multi-frame images.
+        /*desired_image_frame_size=*/gfx::Size(),
+        base::Bind(&CachedImageFetcher::OnImageDecodedFromDatabase,
+                   base::Unretained(this), callback, suggestion_id, url));
     return;
   }
   // Fetching from the DB failed; start a network fetch.
-  FetchSnippetImageFromNetwork(suggestion_id, url, callback);
+  FetchImageFromNetwork(suggestion_id, url, callback);
 }
 
-void CachedImageFetcher::OnSnippetImageDecodedFromDatabase(
+void CachedImageFetcher::OnImageDecodedFromDatabase(
     const ImageFetchedCallback& callback,
     const ContentSuggestion::ID& suggestion_id,
     const GURL& url,
@@ -237,10 +239,10 @@ void CachedImageFetcher::OnSnippetImageDecodedFromDatabase(
   }
   // If decoding the image failed, delete the DB entry.
   database_->DeleteImage(suggestion_id.id_within_category());
-  FetchSnippetImageFromNetwork(suggestion_id, url, callback);
+  FetchImageFromNetwork(suggestion_id, url, callback);
 }
 
-void CachedImageFetcher::FetchSnippetImageFromNetwork(
+void CachedImageFetcher::FetchImageFromNetwork(
     const ContentSuggestion::ID& suggestion_id,
     const GURL& url,
     const ImageFetchedCallback& callback) {
@@ -287,11 +289,9 @@ RemoteSuggestionsProviderImpl::RemoteSuggestionsProviderImpl(
       fetch_when_ready_(false),
       fetch_when_ready_interactive_(false),
       fetch_when_ready_callback_(nullptr),
-      provider_status_callback_(nullptr),
-      nuke_when_initialized_(false),
+      remote_suggestions_scheduler_(nullptr),
+      clear_history_dependent_state_when_initialized_(false),
       clock_(base::MakeUnique<base::DefaultClock>()) {
-  pref_service_->ClearPref(kDeprecatedSnippetHostsPref);
-
   RestoreCategoriesFromPrefs();
   // The articles category always exists. Add it if we didn't get it from prefs.
   // TODO(treib): Rethink this.
@@ -325,29 +325,27 @@ RemoteSuggestionsProviderImpl::~RemoteSuggestionsProviderImpl() = default;
 // static
 void RemoteSuggestionsProviderImpl::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
-  // TODO(treib): Remove after M57.
-  registry->RegisterListPref(kDeprecatedSnippetHostsPref);
   registry->RegisterListPref(prefs::kRemoteSuggestionCategories);
   registry->RegisterInt64Pref(prefs::kLastSuccessfulBackgroundFetchTime, 0);
 
   RemoteSuggestionsStatusService::RegisterProfilePrefs(registry);
 }
 
-void RemoteSuggestionsProviderImpl::SetProviderStatusCallback(
-    std::unique_ptr<ProviderStatusCallback> callback) {
-  provider_status_callback_ = std::move(callback);
+void RemoteSuggestionsProviderImpl::SetRemoteSuggestionsScheduler(
+    RemoteSuggestionsScheduler* scheduler) {
+  remote_suggestions_scheduler_ = scheduler;
   // Call the observer right away if we've reached any final state.
   NotifyStateChanged();
 }
 
 void RemoteSuggestionsProviderImpl::ReloadSuggestions() {
-  FetchSnippets(/*interactive_request=*/true,
-                /*callback=*/nullptr);
+  FetchSuggestions(/*interactive_request=*/true,
+                   /*callback=*/nullptr);
 }
 
 void RemoteSuggestionsProviderImpl::RefetchInTheBackground(
     std::unique_ptr<FetchStatusCallback> callback) {
-  FetchSnippets(/*interactive_request=*/false, std::move(callback));
+  FetchSuggestions(/*interactive_request=*/false, std::move(callback));
 }
 
 const RemoteSuggestionsFetcher*
@@ -355,7 +353,7 @@ RemoteSuggestionsProviderImpl::suggestions_fetcher_for_debugging() const {
   return suggestions_fetcher_.get();
 }
 
-void RemoteSuggestionsProviderImpl::FetchSnippets(
+void RemoteSuggestionsProviderImpl::FetchSuggestions(
     bool interactive_request,
     std::unique_ptr<FetchStatusCallback> callback) {
   if (!ready()) {
@@ -401,11 +399,11 @@ void RemoteSuggestionsProviderImpl::Fetch(
 RequestParams RemoteSuggestionsProviderImpl::BuildFetchParams() const {
   RequestParams result;
   result.language_code = application_language_code_;
-  result.count_to_fetch = kMaxSnippetCount;
+  result.count_to_fetch = kMaxSuggestionCount;
   for (const auto& map_entry : category_contents_) {
     const CategoryContent& content = map_entry.second;
-    for (const auto& dismissed_snippet : content.dismissed) {
-      result.excluded_ids.insert(dismissed_snippet->id());
+    for (const auto& dismissed_suggestion : content.dismissed) {
+      result.excluded_ids.insert(dismissed_suggestion->id());
     }
   }
   return result;
@@ -415,7 +413,7 @@ void RemoteSuggestionsProviderImpl::MarkEmptyCategoriesAsLoading() {
   for (const auto& item : category_contents_) {
     Category category = item.first;
     const CategoryContent& content = item.second;
-    if (content.snippets.empty()) {
+    if (content.suggestions.empty()) {
       UpdateCategoryStatus(category, CategoryStatus::AVAILABLE_LOADING);
     }
   }
@@ -454,13 +452,7 @@ void RemoteSuggestionsProviderImpl::ClearHistory(
   // Both time range and the filter are ignored and all suggestions are removed,
   // because it is not known which history entries were used for the suggestions
   // personalization.
-  if (!ready()) {
-    // No need to refresh the UI afterwards as we didn't provide any data to the
-    // UI so far.
-    nuke_when_initialized_ = true;
-  } else {
-    NukeAllSnippets();
-  }
+  ClearHistoryDependentState();
 }
 
 void RemoteSuggestionsProviderImpl::ClearCachedSuggestions(Category category) {
@@ -476,14 +468,14 @@ void RemoteSuggestionsProviderImpl::ClearCachedSuggestions(Category category) {
   // TODO(tschumann): We do the unnecessary checks for .empty() in many places
   // before calling database methods. Change the RemoteSuggestionsDatabase to
   // return early for those and remove the many if statements in this file.
-  if (!content->snippets.empty()) {
-    database_->DeleteSnippets(GetSnippetIDVector(content->snippets));
-    database_->DeleteImages(GetSnippetIDVector(content->snippets));
-    content->snippets.clear();
+  if (!content->suggestions.empty()) {
+    database_->DeleteSnippets(GetSuggestionIDVector(content->suggestions));
+    database_->DeleteImages(GetSuggestionIDVector(content->suggestions));
+    content->suggestions.clear();
   }
   if (!content->archived.empty()) {
-    database_->DeleteSnippets(GetSnippetIDVector(content->archived));
-    database_->DeleteImages(GetSnippetIDVector(content->archived));
+    database_->DeleteSnippets(GetSuggestionIDVector(content->archived));
+    database_->DeleteImages(GetSuggestionIDVector(content->archived));
     content->archived.clear();
   }
 }
@@ -521,36 +513,36 @@ void RemoteSuggestionsProviderImpl::ClearDismissedSuggestionsForDebugging(
     return;
   }
 
-  database_->DeleteSnippets(GetSnippetIDVector(content->dismissed));
+  database_->DeleteSnippets(GetSuggestionIDVector(content->dismissed));
   // The image got already deleted when the suggestion was dismissed.
 
   content->dismissed.clear();
 }
 
 // static
-int RemoteSuggestionsProviderImpl::GetMaxSnippetCountForTesting() {
-  return kMaxSnippetCount;
+int RemoteSuggestionsProviderImpl::GetMaxSuggestionCountForTesting() {
+  return kMaxSuggestionCount;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Private methods
 
-GURL RemoteSuggestionsProviderImpl::FindSnippetImageUrl(
+GURL RemoteSuggestionsProviderImpl::FindSuggestionImageUrl(
     const ContentSuggestion::ID& suggestion_id) const {
   DCHECK(base::ContainsKey(category_contents_, suggestion_id.category()));
 
   const CategoryContent& content =
       category_contents_.at(suggestion_id.category());
-  const NTPSnippet* snippet =
-      content.FindSnippet(suggestion_id.id_within_category());
-  if (!snippet) {
+  const RemoteSuggestion* suggestion =
+      content.FindSuggestion(suggestion_id.id_within_category());
+  if (!suggestion) {
     return GURL();
   }
-  return snippet->salient_image_url();
+  return suggestion->salient_image_url();
 }
 
 void RemoteSuggestionsProviderImpl::OnDatabaseLoaded(
-    NTPSnippet::PtrVector snippets) {
+    RemoteSuggestion::PtrVector suggestions) {
   if (state_ == State::ERROR_OCCURRED) {
     return;
   }
@@ -562,45 +554,45 @@ void RemoteSuggestionsProviderImpl::OnDatabaseLoaded(
   UMA_HISTOGRAM_MEDIUM_TIMES("NewTabPage.Snippets.DatabaseLoadTime",
                              database_load_time);
 
-  NTPSnippet::PtrVector to_delete;
-  for (std::unique_ptr<NTPSnippet>& snippet : snippets) {
-    Category snippet_category =
-        Category::FromRemoteCategory(snippet->remote_category_id());
-    auto content_it = category_contents_.find(snippet_category);
+  RemoteSuggestion::PtrVector to_delete;
+  for (std::unique_ptr<RemoteSuggestion>& suggestion : suggestions) {
+    Category suggestion_category =
+        Category::FromRemoteCategory(suggestion->remote_category_id());
+    auto content_it = category_contents_.find(suggestion_category);
     // We should already know about the category.
     if (content_it == category_contents_.end()) {
       DLOG(WARNING) << "Loaded a suggestion for unknown category "
-                    << snippet_category << " from the DB; deleting";
-      to_delete.emplace_back(std::move(snippet));
+                    << suggestion_category << " from the DB; deleting";
+      to_delete.emplace_back(std::move(suggestion));
       continue;
     }
     CategoryContent* content = &content_it->second;
-    if (snippet->is_dismissed()) {
-      content->dismissed.emplace_back(std::move(snippet));
+    if (suggestion->is_dismissed()) {
+      content->dismissed.emplace_back(std::move(suggestion));
     } else {
-      content->snippets.emplace_back(std::move(snippet));
+      content->suggestions.emplace_back(std::move(suggestion));
     }
   }
   if (!to_delete.empty()) {
-    database_->DeleteSnippets(GetSnippetIDVector(to_delete));
-    database_->DeleteImages(GetSnippetIDVector(to_delete));
+    database_->DeleteSnippets(GetSuggestionIDVector(to_delete));
+    database_->DeleteImages(GetSuggestionIDVector(to_delete));
   }
 
   // Sort the suggestions in each category.
   // TODO(treib): Persist the actual order in the DB somehow? crbug.com/654409
   for (auto& entry : category_contents_) {
     CategoryContent* content = &entry.second;
-    std::sort(content->snippets.begin(), content->snippets.end(),
-              [](const std::unique_ptr<NTPSnippet>& lhs,
-                 const std::unique_ptr<NTPSnippet>& rhs) {
+    std::sort(content->suggestions.begin(), content->suggestions.end(),
+              [](const std::unique_ptr<RemoteSuggestion>& lhs,
+                 const std::unique_ptr<RemoteSuggestion>& rhs) {
                 return lhs->score() > rhs->score();
               });
   }
 
-  // TODO(tschumann): If I move ClearExpiredDismissedSnippets() to the beginning
-  // of the function, it essentially does nothing but tests are still green. Fix
-  // this!
-  ClearExpiredDismissedSnippets();
+  // TODO(tschumann): If I move ClearExpiredDismissedSuggestions() to the
+  // beginning of the function, it essentially does nothing but tests are still
+  // green. Fix this!
+  ClearExpiredDismissedSuggestions();
   ClearOrphanedImages();
   FinishInitialization();
 }
@@ -632,38 +624,38 @@ void RemoteSuggestionsProviderImpl::OnFetchMoreFinished(
   Category category = fetched_category.category;
   CategoryContent* existing_content =
       UpdateCategoryInfo(category, fetched_category.info);
-  SanitizeReceivedSnippets(existing_content->dismissed,
-                           &fetched_category.snippets);
-  // We compute the result now before modifying |fetched_category.snippets|.
+  SanitizeReceivedSuggestions(existing_content->dismissed,
+                              &fetched_category.suggestions);
+  // We compute the result now before modifying |fetched_category.suggestions|.
   // However, we wait with notifying the caller until the end of the method when
   // all state is updated.
   std::vector<ContentSuggestion> result =
-      ConvertToContentSuggestions(category, fetched_category.snippets);
+      ConvertToContentSuggestions(category, fetched_category.suggestions);
 
-  // Fill up the newly fetched snippets with existing ones, store them, and
+  // Fill up the newly fetched suggestions with existing ones, store them, and
   // notify observers about new data.
-  while (fetched_category.snippets.size() <
-             static_cast<size_t>(kMaxSnippetCount) &&
-         !existing_content->snippets.empty()) {
-    fetched_category.snippets.emplace(
-        fetched_category.snippets.begin(),
-        std::move(existing_content->snippets.back()));
-    existing_content->snippets.pop_back();
+  while (fetched_category.suggestions.size() <
+             static_cast<size_t>(kMaxSuggestionCount) &&
+         !existing_content->suggestions.empty()) {
+    fetched_category.suggestions.emplace(
+        fetched_category.suggestions.begin(),
+        std::move(existing_content->suggestions.back()));
+    existing_content->suggestions.pop_back();
   }
   std::vector<std::string> to_dismiss =
-      *GetSnippetIDVector(existing_content->snippets);
+      *GetSuggestionIDVector(existing_content->suggestions);
   for (const auto& id : to_dismiss) {
     DismissSuggestionFromCategoryContent(existing_content, id);
   }
-  DCHECK(existing_content->snippets.empty());
+  DCHECK(existing_content->suggestions.empty());
 
-  IntegrateSnippets(existing_content, std::move(fetched_category.snippets));
+  IntegrateSuggestions(existing_content,
+                       std::move(fetched_category.suggestions));
 
   // TODO(tschumann): We should properly honor the existing category state,
-  // e.g. to make sure we don't serve results after the sign-out. Revisit this
-  // once the snippets fetcher supports concurrent requests. We can then see if
-  // Nuke should also cancel outstanding requests or we want to check the
-  // status.
+  // e.g. to make sure we don't serve results after the sign-out. Revisit this:
+  // Should Nuke also cancel outstanding requests, or do we want to check the
+  // status?
   UpdateCategoryStatus(category, CategoryStatus::AVAILABLE);
   // Notify callers and observers.
   fetching_callback.Run(Status::Success(), std::move(result));
@@ -694,10 +686,12 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
     content->included_in_last_server_response = false;
   }
 
-  // Clear up expired dismissed snippets before we use them to filter new ones.
-  ClearExpiredDismissedSnippets();
+  // Clear up expired dismissed suggestions before we use them to filter new
+  // ones.
+  ClearExpiredDismissedSuggestions();
 
-  // If snippets were fetched successfully, update our |category_contents_| from
+  // If suggestions were fetched successfully, update our |category_contents_|
+  // from
   // each category provided by the server.
   if (fetched_categories) {
     // TODO(treib): Reorder |category_contents_| to match the order we received
@@ -709,19 +703,20 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
       if (fetched_category.category == articles_category_) {
         UMA_HISTOGRAM_SPARSE_SLOWLY(
             "NewTabPage.Snippets.NumArticlesFetched",
-            std::min(fetched_category.snippets.size(),
-                     static_cast<size_t>(kMaxSnippetCount + 1)));
+            std::min(fetched_category.suggestions.size(),
+                     static_cast<size_t>(kMaxSuggestionCount + 1)));
       }
       category_ranker_->AppendCategoryIfNecessary(fetched_category.category);
       CategoryContent* content =
           UpdateCategoryInfo(fetched_category.category, fetched_category.info);
       content->included_in_last_server_response = true;
-      SanitizeReceivedSnippets(content->dismissed, &fetched_category.snippets);
-      IntegrateSnippets(content, std::move(fetched_category.snippets));
+      SanitizeReceivedSuggestions(content->dismissed,
+                                  &fetched_category.suggestions);
+      IntegrateSuggestions(content, std::move(fetched_category.suggestions));
     }
   }
 
-  // TODO(tschumann): The snippets fetcher needs to signal errors so that we
+  // TODO(tschumann): The suggestions fetcher needs to signal errors so that we
   // know why we received no data. If an error occured, none of the following
   // should take place.
 
@@ -741,8 +736,8 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
   DCHECK(content_it != category_contents_.end());
   const CategoryContent& content = content_it->second;
   UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumArticles",
-                              content.snippets.size());
-  if (content.snippets.empty() && !content.dismissed.empty()) {
+                              content.suggestions.size());
+  if (content.suggestions.empty() && !content.dismissed.empty()) {
     UMA_HISTOGRAM_COUNTS("NewTabPage.Snippets.NumArticlesZeroDueToDiscarded",
                          content.dismissed.size());
   }
@@ -752,73 +747,76 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
   }
 }
 
-void RemoteSuggestionsProviderImpl::ArchiveSnippets(
+void RemoteSuggestionsProviderImpl::ArchiveSuggestions(
     CategoryContent* content,
-    NTPSnippet::PtrVector* to_archive) {
-  // Archive previous snippets - move them at the beginning of the list.
+    RemoteSuggestion::PtrVector* to_archive) {
+  // Archive previous suggestions - move them at the beginning of the list.
   content->archived.insert(content->archived.begin(),
                            std::make_move_iterator(to_archive->begin()),
                            std::make_move_iterator(to_archive->end()));
   to_archive->clear();
 
-  // If there are more archived snippets than we want to keep, delete the
+  // If there are more archived suggestions than we want to keep, delete the
   // oldest ones by their fetch time (which are always in the back).
-  if (content->archived.size() > kMaxArchivedSnippetCount) {
-    NTPSnippet::PtrVector to_delete(
+  if (content->archived.size() > kMaxArchivedSuggestionCount) {
+    RemoteSuggestion::PtrVector to_delete(
         std::make_move_iterator(content->archived.begin() +
-                                kMaxArchivedSnippetCount),
+                                kMaxArchivedSuggestionCount),
         std::make_move_iterator(content->archived.end()));
-    content->archived.resize(kMaxArchivedSnippetCount);
-    database_->DeleteImages(GetSnippetIDVector(to_delete));
+    content->archived.resize(kMaxArchivedSuggestionCount);
+    database_->DeleteImages(GetSuggestionIDVector(to_delete));
   }
 }
 
-void RemoteSuggestionsProviderImpl::SanitizeReceivedSnippets(
-    const NTPSnippet::PtrVector& dismissed,
-    NTPSnippet::PtrVector* snippets) {
+void RemoteSuggestionsProviderImpl::SanitizeReceivedSuggestions(
+    const RemoteSuggestion::PtrVector& dismissed,
+    RemoteSuggestion::PtrVector* suggestions) {
   DCHECK(ready());
-  EraseMatchingSnippets(snippets, dismissed);
-  RemoveIncompleteSnippets(snippets);
+  EraseMatchingSuggestions(suggestions, dismissed);
+  RemoveIncompleteSuggestions(suggestions);
 }
 
-void RemoteSuggestionsProviderImpl::IntegrateSnippets(
+void RemoteSuggestionsProviderImpl::IntegrateSuggestions(
     CategoryContent* content,
-    NTPSnippet::PtrVector new_snippets) {
+    RemoteSuggestion::PtrVector new_suggestions) {
   DCHECK(ready());
 
-  // Do not touch the current set of snippets if the newly fetched one is empty.
+  // Do not touch the current set of suggestions if the newly fetched one is
+  // empty.
   // TODO(tschumann): This should go. If we get empty results we should update
   // accordingly and remove the old one (only of course if this was not received
   // through a fetch-more).
-  if (new_snippets.empty()) {
+  if (new_suggestions.empty()) {
     return;
   }
 
-  // It's entirely possible that the newly fetched snippets contain articles
+  // It's entirely possible that the newly fetched suggestions contain articles
   // that have been present before.
-  // We need to make sure to only delete and archive snippets that don't
+  // We need to make sure to only delete and archive suggestions that don't
   // appear with the same ID in the new suggestions (it's fine for additional
   // IDs though).
-  EraseByPrimaryID(&content->snippets, *GetSnippetIDVector(new_snippets));
+  EraseByPrimaryID(&content->suggestions,
+                   *GetSuggestionIDVector(new_suggestions));
   // Do not delete the thumbnail images as they are still handy on open NTPs.
-  database_->DeleteSnippets(GetSnippetIDVector(content->snippets));
-  // Note, that ArchiveSnippets will clear |content->snippets|.
-  ArchiveSnippets(content, &content->snippets);
+  database_->DeleteSnippets(GetSuggestionIDVector(content->suggestions));
+  // Note, that ArchiveSuggestions will clear |content->suggestions|.
+  ArchiveSuggestions(content, &content->suggestions);
 
-  database_->SaveSnippets(new_snippets);
+  database_->SaveSnippets(new_suggestions);
 
-  content->snippets = std::move(new_snippets);
+  content->suggestions = std::move(new_suggestions);
 }
 
 void RemoteSuggestionsProviderImpl::DismissSuggestionFromCategoryContent(
     CategoryContent* content,
     const std::string& id_within_category) {
-  auto it = std::find_if(
-      content->snippets.begin(), content->snippets.end(),
-      [&id_within_category](const std::unique_ptr<NTPSnippet>& snippet) {
-        return snippet->id() == id_within_category;
-      });
-  if (it == content->snippets.end()) {
+  auto it =
+      std::find_if(content->suggestions.begin(), content->suggestions.end(),
+                   [&id_within_category](
+                       const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                     return suggestion->id() == id_within_category;
+                   });
+  if (it == content->suggestions.end()) {
     return;
   }
 
@@ -827,10 +825,10 @@ void RemoteSuggestionsProviderImpl::DismissSuggestionFromCategoryContent(
   database_->SaveSnippet(**it);
 
   content->dismissed.push_back(std::move(*it));
-  content->snippets.erase(it);
+  content->suggestions.erase(it);
 }
 
-void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSnippets() {
+void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSuggestions() {
   std::vector<Category> categories_to_erase;
 
   const base::Time now = base::Time::Now();
@@ -839,21 +837,21 @@ void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSnippets() {
     Category category = item.first;
     CategoryContent* content = &item.second;
 
-    NTPSnippet::PtrVector to_delete;
-    // Move expired dismissed snippets over into |to_delete|.
-    for (std::unique_ptr<NTPSnippet>& snippet : content->dismissed) {
-      if (snippet->expiry_date() <= now) {
-        to_delete.emplace_back(std::move(snippet));
+    RemoteSuggestion::PtrVector to_delete;
+    // Move expired dismissed suggestions over into |to_delete|.
+    for (std::unique_ptr<RemoteSuggestion>& suggestion : content->dismissed) {
+      if (suggestion->expiry_date() <= now) {
+        to_delete.emplace_back(std::move(suggestion));
       }
     }
     RemoveNullPointers(&content->dismissed);
 
     // Delete the images.
-    database_->DeleteImages(GetSnippetIDVector(to_delete));
+    database_->DeleteImages(GetSuggestionIDVector(to_delete));
     // Delete the removed article suggestions from the DB.
-    database_->DeleteSnippets(GetSnippetIDVector(to_delete));
+    database_->DeleteSnippets(GetSuggestionIDVector(to_delete));
 
-    if (content->snippets.empty() && content->dismissed.empty() &&
+    if (content->suggestions.empty() && content->dismissed.empty() &&
         category != articles_category_ &&
         !content->included_in_last_server_response) {
       categories_to_erase.push_back(category);
@@ -869,20 +867,41 @@ void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSnippets() {
 }
 
 void RemoteSuggestionsProviderImpl::ClearOrphanedImages() {
-  auto alive_snippets = base::MakeUnique<std::set<std::string>>();
+  auto alive_suggestions = base::MakeUnique<std::set<std::string>>();
   for (const auto& entry : category_contents_) {
     const CategoryContent& content = entry.second;
-    for (const auto& snippet_ptr : content.snippets) {
-      alive_snippets->insert(snippet_ptr->id());
+    for (const auto& suggestion_ptr : content.suggestions) {
+      alive_suggestions->insert(suggestion_ptr->id());
     }
-    for (const auto& snippet_ptr : content.dismissed) {
-      alive_snippets->insert(snippet_ptr->id());
+    for (const auto& suggestion_ptr : content.dismissed) {
+      alive_suggestions->insert(suggestion_ptr->id());
     }
   }
-  database_->GarbageCollectImages(std::move(alive_snippets));
+  database_->GarbageCollectImages(std::move(alive_suggestions));
 }
 
-void RemoteSuggestionsProviderImpl::NukeAllSnippets() {
+void RemoteSuggestionsProviderImpl::ClearHistoryDependentState() {
+  if (!initialized()) {
+    clear_history_dependent_state_when_initialized_ = true;
+    return;
+  }
+
+  NukeAllSuggestions();
+  if (remote_suggestions_scheduler_) {
+    remote_suggestions_scheduler_->OnHistoryCleared();
+  }
+}
+
+void RemoteSuggestionsProviderImpl::ClearSuggestions() {
+  DCHECK(initialized());
+
+  NukeAllSuggestions();
+  if (remote_suggestions_scheduler_) {
+    remote_suggestions_scheduler_->OnSuggestionsCleared();
+  }
+}
+
+void RemoteSuggestionsProviderImpl::NukeAllSuggestions() {
   for (const auto& item : category_contents_) {
     Category category = item.first;
     const CategoryContent& content = item.second;
@@ -907,9 +926,9 @@ void RemoteSuggestionsProviderImpl::FetchSuggestionImage(
         FROM_HERE, base::Bind(callback, gfx::Image()));
     return;
   }
-  GURL image_url = FindSnippetImageUrl(suggestion_id);
+  GURL image_url = FindSuggestionImageUrl(suggestion_id);
   if (image_url.is_empty()) {
-    // As we don't know the corresponding snippet anymore, we don't expect to
+    // As we don't know the corresponding suggestion anymore, we don't expect to
     // find it in the database (and also can't fetch it remotely). Cut the
     // lookup short and return directly.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -920,29 +939,23 @@ void RemoteSuggestionsProviderImpl::FetchSuggestionImage(
 }
 
 void RemoteSuggestionsProviderImpl::EnterStateReady() {
-  if (nuke_when_initialized_) {
-    NukeAllSnippets();
-    nuke_when_initialized_ = false;
+  if (clear_history_dependent_state_when_initialized_) {
+    clear_history_dependent_state_when_initialized_ = false;
+    ClearHistoryDependentState();
   }
 
   auto article_category_it = category_contents_.find(articles_category_);
   DCHECK(article_category_it != category_contents_.end());
-  if (article_category_it->second.snippets.empty() || fetch_when_ready_) {
-    // TODO(jkrcal): Fetching snippets automatically upon creation of this
-    // lazily created service can cause troubles, e.g. in unit tests where
-    // network I/O is not allowed.
-    // Either add a DCHECK here that we actually are allowed to do network I/O
-    // or change the logic so that some explicit call is always needed for the
-    // network request.
-    FetchSnippets(fetch_when_ready_interactive_,
-                  std::move(fetch_when_ready_callback_));
+  if (fetch_when_ready_) {
+    FetchSuggestions(fetch_when_ready_interactive_,
+                     std::move(fetch_when_ready_callback_));
     fetch_when_ready_ = false;
   }
 
   for (const auto& item : category_contents_) {
     Category category = item.first;
     const CategoryContent& content = item.second;
-    // FetchSnippets has set the status to |AVAILABLE_LOADING| if relevant,
+    // FetchSuggestions has set the status to |AVAILABLE_LOADING| if relevant,
     // otherwise we transition to |AVAILABLE| here.
     if (content.status != CategoryStatus::AVAILABLE_LOADING) {
       UpdateCategoryStatus(category, CategoryStatus::AVAILABLE);
@@ -951,7 +964,7 @@ void RemoteSuggestionsProviderImpl::EnterStateReady() {
 }
 
 void RemoteSuggestionsProviderImpl::EnterStateDisabled() {
-  NukeAllSnippets();
+  ClearSuggestions();
 }
 
 void RemoteSuggestionsProviderImpl::EnterStateError() {
@@ -959,11 +972,11 @@ void RemoteSuggestionsProviderImpl::EnterStateError() {
 }
 
 void RemoteSuggestionsProviderImpl::FinishInitialization() {
-  if (nuke_when_initialized_) {
-    // We nuke here in addition to EnterStateReady, so that it happens even if
+  if (clear_history_dependent_state_when_initialized_) {
+    // We clear here in addition to EnterStateReady, so that it happens even if
     // we enter the DISABLED state below.
-    NukeAllSnippets();
-    nuke_when_initialized_ = false;
+    clear_history_dependent_state_when_initialized_ = false;
+    ClearHistoryDependentState();
   }
 
   // Note: Initializing the status service will run the callback right away with
@@ -991,12 +1004,9 @@ void RemoteSuggestionsProviderImpl::OnStatusChanged(
     case RemoteSuggestionsStatus::ENABLED_AND_SIGNED_IN:
       if (old_status == RemoteSuggestionsStatus::ENABLED_AND_SIGNED_OUT) {
         DCHECK(state_ == State::READY);
-        // Clear nonpersonalized suggestions.
-        NukeAllSnippets();
-        // Fetch personalized ones.
-        // TODO(jkrcal): Loop in SchedulingRemoteSuggestionsProvider somehow.
-        FetchSnippets(/*interactive_request=*/true,
-                      /*callback=*/nullptr);
+        // Clear nonpersonalized suggestions (and notify the scheduler there are
+        // no suggestions).
+        ClearSuggestions();
       } else {
         // Do not change the status. That will be done in EnterStateReady().
         EnterState(State::READY);
@@ -1006,12 +1016,9 @@ void RemoteSuggestionsProviderImpl::OnStatusChanged(
     case RemoteSuggestionsStatus::ENABLED_AND_SIGNED_OUT:
       if (old_status == RemoteSuggestionsStatus::ENABLED_AND_SIGNED_IN) {
         DCHECK(state_ == State::READY);
-        // Clear personalized suggestions.
-        NukeAllSnippets();
-        // Fetch nonpersonalized ones.
-        // TODO(jkrcal): Loop in SchedulingRemoteSuggestionsProvider somehow.
-        FetchSnippets(/*interactive_request=*/true,
-                      /*callback=*/nullptr);
+        // Clear personalized suggestions (and notify the scheduler there are
+        // no suggestions).
+        ClearSuggestions();
       } else {
         // Do not change the status. That will be done in EnterStateReady().
         EnterState(State::READY);
@@ -1021,11 +1028,6 @@ void RemoteSuggestionsProviderImpl::OnStatusChanged(
     case RemoteSuggestionsStatus::EXPLICITLY_DISABLED:
       EnterState(State::DISABLED);
       UpdateAllCategoryStatus(CategoryStatus::CATEGORY_EXPLICITLY_DISABLED);
-      break;
-
-    case RemoteSuggestionsStatus::SIGNED_OUT_AND_DISABLED:
-      EnterState(State::DISABLED);
-      UpdateAllCategoryStatus(CategoryStatus::SIGNED_OUT);
       break;
   }
 }
@@ -1050,6 +1052,7 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
 
       DVLOG(1) << "Entering state: READY";
       state_ = State::READY;
+      NotifyStateChanged();
       EnterStateReady();
       break;
 
@@ -1057,13 +1060,21 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
       DCHECK(state_ == State::NOT_INITED || state_ == State::READY);
 
       DVLOG(1) << "Entering state: DISABLED";
+      // TODO(jkrcal): Fix the fragility of the following code. Currently, it is
+      // important that we first change the state and notify the scheduler (as
+      // it will update its state) and only at last we EnterStateDisabled()
+      // which clears suggestions. Clearing suggestions namely notifies the
+      // scheduler to fetch them again, which is ignored because the scheduler
+      // is disabled. crbug/695447
       state_ = State::DISABLED;
+      NotifyStateChanged();
       EnterStateDisabled();
       break;
 
     case State::ERROR_OCCURRED:
       DVLOG(1) << "Entering state: ERROR_OCCURRED";
       state_ = State::ERROR_OCCURRED;
+      NotifyStateChanged();
       EnterStateError();
       break;
 
@@ -1071,12 +1082,10 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
       NOTREACHED();
       break;
   }
-
-  NotifyStateChanged();
 }
 
 void RemoteSuggestionsProviderImpl::NotifyStateChanged() {
-  if (!provider_status_callback_) {
+  if (!remote_suggestions_scheduler_) {
     return;
   }
 
@@ -1085,13 +1094,13 @@ void RemoteSuggestionsProviderImpl::NotifyStateChanged() {
       // Initial state, not sure yet whether active or not.
       break;
     case State::READY:
-      provider_status_callback_->Run(ProviderStatus::ACTIVE);
+      remote_suggestions_scheduler_->OnProviderActivated();
       break;
     case State::DISABLED:
-      provider_status_callback_->Run(ProviderStatus::INACTIVE);
+      remote_suggestions_scheduler_->OnProviderDeactivated();
       break;
     case State::ERROR_OCCURRED:
-      provider_status_callback_->Run(ProviderStatus::INACTIVE);
+      remote_suggestions_scheduler_->OnProviderDeactivated();
       break;
     case State::COUNT:
       NOTREACHED();
@@ -1105,7 +1114,7 @@ void RemoteSuggestionsProviderImpl::NotifyNewSuggestions(
   DCHECK(IsCategoryStatusAvailable(content.status));
 
   std::vector<ContentSuggestion> result =
-      ConvertToContentSuggestions(category, content.snippets);
+      ConvertToContentSuggestions(category, content.suggestions);
 
   DVLOG(1) << "NotifyNewSuggestions(): " << result.size()
            << " items in category " << category;
@@ -1140,30 +1149,31 @@ void RemoteSuggestionsProviderImpl::UpdateAllCategoryStatus(
 namespace {
 
 template <typename T>
-typename T::const_iterator FindSnippetInContainer(
+typename T::const_iterator FindSuggestionInContainer(
     const T& container,
     const std::string& id_within_category) {
-  return std::find_if(
-      container.begin(), container.end(),
-      [&id_within_category](const std::unique_ptr<NTPSnippet>& snippet) {
-        return snippet->id() == id_within_category;
-      });
+  return std::find_if(container.begin(), container.end(),
+                      [&id_within_category](
+                          const std::unique_ptr<RemoteSuggestion>& suggestion) {
+                        return suggestion->id() == id_within_category;
+                      });
 }
 
 }  // namespace
 
-const NTPSnippet* RemoteSuggestionsProviderImpl::CategoryContent::FindSnippet(
+const RemoteSuggestion*
+RemoteSuggestionsProviderImpl::CategoryContent::FindSuggestion(
     const std::string& id_within_category) const {
-  // Search for the snippet in current and archived snippets.
-  auto it = FindSnippetInContainer(snippets, id_within_category);
-  if (it != snippets.end()) {
+  // Search for the suggestion in current and archived suggestions.
+  auto it = FindSuggestionInContainer(suggestions, id_within_category);
+  if (it != suggestions.end()) {
     return it->get();
   }
-  auto archived_it = FindSnippetInContainer(archived, id_within_category);
+  auto archived_it = FindSuggestionInContainer(archived, id_within_category);
   if (archived_it != archived.end()) {
     return archived_it->get();
   }
-  auto dismissed_it = FindSnippetInContainer(dismissed, id_within_category);
+  auto dismissed_it = FindSuggestionInContainer(dismissed, id_within_category);
   if (dismissed_it != dismissed.end()) {
     return dismissed_it->get();
   }
@@ -1261,7 +1271,7 @@ void RemoteSuggestionsProviderImpl::StoreCategoriesToPrefs() {
     dict->SetBoolean(kCategoryContentProvidedByServer,
                      content.included_in_last_server_response);
     dict->SetBoolean(kCategoryContentAllowFetchingMore,
-                     content.info.has_more_action());
+                     content.info.has_fetch_action());
     list.Append(std::move(dict));
   }
   // Finally, store the result in the pref service.

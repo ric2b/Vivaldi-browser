@@ -40,7 +40,7 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/javascript_message_type.h"
+#include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
@@ -431,7 +431,7 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
                                                      ->GetController());
       FrameMsg_Navigate_Type::Value navigate_type =
           entry.restore_type() == RestoreType::NONE
-              ? FrameMsg_Navigate_Type::NORMAL
+              ? FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT
               : FrameMsg_Navigate_Type::RESTORE;
       std::unique_ptr<NavigationRequest> navigation_request =
           NavigationRequest::CreateBrowserInitiated(
@@ -504,7 +504,8 @@ TEST_F(RenderFrameHostManagerTest, NewTabPageProcesses) {
   // Navigate our first tab to the chrome url and then to the destination,
   // ensuring we grant bindings to the chrome URL.
   NavigateActiveAndCommit(kChromeUrl);
-  EXPECT_TRUE(active_rvh()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(main_rfh()->GetEnabledBindings() &
+              BINDINGS_POLICY_WEB_UI);
   NavigateActiveAndCommit(kDestUrl);
 
   EXPECT_FALSE(contents()->GetPendingMainFrame());
@@ -933,6 +934,8 @@ TEST_F(RenderFrameHostManagerTest, Navigate) {
   EXPECT_FALSE(host->GetSiteInstance()->HasSite());
   host->GetSiteInstance()->SetSite(kUrl1);
 
+  manager->GetRenderWidgetHostView()->SetBackgroundColor(SK_ColorRED);
+
   // 2) Navigate to next site. -------------------------
   const GURL kUrl2("http://www.google.com/foo");
   NavigationEntryImpl entry2(
@@ -951,6 +954,9 @@ TEST_F(RenderFrameHostManagerTest, Navigate) {
   EXPECT_TRUE(host == manager->current_frame_host());
   ASSERT_TRUE(host);
   EXPECT_TRUE(host->GetSiteInstance()->HasSite());
+
+  EXPECT_EQ(SK_ColorRED,
+            manager->GetRenderWidgetHostView()->background_color());
 
   // 3) Cross-site navigate to next site. --------------
   const GURL kUrl3("http://webkit.org/");
@@ -977,6 +983,9 @@ TEST_F(RenderFrameHostManagerTest, Navigate) {
 
   // We should observe RVH changed event.
   EXPECT_TRUE(change_observer.DidHostChange());
+
+  EXPECT_EQ(SK_ColorRED,
+            manager->GetRenderWidgetHostView()->background_color());
 }
 
 // Tests WebUI creation.
@@ -1033,8 +1042,7 @@ TEST_F(RenderFrameHostManagerTest, WebUI) {
 
   // Commit.
   manager->DidNavigateFrame(host, true);
-  EXPECT_TRUE(
-      host->render_view_host()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(host->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 }
 
 // Tests that we can open a WebUI link in a new tab from a WebUI page and still
@@ -1068,15 +1076,13 @@ TEST_F(RenderFrameHostManagerTest, WebUIInNewTab) {
   // It should already have bindings.
   EXPECT_EQ(host1, GetPendingFrameHost(manager1));
   EXPECT_NE(host1, manager1->current_frame_host());
-  EXPECT_TRUE(
-      host1->render_view_host()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(host1->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 
   // Commit and ensure we still have bindings.
   manager1->DidNavigateFrame(host1, true);
   SiteInstance* webui_instance = host1->GetSiteInstance();
   EXPECT_EQ(host1, manager1->current_frame_host());
-  EXPECT_TRUE(
-      host1->render_view_host()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(host1->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 
   // Now simulate clicking a link that opens in a new tab.
   std::unique_ptr<TestWebContents> web_contents2(
@@ -1101,8 +1107,7 @@ TEST_F(RenderFrameHostManagerTest, WebUIInNewTab) {
   EXPECT_EQ(host2, manager2->current_frame_host());
   EXPECT_TRUE(manager2->GetNavigatingWebUI());
   EXPECT_FALSE(host2->web_ui());
-  EXPECT_TRUE(
-      host2->render_view_host()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(host2->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 
   manager2->DidNavigateFrame(host2, true);
 }
@@ -1557,7 +1562,8 @@ TEST_F(RenderFrameHostManagerTest, EnableWebUIWithSwappedOutOpener) {
 
   // Ensure the RVH has WebUI bindings.
   TestRenderViewHost* rvh1 = test_rvh();
-  EXPECT_TRUE(rvh1->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(rvh1->GetMainFrame()->GetEnabledBindings() &
+              BINDINGS_POLICY_WEB_UI);
 
   // Create a new tab and simulate it being the opener for the main
   // tab.  It should be in the same SiteInstance.
@@ -1583,7 +1589,8 @@ TEST_F(RenderFrameHostManagerTest, EnableWebUIWithSwappedOutOpener) {
   EXPECT_FALSE(opener1_rvh->is_active());
 
   // Ensure the new RVH has WebUI bindings.
-  EXPECT_TRUE(rvh2->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(rvh2->GetMainFrame()->GetEnabledBindings() &
+              BINDINGS_POLICY_WEB_UI);
 }
 
 // Test that we reuse the same guest SiteInstance if we navigate across sites.
@@ -2143,8 +2150,7 @@ TEST_F(RenderFrameHostManagerTestWithSiteIsolation,
   RenderFrameHostManager* main_rfhm = contents()->GetRenderManagerForTesting();
   RenderFrameHostImpl* webui_rfh = NavigateToEntry(main_rfhm, webui_entry);
   EXPECT_EQ(webui_rfh, GetPendingFrameHost(main_rfhm));
-  EXPECT_TRUE(webui_rfh->render_view_host()->GetEnabledBindings() &
-              BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(webui_rfh->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 
   // Before it commits, do a cross-process navigation in a subframe.  This
   // should not grant WebUI bindings to the subframe's RVH.
@@ -2154,8 +2160,7 @@ TEST_F(RenderFrameHostManagerTestWithSiteIsolation,
       base::string16() /* title */, ui::PAGE_TRANSITION_LINK,
       false /* is_renderer_init */);
   RenderFrameHostImpl* bar_rfh = NavigateToEntry(subframe_rfhm, subframe_entry);
-  EXPECT_FALSE(bar_rfh->render_view_host()->GetEnabledBindings() &
-               BINDINGS_POLICY_WEB_UI);
+  EXPECT_FALSE(bar_rfh->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 }
 
 // Test that opener proxies are created properly with a cycle on the opener
@@ -2840,8 +2845,8 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
       NavigationRequest::CreateBrowserInitiated(
           contents()->GetFrameTree()->root(), frame_entry->url(),
           frame_entry->referrer(), *frame_entry, entry,
-          FrameMsg_Navigate_Type::NORMAL, PREVIEWS_UNSPECIFIED, false, false,
-          base::TimeTicks::Now(),
+          FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT, PREVIEWS_UNSPECIFIED,
+          false, false, base::TimeTicks::Now(),
           static_cast<NavigationControllerImpl*>(&controller()));
   manager->DidCreateNavigationRequest(navigation_request.get());
 
@@ -2901,8 +2906,8 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
       NavigationRequest::CreateBrowserInitiated(
           contents()->GetFrameTree()->root(), frame_entry->url(),
           frame_entry->referrer(), *frame_entry, entry,
-          FrameMsg_Navigate_Type::NORMAL, PREVIEWS_UNSPECIFIED, false, false,
-          base::TimeTicks::Now(),
+          FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT, PREVIEWS_UNSPECIFIED,
+          false, false, base::TimeTicks::Now(),
           static_cast<NavigationControllerImpl*>(&controller()));
   manager->DidCreateNavigationRequest(navigation_request.get());
 
@@ -2959,8 +2964,8 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
       NavigationRequest::CreateBrowserInitiated(
           contents()->GetFrameTree()->root(), frame_entry->url(),
           frame_entry->referrer(), *frame_entry, entry,
-          FrameMsg_Navigate_Type::NORMAL, PREVIEWS_UNSPECIFIED, false, false,
-          base::TimeTicks::Now(),
+          FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT, PREVIEWS_UNSPECIFIED,
+          false, false, base::TimeTicks::Now(),
           static_cast<NavigationControllerImpl*>(&controller()));
   manager->DidCreateNavigationRequest(navigation_request.get());
 

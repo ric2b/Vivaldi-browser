@@ -26,6 +26,9 @@
 
 #include "core/testing/Internals.h"
 
+#include <deque>
+#include <memory>
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptFunction.h"
@@ -67,11 +70,8 @@
 #include "core/editing/markers/DocumentMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/editing/spellcheck/IdleSpellCheckCallback.h"
 #include "core/editing/spellcheck/SpellCheckRequester.h"
 #include "core/editing/spellcheck/SpellChecker.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameView.h"
@@ -86,6 +86,7 @@
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/html/HTMLVideoElement.h"
 #include "core/html/canvas/CanvasFontCache.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/forms/FormController.h"
@@ -136,6 +137,8 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
 #include "platform/scroll/ScrollbarTheme.h"
@@ -146,30 +149,40 @@
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
+#include "v8/include/v8.h"
 #include "wtf/InstanceCounter.h"
 #include "wtf/Optional.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/dtoa.h"
 #include "wtf/text/StringBuffer.h"
-#include <deque>
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
 namespace {
 
-class InternalsIterationSource final
-    : public ValueIterable<int>::IterationSource {
+class UseCounterObserverImpl final : public UseCounter::Observer {
+  WTF_MAKE_NONCOPYABLE(UseCounterObserverImpl);
+
  public:
-  bool next(ScriptState* scriptState,
-            int& value,
-            ExceptionState& exceptionState) override {
-    if (m_index >= 5)
+  UseCounterObserverImpl(ScriptPromiseResolver* resolver,
+                         UseCounter::Feature feature)
+      : m_resolver(resolver), m_feature(feature) {}
+
+  bool onCountFeature(UseCounter::Feature feature) final {
+    if (m_feature != feature)
       return false;
-    value = m_index * m_index;
+    m_resolver->resolve(feature);
     return true;
   }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    UseCounter::Observer::trace(visitor);
+    visitor->trace(m_resolver);
+  }
+
+ private:
+  Member<ScriptPromiseResolver> m_resolver;
+  UseCounter::Feature m_feature;
 };
 
 }  // namespace
@@ -198,9 +211,7 @@ static WTF::Optional<DocumentMarker::MarkerTypes> markerTypesFrom(
 static SpellCheckRequester* spellCheckRequester(Document* document) {
   if (!document || !document->frame())
     return 0;
-  if (!RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
-    return &document->frame()->spellChecker().spellCheckRequester();
-  return &document->frame()->idleSpellCheckCallback().spellCheckRequester();
+  return &document->frame()->spellChecker().spellCheckRequester();
 }
 
 static ScrollableArea* scrollableAreaForNode(Node* node) {
@@ -278,13 +289,6 @@ InternalRuntimeFlags* Internals::runtimeFlags() const {
 
 unsigned Internals::workerThreadCount() const {
   return WorkerThread::workerThreadCount();
-}
-
-String Internals::address(Node* node) {
-  char buf[32];
-  sprintf(buf, "%p", node);
-
-  return String(buf);
 }
 
 GCObservation* Internals::observeGC(ScriptValue scriptValue) {
@@ -418,14 +422,14 @@ bool Internals::isLoadingFromMemoryCache(const String& url) {
   const String cacheIdentifier = m_document->fetcher()->getCacheIdentifier();
   Resource* resource = memoryCache()->resourceForURL(
       m_document->completeURL(url), cacheIdentifier);
-  return resource && resource->getStatus() == Resource::Cached;
+  return resource && resource->getStatus() == ResourceStatus::Cached;
 }
 
 int Internals::getResourcePriority(const String& url, Document* document) {
   if (!document)
     return ResourceLoadPriority::ResourceLoadPriorityUnresolved;
 
-  Resource* resource = document->fetcher()->allResources().get(
+  Resource* resource = document->fetcher()->allResources().at(
       URLTestHelpers::toKURL(url.utf8().data()));
 
   if (!resource)
@@ -439,7 +443,7 @@ String Internals::getResourceHeader(const String& url,
                                     Document* document) {
   if (!document)
     return String();
-  Resource* resource = document->fetcher()->allResources().get(
+  Resource* resource = document->fetcher()->allResources().at(
       URLTestHelpers::toKURL(url.utf8().data()));
   if (!resource)
     return String();
@@ -809,7 +813,7 @@ String Internals::shadowRootType(const Node* root,
     case ShadowRootType::Closed:
       return String("ClosedShadowRoot");
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return String("Unknown");
   }
 }
@@ -892,8 +896,15 @@ void Internals::setFormControlStateOfHistoryItem(
 DOMWindow* Internals::pagePopupWindow() const {
   if (!m_document)
     return nullptr;
-  if (Page* page = m_document->page())
-    return page->chromeClient().pagePopupWindowForTesting();
+  if (Page* page = m_document->page()) {
+    LocalDOMWindow* popup =
+        toLocalDOMWindow(page->chromeClient().pagePopupWindowForTesting());
+    if (popup) {
+      // We need to make the popup same origin so layout tests can access it.
+      popup->document()->updateSecurityOrigin(m_document->getSecurityOrigin());
+    }
+    return popup;
+  }
   return nullptr;
 }
 
@@ -906,6 +917,19 @@ ClientRect* Internals::absoluteCaretBounds(ExceptionState& exceptionState) {
 
   m_document->updateStyleAndLayoutIgnorePendingStylesheets();
   return ClientRect::create(frame()->selection().absoluteCaretBounds());
+}
+
+String Internals::textAffinity() {
+  if (frame()
+          ->page()
+          ->focusController()
+          .focusedFrame()
+          ->selection()
+          .selectionInDOMTree()
+          .affinity() == TextAffinity::Upstream) {
+    return "Upstream";
+  }
+  return "Downstream";
 }
 
 ClientRect* Internals::boundingBox(Element* element) {
@@ -1023,6 +1047,9 @@ String Internals::markerDescriptionForNode(Node* node,
 
 void Internals::addTextMatchMarker(const Range* range, bool isActive) {
   DCHECK(range);
+  if (!range->ownerDocument().view())
+    return;
+
   range->ownerDocument().updateStyleAndLayoutIgnorePendingStylesheets();
   range->ownerDocument().markers().addTextMatchMarker(EphemeralRange(range),
                                                       isActive);
@@ -1548,7 +1575,7 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot,
     // If the |graphicsLayer| sets the scrollingContent layer as its
     // scroll parent, consider it belongs to the scrolling layer and
     // mark the layer type as "scrolling".
-    if (!searchRoot->layoutObject()->hasTransformRelatedProperty() &&
+    if (!searchRoot->layoutObject().hasTransformRelatedProperty() &&
         searchRoot->scrollParent() &&
         searchRoot->parent() == searchRoot->scrollParent()) {
       *layerType = "scrolling";
@@ -1559,15 +1586,15 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot,
       // Only when the element's offsetParent == scroller's offsetParent we
       // can compute the element's relative position to the scrolling content
       // in this way.
-      if (searchRoot->layoutObject()->offsetParent() ==
-          searchRoot->parent()->layoutObject()->offsetParent()) {
-        LayoutBoxModelObject* current = searchRoot->layoutObject();
-        LayoutBoxModelObject* parent = searchRoot->parent()->layoutObject();
-        layerOffset->setWidth((parent->offsetLeft(parent->offsetParent()) -
-                               current->offsetLeft(parent->offsetParent()))
+      if (searchRoot->layoutObject().offsetParent() ==
+          searchRoot->parent()->layoutObject().offsetParent()) {
+        LayoutBoxModelObject& current = searchRoot->layoutObject();
+        LayoutBoxModelObject& parent = searchRoot->parent()->layoutObject();
+        layerOffset->setWidth((parent.offsetLeft(parent.offsetParent()) -
+                               current.offsetLeft(parent.offsetParent()))
                                   .toInt());
-        layerOffset->setHeight((parent->offsetTop(parent->offsetParent()) -
-                                current->offsetTop(parent->offsetParent()))
+        layerOffset->setHeight((parent.offsetTop(parent.offsetParent()) -
+                                current.offsetTop(parent.offsetParent()))
                                    .toInt());
         return searchRoot->parent();
       }
@@ -1575,7 +1602,7 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot,
 
     LayoutRect rect;
     PaintLayer::mapRectInPaintInvalidationContainerToBacking(
-        *searchRoot->layoutObject(), rect);
+        searchRoot->layoutObject(), rect);
     rect.move(searchRoot->compositedLayerMapping()
                   ->contentOffsetInCompositingLayer());
 
@@ -1601,7 +1628,7 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot,
       *layerType = "squashing";
       LayoutRect rect;
       PaintLayer::mapRectInPaintInvalidationContainerToBacking(
-          *searchRoot->layoutObject(), rect);
+          searchRoot->layoutObject(), rect);
       *layerOffset = IntSize(rect.x().toInt(), rect.y().toInt());
       return searchRoot;
     }
@@ -1703,7 +1730,7 @@ static void accumulateLayerRectList(PaintLayerCompositor* compositor,
     IntSize layerOffset;
     PaintLayer* paintLayer = findLayerForGraphicsLayer(
         compositor->rootLayer(), graphicsLayer, &layerOffset, &layerType);
-    Node* node = paintLayer ? paintLayer->layoutObject()->node() : 0;
+    Node* node = paintLayer ? paintLayer->layoutObject().node() : 0;
     for (size_t i = 0; i < layerRects.size(); ++i) {
       if (!layerRects[i].isEmpty()) {
         rects->append(node, layerType, layerOffset.width(),
@@ -2268,6 +2295,20 @@ void Internals::mediaPlayerPlayingRemotelyChanged(
     mediaElement->disconnectedFromRemoteDevice();
 }
 
+void Internals::setMediaElementNetworkState(HTMLMediaElement* mediaElement,
+                                            int state) {
+  DCHECK(mediaElement);
+  DCHECK(state >= WebMediaPlayer::NetworkState::NetworkStateEmpty);
+  DCHECK(state <= WebMediaPlayer::NetworkState::NetworkStateDecodeError);
+  mediaElement->setNetworkState(
+      static_cast<WebMediaPlayer::NetworkState>(state));
+}
+
+void Internals::setPersistent(HTMLVideoElement* videoElement, bool persistent) {
+  DCHECK(videoElement);
+  videoElement->onBecamePersistentVideo(persistent);
+}
+
 void Internals::registerURLSchemeAsBypassingContentSecurityPolicy(
     const String& scheme) {
   SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy(scheme);
@@ -2537,7 +2578,7 @@ static const char* cursorTypeToString(Cursor::Type cursorType) {
       return "Custom";
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return "UNKNOWN";
 }
 
@@ -2579,10 +2620,12 @@ bool Internals::cursorUpdatePending() const {
 DOMArrayBuffer* Internals::serializeObject(
     PassRefPtr<SerializedScriptValue> value) const {
   String stringValue = value->toWireString();
-  DOMArrayBuffer* buffer =
-      DOMArrayBuffer::createUninitialized(stringValue.length(), sizeof(UChar));
-  stringValue.copyTo(static_cast<UChar*>(buffer->data()), 0,
-                     stringValue.length());
+  DOMArrayBuffer* buffer = DOMArrayBuffer::createUninitializedOrNull(
+      stringValue.length(), sizeof(UChar));
+  if (buffer) {
+    stringValue.copyTo(static_cast<UChar*>(buffer->data()), 0,
+                       stringValue.length());
+  }
   return buffer;
 }
 
@@ -2597,9 +2640,45 @@ void Internals::forceReload(bool bypassCache) {
   if (!frame())
     return;
 
-  frame()->reload(
-      bypassCache ? FrameLoadTypeReloadBypassingCache : FrameLoadTypeReload,
-      ClientRedirectPolicy::NotClientRedirect);
+  frame()->reload(bypassCache ? FrameLoadTypeReloadBypassingCache
+                              : FrameLoadTypeReloadMainResource,
+                  ClientRedirectPolicy::NotClientRedirect);
+}
+
+Node* Internals::visibleSelectionAnchorNode() {
+  if (!frame())
+    return nullptr;
+  Position position =
+      frame()->selection().computeVisibleSelectionInDOMTreeDeprecated().base();
+  return position.isNull() ? nullptr : position.computeContainerNode();
+}
+
+unsigned Internals::visibleSelectionAnchorOffset() {
+  if (!frame())
+    return 0;
+  Position position =
+      frame()->selection().computeVisibleSelectionInDOMTreeDeprecated().base();
+  return position.isNull() ? 0 : position.computeOffsetInContainerNode();
+}
+
+Node* Internals::visibleSelectionFocusNode() {
+  if (!frame())
+    return nullptr;
+  Position position = frame()
+                          ->selection()
+                          .computeVisibleSelectionInDOMTreeDeprecated()
+                          .extent();
+  return position.isNull() ? nullptr : position.computeContainerNode();
+}
+
+unsigned Internals::visibleSelectionFocusOffset() {
+  if (!frame())
+    return 0;
+  Position position = frame()
+                          ->selection()
+                          .computeVisibleSelectionInDOMTreeDeprecated()
+                          .extent();
+  return position.isNull() ? 0 : position.computeOffsetInContainerNode();
 }
 
 ClientRect* Internals::selectionBounds(ExceptionState& exceptionState) {
@@ -2998,22 +3077,44 @@ float Internals::visualViewportScrollY() {
   return frame()->view()->getScrollableArea()->getScrollOffset().height();
 }
 
-ValueIterable<int>::IterationSource* Internals::startIteration(
-    ScriptState*,
-    ExceptionState&) {
-  return new InternalsIterationSource();
-}
-
-bool Internals::isUseCounted(Document* document, int useCounterId) {
-  if (useCounterId < 0 || useCounterId >= UseCounter::NumberOfFeatures)
+bool Internals::isUseCounted(Document* document, uint32_t feature) {
+  if (feature >= UseCounter::NumberOfFeatures)
     return false;
   return UseCounter::isCounted(*document,
-                               static_cast<UseCounter::Feature>(useCounterId));
+                               static_cast<UseCounter::Feature>(feature));
 }
 
 bool Internals::isCSSPropertyUseCounted(Document* document,
                                         const String& propertyName) {
   return UseCounter::isCounted(*document, propertyName);
+}
+
+ScriptPromise Internals::observeUseCounter(ScriptState* scriptState,
+                                           Document* document,
+                                           uint32_t feature) {
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
+  ScriptPromise promise = resolver->promise();
+  if (feature >= UseCounter::NumberOfFeatures) {
+    resolver->reject();
+    return promise;
+  }
+
+  UseCounter::Feature useCounterFeature =
+      static_cast<UseCounter::Feature>(feature);
+  if (UseCounter::isCounted(*document, useCounterFeature)) {
+    resolver->resolve();
+    return promise;
+  }
+
+  Page* page = document->page();
+  if (!page) {
+    resolver->reject();
+    return promise;
+  }
+
+  page->useCounter().addObserver(
+      new UseCounterObserverImpl(resolver, useCounterFeature));
+  return promise;
 }
 
 String Internals::unscopableAttribute() {
@@ -3060,15 +3161,6 @@ double Internals::monotonicTimeToZeroBasedDocumentTime(
     ExceptionState& exceptionState) {
   return m_document->loader()->timing().monotonicTimeToZeroBasedDocumentTime(
       platformTime);
-}
-
-void Internals::setMediaElementNetworkState(HTMLMediaElement* mediaElement,
-                                            int state) {
-  DCHECK(mediaElement);
-  DCHECK(state >= WebMediaPlayer::NetworkState::NetworkStateEmpty);
-  DCHECK(state <= WebMediaPlayer::NetworkState::NetworkStateDecodeError);
-  mediaElement->setNetworkState(
-      static_cast<WebMediaPlayer::NetworkState>(state));
 }
 
 String Internals::getScrollAnimationState(Node* node) const {

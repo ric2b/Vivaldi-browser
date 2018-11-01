@@ -1,3 +1,7 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
+#ifndef APP_VIVALDI_COMMANDS_H_
+#define APP_VIVALDI_COMMANDS_H_
 
 #define IDC_VIV_NEW_TAB 54001
 #define IDC_VIV_NEW_WINDOW 54002
@@ -57,3 +61,5 @@
 #define IDC_VIV_VIEW_MENU 54901
 #define IDC_VIV_TOOLS_MENU 54902
 #define IDC_VIV_HELP_MENU 54903
+
+#endif  // APP_VIVALDI_COMMANDS_H_

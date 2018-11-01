@@ -249,11 +249,10 @@ base::string16 PrependWindowsSessionPath(const base::char16* object) {
   return base::StringPrintf(L"\\Sessions\\%lu%ls", s_session_id, object);
 }
 
-// Checks if the sandbox should be let to run without a job object assigned.
+// Checks if the sandbox can be let to run without a job object assigned.
+// Returns true if the job object has to be applied to the sandbox and false
+// otherwise.
 bool ShouldSetJobLevel(const base::CommandLine& cmd_line) {
-  if (!cmd_line.HasSwitch(switches::kAllowNoSandboxJob))
-    return true;
-
   // Windows 8 allows nested jobs so we don't need to check if we are in other
   // job.
   if (base::win::GetVersion() >= base::win::VERSION_WIN8)
@@ -277,6 +276,25 @@ bool ShouldSetJobLevel(const base::CommandLine& cmd_line) {
   if (job_info.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_BREAKAWAY_OK)
     return true;
 
+  // Lastly in place of the flag which was supposed to be used only for running
+  // Chrome in remote sessions we do this check explicitly here.
+  // According to MS this flag can be false for a remote session only on Windows
+  // Server 2012 and newer so if we do the check last we should be on the safe
+  // side. See: https://msdn.microsoft.com/en-us/library/aa380798.aspx.
+  if (!::GetSystemMetrics(SM_REMOTESESSION)) {
+    // Measure how often we would have decided to apply the sandbox but the
+    // user actually wanted to avoid it.
+    // TODO(pastarmovj): Remove this check and the flag altogether once we are
+    // convinced that the automatic logic is good enough.
+    bool set_job = !cmd_line.HasSwitch(switches::kAllowNoSandboxJob);
+    UMA_HISTOGRAM_BOOLEAN("Process.Sandbox.FlagOverrodeRemoteSessionCheck",
+                          !set_job);
+    return set_job;
+  }
+
+  // Allow running without the sandbox in this case. This slightly reduces the
+  // ability of the sandbox to protect its children from spawning new processes
+  // or preventing them from shutting down Windows or accessing the clipboard.
   return false;
 }
 
@@ -708,7 +726,8 @@ sandbox::ResultCode StartSandboxedProcess(
     return sandbox::SBOX_ALL_OK;
   }
 
-  sandbox::TargetPolicy* policy = g_broker_services->CreatePolicy();
+  scoped_refptr<sandbox::TargetPolicy> policy =
+      g_broker_services->CreatePolicy();
 
   // Add any handles to be inherited to the policy.
   for (HANDLE handle : handles_to_inherit)
@@ -736,7 +755,7 @@ sandbox::ResultCode StartSandboxedProcess(
 
 #if !defined(NACL_WIN64)
   if (type_str == switches::kRendererProcess && IsWin32kLockdownEnabled()) {
-    result = AddWin32kLockdownPolicy(policy, false);
+    result = AddWin32kLockdownPolicy(policy.get(), false);
     if (result != sandbox::SBOX_ALL_OK)
       return result;
   }
@@ -750,12 +769,12 @@ sandbox::ResultCode StartSandboxedProcess(
   if (result != sandbox::SBOX_ALL_OK)
     return result;
 
-  result = SetJobLevel(*cmd_line, sandbox::JOB_LOCKDOWN, 0, policy);
+  result = SetJobLevel(*cmd_line, sandbox::JOB_LOCKDOWN, 0, policy.get());
   if (result != sandbox::SBOX_ALL_OK)
     return result;
 
   if (!delegate->DisableDefaultPolicy()) {
-    result = AddPolicyForSandboxedProcess(policy);
+    result = AddPolicyForSandboxedProcess(policy.get());
     if (result != sandbox::SBOX_ALL_OK)
       return result;
   }
@@ -764,7 +783,7 @@ sandbox::ResultCode StartSandboxedProcess(
   if (type_str == switches::kRendererProcess ||
       type_str == switches::kPpapiPluginProcess) {
     AddDirectory(base::DIR_WINDOWS_FONTS, NULL, true,
-                 sandbox::TargetPolicy::FILES_ALLOW_READONLY, policy);
+                 sandbox::TargetPolicy::FILES_ALLOW_READONLY, policy.get());
   }
 #endif
 
@@ -775,7 +794,7 @@ sandbox::ResultCode StartSandboxedProcess(
     cmd_line->AppendSwitchASCII("ignored", " --type=renderer ");
   }
 
-  result = AddGenericPolicy(policy);
+  result = AddGenericPolicy(policy.get());
 
   if (result != sandbox::SBOX_ALL_OK) {
     NOTREACHED();
@@ -795,12 +814,14 @@ sandbox::ResultCode StartSandboxedProcess(
     }
   }
 
+#if !defined(OFFICIAL_BUILD)
   // If stdout/stderr point to a Windows console, these calls will
   // have no effect. These calls can fail with SBOX_ERROR_BAD_PARAMS.
   policy->SetStdoutHandle(GetStdHandle(STD_OUTPUT_HANDLE));
   policy->SetStderrHandle(GetStdHandle(STD_ERROR_HANDLE));
+#endif
 
-  if (!delegate->PreSpawnTarget(policy))
+  if (!delegate->PreSpawnTarget(policy.get()))
     return sandbox::SBOX_ERROR_DELEGATE_PRE_SPAWN;
 
   TRACE_EVENT_BEGIN0("startup", "StartProcessWithAccess::LAUNCHPROCESS");

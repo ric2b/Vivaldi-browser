@@ -26,13 +26,13 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/fetch/FetchRequest.h"
 #include "core/html/FormAssociated.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/imagebitmap/ImageBitmapSource.h"
 #include "platform/graphics/GraphicsTypes.h"
+#include "platform/loader/fetch/FetchRequest.h"
 #include "platform/network/ResourceResponse.h"
 
 namespace blink {
@@ -114,6 +114,7 @@ class CORE_EXPORT HTMLImageElement final
   virtual void ensureCollapsedOrFallbackContent();
   virtual void ensureFallbackForGeneratedContent();
   virtual void ensurePrimaryContent();
+  bool isCollapsed() const;
 
   // CanvasImageSource implementation
   PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*,
@@ -187,7 +188,6 @@ class CORE_EXPORT HTMLImageElement final
   void setLayoutDisposition(LayoutDisposition, bool forceReattach = false);
 
   void attachLayoutTree(const AttachContext& = AttachContext()) override;
-  bool layoutObjectIsNeeded(const ComputedStyle&) override;
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
 
   bool canStartSelection() const override { return false; }

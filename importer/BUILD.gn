@@ -8,46 +8,54 @@ static_library("importer") {
     "chromium_importer.h",
     "chromium_profile_importer.cpp",
     "chromium_profile_importer.h",
+    "viv_importer_bookmark.cpp",
+    "viv_importer_notes.cpp",
+    "viv_importer_wand.cpp",
+    "viv_opera_reader.cpp",
+    "viv_opera_reader.h",
+    "viv_importer.cpp",
+    "viv_importer.h",
+    "viv_importer_utils.h",
+  ]
+  deps = [
+    "//base:base",
+    "//chrome/app:generated_resources",
+    "//chrome/common:common",
+    "//chrome/utility:utility",
+    "//components/bookmarks/browser:browser",
+    "//url:url",
+    "//vivaldi/app:resources",
+    "//vivaldi/app:vivaldi_native_strings",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+}
+
+static_library("browser") {
+  sources = [
+    "chrome_importer_util_win.cc",
+    "chromium_importer_util_linux.cc",
+    "chromium_importer_util_mac.mm",
+    "chromium_profile_importer.cpp",
+    "chromium_profile_importer.h",
+    "chromium_profile_lock_posix.cc",
+    "chromium_profile_lock_mac.mm",
+    "chromium_profile_lock_win.cc",
     "chromium_profile_lock.cpp",
     "chromium_profile_lock.h",
     "imported_notes_entry.cpp",
     "imported_notes_entry.h",
     "imported_speeddial_entry.cpp",
     "imported_speeddial_entry.h",
-    "viv_importer.cpp",
+    "viv_detect_opera.cc",
     "viv_importer.h",
-    "viv_importer_bookmark.cpp",
-    "viv_importer_notes.cpp",
-    "viv_importer_utils.h",
-    "viv_importer_wand.cpp",
-    "viv_opera_reader.cpp",
-    "viv_opera_reader.h",
-  ]
-  if (is_linux) {
-    sources += [
-      "chromium_importer_util_linux.cpp",
-      "chromium_profile_lock_posix.cpp",
-      "viv_importer_util_linux.cpp",
-    ]
-  } else if (is_mac) {
-    sources += [
-      "chromium_importer_util_mac.mm",
-      "chromium_profile_lock_mac.mm",
-      "viv_importer_util_mac.mm",
-    ]
-  } else if (is_win) {
-    sources += [
-      "chrome_importer_util_win.cpp",
-      "chromium_profile_lock_win.cpp",
-      "viv_importer_util_win.cpp",
-    ]
-  }
+    "viv_importer_util_linux.cc",
+    "viv_importer_util_mac.mm",
+    "viv_importer_util_win.cc",
+   ]
   deps = [
     "//base:base",
-    "//chrome/app:generated_resources",
     "//chrome/common:common",
-    "//components/bookmarks/browser:browser",
-    "//ui/base:base",
     "//url:url",
     "//vivaldi/app:resources",
     "//vivaldi/app:vivaldi_native_strings",

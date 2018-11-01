@@ -45,6 +45,7 @@
 #include "content/common/media/media_devices.h"
 #include "content/common/media/media_stream_options.h"
 #include "content/public/browser/media_request_state.h"
+#include "media/base/video_facing.h"
 
 namespace media {
 class AudioManager;
@@ -96,6 +97,16 @@ class CONTENT_EXPORT MediaStreamManager
 
   // Used to access MediaDevicesManager.
   MediaDevicesManager* media_devices_manager();
+
+  // AddVideoCaptureObserver() and RemoveAllVideoCaptureObservers() must be
+  // called after InitializeDeviceManagersOnIOThread() and before
+  // WillDestroyCurrentMessageLoop(). They can be called more than once and it's
+  // ok to not call at all if the client is not interested in receiving
+  // media::VideoCaptureObserver callbacks.
+  // The methods must be called on BrowserThread::IO threads. The callbacks of
+  // media::VideoCaptureObserver also arrive on BrowserThread::IO threads.
+  void AddVideoCaptureObserver(media::VideoCaptureObserver* capture_observer);
+  void RemoveAllVideoCaptureObservers();
 
   // Creates a new media access request which is identified by a unique string
   // that's returned to the caller. This will trigger the infobar and ask users
@@ -381,6 +392,13 @@ class CONTENT_EXPORT MediaStreamManager
                          bool requested_video_input,
                          const std::string& label,
                          const MediaDeviceEnumeration& enumeration);
+
+  // Creates MediaStreamDevices for |devices_infos| of |stream_type|. For video
+  // capture device it also uses cached content from |video_capture_manager_| to
+  // set the MediaStreamDevice fields.
+  MediaStreamDevices ConvertToMediaStreamDevices(
+      MediaStreamType stream_type,
+      const MediaDeviceInfoArray& device_infos);
 
   // Task runner shared by VideoCaptureManager and AudioInputDeviceManager and
   // used for enumerating audio output devices.

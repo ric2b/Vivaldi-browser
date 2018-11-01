@@ -16,7 +16,7 @@ class CSSLengthListInterpolationType : public CSSInterpolationType {
   CSSLengthListInterpolationType(PropertyHandle);
 
   InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
-      const StyleResolverState&) const final;
+      const ComputedStyle&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
@@ -33,7 +33,7 @@ class CSSLengthListInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   virtual InterpolationValue maybeConvertValue(const CSSValue&,
-                                               const StyleResolverState&,
+                                               const StyleResolverState*,
                                                ConversionCheckers&) const;
 
   PairwiseInterpolationValue maybeMergeSingles(

@@ -10,14 +10,16 @@
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/host/gpu_switches.h"
 #include "ui/gl/gl_bindings.h"
+#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 
 namespace gpu {
 
 bool AreNativeGpuMemoryBuffersEnabled() {
-  // Disable native buffers when using Mesa.
+  // Disable native buffers when using software GL.
   if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kUseGL) == gl::kGLImplementationOSMesaName) {
+          switches::kUseGL) ==
+      gl::GetGLImplementationName(gl::GetSoftwareGLImplementation())) {
     return false;
   }
 
@@ -57,18 +59,20 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
     }
   }
 
-  // Disable native buffers only when using Mesa.
+  // Disable native buffers only when using software GL.
   bool force_native_gpu_read_write_formats =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kUseGL) != gl::kGLImplementationOSMesaName;
+          switches::kUseGL) !=
+      gl::GetGLImplementationName(gl::GetSoftwareGLImplementation());
   if (force_native_gpu_read_write_formats) {
     const gfx::BufferFormat kGPUReadWriteFormats[] = {
         gfx::BufferFormat::BGR_565,   gfx::BufferFormat::RGBA_8888,
         gfx::BufferFormat::RGBX_8888, gfx::BufferFormat::BGRA_8888,
         gfx::BufferFormat::BGRX_8888, gfx::BufferFormat::UYVY_422,
         gfx::BufferFormat::YVU_420,   gfx::BufferFormat::YUV_420_BIPLANAR};
-    const gfx::BufferUsage kGPUReadWriteUsages[] = {gfx::BufferUsage::GPU_READ,
-                                                    gfx::BufferUsage::SCANOUT};
+    const gfx::BufferUsage kGPUReadWriteUsages[] = {
+        gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
+        gfx::BufferUsage::SCANOUT_CPU_READ_WRITE};
     for (auto format : kGPUReadWriteFormats) {
       for (auto usage : kGPUReadWriteUsages) {
         if (IsNativeGpuMemoryBufferConfigurationSupported(format, usage))

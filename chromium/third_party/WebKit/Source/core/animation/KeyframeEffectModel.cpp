@@ -49,7 +49,7 @@ PropertyHandleSet KeyframeEffectModelBase::properties() const {
   PropertyHandleSet result;
   for (const auto& keyframe : m_keyframes) {
     for (const auto& property : keyframe->properties())
-      result.add(property);
+      result.insert(property);
   }
   return result;
 }
@@ -93,7 +93,7 @@ bool KeyframeEffectModelBase::snapshotNeutralCompositorKeyframes(
     if (CSSPropertyEquality::propertiesEqual(property, oldStyle, newStyle))
       continue;
     PropertySpecificKeyframeGroup* keyframeGroup =
-        m_keyframeGroups->get(PropertyHandle(property));
+        m_keyframeGroups->at(PropertyHandle(property));
     if (!keyframeGroup)
       continue;
     for (auto& keyframe : keyframeGroup->m_keyframes) {
@@ -115,7 +115,7 @@ bool KeyframeEffectModelBase::snapshotAllCompositorKeyframes(
   ensureKeyframeGroups();
   for (CSSPropertyID property : CompositorAnimations::compositableProperties) {
     PropertySpecificKeyframeGroup* keyframeGroup =
-        m_keyframeGroups->get(PropertyHandle(property));
+        m_keyframeGroups->at(PropertyHandle(property));
     if (!keyframeGroup)
       continue;
     for (auto& keyframe : keyframeGroup->m_keyframes) {
@@ -195,8 +195,8 @@ void KeyframeEffectModelBase::ensureKeyframeGroups() const {
       PropertySpecificKeyframeGroup* group;
       if (groupIter == m_keyframeGroups->end()) {
         group = m_keyframeGroups
-                    ->add(property,
-                          WTF::wrapUnique(new PropertySpecificKeyframeGroup))
+                    ->insert(property,
+                             WTF::wrapUnique(new PropertySpecificKeyframeGroup))
                     .storedValue->value.get();
       } else {
         group = groupIter->value.get();

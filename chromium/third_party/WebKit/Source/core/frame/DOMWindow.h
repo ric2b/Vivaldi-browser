@@ -11,37 +11,17 @@
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/Frame.h"
 #include "platform/heap/Handle.h"
-#include "platform/scroll/ScrollableArea.h"
 #include "wtf/Assertions.h"
 #include "wtf/Forward.h"
 
 namespace blink {
 
-class ApplicationCache;
-class BarProp;
-class CSSRuleList;
-class CSSStyleDeclaration;
-class CustomElementRegistry;
-class DOMSelection;
-class DOMVisualViewport;
 class Document;
-class Element;
-class External;
-class FrameRequestCallback;
-class History;
-class IdleRequestCallback;
-class IdleRequestOptions;
 class InputDeviceCapabilitiesConstants;
 class Location;
 class LocalDOMWindow;
 class MessageEvent;
-class MediaQueryList;
-class Navigator;
-class Screen;
-class ScriptState;
-class ScrollToOptions;
 class SerializedScriptValue;
-class StyleMedia;
 
 class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
                               public DOMWindowBase64 {
@@ -51,10 +31,18 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   ~DOMWindow() override;
 
   Frame* frame() const {
-    // If the DOMWindow still has a frame reference, that frame must point
-    // back to this DOMWindow: otherwise, it's easy to get into a situation
-    // where script execution leaks between different DOMWindows.
-    SECURITY_DCHECK(!m_frame || m_frame->domWindow() == this);
+    // A Frame is typically reused for navigations. If |m_frame| is not null,
+    // two conditions must always be true:
+    // - |m_frame->domWindow()| must point back to this DOMWindow. If it does
+    //   not, it is easy to introduce a bug where script execution uses the
+    //   wrong DOMWindow (which may be cross-origin).
+    // - |m_frame| must be attached, i.e. |m_frame->host()| must not be null.
+    //   If |m_frame->host()| is null, this indicates a bug where the frame was
+    //   detached but |m_frame| was not set to null. This bug can lead to
+    //   issues where executing script incorrectly schedules work on a detached
+    //   frame.
+    SECURITY_DCHECK(!m_frame ||
+                    (m_frame->domWindow() == this && m_frame->host()));
     return m_frame;
   }
 
@@ -76,47 +64,10 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   const AtomicString& interfaceName() const override;
   const DOMWindow* toDOMWindow() const override;
 
-  // DOM Level 0
-  virtual Screen* screen() const = 0;
-  virtual History* history() const = 0;
-  virtual BarProp* locationbar() const = 0;
-  virtual BarProp* menubar() const = 0;
-  virtual BarProp* personalbar() const = 0;
-  virtual BarProp* scrollbars() const = 0;
-  virtual BarProp* statusbar() const = 0;
-  virtual BarProp* toolbar() const = 0;
-  virtual Navigator* navigator() const = 0;
-  Navigator* clientInformation() const { return navigator(); }
+  // Cross-origin DOM Level 0
   Location* location() const;
-
-  virtual bool offscreenBuffering() const = 0;
-
-  virtual int outerHeight() const = 0;
-  virtual int outerWidth() const = 0;
-  virtual int innerHeight() const = 0;
-  virtual int innerWidth() const = 0;
-  virtual int screenX() const = 0;
-  virtual int screenY() const = 0;
-  int screenLeft() const { return screenX(); }
-  int screenTop() const { return screenY(); }
-  virtual double scrollX() const = 0;
-  virtual double scrollY() const = 0;
-  double pageXOffset() const { return scrollX(); }
-  double pageYOffset() const { return scrollY(); }
-
-  virtual DOMVisualViewport* visualViewport() { return nullptr; }
-
   bool closed() const;
-
   unsigned length() const;
-
-  virtual const AtomicString& name() const = 0;
-  virtual void setName(const AtomicString&) = 0;
-
-  virtual String status() const = 0;
-  virtual void setStatus(const String&) = 0;
-  virtual String defaultStatus() const = 0;
-  virtual void setDefaultStatus(const String&) = 0;
 
   // Self-referential attributes
   DOMWindow* self() const;
@@ -127,88 +78,9 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   DOMWindow* parent() const;
   DOMWindow* top() const;
 
-  // DOM Level 2 AbstractView Interface
-  virtual Document* document() const = 0;
-
-  // CSSOM View Module
-  virtual StyleMedia* styleMedia() const = 0;
-
-  // WebKit extensions
-  virtual double devicePixelRatio() const = 0;
-
-  virtual ApplicationCache* applicationCache() const = 0;
-
-  // This is the interface orientation in degrees. Some examples are:
-  //  0 is straight up; -90 is when the device is rotated 90 clockwise;
-  //  90 is when rotated counter clockwise.
-  virtual int orientation() const = 0;
-
-  virtual DOMSelection* getSelection() = 0;
-
   void focus(ExecutionContext*);
   virtual void blur() = 0;
   void close(ExecutionContext*);
-  virtual void print(ScriptState*) = 0;
-  virtual void stop() = 0;
-
-  virtual void alert(ScriptState*, const String& message = String()) = 0;
-  virtual bool confirm(ScriptState*, const String& message) = 0;
-  virtual String prompt(ScriptState*,
-                        const String& message,
-                        const String& defaultValue) = 0;
-
-  virtual bool find(const String&,
-                    bool caseSensitive,
-                    bool backwards,
-                    bool wrap,
-                    bool wholeWord,
-                    bool searchInFrames,
-                    bool showDialog) const = 0;
-
-  virtual void scrollBy(double x,
-                        double y,
-                        ScrollBehavior = ScrollBehaviorAuto) const = 0;
-  virtual void scrollBy(const ScrollToOptions&) const = 0;
-  virtual void scrollTo(double x, double y) const = 0;
-  virtual void scrollTo(const ScrollToOptions&) const = 0;
-  void scroll(double x, double y) const { scrollTo(x, y); }
-  void scroll(const ScrollToOptions& scrollToOptions) const {
-    scrollTo(scrollToOptions);
-  }
-  virtual void moveBy(int x, int y) const = 0;
-  virtual void moveTo(int x, int y) const = 0;
-
-  virtual void resizeBy(int x, int y) const = 0;
-  virtual void resizeTo(int width, int height) const = 0;
-
-  virtual MediaQueryList* matchMedia(const String&) = 0;
-
-  // DOM Level 2 Style Interface
-  virtual CSSStyleDeclaration* getComputedStyle(
-      Element*,
-      const String& pseudoElt) const = 0;
-
-  // WebKit extensions
-  virtual CSSRuleList* getMatchedCSSRules(Element*,
-                                          const String& pseudoElt) const = 0;
-
-  // WebKit animation extensions
-  virtual int requestAnimationFrame(FrameRequestCallback*) = 0;
-  virtual int webkitRequestAnimationFrame(FrameRequestCallback*) = 0;
-  virtual void cancelAnimationFrame(int id) = 0;
-
-  // Idle callback extensions
-  virtual int requestIdleCallback(IdleRequestCallback*,
-                                  const IdleRequestOptions&) = 0;
-  virtual void cancelIdleCallback(int id) = 0;
-
-  // Custom elements
-  virtual CustomElementRegistry* customElements(ScriptState*) const = 0;
-
-  // Obsolete APIs
-  void captureEvents() {}
-  void releaseEvents() {}
-  External* external();
 
   // FIXME: This handles both window[index] and window.frames[index]. However,
   // the spec exposes window.frames[index] across origins but not
@@ -225,8 +97,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
       const LocalDOMWindow* callingWindow) const;
   String crossDomainAccessErrorMessage(
       const LocalDOMWindow* callingWindow) const;
-  bool isInsecureScriptAccess(LocalDOMWindow& callingWindow,
-                              const String& urlString);
+  bool isInsecureScriptAccess(LocalDOMWindow& callingWindow, const KURL&);
 
   // FIXME: When this DOMWindow is no longer the active DOMWindow (i.e.,
   // when its document is no longer the document that is displayed in its
@@ -235,27 +106,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   // See https://bugs.webkit.org/show_bug.cgi?id=62054
   bool isCurrentlyDisplayedInFrame() const;
 
-  void resetLocation();
-
   bool isSecureContext() const;
-
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationiteration);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(search);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(transitionend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
-
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart,
-                                         webkitAnimationStart);
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationiteration,
-                                         webkitAnimationIteration);
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationend,
-                                         webkitAnimationEnd);
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkittransitionend,
-                                         webkitTransitionEnd);
-
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(orientationchange);
 
   InputDeviceCapabilitiesConstants* getInputDeviceCapabilities();
 
@@ -272,7 +123,6 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   Member<Frame> m_frame;
   Member<InputDeviceCapabilitiesConstants> m_inputCapabilities;
   mutable Member<Location> m_location;
-  Member<External> m_external;
 
   // Set to true when close() has been called. Needed for
   // |window.closed| determinism; having it return 'true'

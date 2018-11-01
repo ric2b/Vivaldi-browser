@@ -123,13 +123,6 @@ void BlobURLRequestJob::GetResponseInfo(net::HttpResponseInfo* info) {
     *info = *response_info_;
 }
 
-int BlobURLRequestJob::GetResponseCode() const {
-  if (!response_info_)
-    return -1;
-
-  return response_info_->headers->response_code();
-}
-
 void BlobURLRequestJob::SetExtraRequestHeaders(
     const net::HttpRequestHeaders& headers) {
   std::string range_header;
@@ -167,6 +160,10 @@ void BlobURLRequestJob::DidStart() {
   // If the blob data is not present, bail out.
   if (!blob_handle_) {
     NotifyFailure(net::ERR_FILE_NOT_FOUND);
+    return;
+  }
+  if (blob_reader_->net_error()) {
+    NotifyFailure(blob_reader_->net_error());
     return;
   }
 

@@ -33,18 +33,16 @@ void CallbackContentSettingWrapper(
     bool allowed) {
   callback.Run(allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
 }
-#endif // ENABLE_EXTENSIONS
+#endif  // ENABLE_EXTENSIONS
 
 }  // anonymous namespace
 
 NotificationPermissionContextExtensions::
-NotificationPermissionContextExtensions(Profile* profile)
-    : profile_(profile) {
-}
+    NotificationPermissionContextExtensions(Profile* profile)
+    : profile_(profile) {}
 
 NotificationPermissionContextExtensions::
-~NotificationPermissionContextExtensions() {
-}
+    ~NotificationPermissionContextExtensions() {}
 
 bool NotificationPermissionContextExtensions::DecidePermission(
     content::WebContents* web_contents,
@@ -63,9 +61,8 @@ bool NotificationPermissionContextExtensions::DecidePermission(
   // NOTE(yngve) extensions are not allowed to create webviews when running as
   // Vivaldi, so this is only non-null for Vivaldi, but adding check of Vivaldi
   // just to be on the safe side
-  WebViewGuest *guest = WebViewGuest::FromWebContents(web_contents);
-  if (web_view_permission_helper &&
-      !(guest && vivaldi::IsVivaldiRunning())) {
+  WebViewGuest* guest = WebViewGuest::FromWebContents(web_contents);
+  if (web_view_permission_helper && !(guest && vivaldi::IsVivaldiRunning())) {
     web_view_permission_helper->RequestNotificationPermission(
         bridge_id, requesting_frame, user_gesture,
         base::Bind(&CallbackContentSettingWrapper, callback));
@@ -114,9 +111,9 @@ bool NotificationPermissionContextExtensions::CancelPermissionRequest(
     int bridge_id) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::WebViewPermissionHelper* web_view_permission_helper =
-      web_contents ?
-      extensions::WebViewPermissionHelper::FromWebContents(web_contents)
-      : NULL;
+      web_contents
+          ? extensions::WebViewPermissionHelper::FromWebContents(web_contents)
+          : NULL;
   if (web_view_permission_helper) {
     web_view_permission_helper->CancelNotificationPermissionRequest(bridge_id);
     return true;

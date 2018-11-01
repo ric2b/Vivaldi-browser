@@ -1,13 +1,4 @@
-bauerb@chromium.org
-dbeam@chromium.org
-dpapad@chromium.org
-michaelpg@chromium.org
-pam@chromium.org
-tommycli@chromium.org
-xiyuan@chromium.org
-
-# Emeritus
-estade@chromium.org
+file://ui/webui/OWNERS
 
 per-file devtools_ui*=dgozman@chromium.org
 per-file devtools_ui*=pfeldman@chromium.org
@@ -27,6 +18,11 @@ per-file md_history_ui*=tsergeant@chromium.org
 per-file signin_internals_ui*=achuith@chromium.org
 
 per-file snippets_internals*=file://components/ntp_snippets/OWNERS
+per-file ntp_tiles_internals_ui.*=file://components/ntp_tiles/OWNERS
+per-file popular_sites_internals_ui.*=file://components/ntp_tiles/OWNERS
+per-file net_export_ui.*=file://net/OWNERS
 
 # Maintaining ownership from this file's original Chrome OS location.
 per-file device_log_ui*=stevenjb@chromium.org
+
+# COMPONENT: UI>Browser>WebUI

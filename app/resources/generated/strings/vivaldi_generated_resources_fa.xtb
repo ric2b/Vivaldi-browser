@@ -29,7 +29,6 @@
 <translation id="1620510694547887537">دوربین</translation>
 <translation id="1627276047960621195">توصیف‌گرهای فایل</translation>
 <translation id="1635033183663317347">قیم شما نصب کرده است.</translation>
-<translation id="1652965563555864525">&amp;بی صدا</translation>
 <translation id="1682548588986054654">پنجره حالت &amp;ناشناس جدید</translation>
 <translation id="1708338024780164500">(غیرفعال)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (شناسه: <ph name="ID_PH" />)</translation>
@@ -49,7 +48,6 @@
 <translation id="1979718561647571293">آیا این صفحه راه‌اندازی مورد انتظار شماست؟</translation>
 <translation id="1989112275319619282">فهرست</translation>
 <translation id="1992397118740194946">تنظیم نشده است</translation>
-<translation id="2011110593081822050">Web Worker: <ph name="WORKER_NAME" /></translation>
 <translation id="2019718679933488176">&amp;باز کردن فایل صوتی در زبانه‌ی جدید</translation>
 <translation id="2076269580855484719">پنهان کردن این افزایه</translation>
 <translation id="2087822576218954668">چاپ: <ph name="PRINT_NAME" /></translation>
@@ -79,7 +77,6 @@
 <translation id="2482878487686419369">اعلان‌ها</translation>
 <translation id="2501797496290880632">تایپ کردن میان‌بر</translation>
 <translation id="2509857212037838238">نصب <ph name="PLUGIN_NAME" /></translation>
-<translation id="253434972992662860">&amp;توقف موقت</translation>
 <translation id="2550212893339833758">حافظه جابه‌جاشده</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">فعال کردن مجدد</translation>
@@ -146,11 +143,9 @@
 <translation id="3927932062596804919">ردکردن</translation>
 <translation id="3936390757709632190">&amp;باز کردن فایل صوتی در برگهٔ جدید</translation>
 <translation id="3943582379552582368">&amp;برگشت</translation>
-<translation id="3954582159466790312">با&amp;صدا</translation>
 <translation id="3978267865113951599">(از کار افتاده)</translation>
 <translation id="3979395879372752341">افزودنه‌های جدید اضافه شد (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
-<translation id="4059285154003114015">&amp;چاپ قاب...</translation>
 <translation id="4087089424473531098">برنامهٔ افزودنی ایجاد شده:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -183,7 +178,6 @@
 <translation id="4593021220803146968">&amp;رفتن به <ph name="URL" /></translation>
 <translation id="4595560905247879544">برنامه‌ها و افزونه‌ها فقط توسط مدیر (<ph name="CUSTODIAN_NAME" />) قابل تغییر هستند.</translation>
 <translation id="4613271546271159013">یک برنامه افزودنی صفحه‌ای را که موقع باز کردن برگه جدید نشان داده می‌شود، تغییر داده است.</translation>
-<translation id="4623537843784569564">ممکن است این برنامه افزودنی درست به‌روزرسانی نشده باشد. سعی کنید دوباره آن را نصب کنید.</translation>
 <translation id="4643612240819915418">&amp;باز کردن فایل ویدیویی در برگهٔ جدید</translation>
 <translation id="4677772697204437347">‏حافظه GPU</translation>
 <translation id="4711638718396952945">بازیابی تنظیمات</translation>
@@ -192,12 +186,9 @@
 <translation id="4839303808932127586">ذ&amp;خیره فایل ویدیوی به‌عنوان...</translation>
 <translation id="4850258771229959924">مشاهده در ابزارهای توسعه‌دهنده</translation>
 <translation id="4851858059374029925"><ph name="PLUGIN_NAME" /> نصب شود؟ فقط افزایه‌هایی را نصب کنید که به آن‌ها اعتماد دارید.</translation>
-<translation id="4861833787540810454">&amp;پخش</translation>
-<translation id="4883993111890464517">ممکن است این برنامه افزودنی خراب باشد. سعی کنید آن را دوباره نصب کنید.</translation>
 <translation id="488785315393301722">نمایش جزئیات</translation>
 <translation id="4911714727432509308">میان‌برهای صفحه‌کلید به هیچ برنامهٔ افزودنی اختصاص داده نشده است.</translation>
 <translation id="4912643508233590958">تعداد خروج از حالت بی‌حرکت</translation>
-<translation id="4919987486109157213">برنامه افزودنی خراب است. سعی کنید دوباره آن را نصب کنید.</translation>
 <translation id="4927301649992043040">فشرده کردن برنامهٔ افزودنی</translation>
 <translation id="4927753642311223124">در اینجا چیزی برای مشاهده وجود ندارد، به حرکت ادامه دهید.</translation>
 <translation id="49896407730300355">چرخاندن خلاف جهت ع&amp;قربه‌های ساعت</translation>
@@ -293,7 +284,6 @@
 <translation id="6798954102094737107">افزایه: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">حفظ تغییرات</translation>
 <translation id="6841186874966388268">خطاها</translation>
-<translation id="6844537474943985871">ممکن است این برنامه افزودنی خراب باشد. لطفاً نصب آن را لغو کرده و سپس دوباره آن را نصب کنید.</translation>
 <translation id="6863910145616405334">افزایه یافت نشد</translation>
 <translation id="6886871292305414135">باز کردن پیوند در &amp;برگه جدید</translation>
 <translation id="6900284862687837908">برنامه پس‌زمینه: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -322,7 +312,6 @@
 <translation id="7551643184018910560">سنجاق کردن به راه‌انداز</translation>
 <translation id="7554791636758816595">برگهٔ جدید</translation>
 <translation id="7564847347806291057">پایان دادن به فرایند</translation>
-<translation id="7618337809041914424">&amp;چاپ قاب...</translation>
 <translation id="7629827748548208700">برگه: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">لغو</translation>
 <translation id="7663719505383602579">گیرنده: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -401,7 +390,6 @@
 <translation id="9003647077635673607">اجازه‌ی کار بر روی همه‌ی وب‌سایت‌ها</translation>
 <translation id="9027459031423301635">باز کردن پیوند در &amp;زبانه‌ی جدید</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> توسط خط‌مشی شرکت مسدود شده است</translation>
-<translation id="9101691533782776290">راه‌اندازی برنامه</translation>
 <translation id="9145718805518496796">فشرده کردن افزونه‌ها...</translation>
 <translation id="9153341767479566106">سایر افزونه‌هایی که بارگذاری نشده‌اند:</translation>
 <translation id="9170848237812810038">&amp;واگرد</translation>

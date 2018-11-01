@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "components/spellcheck/renderer/spellcheck_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -46,8 +45,7 @@ class TestingSpellCheckProvider : public SpellCheckProvider {
   bool Send(IPC::Message* message) override;
   void OnCallSpellingService(int route_id,
                              int identifier,
-                             const base::string16& text,
-                             const std::vector<SpellCheckMarker>& markers);
+                             const base::string16& text);
   void ResetResult();
 
   void SetLastResults(
@@ -57,7 +55,7 @@ class TestingSpellCheckProvider : public SpellCheckProvider {
                                blink::WebTextCheckingCompletion* completion);
 
   base::string16 text_;
-  ScopedVector<IPC::Message> messages_;
+  std::vector<std::unique_ptr<IPC::Message>> messages_;
   size_t spelling_service_call_count_;
 };
 

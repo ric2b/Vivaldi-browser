@@ -27,7 +27,7 @@ public final class SafeBrowsingApiBridge {
      * Set the class-file for the implementation of SafeBrowsingApiHandler to use when the safe
      * browsing api is invoked.
      */
-    public static void setSafeBrowingHandlerType(Class<? extends SafeBrowsingApiHandler> handler) {
+    public static void setSafeBrowsingHandlerType(Class<? extends SafeBrowsingApiHandler> handler) {
         sHandler = handler;
     }
 

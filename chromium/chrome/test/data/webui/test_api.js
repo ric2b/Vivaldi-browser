@@ -50,7 +50,7 @@ var testing = {};
   /**
    * Make all transitions and animations take 0ms. NOTE: this will completely
    * disable webkitTransitionEnd events. If your code relies on them firing, it
-   * will break. webkitAnimationEnd events should still work.
+   * will break. animationend events should still work.
    */
   Test.disableAnimationsAndTransitions = function() {
     var noAnimationStyle = document.createElement('style');
@@ -59,8 +59,8 @@ var testing = {};
       '*, * /deep/ * {' +
       '  -webkit-transition-duration: 0ms !important;' +
       '  -webkit-transition-delay: 0ms !important;' +
-      '  -webkit-animation-duration: 0ms !important;' +
-      '  -webkit-animation-delay: 0ms !important;' +
+      '  animation-duration: 0ms !important;' +
+      '  animation-delay: 0ms !important;' +
       '}';
     document.querySelector('head').appendChild(noAnimationStyle);
 
@@ -942,6 +942,18 @@ var testing = {};
   }
 
   /**
+   * @param {Function} testFunction
+   * @param {Function=|string=|RegExp=} opt_expected The expected Error
+   *     constructor, partial or complete error message string, or RegExp to
+   *     test the error message.
+   * @param {string=} opt_message Additional error message.
+   * @throws {Error}
+   */
+  function assertThrows(testFunction, opt_expected, opt_message) {
+    chai.assert.throws(testFunction, opt_expected, opt_message);
+  }
+
+  /**
    * Run an accessibility audit on the current page state.
    * @type {Function}
    * @param {Array} a11yResults
@@ -1685,6 +1697,7 @@ var testing = {};
     exports.assertLT = assertLT;
     exports.assertNotEquals = assertNotEquals;
     exports.assertNotReached = assertNotReached;
+    exports.assertThrows = assertThrows;
   }
 
   /**
@@ -1703,6 +1716,7 @@ var testing = {};
     exports.expectNotEquals = createExpect(assertNotEquals);
     exports.expectNotReached = createExpect(assertNotReached);
     exports.expectAccessibilityOk = createExpect(assertAccessibilityOk);
+    exports.expectThrows = createExpect(assertThrows);
   }
 
   /**

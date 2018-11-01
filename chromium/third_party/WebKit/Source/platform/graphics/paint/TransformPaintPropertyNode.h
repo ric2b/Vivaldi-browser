@@ -9,6 +9,7 @@
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/CompositorElementId.h"
+#include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -19,8 +20,11 @@
 
 namespace blink {
 
-// A transform created by a css property such as "transform" or "perspective"
-// along with a reference to the parent TransformPaintPropertyNode.
+// A transform (e.g., created by css "transform" or "perspective", or for
+// internal positioning such as paint offset or scrolling) along with a
+// reference to the parent TransformPaintPropertyNode. The scroll tree is owned
+// by transform nodes and a transform node for scrolling will have a 2d
+// translation for the scroll offset and an associated ScrollPaintPropertyNode.
 //
 // The transform tree is rooted at a node with no parent. This root node should
 // not be modified.
@@ -44,6 +48,31 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
         renderingContextId, directCompositingReasons, compositorElementId));
   }
 
+  static PassRefPtr<TransformPaintPropertyNode> createScrollTranslation(
+      PassRefPtr<const TransformPaintPropertyNode> parent,
+      const TransformationMatrix& matrix,
+      const FloatPoint3D& origin,
+      bool flattensInheritedTransform,
+      unsigned renderingContextId,
+      CompositingReasons directCompositingReasons,
+      const CompositorElementId& compositorElementId,
+      PassRefPtr<const ScrollPaintPropertyNode> parentScroll,
+      const IntSize& clip,
+      const IntSize& bounds,
+      bool userScrollableHorizontal,
+      bool userScrollableVertical,
+      MainThreadScrollingReasons mainThreadScrollingReasons,
+      WebLayerScrollClient* scrollClient) {
+    // If this transform is for scroll offset, it should be a 2d translation.
+    DCHECK(matrix.isIdentityOr2DTranslation());
+    return adoptRef(new TransformPaintPropertyNode(
+        std::move(parent), matrix, origin, flattensInheritedTransform,
+        renderingContextId, directCompositingReasons, compositorElementId,
+        ScrollPaintPropertyNode::create(
+            std::move(parentScroll), clip, bounds, userScrollableHorizontal,
+            userScrollableVertical, mainThreadScrollingReasons, scrollClient)));
+  }
+
   void update(
       PassRefPtr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
@@ -63,6 +92,30 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
     m_compositorElementId = compositorElementId;
   }
 
+  void updateScrollTranslation(
+      PassRefPtr<const TransformPaintPropertyNode> parent,
+      const TransformationMatrix& matrix,
+      const FloatPoint3D& origin,
+      bool flattensInheritedTransform,
+      unsigned renderingContextId,
+      CompositingReasons directCompositingReasons,
+      CompositorElementId compositorElementId,
+      PassRefPtr<const ScrollPaintPropertyNode> parentScroll,
+      const IntSize& clip,
+      const IntSize& bounds,
+      bool userScrollableHorizontal,
+      bool userScrollableVertical,
+      MainThreadScrollingReasons mainThreadScrollingReasons,
+      WebLayerScrollClient* scrollClient) {
+    update(std::move(parent), matrix, origin, flattensInheritedTransform,
+           renderingContextId, directCompositingReasons, compositorElementId);
+    DCHECK(m_scroll);
+    DCHECK(matrix.isIdentityOr2DTranslation());
+    m_scroll->update(std::move(parentScroll), clip, bounds,
+                     userScrollableHorizontal, userScrollableVertical,
+                     mainThreadScrollingReasons, scrollClient);
+  }
+
   const TransformationMatrix& matrix() const { return m_matrix; }
   const FloatPoint3D& origin() const { return m_origin; }
 
@@ -70,6 +123,17 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   // is the root transform.
   const TransformPaintPropertyNode* parent() const { return m_parent.get(); }
   bool isRoot() const { return !m_parent; }
+
+  // True if this transform is for the scroll offset translation.
+  bool isScrollTranslation() const { return !!m_scroll; }
+  // The associated scroll node if this transform is the scroll offset for
+  // scrolling, or nullptr otherwise.
+  const ScrollPaintPropertyNode* scrollNode() const { return m_scroll.get(); }
+
+  // Returns the scroll node this transform scrolls with respect to. If this
+  // is a scroll translation, scrollNode() can be returned. Otherwise, a full
+  // ancestor traversal can be required.
+  const ScrollPaintPropertyNode* findEnclosingScrollNode() const;
 
   // If true, content with this transform node (or its descendant) appears in
   // the plane of its parent. This is implemented by flattening the total
@@ -80,6 +144,10 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
 
   bool hasDirectCompositingReasons() const {
     return m_directCompositingReasons != CompositingReasonNone;
+  }
+
+  bool requiresCompositingForAnimation() const {
+    return m_directCompositingReasons & CompositingReasonActiveAnimation;
   }
 
   const CompositorElementId& compositorElementId() const {
@@ -97,20 +165,25 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   PassRefPtr<TransformPaintPropertyNode> clone() const {
     return adoptRef(new TransformPaintPropertyNode(
         m_parent, m_matrix, m_origin, m_flattensInheritedTransform,
-        m_renderingContextId, m_directCompositingReasons,
-        m_compositorElementId));
+        m_renderingContextId, m_directCompositingReasons, m_compositorElementId,
+        m_scroll ? m_scroll->clone() : nullptr));
   }
 
   // The equality operator is used by FindPropertiesNeedingUpdate.h for checking
   // if a transform node has changed.
   bool operator==(const TransformPaintPropertyNode& o) const {
+    if (m_scroll && o.m_scroll && !(*m_scroll == *o.m_scroll))
+      return false;
     return m_parent == o.m_parent && m_matrix == o.m_matrix &&
            m_origin == o.m_origin &&
            m_flattensInheritedTransform == o.m_flattensInheritedTransform &&
            m_renderingContextId == o.m_renderingContextId &&
            m_directCompositingReasons == o.m_directCompositingReasons &&
-           m_compositorElementId == o.m_compositorElementId;
+           m_compositorElementId == o.m_compositorElementId &&
+           !!m_scroll == !!o.m_scroll;
   }
+
+  String toTreeString() const;
 #endif
 
   String toString() const;
@@ -123,14 +196,16 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       bool flattensInheritedTransform,
       unsigned renderingContextId,
       CompositingReasons directCompositingReasons,
-      CompositorElementId compositorElementId)
+      CompositorElementId compositorElementId,
+      PassRefPtr<ScrollPaintPropertyNode> scroll = nullptr)
       : m_parent(parent),
         m_matrix(matrix),
         m_origin(origin),
         m_flattensInheritedTransform(flattensInheritedTransform),
         m_renderingContextId(renderingContextId),
         m_directCompositingReasons(directCompositingReasons),
-        m_compositorElementId(compositorElementId) {}
+        m_compositorElementId(compositorElementId),
+        m_scroll(scroll) {}
 
   RefPtr<const TransformPaintPropertyNode> m_parent;
   TransformationMatrix m_matrix;
@@ -139,6 +214,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   unsigned m_renderingContextId;
   CompositingReasons m_directCompositingReasons;
   CompositorElementId m_compositorElementId;
+  RefPtr<ScrollPaintPropertyNode> m_scroll;
 };
 
 // Redeclared here to avoid ODR issues.

@@ -2,16 +2,16 @@
 
 #include "sync/test/integration/notes_sync_test.h"
 
+#include <vector>
+
 #include "base/callback.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 
-#include "notes/notes_model_observer.h"
-#include "notes/notes_factory.h"
-#include "sync/test/integration/notes_helper.h"
-#include "notes/notes_model.h"
-
 #include "components/sync/test/fake_server/fake_server_verifier.h"
+#include "notes/notes_factory.h"
+#include "notes/notes_model.h"
+#include "notes/notes_model_observer.h"
 #include "sync/test/fake_server/notes_entity_builder.h"
 #include "sync/test/integration/notes_helper.h"
 

@@ -11,10 +11,7 @@
 #include "ash/common/login_status.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
-
-namespace base {
-class OneShotTimer;
-}  // namespace base
+#include "base/timer/timer.h"
 
 namespace views {
 class View;
@@ -89,18 +86,12 @@ class ASH_EXPORT SystemTrayItem {
   // Returns a detailed view for the item. This view is displayed standalone.
   virtual views::View* CreateDetailedView(LoginStatus status);
 
-  // Returns a notification view for the item. This view is displayed with
-  // other notifications and should be the same size as default views.
-  // DEPRECATED. Use the message center instead.
-  virtual views::View* CreateNotificationView(LoginStatus status);
-
   // These functions are called when the corresponding view item is about to be
   // removed. An item should do appropriate cleanup in these functions.
   // The default implementation does nothing.
   virtual void DestroyTrayView();
   virtual void DestroyDefaultView();
   virtual void DestroyDetailedView();
-  virtual void DestroyNotificationView();
 
   // Updates the tray view (if applicable) when the user's login status changes.
   // It is not necessary the update the default or detailed view, since the
@@ -137,12 +128,6 @@ class ASH_EXPORT SystemTrayItem {
   // |animate| is false.
   void HideDetailedView(bool animate);
 
-  // Shows a notification for this item.
-  void ShowNotificationView();
-
-  // Hides the notification for this item.
-  void HideNotificationView();
-
   // Returns true if this item needs to force the shelf to be visible when
   // the shelf is in the auto-hide state. Default is true.
   virtual bool ShouldShowShelf() const;
@@ -154,9 +139,6 @@ class ASH_EXPORT SystemTrayItem {
   void set_restore_focus(bool restore_focus) { restore_focus_ = restore_focus; }
 
  private:
-  // Actually transitions to the detailed view.
-  void DoTransitionToDetailedView();
-
   // Accesses uma_type().
   friend class SystemTrayBubble;
 
@@ -167,7 +149,7 @@ class ASH_EXPORT SystemTrayItem {
   bool restore_focus_;
 
   // Used to delay the transition to the detailed view.
-  std::unique_ptr<base::OneShotTimer> transition_delay_timer_;
+  base::OneShotTimer transition_delay_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayItem);
 };

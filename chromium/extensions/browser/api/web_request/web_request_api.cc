@@ -29,6 +29,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/common/resource_type.h"
 #include "extensions/browser/api/activity_log/web_request_constants.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/api/declarative_webrequest/request_stage.h"
@@ -39,6 +40,7 @@
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
 #include "extensions/browser/api/web_request/web_request_event_details.h"
 #include "extensions/browser/api/web_request/web_request_event_router_delegate.h"
+#include "extensions/browser/api/web_request/web_request_resource_type.h"
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
 #include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/event_router.h"
@@ -85,6 +87,19 @@ namespace web_request = api::web_request;
 
 namespace {
 
+// Describes the action taken by the Web Request API for a given stage of a web
+// request.
+// These values are written to logs.  New enum values can be added, but existing
+// enum values must never be renumbered or deleted and reused.
+enum RequestAction {
+  CANCEL = 0,
+  REDIRECT = 1,
+  MODIFY_REQUEST_HEADERS = 2,
+  MODIFY_RESPONSE_HEADERS = 3,
+  SET_AUTH_CREDENTIALS = 4,
+  MAX
+};
+
 const char kWebRequestEventPrefix[] = "webRequest.";
 
 // List of all the webRequest events.
@@ -126,6 +141,12 @@ const char* GetRequestStageAsString(
   }
   NOTREACHED();
   return "Not reached";
+}
+
+void LogRequestAction(RequestAction action) {
+  DCHECK_NE(RequestAction::MAX, action);
+  UMA_HISTOGRAM_ENUMERATION("Extensions.WebRequestAction", action,
+                            RequestAction::MAX);
 }
 
 bool IsWebRequestEvent(const std::string& event_name) {
@@ -350,6 +371,13 @@ bool IsPublicSession() {
   return false;
 }
 
+// Returns event details for a given request.
+std::unique_ptr<WebRequestEventDetails> CreateEventDetails(
+    const net::URLRequest* request,
+    int extra_info_spec) {
+  return base::MakeUnique<WebRequestEventDetails>(request, extra_info_spec);
+}
+
 }  // namespace
 
 WebRequestAPI::WebRequestAPI(content::BrowserContext* context)
@@ -392,6 +420,9 @@ void WebRequestAPI::OnListenerRemoved(const EventListenerInfo& details) {
   // Note that details.event_name is actually the sub_event_name!
   ExtensionWebRequestEventRouter::EventListener::ID id(
       details.browser_context, details.extension_id, details.event_name, 0, 0);
+
+  // This Unretained is safe because the ExtensionWebRequestEventRouter
+  // singleton is leaked.
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(
@@ -491,10 +522,10 @@ bool ExtensionWebRequestEventRouter::RequestFilter::InitFromValue(
         return false;
       for (size_t i = 0; i < urls_value->GetSize(); ++i) {
         std::string url;
-        URLPattern pattern(
-            URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS |
-            URLPattern::SCHEME_FTP | URLPattern::SCHEME_FILE |
-            URLPattern::SCHEME_EXTENSION);
+        URLPattern pattern(URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS |
+                           URLPattern::SCHEME_FTP | URLPattern::SCHEME_FILE |
+                           URLPattern::SCHEME_EXTENSION |
+                           URLPattern::SCHEME_WS | URLPattern::SCHEME_WSS);
         if (!urls_value->GetString(i, &url) ||
             pattern.Parse(url) != URLPattern::PARSE_SUCCESS) {
           *error = ErrorUtils::FormatErrorMessage(
@@ -509,8 +540,9 @@ bool ExtensionWebRequestEventRouter::RequestFilter::InitFromValue(
         return false;
       for (size_t i = 0; i < types_value->GetSize(); ++i) {
         std::string type_str;
+        types.push_back(WebRequestResourceType::OTHER);
         if (!types_value->GetString(i, &type_str) ||
-            !helpers::ParseResourceType(type_str, &types)) {
+            !ParseWebRequestResourceType(type_str, &types.back())) {
           return false;
         }
       }
@@ -553,16 +585,14 @@ ExtensionWebRequestEventRouter::RequestFilter::~RequestFilter() {
 
 // static
 ExtensionWebRequestEventRouter* ExtensionWebRequestEventRouter::GetInstance() {
-  return base::Singleton<ExtensionWebRequestEventRouter>::get();
+  CR_DEFINE_STATIC_LOCAL(ExtensionWebRequestEventRouter, instance, ());
+  return &instance;
 }
 
 ExtensionWebRequestEventRouter::ExtensionWebRequestEventRouter()
     : request_time_tracker_(new ExtensionWebRequestTimeTracker),
       web_request_event_router_delegate_(
           ExtensionsAPIClient::Get()->CreateWebRequestEventRouterDelegate()) {}
-
-ExtensionWebRequestEventRouter::~ExtensionWebRequestEventRouter() {
-}
 
 void ExtensionWebRequestEventRouter::RegisterRulesRegistry(
     void* browser_context,
@@ -573,16 +603,6 @@ void ExtensionWebRequestEventRouter::RegisterRulesRegistry(
     rules_registries_[key] = rules_registry;
   else
     rules_registries_.erase(key);
-}
-
-std::unique_ptr<WebRequestEventDetails>
-ExtensionWebRequestEventRouter::CreateEventDetails(
-    const net::URLRequest* request,
-    int extra_info_spec) {
-  std::unique_ptr<WebRequestEventDetails> event_details(
-      new WebRequestEventDetails(request, extra_info_spec));
-
-  return event_details;
 }
 
 int ExtensionWebRequestEventRouter::OnBeforeRequest(
@@ -940,7 +960,8 @@ void ExtensionWebRequestEventRouter::OnCompleted(
   request_time_tracker_->LogRequestEndTime(request->identifier(),
                                            base::Time::Now());
 
-  DCHECK_EQ(net::OK, net_error);
+  // See comment in OnErrorOccurred regarding net::ERR_WS_UPGRADE.
+  DCHECK(net_error == net::OK || net_error == net::ERR_WS_UPGRADE);
 
   DCHECK(!GetAndSetSignaled(request->identifier(), kOnCompleted));
 
@@ -978,6 +999,14 @@ void ExtensionWebRequestEventRouter::OnErrorOccurred(
     net::URLRequest* request,
     bool started,
     int net_error) {
+  // When WebSocket handshake request finishes, URLRequest is cancelled with an
+  // ERR_WS_UPGRADE code (see WebSocketStreamRequestImpl::PerformUpgrade).
+  // WebRequest API reports this as a completed request.
+  if (net_error == net::ERR_WS_UPGRADE) {
+    OnCompleted(browser_context, extension_info_map, request, net_error);
+    return;
+  }
+
   ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
   if (!client) {
     // |client| could be NULL during shutdown.
@@ -1099,9 +1128,12 @@ bool ExtensionWebRequestEventRouter::DispatchEvent(
     DispatchEventToListeners(browser_context, std::move(listeners_to_dispatch),
                              std::move(event_details));
   } else {
-    event_details.release()->DetermineFrameDataOnIO(base::Bind(
-        &ExtensionWebRequestEventRouter::DispatchEventToListeners, AsWeakPtr(),
-        browser_context, base::Passed(&listeners_to_dispatch)));
+    // This Unretained is safe because the ExtensionWebRequestEventRouter
+    // singleton is leaked.
+    event_details.release()->DetermineFrameDataOnIO(
+        base::Bind(&ExtensionWebRequestEventRouter::DispatchEventToListeners,
+                   base::Unretained(this), browser_context,
+                   base::Passed(&listeners_to_dispatch)));
   }
 
   if (num_handlers_blocking > 0) {
@@ -1333,10 +1365,7 @@ void ExtensionWebRequestEventRouter::AddCallbackForPageLoad(
 bool ExtensionWebRequestEventRouter::IsPageLoad(
     const net::URLRequest* request) const {
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-  if (!info)
-    return false;
-
-  return info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME;
+  return info && info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME;
 }
 
 void ExtensionWebRequestEventRouter::NotifyPageLoad() {
@@ -1380,7 +1409,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
     const GURL& url,
     int render_process_host_id,
     int routing_id,
-    content::ResourceType resource_type,
+    WebRequestResourceType resource_type,
     bool is_async_request,
     bool is_request_from_extension,
     int* extra_info_spec,
@@ -1452,7 +1481,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
       continue;
     }
 
-    const std::vector<content::ResourceType>& types = listener->filter.types;
+    const std::vector<WebRequestResourceType>& types = listener->filter.types;
     if (!types.empty() &&
         std::find(types.begin(), types.end(), resource_type) == types.end()) {
       continue;
@@ -1486,7 +1515,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
     // http://crbug.com/105656
     bool synchronous_xhr_from_extension =
         !is_async_request && is_request_from_extension &&
-        resource_type == content::RESOURCE_TYPE_XHR;
+        resource_type == WebRequestResourceType::XHR;
 
     // Only send webRequest events for URLs the extension has access to.
     if (blocking_listener && synchronous_xhr_from_extension)
@@ -1512,7 +1541,7 @@ ExtensionWebRequestEventRouter::GetMatchingListeners(
   const GURL& url = request->url();
   int render_process_host_id = content::ChildProcessHost::kInvalidUniqueID;
   int routing_id = MSG_ROUTING_NONE;
-  content::ResourceType resource_type = content::RESOURCE_TYPE_LAST_TYPE;
+  auto resource_type = GetWebRequestResourceType(request);
   // We are conservative here and assume requests are asynchronous in case
   // we don't have an info object. We don't want to risk a deadlock.
   bool is_async_request = false;
@@ -1522,8 +1551,6 @@ ExtensionWebRequestEventRouter::GetMatchingListeners(
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   if (info) {
     is_async_request = info->IsAsync();
-    if (helpers::IsRelevantResourceType(info->GetResourceType()))
-      resource_type = info->GetResourceType();
     render_process_host_id = info->GetChildID();
     routing_id = info->GetRouteID();
   }
@@ -1796,6 +1823,8 @@ int ExtensionWebRequestEventRouter::ExecuteDeltas(
       base::Time::Now() - blocked_request.blocking_time;
   request_time_tracker_->IncrementTotalBlockTime(request_id, block_time);
 
+  bool request_headers_modified = false;
+  bool response_headers_modified = false;
   bool credentials_set = false;
 
   deltas.sort(&helpers::InDecreasingExtensionInstallationTimeOrder);
@@ -1808,26 +1837,20 @@ int ExtensionWebRequestEventRouter::ExecuteDeltas(
   if (blocked_request.event == kOnBeforeRequest) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnBeforeRequestResponses(
-        blocked_request.response_deltas,
-        blocked_request.new_url,
-        &warnings,
-        blocked_request.net_log);
+        blocked_request.request->url(), blocked_request.response_deltas,
+        blocked_request.new_url, &warnings, blocked_request.net_log);
   } else if (blocked_request.event == kOnBeforeSendHeaders) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnBeforeSendHeadersResponses(
-        blocked_request.response_deltas,
-        blocked_request.request_headers,
-        &warnings,
-        blocked_request.net_log);
+        blocked_request.response_deltas, blocked_request.request_headers,
+        &warnings, blocked_request.net_log, &request_headers_modified);
   } else if (blocked_request.event == kOnHeadersReceived) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnHeadersReceivedResponses(
-        blocked_request.response_deltas,
+        blocked_request.request->url(), blocked_request.response_deltas,
         blocked_request.original_response_headers.get(),
-        blocked_request.override_response_headers,
-        blocked_request.new_url,
-        &warnings,
-        blocked_request.net_log);
+        blocked_request.override_response_headers, blocked_request.new_url,
+        &warnings, blocked_request.net_log, &response_headers_modified);
   } else if (blocked_request.event == kOnAuthRequired) {
     CHECK(blocked_request.callback.is_null());
     CHECK(!blocked_request.auth_callback.is_null());
@@ -1850,12 +1873,28 @@ int ExtensionWebRequestEventRouter::ExecuteDeltas(
                    browser_context, warnings));
   }
 
-  if (canceled) {
+  const bool redirected =
+      blocked_request.new_url && !blocked_request.new_url->is_empty();
+
+  if (canceled)
     request_time_tracker_->SetRequestCanceled(request_id);
-  } else if (blocked_request.new_url &&
-             !blocked_request.new_url->is_empty()) {
+  else if (redirected)
     request_time_tracker_->SetRequestRedirected(request_id);
-  }
+
+  // Log UMA metrics. Note: We are not necessarily concerned with the final
+  // action taken. Instead we are interested in how frequently the different
+  // actions are used by extensions. Hence multiple actions may be logged for a
+  // single delta execution.
+  if (canceled)
+    LogRequestAction(RequestAction::CANCEL);
+  if (redirected)
+    LogRequestAction(RequestAction::REDIRECT);
+  if (request_headers_modified)
+    LogRequestAction(RequestAction::MODIFY_REQUEST_HEADERS);
+  if (response_headers_modified)
+    LogRequestAction(RequestAction::MODIFY_RESPONSE_HEADERS);
+  if (credentials_set)
+    LogRequestAction(RequestAction::SET_AUTH_CREDENTIALS);
 
   // This triggers onErrorOccurred if canceled is true.
   int rv = canceled ? net::ERR_BLOCKED_BY_CLIENT : net::OK;
@@ -1940,10 +1979,12 @@ bool ExtensionWebRequestEventRouter::ProcessDeclarativeRules(
 
     // The rules registry is still loading. Block this request until it
     // finishes.
+    // This Unretained is safe because the ExtensionWebRequestEventRouter
+    // singleton is leaked.
     rules_registry->ready().Post(
         FROM_HERE,
         base::Bind(&ExtensionWebRequestEventRouter::OnRulesRegistryReady,
-                   AsWeakPtr(), browser_context, event_name,
+                   base::Unretained(this), browser_context, event_name,
                    request->identifier(), request_stage));
     BlockedRequest& blocked_request = blocked_requests_[request->identifier()];
     blocked_request.num_handlers_blocking++;

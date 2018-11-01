@@ -8,10 +8,9 @@
 <translation id="1506687042165942984">Visa en sparad kopia av sidan (en som vi vet är inaktuell).</translation>
 <translation id="1559528461873125649">Filen eller katalogen finns inte</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="1838667051080421715">Du tittar på källkoden till en webbsida.</translation>
+<translation id="1728677426644403582">Du visar källkoden till en webbsida</translation>
 <translation id="194030505837763158">Öppna <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Menade du <ph name="LINK" />?</translation>
-<translation id="2089090684895656482">Mindre</translation>
 <translation id="2166378884831602661">Webbplatsen kan inte tillhandahålla en säker anslutning</translation>
 <translation id="2292556288342944218">Internetanslutningen har blockerats</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> skickade ett ogiltigt svar.</translation>
@@ -19,7 +18,6 @@
 <translation id="2650446666397867134">Åtkomst till filen nekades</translation>
 <translation id="2705137772291741111">Det gick inte att läsa den sparade (cachelagrade) kopian av webbplatsen.</translation>
 <translation id="2784949926578158345">Anslutningen  återställdes.</translation>
-<translation id="284702764277384724">Servercertifikatet på <ph name="HOST_NAME" /> verkar vara falskt.</translation>
 <translation id="2909946352844186028">En nätverksförändring upptäcktes.</translation>
 <translation id="3005723025932146533">Visa sparad kopia</translation>
 <translation id="3093245981617870298">Du är inte ansluten.</translation>
@@ -39,7 +37,6 @@
 <translation id="4021036232240155012">DNS är en webbtjänst som översätter namnet på en webbplats till motsvarande internetadress.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godkände inte inloggningscertifikatet eller så har inget inloggningscertifikat angetts.</translation>
 <translation id="4522570452068850558">Info</translation>
-<translation id="4670097147947922288">En tilläggssida visas.</translation>
 <translation id="4708268264240856090">Anslutningen avbröts</translation>
 <translation id="4744603770635761495">Sökväg till körbar fil</translation>
 <translation id="4764776831041365478">Webbsidan på <ph name="URL" /> kan ligga nere för tillfället eller kan ha flyttats permanent till en ny webbadress.</translation>
@@ -56,7 +53,6 @@
 <translation id="5675650730144413517">Sidan fungerar inte</translation>
 <translation id="5869405914158311789">Webbplatsen kan inte nås</translation>
 <translation id="5990559369517809815">Förfrågningar till servern har blockerats av ett tillägg.</translation>
-<translation id="6042308850641462728">Mer</translation>
 <translation id="6146055958333702838">Kontrollera kablar och starta om routrar, modem och andra nätverksenheter
     som används.</translation>
 <translation id="6165508094623778733">Läs mer</translation>
@@ -65,12 +61,11 @@
 <translation id="6321917430147971392">Kontrollera DNS-inställningarna</translation>
 <translation id="6328639280570009161">Prova att inaktivera nätverksförslag</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avvisade anslutningen.</translation>
+<translation id="6569060085658103619">Du visar en tilläggssida</translation>
 <translation id="6711464428925977395">Något är fel med proxyservern eller så är adressen felaktig.</translation>
 <translation id="6757797048963528358">Enheten gick i viloläge.</translation>
-<translation id="6830600606572693159">Webbsidan <ph name="URL" /> är inte tillgänglig just nu. Den kan vara överbelastad eller ligga nere för underhåll.</translation>
 <translation id="6897140037006041989">Användaragent</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
-<translation id="7269802741830436641">Den här webbsidan innehåller en omdirigeringsslinga</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
 <translation id="7518003948725431193">Det fanns ingen webbsida på webbadressen: <ph name="URL" /></translation>
@@ -78,8 +73,8 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan för närvarande inte hantera förfrågan.</translation>
 <translation id="7716424297397655342">Det går inte att läsa in webbplatsen från cachelagringen</translation>
 <translation id="7758069387465995638">Anslutningen kan ha blockerats av en brandvägg eller antivirusprogram.</translation>
-<translation id="778579833039460630">Inga data har tagits emot</translation>
 <translation id="7951415247503192394">(32 bitar)</translation>
+<translation id="8089520772729574115">mindre än 1 MB</translation>
 <translation id="8134994873729925007">Det gick inte att hitta <ph name="BEGIN_ABBR" />DNS-adressen<ph name="END_ABBR" /> till servern för <ph name="HOST_NAME" />.</translation>
 <translation id="8142868475871995937">Besök &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om du vill visa listan med webbadresser som inte är godkända och andra policyer som angetts av systemadministratören.</translation>
 <translation id="8149426793427495338">Datorn gick i viloläge.</translation>

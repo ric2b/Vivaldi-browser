@@ -335,6 +335,15 @@ void CommandBufferProxyImpl::SetUpdateVSyncParametersCallback(
   update_vsync_parameters_completion_callback_ = callback;
 }
 
+void CommandBufferProxyImpl::SetNeedsVSync(bool needs_vsync) {
+  CheckLock();
+  base::AutoLock lock(last_state_lock_);
+  if (last_state_.error != gpu::error::kNoError)
+    return;
+
+  Send(new GpuCommandBufferMsg_SetNeedsVSync(route_id_, needs_vsync));
+}
+
 gpu::CommandBuffer::State CommandBufferProxyImpl::WaitForTokenInRange(
     int32_t start,
     int32_t end) {
@@ -543,25 +552,6 @@ void CommandBufferProxyImpl::DestroyImage(int32_t id) {
     return;
 
   Send(new GpuCommandBufferMsg_DestroyImage(route_id_, id));
-}
-
-int32_t CommandBufferProxyImpl::CreateGpuMemoryBufferImage(
-    size_t width,
-    size_t height,
-    unsigned internal_format,
-    unsigned usage) {
-  CheckLock();
-  std::unique_ptr<gfx::GpuMemoryBuffer> buffer(
-      channel_->gpu_memory_buffer_manager()->CreateGpuMemoryBuffer(
-          gfx::Size(width, height),
-          gpu::DefaultBufferFormatForImageFormat(internal_format),
-          gfx::BufferUsage::SCANOUT, gpu::kNullSurfaceHandle));
-  if (!buffer)
-    return -1;
-
-  int32_t result =
-      CreateImage(buffer->AsClientBuffer(), width, height, internal_format);
-  return result;
 }
 
 uint32_t CommandBufferProxyImpl::CreateStreamTexture(uint32_t texture_id) {

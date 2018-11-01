@@ -6,8 +6,8 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chromecast/app/grit/shell_resources.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "grit/shell_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace chromecast {
@@ -36,7 +36,7 @@ CastDevToolsManagerDelegate::~CastDevToolsManagerDelegate() {
 bool CastDevToolsManagerDelegate::DiscoverTargets(
     const content::DevToolsAgentHost::DiscoveryCallback& callback) {
   content::DevToolsAgentHost::List enabled_hosts;
-  for (const auto& web_contents : enabled_webcontents_) {
+  for (auto* web_contents : enabled_webcontents_) {
     enabled_hosts.push_back(
         content::DevToolsAgentHost::GetOrCreateFor(web_contents));
   }

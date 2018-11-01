@@ -6,22 +6,17 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-  // Broke in v53
-  //DISABLE(ConditionalCacheDeletionHelperBrowserTest, TimeAndURL)
+// Assume these fails due to switches::kExtensionActionRedesign being disabled
+DISABLE(ToolbarActionViewInteractiveUITest, TestClickingOnOverflowedAction)
 
-  //DISABLE(ExtensionFetchTest, ExtensionCanFetchExtensionResource)
+// VB-22258
+DISABLE(ComponentFlashHintFileTest, CorruptionTest)
+DISABLE(ComponentFlashHintFileTest, InstallTest)
 
-  //DISABLE(SitePerProcessBrowserTest, RFPHDestruction)
+// Seems to have broken in v57
+DISABLE(RenderTextHarfBuzzTest, GetSubstringBoundsMultiline/HarfBuzz)
 
-  //DISABLE(RenderFrameHostManagerTest, SwapProcessWithRelNoopenerAndTargetBlank)
-
-  // Assume these fails due to switches::kExtensionActionRedesign being disabled
-  DISABLE(ToolbarActionViewInteractiveUITest, TestClickingOnOverflowedAction)
-
-  // VB-22258
-  DISABLE(ComponentFlashHintFileTest, CorruptionTest)
-  //DISABLE(ComponentFlashHintFileTest, ExistsTest)
-  DISABLE(ComponentFlashHintFileTest, InstallTest)
-
-  // Seems to have broken in v57
-  DISABLE(RenderTextHarfBuzzTest, GetSubstringBoundsMultiline/HarfBuzz)
+// Seems broken on Linux 386
+#if defined(ARCH_CPU_32_BITS)
+DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
+#endif

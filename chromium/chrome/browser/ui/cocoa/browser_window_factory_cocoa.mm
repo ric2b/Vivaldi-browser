@@ -11,7 +11,8 @@
 // Create the controller for the Browser, which handles loading the browser
 // window from the nib. The controller takes ownership of |browser|.
 // static
-BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser) {
+BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser,
+                                                  bool user_gesture) {
   // gisli@vivaldi.com:  Put this here as we choose between Win and Mac
   // at link time.
   if (browser->is_vivaldi()) {

@@ -34,6 +34,7 @@
 
 namespace blink {
 
+class ContainerNode;
 struct InvalidationLists;
 class QualifiedName;
 class RuleData;
@@ -67,7 +68,8 @@ class CORE_EXPORT RuleFeatureSet {
   WTF_MAKE_NONCOPYABLE(RuleFeatureSet);
 
  public:
-  RuleFeatureSet() {}
+  RuleFeatureSet();
+  ~RuleFeatureSet();
 
   void add(const RuleFeatureSet&);
   void clear();
@@ -152,10 +154,13 @@ class CORE_EXPORT RuleFeatureSet {
   void collectUniversalSiblingInvalidationSet(InvalidationLists&,
                                               unsigned minDirectAdjacent) const;
   void collectNthInvalidationSet(InvalidationLists&) const;
+  void collectTypeRuleInvalidationSet(InvalidationLists&, ContainerNode&) const;
 
   bool hasIdsInSelectors() const { return m_idInvalidationSets.size() > 0; }
 
   DECLARE_TRACE();
+
+  bool isAlive() const { return m_isAlive; }
 
  protected:
   InvalidationSet* invalidationSetForSimpleSelector(const CSSSelector&,
@@ -200,6 +205,7 @@ class CORE_EXPORT RuleFeatureSet {
                                                InvalidationType);
   SiblingInvalidationSet& ensureUniversalSiblingInvalidationSet();
   DescendantInvalidationSet& ensureNthInvalidationSet();
+  DescendantInvalidationSet& ensureTypeRuleInvalidationSet();
 
   void updateInvalidationSets(const RuleData&);
   void updateInvalidationSetsForContentAttribute(const RuleData&);
@@ -209,7 +215,7 @@ class CORE_EXPORT RuleFeatureSet {
 
     void add(const InvalidationSetFeatures& other);
     bool hasFeatures() const;
-    bool hasTagIdClassOrAttribute() const;
+    bool hasIdClassOrAttribute() const;
 
     Vector<AtomicString> classes;
     Vector<AtomicString> attributes;
@@ -277,7 +283,7 @@ class CORE_EXPORT RuleFeatureSet {
       const InvalidationSetFeatures& siblingFeatures,
       const InvalidationSetFeatures& descendantFeatures);
 
-  void addClassToInvalidationSet(const AtomicString& className, Element&);
+  void updateRuleSetInvalidation(const InvalidationSetFeatures&);
 
   FeatureMetadata m_metadata;
   InvalidationSetMap m_classInvalidationSets;
@@ -286,10 +292,14 @@ class CORE_EXPORT RuleFeatureSet {
   PseudoTypeInvalidationSetMap m_pseudoInvalidationSets;
   RefPtr<SiblingInvalidationSet> m_universalSiblingInvalidationSet;
   RefPtr<DescendantInvalidationSet> m_nthInvalidationSet;
+  RefPtr<DescendantInvalidationSet> m_typeRuleInvalidationSet;
   HeapVector<RuleFeature> m_siblingRules;
   HeapVector<RuleFeature> m_uncommonAttributeRules;
   MediaQueryResultList m_viewportDependentMediaQueryResults;
   MediaQueryResultList m_deviceDependentMediaQueryResults;
+
+  // If true, the RuleFeatureSet is alive and can be used.
+  unsigned m_isAlive : 1;
 
   friend class RuleFeatureSetTest;
 };

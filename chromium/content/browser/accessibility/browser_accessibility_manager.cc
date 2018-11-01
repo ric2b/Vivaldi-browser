@@ -5,6 +5,7 @@
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 
 #include <stddef.h>
+#include <utility>
 
 #include "base/logging.h"
 #include "build/build_config.h"
@@ -39,8 +40,8 @@ BrowserAccessibility* FindNodeWithChildTreeId(BrowserAccessibility* node,
 }  // namespace
 
 // Map from AXTreeID to BrowserAccessibilityManager
-using AXTreeIDMap =
-    base::hash_map<AXTreeIDRegistry::AXTreeID, BrowserAccessibilityManager*>;
+using AXTreeIDMap = base::hash_map<ui::AXTreeIDRegistry::AXTreeID,
+                                   BrowserAccessibilityManager*>;
 base::LazyInstance<AXTreeIDMap> g_ax_tree_id_map = LAZY_INSTANCE_INITIALIZER;
 
 // A function to call when focus changes, for testing only.
@@ -116,7 +117,7 @@ BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
 
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::FromID(
-    AXTreeIDRegistry::AXTreeID ax_tree_id) {
+    ui::AXTreeIDRegistry::AXTreeID ax_tree_id) {
   AXTreeIDMap* ax_tree_id_map = g_ax_tree_id_map.Pointer();
   auto iter = ax_tree_id_map->find(ax_tree_id);
   return iter == ax_tree_id_map->end() ? nullptr : iter->second;
@@ -133,7 +134,7 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
       last_focused_node_(nullptr),
       last_focused_manager_(nullptr),
       connected_to_parent_tree_node_(false),
-      ax_tree_id_(AXTreeIDRegistry::kNoAXTreeID),
+      ax_tree_id_(ui::AXTreeIDRegistry::kNoAXTreeID),
       parent_node_id_from_parent_tree_(0) {
   tree_->SetDelegate(this);
 }
@@ -149,7 +150,7 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
       osk_state_(OSK_ALLOWED),
       last_focused_node_(nullptr),
       last_focused_manager_(nullptr),
-      ax_tree_id_(AXTreeIDRegistry::kNoAXTreeID),
+      ax_tree_id_(ui::AXTreeIDRegistry::kNoAXTreeID),
       parent_node_id_from_parent_tree_(0) {
   tree_->SetDelegate(this);
   Initialize(initial_tree);
@@ -688,18 +689,15 @@ void BrowserAccessibilityManager::SetValue(
   delegate_->AccessibilityPerformAction(action_data);
 }
 
-void BrowserAccessibilityManager::SetTextSelection(
-    const BrowserAccessibility& node,
-    int start_offset,
-    int end_offset) {
-  if (!delegate_)
+void BrowserAccessibilityManager::SetSelection(AXPlatformRange range) {
+  if (!delegate_ || range.IsNull())
     return;
 
   ui::AXActionData action_data;
-  action_data.anchor_node_id = node.GetId();
-  action_data.anchor_offset = start_offset;
-  action_data.focus_node_id = node.GetId();
-  action_data.focus_offset = end_offset;
+  action_data.anchor_node_id = range.anchor()->anchor_id();
+  action_data.anchor_offset = range.anchor()->text_offset();
+  action_data.focus_node_id = range.focus()->anchor_id();
+  action_data.focus_offset = range.focus()->text_offset();
   action_data.action = ui::AX_ACTION_SET_SELECTION;
   delegate_->AccessibilityPerformAction(action_data);
 }

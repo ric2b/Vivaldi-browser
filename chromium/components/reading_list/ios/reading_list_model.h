@@ -69,6 +69,10 @@ class ReadingListModel : public base::NonThreadSafe {
   // Mark all unseen entries as unread.
   virtual void MarkAllSeen() = 0;
 
+  // Delete all the Reading List entries. Return true if entries where indeed
+  // deleted.
+  virtual bool DeleteAllEntries() = 0;
+
   // Returns the flag about unseen entries on the device.
   // This flag is raised if some unseen items are added on this device.
   // The flag is reset if |ResetLocalUnseenFlag| is called or if all unseen
@@ -90,7 +94,7 @@ class ReadingListModel : public base::NonThreadSafe {
 
   // Adds |url| at the top of the unread entries, and removes entries with the
   // same |url| from everywhere else if they exist. The entry title will be a
-  // trimmed copy of |title.
+  // trimmed copy of |title|.
   // The addition may be asynchronous, and the data will be available only once
   // the observers are notified.
   virtual const ReadingListEntry& AddEntry(
@@ -116,11 +120,15 @@ class ReadingListModel : public base::NonThreadSafe {
 
   // Sets the Distilled info for the entry |url|. This method sets the
   // DistillationState of the entry to PROCESSED and sets the |distilled_path|
-  // (path of the file on disk) and the |distilled_url| (url of the page that
-  // was distilled.
+  // (path of the file on disk), the |distilled_url| (url of the page that
+  // was distilled, the |distillation_size| (the size of the offline data) and
+  // the |distillation_date| (date of distillation in microseconds since Jan 1st
+  // 1970.
   virtual void SetEntryDistilledInfo(const GURL& url,
                                      const base::FilePath& distilled_path,
-                                     const GURL& distilled_url) = 0;
+                                     const GURL& distilled_url,
+                                     int64_t distilation_size,
+                                     int64_t distilation_time) = 0;
 
   // Observer registration methods. The model will remove all observers upon
   // destruction automatically.

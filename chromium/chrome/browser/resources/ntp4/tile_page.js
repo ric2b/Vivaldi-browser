@@ -60,7 +60,7 @@ cr.define('ntp', function() {
       this.addEventListener('dragend', this.onDragEnd_);
 
       this.firstChild.addEventListener(
-          'webkitAnimationEnd', this.onContentsAnimationEnd_.bind(this));
+          'animationend', this.onContentsAnimationEnd_.bind(this));
 
       this.eventTracker = new EventTracker();
     },
@@ -120,7 +120,7 @@ cr.define('ntp', function() {
       this.dragClone.style.right = '';
       this.dragClone.classList.add('drag-representation');
       $('card-slider-frame').appendChild(this.dragClone);
-      this.eventTracker.add(this.dragClone, 'webkitTransitionEnd',
+      this.eventTracker.add(this.dragClone, 'transitionend',
                             this.onDragCloneTransitionEnd_.bind(this));
 
       this.classList.add('dragging');
@@ -238,8 +238,8 @@ cr.define('ntp', function() {
       if (isRTL())
         x *= -1;
 
-      this.doppleganger_.style.WebkitTransform = 'translate(' + x + 'px, ' +
-                                                                y + 'px)';
+      this.doppleganger_.style.transform = 'translate(' + x + 'px, ' +
+                                                          y + 'px)';
     },
 
     /**
@@ -273,7 +273,7 @@ cr.define('ntp', function() {
       this.dragClone = null;
 
       clone.parentNode.removeChild(clone);
-      this.eventTracker.remove(clone, 'webkitTransitionEnd');
+      this.eventTracker.remove(clone, 'transitionend');
       this.classList.remove('dragging');
       if (this.firstChild.finalizeDrag)
         this.firstChild.finalizeDrag();
@@ -304,7 +304,7 @@ cr.define('ntp', function() {
     },
 
     /**
-     * Callback for the webkitAnimationEnd event on the tile's contents.
+     * Callback for the animationend event on the tile's contents.
      * @param {Event} e The event object.
      */
     onContentsAnimationEnd_: function(e) {

@@ -98,9 +98,9 @@ extern const char kChromeUIJavaCrashURL[];
 extern const char kChromeUINativeScheme[];
 extern const char kChromeUINativeNewTabURL[];
 extern const char kChromeUINativeBookmarksURL[];
-extern const char kChromeUINativeHistoryURL[];
 extern const char kChromeUINativePhysicalWebDiagnosticsURL[];
 extern const char kChromeUINativeRecentTabsURL[];
+extern const char kChromeUIWebApksURL[];
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
@@ -266,9 +266,10 @@ extern const char kChromeUIOfflineInternalsURL[];
 extern const char kChromeUIPhysicalWebDiagnosticsHost[];
 extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUISnippetsInternalsHost[];
+extern const char kChromeUIWebApksHost[];
 #endif
 
-#if defined(ENABLE_VR_SHELL) || defined(ENABLE_WEBVR)
+#if defined(ENABLE_WEBVR)
 extern const char kChromeUIVrShellUIHost[];
 #endif
 
@@ -334,7 +335,7 @@ extern const char kClearBrowserDataSubPage[];
 extern const char kContentSettingsSubPage[];
 extern const char kCreateProfileSubPage[];
 extern const char kDeprecatedOptionsContentSettingsExceptionsSubPage[];
-extern const char kExtensionsSubPage[];
+extern const char kDeprecatedExtensionsSubPage[];
 extern const char kHandlerSettingsSubPage[];
 extern const char kImportDataSubPage[];
 extern const char kLanguageOptionsSubPage[];
@@ -349,9 +350,12 @@ extern const char kTriggeredResetProfileSettingsSubPage[];
 extern const char kAccessibilitySubPage[];
 extern const char kBluetoothSubPage[];
 extern const char kDateTimeSubPage[];
+extern const char kDisplaySubPage[];
 extern const char kDeprecatedOptionsSearchSubPage[];
-extern const char kInternetOptionsSubPage[];
-extern const char kPowerOptionsSubPage[];
+extern const char kInternetSubPage[];
+extern const char kNetworkDetailSubPage[];
+extern const char kPowerSubPage[];
+extern const char kStylusSubPage[];
 #endif
 
 // Extensions sub pages.
@@ -365,6 +369,7 @@ extern const char kSyncGoogleDashboardURL[];
 // URL of the 'Activity controls' section of the privacy settings page.
 extern const char kGoogleAccountActivityControlsURL[];
 
+extern const char kContentSettingsExceptionsLearnMoreURL[];
 extern const char kPasswordManagerLearnMoreURL[];
 extern const char kUpgradeHelpCenterBaseURL[];
 extern const char kSmartLockHelpPage[];
@@ -501,7 +506,7 @@ extern const char kNaturalScrollHelpURL[];
 // The URL for the Learn More page about enterprise enrolled devices.
 extern const char kLearnMoreEnterpriseURL[];
 
-// The URL fo the "learn more" link for Google Play Store (Arc++) settings.
+// The URL fo the "learn more" link for Google Play Store (ARC) settings.
 extern const char kAndroidAppsLearnMoreURL[];
 #endif
 

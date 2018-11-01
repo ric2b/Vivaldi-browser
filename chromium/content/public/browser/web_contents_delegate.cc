@@ -162,7 +162,7 @@ bool WebContentsDelegate::ShouldCreateWebContents(
     int32_t route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
-    WindowContainerType window_container_type,
+    content::mojom::WindowContainerType window_container_type,
     const GURL& opener_url,
     const std::string& frame_name,
     const GURL& target_url,
@@ -220,6 +220,12 @@ bool WebContentsDelegate::CheckMediaAccessPermission(
   LOG(ERROR) << "WebContentsDelegate::CheckMediaAccessPermission: "
              << "Not supported.";
   return false;
+}
+
+std::string WebContentsDelegate::GetDefaultMediaDeviceID(
+    WebContents* web_contents,
+    MediaStreamType type) {
+  return std::string();
 }
 
 #if defined(OS_ANDROID)
@@ -311,6 +317,14 @@ void WebContentsDelegate::ShowCertificateViewerInDevTools(
 
 void WebContentsDelegate::RequestAppBannerFromDevTools(
     content::WebContents* web_contents) {
+}
+
+bool WebContentsDelegate::ShouldAllowRunningInsecureContent(
+    WebContents* web_contents,
+    bool allowed_per_prefs,
+    const url::Origin& origin,
+    const GURL& resource_url) {
+  return allowed_per_prefs;
 }
 
 }  // namespace content

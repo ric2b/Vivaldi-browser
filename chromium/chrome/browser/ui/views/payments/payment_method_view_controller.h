@@ -6,30 +6,32 @@
 #define CHROME_BROWSER_UI_VIEWS_PAYMENTS_PAYMENT_METHOD_VIEW_CONTROLLER_H_
 
 #include "base/macros.h"
+#include "chrome/browser/ui/views/payments/payment_request_item_list.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
-#include "ui/views/controls/button/vector_icon_button_delegate.h"
 
 namespace payments {
 
 class PaymentRequest;
-class PaymentRequestDialog;
+class PaymentRequestDialogView;
 
 // The PaymentRequestSheetController subtype for the Payment Method screen of
 // the Payment Request flow.
-class PaymentMethodViewController : public PaymentRequestSheetController,
-                                    public views::VectorIconButtonDelegate {
+class PaymentMethodViewController : public PaymentRequestSheetController {
  public:
   // Does not take ownership of the arguments, which should outlive this object.
   PaymentMethodViewController(PaymentRequest* request,
-                              PaymentRequestDialog* dialog);
+                              PaymentRequestDialogView* dialog);
   ~PaymentMethodViewController() override;
 
   // PaymentRequestSheetController:
   std::unique_ptr<views::View> CreateView() override;
 
  private:
-  // views::VectorIconButtonDelegate:
+  // PaymentRequestSheetController:
+  std::unique_ptr<views::View> CreateExtraFooterView() override;
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+
+  PaymentRequestItemList payment_method_list_;
 
   DISALLOW_COPY_AND_ASSIGN(PaymentMethodViewController);
 };

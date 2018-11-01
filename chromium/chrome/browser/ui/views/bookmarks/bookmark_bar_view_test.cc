@@ -292,7 +292,7 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
     bookmarks::test::WaitForBookmarkModelToLoad(model_);
     profile_->GetPrefs()->SetBoolean(bookmarks::prefs::kShowBookmarkBar, true);
 
-    Browser::CreateParams native_params(profile_.get());
+    Browser::CreateParams native_params(profile_.get(), true);
     browser_ = chrome::CreateBrowserWithTestWindowForParams(&native_params);
 
     local_state_.reset(new ScopedTestingLocalState(
@@ -301,6 +301,10 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
 
     bb_view_.reset(new BookmarkBarView(browser_.get(), NULL));
     bb_view_->set_owned_by_client();
+    // Real bookmark bars get a BookmarkBarViewBackground. Set an opaque
+    // background here just to avoid triggering subpixel rendering issues.
+    bb_view_->set_background(
+        views::Background::CreateSolidBackground(SK_ColorWHITE));
     bb_view_->SetPageNavigator(&navigator_);
 
     AddTestData(CreateBigMenu());

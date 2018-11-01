@@ -5,6 +5,7 @@
 
 #include "sync/test/fake_server/notes_entity.h"
 
+#include <memory>
 #include <string>
 
 #include "base/guid.h"
@@ -49,14 +50,14 @@ std::unique_ptr<FakeServerEntity> NotesEntity::CreateNew(
 // static
 std::unique_ptr<FakeServerEntity> NotesEntity::CreateUpdatedVersion(
     const sync_pb::SyncEntity& client_entity,
-    FakeServerEntity& current_server_entity,
+    const FakeServerEntity& current_server_entity,
     const string& parent_id) {
   CHECK(client_entity.version() != 0) << "Existing entities must not have a "
                                       << "version = 0.";
   CHECK(IsNotes(client_entity)) << "The given entity must be a notes.";
 
-  NotesEntity* current_notes_entity =
-      static_cast<NotesEntity*>(&current_server_entity);
+  const NotesEntity* current_notes_entity =
+      static_cast<const NotesEntity*>(&current_server_entity);
   string originator_cache_guid = current_notes_entity->originator_cache_guid_;
   string originator_client_item_id =
       current_notes_entity->originator_client_item_id_;

@@ -24,6 +24,7 @@
 
 #include "core/layout/LayoutText.h"
 
+#include <algorithm>
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Text.h"
 #include "core/editing/VisiblePosition.h"
@@ -755,16 +756,20 @@ LayoutRect LayoutText::localCaretRect(InlineBox* inlineBox,
   // Get caret height from a font of character.
   const ComputedStyle* styleToUse =
       caretBox->getLineLayoutItem().style(caretBox->isFirstLineStyle());
+  if (!styleToUse->font().primaryFont())
+    return LayoutRect();
+
   int height = styleToUse->font().primaryFont()->getFontMetrics().height();
   int top = caretBox->logicalTop().toInt();
 
   // Go ahead and round left to snap it to the nearest pixel.
   LayoutUnit left = box->positionForOffset(caretOffset);
+  LayoutUnit caretWidth = frameView()->caretWidth();
 
   // Distribute the caret's width to either side of the offset.
-  LayoutUnit caretWidthLeftOfOffset = caretWidth() / 2;
+  LayoutUnit caretWidthLeftOfOffset = caretWidth / 2;
   left -= caretWidthLeftOfOffset;
-  LayoutUnit caretWidthRightOfOffset = caretWidth() - caretWidthLeftOfOffset;
+  LayoutUnit caretWidthRightOfOffset = caretWidth - caretWidthLeftOfOffset;
 
   left = LayoutUnit(left.round());
 
@@ -814,7 +819,7 @@ LayoutRect LayoutText::localCaretRect(InlineBox* inlineBox,
 
   if (rightAligned) {
     left = std::max(left, leftEdge);
-    left = std::min(left, rootRight - caretWidth());
+    left = std::min(left, rootRight - caretWidth);
   } else {
     left = std::min(left, rightEdge - caretWidthRightOfOffset);
     left = std::max(left, rootLeft);
@@ -822,8 +827,8 @@ LayoutRect LayoutText::localCaretRect(InlineBox* inlineBox,
 
   return LayoutRect(
       style()->isHorizontalWritingMode()
-          ? IntRect(left.toInt(), top, caretWidth().toInt(), height)
-          : IntRect(top, left.toInt(), height, caretWidth().toInt()));
+          ? IntRect(left.toInt(), top, caretWidth.toInt(), height)
+          : IntRect(top, left.toInt(), height, caretWidth.toInt()));
 }
 
 ALWAYS_INLINE float LayoutText::widthFromFont(
@@ -995,15 +1000,29 @@ static float minWordFragmentWidthForBreakAll(LayoutText* layoutText,
                                              const Font& font,
                                              TextDirection textDirection,
                                              int start,
-                                             int length) {
+                                             int length,
+                                             EWordBreak breakAllOrBreakWord) {
   DCHECK_GT(length, 0);
-  LazyLineBreakIterator breakIterator(layoutText->text(), style.locale());
+  LazyLineBreakIterator breakIterator(layoutText->text(),
+                                      localeForLineBreakIterator(style));
   int nextBreakable = -1;
   float min = std::numeric_limits<float>::max();
   int end = start + length;
   for (int i = start; i < end;) {
-    breakIterator.isBreakable(i + 1, nextBreakable, LineBreakType::BreakAll);
-    int fragmentLength = (nextBreakable > i ? nextBreakable : length) - i;
+    int fragmentLength;
+    if (breakAllOrBreakWord == EWordBreak::BreakAllWordBreak) {
+      breakIterator.isBreakable(i + 1, nextBreakable, LineBreakType::BreakAll);
+      fragmentLength = (nextBreakable > i ? nextBreakable : length) - i;
+    } else {
+      fragmentLength = U16_LENGTH(layoutText->codepointAt(i));
+    }
+
+    // Ensure that malformed surrogate pairs don't cause us to read
+    // past the end of the string.
+    int textLength = layoutText->textLength();
+    if (i + fragmentLength > textLength)
+      fragmentLength = std::max(textLength - i, 0);
+
     // The correct behavior is to measure width without re-shaping, but we
     // reshape each fragment here because a) the current line breaker does not
     // support it, b) getCharacterRange() can reshape if the text is too long
@@ -1053,6 +1072,30 @@ static float maxWordFragmentWidth(LayoutText* layoutText,
   return maxFragmentWidth + layoutText->hyphenWidth(font, textDirection);
 }
 
+AtomicString localeForLineBreakIterator(const ComputedStyle& style) {
+  LineBreakIteratorMode mode = LineBreakIteratorMode::Default;
+  switch (style.getLineBreak()) {
+    default:
+      NOTREACHED();
+    // Fall through.
+    case LineBreakAuto:
+    case LineBreakAfterWhiteSpace:
+      return style.locale();
+    case LineBreakNormal:
+      mode = LineBreakIteratorMode::Normal;
+      break;
+    case LineBreakStrict:
+      mode = LineBreakIteratorMode::Strict;
+      break;
+    case LineBreakLoose:
+      mode = LineBreakIteratorMode::Loose;
+      break;
+  }
+  if (const LayoutLocale* locale = style.getFontDescription().locale())
+    return locale->localeWithBreakKeyword(mode);
+  return style.locale();
+}
+
 void LayoutText::computePreferredLogicalWidths(
     float leadWidth,
     HashSet<const SimpleFontData*>& fallbackFonts,
@@ -1081,7 +1124,8 @@ void LayoutText::computePreferredLogicalWidths(
   const Font& f = styleToUse.font();  // FIXME: This ignores first-line.
   float wordSpacing = styleToUse.wordSpacing();
   int len = textLength();
-  LazyLineBreakIterator breakIterator(m_text, styleToUse.locale());
+  LazyLineBreakIterator breakIterator(m_text,
+                                      localeForLineBreakIterator(styleToUse));
   bool needsWordSpacing = false;
   bool ignoringSpaces = false;
   bool isSpace = false;
@@ -1091,11 +1135,16 @@ void LayoutText::computePreferredLogicalWidths(
   int lastWordBoundary = 0;
   float cachedWordTrailingSpaceWidth[2] = {0, 0};  // LTR, RTL
 
-  bool breakAll = (styleToUse.wordBreak() == BreakAllWordBreak ||
-                   styleToUse.wordBreak() == BreakWordBreak) &&
-                  styleToUse.autoWrap();
-  bool keepAll =
-      styleToUse.wordBreak() == KeepAllWordBreak && styleToUse.autoWrap();
+  EWordBreak breakAllOrBreakWord = EWordBreak::NormalWordBreak;
+  LineBreakType lineBreakType = LineBreakType::Normal;
+  if (styleToUse.autoWrap()) {
+    if (styleToUse.wordBreak() == BreakAllWordBreak ||
+        styleToUse.wordBreak() == BreakWordBreak) {
+      breakAllOrBreakWord = styleToUse.wordBreak();
+    } else if (styleToUse.wordBreak() == KeepAllWordBreak) {
+      lineBreakType = LineBreakType::KeepAll;
+    }
+  }
 
   Hyphenation* hyphenation =
       styleToUse.autoWrap() ? styleToUse.getHyphenation() : nullptr;
@@ -1191,9 +1240,7 @@ void LayoutText::computePreferredLogicalWidths(
       continue;
     }
 
-    bool hasBreak = breakIterator.isBreakable(
-        i, nextBreakable,
-        keepAll ? LineBreakType::KeepAll : LineBreakType::Normal);
+    bool hasBreak = breakIterator.isBreakable(i, nextBreakable, lineBreakType);
     bool betweenWords = true;
     int j = i;
     while (c != newlineCharacter && c != spaceCharacter &&
@@ -1271,12 +1318,13 @@ void LayoutText::computePreferredLogicalWidths(
         }
       }
 
-      if (breakAll) {
+      if (breakAllOrBreakWord != EWordBreak::NormalWordBreak) {
         // Because sum of character widths may not be equal to the word width,
         // we need to measure twice; once with normal break for max width,
         // another with break-all for min width.
-        currMinWidth = minWordFragmentWidthForBreakAll(
-            this, styleToUse, f, textDirection, i, wordLen);
+        currMinWidth =
+            minWordFragmentWidthForBreakAll(this, styleToUse, f, textDirection,
+                                            i, wordLen, breakAllOrBreakWord);
       } else {
         currMinWidth += w;
       }
@@ -1659,7 +1707,7 @@ void LayoutText::secureText(UChar mask) {
   int lastTypedCharacterOffsetToReveal = -1;
   UChar revealedText;
   SecureTextTimer* secureTextTimer =
-      gSecureTextTimers ? gSecureTextTimers->get(this) : 0;
+      gSecureTextTimers ? gSecureTextTimers->at(this) : 0;
   if (secureTextTimer && secureTextTimer->isActive()) {
     lastTypedCharacterOffsetToReveal =
         secureTextTimer->lastTypedCharacterOffset();
@@ -1680,7 +1728,8 @@ void LayoutText::secureText(UChar mask) {
 void LayoutText::setText(PassRefPtr<StringImpl> text, bool force) {
   ASSERT(text);
 
-  if (!force && equal(m_text.impl(), text.get()))
+  bool equalText = equal(m_text.impl(), text.get());
+  if (equalText && !force)
     return;
 
   setTextInternal(std::move(text));
@@ -1693,8 +1742,14 @@ void LayoutText::setText(PassRefPtr<StringImpl> text, bool force) {
         LayoutInvalidationReason::TextChanged);
   m_knownToHaveNoOverflowAndNoFallbackFonts = false;
 
-  if (AXObjectCache* cache = document().existingAXObjectCache())
-    cache->textChanged(this);
+  // Don't bother updating the AX tree if there's no change. Otherwise, when
+  // typing in password fields, we would announce each "dot" twice: once when a
+  // character is typed, and second when that character is hidden.
+  if (!equalText) {
+    AXObjectCache* cache = document().existingAXObjectCache();
+    if (cache)
+      cache->textChanged(this);
+  }
 
   TextAutosizer* textAutosizer = document().textAutosizer();
   if (textAutosizer)
@@ -1871,6 +1926,24 @@ LayoutRect LayoutText::visualOverflowRect() const {
   LayoutUnit logicalHeight =
       lastTextBox()->logicalBottomVisualOverflow() - logicalTop;
 
+  // Inflate visual overflow if we have adjusted ascent/descent causing the
+  // painted glyphs to overflow the layout geometries based on the adjusted
+  // ascent/descent.
+  unsigned inflation_for_ascent = 0;
+  unsigned inflation_for_descent = 0;
+  const auto* font_data =
+      styleRef(firstTextBox()->isFirstLineStyle()).font().primaryFont();
+  if (font_data)
+    inflation_for_ascent = font_data->VisualOverflowInflationForAscent();
+  if (lastTextBox()->isFirstLineStyle() != firstTextBox()->isFirstLineStyle()) {
+    font_data =
+        styleRef(lastTextBox()->isFirstLineStyle()).font().primaryFont();
+  }
+  if (font_data)
+    inflation_for_descent = font_data->VisualOverflowInflationForDescent();
+  logicalTop -= LayoutUnit(inflation_for_ascent);
+  logicalHeight += LayoutUnit(inflation_for_ascent + inflation_for_descent);
+
   LayoutRect rect(logicalLeftSide, logicalTop, logicalWidth, logicalHeight);
   if (!style()->isHorizontalWritingMode())
     rect = rect.transposedRect();
@@ -1971,10 +2044,10 @@ void LayoutText::momentarilyRevealLastTypedCharacter(
   if (!gSecureTextTimers)
     gSecureTextTimers = new SecureTextTimerMap;
 
-  SecureTextTimer* secureTextTimer = gSecureTextTimers->get(this);
+  SecureTextTimer* secureTextTimer = gSecureTextTimers->at(this);
   if (!secureTextTimer) {
     secureTextTimer = new SecureTextTimer(this);
-    gSecureTextTimers->add(this, secureTextTimer);
+    gSecureTextTimers->insert(this, secureTextTimer);
   }
   secureTextTimer->restartWithNewText(lastTypedCharacterOffset);
 }

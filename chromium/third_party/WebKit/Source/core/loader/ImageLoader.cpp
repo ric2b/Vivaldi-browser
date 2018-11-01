@@ -30,13 +30,8 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceFetcher.h"
-#include "core/fetch/ResourceLoadingLog.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -48,6 +43,10 @@
 #include "core/layout/LayoutVideo.h"
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/svg/graphics/SVGImage.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoadingLog.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/WebCachePolicy.h"
@@ -104,7 +103,7 @@ class ImageLoader::Task {
         m_weakFactory(this),
         m_referrerPolicy(referrerPolicy) {
     ExecutionContext& context = m_loader->element()->document();
-    InspectorInstrumentation::asyncTaskScheduled(&context, "Image", this);
+    probe::asyncTaskScheduled(&context, "Image", this);
     v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
     v8::HandleScope scope(isolate);
     // If we're invoked from C++ without a V8 context on the stack, we should
@@ -124,7 +123,7 @@ class ImageLoader::Task {
     if (!m_loader)
       return;
     ExecutionContext& context = m_loader->element()->document();
-    InspectorInstrumentation::AsyncTask asyncTask(&context, this);
+    probe::AsyncTask asyncTask(&context, this);
     if (m_scriptState->contextIsValid()) {
       ScriptState::Scope scope(m_scriptState.get());
       m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP,
@@ -156,10 +155,7 @@ class ImageLoader::Task {
 
 ImageLoader::ImageLoader(Element* element)
     : m_element(element),
-      m_derefElementTimer(TaskRunnerHelper::get(TaskType::Networking,
-                                                element->document().frame()),
-                          this,
-                          &ImageLoader::timerFired),
+      m_derefElementTimer(this, &ImageLoader::timerFired),
       m_hasPendingLoadEvent(false),
       m_hasPendingErrorEvent(false),
       m_imageComplete(true),
@@ -404,7 +400,7 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior,
   if (m_loadingImageDocument && updateBehavior != UpdateForcedReload) {
     ImageResource* imageResource =
         ImageResource::create(imageSourceToKURL(m_element->imageSourceURL()));
-    imageResource->setStatus(Resource::Pending);
+    imageResource->setStatus(ResourceStatus::Pending);
     m_imageResourceForImageDocument = imageResource;
     setImage(imageResource->getContent());
     return;

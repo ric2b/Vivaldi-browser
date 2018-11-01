@@ -130,6 +130,7 @@ class CC_EXPORT GpuImageDecodeCache
 
   // base::MemoryCoordinatorClient overrides.
   void OnMemoryStateChange(base::MemoryState state) override;
+  void OnPurgeMemory() override;
 
   // Called by Decode / Upload tasks.
   void DecodeImage(const DrawImage& image);
@@ -151,6 +152,7 @@ class CC_EXPORT GpuImageDecodeCache
   size_t GetDrawImageSizeForTesting(const DrawImage& image);
   void SetImageDecodingFailedForTesting(const DrawImage& image);
   bool DiscardableIsLockedForTesting(const DrawImage& image);
+  bool IsInInUseCacheForTesting(const DrawImage& image) const;
 
  private:
   enum class DecodedDataMode { GPU, CPU };

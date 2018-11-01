@@ -106,8 +106,6 @@ source_set("ipc_common_sources") {
     sources += [
       "android/scoped_surface_request_conduit.cc",
       "android/scoped_surface_request_conduit.h",
-      "android/surface_texture_peer.cc",
-      "android/surface_texture_peer.h",
     ]
   }
 
@@ -144,6 +142,7 @@ mojom("interfaces") {
     "gpu_preferences.mojom",
     "mailbox.mojom",
     "mailbox_holder.mojom",
+    "memory_stats.mojom",
     "surface_handle.mojom",
     "sync_token.mojom",
   ]
@@ -169,6 +168,7 @@ source_set("struct_traits") {
   sources = [
     "mailbox_holder_struct_traits.h",
     "mailbox_struct_traits.h",
+    "memory_stats_struct_traits.h",
     "surface_handle_struct_traits.h",
     "sync_token_struct_traits.h",
   ]
@@ -176,6 +176,7 @@ source_set("struct_traits") {
     ":interfaces_shared_cpp_sources",
     ":surface_handle_type",
     "//gpu/command_buffer/common",
+    "//gpu/ipc/common",
     "//mojo/public/cpp/bindings:bindings",
   ]
 }

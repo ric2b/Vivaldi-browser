@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 
+#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen_view.h"
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
@@ -16,52 +17,44 @@ namespace chromeos {
 
 ArcTermsOfServiceScreen::ArcTermsOfServiceScreen(
     BaseScreenDelegate* base_screen_delegate,
-    ArcTermsOfServiceScreenActor* actor)
+    ArcTermsOfServiceScreenView* view)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE),
-      actor_(actor) {
-  DCHECK(actor_);
-  if (actor_)
-    actor_->SetDelegate(this);
+      view_(view) {
+  DCHECK(view_);
+  if (view_)
+    view_->AddObserver(this);
 }
 
 ArcTermsOfServiceScreen::~ArcTermsOfServiceScreen() {
-  if (actor_)
-    actor_->SetDelegate(nullptr);
+  if (view_)
+    view_->RemoveObserver(this);
 }
 
 void ArcTermsOfServiceScreen::Show() {
-  if (!actor_)
+  if (!view_)
     return;
 
   // Show the screen.
-  actor_->Show();
+  view_->Show();
 }
 
 void ArcTermsOfServiceScreen::Hide() {
-  if (actor_)
-    actor_->Hide();
+  if (view_)
+    view_->Hide();
 }
 
 void ArcTermsOfServiceScreen::OnSkip() {
-  ApplyTerms(false);
+  Finish(ScreenExitCode::ARC_TERMS_OF_SERVICE_FINISHED);
 }
 
 void ArcTermsOfServiceScreen::OnAccept() {
-  ApplyTerms(true);
+  Finish(ScreenExitCode::ARC_TERMS_OF_SERVICE_FINISHED);
 }
 
-void ArcTermsOfServiceScreen::ApplyTerms(bool accepted) {
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-  profile->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted, accepted);
-  profile->GetPrefs()->SetBoolean(prefs::kArcEnabled, accepted);
-
-  Finish(BaseScreenDelegate::ARC_TERMS_OF_SERVICE_FINISHED);
-}
-
-void ArcTermsOfServiceScreen::OnActorDestroyed(
-    ArcTermsOfServiceScreenActor* actor) {
-  DCHECK_EQ(actor, actor_);
-  actor_ = nullptr;
+void ArcTermsOfServiceScreen::OnViewDestroyed(
+    ArcTermsOfServiceScreenView* view) {
+  DCHECK_EQ(view, view_);
+  view_ = nullptr;
 }
 
 }  // namespace chromeos

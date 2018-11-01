@@ -82,10 +82,8 @@ class TestResourceDispatcher : public ResourceDispatcher {
       const url::Origin& frame_origin,
       std::unique_ptr<RequestPeer> peer,
       blink::WebURLRequest::LoadingIPCType ipc_type,
-      mojom::URLLoaderFactory* url_loader_factory,
-      mojo::AssociatedGroup* associated_group) override {
+      mojom::URLLoaderFactory* url_loader_factory) override {
     EXPECT_FALSE(peer_);
-    EXPECT_EQ(blink::WebURLRequest::LoadingIPCType::ChromeIPC, ipc_type);
     peer_ = std::move(peer);
     url_ = request->url;
     stream_url_ = request->resource_body_stream_url;
@@ -127,7 +125,7 @@ class TestResourceDispatcher : public ResourceDispatcher {
 class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
  public:
   TestWebURLLoaderClient(ResourceDispatcher* dispatcher)
-      : loader_(new WebURLLoaderImpl(dispatcher, nullptr, nullptr)),
+      : loader_(new WebURLLoaderImpl(dispatcher, nullptr)),
         delete_on_receive_redirect_(false),
         delete_on_receive_response_(false),
         delete_on_receive_data_(false),

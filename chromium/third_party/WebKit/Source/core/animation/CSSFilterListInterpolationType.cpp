@@ -134,7 +134,7 @@ InterpolationValue CSSFilterListInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSFilterListInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   if (value.isIdentifierValue() &&
       toCSSIdentifierValue(value).getValueID() == CSSValueNone)
@@ -164,8 +164,7 @@ InterpolationValue CSSFilterListInterpolationType::maybeConvertValue(
 
 InterpolationValue
 CSSFilterListInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
-    const StyleResolverState& state) const {
-  const ComputedStyle& style = *state.style();
+    const ComputedStyle& style) const {
   return convertFilterList(
       FilterListPropertyFunctions::getFilterList(cssProperty(), style),
       style.effectiveZoom());

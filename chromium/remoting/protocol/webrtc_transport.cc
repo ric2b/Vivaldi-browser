@@ -29,6 +29,7 @@
 #include "remoting/protocol/webrtc_audio_module.h"
 #include "remoting/protocol/webrtc_dummy_video_encoder.h"
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
+#include "third_party/webrtc/api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "third_party/webrtc/api/test/fakeconstraints.h"
 
 using buzz::QName;
@@ -80,10 +81,10 @@ void UpdateCodecParameters(SdpMessage* sdp_message, bool incoming) {
     }
   }
 
-  // Update SDP format to use stereo for opus codec.
+  // Update SDP format to use 160kbps stereo for opus codec.
   if (sdp_message->has_audio() &&
       !sdp_message->AddCodecParameter("opus",
-                                      "stereo=1; x-google-min-bitrate=160")) {
+                                      "stereo=1; maxaveragebitrate=163840")) {
     if (incoming) {
       LOG(WARNING) << "Opus not found in an incoming SDP.";
     } else {
@@ -175,7 +176,9 @@ class WebrtcTransport::PeerConnectionWrapper
 
     peer_connection_factory_ = webrtc::CreatePeerConnectionFactory(
         worker_thread, rtc::Thread::Current(), audio_module_.get(),
-        encoder_factory.release(), nullptr);
+        webrtc::CreateBuiltinAudioEncoderFactory(),
+        webrtc::CreateBuiltinAudioDecoderFactory(), encoder_factory.release(),
+        nullptr);
 
     webrtc::FakeConstraints constraints;
     constraints.AddMandatory(webrtc::MediaConstraintsInterface::kEnableDtlsSrtp,
@@ -472,6 +475,15 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
   SdpMessage sdp_message(description_sdp);
   UpdateCodecParameters(&sdp_message, /*incoming=*/false);
   description_sdp = sdp_message.ToString();
+  webrtc::SdpParseError parse_error;
+  description.reset(webrtc::CreateSessionDescription(
+      description->type(), description_sdp, &parse_error));
+  if (!description) {
+    LOG(ERROR) << "Failed to parse the session description: "
+               << parse_error.description << " line: " << parse_error.line;
+    Close(CHANNEL_CONNECTION_ERROR);
+    return;
+  }
 
   // Format and send the session description to the peer.
   std::unique_ptr<XmlElement> transport_info(

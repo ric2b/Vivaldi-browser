@@ -40,7 +40,7 @@ if (is_win) {
 if (is_mac) {
   post_process_template("//chrome:chrome_framework") {
     ldflags += [
-      "-Wl,-rpath,@loader_path/../../../Frameworks",
+      "-Wl,-rpath,@loader_path/../../../../../Frameworks",
     ]
   }
 

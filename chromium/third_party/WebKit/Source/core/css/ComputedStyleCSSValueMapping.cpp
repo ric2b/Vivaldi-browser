@@ -1906,37 +1906,68 @@ static CSSValue* valueForScrollSnapCoordinate(
   return list;
 }
 
-static EBreak mapToPageBreakValue(EBreak genericBreakValue) {
-  switch (genericBreakValue) {
-    case BreakAvoidColumn:
-    case BreakColumn:
-    case BreakRecto:
-    case BreakVerso:
-      return BreakAuto;
-    case BreakPage:
-      return BreakAlways;
-    case BreakAvoidPage:
-      return BreakAvoid;
+// Returns a suitable value for the page-break-(before|after) property, given
+// the computed value of the more general break-(before|after) property.
+static CSSValue* valueForPageBreakBetween(EBreakBetween breakValue) {
+  switch (breakValue) {
+    case EBreakBetween::kAvoidColumn:
+    case EBreakBetween::kColumn:
+    case EBreakBetween::kRecto:
+    case EBreakBetween::kVerso:
+      return CSSIdentifierValue::create(CSSValueAuto);
+    case EBreakBetween::kPage:
+      return CSSIdentifierValue::create(CSSValueAlways);
+    case EBreakBetween::kAvoidPage:
+      return CSSIdentifierValue::create(CSSValueAvoid);
     default:
-      return genericBreakValue;
+      return CSSIdentifierValue::create(breakValue);
   }
 }
 
-static EBreak mapToColumnBreakValue(EBreak genericBreakValue) {
-  switch (genericBreakValue) {
-    case BreakAvoidPage:
-    case BreakLeft:
-    case BreakPage:
-    case BreakRecto:
-    case BreakRight:
-    case BreakVerso:
-      return BreakAuto;
-    case BreakColumn:
-      return BreakAlways;
-    case BreakAvoidColumn:
-      return BreakAvoid;
+// Returns a suitable value for the -webkit-column-break-(before|after)
+// property, given the computed value of the more general break-(before|after)
+// property.
+static CSSValue* valueForWebkitColumnBreakBetween(EBreakBetween breakValue) {
+  switch (breakValue) {
+    case EBreakBetween::kAvoidPage:
+    case EBreakBetween::kLeft:
+    case EBreakBetween::kPage:
+    case EBreakBetween::kRecto:
+    case EBreakBetween::kRight:
+    case EBreakBetween::kVerso:
+      return CSSIdentifierValue::create(CSSValueAuto);
+    case EBreakBetween::kColumn:
+      return CSSIdentifierValue::create(CSSValueAlways);
+    case EBreakBetween::kAvoidColumn:
+      return CSSIdentifierValue::create(CSSValueAvoid);
     default:
-      return genericBreakValue;
+      return CSSIdentifierValue::create(breakValue);
+  }
+}
+
+// Returns a suitable value for the page-break-inside property, given the
+// computed value of the more general break-inside property.
+static CSSValue* valueForPageBreakInside(EBreakInside breakValue) {
+  switch (breakValue) {
+    case EBreakInside::kAvoidColumn:
+      return CSSIdentifierValue::create(CSSValueAuto);
+    case EBreakInside::kAvoidPage:
+      return CSSIdentifierValue::create(CSSValueAvoid);
+    default:
+      return CSSIdentifierValue::create(breakValue);
+  }
+}
+
+// Returns a suitable value for the -webkit-column-break-inside property, given
+// the computed value of the more general break-inside property.
+static CSSValue* valueForWebkitColumnBreakInside(EBreakInside breakValue) {
+  switch (breakValue) {
+    case EBreakInside::kAvoidPage:
+      return CSSIdentifierValue::create(CSSValueAuto);
+    case EBreakInside::kAvoidColumn:
+      return CSSIdentifierValue::create(CSSValueAvoid);
+    default:
+      return CSSIdentifierValue::create(breakValue);
   }
 }
 
@@ -1945,7 +1976,7 @@ const CSSValue* ComputedStyleCSSValueMapping::get(
     const ComputedStyle& style,
     const PropertyRegistry* registry) {
   if (registry) {
-    const PropertyRegistry::Registration* registration =
+    const PropertyRegistration* registration =
         registry->registration(customPropertyName);
     if (registration) {
       const CSSValue* result = style.getRegisteredVariable(
@@ -2237,14 +2268,11 @@ const CSSValue* ComputedStyleCSSValueMapping::get(
       return CSSIdentifierValue::create(style.getColumnSpan() ? CSSValueAll
                                                               : CSSValueNone);
     case CSSPropertyWebkitColumnBreakAfter:
-      return CSSIdentifierValue::create(
-          mapToColumnBreakValue(style.breakAfter()));
+      return valueForWebkitColumnBreakBetween(style.breakAfter());
     case CSSPropertyWebkitColumnBreakBefore:
-      return CSSIdentifierValue::create(
-          mapToColumnBreakValue(style.breakBefore()));
+      return valueForWebkitColumnBreakBetween(style.breakBefore());
     case CSSPropertyWebkitColumnBreakInside:
-      return CSSIdentifierValue::create(
-          mapToColumnBreakValue(style.breakInside()));
+      return valueForWebkitColumnBreakInside(style.breakInside());
     case CSSPropertyColumnWidth:
       if (style.hasAutoColumnWidth())
         return CSSIdentifierValue::create(CSSValueAuto);
@@ -2660,14 +2688,11 @@ const CSSValue* ComputedStyleCSSValueMapping::get(
     case CSSPropertyBreakInside:
       return CSSIdentifierValue::create(style.breakInside());
     case CSSPropertyPageBreakAfter:
-      return CSSIdentifierValue::create(
-          mapToPageBreakValue(style.breakAfter()));
+      return valueForPageBreakBetween(style.breakAfter());
     case CSSPropertyPageBreakBefore:
-      return CSSIdentifierValue::create(
-          mapToPageBreakValue(style.breakBefore()));
+      return valueForPageBreakBetween(style.breakBefore());
     case CSSPropertyPageBreakInside:
-      return CSSIdentifierValue::create(
-          mapToPageBreakValue(style.breakInside()));
+      return valueForPageBreakInside(style.breakInside());
     case CSSPropertyPosition:
       return CSSIdentifierValue::create(style.position());
     case CSSPropertyQuotes:
@@ -2786,25 +2811,25 @@ const CSSValue* ComputedStyleCSSValueMapping::get(
       return CSSIdentifierValue::create(style.getUnicodeBidi());
     case CSSPropertyVerticalAlign:
       switch (style.verticalAlign()) {
-        case EVerticalAlign::Baseline:
+        case EVerticalAlign::kBaseline:
           return CSSIdentifierValue::create(CSSValueBaseline);
-        case EVerticalAlign::Middle:
+        case EVerticalAlign::kMiddle:
           return CSSIdentifierValue::create(CSSValueMiddle);
-        case EVerticalAlign::Sub:
+        case EVerticalAlign::kSub:
           return CSSIdentifierValue::create(CSSValueSub);
-        case EVerticalAlign::Super:
+        case EVerticalAlign::kSuper:
           return CSSIdentifierValue::create(CSSValueSuper);
-        case EVerticalAlign::TextTop:
+        case EVerticalAlign::kTextTop:
           return CSSIdentifierValue::create(CSSValueTextTop);
-        case EVerticalAlign::TextBottom:
+        case EVerticalAlign::kTextBottom:
           return CSSIdentifierValue::create(CSSValueTextBottom);
-        case EVerticalAlign::Top:
+        case EVerticalAlign::kTop:
           return CSSIdentifierValue::create(CSSValueTop);
-        case EVerticalAlign::Bottom:
+        case EVerticalAlign::kBottom:
           return CSSIdentifierValue::create(CSSValueBottom);
-        case EVerticalAlign::BaselineMiddle:
+        case EVerticalAlign::kBaselineMiddle:
           return CSSIdentifierValue::create(CSSValueWebkitBaselineMiddle);
-        case EVerticalAlign::Length:
+        case EVerticalAlign::kLength:
           return zoomAdjustedPixelValueForLength(style.getVerticalAlignLength(),
                                                  style);
       }
@@ -3538,8 +3563,7 @@ const CSSValue* ComputedStyleCSSValueMapping::get(
                                            style);
     case CSSPropertyTranslate: {
       if (!style.translate())
-        return CSSPrimitiveValue::create(0,
-                                         CSSPrimitiveValue::UnitType::Pixels);
+        return CSSIdentifierValue::create(CSSValueNone);
 
       CSSValueList* list = CSSValueList::createSpaceSeparated();
       if (layoutObject && layoutObject->isBox()) {
@@ -3571,8 +3595,7 @@ const CSSValue* ComputedStyleCSSValueMapping::get(
     }
     case CSSPropertyRotate: {
       if (!style.rotate())
-        return CSSPrimitiveValue::create(0,
-                                         CSSPrimitiveValue::UnitType::Degrees);
+        return CSSIdentifierValue::create(CSSValueNone);
 
       CSSValueList* list = CSSValueList::createSpaceSeparated();
       if (style.rotate()->x() != 0 || style.rotate()->y() != 0 ||

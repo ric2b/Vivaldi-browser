@@ -58,6 +58,8 @@ Network.NetworkTimeCalculator = class extends Common.Object {
   constructor(startAtZero) {
     super();
     this.startAtZero = startAtZero;
+    this._minimumBoundary = -1;
+    this._maximumBoundary = -1;
     this._boundryChangedEventThrottler = new Common.Throttler(0);
     /** @type {?Network.NetworkTimeBoundary} */
     this._window = null;
@@ -74,14 +76,6 @@ Network.NetworkTimeCalculator = class extends Common.Object {
   setInitialUserFriendlyBoundaries() {
     this._minimumBoundary = 0;
     this._maximumBoundary = 1;
-  }
-
-  /**
-   * @override
-   * @return {number}
-   */
-  paddingLeft() {
-    return 0;
   }
 
   /**
@@ -143,8 +137,8 @@ Network.NetworkTimeCalculator = class extends Common.Object {
   }
 
   reset() {
-    delete this._minimumBoundary;
-    delete this._maximumBoundary;
+    this._minimumBoundary = -1;
+    this._maximumBoundary = -1;
     this._boundaryChanged();
   }
 
@@ -158,7 +152,7 @@ Network.NetworkTimeCalculator = class extends Common.Object {
   /**
    * @param {number} clientWidth
    */
-  setDisplayWindow(clientWidth) {
+  setDisplayWidth(clientWidth) {
     this._workingArea = clientWidth;
   }
 
@@ -296,7 +290,7 @@ Network.NetworkTimeCalculator = class extends Common.Object {
     var previousMinimumBoundary = this._minimumBoundary;
     var previousMaximumBoundary = this._maximumBoundary;
     const minOffset = Network.NetworkTimeCalculator._minimumSpread;
-    if (typeof this._minimumBoundary === 'undefined' || typeof this._maximumBoundary === 'undefined') {
+    if (this._minimumBoundary === -1 || this._maximumBoundary === -1) {
       this._minimumBoundary = timestamp;
       this._maximumBoundary = timestamp + minOffset;
     } else {

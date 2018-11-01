@@ -15,6 +15,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "base/values.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -176,7 +177,7 @@ class QuicServerPushHelper : public ServerPushDelegate::ServerPushHelper {
     }
   }
 
-  const GURL& GetURL() override { return request_url_; }
+  const GURL& GetURL() const override { return request_url_; }
 
  private:
   base::WeakPtr<QuicChromiumClientSession> session_;
@@ -234,6 +235,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     TransportSecurityState* transport_security_state,
     std::unique_ptr<QuicServerInfo> server_info,
     const QuicServerId& server_id,
+    bool require_confirmation,
     int yield_after_packets,
     QuicTime::Delta yield_after_duration,
     int cert_verify_flags,
@@ -249,7 +251,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     NetLog* net_log)
     : QuicClientSessionBase(connection, push_promise_index, config),
       server_id_(server_id),
-      require_confirmation_(false),
+      require_confirmation_(require_confirmation),
       stream_factory_(stream_factory),
       transport_security_state_(transport_security_state),
       server_info_(std::move(server_info)),
@@ -662,13 +664,16 @@ Error QuicChromiumClientSession::GetTokenBindingSignature(
 }
 
 int QuicChromiumClientSession::CryptoConnect(
-    bool require_confirmation,
     const CompletionCallback& callback) {
-  require_confirmation_ = require_confirmation;
   connect_timing_.connect_start = base::TimeTicks::Now();
   RecordHandshakeState(STATE_STARTED);
   DCHECK(flow_controller());
   crypto_stream_->CryptoConnect();
+
+  // Check if the connection is still open, issues during CryptoConnect like
+  // packet write error could cause the connection to be torn down.
+  if (!connection()->connected())
+    return ERR_QUIC_HANDSHAKE_FAILED;
 
   if (IsCryptoHandshakeConfirmed()) {
     connect_timing_.connect_end = base::TimeTicks::Now();
@@ -1317,7 +1322,6 @@ std::unique_ptr<base::Value> QuicChromiumClientSession::GetInfoAsValue(
   dict->SetInteger("packets_received", stats.packets_received);
   dict->SetInteger("packets_lost", stats.packets_lost);
   SSLInfo ssl_info;
-  dict->SetBoolean("secure", GetSSLInfo(&ssl_info) && ssl_info.cert.get());
 
   std::unique_ptr<base::ListValue> alias_list(new base::ListValue());
   for (std::set<HostPortPair>::const_iterator it = aliases.begin();
@@ -1466,7 +1470,8 @@ bool QuicChromiumClientSession::HandlePromised(QuicStreamId id,
     GURL pushed_url = GetUrlFromHeaderBlock(headers);
     if (push_delegate_) {
       push_delegate_->OnPush(base::MakeUnique<QuicServerPushHelper>(
-          weak_factory_.GetWeakPtr(), pushed_url));
+                                 weak_factory_.GetWeakPtr(), pushed_url),
+                             net_log_);
     }
   }
   net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PUSH_PROMISE_RECEIVED,
@@ -1517,6 +1522,13 @@ QuicChromiumClientSession::GetConnectTiming() {
 
 QuicVersion QuicChromiumClientSession::GetQuicVersion() const {
   return connection()->version();
+}
+
+size_t QuicChromiumClientSession::EstimateMemoryUsage() const {
+  // TODO(xunjieli): Estimate |crypto_stream_|, QuicSpdySession's
+  // QuicHeaderList, QuicSession's QuiCWriteBlockedList, open streams and
+  // unacked packet map.
+  return base::trace_event::EstimateMemoryUsage(packet_readers_);
 }
 
 }  // namespace net

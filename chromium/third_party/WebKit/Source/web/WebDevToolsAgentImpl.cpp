@@ -371,6 +371,9 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId,
       &m_inspectedFrames->root()->host()->consoleMessageStorage(),
       m_inspectedFrames->root()->performanceMonitor()));
 
+  m_session->append(
+      new DeviceOrientationInspectorAgent(m_inspectedFrames.get()));
+
   m_tracingAgent->setLayerTreeId(m_layerTreeId);
   m_networkAgent->setHostId(hostId);
 
@@ -386,7 +389,6 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId,
     // is ready.
     Page* page = m_webLocalFrameImpl->viewImpl()->page();
     m_session->append(InspectorDatabaseAgent::create(page));
-    m_session->append(DeviceOrientationInspectorAgent::create(page));
     m_session->append(new InspectorAccessibilityAgent(page, m_domAgent));
     m_session->append(InspectorDOMStorageAgent::create(page));
     m_session->append(InspectorCacheStorageAgent::create());
@@ -538,9 +540,9 @@ void WebDevToolsAgentImpl::inspectElementAt(int sessionId,
                            WTF::monotonicallyIncreasingTimeMS());
   dummyEvent.x = pointInRootFrame.x;
   dummyEvent.y = pointInRootFrame.y;
-  IntPoint transformedPoint =
-      PlatformMouseEventBuilder(m_webLocalFrameImpl->frameView(), dummyEvent)
-          .position();
+  IntPoint transformedPoint = flooredIntPoint(
+      TransformWebMouseEvent(m_webLocalFrameImpl->frameView(), dummyEvent)
+          .positionInRootFrame());
   HitTestResult result(
       request,
       m_webLocalFrameImpl->frameView()->rootFrameToContents(transformedPoint));

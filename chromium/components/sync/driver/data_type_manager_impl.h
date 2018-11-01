@@ -31,7 +31,7 @@ struct DataTypeConfigurationStats;
 
 // List of data types grouped by priority and ordered from high priority to
 // low priority.
-typedef std::queue<ModelTypeSet> TypeSetPriorityList;
+using TypeSetPriorityList = std::queue<ModelTypeSet>;
 
 class DataTypeManagerImpl : public DataTypeManager,
                             public ModelAssociationManagerDelegate {
@@ -56,9 +56,12 @@ class DataTypeManagerImpl : public DataTypeManager,
                          ConfigureReason reason) override;
 
   void Stop() override;
+  ModelTypeSet GetActiveDataTypes() const override;
+  bool IsNigoriEnabled() const override;
   State state() const override;
 
   // |ModelAssociationManagerDelegate| implementation.
+  void OnSingleDataTypeWillStart(ModelType type) override;
   void OnAllDataTypesReadyForConfigure() override;
   void OnSingleDataTypeAssociationDone(
       ModelType type,

@@ -2,12 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// USE_SYSTEM_PROPRIETARY_CODECS requires a different test setup, see
-// PlatformMediaPipelineIntegrationTest.
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#undef USE_PROPRIETARY_CODECS
-#endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
 #include <stddef.h>
 #include <stdint.h>
 
@@ -44,7 +38,7 @@
 #include "media/filters/android/media_codec_audio_decoder.h"
 #endif
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/formats/mpeg/adts_stream_parser.h"
 #endif
 
@@ -212,7 +206,7 @@ class AudioDecoderTest
     ASSERT_TRUE(AVCodecContextToAudioDecoderConfig(
         reader_->codec_context_for_testing(), Unencrypted(), &config));
 
-#if defined(OS_ANDROID) && defined(USE_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
     // MEDIA_CODEC type requires config->extra_data() for AAC codec. For ADTS
     // streams we need to extract it with a separate procedure.
     if (decoder_type_ == MEDIA_CODEC && params_.codec == kCodecAAC &&
@@ -425,7 +419,7 @@ const TestParams kReinitializeTestParams = {
     24,         48000,           CHANNEL_LAYOUT_STEREO};
 
 #if defined(OS_ANDROID)
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 const DecodedBufferExpectations kSfxAdtsMcExpectations[] = {
     {0, 23219, "-1.80,-1.49,-0.23,1.11,1.54,-0.11,"},
     {23219, 23219, "-1.90,-1.53,-0.15,1.28,1.23,-0.33,"},
@@ -442,7 +436,7 @@ const DecodedBufferExpectations kHeAacMcExpectations[] = {
 const TestParams kMediaCodecTestParams[] = {
     {kCodecOpus, "bear-opus.ogg", kBearOpusExpectations, 24, 48000,
      CHANNEL_LAYOUT_STEREO},
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {kCodecAAC, "sfx.adts", kSfxAdtsMcExpectations, 0, 44100,
      CHANNEL_LAYOUT_MONO},
     {kCodecAAC, "bear-audio-implicit-he-aac-v2.aac", kHeAacMcExpectations, 0,
@@ -452,7 +446,7 @@ const TestParams kMediaCodecTestParams[] = {
 
 #endif  // defined(OS_ANDROID)
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 const DecodedBufferExpectations kSfxMp3Expectations[] = {
     {0, 1065, "2.81,3.99,4.53,4.10,3.08,2.46,"},
     {1065, 26122, "-3.81,-4.14,-3.90,-3.36,-3.03,-3.23,"},
@@ -511,7 +505,7 @@ const DecodedBufferExpectations kSfxOpusExpectations[] = {
 #endif
 
 const TestParams kFFmpegTestParams[] = {
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {kCodecMP3, "sfx.mp3", kSfxMp3Expectations, 0, 44100, CHANNEL_LAYOUT_MONO},
     {kCodecAAC, "sfx.adts", kSfxAdtsExpectations, 0, 44100,
      CHANNEL_LAYOUT_MONO},

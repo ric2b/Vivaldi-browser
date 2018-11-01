@@ -27,7 +27,6 @@ import org.chromium.chrome.browser.ApplicationLifetime;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.firstrun.FirstRunGlueImpl;
-import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
 import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
@@ -169,8 +168,7 @@ public class FeatureUtilities {
             // Allowing disk access for preferences while prototyping.
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
             try {
-                sCachedHerbFlavor =
-                        ChromePreferenceManager.getInstance(context).getCachedHerbFlavor();
+                sCachedHerbFlavor = ChromePreferenceManager.getInstance().getCachedHerbFlavor();
             } finally {
                 StrictMode.setThreadPolicy(oldPolicy);
             }
@@ -187,7 +185,6 @@ public class FeatureUtilities {
      */
     public static void cacheNativeFlags() {
         cacheHerbFlavor();
-        InstantAppsHandler.getInstance().cacheInstantAppsEnabled();
         ChromeWebApkHost.cacheEnabledStateForNextLaunch();
         cacheChromeHomeEnabled();
         FirstRunGlueImpl.cacheFirstRunPrefs();
@@ -224,7 +221,7 @@ public class FeatureUtilities {
         sCachedHerbFlavor = newFlavor;
 
         if (!TextUtils.equals(oldFlavor, newFlavor)) {
-            ChromePreferenceManager.getInstance(context).setCachedHerbFlavor(newFlavor);
+            ChromePreferenceManager.getInstance().setCachedHerbFlavor(newFlavor);
         }
     }
 
@@ -248,7 +245,7 @@ public class FeatureUtilities {
         if (DeviceFormFactor.isTablet(context)) return;
 
         boolean isChromeHomeEnabled = ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME);
-        ChromePreferenceManager manager = ChromePreferenceManager.getInstance(context);
+        ChromePreferenceManager manager = ChromePreferenceManager.getInstance();
         boolean valueChanged = isChromeHomeEnabled != manager.isChromeHomeEnabled();
         manager.setChromeHomeEnabled(isChromeHomeEnabled);
         sChromeHomeEnabled = isChromeHomeEnabled;
@@ -262,9 +259,7 @@ public class FeatureUtilities {
      */
     public static boolean isChromeHomeEnabled() {
         if (sChromeHomeEnabled == null) {
-            ChromePreferenceManager manager =
-                    ChromePreferenceManager.getInstance(ContextUtils.getApplicationContext());
-            sChromeHomeEnabled = manager.isChromeHomeEnabled();
+            sChromeHomeEnabled = ChromePreferenceManager.getInstance().isChromeHomeEnabled();
         }
 
         return sChromeHomeEnabled;

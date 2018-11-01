@@ -14,8 +14,8 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
+#include "v8/include/v8.h"
 #include "wtf/PassRefPtr.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -59,6 +59,18 @@ class CORE_EXPORT ExceptionToRejectPromiseScope {
   const v8::FunctionCallbackInfo<v8::Value>& m_info;
   ExceptionState& m_exceptionState;
 };
+
+using InstallTemplateFunction =
+    void (*)(v8::Isolate* isolate,
+             const DOMWrapperWorld& world,
+             v8::Local<v8::FunctionTemplate> interfaceTemplate);
+
+using InstallRuntimeEnabledFunction =
+    void (*)(v8::Isolate* isolate,
+             const DOMWrapperWorld& world,
+             v8::Local<v8::Object> instance,
+             v8::Local<v8::Object> prototype,
+             v8::Local<v8::Function> interface);
 
 }  // namespace blink
 

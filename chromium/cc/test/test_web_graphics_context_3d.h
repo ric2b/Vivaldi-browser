@@ -130,10 +130,10 @@ class TestWebGraphicsContext3D {
   virtual void genRenderbuffers(GLsizei count, GLuint* ids);
   virtual void genTextures(GLsizei count, GLuint* ids);
 
-  virtual void deleteBuffers(GLsizei count, GLuint* ids);
-  virtual void deleteFramebuffers(GLsizei count, GLuint* ids);
-  virtual void deleteRenderbuffers(GLsizei count, GLuint* ids);
-  virtual void deleteTextures(GLsizei count, GLuint* ids);
+  virtual void deleteBuffers(GLsizei count, const GLuint* ids);
+  virtual void deleteFramebuffers(GLsizei count, const GLuint* ids);
+  virtual void deleteRenderbuffers(GLsizei count, const GLuint* ids);
+  virtual void deleteTextures(GLsizei count, const GLuint* ids);
 
   virtual GLuint createBuffer();
   virtual GLuint createFramebuffer();
@@ -343,6 +343,12 @@ class TestWebGraphicsContext3D {
   }
   void set_msaa_is_slow(bool msaa_is_slow) {
     test_capabilities_.msaa_is_slow = msaa_is_slow;
+  }
+  void set_gpu_rasterization(bool gpu_rasterization) {
+    test_capabilities_.gpu_rasterization = gpu_rasterization;
+  }
+  void set_support_set_draw_rectangle(bool support) {
+    test_capabilities_.set_draw_rectangle = support;
   }
 
   // When this context is lost, all contexts in its share group are also lost.

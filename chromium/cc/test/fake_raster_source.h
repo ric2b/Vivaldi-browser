@@ -10,8 +10,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-class SkCanvas;
-
 namespace base {
 class WaitableEvent;
 }

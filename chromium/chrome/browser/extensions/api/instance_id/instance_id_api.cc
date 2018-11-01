@@ -7,9 +7,9 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/gcm/instance_id/instance_id_profile_service.h"
+#include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/services/gcm/instance_id/instance_id_profile_service.h"
-#include "chrome/browser/services/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/common/extensions/api/instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
 #include "extensions/common/extension.h"
@@ -111,8 +111,8 @@ ExtensionFunction::ResponseAction InstanceIDGetCreationTimeFunction::DoWork() {
 
 void InstanceIDGetCreationTimeFunction::GetCreationTimeCompleted(
     const base::Time& creation_time) {
-  Respond(OneArgument(
-      base::MakeUnique<base::FundamentalValue>(creation_time.ToDoubleT())));
+  Respond(
+      OneArgument(base::MakeUnique<base::Value>(creation_time.ToDoubleT())));
 }
 
 InstanceIDGetTokenFunction::InstanceIDGetTokenFunction() {}

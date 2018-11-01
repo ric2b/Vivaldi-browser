@@ -198,7 +198,7 @@ void SVGPatternElement::collectPatternAttributes(
 
   while (true) {
     setPatternAttributes(current, attributes);
-    processedPatterns.add(current);
+    processedPatterns.insert(current);
 
     // Respect xlink:href, take attributes from referenced element
     Node* refNode = SVGURIReference::targetElementFromIRIString(
@@ -216,8 +216,7 @@ void SVGPatternElement::collectPatternAttributes(
   }
 }
 
-AffineTransform SVGPatternElement::localCoordinateSpaceTransform(
-    SVGElement::CTMScope) const {
+AffineTransform SVGPatternElement::localCoordinateSpaceTransform() const {
   return calculateTransform(SVGElement::ExcludeMotionTransform);
 }
 

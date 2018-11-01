@@ -68,7 +68,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/history/content/browser/download_constants_utils.h"
+#include "components/history/content/browser/download_conversions.h"
 #include "components/history/core/browser/download_constants.h"
 #include "components/history/core/browser/download_row.h"
 #include "components/history/core/browser/history_service.h"
@@ -98,7 +98,6 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/common/feature_switch.h"
 #include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -123,7 +122,6 @@ using content::DownloadManager;
 using content::DownloadUrlParameters;
 using content::WebContents;
 using extensions::Extension;
-using extensions::FeatureSwitch;
 using net::URLRequestMockHTTPJob;
 
 namespace {
@@ -1085,7 +1083,9 @@ class FakeSafeBrowsingService
     : public safe_browsing::TestSafeBrowsingService,
       public safe_browsing::ServicesDelegate::ServicesCreator {
  public:
-  FakeSafeBrowsingService() {
+  FakeSafeBrowsingService()
+      : TestSafeBrowsingService(
+            safe_browsing::V4FeatureList::V4UsageStatus::V4_DISABLED) {
     services_delegate_ =
         safe_browsing::ServicesDelegate::CreateForTest(this, this);
   }
@@ -1357,7 +1357,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadResourceThrottleCancels) {
       g_browser_process->download_request_limiter()->GetDownloadState(
           web_contents, web_contents, true);
   ASSERT_TRUE(tab_download_state);
-  tab_download_state->set_download_status(
+  tab_download_state->SetDownloadStatusAndNotify(
       DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED);
 
   // Try to start the download via Javascript and wait for the corresponding
@@ -2009,8 +2009,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, AutoOpen) {
 // Download an extension. Expect a dangerous download warning.
 // Deny the download.
 IN_PROC_BROWSER_TEST_F(DownloadTest, CrxDenyInstall) {
-  FeatureSwitch::ScopedOverride enable_easy_off_store_install(
-      FeatureSwitch::easy_off_store_install(), true);
+  std::unique_ptr<base::AutoReset<bool>> allow_offstore_install =
+      download_crx_util::OverrideOffstoreInstallAllowedForTesting(true);
 
   GURL extension_url(URLRequestMockHTTPJob::GetMockUrl(kGoodCrxPath));
 
@@ -2034,8 +2034,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrxDenyInstall) {
 // Download an extension.  Expect a dangerous download warning.
 // Allow the download, deny the install.
 IN_PROC_BROWSER_TEST_F(DownloadTest, CrxInstallDenysPermissions) {
-  FeatureSwitch::ScopedOverride enable_easy_off_store_install(
-      FeatureSwitch::easy_off_store_install(), true);
+  std::unique_ptr<base::AutoReset<bool>> allow_offstore_install =
+      download_crx_util::OverrideOffstoreInstallAllowedForTesting(true);
   extensions::ScopedTestDialogAutoConfirm auto_confirm_install_prompt(
       extensions::ScopedTestDialogAutoConfirm::CANCEL);
 
@@ -2067,8 +2067,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrxInstallDenysPermissions) {
 // Download an extension.  Expect a dangerous download warning.
 // Allow the download, and the install.
 IN_PROC_BROWSER_TEST_F(DownloadTest, CrxInstallAcceptPermissions) {
-  FeatureSwitch::ScopedOverride enable_easy_off_store_install(
-      FeatureSwitch::easy_off_store_install(), true);
+  std::unique_ptr<base::AutoReset<bool>> allow_offstore_install =
+      download_crx_util::OverrideOffstoreInstallAllowedForTesting(true);
 
   GURL extension_url(URLRequestMockHTTPJob::GetMockUrl(kGoodCrxPath));
 
@@ -2127,8 +2127,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrxInvalid) {
 
 // Install a large (100kb) theme.
 IN_PROC_BROWSER_TEST_F(DownloadTest, CrxLargeTheme) {
-  FeatureSwitch::ScopedOverride enable_easy_off_store_install(
-      FeatureSwitch::easy_off_store_install(), true);
+  std::unique_ptr<base::AutoReset<bool>> allow_offstore_install =
+      download_crx_util::OverrideOffstoreInstallAllowedForTesting(true);
 
   GURL extension_url(URLRequestMockHTTPJob::GetMockUrl(kLargeThemePath));
 
@@ -3425,9 +3425,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceDiscardDownload) {
       sb_service->download_protection_service();
   download_protection_service->feedback_service()->MaybeStorePingsForDownload(
       safe_browsing::DownloadProtectionService::UNCOMMON,
-      downloads[0],
-      ping_request,
-      ping_response);
+      true /* upload_requested */, downloads[0], ping_request, ping_response);
   ASSERT_TRUE(safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
       *(downloads[0])));
 
@@ -3478,8 +3476,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceKeepDownload) {
   safe_browsing::DownloadProtectionService* download_protection_service =
       sb_service->download_protection_service();
   download_protection_service->feedback_service()->MaybeStorePingsForDownload(
-      safe_browsing::DownloadProtectionService::UNCOMMON, downloads[0],
-      ping_request, ping_response);
+      safe_browsing::DownloadProtectionService::UNCOMMON,
+      true /* upload_requested */, downloads[0], ping_request, ping_response);
   ASSERT_TRUE(safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
       *(downloads[0])));
 
@@ -3790,8 +3788,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, AutoOpenClosesShelf) {
 }
 
 IN_PROC_BROWSER_TEST_F(DownloadTest, CrxDenyInstallClosesShelf) {
-  FeatureSwitch::ScopedOverride enable_easy_off_store_install(
-      FeatureSwitch::easy_off_store_install(), true);
+  std::unique_ptr<base::AutoReset<bool>> allow_offstore_install =
+      download_crx_util::OverrideOffstoreInstallAllowedForTesting(true);
 
   GURL extension_url(URLRequestMockHTTPJob::GetMockUrl(kGoodCrxPath));
 

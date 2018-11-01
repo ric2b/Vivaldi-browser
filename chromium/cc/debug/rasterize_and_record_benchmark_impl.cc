@@ -52,7 +52,6 @@ void RunBenchmark(RasterSource* raster_source,
       bitmap.allocPixels(SkImageInfo::MakeN32Premul(content_rect.width(),
                                                     content_rect.height()));
       SkCanvas canvas(bitmap);
-
       raster_source->PlaybackToCanvas(&canvas, content_rect, content_rect,
                                       contents_scale,
                                       RasterSource::PlaybackSettings());
@@ -71,7 +70,7 @@ class FixedInvalidationPictureLayerTilingClient
  public:
   FixedInvalidationPictureLayerTilingClient(
       PictureLayerTilingClient* base_client,
-      const Region invalidation)
+      const Region& invalidation)
       : base_client_(base_client), invalidation_(invalidation) {}
 
   std::unique_ptr<Tile> CreateTile(const Tile::CreateInfo& info) override {
@@ -208,7 +207,7 @@ void RasterizeAndRecordBenchmarkImpl::RunOnLayer(PictureLayerImpl* layer) {
 
   const RasterSource* layer_raster_source = layer->GetRasterSource();
   rasterize_results_.total_memory_usage +=
-      layer_raster_source->GetPictureMemoryUsage();
+      layer_raster_source->GetMemoryUsage();
 }
 
 RasterizeAndRecordBenchmarkImpl::RasterizeResults::RasterizeResults()

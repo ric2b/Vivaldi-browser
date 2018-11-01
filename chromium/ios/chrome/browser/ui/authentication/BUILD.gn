@@ -82,6 +82,7 @@ source_set("authentication") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "authentication_flow_unittest.mm",
@@ -111,6 +112,7 @@ source_set("unit_tests") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "signin_interaction_controller_egtest.mm",

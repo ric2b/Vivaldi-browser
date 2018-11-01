@@ -15,7 +15,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/default_tick_clock.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -26,8 +26,8 @@
 #include "components/ntp_snippets/user_classifier.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/variations/variations_associated_data.h"
-#include "grit/components_strings.h"
 #include "net/url_request/url_fetcher.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -52,16 +52,8 @@ const char kContentSuggestionsApiScope[] =
 const char kSnippetsServerNonAuthorizedFormat[] = "%s?key=%s";
 const char kAuthorizationRequestHeaderFormat[] = "Bearer %s";
 
-// Variation parameter for personalizing fetching of snippets.
-const char kPersonalizationName[] = "fetching_personalization";
-
 // Variation parameter for chrome-content-suggestions backend.
 const char kContentSuggestionsBackend[] = "content_suggestions_backend";
-
-// Constants for possible values of the "fetching_personalization" parameter.
-const char kPersonalizationPersonalString[] = "personal";
-const char kPersonalizationNonPersonalString[] = "non_personal";
-const char kPersonalizationBothString[] = "both";  // the default value
 
 const int kFetchTimeHistogramResolution = 5;
 
@@ -69,8 +61,6 @@ std::string FetchResultToString(FetchResult result) {
   switch (result) {
     case FetchResult::SUCCESS:
       return "OK";
-    case FetchResult::DEPRECATED_EMPTY_HOSTS:
-      return "Cannot fetch for empty hosts list.";
     case FetchResult::URL_REQUEST_STATUS_ERROR:
       return "URLRequestStatus error";
     case FetchResult::HTTP_ERROR:
@@ -81,10 +71,6 @@ std::string FetchResultToString(FetchResult result) {
       return "Invalid / empty list.";
     case FetchResult::OAUTH_TOKEN_ERROR:
       return "Error in obtaining an OAuth2 access token.";
-    case FetchResult::INTERACTIVE_QUOTA_ERROR:
-      return "Out of interactive quota.";
-    case FetchResult::NON_INTERACTIVE_QUOTA_ERROR:
-      return "Out of non-interactive quota.";
     case FetchResult::RESULT_MAX:
       break;
   }
@@ -98,15 +84,12 @@ Status FetchResultToStatus(FetchResult result) {
       return Status::Success();
     // Permanent errors occur if it is more likely that the error originated
     // from the client.
-    case FetchResult::DEPRECATED_EMPTY_HOSTS:
     case FetchResult::OAUTH_TOKEN_ERROR:
       return Status(StatusCode::PERMANENT_ERROR, FetchResultToString(result));
     // Temporary errors occur if it's more likely that the client behaved
     // correctly but the server failed to respond as expected.
     // TODO(fhorschig): Revisit HTTP_ERROR once the rescheduling was reworked.
     case FetchResult::HTTP_ERROR:
-    case FetchResult::INTERACTIVE_QUOTA_ERROR:
-    case FetchResult::NON_INTERACTIVE_QUOTA_ERROR:
     case FetchResult::URL_REQUEST_STATUS_ERROR:
     case FetchResult::INVALID_SNIPPET_CONTENT_ERROR:
     case FetchResult::JSON_PARSE_ERROR:
@@ -118,12 +101,6 @@ Status FetchResultToStatus(FetchResult result) {
   return Status(StatusCode::PERMANENT_ERROR, std::string());
 }
 
-std::string GetFetchEndpoint() {
-  std::string endpoint = variations::GetVariationParamValue(
-      ntp_snippets::kStudyName, kContentSuggestionsBackend);
-  return endpoint.empty() ? kContentSuggestionsServer : endpoint;
-}
-
 bool UsesChromeContentSuggestionsAPI(const GURL& endpoint) {
   if (endpoint == kChromeReaderServer) {
     return false;
@@ -133,42 +110,46 @@ bool UsesChromeContentSuggestionsAPI(const GURL& endpoint) {
       endpoint != kContentSuggestionsStagingServer &&
       endpoint != kContentSuggestionsAlphaServer) {
     LOG(WARNING) << "Unknown value for " << kContentSuggestionsBackend << ": "
-                 << "assuming chromecontentsuggestions-style API";
+                 << endpoint << "; assuming chromecontentsuggestions-style API";
   }
   return true;
 }
 
-// Creates snippets from dictionary values in |list| and adds them to
-// |snippets|. Returns true on success, false if anything went wrong.
+// Creates suggestions from dictionary values in |list| and adds them to
+// |suggestions|. Returns true on success, false if anything went wrong.
 // |remote_category_id| is only used if |content_suggestions_api| is true.
-bool AddSnippetsFromListValue(bool content_suggestions_api,
-                              int remote_category_id,
-                              const base::ListValue& list,
-                              NTPSnippet::PtrVector* snippets) {
+bool AddSuggestionsFromListValue(bool content_suggestions_api,
+                                 int remote_category_id,
+                                 const base::ListValue& list,
+                                 RemoteSuggestion::PtrVector* suggestions,
+                                 const base::Time& fetch_time) {
   for (const auto& value : list) {
     const base::DictionaryValue* dict = nullptr;
     if (!value->GetAsDictionary(&dict)) {
       return false;
     }
 
-    std::unique_ptr<NTPSnippet> snippet;
+    std::unique_ptr<RemoteSuggestion> suggestion;
     if (content_suggestions_api) {
-      snippet = NTPSnippet::CreateFromContentSuggestionsDictionary(
-          *dict, remote_category_id);
+      suggestion = RemoteSuggestion::CreateFromContentSuggestionsDictionary(
+          *dict, remote_category_id, fetch_time);
     } else {
-      snippet = NTPSnippet::CreateFromChromeReaderDictionary(*dict);
+      suggestion =
+          RemoteSuggestion::CreateFromChromeReaderDictionary(*dict, fetch_time);
     }
-    if (!snippet) {
+    if (!suggestion) {
       return false;
     }
 
-    snippets->push_back(std::move(snippet));
+    suggestions->push_back(std::move(suggestion));
   }
   return true;
 }
 
-int GetMinuteOfTheDay(bool local_time, bool reduced_resolution) {
-  base::Time now(base::Time::Now());
+int GetMinuteOfTheDay(bool local_time,
+                      bool reduced_resolution,
+                      base::Clock* clock) {
+  base::Time now(clock->Now());
   base::Time::Exploded now_exploded{};
   local_time ? now.LocalExplode(&now_exploded) : now.UTCExplode(&now_exploded);
   int now_minute = reduced_resolution
@@ -204,6 +185,27 @@ void FilterCategories(
 
 }  // namespace
 
+GURL GetFetchEndpoint(version_info::Channel channel) {
+  std::string endpoint = variations::GetVariationParamValueByFeature(
+      ntp_snippets::kArticleSuggestionsFeature, kContentSuggestionsBackend);
+  if (!endpoint.empty()) {
+    return GURL{endpoint};
+  }
+
+  switch (channel) {
+    case version_info::Channel::STABLE:
+    case version_info::Channel::BETA:
+      return GURL{kContentSuggestionsServer};
+
+    case version_info::Channel::DEV:
+    case version_info::Channel::CANARY:
+    case version_info::Channel::UNKNOWN:
+      return GURL{kContentSuggestionsStagingServer};
+  }
+  NOTREACHED();
+  return GURL{kContentSuggestionsStagingServer};
+}
+
 CategoryInfo BuildArticleCategoryInfo(
     const base::Optional<base::string16>& title) {
   return CategoryInfo(
@@ -211,10 +213,7 @@ CategoryInfo BuildArticleCategoryInfo(
                         : l10n_util::GetStringUTF16(
                               IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_HEADER),
       ContentSuggestionsCardLayout::FULL_CARD,
-      // TODO(dgn): merge has_more_action and has_reload_action when we remove
-      // the kFetchMoreFeature flag. See https://crbug.com/667752
-      /*has_more_action=*/base::FeatureList::IsEnabled(kFetchMoreFeature),
-      /*has_reload_action=*/true,
+      /*has_fetch_action=*/true,
       /*has_view_all_action=*/false,
       /*show_if_empty=*/true,
       l10n_util::GetStringUTF16(IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_EMPTY));
@@ -224,11 +223,7 @@ CategoryInfo BuildRemoteCategoryInfo(const base::string16& title,
                                      bool allow_fetching_more_results) {
   return CategoryInfo(
       title, ContentSuggestionsCardLayout::FULL_CARD,
-      // TODO(dgn): merge has_more_action and has_reload_action when we remove
-      // the kFetchMoreFeature flag. See https://crbug.com/667752
-      /*has_more_action=*/allow_fetching_more_results &&
-          base::FeatureList::IsEnabled(kFetchMoreFeature),
-      /*has_reload_action=*/allow_fetching_more_results,
+      /*has_fetch_action=*/allow_fetching_more_results,
       /*has_view_all_action=*/false,
       /*show_if_empty=*/false,
       // TODO(tschumann): The message for no-articles is likely wrong
@@ -257,6 +252,7 @@ RemoteSuggestionsFetcher::RemoteSuggestionsFetcher(
     PrefService* pref_service,
     LanguageModel* language_model,
     const ParseJSONCallback& parse_json_callback,
+    const GURL& api_endpoint,
     const std::string& api_key,
     const UserClassifier* user_classifier)
     : OAuth2TokenService::Consumer("ntp_snippets"),
@@ -265,40 +261,13 @@ RemoteSuggestionsFetcher::RemoteSuggestionsFetcher(
       url_request_context_getter_(std::move(url_request_context_getter)),
       language_model_(language_model),
       parse_json_callback_(parse_json_callback),
-      fetch_url_(GetFetchEndpoint()),
+      fetch_url_(api_endpoint),
       fetch_api_(UsesChromeContentSuggestionsAPI(fetch_url_)
                      ? FetchAPI::CHROME_CONTENT_SUGGESTIONS_API
                      : FetchAPI::CHROME_READER_API),
       api_key_(api_key),
-      tick_clock_(new base::DefaultTickClock()),
-      user_classifier_(user_classifier),
-      request_throttler_rare_ntp_user_(
-          pref_service,
-          RequestThrottler::RequestType::
-              CONTENT_SUGGESTION_FETCHER_RARE_NTP_USER),
-      request_throttler_active_ntp_user_(
-          pref_service,
-          RequestThrottler::RequestType::
-              CONTENT_SUGGESTION_FETCHER_ACTIVE_NTP_USER),
-      request_throttler_active_suggestions_consumer_(
-          pref_service,
-          RequestThrottler::RequestType::
-              CONTENT_SUGGESTION_FETCHER_ACTIVE_SUGGESTIONS_CONSUMER),
-      weak_ptr_factory_(this) {
-  std::string personalization = variations::GetVariationParamValue(
-      ntp_snippets::kStudyName, kPersonalizationName);
-  if (personalization == kPersonalizationNonPersonalString) {
-    personalization_ = Personalization::kNonPersonal;
-  } else if (personalization == kPersonalizationPersonalString) {
-    personalization_ = Personalization::kPersonal;
-  } else {
-    personalization_ = Personalization::kBoth;
-    LOG_IF(WARNING, !personalization.empty() &&
-                        personalization != kPersonalizationBothString)
-        << "Unknown value for " << kPersonalizationName << ": "
-        << personalization;
-  }
-}
+      clock_(new base::DefaultClock()),
+      user_classifier_(user_classifier) {}
 
 RemoteSuggestionsFetcher::~RemoteSuggestionsFetcher() {
   if (waiting_for_refresh_token_) {
@@ -309,22 +278,15 @@ RemoteSuggestionsFetcher::~RemoteSuggestionsFetcher() {
 void RemoteSuggestionsFetcher::FetchSnippets(
     const RequestParams& params,
     SnippetsAvailableCallback callback) {
-  if (!DemandQuotaForRequest(params.interactive_request)) {
-    FetchFinished(OptionalFetchedCategories(), std::move(callback),
-                  params.interactive_request
-                      ? FetchResult::INTERACTIVE_QUOTA_ERROR
-                      : FetchResult::NON_INTERACTIVE_QUOTA_ERROR,
-                  /*error_details=*/std::string());
-    return;
-  }
-
   if (!params.interactive_request) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.FetchTimeLocal",
-                                GetMinuteOfTheDay(/*local_time=*/true,
-                                                  /*reduced_resolution=*/true));
-    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.FetchTimeUTC",
-                                GetMinuteOfTheDay(/*local_time=*/false,
-                                                  /*reduced_resolution=*/true));
+    UMA_HISTOGRAM_SPARSE_SLOWLY(
+        "NewTabPage.Snippets.FetchTimeLocal",
+        GetMinuteOfTheDay(/*local_time=*/true,
+                          /*reduced_resolution=*/true, clock_.get()));
+    UMA_HISTOGRAM_SPARSE_SLOWLY(
+        "NewTabPage.Snippets.FetchTimeUTC",
+        GetMinuteOfTheDay(/*local_time=*/false,
+                          /*reduced_resolution=*/true, clock_.get()));
   }
 
   JsonRequest::Builder builder;
@@ -333,19 +295,18 @@ void RemoteSuggestionsFetcher::FetchSnippets(
       .SetLanguageModel(language_model_)
       .SetParams(params)
       .SetParseJsonCallback(parse_json_callback_)
-      .SetPersonalization(personalization_)
-      .SetTickClock(tick_clock_.get())
+      .SetClock(clock_.get())
       .SetUrlRequestContextGetter(url_request_context_getter_)
       .SetUserClassifier(*user_classifier_);
 
-  if (NeedsAuthentication() && signin_manager_->IsAuthenticated()) {
-    // Signed-in: get OAuth token --> fetch snippets.
+  if (signin_manager_->IsAuthenticated()) {
+    // Signed-in: get OAuth token --> fetch suggestions.
     oauth_token_retried_ = false;
     pending_requests_.emplace(std::move(builder), std::move(callback));
     StartTokenRequest();
-  } else if (NeedsAuthentication() && signin_manager_->AuthInProgress()) {
+  } else if (signin_manager_->AuthInProgress()) {
     // Currently signing in: wait for auth to finish (the refresh token) -->
-    //     get OAuth token --> fetch snippets.
+    //     get OAuth token --> fetch suggestions.
     pending_requests_.emplace(std::move(builder), std::move(callback));
     if (!waiting_for_refresh_token_) {
       // Wait until we get a refresh token.
@@ -353,7 +314,7 @@ void RemoteSuggestionsFetcher::FetchSnippets(
       token_service_->AddObserver(this);
     }
   } else {
-    // Not signed in: fetch snippets (without authentication).
+    // Not signed in: fetch suggestions (without authentication).
     FetchSnippetsNonAuthenticated(std::move(builder), std::move(callback));
   }
 }
@@ -472,6 +433,9 @@ void RemoteSuggestionsFetcher::JsonRequestDone(
     FetchResult status_code,
     const std::string& error_details) {
   DCHECK(request);
+  // Record the time when request for fetching remote content snippets finished.
+  const base::Time fetch_time = clock_->Now();
+
   last_fetch_json_ = request->GetResponseString();
 
   UMA_HISTOGRAM_TIMES("NewTabPage.Snippets.FetchTime",
@@ -483,7 +447,8 @@ void RemoteSuggestionsFetcher::JsonRequestDone(
     return;
   }
   FetchedCategoriesVector categories;
-  if (!JsonToSnippets(*result, &categories)) {
+
+  if (!JsonToSnippets(*result, &categories, fetch_time)) {
     LOG(WARNING) << "Received invalid snippets: " << last_fetch_json_;
     FetchFinished(OptionalFetchedCategories(), std::move(callback),
                   FetchResult::INVALID_SNIPPET_CONTENT_ERROR, std::string());
@@ -519,7 +484,8 @@ void RemoteSuggestionsFetcher::FetchFinished(
 
 bool RemoteSuggestionsFetcher::JsonToSnippets(
     const base::Value& parsed,
-    FetchedCategoriesVector* categories) {
+    FetchedCategoriesVector* categories,
+    const base::Time& fetch_time) {
   const base::DictionaryValue* top_dict = nullptr;
   if (!parsed.GetAsDictionary(&top_dict)) {
     return false;
@@ -534,9 +500,9 @@ bool RemoteSuggestionsFetcher::JsonToSnippets(
 
       const base::ListValue* recos = nullptr;
       return top_dict->GetList("recos", &recos) &&
-             AddSnippetsFromListValue(/*content_suggestions_api=*/false,
-                                      kUnusedRemoteCategoryId, *recos,
-                                      &categories->back().snippets);
+             AddSuggestionsFromListValue(
+                 /*content_suggestions_api=*/false, kUnusedRemoteCategoryId,
+                 *recos, &categories->back().suggestions, fetch_time);
     }
 
     case FetchAPI::CHROME_CONTENT_SUGGESTIONS_API: {
@@ -556,14 +522,14 @@ bool RemoteSuggestionsFetcher::JsonToSnippets(
           return false;
         }
 
-        NTPSnippet::PtrVector snippets;
-        const base::ListValue* suggestions = nullptr;
+        RemoteSuggestion::PtrVector suggestions;
+        const base::ListValue* suggestions_list = nullptr;
         // Absence of a list of suggestions is treated as an empty list, which
         // is permissible.
-        if (category_value->GetList("suggestions", &suggestions)) {
-          if (!AddSnippetsFromListValue(
+        if (category_value->GetList("suggestions", &suggestions_list)) {
+          if (!AddSuggestionsFromListValue(
                   /*content_suggestions_api=*/true, remote_category_id,
-                  *suggestions, &snippets)) {
+                  *suggestions_list, &suggestions, fetch_time)) {
             return false;
           }
         }
@@ -582,50 +548,13 @@ bool RemoteSuggestionsFetcher::JsonToSnippets(
               category, BuildRemoteCategoryInfo(base::UTF8ToUTF16(utf8_title),
                                                 allow_fetching_more_results)));
         }
-        categories->back().snippets = std::move(snippets);
+        categories->back().suggestions = std::move(suggestions);
       }
       return true;
     }
   }
   NOTREACHED();
   return false;
-}
-
-bool RemoteSuggestionsFetcher::DemandQuotaForRequest(bool interactive_request) {
-  switch (user_classifier_->GetUserClass()) {
-    case UserClassifier::UserClass::RARE_NTP_USER:
-      return request_throttler_rare_ntp_user_.DemandQuotaForRequest(
-          interactive_request);
-    case UserClassifier::UserClass::ACTIVE_NTP_USER:
-      return request_throttler_active_ntp_user_.DemandQuotaForRequest(
-          interactive_request);
-    case UserClassifier::UserClass::ACTIVE_SUGGESTIONS_CONSUMER:
-      return request_throttler_active_suggestions_consumer_
-          .DemandQuotaForRequest(interactive_request);
-  }
-  NOTREACHED();
-  return false;
-}
-
-bool RemoteSuggestionsFetcher::NeedsAuthentication() const {
-  return (personalization_ == Personalization::kPersonal ||
-          personalization_ == Personalization::kBoth);
-}
-
-std::string RemoteSuggestionsFetcher::PersonalizationModeString() const {
-  switch (personalization_) {
-    case Personalization::kPersonal:
-      return "Only personalized";
-      break;
-    case Personalization::kBoth:
-      return "Both personalized and non-personalized";
-      break;
-    case Personalization::kNonPersonal:
-      return "Only non-personalized";
-      break;
-  }
-  NOTREACHED();
-  return std::string();
 }
 
 }  // namespace ntp_snippets

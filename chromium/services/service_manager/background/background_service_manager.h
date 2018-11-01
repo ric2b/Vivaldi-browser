@@ -6,58 +6,70 @@
 #define SERVICES_SERVICE_MANAGER_BACKGROUND_BACKGROUND_SERVICE_MANAGER_H_
 
 #include <memory>
-#include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/catalog/store.h"
+#include "base/threading/thread.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/service_manager/runner/host/service_process_launcher.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+class Value;
+class WaitableEvent;
+}
+
 namespace service_manager {
 
+class Context;
+class Identity;
 class ServiceManager;
 
-// BackgroundServiceManager starts up a Service Manager on a background thread,
-// and
-// destroys the thread in the destructor. Once created use CreateApplication()
-// to obtain an InterfaceRequest for the Application. The InterfaceRequest can
-// then be bound to an ApplicationImpl.
+// BackgroundServiceManager runs a Service Manager on a dedicated background
+// thread.
 class BackgroundServiceManager {
  public:
-  struct InitParams {
-    InitParams();
-    ~InitParams();
-
-    ServiceProcessLauncher::Delegate*
-        service_process_launcher_delegate = nullptr;
-
-    // If true the edk is initialized.
-    bool init_edk = true;
-  };
-
-  BackgroundServiceManager();
+  BackgroundServiceManager(
+      service_manager::ServiceProcessLauncher::Delegate* launcher_delegate,
+      std::unique_ptr<base::Value> catalog_contents);
   ~BackgroundServiceManager();
 
-  // Starts the background service manager. |command_line_switches| are
-  // additional
-  // switches applied to any processes spawned by this call.
-  void Init(std::unique_ptr<InitParams> init_params);
+  // Creates a service instance for |identity|. This is intended for use by the
+  // Service Manager's embedder to register instances directly, without
+  // requiring a Connector.
+  //
+  // |pid_receiver_request| may be null, in which case the service manager
+  // assumes the new service is running in this process.
+  void RegisterService(const Identity& identity,
+                       mojom::ServicePtr service,
+                       mojom::PIDReceiverRequest pid_receiver_request);
 
-  // Obtains an InterfaceRequest for the specified name.
-  mojom::ServiceRequest CreateServiceRequest(const std::string& name);
-
-  // Use to do processing on the thread running the Service Manager. The
-  // callback is supplied a pointer to the Service Manager. The callback does
-  // *not* own the Service Manager.
-  using ServiceManagerThreadCallback = base::Callback<void(ServiceManager*)>;
-  void ExecuteOnServiceManagerThread(
-      const ServiceManagerThreadCallback& callback);
+  // Provide a callback to be notified whenever a service is destroyed.
+  // Typically the creator of BackgroundServiceManager will use this to shut
+  // down when some set of services it created is destroyed. The |callback| is
+  // called on whichever thread called this function.
+  void SetInstanceQuitCallback(base::Callback<void(const Identity&)> callback);
 
  private:
-  class MojoThread;
+  void InitializeOnBackgroundThread(
+      service_manager::ServiceProcessLauncher::Delegate* launcher_delegate,
+      std::unique_ptr<base::Value> catalog_contents);
+  void ShutDownOnBackgroundThread(base::WaitableEvent* done_event);
+  void RegisterServiceOnBackgroundThread(
+      const Identity& identity,
+      mojom::ServicePtrInfo service_info,
+      mojom::PIDReceiverRequest pid_receiver_request);
+  void SetInstanceQuitCallbackOnBackgroundThread(
+      const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+      const base::Callback<void(const Identity&)>& callback);
+  void OnInstanceQuitOnBackgroundThread(const Identity& identity);
 
-  std::unique_ptr<MojoThread> thread_;
+  base::Thread background_thread_;
+
+  // The ServiceManager context. Must only be used on the background thread.
+  std::unique_ptr<Context> context_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundServiceManager);
 };

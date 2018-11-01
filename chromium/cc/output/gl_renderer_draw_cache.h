@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "cc/output/program_binding.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace cc {
@@ -29,19 +30,14 @@ struct TexturedQuadDrawCache {
   TexturedQuadDrawCache();
   ~TexturedQuadDrawCache();
 
-  // Values tracked to determine if textured quads may be coalesced.
-  int program_id;
-  int resource_id;
-  bool needs_blending;
-  bool nearest_neighbor;
-  SkColor background_color;
+  bool is_empty = true;
 
-  // Information about the program binding that is required to draw.
-  int uv_xform_location;
-  int background_color_location;
-  int vertex_opacity_location;
-  int matrix_location;
-  int sampler_location;
+  // Values tracked to determine if textured quads may be coalesced.
+  ProgramKey program_key;
+  int resource_id = -1;
+  bool needs_blending = false;
+  bool nearest_neighbor = false;
+  SkColor background_color = 0;
 
   // A cache for the coalesced quad data.
   std::vector<Float4> uv_xform_data;

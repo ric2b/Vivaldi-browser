@@ -7,6 +7,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/media/router/media_router_ui_service.h"
+#include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -31,6 +32,11 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "ui/views/widget/widget.h"
+
+namespace {
+constexpr char kToolbarMigratedComponentActionStatus[] =
+    "toolbar_migrated_component_action_status";
+}
 
 namespace media_router {
 
@@ -101,16 +107,26 @@ class MediaRouterUIBrowserTest : public InProcessBrowserTest {
   }
 
   void SetAlwaysShowActionPref(bool always_show) {
-    return ToolbarActionsModel::Get(browser()->profile())
-        ->component_migration_helper()
-        ->SetComponentActionPref(
-            ComponentToolbarActionsFactory::kMediaRouterActionId, always_show);
+    MediaRouterActionController::SetAlwaysShowActionPref(browser()->profile(),
+                                                         always_show);
   }
 
   AppMenuButton* GetAppMenuButton() {
     return BrowserView::GetBrowserViewForBrowser(browser())
         ->toolbar()
         ->app_menu_button();
+  }
+
+  // Sets the old preference to show the toolbar action icon to |always_show|,
+  // and migrates the preference.
+  void MigrateToolbarIconPref(bool always_show) {
+    {
+      DictionaryPrefUpdate update(browser()->profile()->GetPrefs(),
+                                  kToolbarMigratedComponentActionStatus);
+      update->SetBoolean(ComponentToolbarActionsFactory::kMediaRouterActionId,
+                         always_show);
+    }
+    chrome::MigrateObsoleteProfilePrefs(browser()->profile());
   }
 
  protected:
@@ -124,8 +140,16 @@ class MediaRouterUIBrowserTest : public InProcessBrowserTest {
   MediaRouterActionController* action_controller_ = nullptr;
 };
 
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
+// Flaky on chromeos, linux, win: https://crbug.com/658005
+#define MAYBE_OpenDialogWithMediaRouterAction \
+        DISABLED_OpenDialogWithMediaRouterAction
+#else
+#define MAYBE_OpenDialogWithMediaRouterAction OpenDialogWithMediaRouterAction
+#endif
+
 IN_PROC_BROWSER_TEST_F(MediaRouterUIBrowserTest,
-                       OpenDialogWithMediaRouterAction) {
+                       MAYBE_OpenDialogWithMediaRouterAction) {
   // We start off at about:blank page.
   // Make sure there is 1 tab and media router is enabled.
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
@@ -316,6 +340,19 @@ IN_PROC_BROWSER_TEST_F(MediaRouterUIBrowserTest,
   EXPECT_TRUE(ActionExists());
   browser2->window()->Close();
   EXPECT_TRUE(ActionExists());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaRouterUIBrowserTest, MigrateToolbarIconShownPref) {
+  MigrateToolbarIconPref(true);
+  EXPECT_TRUE(MediaRouterActionController::GetAlwaysShowActionPref(
+      browser()->profile()));
+}
+
+IN_PROC_BROWSER_TEST_F(MediaRouterUIBrowserTest,
+                       MigrateToolbarIconUnshownPref) {
+  MigrateToolbarIconPref(false);
+  EXPECT_FALSE(MediaRouterActionController::GetAlwaysShowActionPref(
+      browser()->profile()));
 }
 
 }  // namespace media_router

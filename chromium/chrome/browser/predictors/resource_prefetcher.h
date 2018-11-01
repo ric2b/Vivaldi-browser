@@ -10,12 +10,14 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
@@ -27,6 +29,15 @@ class URLRequestContext;
 
 namespace predictors {
 
+namespace internal {
+constexpr char kResourcePrefetchPredictorCachePatternHistogram[] =
+    "ResourcePrefetchPredictor.CachePattern";
+constexpr char kResourcePrefetchPredictorPrefetchedCountHistogram[] =
+    "ResourcePrefetchPredictor.PrefetchedCount";
+constexpr char kResourcePrefetchPredictorPrefetchedSizeHistogram[] =
+    "ResourcePrefetchPredictor.PrefetchedSizeKB";
+}  // namespace internal
+
 // Responsible for prefetching resources for a single main frame URL based on
 // the input list of resources.
 //  - Limits the max number of resources in flight for any host and also across
@@ -35,6 +46,27 @@ namespace predictors {
 //  - Lives entirely on the IO thread.
 class ResourcePrefetcher : public net::URLRequest::Delegate {
  public:
+  struct PrefetchedRequestStats {
+    PrefetchedRequestStats(const GURL& resource_url,
+                           bool was_cached,
+                           size_t total_received_bytes);
+    ~PrefetchedRequestStats();
+
+    GURL resource_url;
+    bool was_cached;
+    size_t total_received_bytes;
+  };
+
+  struct PrefetcherStats {
+    explicit PrefetcherStats(const GURL& url);
+    ~PrefetcherStats();
+    PrefetcherStats(const PrefetcherStats& other);
+
+    GURL url;
+    base::TimeTicks start_time;
+    std::vector<PrefetchedRequestStats> requests_stats;
+  };
+
   // Used to communicate when the prefetching is done. All methods are invoked
   // on the IO thread.
   class Delegate {
@@ -43,7 +75,9 @@ class ResourcePrefetcher : public net::URLRequest::Delegate {
 
     // Called when the ResourcePrefetcher is finished, i.e. there is nothing
     // pending in flight.
-    virtual void ResourcePrefetcherFinished(ResourcePrefetcher* prefetcher) = 0;
+    virtual void ResourcePrefetcherFinished(
+        ResourcePrefetcher* prefetcher,
+        std::unique_ptr<PrefetcherStats> stats) = 0;
 
     virtual net::URLRequestContext* GetURLRequestContext() = 0;
   };
@@ -81,6 +115,9 @@ class ResourcePrefetcher : public net::URLRequest::Delegate {
   // be cached correctly. Stubbed out during testing.
   virtual void ReadFullResponse(net::URLRequest* request);
 
+  // Called after successfull reading of response to save stats for histograms.
+  void RequestComplete(net::URLRequest* request);
+
   // net::URLRequest::Delegate methods.
   void OnReceivedRedirect(net::URLRequest* request,
                           const net::RedirectInfo& redirect_info,
@@ -108,12 +145,16 @@ class ResourcePrefetcher : public net::URLRequest::Delegate {
   Delegate* const delegate_;
   ResourcePrefetchPredictorConfig const config_;
   GURL main_frame_url_;
-  std::unique_ptr<GURL> urls_;
+
+  // For histogram reports.
+  size_t prefetched_count_;
+  int64_t prefetched_bytes_;
 
   std::map<net::URLRequest*, std::unique_ptr<net::URLRequest>>
       inflight_requests_;
   std::list<GURL> request_queue_;
   std::map<std::string, size_t> host_inflight_counts_;
+  std::unique_ptr<PrefetcherStats> stats_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourcePrefetcher);
 };

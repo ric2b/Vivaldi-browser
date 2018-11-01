@@ -6,8 +6,8 @@
 #define EXTENSIONS_API_VIVALDI_UTILITIES_VIVALDI_UTILITIES_API_H_
 
 #include <map>
-#include <string>
 #include <memory>
+#include <string>
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
@@ -23,15 +23,16 @@ namespace extensions {
 
 class VivaldiUtilitiesEventRouter {
  public:
-    explicit VivaldiUtilitiesEventRouter(Profile* profile);
-    ~VivaldiUtilitiesEventRouter();
+  explicit VivaldiUtilitiesEventRouter(Profile* profile);
+  ~VivaldiUtilitiesEventRouter();
 
-    // Helper to actually dispatch an event to extension listeners.
-    void DispatchEvent(const std::string& event_name,
-                       std::unique_ptr<base::ListValue> event_args);
+  // Helper to actually dispatch an event to extension listeners.
+  void DispatchEvent(const std::string& event_name,
+                     std::unique_ptr<base::ListValue> event_args);
+
  private:
-    content::BrowserContext* browser_context_;
-    DISALLOW_COPY_AND_ASSIGN(VivaldiUtilitiesEventRouter);
+  content::BrowserContext* browser_context_;
+  DISALLOW_COPY_AND_ASSIGN(VivaldiUtilitiesEventRouter);
 };
 
 class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
@@ -71,9 +72,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   content::BrowserContext* browser_context_;
 
   // BrowserContextKeyedAPI implementation.
-  static const char* service_name() {
-    return "UtilitiesAPI";
-  }
+  static const char* service_name() { return "UtilitiesAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
 
@@ -86,11 +85,11 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
 class UtilitiesBasicPrintFunction : public ChromeAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.basicPrint",
-                             UTILITIES_BASICPRINT)
+  DECLARE_EXTENSION_FUNCTION("utilities.basicPrint", UTILITIES_BASICPRINT)
   UtilitiesBasicPrintFunction();
 
   bool RunAsync() override;
+
  protected:
   ~UtilitiesBasicPrintFunction() override;
 

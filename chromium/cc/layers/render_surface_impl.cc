@@ -31,9 +31,10 @@
 
 namespace cc {
 
-RenderSurfaceImpl::RenderSurfaceImpl(LayerImpl* owning_layer)
-    : layer_tree_impl_(owning_layer->layer_tree_impl()),
-      stable_effect_id_(owning_layer->id()),
+RenderSurfaceImpl::RenderSurfaceImpl(LayerTreeImpl* layer_tree_impl,
+                                     int stable_effect_id)
+    : layer_tree_impl_(layer_tree_impl),
+      stable_effect_id_(stable_effect_id),
       effect_tree_index_(EffectTree::kInvalidNodeId),
       surface_property_changed_(false),
       ancestor_property_changed_(false),
@@ -49,9 +50,8 @@ RenderSurfaceImpl::~RenderSurfaceImpl() {}
 RenderSurfaceImpl* RenderSurfaceImpl::render_target() {
   EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
   EffectNode* node = effect_tree.Node(EffectTreeIndex());
-  EffectNode* target_node = effect_tree.Node(node->target_id);
-  if (target_node->id != EffectTree::kRootNodeId)
-    return target_node->render_surface;
+  if (node->target_id != EffectTree::kRootNodeId)
+    return effect_tree.GetRenderSurface(node->target_id);
   else
     return this;
 }
@@ -60,9 +60,8 @@ const RenderSurfaceImpl* RenderSurfaceImpl::render_target() const {
   const EffectTree& effect_tree =
       layer_tree_impl_->property_trees()->effect_tree;
   const EffectNode* node = effect_tree.Node(EffectTreeIndex());
-  const EffectNode* target_node = effect_tree.Node(node->target_id);
-  if (target_node->id != EffectTree::kRootNodeId)
-    return target_node->render_surface;
+  if (node->target_id != EffectTree::kRootNodeId)
+    return effect_tree.GetRenderSurface(node->target_id);
   else
     return this;
 }
@@ -403,6 +402,12 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
   LayerImpl* mask_layer = MaskLayer();
   if (mask_layer && mask_layer->DrawsContent() &&
       !mask_layer->bounds().IsEmpty()) {
+    // The software renderer applies mask layer and blending in the wrong
+    // order but kDstIn doesn't commute with masking. It is okay to not
+    // support this configuration because kDstIn was introduced to replace
+    // mask layers.
+    DCHECK(BlendMode() != SkBlendMode::kDstIn)
+        << "kDstIn blend mode with mask layer is unsupported.";
     mask_layer->GetContentsResourceId(&mask_resource_id, &mask_texture_size);
     gfx::SizeF unclipped_mask_target_size = gfx::ScaleSize(
         gfx::SizeF(OwningEffectNode()->unscaled_mask_target_size),
@@ -413,9 +418,11 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
 
   RenderPassDrawQuad* quad =
       render_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-  quad->SetNew(shared_quad_state, content_rect(), visible_layer_rect,
-               GetRenderPassId(), mask_resource_id, mask_uv_scale,
-               mask_texture_size, surface_contents_scale, FiltersOrigin());
+  quad->SetNew(
+      shared_quad_state, content_rect(), visible_layer_rect, GetRenderPassId(),
+      mask_resource_id, gfx::ScaleRect(gfx::RectF(content_rect()),
+                                       mask_uv_scale.x(), mask_uv_scale.y()),
+      mask_texture_size, surface_contents_scale, FiltersOrigin(), gfx::RectF());
 }
 
 }  // namespace cc

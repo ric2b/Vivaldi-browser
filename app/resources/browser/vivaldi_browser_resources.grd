@@ -11,8 +11,6 @@
       <include name="IDR_MD_USER_MANAGER_SHARED_STYLES_HTML"
                file="md_user_manager\shared_styles.html"
                flattenhtml="true" type="BINDATA" />
-      <include name="IDR_PLUGINS_HTML" file="plugins\plugins.html"
-               flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_PRINT_PREVIEW_JS" file="print_preview\print_preview.js"
                flattenhtml="true" type="BINDATA" />
       <include name="IDR_UBER_FRAME_HTML" file="uber\uber_frame.html"

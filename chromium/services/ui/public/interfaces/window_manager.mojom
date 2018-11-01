@@ -5,10 +5,10 @@
 module ui.mojom;
 
 import "services/ui/public/interfaces/cursor.mojom";
-import "services/ui/public/interfaces/display/display.mojom";
 import "services/ui/public/interfaces/event_matcher.mojom";
 import "services/ui/public/interfaces/window_manager_constants.mojom";
 import "services/ui/public/interfaces/window_tree_constants.mojom";
+import "ui/display/mojo/display.mojom";
 import "ui/events/mojo/event.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
@@ -35,6 +35,9 @@ interface WindowManager {
 
   // Properties used only during creation time. --------------------------------
 
+  // Whether the window should be initially focusable or not. Type: bool.
+  const string kFocusable_InitProperty = "init:focusable";
+
   // Initial bounds to create the window at. If empty the WindowManager decides
   // the initial bounds. Type: gfx::Rect.
   const string kBounds_InitProperty = "init:bounds";
@@ -56,6 +59,10 @@ interface WindowManager {
   // Specifies that the system default caption and icon should not be rendered,
   // and the client area should be equivalent to the window area. Type: bool
   const string kRemoveStandardFrame_InitProperty = "init:remove-standard-frame";
+
+  // A flag controlling the window's presence on the mash shelf. Type: bool
+  const string kWindowIgnoredByShelf_InitProperty =
+      "init:window-ignored-by-shelf";
 
   // The window type. This maps to aura::client::kWindowTypeKey as well as
   // Window::type(). This mapping is only done for top-level windows that are
@@ -85,6 +92,11 @@ interface WindowManager {
   // used list of windows. Maps to aura::client::kExcludeFromMruKey. Type: bool.
   const string kExcludeFromMru_Property = "prop:exclude_from_mru";
 
+  // If true, when a window is in in fullscreen mode, the user cannot reveal
+  // the top portion of the window through a touch / mouse gesture.
+  // Type: bool.
+  const string kImmersiveFullscreen_Property = "prop:immersive-fullscreen";
+
   // Internal window name. Useful for debugging. Maps to aura::client::kNameKey.
   // Type: mojom::String
   const string kName_Property = "prop:name";
@@ -113,6 +125,9 @@ interface WindowManager {
   // Type: gfx::Rect.
   const string kRestoreBounds_Property = "prop:restore-bounds";
 
+  // See ShadowElevation for details. Type: wm::ShadowElevation.
+  const string kShadowElevation_Property = "prop:shadow-elevation";
+
   // The type of item to be shown on the shelf for this window. Type: int
   // A few ash::ShelfItemType values are supported; TYPE_UNKNOWN means no item.
   const string kShelfItemType_Property = "prop:shelf-item-type";
@@ -123,10 +138,6 @@ interface WindowManager {
 
   // The window icon; typically 16x16 for titlebars. Type: SkBitmap
   const string kWindowIcon_Property = "prop:window-icon";
-
-  // A flag controlling the window's presence on the mash shelf. Type: bool
-  // TODO: convert this to a aura::client property; http://crbug.com/671729.
-  const string kWindowIgnoredByShelf_Property = "prop:window-ignored-by-shelf";
 
   // The window's title. Maps to aura::client::kTitleKey. Type: mojom::String
   const string kWindowTitle_Property = "prop:window-title";
@@ -164,6 +175,8 @@ interface WindowManager {
                 string name,
                 array<uint8>? value);
 
+  WmSetCanFocus(uint32 window_id, bool can_focus);
+
   // Asks the WindowManager to create a new window.
   // |requesting_client_id| is the id of the client issuing the request. This
   // allows the window manager to track top level windows by client.
@@ -191,6 +204,13 @@ interface WindowManager {
   // to the next. The window manager may completely ignore this message.
   WmDeactivateWindow(uint32 window_id);
 
+  // Asks the WindowMangaer to stack |above_id| in front of |below_id|.
+  WmStackAbove(uint32 change_id, uint32 above_id, uint32 below_id);
+
+  // Asks the WindowManager to stack |window_id| as the first child of its
+  // window manager owned parent.
+  WmStackAtTop(uint32 change_id, uint32 window_id);
+
   // An accelerator registered via AddAccelerator() has been triggered. If
   // |ack_id| is non-zero the accelerator matches a PRE_TARGET and must be
   // acknowledged by WindowManagerClient::OnAcceleratorAck().
@@ -211,14 +231,10 @@ interface WindowManagerClient {
 
   ActivateNextWindow();
 
-  // Sets the underlay surface offset for the specified window and additional
-  // hit area. The underlay surface is drawn at the bounds of the window minus
-  // the offset. The hit area is extended from the bounds of the window by
-  // |hit_area|.
-  SetUnderlaySurfaceOffsetAndExtendedHitArea(uint32 window_id,
-                                             int32 x_offset,
-                                             int32 y_offset,
-                                             gfx.mojom.Insets hit_area);
+  // Sets the additional hit area. The hit area is extended from the bounds of
+  // the window by |hit_area|. This is used to allow for resizes to start
+  // outside the bounds of the window.
+  SetExtendedHitArea(uint32 window_id, gfx.mojom.Insets hit_area);
 
   // Add and remove accelerators. When accelerators are registered the
   // WindowManager receives the event via OnAccelerator() rather than the

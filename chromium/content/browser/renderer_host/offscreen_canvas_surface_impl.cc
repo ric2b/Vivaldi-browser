@@ -17,9 +17,12 @@
 namespace content {
 
 OffscreenCanvasSurfaceImpl::OffscreenCanvasSurfaceImpl(
+    const cc::FrameSinkId& parent_frame_sink_id,
     const cc::FrameSinkId& frame_sink_id,
-    blink::mojom::OffscreenCanvasSurfaceClientPtr client)
-    : client_(std::move(client)), frame_sink_id_(frame_sink_id) {
+    cc::mojom::DisplayCompositorClientPtr client)
+    : client_(std::move(client)),
+      frame_sink_id_(frame_sink_id),
+      parent_frame_sink_id_(parent_frame_sink_id) {
   OffscreenCanvasSurfaceManager::GetInstance()
       ->RegisterOffscreenCanvasSurfaceInstance(frame_sink_id_, this);
 }
@@ -33,12 +36,13 @@ OffscreenCanvasSurfaceImpl::~OffscreenCanvasSurfaceImpl() {
 
 // static
 void OffscreenCanvasSurfaceImpl::Create(
+    const cc::FrameSinkId& parent_frame_sink_id,
     const cc::FrameSinkId& frame_sink_id,
-    blink::mojom::OffscreenCanvasSurfaceClientPtr client,
+    cc::mojom::DisplayCompositorClientPtr client,
     blink::mojom::OffscreenCanvasSurfaceRequest request) {
   std::unique_ptr<OffscreenCanvasSurfaceImpl> impl =
-      base::MakeUnique<OffscreenCanvasSurfaceImpl>(frame_sink_id,
-                                                   std::move(client));
+      base::MakeUnique<OffscreenCanvasSurfaceImpl>(
+          parent_frame_sink_id, frame_sink_id, std::move(client));
   OffscreenCanvasSurfaceImpl* surface_service = impl.get();
   surface_service->binding_ =
       mojo::MakeStrongBinding(std::move(impl), std::move(request));
@@ -47,9 +51,9 @@ void OffscreenCanvasSurfaceImpl::Create(
 void OffscreenCanvasSurfaceImpl::OnSurfaceCreated(
     const cc::SurfaceInfo& surface_info) {
   DCHECK_EQ(surface_info.id().frame_sink_id(), frame_sink_id_);
-  if (!current_local_frame_id_.is_valid() ||
-      surface_info.id().local_frame_id() != current_local_frame_id_) {
-    current_local_frame_id_ = surface_info.id().local_frame_id();
+  if (!current_local_surface_id_.is_valid() ||
+      surface_info.id().local_surface_id() != current_local_surface_id_) {
+    current_local_surface_id_ = surface_info.id().local_surface_id();
     if (client_)
       client_->OnSurfaceCreated(surface_info);
   }

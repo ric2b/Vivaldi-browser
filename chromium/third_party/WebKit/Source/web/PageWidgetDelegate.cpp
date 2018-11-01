@@ -41,7 +41,7 @@
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
+#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/transforms/AffineTransform.h"
 #include "public/platform/WebInputEvent.h"
 #include "web/WebInputEventConversion.h"
@@ -68,34 +68,35 @@ static void paintInternal(Page& page,
     return;
 
   IntRect intRect(rect);
-  SkPictureBuilder pictureBuilder(intRect);
+  PaintRecordBuilder builder(intRect);
   {
-    GraphicsContext& paintContext = pictureBuilder.context();
+    GraphicsContext& paintContext = builder.context();
 
     // FIXME: device scale factor settings are layering violations and should
     // not be used within Blink paint code.
-    float scaleFactor = page.deviceScaleFactor();
+    float scaleFactor = page.deviceScaleFactorDeprecated();
     paintContext.setDeviceScaleFactor(scaleFactor);
 
     AffineTransform scale;
     scale.scale(scaleFactor);
-    TransformRecorder scaleRecorder(paintContext, pictureBuilder, scale);
+    TransformRecorder scaleRecorder(paintContext, builder, scale);
 
     IntRect dirtyRect(rect);
     FrameView* view = root.view();
+    view->updateAllLifecyclePhasesExceptPaint();
     if (view) {
-      ClipRecorder clipRecorder(paintContext, pictureBuilder,
+      ClipRecorder clipRecorder(paintContext, builder,
                                 DisplayItem::kPageWidgetDelegateClip,
                                 dirtyRect);
       view->paint(paintContext, globalPaintFlags, CullRect(dirtyRect));
     } else {
       DrawingRecorder drawingRecorder(
-          paintContext, pictureBuilder,
+          paintContext, builder,
           DisplayItem::kPageWidgetDelegateBackgroundFallback, dirtyRect);
       paintContext.fillRect(dirtyRect, Color::white);
     }
   }
-  pictureBuilder.endRecording()->playback(canvas);
+  builder.endRecording()->playback(canvas);
 }
 
 void PageWidgetDelegate::paint(Page& page,
@@ -119,10 +120,11 @@ WebInputEventResult PageWidgetDelegate::handleInputEvent(
   const WebInputEvent& event = coalescedEvent.event();
   if (event.modifiers() & WebInputEvent::IsTouchAccessibility &&
       WebInputEvent::isMouseEventType(event.type())) {
-    PlatformMouseEventBuilder pme(root->view(),
-                                  static_cast<const WebMouseEvent&>(event));
+    WebMouseEvent mouseEvent = TransformWebMouseEvent(
+        root->view(), static_cast<const WebMouseEvent&>(event));
 
-    IntPoint docPoint(root->view()->rootFrameToContents(pme.position()));
+    IntPoint docPoint(root->view()->rootFrameToContents(
+        flooredIntPoint(mouseEvent.positionInRootFrame())));
     HitTestResult result = root->eventHandler().hitTestResultAtPoint(
         docPoint, HitTestRequest::ReadOnly | HitTestRequest::Active);
     result.setToShadowHostIfInUserAgentShadowRoot();
@@ -225,27 +227,32 @@ void PageWidgetEventHandler::handleMouseMove(
     LocalFrame& mainFrame,
     const WebMouseEvent& event,
     const std::vector<const WebInputEvent*>& coalescedEvents) {
+  WebMouseEvent transformedEvent =
+      TransformWebMouseEvent(mainFrame.view(), event);
   mainFrame.eventHandler().handleMouseMoveEvent(
-      PlatformMouseEventBuilder(mainFrame.view(), event),
-      createPlatformMouseEventVector(mainFrame.view(), coalescedEvents));
+      transformedEvent,
+      TransformWebMouseEventVector(mainFrame.view(), coalescedEvents));
 }
 
 void PageWidgetEventHandler::handleMouseLeave(LocalFrame& mainFrame,
                                               const WebMouseEvent& event) {
-  mainFrame.eventHandler().handleMouseLeaveEvent(
-      PlatformMouseEventBuilder(mainFrame.view(), event));
+  WebMouseEvent transformedEvent =
+      TransformWebMouseEvent(mainFrame.view(), event);
+  mainFrame.eventHandler().handleMouseLeaveEvent(transformedEvent);
 }
 
 void PageWidgetEventHandler::handleMouseDown(LocalFrame& mainFrame,
                                              const WebMouseEvent& event) {
-  mainFrame.eventHandler().handleMousePressEvent(
-      PlatformMouseEventBuilder(mainFrame.view(), event));
+  WebMouseEvent transformedEvent =
+      TransformWebMouseEvent(mainFrame.view(), event);
+  mainFrame.eventHandler().handleMousePressEvent(transformedEvent);
 }
 
 void PageWidgetEventHandler::handleMouseUp(LocalFrame& mainFrame,
                                            const WebMouseEvent& event) {
-  mainFrame.eventHandler().handleMouseReleaseEvent(
-      PlatformMouseEventBuilder(mainFrame.view(), event));
+  WebMouseEvent transformedEvent =
+      TransformWebMouseEvent(mainFrame.view(), event);
+  mainFrame.eventHandler().handleMouseReleaseEvent(transformedEvent);
 }
 
 WebInputEventResult PageWidgetEventHandler::handleMouseWheel(
@@ -260,9 +267,11 @@ WebInputEventResult PageWidgetEventHandler::handleTouchEvent(
     LocalFrame& mainFrame,
     const WebTouchEvent& event,
     const std::vector<const WebInputEvent*>& coalescedEvents) {
+  WebTouchEvent transformedEvent =
+      TransformWebTouchEvent(mainFrame.view(), event);
   return mainFrame.eventHandler().handleTouchEvent(
-      PlatformTouchEventBuilder(mainFrame.view(), event),
-      createPlatformTouchEventVector(mainFrame.view(), coalescedEvents));
+      transformedEvent,
+      TransformWebTouchEventVector(mainFrame.view(), coalescedEvents));
 }
 
 }  // namespace blink

@@ -27,9 +27,12 @@
 
 #include "core/workers/WorkerScriptLoader.h"
 
+#include <memory>
 #include "core/dom/ExecutionContext.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/loader/WorkerThreadableLoader.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/HTTPNames.h"
@@ -41,7 +44,6 @@
 #include "public/platform/WebURLRequest.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
-#include <memory>
 
 namespace blink {
 
@@ -66,6 +68,7 @@ void WorkerScriptLoader::loadSynchronously(
     CrossOriginRequestPolicy crossOriginRequestPolicy,
     WebAddressSpace creationAddressSpace) {
   m_url = url;
+  m_executionContext = &executionContext;
 
   ResourceRequest request(createResourceRequest(creationAddressSpace));
   SECURITY_DCHECK(executionContext.isWorkerGlobalScope());
@@ -78,8 +81,6 @@ void WorkerScriptLoader::loadSynchronously(
   ResourceLoaderOptions resourceLoaderOptions;
   resourceLoaderOptions.allowCredentials = AllowStoredCredentials;
 
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_threadableLoader);
   WorkerThreadableLoader::loadResourceSynchronously(
       toWorkerGlobalScope(executionContext), request, *this, options,
       resourceLoaderOptions);
@@ -96,6 +97,7 @@ void WorkerScriptLoader::loadAsynchronously(
   m_responseCallback = std::move(responseCallback);
   m_finishedCallback = std::move(finishedCallback);
   m_url = url;
+  m_executionContext = &executionContext;
 
   ResourceRequest request(createResourceRequest(creationAddressSpace));
   ThreadableLoaderOptions options;
@@ -110,11 +112,8 @@ void WorkerScriptLoader::loadAsynchronously(
   // (E.g. see crbug.com/524694 for why we can't easily remove this protect)
   RefPtr<WorkerScriptLoader> protect(this);
   m_needToCancel = true;
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_threadableLoader);
-  m_threadableLoader = ThreadableLoader::create(
-      executionContext, this, options, resourceLoaderOptions,
-      ThreadableLoader::ClientSpec::kWorkerScriptLoader);
+  m_threadableLoader = ThreadableLoader::create(executionContext, this, options,
+                                                resourceLoaderOptions);
   m_threadableLoader->start(request);
   if (m_failed)
     notifyFinished();
@@ -141,6 +140,15 @@ void WorkerScriptLoader::didReceiveResponse(
     std::unique_ptr<WebDataConsumerHandle> handle) {
   DCHECK(!handle);
   if (response.httpStatusCode() / 100 != 2 && response.httpStatusCode()) {
+    notifyError();
+    return;
+  }
+  if (!ScriptResource::mimeTypeAllowedByNosniff(response)) {
+    m_executionContext->addConsoleMessage(ConsoleMessage::create(
+        SecurityMessageSource, ErrorMessageLevel,
+        "Refused to execute script from '" + m_url.elidedString() +
+            "' because its MIME type ('" + response.httpContentType() +
+            "') is not executable, and strict MIME type checking is enabled."));
     notifyError();
     return;
   }

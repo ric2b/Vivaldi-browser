@@ -5,58 +5,45 @@
 #ifndef ASH_COMMON_SHELF_SHELF_ITEM_DELEGATE_H_
 #define ASH_COMMON_SHELF_SHELF_ITEM_DELEGATE_H_
 
-#include "ash/ash_export.h"
-#include "base/strings/string16.h"
+#include <stdint.h>
 
-namespace ui {
-class Event;
-}
+#include "ash/ash_export.h"
+#include "ash/public/cpp/shelf_application_menu_item.h"
+#include "ash/public/cpp/shelf_types.h"
+#include "ui/events/event_constants.h"
 
 namespace ash {
-
-class ShelfMenuModel;
 
 // Delegate for the ShelfItem.
 class ASH_EXPORT ShelfItemDelegate {
  public:
-  // The return type for the ShelfItemDelegate::ItemSelected method.
-  enum PerformedAction {
-    // No action was taken.
-    kNoAction,
-    // A new window was created.
-    kNewWindowCreated,
-    // An existing window which was not currently active was activated.
-    kExistingWindowActivated,
-    // The currently active window was minimized.
-    kExistingWindowMinimized,
-    // The app list launcher menu was shown.
-    kAppListMenuShown,
-  };
+  ShelfItemDelegate();
+  virtual ~ShelfItemDelegate();
 
-  virtual ~ShelfItemDelegate() {}
-
-  // Invoked when the user clicks on a window entry in the launcher.
-  // |event| is the click event. The |event| is dispatched by a view
-  // and has an instance of |views::View| as the event target
-  // but not |aura::Window|. If the |event| is of type KeyEvent, it is assumed
-  // that this was triggered by keyboard action (Alt+<number>) and special
-  // handling might happen.
+  // Called when the user selects a shelf item. The event type and flags, the
+  // relevant display id, and the source of the selection should be provided if
+  // they are known to the caller; as some subclasses use these arguments.
+  // Defaults: (ET_UNKNOWN, EF_NONE, kInvalidDisplayId, LAUNCH_FROM_UNKNOWN)
   // Returns the action performed by selecting the item.
-  virtual PerformedAction ItemSelected(const ui::Event& event) = 0;
+  virtual ShelfAction ItemSelected(ui::EventType event_type,
+                                   int event_flags,
+                                   int64_t display_id,
+                                   ShelfLaunchSource source) = 0;
 
-  // Returns the application menu model for the specified item. There are three
-  // possible return values:
-  //  - A return of NULL indicates that no menu is wanted for this item.
-  //  - A return of a menu with one item means that only the name of the
-  //    application/item was added and there are no active applications.
-  //    Note: This is useful for hover menus which also show context help.
-  //  - A list containing the title and the active list of items.
-  // The caller takes ownership of the returned model.
+  // A helper to call ItemSelected with a source and default arguments.
+  ShelfAction ItemSelectedBySource(ShelfLaunchSource source);
+
+  // Returns any application menu items that should appear for this shelf item.
   // |event_flags| specifies the flags of the event which triggered this menu.
-  virtual ShelfMenuModel* CreateApplicationMenu(int event_flags) = 0;
+  virtual ShelfAppMenuItemList GetAppMenuItems(int event_flags) = 0;
+
+  // Called on invocation of a shelf item's application menu command.
+  virtual void ExecuteCommand(uint32_t command_id, int event_flags) = 0;
 
   // Closes all windows associated with this item.
   virtual void Close() = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(ShelfItemDelegate);
 };
 
 }  // namespace ash

@@ -323,9 +323,6 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRight) {
 // RearrangeVisibleWindowOnShow places windows flush with work area edges.
 // Test case for the secondary screen.
 TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRightSecondScreen) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   // Create a dual screen layout.
   UpdateDisplay("600x600,600x600");
 
@@ -499,9 +496,6 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDragging) {
 
 // Adds three windows in bottom display and tests layout after a drag.
 TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDraggingSecondScreen) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   // Create two screen vertical layout.
   UpdateDisplay("600x1000,600x1000");
   // Layout the secondary display to the bottom of the primary.
@@ -683,7 +677,7 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsMinimize) {
   EXPECT_EQ(ui::SHOW_STATE_MINIMIZED,
             w1->GetProperty(aura::client::kShowStateKey));
   EXPECT_EQ(ui::SHOW_STATE_DOCKED,
-            w1->GetProperty(aura::client::kRestoreShowStateKey));
+            w1->GetProperty(aura::client::kPreMinimizedShowStateKey));
   // The other two windows should be still docked.
   EXPECT_FALSE(wm::GetWindowState(w2.get())->IsMinimized());
   EXPECT_TRUE(wm::GetWindowState(w2.get())->IsDocked());
@@ -776,9 +770,6 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsHeightRestrictions) {
 // Tests that a docked window is moved to primary display when secondary display
 // is disconnected and that it stays docked and properly positioned.
 TEST_P(DockedWindowLayoutManagerTest, DisplayDisconnectionMovesDocked) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   // Create a dual screen layout.
   UpdateDisplay("600x700,800x600");
 

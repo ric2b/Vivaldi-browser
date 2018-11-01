@@ -18,7 +18,7 @@
 namespace content {
 
 // Implements fake adapters with named mock data set for use in tests as a
-// result of layout tests calling testRunner.setBluetoothMockDataSet.
+// result of layout tests calling testRunner.setBluetoothFakeAdapter.
 
 // An adapter named 'FooAdapter' in
 // https://webbluetoothcg.github.io/web-bluetooth/tests/ is provided by a
@@ -139,7 +139,7 @@ class LayoutTestBluetoothAdapterProvider {
   // Internal structure
   //  - DeviceNameLongerThan29Bytes
   //    - Mock Functions:
-  //      - GetName(): Returns "a_device_name_that_is_longer_than_29_bytes_but_shorter_than_240_bytes"
+  //      - GetName(): Returns "a_device_name_that_is_longer_than_29_bytes_but_shorter_than_248_bytes"
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetDeviceNameLongerThan29BytesAdapter();
 
@@ -341,15 +341,21 @@ class LayoutTestBluetoothAdapterProvider {
   //           - StartNotifySession: Run success callback.
   //           - GetProperties: Returns
   //               BluetoothRemoteGattCharacteristic::PROPERTY_READ
-  //           - Descriptors
+  //           - Descriptors (if |addDescriptors| input is true)
   //             - User Description (2901)
+  //                 - Mock Functions:
+  //                   - Read: Calls success callback with
+  //                           "gatt.characteristic_user_description".
+  //                   - Write: Calls success callback.
   //             - Client Characteristic Configuration (2902)
   //                 Note: This descriptor is blocklisted for writes.
   //             - bad2ddcf-60db-45cd-bef9-fd72b153cf7c
   //                 A test descriptor that is blocklisted.
+  //             - bad3ec61-3cc3-4954-9702-7977df514114
+  //                 A test descriptor that is exclude read.
 
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
-  GetDisconnectingHealthThermometer();
+  GetDisconnectingHealthThermometer(bool add_descriptors);
 
   // |ServicesDiscoveredAfterReconnectionAdapter|(disconnect)
   // Inherits from |HeartRateAdapter|
@@ -398,6 +404,13 @@ class LayoutTestBluetoothAdapterProvider {
   //                 succeeding callback, otherwise it saves a failing callback.
   //                 This calback is run during CreateGattConnection. If
   //                 |disconnect| is true disconnects the device.
+  //               - user_descriptor
+  //                 - Operations read / write nearly identical to the read and
+  //                   write methods of the characteristic.
+  //                 - Read: If |succeeds| is true, saves a succeeding callback,
+  //                   otherwise it saves a failing callback.
+  //                 - Write: If |succeeds| is true, saves a succeeding callback
+  //                   otherwise it saves a failing callback.
   //         - CreateGattConnection: Runs success callback with a new GATT
   //           connection and runs any pending GATT operation callbacks.
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>

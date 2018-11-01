@@ -16,11 +16,8 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/singleton.h"
-#include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
-#include "content/public/common/resource_type.h"
 #include "extensions/browser/api/declarative/rules_registry.h"
 #include "extensions/browser/api/declarative_webrequest/request_stage.h"
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
@@ -54,6 +51,9 @@ class URLRequest;
 }
 
 namespace extensions {
+
+enum class WebRequestResourceType : uint8_t;
+
 class ExtensionNavigationUIData;
 class InfoMap;
 class WebRequestEventDetails;
@@ -92,8 +92,7 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
 // This class observes network events and routes them to the appropriate
 // extensions listening to those events. All methods must be called on the IO
 // thread unless otherwise specified.
-class ExtensionWebRequestEventRouter
-    : public base::SupportsWeakPtr<ExtensionWebRequestEventRouter> {
+class ExtensionWebRequestEventRouter {
  public:
   struct BlockedRequest;
 
@@ -123,7 +122,7 @@ class ExtensionWebRequestEventRouter
     bool InitFromValue(const base::DictionaryValue& value, std::string* error);
 
     extensions::URLPatternSet urls;
-    std::vector<content::ResourceType> types;
+    std::vector<WebRequestResourceType> types;
     int tab_id;
     int window_id;
   };
@@ -369,8 +368,6 @@ class ExtensionWebRequestEventRouter
     DISALLOW_COPY_AND_ASSIGN(EventListener);
   };
 
-  friend struct base::DefaultSingletonTraits<ExtensionWebRequestEventRouter>;
-
   using RawListeners = std::vector<EventListener*>;
   using ListenerIDs = std::vector<EventListener::ID>;
   using Listeners = std::vector<std::unique_ptr<EventListener>>;
@@ -386,7 +383,9 @@ class ExtensionWebRequestEventRouter
   using CallbacksForPageLoad = std::list<base::Closure>;
 
   ExtensionWebRequestEventRouter();
-  ~ExtensionWebRequestEventRouter();
+
+  // This instance is leaked.
+  ~ExtensionWebRequestEventRouter() = delete;
 
   // Returns the EventListener with the given |id|, or nullptr. Must be called
   // from the IO thread.
@@ -439,7 +438,7 @@ class ExtensionWebRequestEventRouter
                                 const GURL& url,
                                 int render_process_host_id,
                                 int routing_id,
-                                content::ResourceType resource_type,
+                                WebRequestResourceType resource_type,
                                 bool is_async_request,
                                 bool is_request_from_extension,
                                 int* extra_info_spec,
@@ -494,11 +493,6 @@ class ExtensionWebRequestEventRouter
                             const std::string& event_name,
                             uint64_t request_id,
                             extensions::RequestStage request_stage);
-
-  // Returns event details for a given request.
-  std::unique_ptr<WebRequestEventDetails> CreateEventDetails(
-      const net::URLRequest* request,
-      int extra_info_spec);
 
   // Sets the flag that |event_type| has been signaled for |request_id|.
   // Returns the value of the flag before setting it.

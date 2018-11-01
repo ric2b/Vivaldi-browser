@@ -129,6 +129,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableZeroCopy,
 #if defined(USE_OZONE)
     ::switches::kExtraTouchNoiseFiltering,
+    ::switches::kEdgeTouchFiltering,
 #endif
     ::switches::kHostWindowBounds,
     ::switches::kMainFrameResizesAreOrientationChanges,
@@ -191,8 +192,6 @@ void DeriveCommandLine(const GURL& start_url,
     // Please keep these in alphabetical order. Non-UI Compositor switches
     // here should also be added to
     // content/browser/renderer_host/render_process_host_impl.cc.
-    cc::switches::kCheckTilePriorityInversion,
-    cc::switches::kDisableCachedPictureRaster,
     cc::switches::kDisableCompositedAntialiasing,
     cc::switches::kDisableMainFrameBeforeActivation,
     cc::switches::kDisableThreadedAnimation,
@@ -210,6 +209,7 @@ void DeriveCommandLine(const GURL& start_url,
     cc::switches::kSlowDownRasterScaleFactor,
     cc::switches::kUIEnableLayerLists,
     cc::switches::kUIShowFPSCounter,
+    chromeos::switches::kArcAvailability,
     chromeos::switches::kArcAvailable,
     chromeos::switches::kDbusStub,
     chromeos::switches::kDisableArcDataWipe,

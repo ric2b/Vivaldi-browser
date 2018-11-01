@@ -16,6 +16,8 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
@@ -34,101 +36,136 @@ public final class NewTabPageUma {
     // Possible actions taken by the user on the NTP. These values are also defined in
     // histograms.xml. WARNING: these values must stay in sync with histograms.xml.
 
-    // User performed a search using the omnibox
+    /** User performed a search using the omnibox. */
     private static final int ACTION_SEARCHED_USING_OMNIBOX = 0;
-    // User navigated to Google search homepage using the omnibox
+
+    /** User navigated to Google search homepage using the omnibox. */
     private static final int ACTION_NAVIGATED_TO_GOOGLE_HOMEPAGE = 1;
-    // User navigated to any other page using the omnibox
+
+    /** User navigated to any other page using the omnibox. */
     private static final int ACTION_NAVIGATED_USING_OMNIBOX = 2;
-    // User opened a most visited tile
+
+    /** User opened a most visited tile. */
     public static final int ACTION_OPENED_MOST_VISITED_TILE = 3;
-    // User opened the recent tabs manager
+
+    /** User opened the recent tabs manager. */
     public static final int ACTION_OPENED_RECENT_TABS_MANAGER = 4;
-    // User opened the history manager
+
+    /** User opened the history manager. */
     public static final int ACTION_OPENED_HISTORY_MANAGER = 5;
-    // User opened the bookmarks manager
+
+    /** User opened the bookmarks manager. */
     public static final int ACTION_OPENED_BOOKMARKS_MANAGER = 6;
-    // User opened the downloads manager
+
+    /** User opened the downloads manager. */
     public static final int ACTION_OPENED_DOWNLOADS_MANAGER = 7;
-    // User navigated to the webpage for a snippet shown on the NTP.
+
+    /** User navigated to the webpage for a snippet shown on the NTP. */
     public static final int ACTION_OPENED_SNIPPET = 8;
-    // User clicked on the "learn more" link in the footer.
+
+    /** User clicked on the "learn more" link in the footer. */
     public static final int ACTION_CLICKED_LEARN_MORE = 9;
-    // User clicked on the "Refresh" button in the "all dismissed" state.
+
+    /** User clicked on the "Refresh" button in the "all dismissed" state. */
     public static final int ACTION_CLICKED_ALL_DISMISSED_REFRESH = 10;
-    // The number of possible actions
+
+    /** The number of possible actions. */
     private static final int NUM_ACTIONS = 11;
 
-    // User navigated to a page using the omnibox.
+    /** User navigated to a page using the omnibox. */
     private static final int RAPPOR_ACTION_NAVIGATED_USING_OMNIBOX = 0;
-    // User navigated to a page using one of the suggested tiles.
+
+    /** User navigated to a page using one of the suggested tiles. */
     public static final int RAPPOR_ACTION_VISITED_SUGGESTED_TILE = 1;
 
-    // Regular NTP impression (usually when a new tab is opened)
+    /** Regular NTP impression (usually when a new tab is opened). */
     public static final int NTP_IMPRESSION_REGULAR = 0;
 
-    // Potential NTP impressions (instead of blank page if no tab is open)
+    /** Potential NTP impressions (instead of blank page if no tab is open). */
     public static final int NTP_IMPESSION_POTENTIAL_NOTAB = 1;
 
-    // The number of possible NTP impression types
+    /** The number of possible NTP impression types */
     private static final int NUM_NTP_IMPRESSION = 2;
 
-    /** Possible results when sizing the NewTabPageLayout.
-     * Do not remove or change existing values other than NUM_NTP_LAYOUT_RESULTS. */
+    /**
+     * Possible results when sizing the NewTabPageLayout.
+     * Do not remove or change existing values other than NUM_NTP_LAYOUT_RESULTS.
+     */
     @IntDef({NTP_LAYOUT_DOES_NOT_FIT, NTP_LAYOUT_FITS_WITHOUT_FIELD_TRIAL,
-             NTP_LAYOUT_FITS_WITH_FIELD_TRIAL, NUM_NTP_LAYOUT_RESULTS})
+            NTP_LAYOUT_FITS_WITH_FIELD_TRIAL, NTP_LAYOUT_CONDENSED, NUM_NTP_LAYOUT_RESULTS})
     @Retention(RetentionPolicy.SOURCE)
     public @interface NTPLayoutResult {}
+
     /** The NewTabPageLayout does not fit above the fold and it is displayed as is. */
     public static final int NTP_LAYOUT_DOES_NOT_FIT = 0;
-    /** The NewTabPageLayout does not fit above the fold, but we added some extra space so that
-     * Most Likely is cut off, indicating to the user they can scroll. */
+
+    /**
+     * The NewTabPageLayout does not fit above the fold, but we added some extra space so that
+     * Most Likely is cut off, indicating to the user they can scroll.
+     */
     public static final int NTP_LAYOUT_DOES_NOT_FIT_PUSH_MOST_LIKELY = 1;
+
     /** The NewTabPageLayout fits above the fold, the field trial is not enabled. */
     public static final int NTP_LAYOUT_FITS_NO_FIELD_TRIAL = 2;
-    /** The NewTabPageLayout fits above the fold, but cannot allow space for the field trial
-     * experiment. */
+
+    /**
+     * The NewTabPageLayout fits above the fold, but cannot allow space for the field trial
+     * experiment.
+     */
     public static final int NTP_LAYOUT_FITS_WITHOUT_FIELD_TRIAL = 3;
+
     /** The NewTabPageLayout fits above the fold allowing space for the field trial experiment. */
     public static final int NTP_LAYOUT_FITS_WITH_FIELD_TRIAL = 4;
-    /** The number of possible results for the NewTabPageLayout calculations. */
-    public static final int NUM_NTP_LAYOUT_RESULTS = 5;
 
-    /** Possible results when updating content suggestions list in the UI. Keep in sync with the
+    /** The NewTabPageLayout is condensed to take up minimal space. */
+    public static final int NTP_LAYOUT_CONDENSED = 5;
+
+    /** The number of possible results for the NewTabPageLayout calculations. */
+    public static final int NUM_NTP_LAYOUT_RESULTS = 6;
+
+    /**
+     * Possible results when updating content suggestions list in the UI. Keep in sync with the
      * ContentSuggestionsUIUpdateResult enum in histograms.xml. Do not remove or change existing
-     * values other than NUM_UI_UPDATE_RESULTS. */
-    @IntDef({UI_UPDATE_SUCCESS_APPENDED, UI_UPDATE_SUCCESS_NONE_SEEN, UI_UPDATE_SUCCESS_1_SEEN,
-            UI_UPDATE_SUCCESS_2_SEEN, UI_UPDATE_SUCCESS_3_SEEN, UI_UPDATE_SUCCESS_MORE_THAN_3_SEEN,
-            UI_UPDATE_FAIL_ALL_SEEN, UI_UPDATE_FAIL_DISABLED})
+     * values other than NUM_UI_UPDATE_RESULTS.
+     */
+    @IntDef({UI_UPDATE_SUCCESS_APPENDED, UI_UPDATE_SUCCESS_REPLACED, UI_UPDATE_FAIL_ALL_SEEN,
+            UI_UPDATE_FAIL_DISABLED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ContentSuggestionsUIUpdateResult {}
-    /** The content suggestions are successfully appended (because they are set for the first time
-     * or explicitly marked to be appended). */
-    public static final int UI_UPDATE_SUCCESS_APPENDED = 0;
-    /** Update successful, none of the previous content suggestions have been seen. */
-    public static final int UI_UPDATE_SUCCESS_NONE_SEEN = 1;
-    /** Update successful, 1 previous content suggestion have been seen (and kept). */
-    public static final int UI_UPDATE_SUCCESS_1_SEEN = 2;
-    /** Update successful, 2 previous content suggestions have been seen (and kept). */
-    public static final int UI_UPDATE_SUCCESS_2_SEEN = 3;
-    /** Update successful, 2 previous content suggestions have been seen (and kept). */
-    public static final int UI_UPDATE_SUCCESS_3_SEEN = 4;
-    /** Update successful, more than 2 previous content suggestions have been seen (and kept). */
-    public static final int UI_UPDATE_SUCCESS_MORE_THAN_3_SEEN = 5;
-    /** Update failed, all previous content suggestions have been seen (and kept). */
-    public static final int UI_UPDATE_FAIL_ALL_SEEN = 6;
-    /** Update failed, all previous content suggestions have been seen (and kept). */
-    public static final int UI_UPDATE_FAIL_DISABLED = 7;
-    public static final int NUM_UI_UPDATE_RESULTS = 8;
 
-    // The NTP was loaded in a cold startup.
+    /**
+     * The content suggestions are successfully appended (because they are set for the first time
+     * or explicitly marked to be appended).
+     */
+    public static final int UI_UPDATE_SUCCESS_APPENDED = 0;
+
+    /**
+     * Update successful, suggestions were replaced (some of them possibly seen, the exact number
+     * reported in a separate histogram).
+     */
+    public static final int UI_UPDATE_SUCCESS_REPLACED = 1;
+
+    /** Update failed, all previous content suggestions have been seen (and kept). */
+    public static final int UI_UPDATE_FAIL_ALL_SEEN = 2;
+
+    /** Update failed, because it is disabled by a variation parameter. */
+    public static final int UI_UPDATE_FAIL_DISABLED = 3;
+
+    private static final int NUM_UI_UPDATE_RESULTS = 4;
+
+    /** The NTP was loaded in a cold startup. */
     private static final int LOAD_TYPE_COLD_START = 0;
-    // The NTP was loaded in a warm startup.
+
+    /** The NTP was loaded in a warm startup. */
     private static final int LOAD_TYPE_WARM_START = 1;
-    // The NTP was loaded at some other time after activity creation and the user interacted with
-    // the activity in the meantime.
+
+    /**
+     * The NTP was loaded at some other time after activity creation and the user interacted with
+     * the activity in the meantime.
+     */
     private static final int LOAD_TYPE_OTHER = 2;
-    // The number of load types.
+
+    /** The number of load types. */
     private static final int LOAD_TYPE_COUNT = 3;
 
     /**
@@ -193,7 +230,20 @@ public final class NewTabPageUma {
     public static void recordUIUpdateResult(
             @ContentSuggestionsUIUpdateResult int result) {
         RecordHistogram.recordEnumeratedHistogram(
-                "NewTabPage.ContentSuggestions.UIUpdateResult", result, NUM_UI_UPDATE_RESULTS);
+                "NewTabPage.ContentSuggestions.UIUpdateResult2", result, NUM_UI_UPDATE_RESULTS);
+    }
+
+    /**
+     * Record how many content suggestions have been seen by the user in the UI section before the
+     * section was successfully updated.
+     * @param numberOfSuggestionsSeen The number of content suggestions seen so far in the section.
+     */
+    public static void recordNumberOfSuggestionsSeenBeforeUIUpdateSuccess(
+            int numberOfSuggestionsSeen) {
+        assert numberOfSuggestionsSeen >= 0;
+        RecordHistogram.recordCount100Histogram(
+                "NewTabPage.ContentSuggestions.UIUpdateSuccessNumberOfSuggestionsSeen",
+                numberOfSuggestionsSeen);
     }
 
     /**
@@ -218,7 +268,16 @@ public final class NewTabPageUma {
     }
 
     /**
-     * Records the type of load for the ntp, such as cold or warm start.
+     * Records how often new tabs with a NewTabPage are created. This helps to determine how often
+     * users navigate back to already opened NTPs.
+     * @param tabModelSelector Model selector controlling the creation of new tabs.
+     */
+    public static void monitorNTPCreation(TabModelSelector tabModelSelector) {
+        tabModelSelector.addObserver(new TabCreationRecorder());
+    }
+
+    /**
+     * Records the type of load for the NTP, such as cold or warm start.
      */
     public static void recordLoadType(ChromeActivity activity) {
         if (activity.getLastUserInteractionTime() > 0) {
@@ -260,6 +319,18 @@ public final class NewTabPageUma {
     }
 
     /**
+     * Records the number of new NTPs opened in a new tab. Use through
+     * {@link NewTabPageUma#monitorNTPCreation(TabModelSelector)}.
+     */
+    private static class TabCreationRecorder extends EmptyTabModelSelectorObserver {
+        @Override
+        public void onNewTabCreated(Tab tab) {
+            if (!NewTabPage.isNTPUrl(tab.getUrl())) return;
+            RecordUserAction.record("MobileNTPOpenedInNewTab");
+        }
+    }
+
+    /**
      * Records stats related to content suggestion visits, such as the time spent on the website, or
      * if the user comes back to the NTP. Use through
      * {@link NewTabPageUma#monitorContentSuggestionVisit(Tab, int)}.
@@ -287,8 +358,8 @@ public final class NewTabPageUma {
             // onLoadUrl below covers many exit conditions to stop recording but not all,
             // such as navigating back. We therefore stop recording if a URL change
             // indicates some non-Web page was visited.
-            if (!url.startsWith(UrlConstants.CHROME_SCHEME)
-                    && !url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME)) {
+            if (!url.startsWith(UrlConstants.CHROME_URL_PREFIX)
+                    && !url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX)) {
                 assert !NewTabPage.isNTPUrl(url);
                 return;
             }

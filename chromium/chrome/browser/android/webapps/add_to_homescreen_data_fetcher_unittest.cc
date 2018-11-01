@@ -33,6 +33,9 @@
 #include "ui/gfx/image/image_unittest_util.h"
 #include "url/gurl.h"
 
+// TODO(zpeng): Effectively test scenarios where both timeout callback and
+// success callback are invoked. See crbug.com/697228.
+
 namespace {
 
 const char* kDefaultManifestUrl = "https://www.example.com/manifest.json";
@@ -131,7 +134,8 @@ class ObserverWaiter : public AddToHomescreenDataFetcher::Observer {
   }
 
   void OnDataAvailable(const ShortcutInfo& info,
-                       const SkBitmap& icon) override {
+                       const SkBitmap& primary_icon,
+                       const SkBitmap& badge_icon) override {
     data_available_ = true;
     if (!quit_closure_.is_null())
       quit_closure_.Run();
@@ -203,7 +207,7 @@ class AddToHomescreenDataFetcherTest : public ChromeRenderViewHostTestHarness {
   scoped_refptr<AddToHomescreenDataFetcher> BuildFetcher(
       bool check_webapk_compatible,
       AddToHomescreenDataFetcher::Observer* observer) {
-    return new AddToHomescreenDataFetcher(web_contents(), 1, 1, 1, 1,
+    return new AddToHomescreenDataFetcher(web_contents(), 1, 1, 1, 1, 1,
                                           check_webapk_compatible, observer);
   }
 

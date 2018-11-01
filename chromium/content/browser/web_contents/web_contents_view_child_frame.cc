@@ -5,6 +5,7 @@
 #include "content/browser/web_contents/web_contents_view_child_frame.h"
 
 #include "build/build_config.h"
+#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_view_delegate.h"
@@ -151,7 +152,7 @@ DropData* WebContentsViewChildFrame::GetDropData() const {
 }
 
 void WebContentsViewChildFrame::UpdateDragCursor(WebDragOperation operation) {
-  if (auto view = GetOuterDelegateView())
+  if (auto* view = GetOuterDelegateView())
     view->UpdateDragCursor(operation);
 }
 
@@ -160,8 +161,17 @@ void WebContentsViewChildFrame::GotFocus() {
 }
 
 void WebContentsViewChildFrame::TakeFocus(bool reverse) {
-  // TODO(avallee): http://crbug.com/610819 Advance focus to next element in
-  // outer WebContents.
+  RenderFrameProxyHost* rfp = web_contents_->GetMainFrame()
+                                  ->frame_tree_node()
+                                  ->render_manager()
+                                  ->GetProxyToOuterDelegate();
+  FrameTreeNode* outer_node = FrameTreeNode::GloballyFindByID(
+      web_contents_->GetOuterDelegateFrameTreeNodeId());
+  RenderFrameHostImpl* rfhi =
+      outer_node->parent()->render_manager()->current_frame_host();
+
+  rfhi->AdvanceFocus(
+      reverse ? blink::WebFocusTypeBackward : blink::WebFocusTypeForward, rfp);
 }
 
 void WebContentsViewChildFrame::ShowContextMenu(
@@ -177,7 +187,7 @@ void WebContentsViewChildFrame::StartDragging(
     const gfx::Vector2d& image_offset,
     const DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
-  if (auto view = GetOuterDelegateView()) {
+  if (auto* view = GetOuterDelegateView()) {
     view->StartDragging(
         drop_data, ops, image, image_offset, event_info, source_rwh);
   } else {

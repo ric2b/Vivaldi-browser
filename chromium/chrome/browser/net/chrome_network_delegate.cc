@@ -16,7 +16,6 @@
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/user_metrics.h"
@@ -83,14 +82,6 @@
 using content::BrowserThread;
 using content::RenderViewHost;
 using content::ResourceRequestInfo;
-
-// By default we don't allow access to all file:// urls on ChromeOS and
-// Android.
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-bool ChromeNetworkDelegate::g_allow_file_access_ = false;
-#else
-bool ChromeNetworkDelegate::g_allow_file_access_ = true;
-#endif
 
 namespace {
 
@@ -221,11 +212,6 @@ void ChromeNetworkDelegate::InitializePrefsOnUIThread(
     allowed_domains_for_apps->MoveToThread(
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   }
-}
-
-// static
-void ChromeNetworkDelegate::AllowAccessToAllFiles() {
-  g_allow_file_access_ = true;
 }
 
 int ChromeNetworkDelegate::OnBeforeURLRequest(
@@ -433,7 +419,7 @@ bool ChromeNetworkDelegate::OnCanGetCookies(
   if (!cookie_settings_.get())
     return true;
 
-  bool allow = cookie_settings_->IsReadingCookieAllowed(
+  bool allow = cookie_settings_->IsCookieAccessAllowed(
       request.url(), request.first_party_for_cookies());
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
@@ -456,7 +442,7 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
   if (!cookie_settings_.get())
     return true;
 
-  bool allow = cookie_settings_->IsSettingCookieAllowed(
+  bool allow = cookie_settings_->IsCookieAccessAllowed(
       request.url(), request.first_party_for_cookies());
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
@@ -474,20 +460,27 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
 
 bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
                                             const base::FilePath& path) const {
-  if (g_allow_file_access_)
-    return true;
-
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-  return true;
-#else
 #if defined(OS_CHROMEOS)
   // If we're running Chrome for ChromeOS on Linux, we want to allow file
-  // access.
+  // access. This is checked here to make IsAccessAllowed() unit-testable.
   if (!base::SysInfo::IsRunningOnChromeOS() ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType)) {
     return true;
   }
+#endif
 
+  return IsAccessAllowed(path, profile_path_);
+}
+
+// static
+bool ChromeNetworkDelegate::IsAccessAllowed(
+    const base::FilePath& path,
+    const base::FilePath& profile_path) {
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+  return true;
+#else
+
+#if defined(OS_CHROMEOS)
   // Use a whitelist to only allow access to files residing in the list of
   // directories below.
   static const char* const kLocalAccessWhiteList[] = {
@@ -506,11 +499,11 @@ bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
   // logged in profile.) For the support of multi-profile sessions, we are
   // switching to use explicit "$PROFILE_PATH/Xyz" path and here whitelist such
   // access.
-  if (!profile_path_.empty()) {
-    const base::FilePath downloads = profile_path_.AppendASCII("Downloads");
+  if (!profile_path.empty()) {
+    const base::FilePath downloads = profile_path.AppendASCII("Downloads");
     if (downloads == path.StripTrailingSeparators() || downloads.IsParent(path))
       return true;
-    const base::FilePath webrtc_logs = profile_path_.AppendASCII("WebRTC Logs");
+    const base::FilePath webrtc_logs = profile_path.AppendASCII("WebRTC Logs");
     if (webrtc_logs == path.StripTrailingSeparators() ||
         webrtc_logs.IsParent(path)) {
       return true;
@@ -551,25 +544,11 @@ bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(
   if (!cookie_settings_.get())
     return false;
 
-  bool reading_cookie_allowed = false;
-  bool setting_cookie_allowed = false;
-  cookie_settings_->GetReadingAndSettingCookieAllowed(
-      url, first_party_for_cookies, &reading_cookie_allowed,
-      &setting_cookie_allowed);
-  bool privacy_mode = !(reading_cookie_allowed && setting_cookie_allowed);
-  return privacy_mode;
+  return !cookie_settings_->IsCookieAccessAllowed(url, first_party_for_cookies);
 }
 
 bool ChromeNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
   return experimental_web_platform_features_enabled_;
-}
-
-bool ChromeNetworkDelegate::OnAreStrictSecureCookiesEnabled() const {
-  const std::string enforce_strict_secure_group =
-      base::FieldTrialList::FindFullName("StrictSecureCookies");
-  return experimental_web_platform_features_enabled_ ||
-         base::StartsWith(enforce_strict_secure_group, "Enabled",
-                          base::CompareCase::INSENSITIVE_ASCII);
 }
 
 bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(

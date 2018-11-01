@@ -201,6 +201,11 @@ try openssl req -x509 -days 3650 -extensions req_san_sanity \
     -config ../scripts/ee.cnf -newkey rsa:2048 -text \
     -out ../certificates/subjectAltName_sanity_check.pem
 
+## SubjectAltName containing www.example.com
+try openssl req -x509 -days 3650 -extensions req_san_example \
+    -config ../scripts/ee.cnf -newkey rsa:2048 -text \
+    -out ../certificates/subjectAltName_www_example_com.pem
+
 ## Punycode handling
 SUBJECT_NAME="req_punycode_dn" \
   try openssl req -x509 -days 3650 -extensions req_punycode \
@@ -209,8 +214,8 @@ SUBJECT_NAME="req_punycode_dn" \
 
 ## Reject intranet hostnames in "publicly" trusted certs
 # 365 * 3 = 1095
-SUBJECT_NAME="req_dn" \
-  try openssl req -x509 -days 1095 \
+SUBJECT_NAME="req_intranet_dn" \
+  try openssl req -x509 -days 1095 -extensions req_intranet_san \
     -config ../scripts/ee.cnf -newkey rsa:2048 -text \
     -out ../certificates/reject_intranet_hosts.pem
 
@@ -222,7 +227,7 @@ try openssl req -x509 -days 3650 \
     -out ../certificates/large_key.pem
 
 ## SHA1 certificate expiring in 2016.
-try openssl req -config ../scripts/ee.cnf -sha1 \
+try openssl req -config ../scripts/ee.cnf \
   -newkey rsa:2048 -text -out out/sha1_2016.req
 CA_NAME="req_ca_dn" \
   try openssl ca \
@@ -232,10 +237,11 @@ CA_NAME="req_ca_dn" \
     -enddate   161230000000Z \
     -in out/sha1_2016.req \
     -out ../certificates/sha1_2016.pem \
-    -config ca.cnf
+    -config ca.cnf \
+    -md sha1
 
 ## SHA1 certificate issued the last second before the SHA-1 deprecation date.
-try openssl req -config ../scripts/ee.cnf -sha1 \
+try openssl req -config ../scripts/ee.cnf \
   -newkey rsa:2048 -text -out out/sha1_dec_2015.req
 CA_NAME="req_ca_dn" \
   try openssl ca \
@@ -245,10 +251,11 @@ CA_NAME="req_ca_dn" \
     -enddate   161230000000Z \
     -in out/sha1_dec_2015.req \
     -out ../certificates/sha1_dec_2015.pem \
-    -config ca.cnf
+    -config ca.cnf \
+    -md sha1
 
 ## SHA1 certificate issued on the SHA-1 deprecation date.
-try openssl req -config ../scripts/ee.cnf -sha1 \
+try openssl req -config ../scripts/ee.cnf \
   -newkey rsa:2048 -text -out out/sha1_jan_2016.req
 CA_NAME="req_ca_dn" \
   try openssl ca \
@@ -258,7 +265,8 @@ CA_NAME="req_ca_dn" \
     -enddate   161230000000Z \
     -in out/sha1_jan_2016.req \
     -out ../certificates/sha1_jan_2016.pem \
-    -config ca.cnf
+    -config ca.cnf \
+    -md sha1
 
 ## Validity too long unit test support.
 try openssl req -config ../scripts/ee.cnf \

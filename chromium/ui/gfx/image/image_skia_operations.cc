@@ -25,6 +25,7 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/skbitmap_operations.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/skia_util.h"
 
 namespace gfx {
@@ -408,9 +409,9 @@ class HorizontalShadowSource : public CanvasImageSource {
 
   // CanvasImageSource overrides:
   void Draw(Canvas* canvas) override {
-    SkPaint paint;
-    paint.setLooper(CreateShadowDrawLooperCorrectBlur(shadows_));
-    canvas->DrawRect(RectF(0, fades_down_ ? -1 : size().height(), 1, 1), paint);
+    cc::PaintFlags flags;
+    flags.setLooper(CreateShadowDrawLooperCorrectBlur(shadows_));
+    canvas->DrawRect(RectF(0, fades_down_ ? -1 : size().height(), 1, 1), flags);
   }
 
  private:
@@ -593,7 +594,7 @@ ImageSkia ImageSkiaOperations::CreateImageWithDropShadow(
 ImageSkia ImageSkiaOperations::CreateHorizontalShadow(
     const std::vector<ShadowValue>& shadows,
     bool fades_down) {
-  auto source = new HorizontalShadowSource(shadows, fades_down);
+  auto* source = new HorizontalShadowSource(shadows, fades_down);
   return ImageSkia(source, source->size());
 }
 

@@ -232,7 +232,7 @@ bool RenderViewContextMenuViews::IsCommandIdEnabled(int command_id) const {
 
 ui::AcceleratorProvider*
 RenderViewContextMenuViews::GetBrowserAcceleratorProvider() const {
-  Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
+  Browser* browser = GetBrowser();
   if (!browser)
     return nullptr;
 

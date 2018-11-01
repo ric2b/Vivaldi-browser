@@ -11,6 +11,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#import "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
@@ -26,7 +27,6 @@
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
-#include "ios/web/public/image_fetcher/image_data_fetcher.h"
 #include "net/base/escape.h"
 
 namespace {
@@ -74,21 +74,13 @@ UIColor* BackgroundColorIncognito() {
 }  // namespace
 
 @interface OmniboxPopupMaterialViewController () {
-  // CTFontRef's are needed for drawing attributed strings but are expensive
-  // to create. Since we only need four, we create them here and hold on to
-  // them.
-  base::ScopedCFTypeRef<CTFontRef> _smallFont;
-  base::ScopedCFTypeRef<CTFontRef> _bigFont;
-  base::ScopedCFTypeRef<CTFontRef> _smallBoldFont;
-  base::ScopedCFTypeRef<CTFontRef> _bigBoldFont;
-
   // Alignment of omnibox text. Popup text should match this alignment.
   NSTextAlignment _alignment;
 
   OmniboxPopupViewIOS* _popupView;  // weak, owns us
 
   // Fetcher for Answers in Suggest images.
-  std::unique_ptr<web::ImageDataFetcher> imageFetcher_;
+  std::unique_ptr<image_fetcher::IOSImageDataFetcherWrapper> imageFetcher_;
 
   // The data source.
   AutocompleteResult _currentResult;
@@ -110,9 +102,10 @@ UIColor* BackgroundColorIncognito() {
 #pragma mark -
 #pragma mark Initialization
 
-- (instancetype)initWithPopupView:(OmniboxPopupViewIOS*)view
-                      withFetcher:
-                          (std::unique_ptr<web::ImageDataFetcher>)imageFetcher {
+- (instancetype)
+initWithPopupView:(OmniboxPopupViewIOS*)view
+      withFetcher:(std::unique_ptr<image_fetcher::IOSImageDataFetcherWrapper>)
+                      imageFetcher {
   if ((self = [super init])) {
     _popupView = view;
     imageFetcher_ = std::move(imageFetcher);
@@ -157,20 +150,6 @@ UIColor* BackgroundColorIncognito() {
                                   UIViewAutoresizingFlexibleHeight)];
 
   // Cache fonts needed for omnibox attributed string.
-  UIFont* smallFont = [MDCTypography body1Font];
-  UIFont* bigFont = [MDCTypography subheadFont];
-  UIFont* smallBoldFont = [[MDFRobotoFontLoader sharedInstance]
-      mediumFontOfSize:smallFont.pointSize];
-  UIFont* bigBoldFont =
-      [[MDFRobotoFontLoader sharedInstance] mediumFontOfSize:bigFont.pointSize];
-  _smallFont.reset(CTFontCreateWithName((CFStringRef)smallFont.fontName,
-                                        smallFont.pointSize, NULL));
-  _bigFont.reset(CTFontCreateWithName((CFStringRef)bigFont.fontName,
-                                      bigFont.pointSize, NULL));
-  _smallBoldFont.reset(CTFontCreateWithName((CFStringRef)smallBoldFont.fontName,
-                                            smallBoldFont.pointSize, NULL));
-  _bigBoldFont.reset(CTFontCreateWithName((CFStringRef)bigBoldFont.fontName,
-                                          bigBoldFont.pointSize, NULL));
   NSMutableArray* rowsBuilder = [[[NSMutableArray alloc] init] autorelease];
   for (int i = 0; i < kRowCount; i++) {
     OmniboxPopupMaterialRow* row = [[[OmniboxPopupMaterialRow alloc]
@@ -202,10 +181,6 @@ UIColor* BackgroundColorIncognito() {
 - (void)didReceiveMemoryWarning {
   [super didReceiveMemoryWarning];
   if (![self isViewLoaded]) {
-    _smallFont.reset();
-    _bigFont.reset();
-    _smallBoldFont.reset();
-    _bigBoldFont.reset();
     _rows.reset();
   }
 }
@@ -226,12 +201,11 @@ UIColor* BackgroundColorIncognito() {
   const CGFloat kTextLabelHeight = 24;
   const CGFloat kTextDetailLabelHeight = 22;
   const CGFloat kAppendButtonWidth = 40;
-  const CGFloat kAnswerLabelHeight = 50;
+  const CGFloat kAnswerLabelHeight = 36;
   const CGFloat kAnswerImageWidth = 30;
   const CGFloat kAnswerImageLeftPadding = -1;
   const CGFloat kAnswerImageRightPadding = 4;
-  const CGFloat kAnswerImageTopPadding = -3;
-  const CGFloat kAnswerRowPadding = 4;
+  const CGFloat kAnswerImageTopPadding = 2;
   const BOOL alignmentRight = _alignment == NSTextAlignmentRight;
 
   BOOL LTRTextInRTLLayout = _alignment == NSTextAlignmentLeft && UseRTLLayout();
@@ -240,16 +214,13 @@ UIColor* BackgroundColorIncognito() {
   const BOOL answerPresent = match.answer.get() != nil;
   row.rowHeight = answerPresent ? kAnswerRowHeight : kRowHeight;
 
-  [row.detailTruncatingLabel setTextAlignment:_alignment];
-  [row.textTruncatingLabel setTextAlignment:_alignment];
-
   // Fetch the answer image if specified.  Currently, no answer types specify an
   // image on the first line so for now we only look at the second line.
   const BOOL answerImagePresent =
       answerPresent && match.answer->second_line().image_url().is_valid();
   if (answerImagePresent) {
-    web::ImageFetchedCallback callback =
-        ^(const GURL& original_url, int response_code, NSData* data) {
+    image_fetcher::IOSImageDataFetcherCallback callback =
+        ^(NSData* data, const image_fetcher::RequestMetadata& metadata) {
           if (data) {
             UIImage* image =
                 [UIImage imageWithData:data scale:[UIScreen mainScreen].scale];
@@ -258,8 +229,8 @@ UIColor* BackgroundColorIncognito() {
             }
           }
         };
-    imageFetcher_->StartDownload(match.answer->second_line().image_url(),
-                                 callback);
+    imageFetcher_->FetchImageDataWebpDecoded(
+        match.answer->second_line().image_url(), callback);
 
     // Answers in suggest do not support RTL, left align only.
     CGFloat imageLeftPadding =
@@ -268,8 +239,7 @@ UIColor* BackgroundColorIncognito() {
       imageLeftPadding =
           row.frame.size.width - (kAnswerImageWidth + kAppendButtonWidth);
     }
-    CGFloat imageTopPadding =
-        kDetailCellTopPadding + kAnswerRowPadding + kAnswerImageTopPadding;
+    CGFloat imageTopPadding = kDetailCellTopPadding + kAnswerImageTopPadding;
     row.answerImageView.frame =
         CGRectMake(imageLeftPadding, imageTopPadding, kAnswerImageWidth,
                    kAnswerImageWidth);
@@ -281,7 +251,18 @@ UIColor* BackgroundColorIncognito() {
   // DetailTextLabel and textLabel are fading labels placed in each row. The
   // textLabel is layed out above the detailTextLabel, and vertically centered
   // if the detailTextLabel is empty.
-  OmniboxPopupTruncatingLabel* detailTextLabel = row.detailTruncatingLabel;
+  // For the detail text label, we use either the regular detail label, which
+  // truncates by fading, or the answer label, which uses UILabel's standard
+  // truncation by ellipse for the multi-line text sometimes shown in answers.
+  row.detailTruncatingLabel.hidden = answerPresent;
+  row.detailAnswerLabel.hidden = !answerPresent;
+  // TODO(crbug.com/697647): The complexity of managing these two separate
+  // labels could probably be encapusulated in the row class if we moved the
+  // layout logic there.
+  UILabel* detailTextLabel =
+      answerPresent ? row.detailAnswerLabel : row.detailTruncatingLabel;
+  [detailTextLabel setTextAlignment:_alignment];
+
   // The width must be positive for CGContextRef to be valid.
   CGFloat labelWidth =
       MAX(40, floorf(row.frame.size.width) - kTextCellLeadingPadding);
@@ -291,41 +272,65 @@ UIColor* BackgroundColorIncognito() {
   CGFloat leadingPadding =
       (answerImagePresent && !alignmentRight ? answerImagePadding : 0) +
       kTextCellLeadingPadding;
-  CGFloat topPadding =
-      (answerPresent ? kAnswerRowPadding : 0) + kDetailCellTopPadding;
 
   LayoutRect detailTextLabelLayout =
       LayoutRectMake(leadingPadding, CGRectGetWidth(self.view.bounds),
-                     topPadding, labelWidth, labelHeight);
+                     kDetailCellTopPadding, labelWidth, labelHeight);
   detailTextLabel.frame = LayoutRectGetRect(detailTextLabelLayout);
 
-  // Details should be the URL (|match.contents|). For searches |match.contents|
-  // is the default search engine name, which for mobile we suppress.
-  NSString* detailText = ![self isSearchMatch:match.type]
-                             ? base::SysUTF16ToNSString(match.contents)
-                             : nil;
+  // The detail text should be the URL (|match.contents|) for non-search
+  // suggestions and the entity type (|match.description|) for search entity
+  // suggestions. For all other search suggestions, |match.description| is the
+  // name of the currently selected search engine, which for mobile we suppress.
+  NSString* detailText = nil;
+  if (![self isSearchMatch:match.type])
+    detailText = base::SysUTF16ToNSString(match.contents);
+  else if (match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY)
+    detailText = base::SysUTF16ToNSString(match.description);
+
   if (answerPresent) {
     detailTextLabel.attributedText =
         [self attributedStringWithAnswerLine:match.answer->second_line()];
+
+    // Answers specify their own limit on the number of lines to show but we
+    // additionally cap this at 3 to guard against unreasonable values.
+    const SuggestionAnswer::TextField& first_text_field =
+        match.answer->second_line().text_fields()[0];
+    if (first_text_field.has_num_lines() && first_text_field.num_lines() > 1)
+      detailTextLabel.numberOfLines = MIN(3, first_text_field.num_lines());
+    else
+      detailTextLabel.numberOfLines = 1;
   } else {
     const ACMatchClassifications* classifications =
         ![self isSearchMatch:match.type] ? &match.contents_class : nil;
+    // The suggestion detail color should match the main text color for entity
+    // suggestions. For non-search suggestions (URLs), a highlight color is used
+    // instead.
+    UIColor* suggestionDetailTextColor = nil;
+    if (match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
+      suggestionDetailTextColor =
+          _incognito ? SuggestionTextColorIncognito() : SuggestionTextColor();
+    } else {
+      suggestionDetailTextColor = SuggestionDetailTextColor();
+    }
+    DCHECK(suggestionDetailTextColor);
     detailTextLabel.attributedText =
         [self attributedStringWithString:detailText
                          classifications:classifications
                                smallFont:YES
-                                   color:SuggestionDetailTextColor()
+                                   color:suggestionDetailTextColor
                                 dimColor:DimColor()];
   }
   [detailTextLabel setNeedsDisplay];
 
   OmniboxPopupTruncatingLabel* textLabel = row.textTruncatingLabel;
+  [textLabel setTextAlignment:_alignment];
   LayoutRect textLabelLayout =
       LayoutRectMake(kTextCellLeadingPadding, CGRectGetWidth(self.view.bounds),
                      0, labelWidth, kTextLabelHeight);
   textLabel.frame = LayoutRectGetRect(textLabelLayout);
 
-  // Match should be search term (match.contents) for searches, otherwise
+  // The text should be search term (|match.contents|) for searches, otherwise
   // page title (|match.description|).
   base::string16 textString =
       [self isSearchMatch:match.type] ? match.contents : match.description;
@@ -374,9 +379,11 @@ UIColor* BackgroundColorIncognito() {
 
   // Show append button for search history/search suggestions/Physical Web as
   // the right control element (aka an accessory element of a table view cell).
-  BOOL appendableMatch = match.type == AutocompleteMatchType::SEARCH_HISTORY ||
-                         match.type == AutocompleteMatchType::SEARCH_SUGGEST ||
-                         match.type == AutocompleteMatchType::PHYSICAL_WEB;
+  BOOL appendableMatch =
+      match.type == AutocompleteMatchType::SEARCH_HISTORY ||
+      match.type == AutocompleteMatchType::SEARCH_SUGGEST ||
+      match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
+      match.type == AutocompleteMatchType::PHYSICAL_WEB;
   row.appendButton.hidden = !appendableMatch;
   [row.appendButton cancelTrackingWithEvent:nil];
 
@@ -450,8 +457,8 @@ UIColor* BackgroundColorIncognito() {
                                              type:(int)type {
   NSDictionary* attributes = nil;
 
-  const id font = (id)kCTFontAttributeName;
-  NSString* foregroundColor = (NSString*)kCTForegroundColorAttributeName;
+  const id font = (id)NSFontAttributeName;
+  NSString* foregroundColor = (NSString*)NSForegroundColorAttributeName;
   const id baselineOffset = (id)NSBaselineOffsetAttributeName;
 
   // Answer types, sizes and colors specified at http://goto.google.com/ais_api.
@@ -460,27 +467,25 @@ UIColor* BackgroundColorIncognito() {
       attributes = @{
         font : [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:12],
         baselineOffset : @10.0f,
-        foregroundColor : (id)[UIColor grayColor].CGColor,
+        foregroundColor : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::DESCRIPTION_POSITIVE:
       attributes = @{
         font : [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:16],
-        foregroundColor : (id)[UIColor colorWithRed:11 / 255.0
-                                              green:128 / 255.0
-                                               blue:67 / 255.0
-                                              alpha:1.0]
-                              .CGColor,
+        foregroundColor : [UIColor colorWithRed:11 / 255.0
+                                          green:128 / 255.0
+                                           blue:67 / 255.0
+                                          alpha:1.0],
       };
       break;
     case SuggestionAnswer::DESCRIPTION_NEGATIVE:
       attributes = @{
         font : [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:16],
-        foregroundColor : (id)[UIColor colorWithRed:197 / 255.0
-                                              green:57 / 255.0
-                                               blue:41 / 255.0
-                                              alpha:1.0]
-                              .CGColor,
+        foregroundColor : [UIColor colorWithRed:197 / 255.0
+                                          green:57 / 255.0
+                                           blue:41 / 255.0
+                                          alpha:1.0],
       };
       break;
     case SuggestionAnswer::PERSONALIZED_SUGGESTION:
@@ -501,13 +506,13 @@ UIColor* BackgroundColorIncognito() {
     case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_SMALL:
       attributes = @{
         font : [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:12],
-        foregroundColor : (id)[UIColor grayColor].CGColor,
+        foregroundColor : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_MEDIUM:
       attributes = @{
         font : [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:14],
-        foregroundColor : (id)[UIColor grayColor].CGColor,
+        foregroundColor : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::SUGGESTION:
@@ -665,6 +670,7 @@ UIColor* BackgroundColorIncognito() {
           type == AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED ||
           type == AutocompleteMatchType::SEARCH_HISTORY ||
           type == AutocompleteMatchType::SEARCH_SUGGEST ||
+          type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
           type == AutocompleteMatchType::SEARCH_OTHER_ENGINE);
 }
 
@@ -677,21 +683,22 @@ attributedStringWithString:(NSString*)text
   if (text == nil)
     return nil;
 
-  CTFontRef fontRef = smallFont ? _smallFont : _bigFont;
+  UIFont* fontRef =
+      smallFont ? [MDCTypography body1Font] : [MDCTypography subheadFont];
 
   NSMutableAttributedString* as =
       [[[NSMutableAttributedString alloc] initWithString:text] autorelease];
 
   // Set the base attributes to the default font and color.
-  NSDictionary* dict = [NSDictionary
-      dictionaryWithObjectsAndKeys:(id)fontRef, (NSString*)kCTFontAttributeName,
-                                   defaultColor.CGColor,
-                                   (NSString*)kCTForegroundColorAttributeName,
-                                   nil];
+  NSDictionary* dict = @{
+    NSFontAttributeName : fontRef,
+    NSForegroundColorAttributeName : defaultColor,
+  };
   [as addAttributes:dict range:NSMakeRange(0, [text length])];
 
   if (classifications != NULL) {
-    CTFontRef boldFontRef = smallFont ? _smallBoldFont : _bigBoldFont;
+    UIFont* boldFontRef = [[MDFRobotoFontLoader sharedInstance]
+        mediumFontOfSize:fontRef.pointSize];
 
     for (ACMatchClassifications::const_iterator i = classifications->begin();
          i != classifications->end(); ++i) {
@@ -705,14 +712,12 @@ attributedStringWithString:(NSString*)text
         break;
       const NSRange range = NSMakeRange(location, length);
       if (0 != (i->style & ACMatchClassification::MATCH)) {
-        [as addAttribute:(id)kCTFontAttributeName
-                   value:(id)boldFontRef
-                   range:range];
+        [as addAttribute:NSFontAttributeName value:boldFontRef range:range];
       }
 
       if (0 != (i->style & ACMatchClassification::DIM)) {
-        [as addAttribute:(id)kCTForegroundColorAttributeName
-                   value:(id)dimColor.CGColor
+        [as addAttribute:NSForegroundColorAttributeName
+                   value:dimColor
                    range:range];
       }
     }

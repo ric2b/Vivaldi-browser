@@ -13,19 +13,11 @@
 
 namespace blink {
 
-struct BLINK_COMMON_EXPORT WebInputEventDeleter {
-  void operator()(blink::WebInputEvent*) const;
-};
-
-using WebScopedInputEvent =
-    std::unique_ptr<WebInputEvent, WebInputEventDeleter>;
-
 // This class is representing a polymorphic WebInputEvent structure with its
 // coalesced events. The event could be any events defined in WebInputEvent.h.
-class BLINK_COMMON_EXPORT WebCoalescedInputEvent {
+class BLINK_PLATFORM_EXPORT WebCoalescedInputEvent {
  public:
-  WebCoalescedInputEvent(WebScopedInputEvent);
-  WebCoalescedInputEvent(const WebInputEvent&);
+  explicit WebCoalescedInputEvent(const WebInputEvent&);
   WebCoalescedInputEvent(const WebInputEvent&,
                          const std::vector<const WebInputEvent*>&);
 
@@ -33,10 +25,21 @@ class BLINK_COMMON_EXPORT WebCoalescedInputEvent {
   void addCoalescedEvent(const blink::WebInputEvent&);
   const WebInputEvent& event() const;
   size_t coalescedEventSize() const;
-  const WebInputEvent* coalescedEvent(int index) const;
+  const WebInputEvent& coalescedEvent(size_t index) const;
   std::vector<const WebInputEvent*> getCoalescedEventsPointers() const;
 
  private:
+  // TODO(hans): Remove this once clang-cl knows to not inline dtors that
+  // call operator(), https://crbug.com/691714
+  struct BLINK_PLATFORM_EXPORT WebInputEventDeleter {
+    void operator()(blink::WebInputEvent*) const;
+  };
+
+  using WebScopedInputEvent =
+      std::unique_ptr<WebInputEvent, WebInputEventDeleter>;
+
+  WebScopedInputEvent makeWebScopedInputEvent(const blink::WebInputEvent&);
+
   WebScopedInputEvent m_event;
   std::vector<WebScopedInputEvent> m_coalescedEvents;
 };

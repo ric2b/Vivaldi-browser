@@ -30,6 +30,8 @@
 
 #include "core/inspector/MainThreadDebugger.h"
 
+#include <memory>
+
 #include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
@@ -58,6 +60,7 @@
 #include "core/inspector/InspectorTaskRunner.h"
 #include "core/inspector/V8InspectorString.h"
 #include "core/inspector/protocol/Protocol.h"
+#include "core/page/Page.h"
 #include "core/timing/MemoryInfo.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/xml/XPathEvaluator.h"
@@ -65,7 +68,6 @@
 #include "platform/UserGestureIndicator.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/ThreadingPrimitives.h"
-#include <memory>
 
 namespace blink {
 
@@ -216,11 +218,11 @@ int MainThreadDebugger::contextGroupId(LocalFrame* frame) {
 }
 
 MainThreadDebugger* MainThreadDebugger::instance() {
-  ASSERT(isMainThread());
-  V8PerIsolateData* data =
-      V8PerIsolateData::from(V8PerIsolateData::mainThreadIsolate());
-  ASSERT(data->threadDebugger() && !data->threadDebugger()->isWorker());
-  return static_cast<MainThreadDebugger*>(data->threadDebugger());
+  DCHECK(isMainThread());
+  ThreadDebugger* debugger =
+      ThreadDebugger::from(V8PerIsolateData::mainThreadIsolate());
+  DCHECK(debugger && !debugger->isWorker());
+  return static_cast<MainThreadDebugger*>(debugger);
 }
 
 void MainThreadDebugger::interruptMainThreadAndRun(
@@ -257,17 +259,17 @@ void MainThreadDebugger::quitMessageLoopOnPause() {
 
 void MainThreadDebugger::muteMetrics(int contextGroupId) {
   LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
-  if (frame && frame->host()) {
-    frame->host()->useCounter().muteForInspector();
-    frame->host()->deprecation().muteForInspector();
+  if (frame && frame->page()) {
+    frame->page()->useCounter().muteForInspector();
+    frame->page()->deprecation().muteForInspector();
   }
 }
 
 void MainThreadDebugger::unmuteMetrics(int contextGroupId) {
   LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
-  if (frame && frame->host()) {
-    frame->host()->useCounter().unmuteForInspector();
-    frame->host()->deprecation().unmuteForInspector();
+  if (frame && frame->page()) {
+    frame->page()->useCounter().unmuteForInspector();
+    frame->page()->deprecation().unmuteForInspector();
   }
 }
 
@@ -290,7 +292,7 @@ void MainThreadDebugger::endEnsureAllContextsInGroup(int contextGroupId) {
 
 bool MainThreadDebugger::canExecuteScripts(int contextGroupId) {
   LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
-  return frame->script().canExecuteScripts(NotAboutToExecuteScript);
+  return frame->document()->canExecuteScripts(NotAboutToExecuteScript);
 }
 
 void MainThreadDebugger::runIfWaitingForDebugger(int contextGroupId) {
@@ -301,7 +303,7 @@ void MainThreadDebugger::runIfWaitingForDebugger(int contextGroupId) {
 
 void MainThreadDebugger::consoleAPIMessage(
     int contextGroupId,
-    v8_inspector::V8ConsoleAPIType type,
+    v8::Isolate::MessageErrorLevel level,
     const v8_inspector::StringView& message,
     const v8_inspector::StringView& url,
     unsigned lineNumber,
@@ -310,16 +312,22 @@ void MainThreadDebugger::consoleAPIMessage(
   LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
   if (!frame)
     return;
-  if (type == v8_inspector::V8ConsoleAPIType::kClear && frame->host())
-    frame->host()->consoleMessageStorage().clear();
   // TODO(dgozman): we can save a copy of message and url here by making
   // FrameConsole work with StringView.
   std::unique_ptr<SourceLocation> location =
       SourceLocation::create(toCoreString(url), lineNumber, columnNumber,
                              stackTrace ? stackTrace->clone() : nullptr, 0);
   frame->console().reportMessageToClient(ConsoleAPIMessageSource,
-                                         consoleAPITypeToMessageLevel(type),
+                                         v8MessageLevelToMessageLevel(level),
                                          toCoreString(message), location.get());
+}
+
+void MainThreadDebugger::consoleClear(int contextGroupId) {
+  LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+  if (!frame)
+    return;
+  if (frame->host())
+    frame->host()->consoleMessageStorage().clear();
 }
 
 v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(

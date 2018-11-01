@@ -21,6 +21,7 @@ class ApplicationDragAndDropHost;
 }
 
 namespace ash {
+enum class AnimationChangeType;
 class AppListButton;
 class FocusCycler;
 class ShelfLayoutManager;
@@ -44,12 +45,9 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
 
   void OnShelfAlignmentChanged();
 
-  // DEPRECATED: Prefer WmShelf::GetAlignment().
-  ShelfAlignment GetAlignment() const;
-
   // Sets the shelf's background type.
   void SetPaintsBackground(ShelfBackgroundType background_type,
-                           BackgroundAnimatorChangeType change_type);
+                           AnimationChangeType change_type);
   ShelfBackgroundType GetBackgroundType() const;
 
   // Hide the shelf behind a black bar during e.g. a user transition when |hide|
@@ -98,7 +96,7 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
   // ShelfBackgroundAnimatorObserver overrides:
-  void UpdateShelfItemBackground(int alpha) override;
+  void UpdateShelfItemBackground(SkColor color) override;
 
   // ShelfLayoutManagerObserver overrides:
   void WillDeleteShelfLayoutManager() override;

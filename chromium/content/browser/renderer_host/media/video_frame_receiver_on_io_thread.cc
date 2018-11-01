@@ -14,13 +14,35 @@ VideoFrameReceiverOnIOThread::VideoFrameReceiverOnIOThread(
 
 VideoFrameReceiverOnIOThread::~VideoFrameReceiverOnIOThread() = default;
 
-void VideoFrameReceiverOnIOThread::OnIncomingCapturedVideoFrame(
-    media::VideoCaptureDevice::Client::Buffer buffer,
-    scoped_refptr<media::VideoFrame> frame) {
+void VideoFrameReceiverOnIOThread::OnNewBufferHandle(
+    int buffer_id,
+    std::unique_ptr<media::VideoCaptureDevice::Client::Buffer::HandleProvider>
+        handle_provider) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&VideoFrameReceiver::OnIncomingCapturedVideoFrame, receiver_,
-                 base::Passed(&buffer), frame));
+      base::Bind(&VideoFrameReceiver::OnNewBufferHandle, receiver_, buffer_id,
+                 base::Passed(std::move(handle_provider))));
+}
+
+void VideoFrameReceiverOnIOThread::OnFrameReadyInBuffer(
+    int buffer_id,
+    int frame_feedback_id,
+    std::unique_ptr<
+        media::VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
+        buffer_read_permission,
+    media::mojom::VideoFrameInfoPtr frame_info) {
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(&VideoFrameReceiver::OnFrameReadyInBuffer, receiver_,
+                 buffer_id, frame_feedback_id,
+                 base::Passed(&buffer_read_permission),
+                 base::Passed(&frame_info)));
+}
+
+void VideoFrameReceiverOnIOThread::OnBufferRetired(int buffer_id) {
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(&VideoFrameReceiver::OnBufferRetired, receiver_, buffer_id));
 }
 
 void VideoFrameReceiverOnIOThread::OnError() {
@@ -35,11 +57,10 @@ void VideoFrameReceiverOnIOThread::OnLog(const std::string& message) {
       base::Bind(&VideoFrameReceiver::OnLog, receiver_, message));
 }
 
-void VideoFrameReceiverOnIOThread::OnBufferDestroyed(int buffer_id_to_drop) {
+void VideoFrameReceiverOnIOThread::OnStarted() {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&VideoFrameReceiver::OnBufferDestroyed, receiver_,
-                 buffer_id_to_drop));
+      base::Bind(&VideoFrameReceiver::OnStarted, receiver_));
 }
 
 }  // namespace content

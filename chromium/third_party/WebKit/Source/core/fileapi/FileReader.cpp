@@ -36,7 +36,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ProgressEvent.h"
 #include "core/fileapi/File.h"
@@ -81,7 +80,7 @@ class FileReader::ThrottlingController final
     ThrottlingController* controller = static_cast<ThrottlingController*>(
         Supplement<ExecutionContext>::from(*context, supplementName()));
     if (!controller) {
-      controller = new ThrottlingController;
+      controller = new ThrottlingController(*context);
       provideTo(*context, supplementName(), controller);
     }
     return controller;
@@ -94,8 +93,7 @@ class FileReader::ThrottlingController final
     if (!controller)
       return;
 
-    InspectorInstrumentation::asyncTaskScheduled(context, "FileReader", reader,
-                                                 true);
+    probe::asyncTaskScheduled(context, "FileReader", reader, true);
     controller->pushReader(reader);
   }
 
@@ -116,7 +114,7 @@ class FileReader::ThrottlingController final
       return;
 
     controller->finishReader(reader, nextStep);
-    InspectorInstrumentation::asyncTaskCanceled(context, reader);
+    probe::asyncTaskCanceled(context, reader);
   }
 
   DEFINE_INLINE_TRACE() {
@@ -126,15 +124,16 @@ class FileReader::ThrottlingController final
   }
 
  private:
-  ThrottlingController()
-      : m_maxRunningReaders(kMaxOutstandingRequestsPerThread) {}
+  explicit ThrottlingController(ExecutionContext& context)
+      : Supplement<ExecutionContext>(context),
+        m_maxRunningReaders(kMaxOutstandingRequestsPerThread) {}
 
   void pushReader(FileReader* reader) {
     if (m_pendingReaders.isEmpty() &&
         m_runningReaders.size() < m_maxRunningReaders) {
       reader->executePendingRead();
       ASSERT(!m_runningReaders.contains(reader));
-      m_runningReaders.add(reader);
+      m_runningReaders.insert(reader);
       return;
     }
     m_pendingReaders.append(reader);
@@ -144,7 +143,7 @@ class FileReader::ThrottlingController final
   FinishReaderType removeReader(FileReader* reader) {
     FileReaderHashSet::const_iterator hashIter = m_runningReaders.find(reader);
     if (hashIter != m_runningReaders.end()) {
-      m_runningReaders.remove(hashIter);
+      m_runningReaders.erase(hashIter);
       return RunPendingReaders;
     }
     FileReaderDeque::const_iterator dequeEnd = m_pendingReaders.end();
@@ -169,7 +168,7 @@ class FileReader::ThrottlingController final
         return;
       FileReader* reader = m_pendingReaders.takeFirst();
       reader->executePendingRead();
-      m_runningReaders.add(reader);
+      m_runningReaders.insert(reader);
     }
   }
 
@@ -342,7 +341,6 @@ void FileReader::abort() {
   ThrottlingController::FinishReaderType finalStep =
       ThrottlingController::removeReader(getExecutionContext(), this);
 
-  fireEvent(EventTypeNames::error);
   fireEvent(EventTypeNames::abort);
   fireEvent(EventTypeNames::loadend);
 
@@ -353,9 +351,9 @@ void FileReader::abort() {
   // called from the event handler and we do not want the resource loading code
   // to be on the stack when doing so. The persistent reference keeps the
   // reader alive until the task has completed.
-  getExecutionContext()->postTask(
-      TaskType::FileReading, BLINK_FROM_HERE,
-      createSameThreadTask(&FileReader::terminate, wrapPersistent(this)));
+  TaskRunnerHelper::get(TaskType::FileReading, getExecutionContext())
+      ->postTask(BLINK_FROM_HERE,
+                 WTF::bind(&FileReader::terminate, wrapPersistent(this)));
 }
 
 void FileReader::result(StringOrArrayBuffer& resultAttribute) const {
@@ -454,7 +452,7 @@ void FileReader::didFail(FileError::ErrorCode errorCode) {
 }
 
 void FileReader::fireEvent(const AtomicString& type) {
-  InspectorInstrumentation::AsyncTask asyncTask(getExecutionContext(), this);
+  probe::AsyncTask asyncTask(getExecutionContext(), this);
   if (!m_loader) {
     dispatchEvent(ProgressEvent::create(type, false, 0, 0));
     return;

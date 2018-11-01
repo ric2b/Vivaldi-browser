@@ -12,7 +12,6 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
-import("//build_overrides/v8.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
 import("//remoting/remoting_enable.gni")
@@ -236,8 +235,6 @@ group("both_gn_and_gyp") {
       "//gpu/khronos_glcts_support:khronos_glcts_test",
       "//jingle:jingle_unittests",
       "//net:hpack_example_generator",
-      "//net:hpack_fuzz_mutator",
-      "//net:hpack_fuzz_wrapper",
       "//ppapi:ppapi_unittests",
       "//ppapi/examples/2d",
       "//ppapi/examples/audio",
@@ -269,7 +266,6 @@ group("both_gn_and_gyp") {
       "//ppapi/examples/video_encode",
       "//printing:printing_unittests",
       "//third_party/cacheinvalidation:cacheinvalidation_unittests",
-      "//third_party/codesighs",
       "//third_party/pdfium/samples:pdfium_test",
       "//third_party/webrtc/tools:frame_analyzer",
       "//tools/battor_agent",
@@ -316,6 +312,7 @@ group("both_gn_and_gyp") {
       "//third_party/WebKit/Source/wtf:wtf_unittests",
       "//third_party/angle/src/tests:angle_end2end_tests",
       "//third_party/angle/src/tests:angle_unittests",
+      "//third_party/angle/src/tests:angle_white_box_tests",
       "//third_party/catapult/telemetry:bitmaptools($host_toolchain)",
       "//third_party/smhasher:pmurhash",
       "//tools/imagediff($host_toolchain)",
@@ -367,12 +364,6 @@ group("both_gn_and_gyp") {
     ]
   }
 
-  if (is_linux && !is_chromeos && !is_chromecast && !use_ozone) {
-    # TODO(thomasanderson): Remove this once we build using
-    # GTK3 by default. (crbug.com/132847, crbug.com/79722)
-    deps += [ "//chrome/browser/ui/libgtkui:libgtk3ui" ]
-  }
-
   if (use_ozone) {
     deps += [
       "//ui/ozone",
@@ -383,10 +374,6 @@ group("both_gn_and_gyp") {
 
   if (use_x11 || ozone_platform_x11) {
     deps += [ "//tools/xdisplaycheck" ]
-  }
-
-  if (v8_use_external_startup_data) {
-    deps += [ "//gin:gin_v8_snapshot_fingerprint" ]
   }
 
   if (is_win) {
@@ -552,7 +539,6 @@ group("both_gn_and_gyp") {
       "//ipc:ipc_perftests",
       "//media:media_perftests",
       "//net:dump_cache",
-      "//third_party/codesighs:maptsvdifftool",
       "//third_party/libphonenumber:libphonenumber_unittests",
       "//ui/compositor:compositor_unittests",
     ]
@@ -622,7 +608,6 @@ group("both_gn_and_gyp") {
       "//mojo/edk/test:mojo_public_system_perftests",
       "//services/service_manager/public/cpp",
       "//testing/gmock:gmock_main",
-      "//third_party/codesighs:nm2tsv",
     ]
 
     if (!is_android) {
@@ -687,7 +672,6 @@ group("both_gn_and_gyp") {
       "//sandbox/win:sbox_unittests",
       "//sandbox/win:sbox_validation_tests",
       "//testing/gtest:gtest_main",
-      "//third_party/codesighs:msmap2tsv",
       "//third_party/pdfium/samples:pdfium_diff",
       "//tools/win/chromeexts:chromeexts",
     ]
@@ -732,8 +716,7 @@ group("gn_only") {
   if (!is_ios) {
     deps += [
       "//media/mojo:media_mojo_unittests",
-      "//mojo/common:mojo_common_perftests",
-      "//services/video_capture:video_capture_unittests",
+      "//services:service_unittests",
     ]
   }
 
@@ -791,22 +774,7 @@ group("gn_only") {
       "//third_party/angle:libANGLE",
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
-      "//third_party/leveldatabase:leveldb_arena_test",
-      "//third_party/leveldatabase:leveldb_bloom_test",
-      "//third_party/leveldatabase:leveldb_cache_test",
-      "//third_party/leveldatabase:leveldb_corruption_test",
-      "//third_party/leveldatabase:leveldb_crc32c_test",
-      "//third_party/leveldatabase:leveldb_db_bench",
-      "//third_party/leveldatabase:leveldb_db_test",
-      "//third_party/leveldatabase:leveldb_dbformat_test",
-      "//third_party/leveldatabase:leveldb_env_test",
-      "//third_party/leveldatabase:leveldb_filename_test",
-      "//third_party/leveldatabase:leveldb_filter_block_test",
-      "//third_party/leveldatabase:leveldb_log_test",
-      "//third_party/leveldatabase:leveldb_skiplist_test",
-      "//third_party/leveldatabase:leveldb_table_test",
-      "//third_party/leveldatabase:leveldb_version_edit_test",
-      "//third_party/leveldatabase:leveldb_write_batch_test",
+      "//third_party/leveldatabase:leveldb_test_targets",
       "//third_party/libjpeg_turbo:simd",
       "//third_party/opus:opus_compare",
       "//third_party/opus:opus_demo",
@@ -924,11 +892,30 @@ if (!is_ios) {
   }
 
   # https://www.chromium.org/developers/testing/webkit-layout-tests
+
+  # The _exparchive at the end of the name indicates to the isolate recipe
+  # that the isolate should be archived separately using the `exparchive`
+  # command, rather than as part of the normal `batcharchive` command.
+  group("webkit_layout_tests_exparchive") {
+    testonly = true
+    deps = [
+      ":webkit_layout_tests",
+    ]
+    data_deps = [
+      ":webkit_layout_tests",
+    ]
+  }
+
+  # This target contains only a small subset of the layout tests,
+  # and is useful for testing with the regular isolate mechanism.
+  # To run the full layout test suite you need to use
+  # :webkit_layout_tests_exparchive, above, instead.
   group("webkit_layout_tests") {
     testonly = true
-
     data_deps = [
       "//content/shell:content_shell",
+      "//third_party/WebKit/public:blink_devtools_frontend_resources_files",
+      "//third_party/mesa:osmesa",
       "//tools/imagediff",
     ]
 
@@ -961,13 +948,27 @@ if (!is_ios) {
     }
 
     data = [
-      "//testing/scripts/common.py",
-      "//testing/xvfb.py",
-      "//testing/scripts/run_telemetry_as_googletest.py",
-      "//third_party/WebKit/LayoutTests/",
-      "//third_party/WebKit/Tools/Scripts/",
       "$root_build_dir/resources/inspector/",
+      "//testing/scripts/common.py",
+      "//testing/scripts/run_isolated_script_test.py",
+      "//testing/xvfb.py",
+      "//third_party/WebKit/LayoutTests/",
+      "//third_party/WebKit/PerformanceTests/",
+      "//third_party/WebKit/Source/platform/audio/resources/Composite.flac",
+      "//third_party/WebKit/Source/platform/audio/resources/Composite.wav",
+      "//third_party/WebKit/Tools/Scripts/",
     ]
+
+    if (is_win) {
+      data += [ "//third_party/apache-win32/" ]
+    }
+
+    if (is_android) {
+      data += [
+        "//third_party/catapult/",
+        "//build/android/",
+      ]
+    }
   }
 }
 
@@ -1026,7 +1027,6 @@ if (!is_ios && !is_android && !is_chromecast) {
     if (!is_win) {
       deps += [
         "//net:dns_fuzz_stub",
-        "//net:hpack_fuzz_wrapper",
         "//skia:filter_fuzz_stub",
       ]
     }

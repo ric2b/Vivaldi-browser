@@ -18,11 +18,6 @@ document.addEventListener('DOMContentLoaded', onLoad);
 var NetExportView = (function() {
   'use strict';
 
-  /**
-   * Delay in milliseconds between updates of certain browser information.
-   */
-  /** @const */ var POLL_INTERVAL_MS = 5000;
-
   // --------------------------------------------------------------------------
 
   /**
@@ -33,10 +28,9 @@ var NetExportView = (function() {
     $('export-view-stop-data').onclick = this.onStopData_.bind(this);
     $('export-view-send-data').onclick = this.onSendData_.bind(this);
 
-    window.setInterval(function() { chrome.send('getExportNetLogInfo'); },
-                       POLL_INTERVAL_MS);
-
-    chrome.send('getExportNetLogInfo');
+    // Tell NetExportMessageHandler to notify the UI of future state changes
+    // from this point on (through onExportNetLogInfoChanged()).
+    chrome.send('enableNotifyUIWithState');
   }
 
   cr.addSingletonGetter(NetExportView);
@@ -106,19 +100,22 @@ var NetExportView = (function() {
         $('export-view-start-data').disabled = false;
 
         // If there's an existing log, allow sending it.
-        if (exportNetLogInfo.logType != 'NONE') {
+        if (!!exportNetLogInfo.logExists) {
           $('export-view-deletes-log-text').hidden = false;
           $('export-view-send-data').disabled = false;
-          if (exportNetLogInfo.logType == 'UNKNOWN') {
+          if (!exportNetLogInfo.logCaptureModeKnown) {
             $('export-view-send-old-log-text').hidden = false;
-          } else if (exportNetLogInfo.logType == 'NORMAL') {
+          } else if (exportNetLogInfo.captureMode != 'STRIP_PRIVATE_DATA') {
             $('export-view-private-data-text').hidden = false;
           }
         }
       } else if (exportNetLogInfo.state == 'LOGGING') {
         // Only possible to stop logging. Radio buttons reflects current state.
-        document.querySelector('input[name="log-mode"][value="' +
-                               exportNetLogInfo.logType + '"]').checked = true;
+        document
+            .querySelector(
+                'input[name="log-mode"][value="' +
+                exportNetLogInfo.captureMode + '"]')
+            .checked = true;
         $('export-view-stop-data').disabled = false;
       } else if (exportNetLogInfo.state == 'UNINITIALIZED') {
         $('export-view-file-path-text').textContent =

@@ -2,12 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-action("aggregate_vector_icons") {
-  visibility = [ ":*" ]
+import("//build/util/branding.gni")
+import("//ui/vector_icons/vector_icons.gni")
 
-  script = "//ui/gfx/vector_icons/aggregate_vector_icons.py"
+aggregate_vector_icons("chrome_vector_icons") {
+  icon_directory = "."
 
   icons = [
+    "account_box.icon",
+    "account_child.icon",
+    "account_child_circle.icon",
+    "account_circle.icon",
+    "apps.icon",
+    "autologin.icon",
+    "blocked_badge.icon",
+    "bluetooth_connected.icon",
     "browser_tools.icon",
     "browser_tools_error.icon",
     "browser_tools_update.icon",
@@ -15,18 +24,52 @@ action("aggregate_vector_icons") {
     "caret_down.icon",
     "caret_up.1x.icon",
     "caret_up.icon",
+    "close_all.icon",
+    "code.icon",
+    "cookie.icon",
+    "crashed_tab.icon",
+    "credit_card.1x.icon",
+    "credit_card.icon",
+    "extension.icon",
+    "extension_crashed.icon",
+    "file_download.icon",
+    "file_download_incognito.1x.icon",
+    "file_download_incognito.icon",
+    "file_download_shelf.icon",
+    "folder.1x.icon",
+    "folder.icon",
+    "folder_managed.1x.icon",
+    "folder_managed.icon",
+    "folder_supervised.1x.icon",
+    "folder_supervised.icon",
+    "globe.icon",
+    "image.icon",
+    "incognito.1x.icon",
+    "incognito.icon",
     "laptop.icon",
-    "navigate_back.1x.icon",
-    "navigate_back.icon",
-    "navigate_forward.1x.icon",
-    "navigate_forward.icon",
+    "lock.icon",
+    "mixed_content.icon",
+    "mode_edit.icon",
+    "my_location.icon",
     "navigate_home.1x.icon",
     "navigate_home.icon",
     "navigate_reload.1x.icon",
     "navigate_reload.icon",
     "navigate_stop.1x.icon",
     "navigate_stop.icon",
+    "open_in_phone.icon",
+    "overflow_chevron.1x.icon",
+    "overflow_chevron.icon",
+    "paintbrush.icon",
+    "photo_camera.icon",
+    "remove_box.icon",
+    "sad_tab.icon",
+    "settings.icon",
     "smartphone.icon",
+    "subresource_filter_active.icon",
+    "supervisor_account.icon",
+    "supervisor_account_circle.icon",
+    "sync_problem.icon",
     "tab.icon",
     "tab_audio.1x.icon",
     "tab_audio.icon",
@@ -42,37 +85,26 @@ action("aggregate_vector_icons") {
     "tab_usb_connected.1x.icon",
     "tab_usb_connected.icon",
     "tablet.icon",
+    "translate.icon",
+    "user_account_avatar.icon",
+    "warning_badge.icon",
+    "web.icon",
+    "zoom_minus.icon",
+    "zoom_plus.icon",
+    "//vivaldi/app/resources/vector_icons/product.icon",
   ]
 
-  output_cc = "$target_gen_dir/vector_icons.cc"
-  output_h = "$target_gen_dir/vector_icons.h"
-
-  inputs = icons
-  inputs += [
-    "vector_icons.cc.template",
-    "vector_icons.h.template",
-  ]
-  outputs = [
-    output_cc,
-    output_h,
-  ]
-
-  response_file_contents = rebase_path(icons, root_build_dir)
-
-  args = [
-    "--working_directory=" + rebase_path("./"),
-    "--file_list={{response_file_name}}",
-    "--output_cc=" + rebase_path(output_cc, root_build_dir),
-    "--output_h=" + rebase_path(output_h, root_build_dir),
-  ]
+  if (is_mac) {
+    icons += [ "new_tab_mac_touchbar.icon" ]
+  }
 }
 
 source_set("vector_icons") {
-  sources = get_target_outputs(":aggregate_vector_icons")
+  sources = get_target_outputs(":chrome_vector_icons")
   sources += [ "//ui/gfx/vector_icon_types.h" ]
 
   deps = [
-    ":aggregate_vector_icons",
+    ":chrome_vector_icons",
     "//base",
     "//skia",
   ]

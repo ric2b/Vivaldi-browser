@@ -24,14 +24,19 @@ for m in re.findall(r"(.*node_modules/([^/]+))", maindeps):
      or (modulename == "binary-search") # CC0-1.0, no need to put in credits file
     ):
       continue
-  entry = {"name": modulename}
+  entry = {
+      "name": modulename,
+      "License File": "", # Can't be None due to string conversion below
+  }
 
   # get license file (in order of preference)
   for l in ["LICENSE-MIT", "LICENSE-MIT.TXT", "LICENSE.MIT", "LICENSE.BSD",
       "LICENSE.APACHE2", "LICENSE", "LICENSE.txt", "LICENSE.md", "License",
       "license.txt", "License.md", "LICENSE.mkd", "UNLICENSE"]:
-    if os.path.exists(basepath+"/"+moduledir+"/"+l):
-      f = open(basepath+"/"+moduledir+"/"+l)
+    file_name = basepath+"/"+moduledir+"/"+l
+    if os.path.exists(file_name):
+      entry["License File"] = file_name
+      f = open(file_name)
       entry["license"] = f.read()
       f.close()
       break
@@ -100,6 +105,12 @@ ADDITIONAL_PATHS = (
 )
 
 SPECIAL_CASES = {
+    os.path.join('..', 'platform_media'): {
+        "Name": "Opera",
+        "URL": "http://www.opera.com/",
+        "License": "BSD",
+        "License File": "/../platform_media/OPERA_LICENSE.txt",
+    },
     os.path.join('..', 'third_party', '_winsparkle_lib'): {
         "Name": "WinSparkle",
         "URL": "http://winsparkle.org/",
@@ -119,6 +130,7 @@ def GetEntries(entry_template, EvaluateTemplate):
   for module, license in modules.iteritems():
     entries.append({
         'name': license['name'],
-        'content': EvaluateTemplate(entry_template, license)
+        'content': EvaluateTemplate(entry_template, license),
+        'license_file': license['License File'],
         })
   return entries

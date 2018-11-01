@@ -25,8 +25,6 @@
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#import "ios/chrome/browser/find_in_page/find_in_page_controller.h"
-#import "ios/chrome/browser/find_in_page/find_in_page_model.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -90,7 +88,8 @@ using web::WebStateImpl;
 @property(nonatomic, assign) const GURL& url;
 @property(nonatomic, assign) WebStateImpl* webState;
 
-- (NavigationManagerImpl*)navigationManager;
+- (web::NavigationManager*)navigationManager;
+- (web::NavigationManagerImpl*)navigationManagerImpl;
 
 @end
 
@@ -107,7 +106,10 @@ using web::WebStateImpl;
 - (void)setWebState:(WebStateImpl*)webState {
   webState_ = webState;
 }
-- (NavigationManagerImpl*)navigationManager {
+- (web::NavigationManager*)navigationManager {
+  return &(webState_->GetNavigationManagerImpl());
+}
+- (web::NavigationManagerImpl*)navigationManagerImpl {
   return &(webState_->GetNavigationManagerImpl());
 }
 @end
@@ -144,14 +146,12 @@ class BrowserViewControllerTest : public BlockCleanupTest {
             chrome_browser_state_.get());
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model);
 
-    // Set up mock TabModel, Tab, CRWWebController and FindInPageController.
+    // Set up mock TabModel, Tab, and CRWWebController.
     id tabModel = [OCMockObject mockForClass:[TabModel class]];
     base::scoped_nsobject<id> currentTab([[BVCTestTabMock alloc]
         initWithRepresentedObject:[OCMockObject niceMockForClass:[Tab class]]]);
     id webControllerMock =
         [OCMockObject niceMockForClass:[CRWWebController class]];
-    id findInPageControllerMock =
-        [OCMockObject niceMockForClass:[FindInPageController class]];
 
     // Stub methods for TabModel.
     NSUInteger tabCount = 1;
@@ -160,10 +160,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     [[[tabModel stub] andReturnValue:OCMOCK_VALUE(enabled)] webUsageEnabled];
     [[[tabModel stub] andReturn:currentTab] currentTab];
     [[[tabModel stub] andReturn:currentTab] tabAtIndex:0];
-    GURL URL("http://www.google.com");
-    [[[tabModel stub] andReturn:currentTab] addTabWithURL:URL
-                                                 referrer:web::Referrer()
-                                               windowName:[OCMArg any]];
     [[tabModel stub] addObserver:[OCMArg any]];
     [[tabModel stub] removeObserver:[OCMArg any]];
     [[tabModel stub] saveSessionImmediately:NO];
@@ -174,8 +170,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     UIView* dummyView = [[[UIView alloc] initWithFrame:CGRectZero] autorelease];
     [[[currentTab stub] andReturn:dummyView] view];
     [[[currentTab stub] andReturn:webControllerMock] webController];
-    [[[currentTab stub] andReturn:findInPageControllerMock]
-        findInPageController];
 
     id sessionControllerMock =
         [OCMockObject niceMockForClass:[CRWSessionController class]];
@@ -205,8 +199,8 @@ class BrowserViewControllerTest : public BlockCleanupTest {
         newTabStripControllerWithTabModel:[OCMArg any]];
     [[[factory stub] andReturn:nil] newPreloadController];
     [[[factory stub] andReturnValue:OCMOCK_VALUE(toolbarModelIOS_)]
-        newToolbarModelIOSWithDelegate:(ToolbarModelDelegateIOS*)
-                                           [OCMArg anyPointer]];
+        newToolbarModelIOSWithDelegate:static_cast<ToolbarModelDelegateIOS*>(
+                                           [OCMArg anyPointer])];
     [[[factory stub] andReturn:nil]
         newWebToolbarControllerWithDelegate:[OCMArg any]
                                   urlLoader:[OCMArg any]
@@ -217,7 +211,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     [[[factory stub] andReturn:nil] showPassKitErrorInfoBarForManager:nil];
 
     webController_.reset([webControllerMock retain]);
-    findInPageController_.reset([findInPageControllerMock retain]);
     tabModel_.reset([tabModel retain]);
     tab_.reset([currentTab retain]);
     dependencyFactory_.reset([factory retain]);
@@ -260,7 +253,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
   base::scoped_nsobject<TabModel> tabModel_;
   ToolbarModelIOS* toolbarModelIOS_;
   base::scoped_nsprotocol<id<ShareProtocol>> shareController_;
-  base::scoped_nsobject<FindInPageController> findInPageController_;
   base::scoped_nsobject<PKAddPassesViewController> passKitViewController_;
   base::scoped_nsobject<OCMockObject> dependencyFactory_;
   base::scoped_nsobject<BrowserViewController> bvc_;
@@ -314,7 +306,7 @@ TEST_F(BrowserViewControllerTest, TestTabSelectedIsNewTab) {
 }
 
 TEST_F(BrowserViewControllerTest, TestTabDeselected) {
-  OCMockObject* tabMock = (OCMockObject*)tab_.get();
+  OCMockObject* tabMock = static_cast<OCMockObject*>(tab_.get());
   [[tabMock expect] wasHidden];
   NSDictionary* userInfoWithThisTab =
       [NSDictionary dictionaryWithObject:tab_ forKey:kTabModelTabKey];
@@ -374,10 +366,10 @@ TEST_F(BrowserViewControllerTest, DISABLED_TestShieldWasTapped) {
 // load on a handset, but not stop the load on a tablet.
 TEST_F(BrowserViewControllerTest,
        TestLocationBarBeganEdit_whenPageLoadIsInProgress) {
-  OCMockObject* tabMock = (OCMockObject*)tab_.get();
+  OCMockObject* tabMock = static_cast<OCMockObject*>(tab_.get());
 
   // Have the TestToolbarModel indicate that a page load is in progress.
-  ((TestToolbarModelIOS*)toolbarModelIOS_)->set_is_loading(true);
+  static_cast<TestToolbarModelIOS*>(toolbarModelIOS_)->set_is_loading(true);
 
   // The tab should only stop loading on handsets.
   if (!IsIPadIdiom())
@@ -391,10 +383,10 @@ TEST_F(BrowserViewControllerTest,
 // to stop the load on a handset or a tablet.
 TEST_F(BrowserViewControllerTest,
        TestLocationBarBeganEdit_whenPageLoadIsComplete) {
-  OCMockObject* tabMock = (OCMockObject*)tab_.get();
+  OCMockObject* tabMock = static_cast<OCMockObject*>(tab_.get());
 
   // Have the TestToolbarModel indicate that the page load is complete.
-  ((TestToolbarModelIOS*)toolbarModelIOS_)->set_is_loading(false);
+  static_cast<TestToolbarModelIOS*>(toolbarModelIOS_)->set_is_loading(false);
 
   // Don't set any expectation for stopLoading to be called on the mock tab.
   [bvc_ locationBarBeganEdit:nil];
@@ -407,8 +399,8 @@ TEST_F(BrowserViewControllerTest,
 TEST_F(BrowserViewControllerTest, TestSharePageCommandHandling) {
   GURL expectedUrl("http://www.testurl.net");
   NSString* expectedTitle = @"title";
-  [(BVCTestTabMock*)tab_.get() setUrl:expectedUrl];
-  OCMockObject* tabMock = (OCMockObject*)tab_.get();
+  [static_cast<BVCTestTabMock*>(tab_.get()) setUrl:expectedUrl];
+  OCMockObject* tabMock = static_cast<OCMockObject*>(tab_.get());
   ios::ChromeBrowserState* ptr = chrome_browser_state_.get();
   [[[tabMock stub] andReturnValue:OCMOCK_VALUE(ptr)] browserState];
   [[[tabMock stub] andReturn:expectedTitle] title];
@@ -418,14 +410,15 @@ TEST_F(BrowserViewControllerTest, TestSharePageCommandHandling) {
       CGSizeMake(300, 400), [UIColor blueColor]);
   [[[tabMock stub] andReturn:tabSnapshot] generateSnapshotWithOverlay:NO
                                                      visibleFrameOnly:YES];
-  OCMockObject* shareControllerMock = (OCMockObject*)shareController_.get();
+  OCMockObject* shareControllerMock =
+      static_cast<OCMockObject*>(shareController_.get());
   // Passing non zero/nil |fromRect| and |inView| parameters to satisfy protocol
   // requirements.
   BOOL (^shareDataChecker)
   (id value) = ^BOOL(id value) {
     if (![value isMemberOfClass:ShareToData.class])
       return NO;
-    ShareToData* shareToData = (ShareToData*)value;
+    ShareToData* shareToData = static_cast<ShareToData*>(value);
     CGSize size = CGSizeMake(40, 40);
     BOOL thumbnailDataIsEqual = ui::test::uiimage_utils::UIImagesAreEqual(
         shareToData.thumbnailGenerator(size),
@@ -454,13 +447,14 @@ TEST_F(BrowserViewControllerTest, TestSharePageWhenClosing) {
   GURL expectedUrl("http://www.testurl.net");
   NSString* expectedTitle = @"title";
   // Sets WebState to nil because [tab close] clears the WebState.
-  [(BVCTestTabMock*)tab_.get() setWebState:nil];
-  [(BVCTestTabMock*)tab_.get() setUrl:expectedUrl];
-  OCMockObject* tabMock = (OCMockObject*)tab_.get();
+  [static_cast<BVCTestTabMock*>(tab_.get()) setWebState:nil];
+  [static_cast<BVCTestTabMock*>(tab_.get()) setUrl:expectedUrl];
+  OCMockObject* tabMock = static_cast<OCMockObject*>(tab_.get());
   [[[tabMock stub] andReturn:expectedTitle] title];
   [[[tabMock stub] andReturn:expectedTitle] originalTitle];
   // Explicitly disallow the execution of the ShareController.
-  OCMockObject* shareControllerMock = (OCMockObject*)shareController_.get();
+  OCMockObject* shareControllerMock =
+      static_cast<OCMockObject*>(shareController_.get());
   [[shareControllerMock reject]
         shareWithData:[OCMArg any]
            controller:bvc_
@@ -497,7 +491,7 @@ TEST_F(BrowserViewControllerTest, TestShareDidCompleteWithError) {
       alertCoordinatorWithTitle:errorTitle
                         message:errorMessage
                  viewController:OCMOCK_ANY];
-  [((AlertCoordinator*)[mockCoordinator expect])start];
+  [static_cast<AlertCoordinator*>([mockCoordinator expect]) start];
 
   [bvc_ shareDidComplete:ShareTo::SHARE_ERROR successMessage:@"dummy"];
   EXPECT_OCMOCK_VERIFY(dependencyFactory_);
@@ -543,7 +537,8 @@ TEST_F(BrowserViewControllerTest, TestPassKitErrorInfoBarDisplayed) {
 }
 
 TEST_F(BrowserViewControllerTest, TestClearPresentedState) {
-  OCMockObject* shareControllerMock = (OCMockObject*)shareController_.get();
+  OCMockObject* shareControllerMock =
+      static_cast<OCMockObject*>(shareController_.get());
   [[shareControllerMock expect] cancelShareAnimated:NO];
   EXPECT_CALL(*this, OnCompletionCalled());
   [bvc_ clearPresentedStateWithCompletion:^{

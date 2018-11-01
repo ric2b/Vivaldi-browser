@@ -32,9 +32,9 @@
 #define SharedPersistent_h
 
 #include "bindings/core/v8/ScopedPersistent.h"
+#include "v8/include/v8.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
-#include <v8.h>
 
 namespace blink {
 
@@ -53,11 +53,6 @@ class SharedPersistent : public RefCounted<SharedPersistent<T>> {
   }
 
   bool isEmpty() { return m_value.isEmpty(); }
-
-  void setReference(const v8::Persistent<v8::Object>& parent,
-                    v8::Isolate* isolate) {
-    m_value.setReference(parent, isolate);
-  }
 
   bool operator==(const SharedPersistent<T>& other) {
     return m_value == other.m_value;

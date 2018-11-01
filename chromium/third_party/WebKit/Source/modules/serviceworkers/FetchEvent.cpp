@@ -12,6 +12,7 @@
 #include "modules/fetch/Response.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
+#include "platform/network/NetworkUtils.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "wtf/PtrUtil.h"
@@ -113,10 +114,13 @@ void FetchEvent::onNavigationPreloadResponse(
     return;
   DCHECK(m_preloadResponseProperty);
   ScriptState::Scope scope(scriptState);
-  FetchResponseData* responseData = FetchResponseData::createWithBuffer(
-      new BodyStreamBuffer(scriptState, new BytesConsumerForDataConsumerHandle(
-                                            scriptState->getExecutionContext(),
-                                            std::move(dataConsumeHandle))));
+  FetchResponseData* responseData =
+      dataConsumeHandle
+          ? FetchResponseData::createWithBuffer(new BodyStreamBuffer(
+                scriptState, new BytesConsumerForDataConsumerHandle(
+                                 scriptState->getExecutionContext(),
+                                 std::move(dataConsumeHandle))))
+          : FetchResponseData::create();
   Vector<KURL> urlList(1);
   urlList[0] = response->url();
   responseData->setURLList(urlList);
@@ -129,7 +133,9 @@ void FetchEvent::onNavigationPreloadResponse(
     responseData->headerList()->append(header.key, header.value);
   }
   FetchResponseData* taintedResponse =
-      responseData->createBasicFilteredResponse();
+      NetworkUtils::isRedirectResponseCode(response->httpStatusCode())
+          ? responseData->createOpaqueRedirectFilteredResponse()
+          : responseData->createBasicFilteredResponse();
   m_preloadResponseProperty->resolve(
       Response::create(scriptState->getExecutionContext(), taintedResponse));
 }

@@ -19,6 +19,8 @@
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/StyleBuilderConverter.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/css/resolver/StyleResolverStats.h"
+#include "core/dom/StyleEngine.h"
 #include "core/style/StyleInheritedVariables.h"
 #include "core/style/StyleNonInheritedVariables.h"
 #include "wtf/Vector.h"
@@ -40,12 +42,12 @@ bool CSSVariableResolver::resolveFallback(CSSParserTokenRange range,
 CSSVariableData* CSSVariableResolver::valueForCustomProperty(
     AtomicString name) {
   if (m_variablesSeen.contains(name)) {
-    m_cycleStartPoints.add(name);
+    m_cycleStartPoints.insert(name);
     return nullptr;
   }
 
   DCHECK(m_registry || !RuntimeEnabledFeatures::cssVariables2Enabled());
-  const PropertyRegistry::Registration* registration =
+  const PropertyRegistration* registration =
       m_registry ? m_registry->registration(name) : nullptr;
 
   CSSVariableData* variableData = nullptr;
@@ -94,11 +96,11 @@ PassRefPtr<CSSVariableData> CSSVariableResolver::resolveCustomProperty(
   bool disallowAnimationTainted = false;
   bool isAnimationTainted = variableData.isAnimationTainted();
   Vector<CSSParserToken> tokens;
-  m_variablesSeen.add(name);
+  m_variablesSeen.insert(name);
   bool success =
       resolveTokenRange(variableData.tokens(), disallowAnimationTainted, tokens,
                         isAnimationTainted);
-  m_variablesSeen.remove(name);
+  m_variablesSeen.erase(name);
 
   // The old variable data holds onto the backing string the new resolved
   // CSSVariableData relies on. Ensure it will live beyond us overwriting the
@@ -106,7 +108,7 @@ PassRefPtr<CSSVariableData> CSSVariableResolver::resolveCustomProperty(
   ASSERT(variableData.refCount() > 1);
 
   if (!success || !m_cycleStartPoints.isEmpty()) {
-    m_cycleStartPoints.remove(name);
+    m_cycleStartPoints.erase(name);
     return nullptr;
   }
   return CSSVariableData::createResolved(tokens, variableData,
@@ -242,7 +244,7 @@ const CSSValue* CSSVariableResolver::resolvePendingSubstitutions(
   HeapHashMap<CSSPropertyID, Member<const CSSValue>>& propertyCache =
       state.parsedPropertiesForPendingSubstitutionCache(pendingValue);
 
-  const CSSValue* value = propertyCache.get(id);
+  const CSSValue* value = propertyCache.at(id);
   if (!value) {
     // TODO(timloh): We shouldn't retry this for all longhands if the shorthand
     // ends up invalid.
@@ -270,7 +272,7 @@ const CSSValue* CSSVariableResolver::resolvePendingSubstitutions(
         }
       }
     }
-    value = propertyCache.get(id);
+    value = propertyCache.at(id);
   }
 
   if (value)
@@ -289,14 +291,19 @@ void CSSVariableResolver::resolveVariableDefinitions(
     return;
 
   CSSVariableResolver resolver(state);
+  int variableCount = 0;
   if (inheritedVariables) {
     for (auto& variable : inheritedVariables->m_data)
       resolver.valueForCustomProperty(variable.key);
+    variableCount += inheritedVariables->m_data.size();
   }
   if (nonInheritedVariables) {
     for (auto& variable : nonInheritedVariables->m_data)
       resolver.valueForCustomProperty(variable.key);
+    variableCount += nonInheritedVariables->m_data.size();
   }
+  INCREMENT_STYLE_STATS_COUNTER(state.document().styleEngine(),
+                                customPropertiesApplied, variableCount);
 }
 
 void CSSVariableResolver::computeRegisteredVariables(
@@ -332,9 +339,5 @@ CSSVariableResolver::CSSVariableResolver(const StyleResolverState& state)
     : m_inheritedVariables(state.style()->inheritedVariables()),
       m_nonInheritedVariables(state.style()->nonInheritedVariables()),
       m_registry(state.document().propertyRegistry()) {}
-
-DEFINE_TRACE(CSSVariableResolver) {
-  visitor->trace(m_registry);
-}
 
 }  // namespace blink

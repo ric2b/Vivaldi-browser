@@ -77,6 +77,8 @@
             android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:background="@null"
+            android:drawableStart="@drawable/googleg"
+            android:drawablePadding="8dp"
             android:ellipsize="end"
             android:focusableInTouchMode="false"
             android:gravity="center_vertical"
@@ -102,26 +104,26 @@
         android:layout_weight="0"
         android:visibility="invisible" />
 
-    <!-- Most visited items -->
-    <org.chromium.chrome.browser.ntp.MostVisitedLayout
-        android:id="@+id/most_visited_layout"
+    <!-- Site suggestion tile grid -->
+    <org.chromium.chrome.browser.suggestions.TileGridLayout
+        android:id="@+id/tile_grid_layout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
         android:layout_gravity="center_horizontal"
-        android:paddingTop="@dimen/most_visited_layout_padding_top"
+        android:paddingTop="@dimen/tile_grid_layout_padding_top"
         android:paddingBottom="4dp" />
 
-    <!-- Most visited items placeholder -->
+    <!-- Site suggestion tile grid placeholder -->
     <ViewStub
-        android:id="@+id/most_visited_placeholder_stub"
+        android:id="@+id/tile_grid_placeholder_stub"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:inflatedId="@+id/most_visited_placeholder"
-        android:layout="@layout/most_visited_placeholder" />
+        android:inflatedId="@+id/tile_grid_placeholder"
+        android:layout="@layout/new_tab_page_tile_grid_placeholder" />
 
     <!-- Bottom spacer -->
     <View
@@ -137,12 +139,5 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:visibility="gone" />
-
-    <!-- Spacer to make the page scrollable when needed. -->
-    <View
-        android:id="@+id/ntp_scroll_spacer"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
         android:visibility="gone" />
 </org.chromium.chrome.browser.ntp.NewTabPageLayout>

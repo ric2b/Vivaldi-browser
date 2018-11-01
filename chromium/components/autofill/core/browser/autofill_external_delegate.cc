@@ -24,7 +24,7 @@
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/common/autofill_util.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
@@ -283,6 +283,10 @@ void AutofillExternalDelegate::ClearPreviewedForm() {
 
 bool AutofillExternalDelegate::IsCreditCardPopup() {
   return is_credit_card_popup_;
+}
+
+AutofillDriver* AutofillExternalDelegate::GetAutofillDriver() {
+  return driver_;
 }
 
 void AutofillExternalDelegate::Reset() {

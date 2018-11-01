@@ -499,7 +499,9 @@ void V4L2CaptureDelegate::AllocateAndStart(
     return;
   }
 
+  client_->OnStarted();
   is_capturing_ = true;
+
   // Post task to start fetching frames from v4l2.
   v4l2_task_runner_->PostTask(
       FROM_HERE, base::Bind(&V4L2CaptureDelegate::DoCapture, this));

@@ -8,7 +8,7 @@
 #include "ash/common/wm_shell.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -17,6 +17,7 @@
 #include "components/wallpaper/wallpaper_layout.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_util.h"
@@ -109,15 +110,17 @@ void ArcWallpaperService::OnInstanceClosed() {
 void ArcWallpaperService::SetWallpaper(const std::vector<uint8_t>& data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   ImageDecoder::Cancel(this);
-  ImageDecoder::StartWithOptions(this, data, ImageDecoder::DEFAULT_CODEC, true);
+  ImageDecoder::StartWithOptions(this, data, ImageDecoder::DEFAULT_CODEC, true,
+                                 gfx::Size());
 }
 
 void ArcWallpaperService::GetWallpaper(const GetWallpaperCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   ash::WallpaperController* wc = ash::WmShell::Get()->wallpaper_controller();
   gfx::ImageSkia wallpaper = wc->GetWallpaper();
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(), FROM_HERE,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
       base::Bind(&EncodeImagePng, wallpaper), callback);
 }
 

@@ -14,7 +14,7 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "third_party/WebKit/public/web/WebCache.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 #include "ui/gfx/image/image_skia.h"
 
 class Profile;
@@ -134,6 +134,9 @@ class Task {
   // them if it does.
   virtual bool ReportsWebCacheStats() const;
   virtual blink::WebCache::ResourceTypeStats GetWebCacheStats() const;
+
+  // Returns the keep-alive counter if the Task is an event page, -1 otherwise.
+  virtual int GetKeepaliveCount() const;
 
   // Checking whether the task reports network usage.
   bool ReportsNetworkUsage() const;

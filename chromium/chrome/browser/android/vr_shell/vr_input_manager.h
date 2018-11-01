@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_ANDROID_VR_SHELL_VR_INPUT_MANAGER_H_
 #define CHROME_BROWSER_ANDROID_VR_SHELL_VR_INPUT_MANAGER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "content/public/browser/native_web_keyboard_event.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
@@ -23,17 +26,17 @@ class VrInputManager {
   explicit VrInputManager(content::WebContents* web_contents);
   ~VrInputManager();
 
-  base::WeakPtr<VrInputManager> GetWeakPtr();
   void ProcessUpdatedGesture(std::unique_ptr<blink::WebInputEvent> event);
+  void GenerateKeyboardEvent(int char_value, int modifiers);
 
  private:
   void SendGesture(const blink::WebGestureEvent& gesture);
   void ForwardGestureEvent(const blink::WebGestureEvent& gesture);
   void ForwardMouseEvent(const blink::WebMouseEvent& mouse_event);
+  void ForwardKeyboardEvent(
+      const content::NativeWebKeyboardEvent& keyboard_event);
 
   content::WebContents* web_contents_;
-
-  base::WeakPtrFactory<VrInputManager> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VrInputManager);
 };

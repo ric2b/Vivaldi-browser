@@ -1,10 +1,13 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
+#ifndef SYNC_TEST_INTEGRATION_NOTES_SYNC_TEST_H_
+#define SYNC_TEST_INTEGRATION_NOTES_SYNC_TEST_H_
+
 #include "chrome/browser/sync/test/integration/sync_test.h"
 
 class NotesSyncTest : public SyncTest {
  public:
-  NotesSyncTest(TestType test_type);
+  explicit NotesSyncTest(TestType test_type);
   ~NotesSyncTest() override;
 
   bool SetupClients() override;
@@ -21,3 +24,5 @@ class NotesSyncTest : public SyncTest {
  private:
   DISALLOW_COPY_AND_ASSIGN(NotesSyncTest);
 };
+
+#endif  // SYNC_TEST_INTEGRATION_NOTES_SYNC_TEST_H_

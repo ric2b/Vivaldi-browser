@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.payments;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Handler;
@@ -12,16 +13,17 @@ import android.support.v4.util.ArrayMap;
 import android.text.TextUtils;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
+import org.chromium.chrome.browser.pageinfo.CertificateChainHelper;
 import org.chromium.chrome.browser.payments.ui.Completable;
 import org.chromium.chrome.browser.payments.ui.ContactDetailsSection;
 import org.chromium.chrome.browser.payments.ui.LineItem;
@@ -32,7 +34,7 @@ import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.SectionInformation;
 import org.chromium.chrome.browser.payments.ui.ShoppingCart;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
+import org.chromium.chrome.browser.preferences.autofill.AutofillAndPaymentsPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
@@ -40,6 +42,7 @@ import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
@@ -73,7 +76,7 @@ import javax.annotation.Nullable;
 
 /**
  * Android implementation of the PaymentRequest service defined in
- * components/payments/payment_request.mojom.
+ * components/payments/content/payment_request.mojom.
  */
 public class PaymentRequestImpl
         implements PaymentRequest, PaymentRequestUI.Client, PaymentApp.InstrumentsCallback,
@@ -116,42 +119,51 @@ public class PaymentRequestImpl
         void onPaymentRequestServiceCanMakePaymentQueryResponded();
     }
 
-    /** The object to keep track of cached payment query results. */
+    /** The object to keep track of payment queries. */
     private static class CanMakePaymentQuery {
         private final Set<PaymentRequestImpl> mObservers = new HashSet<>();
-        private final Set<String> mMethods;
-        private Boolean mResponse;
+        private final Map<String, String> mMethods;
 
         /**
          * Keeps track of a payment query.
          *
-         * @param methods The payment methods that are being queried.
+         * @param methods The map of the payment methods that are being queried to the corresponding
+         *                payment method data.
          */
-        public CanMakePaymentQuery(Set<String> methods) {
+        public CanMakePaymentQuery(Map<String, PaymentMethodData> methods) {
             assert methods != null;
-            mMethods = methods;
+            mMethods = new HashMap<>();
+            for (Map.Entry<String, PaymentMethodData> method : methods.entrySet()) {
+                mMethods.put(method.getKey(),
+                        method.getValue() == null ? "" : method.getValue().stringifiedData);
+            }
         }
 
         /**
-         * Checks whether the given payment methods matches the previously queried payment methods.
+         * Checks whether the given payment methods and data match the previously queried payment
+         * methods and data.
          *
-         * @param methods The payment methods that are being queried.
-         * @return True if the given methods match the previously queried payment methods.
+         * @param methods The map of the payment methods that are being queried to the corresponding
+         *                payment method data.
+         * @return True if the given methods and data match the previously queried payment methods
+         *         and data.
          */
-        public boolean matchesPaymentMethods(Set<String> methods) {
-            return mMethods.equals(methods);
-        }
+        public boolean matchesPaymentMethods(Map<String, PaymentMethodData> methods) {
+            if (!mMethods.keySet().equals(methods.keySet())) return false;
 
-        /** @return Whether payment can be made, or null if response is not known yet. */
-        public Boolean getPreviousResponse() {
-            return mResponse;
+            for (Map.Entry<String, String> thisMethod : mMethods.entrySet()) {
+                PaymentMethodData otherMethod = methods.get(thisMethod.getKey());
+                String otherData = otherMethod == null ? "" : otherMethod.stringifiedData;
+                if (!thisMethod.getValue().equals(otherData)) return false;
+            }
+
+            return true;
         }
 
         /** @param response Whether payment can be made. */
-        public void setResponse(boolean response) {
-            if (mResponse == null) mResponse = response;
+        public void notifyObserversOfResponse(boolean response) {
             for (PaymentRequestImpl observer : mObservers) {
-                observer.respondCanMakePaymentQuery(mResponse.booleanValue());
+                observer.respondCanMakePaymentQuery(response);
             }
             mObservers.clear();
         }
@@ -167,7 +179,6 @@ public class PaymentRequestImpl
 
     private static final String TAG = "cr_PaymentRequest";
     private static final String ANDROID_PAY_METHOD_NAME = "https://android.com/pay";
-    private static final String PAYMENT_COMPLETE_ONCE = "payment_complete_once";
     private static final Comparator<Completable> COMPLETENESS_COMPARATOR =
             new Comparator<Completable>() {
                 @Override
@@ -176,13 +187,37 @@ public class PaymentRequestImpl
                 }
             };
 
+    /**
+     * Comparator to sort payment apps by maximum frecency score of the contained instruments. Note
+     * that the first instrument in the list must have the maximum frecency score.
+     */
+    private static final Comparator<List<PaymentInstrument>> APP_FRECENCY_COMPARATOR =
+            new Comparator<List<PaymentInstrument>>() {
+                @Override
+                public int compare(List<PaymentInstrument> a, List<PaymentInstrument> b) {
+                    return compareInstrumentsByFrecency(b.get(0), a.get(0));
+                }
+            };
+
+    /** Comparator to sort instruments in payment apps by frecency. */
+    private static final Comparator<PaymentInstrument> INSTRUMENT_FRECENCY_COMPARATOR =
+            new Comparator<PaymentInstrument>() {
+                @Override
+                public int compare(PaymentInstrument a, PaymentInstrument b) {
+                    return compareInstrumentsByFrecency(b, a);
+                }
+            };
+
     /** Every origin can call canMakePayment() every 30 minutes. */
     private static final int CAN_MAKE_PAYMENT_QUERY_PERIOD_MS = 30 * 60 * 1000;
 
     private static PaymentRequestServiceObserverForTest sObserverForTest;
 
-    /** True if show() was called in any PaymentRequestImpl object. */
-    private static boolean sIsShowing;
+    /**
+     * True if show() was called in any PaymentRequestImpl object. Used to prevent showing more than
+     * one PaymentRequest UI per browser process.
+     */
+    private static boolean sIsAnyPaymentRequestShowing;
 
     /**
      * In-memory mapping of the origins of websites that have recently called canMakePayment()
@@ -209,16 +244,17 @@ public class PaymentRequestImpl
     };
 
     private final Handler mHandler = new Handler();
-    private final ChromeActivity mContext;
     private final WebContents mWebContents;
+    private final String mSchemelessOriginForPaymentApp;
+    private final String mOriginForDisplay;
     private final String mMerchantName;
-    private final String mOrigin;
+    private final byte[][] mCertificateChain;
     private final AddressEditor mAddressEditor;
     private final CardEditor mCardEditor;
     private final PaymentRequestJourneyLogger mJourneyLogger = new PaymentRequestJourneyLogger();
 
-    private Bitmap mFavicon;
     private PaymentRequestClient mClient;
+    private boolean mIsCurrentPaymentRequestShowing;
 
     /**
      * The raw total amount being charged, as it was received from the website. This data is passed
@@ -252,11 +288,16 @@ public class PaymentRequestImpl
     private SectionInformation mUiShippingOptions;
 
     private Map<String, PaymentMethodData> mMethodData;
+    private boolean mRequestShipping;
+    private boolean mRequestPayerName;
+    private boolean mRequestPayerPhone;
+    private boolean mRequestPayerEmail;
+    private int mShippingType;
     private SectionInformation mShippingAddressesSection;
     private ContactDetailsSection mContactSection;
     private List<PaymentApp> mApps;
     private List<PaymentApp> mPendingApps;
-    private List<PaymentInstrument> mPendingInstruments;
+    private List<List<PaymentInstrument>> mPendingInstruments;
     private List<PaymentInstrument> mPendingAutofillInstruments;
     private SectionInformation mPaymentMethodsSection;
     private PaymentRequestUI mUI;
@@ -267,9 +308,17 @@ public class PaymentRequestImpl
     private boolean mHasRecordedAbortReason;
     private boolean mQueriedCanMakePayment;
     private CurrencyFormatter mCurrencyFormatter;
+    private TabModelSelector mObservedTabModelSelector;
+    private TabModel mObservedTabModel;
 
     /** Aborts should only be recorded if the Payment Request was shown to the user. */
     private boolean mShouldRecordAbortReason;
+
+    /**
+     * There are a few situations were the Payment Request can appear, from a code perspective, to
+     * be shown more than once. This boolean is used to make sure it is only logged once.
+     */
+    private boolean mDidRecordShowEvent;
 
     /** True if any of the requested payment methods are supported. */
     private boolean mArePaymentMethodsSupported;
@@ -280,49 +329,40 @@ public class PaymentRequestImpl
      */
     private boolean mCanMakePayment;
 
+    /**
+     * True if we should skip showing PaymentRequest UI.
+     *
+     * <p>In cases where there is a single payment app and the merchant does not request shipping
+     * or billing, we can skip showing UI as Payment Request UI is not benefiting the user at all.
+     */
+    private boolean mShouldSkipShowingPaymentRequestUi;
+
     /** The helper to create and fill the response to send to the merchant. */
     private PaymentResponseHelper mPaymentResponseHelper;
 
     /**
      * Builds the PaymentRequest service implementation.
      *
-     * @param context     The context where PaymentRequest has been invoked.
      * @param webContents The web contents that have invoked the PaymentRequest API.
      */
-    public PaymentRequestImpl(Activity context, WebContents webContents) {
-        assert context != null;
+    public PaymentRequestImpl(WebContents webContents) {
         assert webContents != null;
 
-        assert context instanceof ChromeActivity;
-        mContext = (ChromeActivity) context;
         mWebContents = webContents;
 
-        mMerchantName = webContents.getTitle();
-        // The feature is available only in secure context, so it's OK to not show HTTPS.
-        mOrigin = UrlFormatter.formatUrlForSecurityDisplay(
-                webContents.getLastCommittedUrl(), false);
+        mSchemelessOriginForPaymentApp = UrlFormatter.formatUrlForSecurityDisplay(
+                mWebContents.getLastCommittedUrl(), false /* omit scheme for payment apps. */);
 
-        final FaviconHelper faviconHelper = new FaviconHelper();
-        faviconHelper.getLocalFaviconImageForURL(Profile.getLastUsedProfile(),
-                webContents.getVisibleUrl(),
-                mContext.getResources().getDimensionPixelSize(R.dimen.payments_favicon_size),
-                new FaviconHelper.FaviconImageCallback() {
-                    @Override
-                    public void onFaviconAvailable(Bitmap bitmap, String iconUrl) {
-                        faviconHelper.destroy();
-                        if (bitmap == null) return;
-                        if (mUI == null) {
-                            mFavicon = bitmap;
-                            return;
-                        }
-                        mUI.setTitleBitmap(bitmap);
-                    }
-                });
+        mOriginForDisplay = UrlFormatter.formatUrlForSecurityDisplay(
+                mWebContents.getLastCommittedUrl(), true /* include scheme in display */);
+
+        mMerchantName = webContents.getTitle();
+        mCertificateChain = CertificateChainHelper.getCertificateChain(mWebContents);
 
         mApps = new ArrayList<>();
 
         mAddressEditor = new AddressEditor();
-        mCardEditor = new CardEditor(webContents, mAddressEditor, sObserverForTest);
+        mCardEditor = new CardEditor(mWebContents, mAddressEditor, sObserverForTest);
 
         if (sCanMakePaymentQueries == null) sCanMakePaymentQueries = new ArrayMap<>();
 
@@ -364,52 +404,80 @@ public class PaymentRequestImpl
         if (!parseAndValidateDetailsOrDisconnectFromClient(details)) return;
 
         PaymentAppFactory.getInstance().create(
-                mContext, mWebContents, Collections.unmodifiableSet(mMethodData.keySet()), this);
+                mWebContents, Collections.unmodifiableSet(mMethodData.keySet()), this);
 
-        boolean requestShipping = options != null && options.requestShipping;
-        boolean requestPayerName = options != null && options.requestPayerName;
-        boolean requestPayerPhone = options != null && options.requestPayerPhone;
-        boolean requestPayerEmail = options != null && options.requestPayerEmail;
+        mRequestShipping = options != null && options.requestShipping;
+        mRequestPayerName = options != null && options.requestPayerName;
+        mRequestPayerPhone = options != null && options.requestPayerPhone;
+        mRequestPayerEmail = options != null && options.requestPayerEmail;
+        mShippingType = options == null ? PaymentShippingType.SHIPPING : options.shippingType;
+
+        // If there is a single payment method and the merchant has not requested any other
+        // information, we can safely go directly to the payment app instead of showing
+        // Payment Request UI.
+        mShouldSkipShowingPaymentRequestUi =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_PAYMENTS_SINGLE_APP_UI_SKIP)
+                && mMethodData.size() == 1 && !mRequestShipping && !mRequestPayerName
+                && !mRequestPayerPhone && !mRequestPayerEmail
+                // Only allowing payment apps that own their own UIs.
+                // This excludes AutofillPaymentApp as its UI is rendered inline in
+                // the payment request UI, thus can't be skipped.
+                && mMethodData.keySet().iterator().next() != null
+                && mMethodData.keySet().iterator().next().startsWith(UrlConstants.HTTPS_URL_PREFIX);
+
+        PaymentRequestMetrics.recordRequestedInformationHistogram(mRequestPayerEmail,
+                mRequestPayerPhone, mRequestShipping, mRequestPayerName);
+    }
+
+    private void buildUI(Activity activity) {
+        assert activity != null;
 
         List<AutofillProfile> profiles = null;
-        if (requestShipping || requestPayerName || requestPayerPhone || requestPayerEmail) {
+        if (mRequestShipping || mRequestPayerName || mRequestPayerPhone || mRequestPayerEmail) {
             profiles = PersonalDataManager.getInstance().getProfilesToSuggest(
                     false /* includeNameInLabel */);
         }
 
-        if (requestShipping) {
-            createShippingSection(Collections.unmodifiableList(profiles));
+        if (mRequestShipping) {
+            createShippingSection(activity, Collections.unmodifiableList(profiles));
         }
 
-        if (requestPayerName || requestPayerPhone || requestPayerEmail) {
+        if (mRequestPayerName || mRequestPayerPhone || mRequestPayerEmail) {
             mContactEditor =
-                    new ContactEditor(requestPayerName, requestPayerPhone, requestPayerEmail);
+                    new ContactEditor(mRequestPayerName, mRequestPayerPhone, mRequestPayerEmail);
             mContactSection = new ContactDetailsSection(
-                    mContext, Collections.unmodifiableList(profiles), mContactEditor);
+                    activity, Collections.unmodifiableList(profiles), mContactEditor);
         }
-        
-        mUI = new PaymentRequestUI(mContext, this, requestShipping,
-                requestPayerName || requestPayerPhone || requestPayerEmail,
-                mMerchantSupportsAutofillPaymentInstruments, !isPaymentCompleteOnce(),
-                mMerchantName, mOrigin,
-                new ShippingStrings(
-                        options == null ? PaymentShippingType.SHIPPING : options.shippingType));
+
+        setIsAnyPaymentRequestShowing(true);
+        mUI = new PaymentRequestUI(activity, this, mRequestShipping,
+                mRequestPayerName || mRequestPayerPhone || mRequestPayerEmail,
+                mMerchantSupportsAutofillPaymentInstruments,
+                !PaymentPreferencesUtil.isPaymentCompleteOnce(), mMerchantName, mOriginForDisplay,
+                new ShippingStrings(mShippingType));
+
+        final FaviconHelper faviconHelper = new FaviconHelper();
+        faviconHelper.getLocalFaviconImageForURL(Profile.getLastUsedProfile(),
+                mWebContents.getLastCommittedUrl(),
+                activity.getResources().getDimensionPixelSize(R.dimen.payments_favicon_size),
+                new FaviconHelper.FaviconImageCallback() {
+                    @Override
+                    public void onFaviconAvailable(Bitmap bitmap, String iconUrl) {
+                        if (mUI != null && bitmap != null) mUI.setTitleBitmap(bitmap);
+                        faviconHelper.destroy();
+                    }
+                });
 
         // Add the callback to change the label of shipping addresses depending on the focus.
-        if (requestShipping) mUI.setShippingAddressSectionFocusChangedObserver(this);
-
-        if (mFavicon != null) mUI.setTitleBitmap(mFavicon);
-        mFavicon = null;
+        if (mRequestShipping) mUI.setShippingAddressSectionFocusChangedObserver(this);
 
         mAddressEditor.setEditorView(mUI.getEditorView());
         mCardEditor.setEditorView(mUI.getCardEditorView());
         if (mContactEditor != null) mContactEditor.setEditorView(mUI.getEditorView());
-
-        PaymentRequestMetrics.recordRequestedInformationHistogram(requestPayerEmail,
-                requestPayerPhone, requestShipping, requestPayerName);
     }
 
-    private void createShippingSection(List<AutofillProfile> unmodifiableProfiles) {
+    private void createShippingSection(
+            Context context, List<AutofillProfile> unmodifiableProfiles) {
         List<AutofillAddress> addresses = new ArrayList<>();
 
         for (int i = 0; i < unmodifiableProfiles.size(); i++) {
@@ -418,7 +486,7 @@ public class PaymentRequestImpl
 
             // Only suggest addresses that have a street address.
             if (!TextUtils.isEmpty(profile.getStreetAddress())) {
-                addresses.add(new AutofillAddress(mContext, profile));
+                addresses.add(new AutofillAddress(context, profile));
             }
         }
 
@@ -465,22 +533,51 @@ public class PaymentRequestImpl
     public void show() {
         if (mClient == null) return;
 
-        if (getIsShowing()) {
+        if (getIsAnyPaymentRequestShowing()) {
             disconnectFromClientWithDebugMessage("A PaymentRequest UI is already showing");
             recordAbortReasonHistogram(
                     PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return;
         }
 
-        setIsShowing(true);
+        mIsCurrentPaymentRequestShowing = true;
         if (disconnectIfNoPaymentMethodsSupported()) return;
+
+        ChromeActivity chromeActivity = ChromeActivity.fromWebContents(mWebContents);
+        if (chromeActivity == null) {
+            disconnectFromClientWithDebugMessage("Unable to find Chrome activity");
+            recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_OTHER);
+            return;
+        }
 
         // Catch any time the user switches tabs. Because the dialog is modal, a user shouldn't be
         // allowed to switch tabs, which can happen if the user receives an external Intent.
-        mContext.getTabModelSelector().addObserver(mSelectorObserver);
-        mContext.getCurrentTabModel().addObserver(mTabModelObserver);
+        mObservedTabModelSelector = chromeActivity.getTabModelSelector();
+        mObservedTabModel = chromeActivity.getCurrentTabModel();
+        mObservedTabModelSelector.addObserver(mSelectorObserver);
+        mObservedTabModel.addObserver(mTabModelObserver);
 
-        mUI.show();
+        buildUI(chromeActivity);
+        if (!mShouldSkipShowingPaymentRequestUi) mUI.show();
+
+        triggerPaymentAppUiSkipIfApplicable();
+    }
+
+    private void triggerPaymentAppUiSkipIfApplicable() {
+        // If we are skipping showing the Payment Request UI, we should call into the
+        // PaymentApp immediately after we determine the instruments are ready and UI is shown.
+        if (mShouldSkipShowingPaymentRequestUi && isFinishedQueryingPaymentApps()
+                && mIsCurrentPaymentRequestShowing) {
+            assert !mPaymentMethodsSection.isEmpty();
+
+            mDidRecordShowEvent = true;
+            mShouldRecordAbortReason = true;
+            recordSuccessFunnelHistograms("Shown");
+            mJourneyLogger.setShowCalled();
+
+            onPayClicked(null /* selectedShippingAddress */, null /* selectedShippingOption */,
+                    mPaymentMethodsSection.getItem(0));
+        }
     }
 
     private static Map<String, PaymentMethodData> getValidatedMethodData(
@@ -539,7 +636,8 @@ public class PaymentRequestImpl
         // so a fast response from a non-autofill payment app at the front of the app list does not
         // cause NOT_SUPPORTED payment rejection.
         for (Map.Entry<PaymentApp, Map<String, PaymentMethodData>> q : queryApps.entrySet()) {
-            q.getKey().getInstruments(q.getValue(), mOrigin, this);
+            q.getKey().getInstruments(
+                    q.getValue(), mSchemelessOriginForPaymentApp, mCertificateChain, this);
         }
     }
 
@@ -673,7 +771,7 @@ public class PaymentRequestImpl
 
     /** @return The first modifier that matches the given instrument, or null. */
     @Nullable private PaymentDetailsModifier getModifier(@Nullable PaymentInstrument instrument) {
-        if (instrument == null) return null;
+        if (mModifiers == null || instrument == null) return null;
         Set<String> methodNames = instrument.getInstrumentMethodNames();
         methodNames.retainAll(mModifiers.keySet());
         return methodNames.isEmpty() ? null : mModifiers.get(methodNames.iterator().next());
@@ -752,9 +850,12 @@ public class PaymentRequestImpl
                         mUiShippingOptions, mContactSection, mPaymentMethodsSection));
         mPaymentInformationCallback = null;
 
-        recordSuccessFunnelHistograms("Shown");
-        mShouldRecordAbortReason = true;
-        mJourneyLogger.setShowCalled();
+        if (!mDidRecordShowEvent) {
+            mDidRecordShowEvent = true;
+            mShouldRecordAbortReason = true;
+            recordSuccessFunnelHistograms("Shown");
+            mJourneyLogger.setShowCalled();
+        }
     }
 
     @Override
@@ -1024,8 +1125,9 @@ public class PaymentRequestImpl
     public void onInstrumentDetailsLoadingWithoutUI() {
         if (mClient == null || mUI == null || mPaymentResponseHelper == null) return;
 
+        assert mPaymentMethodsSection.getSelectedItem() instanceof AutofillPaymentInstrument;
+
         mUI.showProcessingMessage();
-        mPaymentResponseHelper.onInstrumentsDetailsLoading();
     }
 
     @Override
@@ -1040,19 +1142,26 @@ public class PaymentRequestImpl
         mPaymentResponseHelper = new PaymentResponseHelper(
                 selectedShippingAddress, selectedShippingOption, selectedContact, this);
 
-        // Create a map that is the subset of mMethodData that contains the
-        // payment methods supported by the selected payment instrument. If this
-        // intersection contains more than one payment method, the payment app is
-        // at liberty to choose (or have the user choose) one of the methods.
+        // Create maps that are subsets of mMethodData and mModifiers, that contain
+        // the payment methods supported by the selected payment instrument. If the
+        // intersection of method data contains more than one payment method, the
+        // payment app is at liberty to choose (or have the user choose) one of the
+        // methods.
         Map<String, PaymentMethodData> methodData = new HashMap<>();
+        Map<String, PaymentDetailsModifier> modifiers = new HashMap<>();
         for (String instrumentMethodName : instrument.getInstrumentMethodNames()) {
             if (mMethodData.containsKey(instrumentMethodName)) {
                 methodData.put(instrumentMethodName, mMethodData.get(instrumentMethodName));
             }
+            if (mModifiers != null && mModifiers.containsKey(instrumentMethodName)) {
+                modifiers.put(instrumentMethodName, mModifiers.get(instrumentMethodName));
+            }
         }
 
-        instrument.invokePaymentApp(mMerchantName, mOrigin, mRawTotal, mRawLineItems,
-                Collections.unmodifiableMap(methodData), this);
+        instrument.invokePaymentApp(mMerchantName, mSchemelessOriginForPaymentApp,
+                mCertificateChain, Collections.unmodifiableMap(methodData), mRawTotal,
+                mRawLineItems, Collections.unmodifiableMap(modifiers), this);
+
         recordSuccessFunnelHistograms("PayClicked");
         return !(instrument instanceof AutofillPaymentInstrument);
     }
@@ -1097,26 +1206,35 @@ public class PaymentRequestImpl
     public void complete(int result) {
         if (mClient == null) return;
         recordSuccessFunnelHistograms("Completed");
-        if (!isPaymentCompleteOnce()) setPaymentCompleteOnce();
+        if (!PaymentPreferencesUtil.isPaymentCompleteOnce()) {
+            PaymentPreferencesUtil.setPaymentCompleteOnce();
+        }
+
+        /**
+         * Update records of the used payment instrument for sorting payment apps and instruments
+         * next time.
+         */
+        PaymentOption selectedPaymentMethod = mPaymentMethodsSection.getSelectedItem();
+        PaymentPreferencesUtil.increasePaymentInstrumentUseCount(
+                selectedPaymentMethod.getIdentifier());
+        PaymentPreferencesUtil.setPaymentInstrumentLastUseDate(
+                selectedPaymentMethod.getIdentifier(), System.currentTimeMillis());
+
         closeUI(PaymentComplete.FAIL != result);
-    }
-
-    private static boolean isPaymentCompleteOnce() {
-        return ContextUtils.getAppSharedPreferences().getBoolean(PAYMENT_COMPLETE_ONCE, false);
-    }
-
-    private static void setPaymentCompleteOnce() {
-        ContextUtils.getAppSharedPreferences()
-                .edit()
-                .putBoolean(PAYMENT_COMPLETE_ONCE, true)
-                .apply();
     }
 
     @Override
     public void onCardAndAddressSettingsClicked() {
+        Context context = ChromeActivity.fromWebContents(mWebContents);
+        if (context == null) {
+            disconnectFromClientWithDebugMessage("Unable to find Chrome activity");
+            recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_OTHER);
+            return;
+        }
+
         Intent intent = PreferencesLauncher.createIntentForSettingsPage(
-                mContext, AutofillPreferences.class.getName());
-        mContext.startActivity(intent);
+                context, AutofillAndPaymentsPreferences.class.getName());
+        context.startActivity(intent);
         disconnectFromClientWithDebugMessage("Card and address settings clicked");
         recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_ABORTED_BY_USER);
     }
@@ -1128,19 +1246,17 @@ public class PaymentRequestImpl
     public void canMakePayment() {
         if (mClient == null) return;
 
-        CanMakePaymentQuery query = sCanMakePaymentQueries.get(mOrigin);
+        CanMakePaymentQuery query = sCanMakePaymentQueries.get(mSchemelessOriginForPaymentApp);
         if (query == null) {
-            query = new CanMakePaymentQuery(mMethodData.keySet());
-            sCanMakePaymentQueries.put(mOrigin, query);
+            query = new CanMakePaymentQuery(Collections.unmodifiableMap(mMethodData));
+            sCanMakePaymentQueries.put(mSchemelessOriginForPaymentApp, query);
             mHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    sCanMakePaymentQueries.remove(mOrigin);
+                    sCanMakePaymentQueries.remove(mSchemelessOriginForPaymentApp);
                 }
             }, CAN_MAKE_PAYMENT_QUERY_PERIOD_MS);
-        }
-
-        if (!query.matchesPaymentMethods(mMethodData.keySet())) {
+        } else if (!query.matchesPaymentMethods(Collections.unmodifiableMap(mMethodData))) {
             mClient.onCanMakePayment(CanMakePaymentQueryResult.QUERY_QUOTA_EXCEEDED);
             if (sObserverForTest != null) {
                 sObserverForTest.onPaymentRequestServiceCanMakePaymentQueryResponded();
@@ -1148,22 +1264,15 @@ public class PaymentRequestImpl
             return;
         }
 
-        if (query.getPreviousResponse() != null) {
-            respondCanMakePaymentQuery(query.getPreviousResponse().booleanValue());
-            return;
-        }
-
         query.addObserver(this);
-        if (isFinishedQueryingPaymentApps()) {
-            query.setResponse(mCanMakePayment);
-            mJourneyLogger.setCanMakePaymentValue(mCanMakePayment);
-        }
+        if (isFinishedQueryingPaymentApps()) query.notifyObserversOfResponse(mCanMakePayment);
     }
 
     private void respondCanMakePaymentQuery(boolean response) {
+        if (mClient == null) return;
         mClient.onCanMakePayment(response ? CanMakePaymentQueryResult.CAN_MAKE_PAYMENT
                 : CanMakePaymentQueryResult.CANNOT_MAKE_PAYMENT);
-        mJourneyLogger.setCanMakePaymentValue(mCanMakePayment);
+        mJourneyLogger.setCanMakePaymentValue(response);
         if (sObserverForTest != null) {
             sObserverForTest.onPaymentRequestServiceCanMakePaymentQueryResponded();
         }
@@ -1202,16 +1311,25 @@ public class PaymentRequestImpl
         // Place the instruments into either "autofill" or "non-autofill" list to be displayed when
         // all apps have responded.
         if (instruments != null) {
+            List<PaymentInstrument> nonAutofillInstruments = new ArrayList<>();
             for (int i = 0; i < instruments.size(); i++) {
                 PaymentInstrument instrument = instruments.get(i);
                 Set<String> instrumentMethodNames = new HashSet<>(
                         instrument.getInstrumentMethodNames());
                 instrumentMethodNames.retainAll(mMethodData.keySet());
                 if (!instrumentMethodNames.isEmpty()) {
-                    addPendingInstrument(instrument);
+                    if (instrument instanceof AutofillPaymentInstrument) {
+                        mPendingAutofillInstruments.add(instrument);
+                    } else {
+                        nonAutofillInstruments.add(instrument);
+                    }
                 } else {
                     instrument.dismissInstrument();
                 }
+            }
+            if (!nonAutofillInstruments.isEmpty()) {
+                Collections.sort(nonAutofillInstruments, INSTRUMENT_FRECENCY_COMPARATOR);
+                mPendingInstruments.add(nonAutofillInstruments);
             }
         }
 
@@ -1244,18 +1362,19 @@ public class PaymentRequestImpl
         // > Complete autofill instruments.
         // > Incomplete autofill instruments.
         Collections.sort(mPendingAutofillInstruments, COMPLETENESS_COMPARATOR);
-        mPendingInstruments.addAll(mPendingAutofillInstruments);
+        Collections.sort(mPendingInstruments, APP_FRECENCY_COMPARATOR);
+        if (!mPendingAutofillInstruments.isEmpty()) {
+            mPendingInstruments.add(mPendingAutofillInstruments);
+        }
 
         // Log the number of suggested credit cards.
         mJourneyLogger.setNumberOfSuggestionsShown(PaymentRequestJourneyLogger.SECTION_CREDIT_CARDS,
                 mPendingAutofillInstruments.size());
 
-        mPendingAutofillInstruments.clear();
-
         // Possibly pre-select the first instrument on the list.
         int selection = SectionInformation.NO_SELECTION;
         if (!mPendingInstruments.isEmpty()) {
-            PaymentInstrument first = mPendingInstruments.get(0);
+            PaymentInstrument first = mPendingInstruments.get(0).get(0);
             if (first instanceof AutofillPaymentInstrument) {
                 AutofillPaymentInstrument creditCard = (AutofillPaymentInstrument) first;
                 if (creditCard.isComplete()) selection = 0;
@@ -1266,12 +1385,16 @@ public class PaymentRequestImpl
             }
         }
 
-        CanMakePaymentQuery query = sCanMakePaymentQueries.get(mOrigin);
-        if (query != null) query.setResponse(mCanMakePayment);
+        CanMakePaymentQuery query = sCanMakePaymentQueries.get(mSchemelessOriginForPaymentApp);
+        if (query != null) query.notifyObserversOfResponse(mCanMakePayment);
 
         // The list of payment instruments is ready to display.
-        mPaymentMethodsSection = new SectionInformation(PaymentRequestUI.TYPE_PAYMENT_METHODS,
-                selection, mPendingInstruments);
+        List<PaymentInstrument> sortedInstruments = new ArrayList<>();
+        for (List<PaymentInstrument> a : mPendingInstruments) {
+            sortedInstruments.addAll(a);
+        }
+        mPaymentMethodsSection = new SectionInformation(
+                PaymentRequestUI.TYPE_PAYMENT_METHODS, selection, sortedInstruments);
 
         mPendingInstruments.clear();
 
@@ -1279,6 +1402,8 @@ public class PaymentRequestImpl
 
         // UI has requested the full list of payment instruments. Provide it now.
         if (mPaymentInformationCallback != null) providePaymentInformation();
+
+        triggerPaymentAppUiSkipIfApplicable();
     }
 
     /**
@@ -1294,8 +1419,8 @@ public class PaymentRequestImpl
         boolean userCanAddCreditCard = mMerchantSupportsAutofillPaymentInstruments
                 && !ChromeFeatureList.isEnabled(ChromeFeatureList.NO_CREDIT_CARD_ABORT);
 
-        if (!mArePaymentMethodsSupported
-                || (getIsShowing() && !foundPaymentMethods && !userCanAddCreditCard)) {
+        if (!mArePaymentMethodsSupported || (mIsCurrentPaymentRequestShowing && !foundPaymentMethods
+                                                    && !userCanAddCreditCard)) {
             // All payment apps have responded, but none of them have instruments. It's possible to
             // add credit cards, but the merchant does not support them either. The payment request
             // must be rejected.
@@ -1314,20 +1439,6 @@ public class PaymentRequestImpl
     /** @return True after payment apps have been queried. */
     private boolean isFinishedQueryingPaymentApps() {
         return mPendingApps != null && mPendingApps.isEmpty() && mPendingInstruments.isEmpty();
-    }
-
-    /**
-     * Saves the given instrument in either "autofill" or "non-autofill" list. The separation
-     * enables placing autofill instruments on the bottom of the list.
-     *
-     * @param instrument The instrument to add to either "autofill" or "non-autofill" list.
-     */
-    private void addPendingInstrument(PaymentInstrument instrument) {
-        if (instrument instanceof AutofillPaymentInstrument) {
-            mPendingAutofillInstruments.add(instrument);
-        } else {
-            mPendingInstruments.add(instrument);
-        }
     }
 
     /**
@@ -1355,6 +1466,10 @@ public class PaymentRequestImpl
                     PaymentRequestMetrics.SELECTED_METHOD_OTHER_PAYMENT_APP);
         }
 
+        // Showing the payment request UI if we were previously skipping it so the loading
+        // spinner shows up until the merchant notifies that payment was completed.
+        if (mShouldSkipShowingPaymentRequestUi) mUI.showProcessingMessageAfterUiSkip();
+
         recordSuccessFunnelHistograms("ReceivedInstrumentDetails");
 
         mPaymentResponseHelper.onInstrumentDetailsReceived(methodName, stringifiedDetails);
@@ -1364,7 +1479,6 @@ public class PaymentRequestImpl
     public void onPaymentResponseReady(PaymentResponse response) {
         mClient.onPaymentResponse(response);
         mPaymentResponseHelper = null;
-        PersonalDataManager.getInstance().cancelPendingAddressNormalizations();
     }
 
     /**
@@ -1373,8 +1487,14 @@ public class PaymentRequestImpl
     @Override
     public void onInstrumentDetailsError() {
         if (mClient == null) return;
-        mUI.onPayButtonProcessingCancelled();
         mPaymentAppRunning = false;
+        // When skipping UI, any errors/cancel from fetching instrument details should be
+        // equivalent to a cancel.
+        if (mShouldSkipShowingPaymentRequestUi) {
+            onDismiss();
+        } else {
+            mUI.onPayButtonProcessingCancelled();
+        }
     }
 
     @Override
@@ -1418,6 +1538,8 @@ public class PaymentRequestImpl
                 }
             });
             mUI = null;
+            mIsCurrentPaymentRequestShowing = false;
+            setIsAnyPaymentRequestShowing(false);
         }
 
         if (mPaymentMethodsSection != null) {
@@ -1429,22 +1551,33 @@ public class PaymentRequestImpl
             mPaymentMethodsSection = null;
         }
 
-        mContext.getTabModelSelector().removeObserver(mSelectorObserver);
-        mContext.getCurrentTabModel().removeObserver(mTabModelObserver);
+        if (mObservedTabModelSelector != null) {
+            mObservedTabModelSelector.removeObserver(mSelectorObserver);
+            mObservedTabModelSelector = null;
+        }
+
+        if (mObservedTabModel != null) {
+            mObservedTabModel.removeObserver(mTabModelObserver);
+            mObservedTabModel = null;
+        }
     }
 
     private void closeClient() {
         if (mClient != null) mClient.close();
         mClient = null;
-        setIsShowing(false);
     }
 
-    private static boolean getIsShowing() {
-        return sIsShowing;
+    /**
+     * @return Whether any instance of PaymentRequest has received a show() call. Don't use this
+     *         function to check whether the current instance has received a show() call.
+     */
+    private static boolean getIsAnyPaymentRequestShowing() {
+        return sIsAnyPaymentRequestShowing;
     }
 
-    private static void setIsShowing(boolean isShowing) {
-        sIsShowing = isShowing;
+    /** @param isShowing Whether any instance of PaymentRequest has received a show() call. */
+    private static void setIsAnyPaymentRequestShowing(boolean isShowing) {
+        sIsAnyPaymentRequestShowing = isShowing;
     }
 
     @VisibleForTesting
@@ -1483,7 +1616,7 @@ public class PaymentRequestImpl
             mJourneyLogger.recordJourneyStatsHistograms("OtherAborted");
         }
     }
-    
+
     /**
      * Adds an entry to the NoShow Payment Request histogram in the bucket corresponding to the
      * reason for not showing the Payment Request.
@@ -1493,5 +1626,29 @@ public class PaymentRequestImpl
 
         RecordHistogram.recordEnumeratedHistogram("PaymentRequest.CheckoutFunnel.NoShow", reason,
                 PaymentRequestMetrics.NO_SHOW_REASON_MAX);
+    }
+
+    /**
+     * Compares two payment instruments by frecency.
+     * Return negative value if a has strictly lower frecency score than b.
+     * Return zero if a and b have the same frecency score.
+     * Return positive value if a has strictly higher frecency score than b.
+     */
+    private static int compareInstrumentsByFrecency(PaymentInstrument a, PaymentInstrument b) {
+        int aCount = PaymentPreferencesUtil.getPaymentInstrumentUseCount(a.getIdentifier());
+        int bCount = PaymentPreferencesUtil.getPaymentInstrumentUseCount(b.getIdentifier());
+        long aDate = PaymentPreferencesUtil.getPaymentInstrumentLastUseDate(a.getIdentifier());
+        long bDate = PaymentPreferencesUtil.getPaymentInstrumentLastUseDate(a.getIdentifier());
+
+        return Double.compare(getFrecencyScore(aCount, aDate), getFrecencyScore(bCount, bDate));
+    }
+
+    /**
+     * The frecency score is calculated according to use count and last use date. The formula is
+     * the same as the one used in GetFrecencyScore in autofill_data_model.cc.
+     */
+    private static final double getFrecencyScore(int count, long date) {
+        long currentTime = System.currentTimeMillis();
+        return -Math.log((currentTime - date) / (24 * 60 * 60 * 1000) + 2) / Math.log(count + 2);
     }
 }

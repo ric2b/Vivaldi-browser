@@ -209,8 +209,8 @@ TEST_F(VisibleSelectionTest, Initialisation) {
   EXPECT_TRUE(selectionInFlatTree.isCaret());
 
   Range* range = firstRangeOf(selection);
-  EXPECT_EQ(0, range->startOffset());
-  EXPECT_EQ(0, range->endOffset());
+  EXPECT_EQ(0u, range->startOffset());
+  EXPECT_EQ(0u, range->endOffset());
   EXPECT_EQ("", range->text());
   testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                  selectionInFlatTree);
@@ -218,6 +218,37 @@ TEST_F(VisibleSelectionTest, Initialisation) {
   const VisibleSelection noSelection =
       createVisibleSelection(SelectionInDOMTree::Builder().build());
   EXPECT_EQ(NoSelection, noSelection.getSelectionType());
+}
+
+// For http://crbug.com/695317
+TEST_F(VisibleSelectionTest, SelectAllWithInputElement) {
+  setBodyContent("<input>123");
+  Element* const htmlElement = document().documentElement();
+  Element* const input = document().querySelector("input");
+  Node* const lastChild = document().body()->lastChild();
+
+  const VisibleSelection& visibleSelectinInDOMTree = createVisibleSelection(
+      SelectionInDOMTree::Builder()
+          .collapse(Position::firstPositionInNode(htmlElement))
+          .extend(Position::lastPositionInNode(htmlElement))
+          .build());
+  EXPECT_EQ(SelectionInDOMTree::Builder()
+                .collapse(Position::beforeNode(input))
+                .extend(Position(lastChild, 3))
+                .build(),
+            visibleSelectinInDOMTree.asSelection());
+
+  const VisibleSelectionInFlatTree& visibleSelectinInFlatTree =
+      createVisibleSelection(
+          SelectionInFlatTree::Builder()
+              .collapse(PositionInFlatTree::firstPositionInNode(htmlElement))
+              .extend(PositionInFlatTree::lastPositionInNode(htmlElement))
+              .build());
+  EXPECT_EQ(SelectionInFlatTree::Builder()
+                .collapse(PositionInFlatTree::beforeNode(input))
+                .extend(PositionInFlatTree(lastChild, 3))
+                .build(),
+            visibleSelectinInFlatTree.asSelection());
 }
 
 TEST_F(VisibleSelectionTest, ShadowCrossing) {
@@ -351,8 +382,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(0, range->startOffset());
-    EXPECT_EQ(5, range->endOffset());
+    EXPECT_EQ(0u, range->startOffset());
+    EXPECT_EQ(5u, range->endOffset());
     EXPECT_EQ("Lorem", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -367,8 +398,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(6, range->startOffset());
-    EXPECT_EQ(11, range->endOffset());
+    EXPECT_EQ(6u, range->startOffset());
+    EXPECT_EQ(11u, range->endOffset());
     EXPECT_EQ("ipsum", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -385,8 +416,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(5, range->startOffset());
-    EXPECT_EQ(6, range->endOffset());
+    EXPECT_EQ(5u, range->startOffset());
+    EXPECT_EQ(6u, range->endOffset());
     EXPECT_EQ(" ", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -403,8 +434,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(26, range->startOffset());
-    EXPECT_EQ(27, range->endOffset());
+    EXPECT_EQ(26u, range->startOffset());
+    EXPECT_EQ(27u, range->endOffset());
     EXPECT_EQ(",", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -419,8 +450,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(27, range->startOffset());
-    EXPECT_EQ(28, range->endOffset());
+    EXPECT_EQ(27u, range->startOffset());
+    EXPECT_EQ(28u, range->endOffset());
     EXPECT_EQ(" ", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -435,8 +466,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(0, range->startOffset());
-    EXPECT_EQ(5, range->endOffset());
+    EXPECT_EQ(0u, range->startOffset());
+    EXPECT_EQ(5u, range->endOffset());
     EXPECT_EQ("Lorem", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -451,8 +482,8 @@ TEST_F(VisibleSelectionTest, WordGranularity) {
         expandUsingGranularity(selectionInFlatTree, WordGranularity);
 
     Range* range = firstRangeOf(selection);
-    EXPECT_EQ(0, range->startOffset());
-    EXPECT_EQ(11, range->endOffset());
+    EXPECT_EQ(0u, range->startOffset());
+    EXPECT_EQ(11u, range->endOffset());
     EXPECT_EQ("Lorem ipsum", range->text());
     testFlatTreePositionsToEqualToDOMTreePositions(selection,
                                                    selectionInFlatTree);
@@ -479,13 +510,8 @@ TEST_F(VisibleSelectionTest, updateIfNeededWithShadowHost) {
   document().updateStyleAndLayout();
 
   // Simulates to restore selection from undo stack.
-  selection.updateIfNeeded();
+  selection = createVisibleSelection(selection.asSelection());
   EXPECT_EQ(Position(sample->firstChild(), 0), selection.start());
-
-  VisibleSelectionInFlatTree selectionInFlatTree;
-  SelectionAdjuster::adjustSelectionInFlatTree(&selectionInFlatTree, selection);
-  EXPECT_EQ(PositionInFlatTree(sample->firstChild(), 0),
-            selectionInFlatTree.start());
 }
 
 }  // namespace blink

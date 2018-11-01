@@ -130,6 +130,7 @@ View::View()
 #if DCHECK_IS_ON()
       iterating_(false),
 #endif
+      can_process_events_within_subtree_(true),
       visible_(true),
       enabled_(true),
       notify_enter_exit_on_child_(false),
@@ -168,6 +169,9 @@ View::~View() {
   // reference-counted on some platforms, so it may not be deleted right away.
   if (native_view_accessibility_)
     native_view_accessibility_->Destroy();
+
+  for (ViewObserver& observer : observers_)
+    observer.OnViewIsDeleting(this);
 }
 
 // Tree operations -------------------------------------------------------------
@@ -219,7 +223,7 @@ void View::AddChildViewAt(View* view, int index) {
   const bool did_reparent_any_layers = view->UpdateParentLayers();
   Widget* widget = GetWidget();
   if (did_reparent_any_layers && widget)
-    widget->UpdateRootLayers();
+    widget->LayerTreeChanged();
 
   ReorderLayers();
 
@@ -523,29 +527,56 @@ void View::SetTransform(const gfx::Transform& transform) {
     }
   } else {
     if (!layer())
-      CreateLayer();
+      CreateLayer(ui::LAYER_TEXTURED);
     layer()->SetTransform(transform);
     layer()->ScheduleDraw();
   }
 }
 
-void View::SetPaintToLayer(bool paint_to_layer) {
-  if (paint_to_layer_ == paint_to_layer)
+void View::SetPaintToLayer(ui::LayerType layer_type) {
+  if (paint_to_layer_ && (layer()->type() == layer_type))
     return;
 
-  paint_to_layer_ = paint_to_layer;
-  if (paint_to_layer_ && !layer()) {
-    CreateLayer();
-  } else if (!paint_to_layer_ && layer()) {
-    DestroyLayer();
+  DestroyLayer();
+  CreateLayer(layer_type);
+  paint_to_layer_ = true;
+}
+
+void View::DestroyLayer() {
+  if (!paint_to_layer_)
+    return;
+
+  paint_to_layer_ = false;
+  if (!layer())
+    return;
+
+  ui::Layer* new_parent = layer()->parent();
+  std::vector<ui::Layer*> children = layer()->children();
+  for (size_t i = 0; i < children.size(); ++i) {
+    layer()->Remove(children[i]);
+    if (new_parent)
+      new_parent->Add(children[i]);
   }
+
+  LayerOwner::DestroyLayer();
+
+  if (new_parent)
+    ReorderLayers();
+
+  UpdateChildLayerBounds(CalculateOffsetToAncestorWithLayer(NULL));
+
+  SchedulePaint();
+
+  Widget* widget = GetWidget();
+  if (widget)
+    widget->LayerTreeChanged();
 }
 
 std::unique_ptr<ui::Layer> View::RecreateLayer() {
   std::unique_ptr<ui::Layer> old_layer = LayerOwner::RecreateLayer();
   Widget* widget = GetWidget();
   if (widget)
-    widget->UpdateRootLayers();
+    widget->LayerTreeChanged();
   return old_layer;
 }
 
@@ -961,7 +992,7 @@ View* View::GetEventHandlerForRect(const gfx::Rect& rect) {
 }
 
 bool View::CanProcessEventsWithinSubtree() const {
-  return true;
+  return can_process_events_within_subtree_;
 }
 
 View* View::GetTooltipHandlerForPoint(const gfx::Point& point) {
@@ -1914,7 +1945,7 @@ void View::DoRemoveChildView(View* view,
   // removed.
   view->OrphanLayers();
   if (widget)
-    widget->UpdateRootLayers();
+    widget->LayerTreeChanged();
 
   view->PropagateRemoveNotifications(this, new_parent);
   view->parent_ = nullptr;
@@ -2184,7 +2215,7 @@ bool View::ConvertRectFromAncestor(const View* ancestor,
 
 // Accelerated painting --------------------------------------------------------
 
-void View::CreateLayer() {
+void View::CreateLayer(ui::LayerType layer_type) {
   // A new layer is being created for the view. So all the layers of the
   // sub-tree can inherit the visibility of the corresponding view.
   {
@@ -2193,7 +2224,7 @@ void View::CreateLayer() {
       child->UpdateChildLayerVisibility(true);
   }
 
-  SetLayer(base::MakeUnique<ui::Layer>());
+  SetLayer(base::MakeUnique<ui::Layer>(layer_type));
   layer()->set_delegate(this);
   layer()->set_name(GetClassName());
 
@@ -2208,7 +2239,7 @@ void View::CreateLayer() {
 
   Widget* widget = GetWidget();
   if (widget)
-    widget->UpdateRootLayers();
+    widget->LayerTreeChanged();
 
   // Before having its own Layer, this View may have painted in to a Layer owned
   // by an ancestor View. Scheduling a paint on the parent View will erase this
@@ -2258,29 +2289,6 @@ void View::ReparentLayer(const gfx::Vector2d& offset, ui::Layer* parent_layer) {
     parent_layer->Add(layer());
   layer()->SchedulePaint(GetLocalBounds());
   MoveLayerToParent(layer(), gfx::Point());
-}
-
-void View::DestroyLayer() {
-  ui::Layer* new_parent = layer()->parent();
-  std::vector<ui::Layer*> children = layer()->children();
-  for (size_t i = 0; i < children.size(); ++i) {
-    layer()->Remove(children[i]);
-    if (new_parent)
-      new_parent->Add(children[i]);
-  }
-
-  LayerOwner::DestroyLayer();
-
-  if (new_parent)
-    ReorderLayers();
-
-  UpdateChildLayerBounds(CalculateOffsetToAncestorWithLayer(NULL));
-
-  SchedulePaint();
-
-  Widget* widget = GetWidget();
-  if (widget)
-    widget->UpdateRootLayers();
 }
 
 // Input -----------------------------------------------------------------------

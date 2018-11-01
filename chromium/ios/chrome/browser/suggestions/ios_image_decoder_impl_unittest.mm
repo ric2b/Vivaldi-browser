@@ -9,9 +9,11 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -81,8 +83,9 @@ TEST_F(IOSImageDecoderImplTest, JPGImage) {
   std::string image_data =
       std::string(reinterpret_cast<char*>(kJPGImage), sizeof(kJPGImage));
   ios_image_decoder_impl_->DecodeImage(
-      image_data, base::Bind(&IOSImageDecoderImplTest::OnImageDecoded,
-                             base::Unretained(this)));
+      image_data, gfx::Size(),
+      base::Bind(&IOSImageDecoderImplTest::OnImageDecoded,
+                 base::Unretained(this)));
 
   pool_->FlushForTesting();
   base::RunLoop().RunUntilIdle();
@@ -96,8 +99,9 @@ TEST_F(IOSImageDecoderImplTest, WebpImage) {
   std::string image_data =
       std::string(reinterpret_cast<char*>(kWEBPImage), sizeof(kWEBPImage));
   ios_image_decoder_impl_->DecodeImage(
-      image_data, base::Bind(&IOSImageDecoderImplTest::OnImageDecoded,
-                             base::Unretained(this)));
+      image_data, gfx::Size(),
+      base::Bind(&IOSImageDecoderImplTest::OnImageDecoded,
+                 base::Unretained(this)));
 
   pool_->FlushForTesting();
   base::RunLoop().RunUntilIdle();

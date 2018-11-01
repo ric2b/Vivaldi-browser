@@ -21,31 +21,11 @@ class GURL;
 @class CRWSessionEntry;
 @class CRWWebController;
 
-namespace web {
-class BlockedPopupInfo;
-struct Referrer;
-}
-
 // Methods implemented by the delegate of the CRWWebController.
 // DEPRECATED, do not conform to this protocol and do not add any methods to it.
 // Use web::WebStateDelegate instead.
 // TODO(crbug.com/674991): Remove this protocol.
 @protocol CRWWebDelegate<NSObject>
-
-// Called when the page wants to open a new window by DOM (e.g. with
-// |window.open| JavaScript call or by clicking a link with |_blank| target) or
-// wants to open a window with a new tab. |inBackground| allows a page to force
-// a new window to open in the background. CRWSessionController's openedByDOM
-// property of the returned CRWWebController must be YES.
-- (CRWWebController*)webPageOrderedOpen:(const GURL&)url
-                               referrer:(const web::Referrer&)referrer
-                             windowName:(NSString*)windowName
-                           inBackground:(BOOL)inBackground;
-
-// Called when the page wants to open a new window by DOM.
-// CRWSessionController's openedByDOM property of the returned CRWWebController
-// must be YES.
-- (CRWWebController*)webPageOrderedOpen;
 
 // Called when the page calls window.close() on itself. Begin the shut-down
 // sequence for this controller.
@@ -67,30 +47,15 @@ struct Referrer;
 // Called when the page URL has changed. Phase will be PAGE_LOADING. Can be
 // followed by webDidFinishWithURL or webWillStartLoadingURL.
 // |updateHistory| is YES if the URL should be added to the history DB.
-// TODO(stuartmorgan): Remove or rename the history param; the history DB
-// isn't a web concept, so this shoud be expressed differently.
+// TODO(crbug.com/692331): Remove this method and use |DidFinishNavigation|.
 - (void)webDidStartLoadingURL:(const GURL&)url
           shouldUpdateHistory:(BOOL)updateHistory;
 // Called when the page load was cancelled by page activity (before a success /
 // failure state is known). Phase will be PAGE_LOADED.
 - (void)webLoadCancelled:(const GURL&)url;
-// Called when a page updates its history stack using pushState or replaceState.
-// TODO(stuartmorgan): Generalize this to cover any change of URL without page
-// document change.
-- (void)webDidUpdateHistoryStateWithPageURL:(const GURL&)pageUrl;
 // Called when a placeholder image should be displayed instead of the WebView.
 - (void)webController:(CRWWebController*)webController
     retrievePlaceholderOverlayImage:(void (^)(UIImage*))block;
-// Consults the delegate whether a form should be resubmitted for a request.
-// Occurs when a POST request is reached when navigating through history.
-// Call |continueBlock| if a form should be resubmitted.
-// Call |cancelBlock| if a form should not be resubmitted.
-// Delegates must call either of these (just once) before the load will
-// continue.
-- (void)webController:(CRWWebController*)webController
-    onFormResubmissionForRequest:(NSURLRequest*)request
-                   continueBlock:(ProceduralBlock)continueBlock
-                     cancelBlock:(ProceduralBlock)cancelBlock;
 
 // ---------------------------------------------------------------------
 // TODO(rohitrao): Eliminate as many of the following delegate methods as
@@ -110,8 +75,19 @@ struct Referrer;
             (const web::NavigationManager::WebLoadParams&)params
                         wasInitialNavigation:(BOOL)initialNavigation;
 // Called from finishHistoryNavigationFromEntry.
-- (void)webWillFinishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry;
+// TODO(crbug.com/692331): Remove this method and use |DidFinishNavigation|.
+- (void)webWillFinishHistoryNavigation;
 // ---------------------------------------------------------------------
+
+// Called when |webController| wants to open a new window. |URL| is the URL of
+// the new window; |openerURL| is the URL of the page which requested a window
+// to be open; |initiatedByUser| is YES if action was caused by the user.
+// |webController| will not open a window if this method returns nil. This
+// method can not return |webController|.
+- (CRWWebController*)webController:(CRWWebController*)webController
+         createWebControllerForURL:(const GURL&)URL
+                         openerURL:(const GURL&)openerURL
+                   initiatedByUser:(BOOL)initiatedByUser;
 
 @optional
 
@@ -145,24 +121,6 @@ struct Referrer;
 // the native controller to display if the delegate can handle the url,
 // or nil otherwise.
 - (id<CRWNativeContent>)controllerForUnhandledContentAtURL:(const GURL&)url;
-
-// Called when the page supplies a new title.
-- (void)webController:(CRWWebController*)webController
-       titleDidChange:(NSString*)title;
-
-// Called when CRWWebController has detected a popup. If NO is returned then
-// popup will be shown, otherwise |webController:didBlockPopup:| will be called
-// and CRWWebDelegate will have a chance to unblock the popup later. NO is
-// assumed by default if this method is not implemented.
-- (BOOL)webController:(CRWWebController*)webController
-    shouldBlockPopupWithURL:(const GURL&)popupURL
-                  sourceURL:(const GURL&)sourceURL;
-
-// Called when CRWWebController has detected and blocked a popup. In order to
-// allow the blocked pop up CRWWebDelegate must call
-// |blockedPopupInfo.ShowPopup()| instead of attempting to open a new window.
-- (void)webController:(CRWWebController*)webController
-        didBlockPopup:(const web::BlockedPopupInfo&)blockedPopupInfo;
 
 // Called when CRWWebController did suppress a dialog (JavaScript, HTTP
 // authentication or window.open).

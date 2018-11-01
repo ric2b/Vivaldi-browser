@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/input/input_router_impl.h"
+#include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/edit_command.h"
@@ -39,9 +40,7 @@
 #include "ui/gfx/canvas.h"
 
 #if defined(OS_ANDROID)
-#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
-#include "content/test/mock_gpu_channel_establish_factory.h"
 #include "ui/android/screen_android.h"
 #endif
 
@@ -335,6 +334,30 @@ class TestView : public TestRenderWidgetHostView {
   DISALLOW_COPY_AND_ASSIGN(TestView);
 };
 
+// MockRenderViewHostDelegateView ------------------------------------------
+class MockRenderViewHostDelegateView : public RenderViewHostDelegateView {
+ public:
+  MockRenderViewHostDelegateView() = default;
+  ~MockRenderViewHostDelegateView() override = default;
+
+  int start_dragging_count() const { return start_dragging_count_; }
+
+  // RenderViewHostDelegateView:
+  void StartDragging(const DropData& drop_data,
+                     blink::WebDragOperationsMask allowed_ops,
+                     const gfx::ImageSkia& image,
+                     const gfx::Vector2d& image_offset,
+                     const DragEventSourceInfo& event_info,
+                     RenderWidgetHostImpl* source_rwh) override {
+    ++start_dragging_count_;
+  }
+
+ private:
+  int start_dragging_count_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(MockRenderViewHostDelegateView);
+};
+
 // MockRenderWidgetHostDelegate --------------------------------------------
 
 class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
@@ -348,7 +371,8 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
         unhandled_keyboard_event_type_(WebInputEvent::Undefined),
         handle_wheel_event_(false),
         handle_wheel_event_called_(false),
-        unresponsive_timer_fired_(false) {}
+        unresponsive_timer_fired_(false),
+        render_view_host_delegate_view_(new MockRenderViewHostDelegateView()) {}
   ~MockRenderWidgetHostDelegate() override {}
 
   // Tests that make sure we ignore keyboard event acknowledgments to events we
@@ -385,6 +409,10 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
 
   bool unresponsive_timer_fired() const { return unresponsive_timer_fired_; }
 
+  MockRenderViewHostDelegateView* mock_delegate_view() {
+    return render_view_host_delegate_view_.get();
+  }
+
   void SetScreenInfo(const ScreenInfo& screen_info) {
     screen_info_ = screen_info;
   }
@@ -392,6 +420,10 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   // RenderWidgetHostDelegate overrides.
   void GetScreenInfo(ScreenInfo* screen_info) override {
     *screen_info = screen_info_;
+  }
+
+  RenderViewHostDelegateView* GetDelegateView() override {
+    return mock_delegate_view();
   }
 
  protected:
@@ -438,6 +470,9 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   bool unresponsive_timer_fired_;
 
   ScreenInfo screen_info_;
+
+  std::unique_ptr<MockRenderViewHostDelegateView>
+      render_view_host_delegate_view_;
 };
 
 // RenderWidgetHostTest --------------------------------------------------------
@@ -476,9 +511,6 @@ class RenderWidgetHostTest : public testing::Test {
             new NoTransportImageTransportFactory));
 #endif
 #if defined(OS_ANDROID)
-    ContextProviderFactoryImpl::Initialize(&gpu_channel_factory_);
-    ui::ContextProviderFactory::SetInstance(
-        ContextProviderFactoryImpl::GetInstance());
     ui::SetScreenAndroid();  // calls display::Screen::SetScreenInstance().
 #endif
 #if defined(USE_AURA)
@@ -511,8 +543,6 @@ class RenderWidgetHostTest : public testing::Test {
 #endif
 #if defined(OS_ANDROID)
     display::Screen::SetScreenInstance(nullptr);
-    ui::ContextProviderFactory::SetInstance(nullptr);
-    ContextProviderFactoryImpl::Terminate();
 #endif
 
     // Process all pending tasks to avoid leaks.
@@ -663,10 +693,6 @@ class RenderWidgetHostTest : public testing::Test {
   double last_simulated_event_time_seconds_;
   double simulated_event_time_delta_seconds_;
 
-#if defined(OS_ANDROID)
-  MockGpuChannelEstablishFactory gpu_channel_factory_;
-#endif
-
  private:
   SyntheticWebTouchEvent touch_event_;
 
@@ -814,7 +840,7 @@ TEST_F(RenderWidgetHostTest, ResizeScreenInfo) {
   screen_info.orientation_angle = 0;
   screen_info.orientation_type = SCREEN_ORIENTATION_VALUES_PORTRAIT_PRIMARY;
 
-  auto host_delegate =
+  auto* host_delegate =
       static_cast<MockRenderWidgetHostDelegate*>(host_->delegate());
 
   host_delegate->SetScreenInfo(screen_info);
@@ -1253,7 +1279,7 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
       base::TimeDelta::FromMicroseconds(10));
 
   // Test immediate start and stop, ensuring that the timeout doesn't fire.
-  host_->StartNewContentRenderingTimeout();
+  host_->StartNewContentRenderingTimeout(0);
   host_->OnFirstPaintAfterLoad();
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -1265,7 +1291,7 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   // Test that the timer doesn't fire if it receives a stop before
   // a start.
   host_->OnFirstPaintAfterLoad();
-  host_->StartNewContentRenderingTimeout();
+  host_->StartNewContentRenderingTimeout(0);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(20));
@@ -1274,12 +1300,45 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   EXPECT_FALSE(host_->new_content_rendering_timeout_fired());
 
   // Test with a long delay to ensure that it does fire this time.
-  host_->StartNewContentRenderingTimeout();
+  host_->StartNewContentRenderingTimeout(0);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(20));
   base::RunLoop().Run();
   EXPECT_TRUE(host_->new_content_rendering_timeout_fired());
+}
+
+// This tests that a compositor frame received with a stale content source ID
+// in its metadata is properly discarded.
+TEST_F(RenderWidgetHostTest, SwapCompositorFrameWithBadSourceId) {
+  host_->StartNewContentRenderingTimeout(100);
+  host_->OnFirstPaintAfterLoad();
+
+  // First swap a frame with an invalid ID.
+  cc::CompositorFrame frame;
+  frame.metadata.content_source_id = 99;
+  host_->OnMessageReceived(ViewHostMsg_SwapCompositorFrame(
+      0, 0, frame, std::vector<IPC::Message>()));
+  EXPECT_FALSE(
+      static_cast<TestView*>(host_->GetView())->did_swap_compositor_frame());
+  static_cast<TestView*>(host_->GetView())->reset_did_swap_compositor_frame();
+
+  // Test with a valid content ID as a control.
+  frame.metadata.content_source_id = 100;
+  host_->OnMessageReceived(ViewHostMsg_SwapCompositorFrame(
+      0, 0, frame, std::vector<IPC::Message>()));
+  EXPECT_TRUE(
+      static_cast<TestView*>(host_->GetView())->did_swap_compositor_frame());
+  static_cast<TestView*>(host_->GetView())->reset_did_swap_compositor_frame();
+
+  // We also accept frames with higher content IDs, to cover the case where
+  // the browser process receives a compositor frame for a new page before
+  // the corresponding DidCommitProvisionalLoad (it's a race).
+  frame.metadata.content_source_id = 101;
+  host_->OnMessageReceived(ViewHostMsg_SwapCompositorFrame(
+      0, 0, frame, std::vector<IPC::Message>()));
+  EXPECT_TRUE(
+      static_cast<TestView*>(host_->GetView())->did_swap_compositor_frame());
 }
 
 TEST_F(RenderWidgetHostTest, TouchEmulator) {
@@ -1461,7 +1520,7 @@ TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Paste);
 TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_PasteAndMatchStyle);
 TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Delete);
 TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_SelectAll);
-TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_Unselect);
+TEST_InputRouterRoutes_NOARGS_FromRFH(InputMsg_CollapseSelection);
 
 #undef TEST_InputRouterRoutes_NOARGS_FromRFH
 
@@ -1603,7 +1662,7 @@ void CheckLatencyInfoComponentInMessage(RenderWidgetHostProcess* process,
   EXPECT_TRUE(InputMsg_HandleInputEvent::Read(message, &params));
 
   const WebInputEvent* event = std::get<0>(params);
-  ui::LatencyInfo latency_info = std::get<1>(params);
+  ui::LatencyInfo latency_info = std::get<2>(params);
 
   EXPECT_TRUE(event->type() == expected_type);
   EXPECT_TRUE(latency_info.FindLatency(
@@ -1704,6 +1763,30 @@ TEST_F(RenderWidgetHostTest, ResizeParams) {
   host_->GetResizeParams(&resize_params);
   EXPECT_EQ(bounds.size(), resize_params.new_size);
   EXPECT_EQ(physical_backing_size, resize_params.physical_backing_size);
+}
+
+// Make sure no dragging occurs after renderer exited. See crbug.com/704832.
+TEST_F(RenderWidgetHostTest, RendererExitedNoDrag) {
+  host_->SetView(new TestView(host_.get()));
+
+  EXPECT_EQ(delegate_->mock_delegate_view()->start_dragging_count(), 0);
+
+  GURL http_url = GURL("http://www.domain.com/index.html");
+  DropData drop_data;
+  drop_data.url = http_url;
+  drop_data.html_base_url = http_url;
+  blink::WebDragOperationsMask drag_operation = blink::WebDragOperationEvery;
+  DragEventSourceInfo event_info;
+  host_->OnStartDragging(drop_data, drag_operation, SkBitmap(), gfx::Vector2d(),
+                         event_info);
+  EXPECT_EQ(delegate_->mock_delegate_view()->start_dragging_count(), 1);
+
+  // Simulate that renderer exited due navigation to the next page.
+  host_->RendererExited(base::TERMINATION_STATUS_NORMAL_TERMINATION, 0);
+  EXPECT_FALSE(host_->GetView());
+  host_->OnStartDragging(drop_data, drag_operation, SkBitmap(), gfx::Vector2d(),
+                         event_info);
+  EXPECT_EQ(delegate_->mock_delegate_view()->start_dragging_count(), 1);
 }
 
 class RenderWidgetHostInitialSizeTest : public RenderWidgetHostTest {

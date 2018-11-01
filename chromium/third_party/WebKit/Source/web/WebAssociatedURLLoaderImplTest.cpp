@@ -30,6 +30,7 @@
 
 #include "public/web/WebAssociatedURLLoader.h"
 
+#include <memory>
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
@@ -41,7 +42,6 @@
 #include "public/platform/WebURLResponse.h"
 #include "public/web/WebAssociatedURLLoaderClient.h"
 #include "public/web/WebAssociatedURLLoaderOptions.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebView.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,7 +49,6 @@
 #include "wtf/PtrUtil.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
-#include <memory>
 
 using blink::URLTestHelpers::toKURL;
 using blink::testing::runPendingTasks;
@@ -68,21 +67,16 @@ class WebAssociatedURLLoaderTest : public ::testing::Test,
         m_didFinishLoading(false),
         m_didFail(false) {
     // Reuse one of the test files from WebFrameTest.
-    m_baseFilePath = testing::blinkRootDir();
-    m_baseFilePath.append("/Source/web/tests/data/");
-    m_frameFilePath = m_baseFilePath;
-    m_frameFilePath.append("iframes_test.html");
+    m_frameFilePath = testing::webTestDataPath("iframes_test.html");
   }
 
   KURL RegisterMockedUrl(const std::string& urlRoot,
                          const WTF::String& filename) {
     WebURLResponse response;
     response.setMIMEType("text/html");
-    WTF::String localPath = m_baseFilePath;
-    localPath.append(filename);
     KURL url = toKURL(urlRoot + filename.utf8().data());
-    Platform::current()->getURLLoaderMockFactory()->registerURL(url, response,
-                                                                localPath);
+    Platform::current()->getURLLoaderMockFactory()->registerURL(
+        url, response, testing::webTestDataPath(filename.utf8().data()));
     return url;
   }
 
@@ -105,8 +99,9 @@ class WebAssociatedURLLoaderTest : public ::testing::Test,
   }
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   void serveRequests() {
@@ -246,7 +241,6 @@ class WebAssociatedURLLoaderTest : public ::testing::Test,
   WebFrame* mainFrame() const { return m_helper.webView()->mainFrame(); }
 
  protected:
-  String m_baseFilePath;
   String m_frameFilePath;
   FrameTestHelpers::WebViewHelper m_helper;
 

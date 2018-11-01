@@ -13,6 +13,7 @@ import org.chromium.chrome.browser.ntp.cards.ActionItem;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus.CategoryStatusEnum;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetricsReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 
@@ -22,7 +23,8 @@ import java.util.List;
 /**
  * Provides access to the snippets to display on the NTP using the C++ ContentSuggestionsService.
  */
-public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsReporter {
+public class SnippetsBridge
+        implements SuggestionsSource, SuggestionsMetricsReporter, DestructionObserver {
     private static final String TAG = "SnippetsBridge";
 
     private long mNativeSnippetsBridge;
@@ -63,7 +65,8 @@ public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsRepo
      * Destroys the native bridge. This object can no longer be used to send native commands, and
      * any observer is nulled out and will stop receiving updates. This object should be discarded.
      */
-    public void destroy() {
+    @Override
+    public void onDestroy() {
         assert mNativeSnippetsBridge != 0;
         nativeDestroy(mNativeSnippetsBridge);
         mNativeSnippetsBridge = 0;
@@ -151,7 +154,8 @@ public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsRepo
         assert mNativeSnippetsBridge != 0;
         nativeOnSuggestionShown(mNativeSnippetsBridge, suggestion.getGlobalRank(),
                 suggestion.mCategory, suggestion.getPerSectionRank(),
-                suggestion.mPublishTimestampMilliseconds, suggestion.mScore);
+                suggestion.mPublishTimestampMilliseconds, suggestion.mScore,
+                suggestion.mFetchTimestampMilliseconds);
     }
 
     @Override
@@ -259,10 +263,10 @@ public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsRepo
     @CalledByNative
     private static SnippetArticle addSuggestion(List<SnippetArticle> suggestions, int category,
             String id, String title, String publisher, String previewText, String url,
-            long timestamp, float score) {
+            long timestamp, float score, long fetchTime) {
         int position = suggestions.size();
         suggestions.add(new SnippetArticle(
-                category, id, title, publisher, previewText, url, timestamp, score));
+                category, id, title, publisher, previewText, url, timestamp, score, fetchTime));
         return suggestions.get(position);
     }
 
@@ -280,16 +284,16 @@ public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsRepo
 
     @CalledByNative
     private static void setRecentTabDataForSuggestion(
-            SnippetArticle suggestion, String tabId, long offlinePageId) {
+            SnippetArticle suggestion, int tabId, long offlinePageId) {
         suggestion.setRecentTabData(tabId, offlinePageId);
     }
 
     @CalledByNative
     private static SuggestionsCategoryInfo createSuggestionsCategoryInfo(int category, String title,
-            int cardLayout, boolean hasMoreAction, boolean hasReloadAction,
-            boolean hasViewAllAction, boolean showIfEmpty, String noSuggestionsMessage) {
-        return new SuggestionsCategoryInfo(category, title, cardLayout, hasMoreAction,
-                hasReloadAction, hasViewAllAction, showIfEmpty, noSuggestionsMessage);
+            int cardLayout, boolean hasFetchAction, boolean hasViewAllAction, boolean showIfEmpty,
+            String noSuggestionsMessage) {
+        return new SuggestionsCategoryInfo(category, title, cardLayout, hasFetchAction,
+                hasViewAllAction, showIfEmpty, noSuggestionsMessage);
     }
 
     @CalledByNative
@@ -340,7 +344,8 @@ public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsRepo
     private native void nativeOnPageShown(
             long nativeNTPSnippetsBridge, int[] categories, int[] suggestionsPerCategory);
     private native void nativeOnSuggestionShown(long nativeNTPSnippetsBridge, int globalPosition,
-            int category, int positionInCategory, long publishTimestampMs, float score);
+            int category, int positionInCategory, long publishTimestampMs, float score,
+            long fetchTimestampMs);
     private native void nativeOnSuggestionOpened(long nativeNTPSnippetsBridge, int globalPosition,
             int category, int categoryIndex, int positionInCategory, long publishTimestampMs,
             float score, int windowOpenDisposition);

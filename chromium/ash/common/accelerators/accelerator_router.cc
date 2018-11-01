@@ -8,6 +8,7 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event.h"
@@ -18,7 +19,6 @@ namespace {
 
 // Returns true if |key_code| is a key usually handled directly by the shell.
 bool IsSystemKey(ui::KeyboardCode key_code) {
-#if defined(OS_CHROMEOS)
   switch (key_code) {
     case ui::VKEY_MEDIA_LAUNCH_APP2:  // Fullscreen button.
     case ui::VKEY_MEDIA_LAUNCH_APP1:  // Overview button.
@@ -34,8 +34,6 @@ bool IsSystemKey(ui::KeyboardCode key_code) {
     default:
       return false;
   }
-#endif  // defined(OS_CHROMEOS)
-  return false;
 }
 
 }  // namespace
@@ -49,6 +47,7 @@ bool AcceleratorRouter::ProcessAccelerator(WmWindow* target,
                                            const ui::Accelerator& accelerator) {
   // Callers should never supply null.
   DCHECK(target);
+  RecordSearchKeyStats(accelerator);
   // Special hardware keys like brightness and volume are handled in
   // special way. However, some windows can override this behavior
   // (e.g. Chrome v1 apps by default and Chrome v2 apps with
@@ -63,6 +62,26 @@ bool AcceleratorRouter::ProcessAccelerator(WmWindow* target,
   if (!ShouldProcessAcceleratorNow(target, key_event, accelerator))
     return false;
   return WmShell::Get()->accelerator_controller()->Process(accelerator);
+}
+
+void AcceleratorRouter::RecordSearchKeyStats(
+    const ui::Accelerator& accelerator) {
+  if (accelerator.IsCmdDown()) {
+    if (search_key_state_ == RELEASED) {
+      search_key_state_ = PRESSED;
+      search_key_pressed_timestamp_ = base::TimeTicks::Now();
+    }
+
+    if (accelerator.key_code() != ui::KeyboardCode::VKEY_COMMAND &&
+        search_key_state_ == PRESSED) {
+      search_key_state_ = RECORDED;
+      UMA_HISTOGRAM_TIMES(
+          "Keyboard.Shortcuts.CrosSearchKeyDelay",
+          base::TimeTicks::Now() - search_key_pressed_timestamp_);
+    }
+  } else {
+    search_key_state_ = RELEASED;
+  }
 }
 
 bool AcceleratorRouter::CanConsumeSystemKeys(WmWindow* target,

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/run_loop.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -48,6 +49,8 @@ class BlobStorageBrowserTest : public ContentBrowserTest {
     content::ChromeBlobStorageContext* blob_context =
         ChromeBlobStorageContext::GetFor(
             shell()->web_contents()->GetBrowserContext());
+    if (!blob_context->context())
+      return nullptr;
     return blob_context->context()->mutable_memory_controller();
   }
 
@@ -55,6 +58,7 @@ class BlobStorageBrowserTest : public ContentBrowserTest {
     // The test page will perform tests on blob storage, then navigate to either
     // a #pass or #fail ref.
     Shell* the_browser = incognito ? CreateOffTheRecordBrowser() : shell();
+    ASSERT_TRUE(the_browser);
 
     VLOG(0) << "Navigating to URL and blocking. " << test_url.spec();
     NavigateToURLBlockUntilNavigationsComplete(the_browser, test_url, 2);
@@ -81,6 +85,7 @@ IN_PROC_BROWSER_TEST_F(BlobStorageBrowserTest, BlobCombinations) {
   SetBlobLimits();
   SimpleTest(GetTestUrl("blob_storage", "blob_creation_and_slicing.html"));
   storage::BlobMemoryController* memory_controller = GetMemoryController();
+  ASSERT_TRUE(memory_controller);
   // Our exact usages depend on IPC message ordering & garbage collection.
   // Since this is basically random, we just check bounds.
   EXPECT_LT(0u, memory_controller->memory_usage());

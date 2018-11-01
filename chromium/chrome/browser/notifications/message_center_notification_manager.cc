@@ -10,17 +10,15 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/api/notification_provider/notification_provider_api.h"
 #include "chrome/browser/notifications/extension_welcome_notification.h"
 #include "chrome/browser/notifications/extension_welcome_notification_factory.h"
 #include "chrome/browser/notifications/fullscreen_notification_blocker.h"
 #include "chrome/browser/notifications/message_center_settings_controller.h"
 #include "chrome/browser/notifications/notification.h"
-#include "chrome/browser/notifications/notification_conversion_helper.h"
 #include "chrome/browser/notifications/profile_notification.h"
 #include "chrome/browser/notifications/screen_lock_notification_blocker.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/extensions/api/notification_provider.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
@@ -34,7 +32,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/notifications/login_state_notification_blocker_chromeos.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #endif
 
 #if defined(USE_ASH)
@@ -85,6 +82,10 @@ MessageCenterNotificationManager::~MessageCenterNotificationManager() {
 
 void MessageCenterNotificationManager::Add(const Notification& notification,
                                            Profile* profile) {
+  // We won't have time to process and act on this notification.
+  if (is_shutdown_started_)
+    return;
+
   if (Update(notification, profile))
     return;
 
@@ -100,19 +101,6 @@ void MessageCenterNotificationManager::Add(const Notification& notification,
   // will not be correctly set for ChromeOS.
   // Takes ownership of profile_notification.
   AddProfileNotification(std::move(profile_notification_ptr));
-
-  // TODO(liyanhou): Change the logic to only send notifications to one party.
-  // Currently, if there is an app with notificationProvider permission,
-  // notifications will go to both message center and the app.
-  // Change it to send notifications to message center only when the user chose
-  // default message center (extension_id.empty()).
-
-  // If there exist apps/extensions that have notificationProvider permission,
-  // route notifications to one of the apps/extensions.
-  std::string extension_id = GetExtensionTakingOverNotifications(profile);
-  if (!extension_id.empty())
-    AddNotificationToAlternateProvider(profile_notification->notification(),
-                                       profile, extension_id);
 
   message_center_->AddNotification(
       base::MakeUnique<message_center::Notification>(
@@ -275,6 +263,11 @@ void MessageCenterNotificationManager::CancelAll() {
       false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
 }
 
+void MessageCenterNotificationManager::StartShutdown() {
+  is_shutdown_started_ = true;
+  CancelAll();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MessageCenter::Observer
 void MessageCenterNotificationManager::OnNotificationRemoved(
@@ -323,23 +316,6 @@ MessageCenterNotificationManager::GetMessageCenterNotificationIdForTest(
 ////////////////////////////////////////////////////////////////////////////////
 // private
 
-void MessageCenterNotificationManager::AddNotificationToAlternateProvider(
-    const Notification& notification,
-    Profile* profile,
-    const std::string& extension_id) const {
-  // Convert data from Notification type to NotificationOptions type.
-  extensions::api::notifications::NotificationOptions options;
-  NotificationConversionHelper::NotificationToNotificationOptions(notification,
-                                                                  &options);
-
-  // Send the notification to the alternate provider extension/app.
-  extensions::NotificationProviderEventRouter event_router(profile);
-  event_router.CreateNotification(extension_id,
-                                  notification.notifier_id().id,
-                                  notification.delegate_id(),
-                                  options);
-}
-
 void MessageCenterNotificationManager::AddProfileNotification(
     std::unique_ptr<ProfileNotification> profile_notification) {
   const Notification& notification = profile_notification->notification();
@@ -355,18 +331,19 @@ void MessageCenterNotificationManager::RemoveProfileNotification(
   if (it == profile_notifications_.end())
     return;
 
-  // Delay destruction of the ProfileNotification until after all the work
-  // removing it from |profile_notifications_| is complete. This must be done
-  // because this ProfileNotification might have the one ScopedKeepAlive object
-  // that was keeping the browser alive, and destroying it would result in a re-
-  // entrant call to this class. Because every method in this class touches
-  // |profile_notifications_|, |profile_notifications_| must always be in a
-  // self-consistent state in moments where re-entrance might happen.
-  // https://crbug.com/649971
-  std::unique_ptr<ProfileNotification> notification = std::move(it->second);
+  // Delay destruction of the ProfileNotification until current task is
+  // completed. This must be done because this ProfileNotification might have
+  // the one ScopedKeepAlive object that was keeping the browser alive, and
+  // destroying it would result in:
+  // a) A reentrant call to this class. Because every method in this class
+  //   touches |profile_notifications_|, |profile_notifications_| must always
+  //   be in a self-consistent state in moments where re-entrance might happen.
+  // b) A crash like https://crbug.com/649971 because it can trigger
+  //    shutdown process while we're still inside the call stack from UI
+  //    framework.
+  content::BrowserThread::DeleteSoon(content::BrowserThread::UI, FROM_HERE,
+                                     it->second.release());
   profile_notifications_.erase(it);
-  // Now that the map modifications are complete, going out of scope will
-  // destroy the notification.
 }
 
 ProfileNotification* MessageCenterNotificationManager::FindProfileNotification(
@@ -376,26 +353,4 @@ ProfileNotification* MessageCenterNotificationManager::FindProfileNotification(
     return nullptr;
 
   return (*iter).second.get();
-}
-
-std::string
-MessageCenterNotificationManager::GetExtensionTakingOverNotifications(
-    Profile* profile) {
-  // TODO(liyanhou): When additional settings in Chrome Settings is implemented,
-  // change choosing the last app with permission to a user selected app.
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(profile);
-  DCHECK(registry);
-  std::string extension_id;
-  for (extensions::ExtensionSet::const_iterator it =
-           registry->enabled_extensions().begin();
-       it != registry->enabled_extensions().end();
-       ++it) {
-    if ((*it->get()).permissions_data()->HasAPIPermission(
-            extensions::APIPermission::ID::kNotificationProvider)) {
-      extension_id = (*it->get()).id();
-      return extension_id;
-    }
-  }
-  return extension_id;
 }

@@ -57,6 +57,11 @@ bool RenderFrameHostDelegate::CheckMediaAccessPermission(
   return false;
 }
 
+std::string RenderFrameHostDelegate::GetDefaultMediaDeviceID(
+    MediaStreamType type) {
+  return std::string();
+}
+
 AccessibilityMode RenderFrameHostDelegate::GetAccessibilityMode() const {
   return AccessibilityModeOff;
 }
@@ -77,11 +82,6 @@ RenderFrameHostDelegate::GetWakeLockServiceContext() {
   return nullptr;
 }
 
-ScreenOrientationProvider*
-RenderFrameHostDelegate::GetScreenOrientationProvider() {
-  return nullptr;
-}
-
 bool RenderFrameHostDelegate::ShouldRouteMessageEvent(
     RenderFrameHost* target_rfh,
     SiteInstance* source_site_instance) const {
@@ -91,6 +91,14 @@ bool RenderFrameHostDelegate::ShouldRouteMessageEvent(
 std::unique_ptr<WebUIImpl>
 RenderFrameHostDelegate::CreateWebUIForRenderFrameHost(const GURL& url) {
   return nullptr;
+}
+
+bool RenderFrameHostDelegate::ShouldAllowRunningInsecureContent(
+    WebContents* web_contents,
+    bool allowed_per_prefs,
+    const url::Origin& origin,
+    const GURL& resource_url) {
+  return false;
 }
 
 }  // namespace content

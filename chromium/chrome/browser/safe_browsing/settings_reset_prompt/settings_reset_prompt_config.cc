@@ -8,13 +8,13 @@
 
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "components/url_formatter/url_fixer.h"
-#include "components/variations/variations_associated_data.h"
 #include "crypto/sha2.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
@@ -23,21 +23,16 @@ namespace safe_browsing {
 
 namespace {
 
-const char kSettingsResetPromptFeatureName[] = "SettingsResetPrompt";
-const char kDomainHashesParamName[] = "domain_hashes";
+constexpr const char kSettingsResetPromptFeatureName[] = "SettingsResetPrompt";
+
+bool IsPromptEnabled() {
+  return base::FeatureList::IsEnabled(kSettingsResetPrompt);
+}
 
 }  // namespace.
 
 const base::Feature kSettingsResetPrompt{kSettingsResetPromptFeatureName,
                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
-// static
-bool SettingsResetPromptConfig::IsPromptEnabled() {
-  // TODO(alito): Add prefs to local state to track when the user was
-  // last prompted and ensure that we only prompt once per reset prompt
-  // wave.
-  return base::FeatureList::IsEnabled(kSettingsResetPrompt);
-}
 
 // static
 std::unique_ptr<SettingsResetPromptConfig> SettingsResetPromptConfig::Create() {
@@ -102,6 +97,18 @@ int SettingsResetPromptConfig::UrlToResetDomainId(const GURL& url) const {
   return -1;
 }
 
+base::TimeDelta SettingsResetPromptConfig::delay_before_prompt() const {
+  return delay_before_prompt_;
+}
+
+int SettingsResetPromptConfig::prompt_wave() const {
+  return prompt_wave_;
+}
+
+base::TimeDelta SettingsResetPromptConfig::time_between_prompts() const {
+  return time_between_prompts_;
+}
+
 // Implements the hash function for SHA256Hash objects. Simply uses the
 // first bytes of the SHA256 hash as its own hash.
 size_t SettingsResetPromptConfig::SHA256HashHasher::operator()(
@@ -123,6 +130,9 @@ enum SettingsResetPromptConfig::ConfigError : int {
   CONFIG_ERROR_BAD_DOMAIN_HASH = 4,
   CONFIG_ERROR_BAD_DOMAIN_ID = 5,
   CONFIG_ERROR_DUPLICATE_DOMAIN_HASH = 6,
+  CONFIG_ERROR_BAD_DELAY_BEFORE_PROMPT_SECONDS_PARAM = 7,
+  CONFIG_ERROR_BAD_PROMPT_WAVE_PARAM = 8,
+  CONFIG_ERROR_BAD_TIME_BETWEEN_PROMPTS_SECONDS_PARAM = 9,
   CONFIG_ERROR_MAX
 };
 
@@ -130,12 +140,53 @@ bool SettingsResetPromptConfig::Init() {
   if (!IsPromptEnabled())
     return false;
 
-  std::string domain_hashes_json = variations::GetVariationParamValueByFeature(
-      kSettingsResetPrompt, kDomainHashesParamName);
+  // Parse the domain_hashes feature parameter.
+  std::string domain_hashes_json = base::GetFieldTrialParamValueByFeature(
+      kSettingsResetPrompt, "domain_hashes");
   ConfigError error = ParseDomainHashes(domain_hashes_json);
-  UMA_HISTOGRAM_ENUMERATION("SettingsResetPrompt.ConfigError", error,
+  if (error != CONFIG_ERROR_OK) {
+    UMA_HISTOGRAM_ENUMERATION("SettingsResetPrompt.ConfigError", error,
+                              CONFIG_ERROR_MAX);
+    return false;
+  }
+
+  // Get the delay_before_prompt feature parameter.
+  int delay_before_prompt_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      kSettingsResetPrompt, "delay_before_prompt_seconds", -1);
+  if (delay_before_prompt_seconds < 0) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "SettingsResetPrompt.ConfigError",
+        CONFIG_ERROR_BAD_DELAY_BEFORE_PROMPT_SECONDS_PARAM, CONFIG_ERROR_MAX);
+    return false;
+  }
+  delay_before_prompt_ =
+      base::TimeDelta::FromSeconds(delay_before_prompt_seconds);
+
+  // Get the prompt_wave feature paramter.
+  prompt_wave_ = base::GetFieldTrialParamByFeatureAsInt(kSettingsResetPrompt,
+                                                        "prompt_wave", 0);
+  if (prompt_wave_ <= 0) {
+    UMA_HISTOGRAM_ENUMERATION("SettingsResetPrompt.ConfigError",
+                              CONFIG_ERROR_BAD_PROMPT_WAVE_PARAM,
+                              CONFIG_ERROR_MAX);
+    return false;
+  }
+
+  // Get the time_between_prompts_seconds feature parameter.
+  int time_between_prompts_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      kSettingsResetPrompt, "time_between_prompts_seconds", -1);
+  if (time_between_prompts_seconds < 0) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "SettingsResetPrompt.ConfigError",
+        CONFIG_ERROR_BAD_TIME_BETWEEN_PROMPTS_SECONDS_PARAM, CONFIG_ERROR_MAX);
+    return false;
+  }
+  time_between_prompts_ =
+      base::TimeDelta::FromSeconds(time_between_prompts_seconds);
+
+  UMA_HISTOGRAM_ENUMERATION("SettingsResetPrompt.ConfigError", CONFIG_ERROR_OK,
                             CONFIG_ERROR_MAX);
-  return error == CONFIG_ERROR_OK;
+  return true;
 }
 
 SettingsResetPromptConfig::ConfigError

@@ -38,14 +38,17 @@ class CONTENT_EXPORT ThrottlingResourceHandler
   ~ThrottlingResourceHandler() override;
 
   // LayeredResourceHandler overrides:
-  bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
-                           ResourceResponse* response,
-                           bool* defer) override;
-  bool OnResponseStarted(ResourceResponse* response,
-                         bool* defer,
-                         bool open_when_done,
-                         bool ask_for_target) override;
-  bool OnWillStart(const GURL& url, bool* defer) override;
+  void OnRequestRedirected(
+      const net::RedirectInfo& redirect_info,
+      ResourceResponse* response,
+      std::unique_ptr<ResourceController> controller) override;
+  void OnResponseStarted(
+      ResourceResponse* response,
+      std::unique_ptr<ResourceController> controller,
+      bool open_when_done,
+      bool ask_for_target) override;
+  void OnWillStart(const GURL& url,
+                   std::unique_ptr<ResourceController> controller) override;
 
   // ResourceThrottle::Delegate implementation:
   void Cancel() override;

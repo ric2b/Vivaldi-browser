@@ -54,6 +54,12 @@ source_set("audio") {
   visibility = [ "//media/*" ]
   sources = [
     "agc_audio_stream.h",
+    "audio_debug_file_writer.cc",
+    "audio_debug_file_writer.h",
+    "audio_debug_recording_helper.cc",
+    "audio_debug_recording_helper.h",
+    "audio_debug_recording_manager.cc",
+    "audio_debug_recording_manager.h",
     "audio_device_description.cc",
     "audio_device_description.h",
     "audio_device_name.cc",
@@ -62,7 +68,6 @@ source_set("audio") {
     "audio_device_thread.h",
     "audio_features.cc",
     "audio_features.h",
-    "audio_file_writer.h",
     "audio_input_controller.cc",
     "audio_input_controller.h",
     "audio_input_device.cc",
@@ -93,8 +98,10 @@ source_set("audio") {
     "audio_power_monitor.cc",
     "audio_power_monitor.h",
     "audio_source_diverter.h",
-    "audio_streams_tracker.cc",
-    "audio_streams_tracker.h",
+    "audio_system.cc",
+    "audio_system.h",
+    "audio_system_impl.cc",
+    "audio_system_impl.h",
     "clockless_audio_sink.cc",
     "clockless_audio_sink.h",
     "fake_audio_input_stream.cc",
@@ -177,8 +184,6 @@ source_set("audio") {
       "win/core_audio_util_win.h",
       "win/device_enumeration_win.cc",
       "win/device_enumeration_win.h",
-      "win/wavein_input_win.cc",
-      "win/wavein_input_win.h",
       "win/waveout_output_win.cc",
       "win/waveout_output_win.h",
     ]
@@ -302,6 +307,9 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "audio_debug_file_writer_unittest.cc",
+    "audio_debug_recording_helper_unittest.cc",
+    "audio_debug_recording_manager_unittest.cc",
     "audio_input_controller_unittest.cc",
     "audio_input_device_unittest.cc",
     "audio_input_unittest.cc",
@@ -310,7 +318,7 @@ source_set("unit_tests") {
     "audio_output_device_unittest.cc",
     "audio_output_proxy_unittest.cc",
     "audio_power_monitor_unittest.cc",
-    "audio_streams_tracker_unittest.cc",
+    "audio_system_impl_unittest.cc",
     "fake_audio_worker_unittest.cc",
     "simple_sources_unittest.cc",
     "virtual_audio_input_stream_unittest.cc",

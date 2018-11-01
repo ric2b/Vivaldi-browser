@@ -5,15 +5,17 @@
 #ifndef WebRemoteFrame_h
 #define WebRemoteFrame_h
 
+#include "public/platform/WebContentSecurityPolicy.h"
 #include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
-#include "public/web/WebContentSecurityPolicy.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebSandboxFlags.h"
 
 namespace blink {
 
 enum class WebTreeScopeType;
+class InterfaceProvider;
+class InterfaceRegistry;
 class WebFrameClient;
 class WebLayer;
 class WebRemoteFrameClient;
@@ -35,6 +37,8 @@ class WebRemoteFrame : public WebFrame {
                                           const WebString& uniqueName,
                                           WebSandboxFlags,
                                           WebFrameClient*,
+                                          blink::InterfaceProvider*,
+                                          blink::InterfaceRegistry*,
                                           WebFrame* previousSibling,
                                           const WebFrameOwnerProperties&,
                                           WebFrame* opener) = 0;
@@ -60,7 +64,7 @@ class WebRemoteFrame : public WebFrame {
                                  const WebString& uniqueName) const = 0;
 
   virtual void setReplicatedFeaturePolicyHeader(
-      const WebParsedFeaturePolicy& parsedHeader) const = 0;
+      const WebParsedFeaturePolicyHeader& parsedHeader) const = 0;
 
   // Adds |header| to the set of replicated CSP headers.
   virtual void addReplicatedContentSecurityPolicyHeader(

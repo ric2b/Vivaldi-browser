@@ -57,7 +57,13 @@ bool CSPSource::hostMatches(const String& host) const {
 
   bool equalHosts = m_host == host;
   if (m_hostWildcard == HasWildcard) {
-    match = host.endsWith(String("." + m_host), TextCaseUnicodeInsensitive);
+    if (m_host.isEmpty()) {
+      // host-part = "*"
+      match = true;
+    } else {
+      // host-part = "*." 1*host-char *( "." 1*host-char )
+      match = host.endsWith(String("." + m_host), TextCaseUnicodeInsensitive);
+    }
 
     // Chrome used to, incorrectly, match *.x.y to x.y. This was fixed, but
     // the following count measures when a match fails that would have
@@ -67,6 +73,7 @@ bool CSPSource::hostMatches(const String& host) const {
       UseCounter::count(*document,
                         UseCounter::CSPSourceWildcardWouldMatchExactHost);
   } else {
+    // host-part = 1*host-char *( "." 1*host-char )
     match = equalHosts;
   }
 
@@ -173,7 +180,7 @@ CSPSource* CSPSource::intersect(CSPSource* other) const {
 }
 
 bool CSPSource::isSchemeOnly() const {
-  return m_host.isEmpty();
+  return m_host.isEmpty() && (m_hostWildcard == NoWildcard);
 }
 
 bool CSPSource::firstSubsumesSecond(
@@ -196,6 +203,20 @@ bool CSPSource::firstSubsumesSecond(
       return false;
   }
   return true;
+}
+
+WebContentSecurityPolicySourceExpression
+CSPSource::exposeForNavigationalChecks() const {
+  WebContentSecurityPolicySourceExpression sourceExpression;
+  sourceExpression.scheme = m_scheme;
+  sourceExpression.host = m_host;
+  sourceExpression.isHostWildcard =
+      static_cast<WebWildcardDisposition>(m_hostWildcard);
+  sourceExpression.port = m_port;
+  sourceExpression.isPortWildcard =
+      static_cast<WebWildcardDisposition>(m_portWildcard);
+  sourceExpression.path = m_path;
+  return sourceExpression;
 }
 
 DEFINE_TRACE(CSPSource) {

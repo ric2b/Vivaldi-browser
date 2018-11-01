@@ -85,8 +85,8 @@ VolumeManagerImpl.prototype.addVolumeMetadata_ = function(volumeMetadata) {
         // error, since users can do nothing in this situation.
         // We show Removable and Provided volumes regardless of mount error so
         // that users can unmount or format the volume.
-        // TODO(fukino): Once Files.app get ready, show erroneous Drive volume
-        // so that users can see auth warning banner on the volume.
+        // TODO(fukino): Once the Files app gets ready, show erroneous Drive
+        // volume so that users can see auth warning banner on the volume.
         // crbug.com/517772.
         var shouldShow = true;
         switch (volumeInfo.volumeType) {
@@ -181,6 +181,14 @@ VolumeManagerImpl.prototype.onMountCompleted_ = function(event) {
                 this.finishRequest_(requestKey, event.status, volumeInfo);
                 callback();
               }.bind(this));
+        } else if (event.status ===
+            VolumeManagerCommon.VolumeError.ALREADY_MOUNTED) {
+          var navigation_event =
+              new Event(VolumeManagerCommon.VOLUME_ALREADY_MOUNTED);
+          navigation_event.volumeId = event.volumeMetadata.volumeId;
+          this.dispatchEvent(navigation_event);
+          this.finishRequest_(requestKey, event.status, volumeInfo);
+          callback();
         } else {
           console.warn('Failed to mount a volume: ' + event.status);
           this.finishRequest_(requestKey, event.status);

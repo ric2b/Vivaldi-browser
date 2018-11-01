@@ -18,69 +18,70 @@ void SetVivaldiScrollType(int scrollType) {
   Browser* browser = chrome::FindLastActive();
   if (browser) {
     extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
-         ->Get(browser->profile())->ScrollType(scrollType);
+        ->Get(browser->profile())
+        ->ScrollType(scrollType);
   }
 }
 
-void UpdateCommandsForVivaldi(CommandUpdater &command_updater_) {
-  command_updater_.UpdateCommandEnabled(IDC_TASK_MANAGER, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_NEW_TAB, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_NEW_WINDOW, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_IMPORT_DATA, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_PRINT, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_EXIT, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_FIND_IN_PAGE, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_TOGGLE_MENU_POSITION, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_TOGGLE_PANEL, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_TOGGLE_STATUS_BAR, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_BOOKMARKS_PANEL, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_MAIL_PANEL, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CONTACTS_PANEL, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_DOWNLOADS_PANEL, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_SETTINGS, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_SHOW_QUICK_COMMANDS, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_TOGGLE_FULLSCREEN, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_ABOUT, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMUNITY, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_SAVE_AS, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_NOTES_PANEL, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CHECK_FOR_UPDATES, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_TASK_MANAGER, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_DEVELOPER_TOOLS, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_PLUGINS_PAGE, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_TOGGLE_BOOKMARKS_BAR, true);
-  command_updater_.UpdateCommandEnabled(
-        IDC_VIV_PASTE_AS_PLAIN_TEXT_OR_PASTE_AND_GO, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_SHOW_KEYBOARDSHORTCUTS, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_EXTENSIONS_PAGE, true);
-  command_updater_.UpdateCommandEnabled(
-        IDC_VIV_CLEAR_PRIVATE_DATA_PAGE, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_NEW_PRIVATE_WINDOW, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_PASTE_AS_PLAIN_TEXT, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_OPEN_PAGE, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CLOSE_TAB, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_MAIN_ZOOM_IN, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_MAIN_ZOOM_OUT, true);
-  command_updater_.UpdateCommandEnabled(
-        IDC_VIV_COMMAND_MAIN_ZOOM_RESET, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_EXPORT_DATA, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_MANAGE_BOOKMARKS, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_MANAGE_HISTORY, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CLOSE_WINDOW, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_SHOW_HELP, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_ACTIVATE_TAB, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_OPEN_SESSION, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_SAVE_SESSION, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_SHOW_WELCOME, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_FOCUS_ADDRESSFIELD, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_DISK, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_DISK, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD, true);
-  command_updater_.UpdateCommandEnabled(IDC_VIV_HISTORY_PANEL, true);
+void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
+  command_updater_->UpdateCommandEnabled(IDC_TASK_MANAGER, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_NEW_TAB, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_NEW_WINDOW, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_IMPORT_DATA, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_PRINT, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_EXIT, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_FIND_IN_PAGE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_MENU_POSITION, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_STATUS_BAR, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_BOOKMARKS_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CONTACTS_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_DOWNLOADS_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SETTINGS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SHOW_QUICK_COMMANDS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_FULLSCREEN, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_ABOUT, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMUNITY, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SAVE_AS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_NOTES_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CHECK_FOR_UPDATES, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TASK_MANAGER, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_DEVELOPER_TOOLS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_PLUGINS_PAGE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_BOOKMARKS_BAR, true);
+  command_updater_->UpdateCommandEnabled(
+      IDC_VIV_PASTE_AS_PLAIN_TEXT_OR_PASTE_AND_GO, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SHOW_KEYBOARDSHORTCUTS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_EXTENSIONS_PAGE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CLEAR_PRIVATE_DATA_PAGE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_NEW_PRIVATE_WINDOW, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_PASTE_AS_PLAIN_TEXT, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_OPEN_PAGE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CLOSE_TAB, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_MAIN_ZOOM_IN, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_MAIN_ZOOM_OUT, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_MAIN_ZOOM_RESET, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_EXPORT_DATA, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MANAGE_BOOKMARKS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MANAGE_HISTORY, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CLOSE_WINDOW, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SHOW_HELP, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_ACTIVATE_TAB, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_OPEN_SESSION, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_SAVE_SESSION, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_SHOW_WELCOME, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_FOCUS_ADDRESSFIELD, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_DISK, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD,
+                                         true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_DISK, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD,
+                                         true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_HISTORY_PANEL, true);
 }
 
-bool ExecuteVivaldiCommands(Browser *browser, int id) {
+bool ExecuteVivaldiCommands(Browser* browser, int id) {
   switch (id) {
     case IDC_VIV_NEW_TAB:
     case IDC_VIV_NEW_WINDOW:
@@ -135,7 +136,8 @@ bool ExecuteVivaldiCommands(Browser *browser, int id) {
     case IDC_VIV_HISTORY_PANEL:
       // The API is registered with a regular profile.
       extensions::ShowMenuAPI::GetFactoryInstance()
-        ->Get(browser->profile()->GetOriginalProfile())->CommandExecuted(id);
+          ->Get(browser->profile()->GetOriginalProfile())
+          ->CommandExecuted(id);
       break;
 
     default:

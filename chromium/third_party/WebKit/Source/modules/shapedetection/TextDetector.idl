@@ -6,9 +6,8 @@
 
 [
     Constructor,
-    ConstructorCallWith=Document,
     Exposed=(Window,Worker),
     RuntimeEnabled=ShapeDetection,
 ] interface TextDetector {
-    [CallWith=ScriptState] Promise<sequence<DetectedText>> detect(ImageBitmapSource image);
+    [CallWith=ScriptState, Measure] Promise<sequence<DetectedText>> detect(ImageBitmapSource image);
 };

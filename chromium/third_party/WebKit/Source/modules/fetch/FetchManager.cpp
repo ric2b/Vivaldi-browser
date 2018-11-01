@@ -10,7 +10,6 @@
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/Frame.h"
 #include "core/frame/SubresourceIntegrity.h"
@@ -30,6 +29,7 @@
 #include "modules/fetch/Response.h"
 #include "modules/fetch/ResponseInit.h"
 #include "platform/HTTPNames.h"
+#include "platform/loader/fetch/FetchUtils.h"
 #include "platform/network/NetworkUtils.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
@@ -561,9 +561,8 @@ void FetchManager::Loader::loadSucceeded() {
     document()->frame()->page()->chromeClient().ajaxSucceeded(
         document()->frame());
   }
-  InspectorInstrumentation::didFinishFetch(m_executionContext, this,
-                                           m_request->method(),
-                                           m_request->url().getString());
+  probe::didFinishFetch(m_executionContext, this, m_request->method(),
+                        m_request->url().getString());
   notifyFinished();
 }
 
@@ -676,6 +675,7 @@ void FetchManager::Loader::start() {
 }
 
 void FetchManager::Loader::dispose() {
+  probe::detachClientRequest(m_executionContext, this);
   // Prevent notification
   m_fetchManager = nullptr;
   if (m_loader) {
@@ -763,9 +763,9 @@ void FetchManager::Loader::performHTTPFetch(bool corsFlag,
   // referrer string (i.e. String()).
   request.setHTTPReferrer(SecurityPolicy::generateReferrer(
       referrerPolicy, m_request->url(), referrerString));
-  request.setSkipServiceWorker(m_isIsolatedWorld
-                                   ? WebURLRequest::SkipServiceWorker::All
-                                   : WebURLRequest::SkipServiceWorker::None);
+  request.setServiceWorkerMode(m_isIsolatedWorld
+                                   ? WebURLRequest::ServiceWorkerMode::None
+                                   : WebURLRequest::ServiceWorkerMode::All);
 
   // "3. Append `Host`, ..."
   // FIXME: Implement this when the spec is fixed.
@@ -837,12 +837,10 @@ void FetchManager::Loader::performHTTPFetch(bool corsFlag,
           DenyCrossOriginRequests;
       break;
   }
-  InspectorInstrumentation::willStartFetch(m_executionContext, this);
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_loader);
-  m_loader = ThreadableLoader::create(
-      *m_executionContext, this, threadableLoaderOptions, resourceLoaderOptions,
-      ThreadableLoader::ClientSpec::kFetchManager);
+  probe::willStartFetch(m_executionContext, this);
+  m_loader =
+      ThreadableLoader::create(*m_executionContext, this,
+                               threadableLoaderOptions, resourceLoaderOptions);
   m_loader->start(request);
 }
 
@@ -872,10 +870,10 @@ void FetchManager::Loader::performDataFetch() {
           : EnforceContentSecurityPolicy;
   threadableLoaderOptions.crossOriginRequestPolicy = AllowCrossOriginRequests;
 
-  InspectorInstrumentation::willStartFetch(m_executionContext, this);
-  m_loader = ThreadableLoader::create(
-      *m_executionContext, this, threadableLoaderOptions, resourceLoaderOptions,
-      ThreadableLoader::ClientSpec::kFetchManager);
+  probe::willStartFetch(m_executionContext, this);
+  m_loader =
+      ThreadableLoader::create(*m_executionContext, this,
+                               threadableLoaderOptions, resourceLoaderOptions);
   m_loader->start(request);
 }
 
@@ -894,7 +892,7 @@ void FetchManager::Loader::failed(const String& message) {
     m_resolver->reject(
         V8ThrowException::createTypeError(state->isolate(), "Failed to fetch"));
   }
-  InspectorInstrumentation::didFailFetch(m_executionContext, this);
+  probe::didFailFetch(m_executionContext, this);
   notifyFinished();
 }
 
@@ -920,7 +918,7 @@ ScriptPromise FetchManager::fetch(ScriptState* scriptState,
   Loader* loader =
       Loader::create(getExecutionContext(), this, resolver, request,
                      scriptState->world().isIsolatedWorld());
-  m_loaders.add(loader);
+  m_loaders.insert(loader);
   loader->start();
   return promise;
 }
@@ -931,7 +929,7 @@ void FetchManager::contextDestroyed(ExecutionContext*) {
 }
 
 void FetchManager::onLoaderFinished(Loader* loader) {
-  m_loaders.remove(loader);
+  m_loaders.erase(loader);
   loader->dispose();
 }
 

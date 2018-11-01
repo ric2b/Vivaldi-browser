@@ -9,11 +9,14 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "content/child/resource_dispatcher.h"
+#include "content/child/site_isolation_stats_gatherer.h"
 #include "content/common/resource_messages.h"
 #include "content/common/resource_request_completion_status.h"
 #include "content/public/child/request_peer.h"
 
 namespace content {
+
+constexpr uint32_t URLResponseBodyConsumer::kMaxNumConsumedBytesInTask;
 
 class URLResponseBodyConsumer::ReceivedData final
     : public RequestPeer::ReceivedData {
@@ -45,7 +48,7 @@ URLResponseBodyConsumer::URLResponseBodyConsumer(
     : request_id_(request_id),
       resource_dispatcher_(resource_dispatcher),
       handle_(std::move(handle)),
-      handle_watcher_(task_runner),
+      handle_watcher_(FROM_HERE, task_runner),
       task_runner_(task_runner),
       has_seen_end_of_data_(!handle_.is_valid()) {
   handle_watcher_.Start(
@@ -98,6 +101,7 @@ void URLResponseBodyConsumer::OnReadable(MojoResult unused) {
     return;
 
   DCHECK(!is_in_on_readable_);
+  uint32_t num_bytes_consumed = 0;
 
   // Protect |this| as RequestPeer::OnReceivedData may call deref.
   scoped_refptr<URLResponseBodyConsumer> protect(this);
@@ -122,9 +126,33 @@ void URLResponseBodyConsumer::OnReadable(MojoResult unused) {
       NotifyCompletionIfAppropriate();
       return;
     }
+    DCHECK_LE(num_bytes_consumed, kMaxNumConsumedBytesInTask);
+    available =
+        std::min(available, kMaxNumConsumedBytesInTask - num_bytes_consumed);
+    if (available == 0) {
+      // We've already consumed many bytes in this task. Defer the remaining
+      // to the next task.
+      result = mojo::EndReadDataRaw(handle_.get(), 0);
+      DCHECK_EQ(result, MOJO_RESULT_OK);
+      task_runner_->PostTask(FROM_HERE,
+                             base::Bind(&URLResponseBodyConsumer::OnReadable,
+                                        AsWeakPtr(), MOJO_RESULT_OK));
+      return;
+    }
+    num_bytes_consumed += available;
     ResourceDispatcher::PendingRequestInfo* request_info =
         resource_dispatcher_->GetPendingRequestInfo(request_id_);
     DCHECK(request_info);
+
+    // Check whether this response data is compliant with our cross-site
+    // document blocking policy. We only do this for the first chunk of data.
+    if (request_info->site_isolation_metadata.get()) {
+      SiteIsolationStatsGatherer::OnReceivedFirstChunk(
+          request_info->site_isolation_metadata,
+          static_cast<const char*>(buffer), available);
+      request_info->site_isolation_metadata.reset();
+    }
+
     request_info->peer->OnReceivedData(base::MakeUnique<ReceivedData>(
         static_cast<const char*>(buffer), available, this));
   }

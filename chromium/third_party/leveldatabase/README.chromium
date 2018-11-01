@@ -1,7 +1,7 @@
 Name: LevelDB: A Fast Persistent Key-Value Store
 Short Name: leveldb
 URL: https://github.com/google/leveldb.git
-Version: unknown
+Version: 1.20
 License: New BSD
 License File: src/LICENSE
 Security Critical: yes
@@ -25,3 +25,4 @@ Local Additions:
 * TRACE macros/thread name for chrome://tracing diagnostics
 * Handle in-process exclusive file locks, based on src/util/env_posix.cc
 * Unit tests for the Chromium environment.
+* db_bench is built as leveldb_bench in Chromium.

@@ -8,24 +8,21 @@
 // PersistentTabRestoreService::Delegate::CreateEntriesFromCommands
 // Might later be converted to functions, but those will need to update the
 // variables of the caller, which is why a macro was used instead
-#define VIVALDI_SESSION_SERVICE_CASES  \
-  case kCommandSetExtData:            \
-  case kCommandSetWindowExtData:      \
+#define VIVALDI_SESSION_SERVICE_CASES                \
+  case kCommandSetExtData:                           \
+  case kCommandSetWindowExtData:                     \
     if (!VivaldiReadExtdata(command, tabs, windows)) \
-      return true;                    \
+      return true;                                   \
     break;
 
 bool VivaldiReadExtdata(const SessionCommand* command,
                         IdToSessionTab* tabs,
                         IdToSessionWindow* windows) {
-  switch(command->id()) {
+  switch (command->id()) {
     case kCommandSetExtData: {
       SessionID::id_type tab_id;
       std::string ext_data;
-      if (!vivaldi::RestoreSetExtDataCommand(
-              *command,
-              &tab_id,
-              &ext_data)) {
+      if (!vivaldi::RestoreSetExtDataCommand(*command, &tab_id, &ext_data)) {
         return false;
       }
 
@@ -36,7 +33,8 @@ bool VivaldiReadExtdata(const SessionCommand* command,
     case kCommandSetWindowExtData: {
       SessionID::id_type window_id;
       std::string ext_data;
-      if (!vivaldi::RestoreSetWindowExtDataCommand(*command, &window_id, &ext_data))
+      if (!vivaldi::RestoreSetWindowExtDataCommand(*command, &window_id,
+                                                   &ext_data))
         return false;
 
       GetWindow(window_id, windows)->ext_data.swap(ext_data);

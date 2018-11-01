@@ -14,8 +14,9 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/task_runner_util.h"
-#include "base/threading/worker_pool.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "net/base/address_list.h"
 #include "net/base/io_buffer.h"
@@ -24,6 +25,7 @@
 #include "net/base/network_activity_monitor.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/sockaddr_storage.h"
+#include "net/http/http_util.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
@@ -93,12 +95,15 @@ bool SystemSupportsTCPFastOpen() {
                               &system_supports_tcp_fastopen)) {
     return false;
   }
-  // The read from /proc should return '1' if TCP FastOpen is enabled in the OS.
-  if (system_supports_tcp_fastopen.empty() ||
-      (system_supports_tcp_fastopen[0] != '1')) {
-    return false;
-  }
-  return true;
+  // The read value from /proc will be set in its least significant bit if
+  // TCP FastOpen is enabled.
+  int read_int = 0;
+  base::StringToInt(
+      HttpUtil::TrimLWS(base::StringPiece(system_supports_tcp_fastopen)),
+      &read_int);
+  if ((read_int & 0x1) == 1)
+    return true;
+  return false;
 }
 
 void RegisterTCPFastOpenIntentAndSupport(bool user_enabled,
@@ -132,9 +137,9 @@ bool IsTCPFastOpenUserEnabled() {
 // do that on the IO thread.
 void CheckSupportAndMaybeEnableTCPFastOpen(bool user_enabled) {
 #if defined(OS_LINUX) || defined(OS_ANDROID)
-  base::PostTaskAndReplyWithResult(
-      base::WorkerPool::GetTaskRunner(/*task_is_slow=*/false).get(),
-      FROM_HERE,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
+                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
       base::Bind(SystemSupportsTCPFastOpen),
       base::Bind(RegisterTCPFastOpenIntentAndSupport, user_enabled));
 #endif

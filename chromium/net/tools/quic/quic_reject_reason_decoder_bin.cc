@@ -13,12 +13,9 @@
 #include "net/quic/core/crypto/crypto_utils.h"
 
 using base::CommandLine;
-using base::StringToUint;
 using net::HandshakeFailureReason;
 using net::CryptoUtils;
 using net::MAX_FAILURE_REASON;
-using std::cerr;
-using std::cout;
 
 int main(int argc, char* argv[]) {
   CommandLine::Init(argc, argv);
@@ -26,13 +23,13 @@ int main(int argc, char* argv[]) {
   const CommandLine::StringVector& args = line->GetArgs();
 
   if (args.size() != 1) {
-    cerr << "Missing argument (Usage: " << argv[0] << " <packed_reason>\n";
+    std::cerr << "Missing argument (Usage: " << argv[0] << " <packed_reason>\n";
     return 1;
   }
 
   uint32_t packed_error = 0;
-  if (!StringToUint(args[0], &packed_error)) {
-    cerr << "Unable to parse: " << args[0] << "\n";
+  if (!base::StringToUint(args[0], &packed_error)) {
+    std::cerr << "Unable to parse: " << args[0] << "\n";
     return 2;
   }
 
@@ -41,7 +38,7 @@ int main(int argc, char* argv[]) {
       continue;
     }
     HandshakeFailureReason reason = static_cast<HandshakeFailureReason>(i);
-    cout << CryptoUtils::HandshakeFailureReasonToString(reason) << "\n";
+    std::cout << CryptoUtils::HandshakeFailureReasonToString(reason) << "\n";
   }
   return 0;
 }

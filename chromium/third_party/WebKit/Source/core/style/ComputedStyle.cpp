@@ -63,15 +63,18 @@ namespace blink {
 
 struct SameSizeAsBorderValue {
   RGBA32 m_color;
-  unsigned m_width;
+  unsigned m_bitfield;
 };
 
 ASSERT_SIZE(BorderValue, SameSizeAsBorderValue);
 
 // Since different compilers/architectures pack ComputedStyle differently,
 // re-create the same structure for an accurate size comparison.
-struct SameSizeAsComputedStyle : public ComputedStyleBase,
-                                 public RefCounted<ComputedStyle> {
+struct SameSizeAsComputedStyle : public RefCounted<SameSizeAsComputedStyle> {
+  struct ComputedStyleBase {
+    unsigned m_bitfields[3];
+  } m_base;
+
   void* dataRefs[7];
   void* ownPtrs[1];
   void* dataRefSvgStyle;
@@ -81,10 +84,14 @@ struct SameSizeAsComputedStyle : public ComputedStyleBase,
   } m_inheritedData;
 
   struct NonInheritedData {
-    unsigned m_bitfields[3];
+    unsigned m_bitfields[2];
   } m_nonInheritedData;
 };
 
+// If this assert fails, it means that size of ComputedStyle has changed. Please
+// check that you really *do* what to increase the size of ComputedStyle, then
+// update the SameSizeAsComputedStyle struct to match the updated storage of
+// ComputedStyle.
 ASSERT_SIZE(ComputedStyle, SameSizeAsComputedStyle);
 
 PassRefPtr<ComputedStyle> ComputedStyle::create() {
@@ -124,7 +131,8 @@ ALWAYS_INLINE ComputedStyle::ComputedStyle()
       m_rareInheritedData(initialStyle().m_rareInheritedData),
       m_styleInheritedData(initialStyle().m_styleInheritedData),
       m_svgStyle(initialStyle().m_svgStyle) {
-  setBitDefaults();  // Would it be faster to copy this from the default style?
+  initializeBitDefaults();  // Would it be faster to copy this from the default
+                            // style?
   static_assert((sizeof(InheritedData) <= 8), "InheritedData should not grow");
   static_assert((sizeof(NonInheritedData) <= 12),
                 "NonInheritedData should not grow");
@@ -132,7 +140,7 @@ ALWAYS_INLINE ComputedStyle::ComputedStyle()
 
 ALWAYS_INLINE ComputedStyle::ComputedStyle(InitialStyleTag)
     : ComputedStyleBase(), RefCounted<ComputedStyle>() {
-  setBitDefaults();
+  initializeBitDefaults();
 
   m_box.init();
   m_visual.init();
@@ -367,19 +375,9 @@ void ComputedStyle::copyNonInheritedFromCached(const ComputedStyle& other) {
       other.m_nonInheritedData.m_effectiveDisplay;
   m_nonInheritedData.m_originalDisplay =
       other.m_nonInheritedData.m_originalDisplay;
-  m_nonInheritedData.m_overflowAnchor =
-      other.m_nonInheritedData.m_overflowAnchor;
-  m_nonInheritedData.m_overflowX = other.m_nonInheritedData.m_overflowX;
-  m_nonInheritedData.m_overflowY = other.m_nonInheritedData.m_overflowY;
   m_nonInheritedData.m_verticalAlign = other.m_nonInheritedData.m_verticalAlign;
-  m_nonInheritedData.m_clear = other.m_nonInheritedData.m_clear;
-  m_nonInheritedData.m_position = other.m_nonInheritedData.m_position;
-  m_nonInheritedData.m_tableLayout = other.m_nonInheritedData.m_tableLayout;
   m_nonInheritedData.m_hasViewportUnits =
       other.m_nonInheritedData.m_hasViewportUnits;
-  m_nonInheritedData.m_breakBefore = other.m_nonInheritedData.m_breakBefore;
-  m_nonInheritedData.m_breakAfter = other.m_nonInheritedData.m_breakAfter;
-  m_nonInheritedData.m_breakInside = other.m_nonInheritedData.m_breakInside;
   m_nonInheritedData.m_hasRemUnits = other.m_nonInheritedData.m_hasRemUnits;
 
   // Correctly set during selector matching:
@@ -390,11 +388,11 @@ void ComputedStyle::copyNonInheritedFromCached(const ComputedStyle& other) {
   // m_nonInheritedData.m_explicitInheritance
 
   // unique() styles are not cacheable.
-  DCHECK(!other.m_nonInheritedData.m_unique);
+  DCHECK(!other.unique());
 
   // styles with non inherited properties that reference variables are not
   // cacheable.
-  DCHECK(!other.m_nonInheritedData.m_variableReference);
+  DCHECK(!other.hasVariableReferenceFromNonInheritedProperty());
 
   // The following flags are set during matching before we decide that we get a
   // match in the MatchedPropertiesCache which in turn calls this method. The
@@ -549,7 +547,7 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
   if (m_svgStyle.get() != other.m_svgStyle.get())
     diff = m_svgStyle->diff(other.m_svgStyle.get());
 
-  if ((!diff.needsFullLayout() || !diff.needsPaintInvalidation()) &&
+  if ((!diff.needsFullLayout() || !diff.needsFullPaintInvalidation()) &&
       diffNeedsFullLayoutAndPaintInvalidation(other)) {
     diff.setNeedsFullLayout();
     diff.setNeedsPaintInvalidationObject();
@@ -568,7 +566,7 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
       diff.setNeedsFullLayout();
   }
 
-  if (!diff.needsFullLayout() && position() != StaticPosition &&
+  if (!diff.needsFullLayout() && position() != EPosition::kStatic &&
       m_surround->offset != other.m_surround->offset) {
     // Optimize for the case where a positioned layer is moving but not changing
     // size.
@@ -582,6 +580,8 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
     diff.setNeedsPaintInvalidationSubtree();
   else if (diffNeedsPaintInvalidationObject(other))
     diff.setNeedsPaintInvalidationObject();
+  else if (diffNeedsPaintInvalidationSelection(other))
+    diff.setNeedsPaintInvalidationSelection();
 
   updatePropertySpecificDifferences(other, diff);
 
@@ -604,7 +604,7 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
 bool ComputedStyle::scrollAnchorDisablingPropertyChanged(
     const ComputedStyle& other,
     const StyleDifference& diff) const {
-  if (m_nonInheritedData.m_position != other.m_nonInheritedData.m_position)
+  if (position() != other.position())
     return true;
 
   if (m_box.get() != other.m_box.get()) {
@@ -646,6 +646,9 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
         borderTopWidth() != other.borderTopWidth() ||
         borderBottomWidth() != other.borderBottomWidth() ||
         borderRightWidth() != other.borderRightWidth())
+      return true;
+
+    if (m_surround->padding != other.m_surround->padding)
       return true;
   }
 
@@ -815,10 +818,8 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
       getWritingMode() != other.getWritingMode())
     return true;
 
-  if (m_nonInheritedData.m_overflowX != other.m_nonInheritedData.m_overflowX ||
-      m_nonInheritedData.m_overflowY != other.m_nonInheritedData.m_overflowY ||
-      m_nonInheritedData.m_clear != other.m_nonInheritedData.m_clear ||
-      getUnicodeBidi() != other.getUnicodeBidi() ||
+  if (overflowX() != other.overflowX() || overflowY() != other.overflowY() ||
+      clear() != other.clear() || getUnicodeBidi() != other.getUnicodeBidi() ||
       floating() != other.floating() ||
       m_nonInheritedData.m_originalDisplay !=
           other.m_nonInheritedData.m_originalDisplay)
@@ -828,8 +829,7 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
     if (borderCollapse() != other.borderCollapse() ||
         emptyCells() != other.emptyCells() ||
         captionSide() != other.captionSide() ||
-        m_nonInheritedData.m_tableLayout !=
-            other.m_nonInheritedData.m_tableLayout)
+        tableLayout() != other.tableLayout())
       return true;
 
     // In the collapsing border model, 'hidden' suppresses other borders, while
@@ -891,13 +891,8 @@ bool ComputedStyle::diffNeedsFullLayout(const ComputedStyle& other) const {
 
   if (m_nonInheritedData.m_verticalAlign !=
           other.m_nonInheritedData.m_verticalAlign ||
-      m_nonInheritedData.m_position != other.m_nonInheritedData.m_position)
+      position() != other.position())
     return true;
-
-  if (m_surround.get() != other.m_surround.get()) {
-    if (m_surround->padding != other.m_surround->padding)
-      return true;
-  }
 
   if (m_rareNonInheritedData.get() != other.m_rareNonInheritedData.get()) {
     if (m_rareNonInheritedData->m_alignContent !=
@@ -1033,6 +1028,12 @@ bool ComputedStyle::diffNeedsPaintInvalidationObjectForPaintImage(
   return false;
 }
 
+bool ComputedStyle::diffNeedsPaintInvalidationSelection(
+    const ComputedStyle& other) const {
+  return hasPseudoStyle(PseudoIdSelection) ||
+         other.hasPseudoStyle(PseudoIdSelection);
+}
+
 void ComputedStyle::updatePropertySpecificDifferences(
     const ComputedStyle& other,
     StyleDifference& diff) const {
@@ -1076,7 +1077,7 @@ void ComputedStyle::updatePropertySpecificDifferences(
   if (!m_surround->border.visualOverflowEqual(other.m_surround->border))
     diff.setNeedsRecomputeOverflow();
 
-  if (!diff.needsPaintInvalidation()) {
+  if (!diff.needsFullPaintInvalidation()) {
     if (m_styleInheritedData->color != other.m_styleInheritedData->color ||
         m_styleInheritedData->visitedLinkColor !=
             other.m_styleInheritedData->visitedLinkColor ||
@@ -1260,6 +1261,8 @@ bool ComputedStyle::hasWillChangeTransformHint() const {
       case CSSPropertyTranslate:
       case CSSPropertyScale:
       case CSSPropertyRotate:
+      case CSSPropertyOffsetPath:
+      case CSSPropertyOffsetPosition:
         return true;
       default:
         break;
@@ -1500,12 +1503,13 @@ FloatRoundedRect ComputedStyle::getRoundedInnerBorderFor(
   bool horizontal = isHorizontalWritingMode();
 
   int leftWidth =
-      (!horizontal || includeLogicalLeftEdge) ? borderLeftWidth() : 0;
+      (!horizontal || includeLogicalLeftEdge) ? roundf(borderLeftWidth()) : 0;
   int rightWidth =
-      (!horizontal || includeLogicalRightEdge) ? borderRightWidth() : 0;
-  int topWidth = (horizontal || includeLogicalLeftEdge) ? borderTopWidth() : 0;
+      (!horizontal || includeLogicalRightEdge) ? roundf(borderRightWidth()) : 0;
+  int topWidth =
+      (horizontal || includeLogicalLeftEdge) ? roundf(borderTopWidth()) : 0;
   int bottomWidth =
-      (horizontal || includeLogicalRightEdge) ? borderBottomWidth() : 0;
+      (horizontal || includeLogicalRightEdge) ? roundf(borderBottomWidth()) : 0;
 
   return getRoundedInnerBorderFor(
       borderRect,
@@ -1565,7 +1569,7 @@ CounterDirectiveMap& ComputedStyle::accessCounterDirectives() {
 const CounterDirectives ComputedStyle::getCounterDirectives(
     const AtomicString& identifier) const {
   if (const CounterDirectiveMap* directives = counterDirectives())
-    return directives->get(identifier);
+    return directives->at(identifier);
   return CounterDirectives();
 }
 
@@ -1929,6 +1933,20 @@ int ComputedStyle::computedLineHeight() const {
   return std::min(lh.value(), LayoutUnit::max().toFloat());
 }
 
+float ComputedStyle::computedLineHeightInFloat() const {
+  const Length& lh = lineHeight();
+
+  // Negative value means the line height is not set. Use the font's built-in
+  // spacing, if avalible.
+  if (lh.isNegative() && font().primaryFont())
+    return font().primaryFont()->getFontMetrics().floatLineSpacing();
+
+  if (lh.isPercentOrCalc())
+    return floatValueForLength(lh, computedFontSize());
+
+  return std::min(lh.value(), LayoutUnit::max().toFloat());
+}
+
 void ComputedStyle::setWordSpacing(float wordSpacing) {
   FontSelector* currentFontSelector = font().getFontSelector();
   FontDescription desc(getFontDescription());
@@ -2222,7 +2240,7 @@ const BorderValue& ComputedStyle::borderEnd() const {
   return isLeftToRightDirection() ? borderBottom() : borderTop();
 }
 
-int ComputedStyle::borderBeforeWidth() const {
+float ComputedStyle::borderBeforeWidth() const {
   switch (getWritingMode()) {
     case WritingMode::kHorizontalTb:
       return borderTopWidth();
@@ -2235,7 +2253,7 @@ int ComputedStyle::borderBeforeWidth() const {
   return borderTopWidth();
 }
 
-int ComputedStyle::borderAfterWidth() const {
+float ComputedStyle::borderAfterWidth() const {
   switch (getWritingMode()) {
     case WritingMode::kHorizontalTb:
       return borderBottomWidth();
@@ -2248,23 +2266,23 @@ int ComputedStyle::borderAfterWidth() const {
   return borderBottomWidth();
 }
 
-int ComputedStyle::borderStartWidth() const {
+float ComputedStyle::borderStartWidth() const {
   if (isHorizontalWritingMode())
     return isLeftToRightDirection() ? borderLeftWidth() : borderRightWidth();
   return isLeftToRightDirection() ? borderTopWidth() : borderBottomWidth();
 }
 
-int ComputedStyle::borderEndWidth() const {
+float ComputedStyle::borderEndWidth() const {
   if (isHorizontalWritingMode())
     return isLeftToRightDirection() ? borderRightWidth() : borderLeftWidth();
   return isLeftToRightDirection() ? borderBottomWidth() : borderTopWidth();
 }
 
-int ComputedStyle::borderOverWidth() const {
+float ComputedStyle::borderOverWidth() const {
   return isHorizontalWritingMode() ? borderTopWidth() : borderRightWidth();
 }
 
-int ComputedStyle::borderUnderWidth() const {
+float ComputedStyle::borderUnderWidth() const {
   return isHorizontalWritingMode() ? borderBottomWidth() : borderLeftWidth();
 }
 

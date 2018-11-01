@@ -97,6 +97,7 @@ class SearchProvider : public BaseSearchProvider,
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, AnswersCache);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, RemoveExtraAnswers);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoesNotProvideOnFocus);
+  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, SendsWarmUpRequestOnFocus);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, ClearPrefetchedResults);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, SetPrefetchQuery);
 
@@ -155,9 +156,6 @@ class SearchProvider : public BaseSearchProvider,
   static void UpdateOldResults(bool minimal_changes,
                                SearchSuggestionParser::Results* results);
 
-  // Returns the first match in |matches| which might be chosen as default.
-  static ACMatches::iterator FindTopMatch(ACMatches* matches);
-
   // AutocompleteProvider:
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
   void Stop(bool clear_cached_results,
@@ -198,6 +196,15 @@ class SearchProvider : public BaseSearchProvider,
   // if suggested relevances cause undesirable behavior. Updates |done_|.
   void UpdateMatches();
 
+  // Check constraints that may be violated by suggested relevances and revises/
+  // rolls back the suggested relevance scores to make all constraints old.
+  void EnforceConstraints();
+
+  // Record the top suggestion (if any) for future use.  SearchProvider tries
+  // to ensure that an inline autocomplete suggestion does not change
+  // asynchronously.
+  void RecordTopSuggestion();
+
   // Called when |timer_| expires.  Sends the suggest requests.
   // If |query_is_private|, the function doesn't send this query to the default
   // provider.
@@ -226,7 +233,9 @@ class SearchProvider : public BaseSearchProvider,
   bool IsQuerySuitableForSuggest(bool* query_is_private) const;
 
   // Returns true if sending the query to a suggest server may leak sensitive
-  // information (and hence the suggest request shouldn't be sent).
+  // information (and hence the suggest request shouldn't be sent).  In
+  // particular, if the input type might be a URL, we take extra care so that
+  // it isn't sent to the server.
   bool IsQueryPotentionallyPrivate() const;
 
   // Remove existing keyword results if the user is no longer in keyword mode,
@@ -257,10 +266,6 @@ class SearchProvider : public BaseSearchProvider,
   // Remove answer contents from each match in |matches| other than the first
   // that appears.
   static void RemoveExtraAnswers(ACMatches* matches);
-
-  // Returns an iterator to the first match in |matches_| which might
-  // be chosen as default.
-  ACMatches::const_iterator FindTopMatch() const;
 
   // Checks if suggested relevances violate an expected constraint.
   // See UpdateMatches() for the use and explanation of this constraint

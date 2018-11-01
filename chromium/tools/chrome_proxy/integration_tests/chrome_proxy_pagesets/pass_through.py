@@ -20,10 +20,10 @@ class PassThroughPage(page_module.Page):
     action_runner.ExecuteJavaScript('''
         (function() {
           var request = new XMLHttpRequest();
-          request.open("GET", "%s");
+          request.open("GET", {{ url }});
           request.setRequestHeader("Chrome-Proxy-Accept-Transform", "identity");
           request.send(null);
-        })();''' % (self.url))
+        })();''', url=self.url)
     action_runner.Wait(1)
 
 

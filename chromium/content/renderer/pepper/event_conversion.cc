@@ -23,7 +23,9 @@
 #include "ppapi/shared_impl/ppb_input_event_shared.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 using ppapi::InputEventData;
@@ -504,7 +506,7 @@ WebMouseWheelEvent* BuildMouseWheelEvent(const InputEventData& event) {
 #endif
 
 // Convert a character string to a Windows virtual key code. Adapted from
-// src/components/test_runner/event_sender.cc. This
+// src/content/shell/test_runner/event_sender.cc. This
 // is used by CreateSimulatedWebInputEvents to convert keyboard events.
 void GetKeyCode(const std::string& char_text,
                 WebUChar* code,
@@ -649,7 +651,7 @@ WebInputEvent* CreateWebInputEvent(const InputEventData& event) {
 }
 
 // Generate a coherent sequence of input events to simulate a user event.
-// From src/components/test_runner/event_sender.cc.
+// From src/content/shell/test_runner/event_sender.cc.
 std::vector<std::unique_ptr<WebInputEvent>> CreateSimulatedWebInputEvents(
     const ppapi::InputEventData& event,
     int plugin_x,

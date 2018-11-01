@@ -166,7 +166,7 @@ class MockServerConnection : public MockQuicConnection {
 class QuicDispatcherTest : public ::testing::Test {
  public:
   QuicDispatcherTest()
-      : QuicDispatcherTest(CryptoTestUtils::ProofSourceForTesting()) {}
+      : QuicDispatcherTest(crypto_test_utils::ProofSourceForTesting()) {}
 
   explicit QuicDispatcherTest(std::unique_ptr<ProofSource> proof_source)
       : helper_(&eps_, QuicAllocator::BUFFER_POOL),
@@ -533,12 +533,12 @@ TEST_F(QuicDispatcherTest, TooBigSeqNoPacketToTimeWaitListManager) {
 }
 
 TEST_F(QuicDispatcherTest, SupportedVersionsChangeInFlight) {
-  static_assert(arraysize(kSupportedQuicVersions) == 4u,
+  static_assert(arraysize(kSupportedQuicVersions) == 5u,
                 "Supported versions out of sync");
-  FLAGS_quic_reloadable_flag_quic_fix_version_manager = true;
   FLAGS_quic_reloadable_flag_quic_disable_version_34 = false;
   FLAGS_quic_reloadable_flag_quic_enable_version_36_v3 = true;
   FLAGS_quic_reloadable_flag_quic_enable_version_37 = true;
+  FLAGS_quic_enable_version_38 = true;
   QuicSocketAddress client_address(QuicIpAddress::Loopback4(), 1);
   server_address_ = QuicSocketAddress(QuicIpAddress::Any4(), 5);
   QuicConnectionId connection_id = 1;
@@ -818,17 +818,13 @@ TEST_P(QuicDispatcherStatelessRejectTest, CheapRejects) {
   QUIC_LOG(INFO) << "ExpectStatelessReject: " << ExpectStatelessReject();
   QUIC_LOG(INFO) << "Params: " << GetParam();
   // Process the first packet for the connection.
-  // clang-format off
-  CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
-      "CHLO",
-      "AEAD", "AESG",
-      "KEXS", "C255",
-      "COPT", "SREJ",
-      "NONC", "1234567890123456789012",
-      "VER\0", "Q025",
-      "$padding", static_cast<int>(kClientHelloMinimumSize),
-      nullptr);
-  // clang-format on
+  CryptoHandshakeMessage client_hello =
+      crypto_test_utils::CreateCHLO({{"AEAD", "AESG"},
+                                     {"KEXS", "C255"},
+                                     {"COPT", "SREJ"},
+                                     {"NONC", "1234567890123456789012"},
+                                     {"VER\0", "Q025"}},
+                                    kClientHelloMinimumSize);
 
   ProcessPacket(client_address, connection_id, true, false,
                 client_hello.GetSerialized().AsStringPiece().as_string());
@@ -850,16 +846,12 @@ TEST_P(QuicDispatcherStatelessRejectTest, BufferNonChlo) {
                   "NOT DATA FOR A CHLO");
 
   // Process the first packet for the connection.
-  // clang-format off
-  CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
-      "CHLO",
-      "AEAD", "AESG",
-      "KEXS", "C255",
-      "NONC", "1234567890123456789012",
-      "VER\0", "Q025",
-      "$padding", static_cast<int>(kClientHelloMinimumSize),
-      nullptr);
-  // clang-format on
+    CryptoHandshakeMessage client_hello =
+        crypto_test_utils::CreateCHLO({{"AEAD", "AESG"},
+                                       {"KEXS", "C255"},
+                                       {"NONC", "1234567890123456789012"},
+                                       {"VER\0", "Q025"}},
+                                      kClientHelloMinimumSize);
 
     // If stateless rejects are enabled then a connection will be created now
     // and the buffered packet will be processed
@@ -1169,11 +1161,12 @@ class BufferedPacketStoreTest
     clock_ = QuicDispatcherPeer::GetHelper(dispatcher_.get())->GetClock();
 
     QuicVersion version = AllSupportedVersions().front();
-    CryptoHandshakeMessage chlo = CryptoTestUtils::GenerateDefaultInchoateCHLO(
-        clock_, version, &crypto_config_);
+    CryptoHandshakeMessage chlo =
+        crypto_test_utils::GenerateDefaultInchoateCHLO(clock_, version,
+                                                       &crypto_config_);
     chlo.SetVector(net::kCOPT, net::QuicTagVector{net::kSREJ});
     // Pass an inchoate CHLO.
-    CryptoTestUtils::GenerateFullCHLO(
+    crypto_test_utils::GenerateFullCHLO(
         chlo, &crypto_config_, server_addr_, client_addr_, version, clock_,
         signed_config_, QuicDispatcherPeer::GetCache(dispatcher_.get()),
         &full_chlo_);
@@ -1609,7 +1602,6 @@ class AsyncGetProofTest : public QuicDispatcherTest {
         client_addr_(QuicIpAddress::Loopback4(), 1234),
         crypto_config_peer_(&crypto_config_),
         signed_config_(new QuicSignedServerConfig) {
-    FLAGS_quic_reloadable_flag_enable_async_get_proof = true;
     FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
     FLAGS_quic_reloadable_flag_quic_use_cheap_stateless_rejects = true;
     FLAGS_quic_reloadable_flag_quic_create_session_after_insertion = true;
@@ -1620,11 +1612,11 @@ class AsyncGetProofTest : public QuicDispatcherTest {
 
     clock_ = QuicDispatcherPeer::GetHelper(dispatcher_.get())->GetClock();
     QuicVersion version = AllSupportedVersions().front();
-    chlo_ = CryptoTestUtils::GenerateDefaultInchoateCHLO(clock_, version,
-                                                         &crypto_config_);
+    chlo_ = crypto_test_utils::GenerateDefaultInchoateCHLO(clock_, version,
+                                                           &crypto_config_);
     chlo_.SetVector(net::kCOPT, net::QuicTagVector{net::kSREJ});
     // Pass an inchoate CHLO.
-    CryptoTestUtils::GenerateFullCHLO(
+    crypto_test_utils::GenerateFullCHLO(
         chlo_, &crypto_config_, server_addr_, client_addr_, version, clock_,
         signed_config_, QuicDispatcherPeer::GetCache(dispatcher_.get()),
         &full_chlo_);

@@ -52,7 +52,7 @@ class CORE_EXPORT MediaQueryList final
  public:
   static MediaQueryList* create(ExecutionContext*,
                                 MediaQueryMatcher*,
-                                MediaQuerySet*);
+                                RefPtr<MediaQuerySet>);
   ~MediaQueryList() override;
 
   String media() const;
@@ -86,12 +86,12 @@ class CORE_EXPORT MediaQueryList final
   ExecutionContext* getExecutionContext() const override;
 
  private:
-  MediaQueryList(ExecutionContext*, MediaQueryMatcher*, MediaQuerySet*);
+  MediaQueryList(ExecutionContext*, MediaQueryMatcher*, RefPtr<MediaQuerySet>);
 
   bool updateMatches();
 
   Member<MediaQueryMatcher> m_matcher;
-  Member<MediaQuerySet> m_media;
+  RefPtr<MediaQuerySet> m_media;
   using ListenerList = HeapListHashSet<Member<MediaQueryListListener>>;
   ListenerList m_listeners;
   bool m_matchesDirty;

@@ -5,6 +5,7 @@
 #ifndef ASH_COMMON_SYSTEM_CHROMEOS_IME_MENU_IME_LIST_VIEW_H_
 #define ASH_COMMON_SYSTEM_CHROMEOS_IME_MENU_IME_LIST_VIEW_H_
 
+#include "ash/ash_export.h"
 #include "ash/common/system/tray/ime_info.h"
 #include "ash/common/system/tray/tray_details_view.h"
 #include "ui/views/controls/button/button.h"
@@ -22,11 +23,12 @@ class ImeListView : public TrayDetailsView {
     HIDE_SINGLE_IME
   };
 
-  ImeListView(SystemTrayItem* owner,
-              bool show_keyboard_toggle,
-              SingleImeBehavior single_ime_behavior);
+  ImeListView(SystemTrayItem* owner);
 
   ~ImeListView() override;
+
+  // Initializes the contents of a newly-instantiated ImeListView.
+  void Init(bool show_keyboard_toggle, SingleImeBehavior single_ime_behavior);
 
   // Updates the view.
   virtual void Update(const IMEInfoList& list,
@@ -59,9 +61,11 @@ class ImeListView : public TrayDetailsView {
   void HandleButtonPressed(views::Button* sender,
                            const ui::Event& event) override;
 
+  // views::View:
+  void VisibilityChanged(View* starting_from, bool is_visible) override;
+
  private:
-  // To allow the test class to access |ime_map_|.
-  friend class ImeMenuTrayTest;
+  friend class ImeListViewTestApi;
 
   // Appends the IMEs to the scrollable area of the detailed view.
   void AppendIMEList(const IMEInfoList& list);
@@ -103,7 +107,27 @@ class ImeListView : public TrayDetailsView {
   // order to trigger spoken feedback with ChromeVox enabled.
   bool should_focus_ime_after_selection_with_keyboard_;
 
+  // The item view of the current selected IME.
+  views::View* current_ime_view_;
+
   DISALLOW_COPY_AND_ASSIGN(ImeListView);
+};
+
+class ASH_EXPORT ImeListViewTestApi {
+ public:
+  explicit ImeListViewTestApi(ImeListView* ime_list_view);
+  virtual ~ImeListViewTestApi();
+
+  views::View* GetToggleView() const;
+
+  const std::map<views::View*, std::string>& ime_map() const {
+    return ime_list_view_->ime_map_;
+  }
+
+ private:
+  ImeListView* ime_list_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(ImeListViewTestApi);
 };
 
 }  // namespace ash

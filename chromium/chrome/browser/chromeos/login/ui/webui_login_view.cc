@@ -27,7 +27,6 @@
 #include "chrome/browser/chromeos/login/ui/web_contents_set_background_color.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
@@ -42,7 +41,6 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -180,7 +178,7 @@ WebUILoginView::~WebUILoginView() {
   for (auto& observer : observer_list_)
     observer.OnHostDestroying();
 
-  if (!chrome::IsRunningInMash() &&
+  if (!ash_util::IsRunningInMash() &&
       ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
     ash::Shell::GetInstance()->GetPrimarySystemTray()->SetNextFocusableView(
         nullptr);
@@ -325,7 +323,7 @@ void WebUILoginView::LoadURL(const GURL& url) {
   web_view()->RequestFocus();
 
   // There is no Shell instance while running in mash.
-  if (chrome::IsRunningInMash())
+  if (ash_util::IsRunningInMash())
     return;
 }
 
@@ -461,7 +459,7 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
 
   // Focus is accepted, but the Ash system tray is not available in Mash, so
   // exit early.
-  if (chrome::IsRunningInMash())
+  if (ash_util::IsRunningInMash())
     return true;
 
   ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
@@ -478,46 +476,10 @@ void WebUILoginView::RequestMediaAccessPermission(
     WebContents* web_contents,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
-  MediaStreamDevicesController controller(web_contents, request, callback);
-  if (!controller.IsAskingForAudio() && !controller.IsAskingForVideo())
-    return;
-
-  if (controller.IsAskingForAudio()) {
-    controller.PermissionDenied();
-    return;
-  }
-
-  const CrosSettings* const settings = CrosSettings::Get();
-  if (!settings) {
-    controller.PermissionDenied();
-    return;
-  }
-
-  const base::Value* const raw_list_value =
-      settings->GetPref(kLoginVideoCaptureAllowedUrls);
-  if (!raw_list_value) {
-    controller.PermissionDenied();
-    return;
-  }
-
-  const base::ListValue* list_value;
-  CHECK(raw_list_value->GetAsList(&list_value));
-  for (const auto& base_value : *list_value) {
-    std::string value;
-    if (base_value->GetAsString(&value)) {
-      ContentSettingsPattern pattern =
-          ContentSettingsPattern::FromString(value);
-      if (pattern == ContentSettingsPattern::Wildcard()) {
-        LOG(WARNING) << "Ignoring wildcard URL pattern: " << value;
-        continue;
-      }
-      if (pattern.IsValid() && pattern.Matches(request.security_origin)) {
-        controller.PermissionGranted();
-        return;
-      }
-    }
-  }
-  controller.PermissionDenied();
+  // Note: This is needed for taking photos when selecting new user images
+  // and SAML logins. Must work for all user types (including supervised).
+  MediaStreamDevicesController::RequestPermissions(web_contents, request,
+                                                   callback);
 }
 
 bool WebUILoginView::CheckMediaAccessPermission(

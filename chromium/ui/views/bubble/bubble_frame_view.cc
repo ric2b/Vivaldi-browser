@@ -20,17 +20,18 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/bubble/bubble_border.h"
-#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/vector_icon_button.h"
 #include "ui/views/controls/image_view.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/resources/grit/views_resources.h"
+#include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/client_view.h"
@@ -44,14 +45,6 @@ const SkColor kFootnoteBackgroundColor = SkColorSetRGB(245, 245, 245);
 
 // Color of the top border of the footnote.
 const SkColor kFootnoteBorderColor = SkColorSetRGB(229, 229, 229);
-
-constexpr int kClosePaddingRight = 7;
-constexpr int kClosePaddingTop = 6;
-
-// The MD spec states that the center of the "x" should be 16x16 from the top
-// right of the dialog.
-constexpr int kClosePaddingRightMd = 4;
-constexpr int kClosePaddingTopMd = 5;
 
 // Get the |vertical| or horizontal amount that |available_bounds| overflows
 // |window_bounds|.
@@ -116,26 +109,25 @@ BubbleFrameView::~BubbleFrameView() {}
 
 // static
 Button* BubbleFrameView::CreateCloseButton(VectorIconButtonDelegate* delegate) {
-  Button* close_button = nullptr;
+  ImageButton* close_button = nullptr;
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     VectorIconButton* close = new VectorIconButton(delegate);
-    close->SetIcon(gfx::VectorIconId::BAR_CLOSE);
-    close->SetSize(close->GetPreferredSize());
+    close->SetIcon(ui::kCloseIcon);
     close_button = close;
   } else {
-    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    LabelButton* close = new LabelButton(delegate, base::string16());
-    close->SetImage(CustomButton::STATE_NORMAL,
-                    *rb.GetImageNamed(IDR_CLOSE_DIALOG).ToImageSkia());
-    close->SetImage(CustomButton::STATE_HOVERED,
-                    *rb.GetImageNamed(IDR_CLOSE_DIALOG_H).ToImageSkia());
-    close->SetImage(CustomButton::STATE_PRESSED,
-                    *rb.GetImageNamed(IDR_CLOSE_DIALOG_P).ToImageSkia());
-    close->SetBorder(nullptr);
-    close->SetSize(close->GetPreferredSize());
-    close_button = close;
+    ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
+    close_button = new ImageButton(delegate);
+    close_button->SetImage(CustomButton::STATE_NORMAL,
+                           *rb->GetImageNamed(IDR_CLOSE_DIALOG).ToImageSkia());
+    close_button->SetImage(
+        CustomButton::STATE_HOVERED,
+        *rb->GetImageNamed(IDR_CLOSE_DIALOG_H).ToImageSkia());
+    close_button->SetImage(
+        CustomButton::STATE_PRESSED,
+        *rb->GetImageNamed(IDR_CLOSE_DIALOG_P).ToImageSkia());
   }
   close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
+  close_button->SizeToPreferredSize();
   return close_button;
 }
 
@@ -267,7 +259,8 @@ gfx::Insets BubbleFrameView::GetInsets() const {
   const int title_height = std::max(icon_height, label_height) + title_padding;
   const int close_height =
       GetWidget()->widget_delegate()->ShouldShowCloseButton()
-          ? close_->height()
+          ? close_->height() +
+                ViewsDelegate::GetInstance()->GetDialogCloseButtonMargin()
           : 0;
   insets += gfx::Insets(std::max(title_height, close_height), 0, 0, 0);
   return insets;
@@ -315,21 +308,18 @@ void BubbleFrameView::Layout() {
   // there's no title.
   DCHECK(!title_margins_.IsEmpty() || !title_->visible());
 
-  gfx::Rect bounds(GetContentsBounds());
+  const gfx::Rect contents_bounds = GetContentsBounds();
+  gfx::Rect bounds = contents_bounds;
   bounds.Inset(title_margins_);
   if (bounds.IsEmpty())
     return;
 
   // The close button is positioned somewhat closer to the edge of the bubble.
-  gfx::Point close_position = GetContentsBounds().top_right();
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    close_position += gfx::Vector2d(-close_->width() - kClosePaddingRightMd,
-                                    kClosePaddingTopMd);
-  } else {
-    close_position +=
-        gfx::Vector2d(-close_->width() - kClosePaddingRight, kClosePaddingTop);
-  }
-  close_->SetPosition(close_position);
+  const int close_margin =
+      ViewsDelegate::GetInstance()->GetDialogCloseButtonMargin();
+  close_->SetPosition(
+      gfx::Point(contents_bounds.right() - close_margin - close_->width(),
+                 contents_bounds.y() + close_margin));
 
   gfx::Size title_icon_pref_size(title_icon_->GetPreferredSize());
   int padding = 0;
@@ -353,11 +343,10 @@ void BubbleFrameView::Layout() {
   bounds.set_height(title_height);
 
   if (footnote_container_) {
-    gfx::Rect local_bounds = GetContentsBounds();
-    int height = footnote_container_->GetHeightForWidth(local_bounds.width());
-    footnote_container_->SetBounds(local_bounds.x(),
-                                   local_bounds.bottom() - height,
-                                   local_bounds.width(), height);
+    const int width = contents_bounds.width();
+    const int height = footnote_container_->GetHeightForWidth(width);
+    footnote_container_->SetBounds(
+        contents_bounds.x(), contents_bounds.bottom() - height, width, height);
   }
 }
 

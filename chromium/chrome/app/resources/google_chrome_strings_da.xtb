@@ -17,6 +17,7 @@
 <translation id="1434626383986940139">Chrome Canary-apps</translation>
 <translation id="1457721931618994305">Opdaterer Google Chrome...</translation>
 <translation id="1469002951682717133">Chrome-applisten</translation>
+<translation id="1475773083554142432">Chrome gemmer denne med <ph name="SAVED_PASSWORD_LINK" /> og husker den, næste gang du skal bruge den.</translation>
 <translation id="1480489203462860648">Prøv det, det er allerede installeret</translation>
 <translation id="1553358976309200471">Opdater Chrome</translation>
 <translation id="1587223624401073077">Google Chrome bruger dit kamera.</translation>
@@ -32,6 +33,7 @@
 <translation id="1759301979429102118">Oplysninger om dine kontaktpersoner kan hjælpe dig med at udfylde formularer hurtigere i Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Få hjælp til at bruge Chrome OS</translation>
+<translation id="1795405610103747296">Installer Chrome på din telefon. Vi sender en sms til din telefon: <ph name="PHONE_NUMBER" /></translation>
 <translation id="1818142563254268765">Chrome kunne ikke opdatere sig selv til den nyeste version, så du går glip af nye fantastiske funktioner og sikkerhedsrettelser. Du skal opdatere Chrome.</translation>
 <translation id="1877026089748256423">Chrome er forældet</translation>
 <translation id="2063848847527508675">Chrome OS skal genstartes, før opdateringen kan anvendes.</translation>
@@ -39,6 +41,7 @@
 <translation id="2084710999043359739">Føj til Chrome</translation>
 <translation id="2120620239521071941">Denne handling sletter <ph name="ITEMS_COUNT" /> elementer på denne enhed. Hvis du senere vil hente dine data igen, skal du logge ind på Chrome som <ph name="USER_EMAIL" />.</translation>
 <translation id="2147651015520127414">Chrome bekræftede, at <ph name="ISSUER" /> har udstedt certifikatet for dette website.</translation>
+<translation id="216054706567564023">Installer Chrome på din telefon. Vi sender en sms til telefonnummeret til gendannelse for din konto.</translation>
 <translation id="2246246234298806438">Google Chrome kan ikke vise udskrifter, når den indbyggede PDF-fremviser mangler.</translation>
 <translation id="2252923619938421629">Hjælp med at gøre Google Chrome bedre ved at rapportere de aktuelle indstillinger</translation>
 <translation id="2286950485307333924">Du er nu logget ind i Chrome</translation>
@@ -61,7 +64,6 @@ Hvis du logger ind alligevel, flettes Chrome-oplysninger, som f.eks. bogmærker,
 <translation id="2664962310688259219">Chrome OS open source-licenser</translation>
 <translation id="2665296953892887393">Hjælp med at gøre Google Chrome bedre ved at sende fejlrapporter og <ph name="UMA_LINK" /> til Google</translation>
 <translation id="2689103672227170538">Denne udvidelse har ændret din startside i Chrome.</translation>
-<translation id="2748463065602559597">Du får vist en sikker Google Chrome-side.</translation>
 <translation id="2769762047821873045">Google Chrome er ikke din standardbrowser.</translation>
 <translation id="2770231113462710648">Skift standardbrowser til:</translation>
 <translation id="2799223571221894425">Genstart</translation>
@@ -116,7 +118,6 @@ Gå til din e-mail på <ph name="ACCOUNT_EMAIL" /> for at få yderligere vejledn
 <translation id="4458285410772214805">Du skal logge ud og logge ind igen, for at denne ændring kan træde i kraft.</translation>
 <translation id="4458462641685292929">En anden handling i Google Chrome er i gang. Prøv igen senere.</translation>
 <translation id="4480040274068703980">Chrome OS kunne ikke synkronisere dine data på grund af en fejl under login.</translation>
-<translation id="4519152997629025674">Google Chrome kan bruge <ph name="BEGIN_LINK" />webtjenester<ph name="END_LINK" /> for at forbedre din browseroplevelse. Du kan deaktivere disse tjenester til enhver tid.</translation>
 <translation id="4561051373932531560">Med Google Chrome kan du klikke på et telefonnummer på nettet og ringe op til det via Skype!</translation>
 <translation id="4567424176335768812">Du er logget ind som <ph name="USER_EMAIL_ADDRESS" />. Nu kan du få adgang til dine bogmærker, din historik og andre indstillinger på alle de enheder, hvor du er logget ind.</translation>
 <translation id="4631713731678262610">Skjul i Chrome-menuen</translation>
@@ -139,7 +140,6 @@ Gå til din e-mail på <ph name="ACCOUNT_EMAIL" /> for at få yderligere vejledn
 <translation id="5028489144783860647">Google Chrome kunne ikke synkronisere dine data. Opdater din adgangssætning til synkronisering.</translation>
 <translation id="5037239767309817516">Luk alle vinduer i Google Chrome, og genstart, så denne ændring kan træde i kraft.</translation>
 <translation id="5132929315877954718">Find fantastiske apps, spil, udvidelser og temaer til Google Chrome.</translation>
-<translation id="5148419164691878332">Chrome gemmer denne i <ph name="SAVED_PASSWORDS_LINK" /> og husker den, næste gang du skal bruge den.</translation>
 <translation id="5170938038195470297">Din profil kan ikke bruges, fordi den stammer fra en nyere version af Google Chrome. Nogle funktioner er muligvis ikke tilgængelige. Angiv en anden profilmappe, eller brug en nyere version af Chrome.</translation>
 <translation id="5176234269072261959">Hjælp med at gøre Chrome bedre ved at rapportere de aktuelle indstillinger.</translation>
 <translation id="5193136243808726294">Google Chrome OS kan ikke åbne denne side.</translation>
@@ -244,6 +244,7 @@ Gå til din e-mail på <ph name="ACCOUNT_EMAIL" /> for at få yderligere vejledn
 <translation id="8030318113982266900">Opdaterer din enhed til kanalen <ph name="CHANNEL_NAME" />...</translation>
 <translation id="8032142183999901390">Når du har fjernet din konto fra Chrome, skal du muligvis indlæse dine åbne faner, før ændringen træder i kraft.</translation>
 <translation id="8129812357326543296">Om &amp;Google Chrome</translation>
+<translation id="8179874765710681175">Installer Chrome på din telefon. Vi sender en sms til din telefon.</translation>
 <translation id="8183957050892517584">Chrome gemmer dine personlige oplysninger på sikker vis, så du ikke behøver at angive dem igen.</translation>
 <translation id="8211929904040702368">Denne handling sletter mindst <ph name="TOTAL_COUNT" /> elementer permanent fra denne enhed. Hvis du senere vil hente dine data igen, skal du logge ind i Chrome som $2.</translation>
 <translation id="8255190535488645436">Google Chrome bruger dit kamera og din mikrofon.</translation>
@@ -252,10 +253,12 @@ Gå til din e-mail på <ph name="ACCOUNT_EMAIL" /> for at få yderligere vejledn
 <translation id="8342675569599923794">Denne fil er farlig, så Chrome har blokeret den.</translation>
 <translation id="8406086379114794905">Hjælp med at forbedre Chrome</translation>
 <translation id="8455999171311319804">Valgfrit: Hjælp med at gøre Chrome OS bedre ved automatisk at sende diagnostik og brugsdata til Google.</translation>
+<translation id="8478823064122749032">Installer Chrome på din telefon. Vi sender en sms til dit telefonnummer til gendannelse: <ph name="PHONE_NUMBER" /></translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Chrome-applikationslisten for Canary</translation>
 <translation id="8556340503434111824">Der findes en ny version af Google Chrome, som er hurtigere end nogensinde før.</translation>
 <translation id="8568392309447938879">Du skal være logget ind på Chrome for at bruge apps. Dette gør det muligt for Chrome at synkronisere din historik, dine apps, bogmærker, adgangskoder og andre indstillinger på alle enheder.</translation>
+<translation id="8606668294522778825">Google Chrome bruger muligvis webtjenester for at forbedre din browseroplevelse. Du kan vælge at deaktivere disse tjenester. <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
 <translation id="8614913330719544658">Google Chrome svarer ikke. Vil du genstarte nu?</translation>
 <translation id="8667808506758191620">Din <ph name="DEVICE_TYPE" /> er opdateret.</translation>
 <translation id="8669527147644353129">Hjælp til Google Chrome</translation>

@@ -48,6 +48,7 @@
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -58,13 +59,12 @@
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/NavigationScheduler.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/plugins/PluginView.h"
+#include "platform/FrameViewBase.h"
 #include "platform/Histogram.h"
 #include "platform/UserGestureIndicator.h"
-#include "platform/Widget.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
@@ -126,8 +126,8 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(
   TRACE_EVENT1("devtools.timeline", "EvaluateScript", "data",
                InspectorEvaluateScriptEvent::data(
                    frame(), source.url().getString(), source.startPosition()));
-  InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(
-      frame()->document(), "scriptFirstStatement", false);
+  probe::NativeBreakpoint nativeBreakpoint(frame()->document(),
+                                           "scriptFirstStatement");
 
   v8::Local<v8::Value> result;
   {
@@ -205,15 +205,15 @@ void ScriptController::disableEval(const String& errorMessage) {
 }
 
 PassRefPtr<SharedPersistent<v8::Object>> ScriptController::createPluginWrapper(
-    Widget* widget) {
-  ASSERT(widget);
+    FrameViewBase* frameViewBase) {
+  DCHECK(frameViewBase);
 
-  if (!widget->isPluginView())
+  if (!frameViewBase->isPluginView())
     return nullptr;
 
   v8::HandleScope handleScope(isolate());
   v8::Local<v8::Object> scriptableObject =
-      toPluginView(widget)->scriptableObject(isolate());
+      toPluginView(frameViewBase)->scriptableObject(isolate());
 
   if (scriptableObject.IsEmpty())
     return nullptr;
@@ -247,49 +247,21 @@ void ScriptController::updateDocument() {
   m_windowProxyManager->mainWorldProxy()->updateDocument();
 }
 
-bool ScriptController::canExecuteScripts(
-    ReasonForCallingCanExecuteScripts reason) {
-
-  if (frame()->document() && frame()->document()->isSandboxed(SandboxScripts)) {
-    // FIXME: This message should be moved off the console once a solution to
-    // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-    if (reason == AboutToExecuteScript)
-      frame()->document()->addConsoleMessage(ConsoleMessage::create(
-          SecurityMessageSource, ErrorMessageLevel,
-          "Blocked script execution in '" +
-              frame()->document()->url().elidedString() +
-              "' because the document's frame is sandboxed and the "
-              "'allow-scripts' permission is not set."));
-    return false;
-  }
-
-  if (frame()->document() && frame()->document()->isViewSource()) {
-    ASSERT(frame()->document()->getSecurityOrigin()->isUnique());
-    return true;
-  }
-
-  FrameLoaderClient* client = frame()->loader().client();
-  if (!client)
-    return false;
-  Settings* settings = frame()->settings();
-  const bool allowed =
-      client->allowScript(settings && settings->getScriptEnabled());
-  if (!allowed && reason == AboutToExecuteScript)
-    client->didNotAllowScript();
-  return allowed;
-}
-
 bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url,
                                                     Element* element) {
-  if (!protocolIsJavaScript(url))
+  if (!url.protocolIsJavaScript())
     return false;
+
+  const int javascriptSchemeLength = sizeof("javascript:") - 1;
+  String scriptSource = decodeURLEscapeSequences(url.getString())
+                            .substring(javascriptSchemeLength);
 
   bool shouldBypassMainWorldContentSecurityPolicy =
       ContentSecurityPolicy::shouldBypassMainWorld(frame()->document());
   if (!frame()->page() ||
       (!shouldBypassMainWorldContentSecurityPolicy &&
        !frame()->document()->contentSecurityPolicy()->allowJavaScriptURLs(
-           element, frame()->document()->url(),
+           element, scriptSource, frame()->document()->url(),
            eventHandlerPosition().m_line))) {
     return true;
   }
@@ -298,20 +270,17 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url,
       frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument() &&
       !frame()->isLoading();
   if (progressNotificationsNeeded)
-    frame()->loader().progress().progressStarted();
+    frame()->loader().progress().progressStarted(FrameLoadTypeStandard);
 
   Document* ownerDocument = frame()->document();
-
-  const int javascriptSchemeLength = sizeof("javascript:") - 1;
 
   bool locationChangeBefore =
       frame()->navigationScheduler().locationChangePending();
 
-  String decodedURL = decodeURLEscapeSequences(url.getString());
   v8::HandleScope handleScope(isolate());
   v8::Local<v8::Value> result = evaluateScriptInMainWorld(
-      ScriptSourceCode(decodedURL.substring(javascriptSchemeLength)),
-      NotSharableCrossOrigin, DoNotExecuteScriptWhenScriptsDisabled);
+      ScriptSourceCode(scriptSource), NotSharableCrossOrigin,
+      DoNotExecuteScriptWhenScriptsDisabled);
 
   // If executing script caused this frame to be removed from the page, we
   // don't want to try to replace its document!
@@ -326,7 +295,7 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url,
   String scriptResult = toCoreString(v8::Local<v8::String>::Cast(result));
 
   // We're still in a frame, so there should be a DocumentLoader.
-  ASSERT(frame()->document()->loader());
+  DCHECK(frame()->document()->loader());
   if (!locationChangeBefore &&
       frame()->navigationScheduler().locationChangePending())
     return true;
@@ -362,7 +331,7 @@ v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(
     AccessControlStatus accessControlStatus,
     ExecuteScriptPolicy policy) {
   if (policy == DoNotExecuteScriptWhenScriptsDisabled &&
-      !canExecuteScripts(AboutToExecuteScript))
+      !frame()->document()->canExecuteScripts(AboutToExecuteScript))
     return v8::Local<v8::Value>();
 
   ScriptState* scriptState = ScriptState::forMainWorld(frame());
@@ -387,7 +356,7 @@ void ScriptController::executeScriptInIsolatedWorld(
     int worldID,
     const HeapVector<ScriptSourceCode>& sources,
     Vector<v8::Local<v8::Value>>* results) {
-  ASSERT(worldID > 0);
+  DCHECK_GT(worldID, 0);
 
   RefPtr<DOMWrapperWorld> world =
       DOMWrapperWorld::ensureIsolatedWorld(isolate(), worldID);

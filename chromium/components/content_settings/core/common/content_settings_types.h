@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_CONTENT_SETTINGS_CORE_COMMON_CONTENT_SETTINGS_TYPES_H_
 #define COMPONENTS_CONTENT_SETTINGS_CORE_COMMON_CONTENT_SETTINGS_TYPES_H_
 
+#include <cstddef>
+
 #include "build/build_config.h"
 
 // A particular type of content to care about.  We give the user various types
@@ -42,11 +44,29 @@ enum ContentSettingsType {
   CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD,
   CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
   CONTENT_SETTINGS_TYPE_AUTOPLAY,
+  // TODO(raymes): Deprecated. See crbug.com/681709. Remove after M60.
   CONTENT_SETTINGS_TYPE_PROMPT_NO_DECISION_COUNT,
   CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO,
+  CONTENT_SETTINGS_TYPE_PERMISSION_AUTOBLOCKER_DATA,
+  CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
+
+  // This is special-cased in the permissions layer to always allow, and as
+  // such doesn't have associated prefs data.
+  CONTENT_SETTINGS_TYPE_MIDI,
+
+  // This is only here temporarily and will be removed when we further unify
+  // it with notifications, see crbug.com/563297. No prefs data is stored for
+  // this content type, we instead share values with NOTIFICATIONS.
+  CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
 
   // WARNING: This enum is going to be removed soon. Do not depend on NUM_TYPES.
   CONTENT_SETTINGS_NUM_TYPES_DO_NOT_USE,
+};
+
+struct ContentSettingsTypeHash {
+  std::size_t operator()(ContentSettingsType type) const {
+    return static_cast<std::size_t>(type);
+  }
 };
 
 #endif  // COMPONENTS_CONTENT_SETTINGS_CORE_COMMON_CONTENT_SETTINGS_TYPES_H_

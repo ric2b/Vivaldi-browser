@@ -1,0 +1,15 @@
+include_rules = [
+  "+base",
+  "+components/infobars/core",
+  "+components/keyed_service/core",
+  "+components/keyed_service/ios",
+  "+components/pref_registry",
+  "+components/prefs",
+  "+components/translate/core",
+  "+components/translate/ios",
+  "+ios/net",
+  "+ios/web/public",
+  "+ios/web_view",
+  "+net",
+  "+ui/base",
+]

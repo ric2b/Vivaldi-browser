@@ -14,6 +14,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/shadow_value.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/skia_util.h"
 
 namespace gfx {
@@ -35,8 +36,8 @@ class ShadowNineboxSource : public CanvasImageSource {
 
   // CanvasImageSource overrides:
   void Draw(Canvas* canvas) override {
-    SkPaint paint;
-    paint.setLooper(CreateShadowDrawLooperCorrectBlur(shadows_));
+    cc::PaintFlags flags;
+    flags.setLooper(CreateShadowDrawLooperCorrectBlur(shadows_));
     Insets insets = -ShadowValue::GetMargin(shadows_);
     gfx::Rect bounds(size());
     bounds.Inset(insets);
@@ -48,8 +49,8 @@ class ShadowNineboxSource : public CanvasImageSource {
     // Clipping alone is not enough --- due to anti aliasing there will still be
     // some of the fill color in the rounded corners. We must make the fill
     // color transparent.
-    paint.setColor(SK_ColorTRANSPARENT);
-    canvas->sk_canvas()->drawRRect(r_rect, paint);
+    flags.setColor(SK_ColorTRANSPARENT);
+    canvas->sk_canvas()->drawRRect(r_rect, flags);
   }
 
  private:
@@ -105,7 +106,7 @@ const ShadowDetails& ShadowDetails::Get(int elevation, int corner_radius) {
   // To see what this looks like for elevation 24, try this CSS:
   //   box-shadow: 0 24px 48px rgba(0, 0, 0, .24),
   //               0 0 24px rgba(0, 0, 0, .12);
-  auto source = new ShadowNineboxSource(shadow->values, corner_radius);
+  auto* source = new ShadowNineboxSource(shadow->values, corner_radius);
   shadow->ninebox_image = ImageSkia(source, source->size());
   return *shadow;
 }

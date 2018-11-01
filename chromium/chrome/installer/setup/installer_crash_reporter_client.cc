@@ -55,8 +55,7 @@ void InstallerCrashReporterClient::GetProductNameAndVersion(
     *version = L"0.0.0.0-devel";
   }
 
-  *channel_name =
-      GoogleUpdateSettings::GetChromeChannel(!GetIsPerUserInstall(exe_path));
+  *channel_name = install_static::GetChromeChannelName();
 }
 
 bool InstallerCrashReporterClient::ShouldShowRestartDialog(
@@ -78,18 +77,13 @@ bool InstallerCrashReporterClient::GetDeferredUploadsSupported(
   return false;
 }
 
-bool InstallerCrashReporterClient::GetIsPerUserInstall(
-    const base::string16& exe_path) {
+bool InstallerCrashReporterClient::GetIsPerUserInstall() {
   return is_per_user_install_;
 }
 
-bool InstallerCrashReporterClient::GetShouldDumpLargerDumps(
-    bool is_per_user_install) {
-  DCHECK_EQ(is_per_user_install_, is_per_user_install);
-  base::string16 channel =
-      GoogleUpdateSettings::GetChromeChannel(!is_per_user_install);
+bool InstallerCrashReporterClient::GetShouldDumpLargerDumps() {
   // Use large dumps for all but the stable channel.
-  return !channel.empty();
+  return !install_static::GetChromeChannelName().empty();
 }
 
 int InstallerCrashReporterClient::GetResultCodeRespawnFailed() {

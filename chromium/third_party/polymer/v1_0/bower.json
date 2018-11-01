@@ -5,7 +5,7 @@
     "font-roboto": "PolymerElements/font-roboto#1.0.1",
     "iron-a11y-announcer": "PolymerElements/iron-a11y-announcer#1.0.5",
     "iron-a11y-keys-behavior": "PolymerElements/iron-a11y-keys-behavior#1.1.9",
-    "iron-a11y-keys": "PolymerElements/iron-a11y-keys#1.0.6",
+    "iron-a11y-keys": "PolymerElements/iron-a11y-keys#1.0.7",
     "iron-autogrow-textarea": "PolymerElements/iron-autogrow-textarea#1.0.13",
     "iron-behaviors": "PolymerElements/iron-behaviors#1.0.17",
     "iron-checked-element-behavior": "PolymerElements/iron-checked-element-behavior#1.0.5",
@@ -53,14 +53,14 @@
     "paper-radio-button": "PolymerElements/paper-radio-button#1.3.1",
     "paper-radio-group": "PolymerElements/paper-radio-group#1.2.0",
     "paper-ripple": "PolymerElements/paper-ripple#1.0.9",
-    "paper-slider": "PolymerElements/paper-slider#1.0.11",
+    "paper-slider": "PolymerElements/paper-slider#1.0.13",
     "paper-spinner": "PolymerElements/paper-spinner#1.2.0",
     "paper-styles": "PolymerElements/paper-styles#1.1.4",
     "paper-tabs": "PolymerElements/paper-tabs#1.6.2",
-    "paper-toggle-button": "PolymerElements/paper-toggle-button#1.2.0",
+    "paper-toggle-button": "PolymerElements/paper-toggle-button#1.3.0",
     "paper-toolbar": "PolymerElements/paper-toolbar#1.1.6",
     "paper-tooltip": "PolymerElements/paper-tooltip#1.1.3",
-    "polymer": "Polymer/polymer#1.6.1",
+    "polymer": "Polymer/polymer#1.8.1",
     "web-animations-js": "web-animations/web-animations-js#2.2.2"
   }
 }

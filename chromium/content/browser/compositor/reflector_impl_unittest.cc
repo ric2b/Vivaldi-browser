@@ -68,7 +68,7 @@ CreateTestValidatorOzone() {
       new display_compositor::CompositorOverlayCandidateValidatorOzone(
           std::unique_ptr<ui::OverlayCandidatesOzone>(
               new TestOverlayCandidatesOzone()),
-          false));
+          ""));
 #else
   return nullptr;
 #endif  // defined(USE_OZONE)
@@ -87,6 +87,7 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override {}
+  void SetDrawRectangle(const gfx::Rect& draw_rectangle) override {}
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,

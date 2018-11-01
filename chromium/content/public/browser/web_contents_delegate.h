@@ -17,7 +17,7 @@
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/common/media_stream_request.h"
-#include "content/public/common/window_container_type.h"
+#include "content/public/common/window_container_type.mojom.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebSecurityStyle.h"
@@ -64,6 +64,10 @@ class Size;
 
 namespace net {
 class X509Certificate;
+}
+
+namespace url {
+class Origin;
 }
 
 namespace blink {
@@ -355,7 +359,7 @@ class CONTENT_EXPORT WebContentsDelegate {
       int32_t route_id,
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
-      WindowContainerType window_container_type,
+      content::mojom::WindowContainerType window_container_type,
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
@@ -516,6 +520,12 @@ class CONTENT_EXPORT WebContentsDelegate {
                                           const GURL& security_origin,
                                           MediaStreamType type);
 
+  // Returns the ID of the default device for the given media device |type|.
+  // If the returned value is an empty string, it means that there is no
+  // default device for the given |type|.
+  virtual std::string GetDefaultMediaDeviceID(WebContents* web_contents,
+                                              MediaStreamType type);
+
 #if defined(OS_ANDROID)
   // Asks permission to decode media stream. After permission is determined,
   // |callback| will be called with the result.
@@ -596,6 +606,16 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Requests the app banner. This method is called from the DevTools.
   virtual void RequestAppBannerFromDevTools(content::WebContents* web_contents);
+
+  // Reports that passive mixed content was found at the specified url.
+  virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
+
+  // Checks if running of active mixed content is allowed for the specified
+  // WebContents/tab.
+  virtual bool ShouldAllowRunningInsecureContent(WebContents* web_contents,
+                                                 bool allowed_per_prefs,
+                                                 const url::Origin& origin,
+                                                 const GURL& resource_url);
 
  protected:
   virtual ~WebContentsDelegate();

@@ -5,6 +5,7 @@
 module cc.mojom;
 
 import "cc/ipc/frame_sink_id.mojom";
+import "cc/ipc/local_surface_id.mojom";
 import "cc/ipc/mojo_compositor_frame_sink.mojom";
 import "cc/ipc/surface_id.mojom";
 import "cc/ipc/surface_info.mojom";
@@ -21,6 +22,8 @@ interface DisplayPrivate {
   ResizeDisplay(gfx.mojom.Size size_in_pixel);
   SetDisplayColorSpace(gfx.mojom.ColorSpace color_space);
   SetOutputIsSecure(bool secure);
+  SetLocalSurfaceId(cc.mojom.LocalSurfaceId local_surface_id,
+                    float scale_factor);
 };
 
 // The DisplayCompositor interface is a privileged interface that allows
@@ -37,23 +40,37 @@ interface DisplayPrivate {
 interface DisplayCompositor {
   // Create a CompositorFrameSink for a privileged client (e.g. WindowServer).
   // This is only used by privileged clients. The client can call methods that
-  // talks to the cc::Display (e.g. ResizeDisplay(), SetDisplayVisible(), etc)
-  CreateDisplayCompositorFrameSink(
+  // talks to the Display (e.g. ResizeDisplay(), SetDisplayVisible(), etc)
+  CreateRootCompositorFrameSink(
       cc.mojom.FrameSinkId frame_sink_id,
       gpu.mojom.SurfaceHandle widget,
-      cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
+      associated cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
       cc.mojom.MojoCompositorFrameSinkPrivate& compositor_frame_sink_private,
       cc.mojom.MojoCompositorFrameSinkClient compositor_frame_sink_client,
-      DisplayPrivate& display_private);
+      associated DisplayPrivate& display_private);
 
-  // CreateOffscreenCompositorFrameSink is used by unprivileged clients.
-  // An off screen CompositorFrameSink only submits frames to a buffer instead
-  // of a display.
-  CreateOffscreenCompositorFrameSink(
+  // CreateCompositorFrameSink is used by unprivileged clients.
+  // This CompositorFrameSink is not a root, and has to be parented by another
+  // CompositorFrameSink in order to appear on screen.
+  CreateCompositorFrameSink(
       cc.mojom.FrameSinkId frame_sink_id,
       cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
       cc.mojom.MojoCompositorFrameSinkPrivate& compositor_frame_sink_private,
       cc.mojom.MojoCompositorFrameSinkClient compositor_frame_sink_client);
+
+  // Set up a BeginFrame relationship between two FrameSinkIds. In this case,
+  // the child inherits the BeginFrameSource from the parent if it doesn't
+  // already have a BeginFrameSource.
+  RegisterFrameSinkHierarchy(cc.mojom.FrameSinkId parent_frame_sink_id,
+                             cc.mojom.FrameSinkId child_frame_sink_id);
+
+  // Removes a BeginFrame relationship between two FrameSinkIds.
+  UnregisterFrameSinkHierarchy(cc.mojom.FrameSinkId parent_frame_sink_id,
+                               cc.mojom.FrameSinkId child_frame_sink_id);
+
+  // Drops the temporary reference for |surface_id|. This will get called when
+  // the DisplayCompositorClient doesn't think |surface_id| will be embedded.
+  DropTemporaryReference(cc.mojom.SurfaceId surface_id);
 };
 
 // The DisplayCompositorClient interface is implemented by the Display

@@ -35,6 +35,7 @@
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/scroll/Scrollbar.h"
+#include "public/platform/WebLayerScrollClient.h"
 #include "wtf/MathExtras.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
@@ -59,7 +60,8 @@ enum IncludeScrollbarsInRect {
   IncludeScrollbars,
 };
 
-class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
+class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
+                                       public WebLayerScrollClient {
   WTF_MAKE_NONCOPYABLE(ScrollableArea);
 
  public:
@@ -101,10 +103,6 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
                                     const ScrollAlignment& alignX,
                                     const ScrollAlignment& alignY,
                                     ScrollType = ProgrammaticScroll);
-
-  // Returns a rect, in the space of the area's backing graphics layer, that
-  // contains the visual region of all scrollbar parts.
-  virtual LayoutRect visualRectForScrollbarParts() const = 0;
 
   static bool scrollBehaviorFromString(const String&, ScrollBehavior&);
 
@@ -183,28 +181,28 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   void setScrollCornerNeedsPaintInvalidation();
   virtual void getTickmarks(Vector<IntRect>&) const {}
 
-  // Convert points and rects between the scrollbar and its containing Widget.
-  // The client needs to implement these in order to be aware of layout effects
-  // like CSS transforms.
+  // Convert points and rects between the scrollbar and its containing
+  // FrameViewBase. The client needs to implement these in order to be aware of
+  // layout effects like CSS transforms.
   virtual IntRect convertFromScrollbarToContainingWidget(
       const Scrollbar& scrollbar,
       const IntRect& scrollbarRect) const {
-    return scrollbar.Widget::convertToContainingWidget(scrollbarRect);
+    return scrollbar.FrameViewBase::convertToContainingWidget(scrollbarRect);
   }
   virtual IntRect convertFromContainingWidgetToScrollbar(
       const Scrollbar& scrollbar,
       const IntRect& parentRect) const {
-    return scrollbar.Widget::convertFromContainingWidget(parentRect);
+    return scrollbar.FrameViewBase::convertFromContainingWidget(parentRect);
   }
   virtual IntPoint convertFromScrollbarToContainingWidget(
       const Scrollbar& scrollbar,
       const IntPoint& scrollbarPoint) const {
-    return scrollbar.Widget::convertToContainingWidget(scrollbarPoint);
+    return scrollbar.FrameViewBase::convertToContainingWidget(scrollbarPoint);
   }
   virtual IntPoint convertFromContainingWidgetToScrollbar(
       const Scrollbar& scrollbar,
       const IntPoint& parentPoint) const {
-    return scrollbar.Widget::convertFromContainingWidget(parentPoint);
+    return scrollbar.FrameViewBase::convertFromContainingWidget(parentPoint);
   }
 
   virtual Scrollbar* horizontalScrollbar() const { return nullptr; }
@@ -246,7 +244,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual bool scrollbarsCanBeActive() const = 0;
 
   // Returns the bounding box of this scrollable area, in the coordinate system
-  // of the enclosing scroll view.
+  // of the top-level FrameView.
   virtual IntRect scrollableAreaBoundingBox() const = 0;
 
   virtual bool scrollAnimatorEnabled() const { return false; }
@@ -319,6 +317,8 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return ScrollBehaviorInstant;
   }
 
+  virtual bool isScrollable() const { return true; }
+
   // TODO(bokan): FrameView::setScrollOffset uses updateScrollbars to scroll
   // which bails out early if its already in updateScrollbars, the effect being
   // that programmatic scrolls (i.e. setScrollOffset) are disabled when in
@@ -336,7 +336,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
       OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const;
 
   // Returns the widget associated with this ScrollableArea.
-  virtual Widget* getWidget() { return nullptr; }
+  virtual FrameViewBase* getWidget() { return nullptr; }
 
   virtual LayoutBox* layoutBox() const { return nullptr; }
 
@@ -365,6 +365,15 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual ScrollAnchor* scrollAnchor() { return nullptr; }
 
   virtual void didScrollWithScrollbar(ScrollbarPart, ScrollbarOrientation) {}
+
+  // Returns the task runner to be used for scrollable area timers.
+  // Ideally a frame-specific throttled one can be used.
+  virtual RefPtr<WebTaskRunner> getTimerTaskRunner() const = 0;
+
+  // Callback for compositor-side scrolling.
+  void didScroll(const gfx::ScrollOffset&) override;
+
+  virtual void scrollbarFrameRectChanged() {}
 
  protected:
   ScrollableArea();
@@ -420,7 +429,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   mutable Member<ScrollAnimatorBase> m_scrollAnimator;
   mutable Member<ProgrammaticScrollAnimator> m_programmaticScrollAnimator;
 
-  std::unique_ptr<Timer<ScrollableArea>> m_fadeOverlayScrollbarsTimer;
+  std::unique_ptr<TaskRunnerTimer<ScrollableArea>> m_fadeOverlayScrollbarsTimer;
 
   unsigned m_scrollbarOverlayColorTheme : 2;
 

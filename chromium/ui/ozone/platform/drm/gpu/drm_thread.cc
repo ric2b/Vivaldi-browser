@@ -89,10 +89,8 @@ void DrmThread::Start() {
 
 void DrmThread::Init() {
   bool use_atomic = false;
-#if defined(USE_DRM_ATOMIC)
   use_atomic = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableDrmAtomic);
-#endif
 
   device_manager_.reset(
       new DrmDeviceManager(base::MakeUnique<GbmDeviceGenerator>(use_atomic)));
@@ -118,6 +116,9 @@ void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
       break;
     case gfx::BufferUsage::SCANOUT:
       flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
+      break;
+    case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
+      flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_LINEAR;
       break;
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:

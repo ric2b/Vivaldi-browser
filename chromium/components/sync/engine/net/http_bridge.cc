@@ -63,10 +63,6 @@ void RecordSyncResponseContentLengthHistograms(
 
 }  // namespace
 
-// Enables compression of messages from client to server.
-const base::Feature kSyncClientToServerCompression{
-    "EnableSyncClientToServerCompression", base::FEATURE_DISABLED_BY_DEFAULT};
-
 HttpBridgeFactory::HttpBridgeFactory(
     const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
     const NetworkTimeUpdateCallback& network_time_update_callback,
@@ -74,11 +70,12 @@ HttpBridgeFactory::HttpBridgeFactory(
     : request_context_getter_(request_context_getter),
       network_time_update_callback_(network_time_update_callback),
       cancelation_signal_(cancelation_signal) {
-  // Registration should never fail.  This should happen on the UI thread during
-  // init.  It would be impossible for a shutdown to have been requested at this
-  // point.
-  bool result = cancelation_signal_->TryRegisterHandler(this);
-  DCHECK(result);
+  // This registration is happening on the Sync thread, while signalling occurs
+  // on the UI thread. We must handle the possibility signalling has already
+  // occurred.
+  if (!cancelation_signal_->TryRegisterHandler(this)) {
+    OnSignalReceived();
+  }
 }
 
 HttpBridgeFactory::~HttpBridgeFactory() {
@@ -246,12 +243,8 @@ void HttpBridge::MakeAsynchronousPost() {
   fetch_state_.url_poster->SetExtraRequestHeaders(extra_headers_);
 
   std::string request_to_send;
-  if (base::FeatureList::IsEnabled(kSyncClientToServerCompression)) {
-    compression::GzipCompress(request_content_, &request_to_send);
-    fetch_state_.url_poster->AddExtraRequestHeader("Content-Encoding: gzip");
-  } else {
-    request_to_send = request_content_;
-  }
+  compression::GzipCompress(request_content_, &request_to_send);
+  fetch_state_.url_poster->AddExtraRequestHeader("Content-Encoding: gzip");
   fetch_state_.url_poster->SetUploadData(content_type_, request_to_send);
   RecordSyncRequestContentLengthHistograms(request_to_send.size(),
                                            request_content_.size());

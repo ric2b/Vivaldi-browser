@@ -24,9 +24,9 @@
 
 #include "core/dom/CharacterData.h"
 #include "core/dom/StyleEngineContext.h"
-#include "core/fetch/ResourceOwner.h"
 #include "core/loader/resource/StyleSheetResource.h"
 #include "core/loader/resource/StyleSheetResourceClient.h"
+#include "platform/loader/fetch/ResourceOwner.h"
 
 namespace blink {
 
@@ -77,7 +77,7 @@ class ProcessingInstruction final : public CharacterData,
 
   String nodeName() const override;
   NodeType getNodeType() const override;
-  Node* cloneNode(bool deep) override;
+  Node* cloneNode(bool deep, ExceptionState&) override;
 
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
   void removedFrom(ContainerNode*) override;

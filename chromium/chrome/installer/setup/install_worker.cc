@@ -27,6 +27,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "base/win/registry.h"
+#include "chrome/install_static/install_details.h"
 #include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/persistent_histogram_storage.h"
 #include "chrome/installer/setup/setup_constants.h"
@@ -359,8 +360,8 @@ bool AddAclToPath(const base::FilePath& path,
 // Chrome when migrating multi-install Chrome to single-install.
 void AddMigrateUsageStatsWorkItems(const InstallerState& installer_state,
                                    WorkItemList* install_list) {
-  // This operation doesn't apply to SxS Chrome.
-  if (InstallUtil::IsChromeSxSProcess())
+  // This operation only applies to modes that once supported multi-install.
+  if (install_static::InstallDetails::Get().supported_multi_install())
     return;
 
   // Bail out if an existing multi-install Chrome is not being migrated to
@@ -623,14 +624,6 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
         installer_state.GetInstallerDirectory(new_version).Append(
             setup_path.BaseName()));
 
-    base::CommandLine rename(installer_path);
-    rename.AppendSwitch(switches::kRenameChromeExe);
-    if (installer_state.system_install())
-      rename.AppendSwitch(switches::kSystemLevel);
-
-    if (installer_state.verbose_logging())
-      rename.AppendSwitch(switches::kVerboseLogging);
-
     BrowserDistribution* dist = installer_state.product().distribution();
     const base::string16 version_key(dist->GetVersionKey());
 
@@ -651,10 +644,14 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
           google_update::kRegCriticalVersionField);
     }
 
-    // Append the distribution-specific flags to the command line (e.g.,
-    // "--chrome-sxs" for SxS/canary).
-    base::CommandLine product_rename_cmd(rename);
-    installer_state.product().AppendRenameFlags(&product_rename_cmd);
+    // Form the mode-specific rename command.
+    base::CommandLine product_rename_cmd(installer_path);
+    product_rename_cmd.AppendSwitch(switches::kRenameChromeExe);
+    if (installer_state.system_install())
+      product_rename_cmd.AppendSwitch(switches::kSystemLevel);
+    if (installer_state.verbose_logging())
+      product_rename_cmd.AppendSwitch(switches::kVerboseLogging);
+    InstallUtil::AppendModeSwitch(&product_rename_cmd);
     in_use_update_work_items->AddSetRegValueWorkItem(
         root, version_key, KEY_WOW64_32KEY, google_update::kRegRenameCmdField,
         product_rename_cmd.GetCommandLineString(), true);
@@ -853,7 +850,7 @@ void AddActiveSetupWorkItems(const InstallerState& installer_state,
   cmd.AppendSwitch(installer::switches::kConfigureUserSettings);
   cmd.AppendSwitch(installer::switches::kVerboseLogging);
   cmd.AppendSwitch(installer::switches::kSystemLevel);
-  product.AppendProductFlags(&cmd);
+  InstallUtil::AppendModeSwitch(&cmd);
   list->AddSetRegValueWorkItem(root,
                                active_setup_path,
                                WorkItem::kWow64Default,
@@ -888,8 +885,7 @@ void AppendUninstallCommandLineFlags(const InstallerState& installer_state,
 
   uninstall_cmd->AppendSwitch(installer::switches::kUninstall);
 
-  // Append the product-specific uninstall flags.
-  product.AppendProductFlags(uninstall_cmd);
+  InstallUtil::AppendModeSwitch(uninstall_cmd);
   if (installer_state.is_msi())
     uninstall_cmd->AppendSwitch(installer::switches::kMsi);
   if (installer_state.system_install())
@@ -920,8 +916,7 @@ void AddOsUpgradeWorkItems(const InstallerState& installer_state,
             .Append(setup_path.BaseName()));
     // Add the main option to indicate OS upgrade flow.
     cmd_line.AppendSwitch(installer::switches::kOnOsUpgrade);
-    // Add product-specific options.
-    product.AppendProductFlags(&cmd_line);
+    InstallUtil::AppendModeSwitch(&cmd_line);
     if (installer_state.system_install())
       cmd_line.AppendSwitch(installer::switches::kSystemLevel);
     // Log everything for now.

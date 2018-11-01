@@ -12,7 +12,6 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
-#include "components/search/search.h"
 #include "ui/gfx/geometry/rect.h"
 
 OmniboxController::OmniboxController(OmniboxEditModel* omnibox_edit_model,
@@ -23,7 +22,7 @@ OmniboxController::OmniboxController(OmniboxEditModel* omnibox_edit_model,
       autocomplete_controller_(new AutocompleteController(
           client_->CreateAutocompleteProviderClient(),
           this,
-          AutocompleteClassifier::kDefaultOmniboxProviders)),
+          AutocompleteClassifier::DefaultOmniboxProviders())),
       weak_ptr_factory_(this) {}
 
 OmniboxController::~OmniboxController() {

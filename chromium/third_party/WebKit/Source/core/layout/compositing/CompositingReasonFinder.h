@@ -25,7 +25,7 @@ class CORE_EXPORT CompositingReasonFinder {
  public:
   explicit CompositingReasonFinder(LayoutView&);
 
-  CompositingReasons potentialCompositingReasonsFromStyle(LayoutObject*) const;
+  CompositingReasons potentialCompositingReasonsFromStyle(LayoutObject&) const;
   CompositingReasons directReasons(const PaintLayer*) const;
 
   void updateTriggers();
@@ -33,6 +33,10 @@ class CORE_EXPORT CompositingReasonFinder {
   bool hasOverflowScrollTrigger() const;
   bool requiresCompositingForScrollableFrame() const;
   static bool requiresCompositingForAnimation(const ComputedStyle&);
+  static bool requiresCompositingForOpacityAnimation(const ComputedStyle&);
+  static bool requiresCompositingForFilterAnimation(const ComputedStyle&);
+  static bool requiresCompositingForBackdropFilterAnimation(
+      const ComputedStyle&);
   static bool requiresCompositingForEffectAnimation(const ComputedStyle&);
   static bool requiresCompositingForTransformAnimation(const ComputedStyle&);
   static bool requiresCompositingForTransform(const LayoutObject&);

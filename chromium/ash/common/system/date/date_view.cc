@@ -11,11 +11,11 @@
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/wm_shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/i18n/rtl.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "grit/ash_strings.h"
 #include "third_party/icu/source/i18n/unicode/datefmt.h"
 #include "third_party/icu/source/i18n/unicode/dtptngen.h"
 #include "third_party/icu/source/i18n/unicode/smpdtfmt.h"
@@ -183,6 +183,8 @@ DateView::DateView(SystemTrayItem* owner)
   if (!UseMd())
     date_label_->SetEnabledColor(kHeaderTextColorNormal);
   UpdateTextInternal(base::Time::Now());
+  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
+  style.SetupLabel(date_label_);
   AddChildView(date_label_);
 }
 
@@ -228,12 +230,6 @@ void DateView::SetActive(bool active) {
   SchedulePaint();
 }
 
-void DateView::UpdateStyle() {
-  TrayPopupItemStyle style(GetNativeTheme(),
-                           TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
-  style.SetupLabel(date_label_);
-}
-
 void DateView::UpdateTextInternal(const base::Time& now) {
   BaseDateTimeView::UpdateTextInternal(now);
   date_label_->SetText(l10n_util::GetStringFUTF16(
@@ -273,10 +269,6 @@ void DateView::OnGestureEvent(ui::GestureEvent* event) {
     SetActive(false);
   }
   BaseDateTimeView::OnGestureEvent(event);
-}
-
-void DateView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
-  UpdateStyle();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -369,20 +361,21 @@ void TimeView::UpdateClockLayout(ClockLayout clock_layout) {
     layout->AddView(vertical_label_hours_.get());
     layout->StartRow(0, kColumnId);
     layout->AddView(vertical_label_minutes_.get());
-    layout->AddPaddingRow(0,
-                          is_material_design
-                              ? GetTrayConstant(TRAY_IMAGE_ITEM_PADDING) +
-                                    kVerticalClockMinutesTopOffsetMD
-                              : kTrayLabelItemVerticalPaddingVerticalAlignment);
+    layout->AddPaddingRow(
+        0,
+        is_material_design
+            ? kTrayImageItemPadding + kVerticalClockMinutesTopOffsetMD
+            : kTrayLabelItemVerticalPaddingVerticalAlignment);
   }
   Layout();
 }
 
 void TimeView::SetBorderFromLayout(ClockLayout clock_layout) {
   if (clock_layout == ClockLayout::HORIZONTAL_CLOCK) {
-    SetBorder(views::CreateEmptyBorder(gfx::Insets(
-        0, UseMd() ? GetTrayConstant(TRAY_IMAGE_ITEM_PADDING)
-                   : kTrayLabelItemHorizontalPaddingBottomAlignment)));
+    SetBorder(views::CreateEmptyBorder(
+        gfx::Insets(0,
+                    UseMd() ? kTrayImageItemPadding
+                            : kTrayLabelItemHorizontalPaddingBottomAlignment)));
   } else {
     SetBorder(views::NullBorder());
   }

@@ -25,7 +25,28 @@
 
 #include "core/editing/PositionIterator.h"
 
+#include "core/editing/EditingUtilities.h"
+
 namespace blink {
+
+namespace {
+
+// TODO(editing-dev): We should replace usages of |hasChildren()| in
+// |PositionIterator| to |shouldTraverseChildren()|.
+template <typename Strategy>
+bool shouldTraverseChildren(const Node& node) {
+  return Strategy::hasChildren(node) && !isUserSelectContain(node);
+}
+
+// TODO(editing-dev): We should replace usages of |parent()| in
+// |PositionIterator| to |selectableParentOf()|.
+template <typename Strategy>
+ContainerNode* selectableParentOf(const Node& node) {
+  ContainerNode* const parent = Strategy::parent(node);
+  return parent && !isUserSelectContain(*parent) ? parent : nullptr;
+}
+
+}  // namespace
 
 static const int kInvalidOffset = -1;
 
@@ -39,16 +60,16 @@ PositionIteratorAlgorithm<Strategy>::PositionIteratorAlgorithm(
       m_offsetInAnchor(m_nodeAfterPositionInAnchor ? 0 : offsetInAnchor),
       m_depthToAnchorNode(0),
       m_domTreeVersion(anchorNode->document().domTreeVersion()) {
-  for (Node* node = Strategy::parent(*anchorNode); node;
-       node = Strategy::parent(*node)) {
+  for (Node* node = selectableParentOf<Strategy>(*anchorNode); node;
+       node = selectableParentOf<Strategy>(*node)) {
     // Each m_offsetsInAnchorNode[offset] should be an index of node in
     // parent, but delay to calculate the index until it is needed for
     // performance.
-    m_offsetsInAnchorNode.append(kInvalidOffset);
+    m_offsetsInAnchorNode.push_back(kInvalidOffset);
     ++m_depthToAnchorNode;
   }
   if (m_nodeAfterPositionInAnchor)
-    m_offsetsInAnchorNode.append(offsetInAnchor);
+    m_offsetsInAnchorNode.push_back(offsetInAnchor);
 }
 template <typename Strategy>
 PositionIteratorAlgorithm<Strategy>::PositionIteratorAlgorithm(
@@ -108,7 +129,7 @@ PositionIteratorAlgorithm<Strategy>::computePosition() const {
     return PositionTemplate<Strategy>(
         m_anchorNode, m_offsetsInAnchorNode[m_depthToAnchorNode]);
   }
-  if (Strategy::hasChildren(*m_anchorNode))
+  if (shouldTraverseChildren<Strategy>(*m_anchorNode))
     // For example, position is the end of B.
     return PositionTemplate<Strategy>::lastPositionInOrAfterNode(m_anchorNode);
   if (m_anchorNode->isTextNode())
@@ -147,18 +168,22 @@ void PositionIteratorAlgorithm<Strategy>::increment() {
     // Let |anchor| is A and |child| is B,
     // then next |anchor| is B and |child| is E.
     m_anchorNode = m_nodeAfterPositionInAnchor;
-    m_nodeAfterPositionInAnchor = Strategy::firstChild(*m_anchorNode);
+    m_nodeAfterPositionInAnchor =
+        shouldTraverseChildren<Strategy>(*m_anchorNode)
+            ? Strategy::firstChild(*m_anchorNode)
+            : nullptr;
     m_offsetInAnchor = 0;
     // Increment depth intializing with 0.
     ++m_depthToAnchorNode;
     if (m_depthToAnchorNode == m_offsetsInAnchorNode.size())
-      m_offsetsInAnchorNode.append(0);
+      m_offsetsInAnchorNode.push_back(0);
     else
       m_offsetsInAnchorNode[m_depthToAnchorNode] = 0;
     return;
   }
 
-  if (m_anchorNode->layoutObject() && !Strategy::hasChildren(*m_anchorNode) &&
+  if (m_anchorNode->layoutObject() &&
+      !shouldTraverseChildren<Strategy>(*m_anchorNode) &&
       m_offsetInAnchor < Strategy::lastOffsetForEditing(m_anchorNode)) {
     // Case #2. This is the next of Case #1 or #2 itself.
     // Position is (|anchor|, |m_offsetInAchor|).
@@ -174,7 +199,7 @@ void PositionIteratorAlgorithm<Strategy>::increment() {
     // 3-b. If |anchor| doesn't have next sibling (let F),
     //      next |anchor| is B and |child| is null. (next is Case #3.)
     m_nodeAfterPositionInAnchor = m_anchorNode;
-    m_anchorNode = Strategy::parent(*m_nodeAfterPositionInAnchor);
+    m_anchorNode = selectableParentOf<Strategy>(*m_nodeAfterPositionInAnchor);
     if (!m_anchorNode)
       return;
     DCHECK_GT(m_depthToAnchorNode, 0u);
@@ -219,7 +244,7 @@ void PositionIteratorAlgorithm<Strategy>::decrement() {
       // Let |anchor| is B and |child| is F,
       // next |anchor| is E and |child| is null.
       m_nodeAfterPositionInAnchor = nullptr;
-      m_offsetInAnchor = Strategy::hasChildren(*m_anchorNode)
+      m_offsetInAnchor = shouldTraverseChildren<Strategy>(*m_anchorNode)
                              ? 0
                              : Strategy::lastOffsetForEditing(m_anchorNode);
       // Decrement offset of |child| or initialize if it have never been
@@ -233,7 +258,7 @@ void PositionIteratorAlgorithm<Strategy>::decrement() {
       // Increment depth intializing with last offset.
       ++m_depthToAnchorNode;
       if (m_depthToAnchorNode >= m_offsetsInAnchorNode.size())
-        m_offsetsInAnchorNode.append(m_offsetInAnchor);
+        m_offsetsInAnchorNode.push_back(m_offsetInAnchor);
       else
         m_offsetsInAnchorNode[m_depthToAnchorNode] = m_offsetInAnchor;
       return;
@@ -244,7 +269,7 @@ void PositionIteratorAlgorithm<Strategy>::decrement() {
       // next |anchor| is A and |child| is B.
       m_nodeAfterPositionInAnchor =
           Strategy::parent(*m_nodeAfterPositionInAnchor);
-      m_anchorNode = Strategy::parent(*m_nodeAfterPositionInAnchor);
+      m_anchorNode = selectableParentOf<Strategy>(*m_nodeAfterPositionInAnchor);
       if (!m_anchorNode)
         return;
       m_offsetInAnchor = 0;
@@ -258,47 +283,46 @@ void PositionIteratorAlgorithm<Strategy>::decrement() {
     return;
   }
 
-  if (Strategy::hasChildren(*m_anchorNode)) {
+  if (shouldTraverseChildren<Strategy>(*m_anchorNode)) {
     // Case #2. This is a reverse of increment()::Case3-b.
     // Let |anchor| is B, next |anchor| is F.
     m_anchorNode = Strategy::lastChild(*m_anchorNode);
-    m_offsetInAnchor = Strategy::hasChildren(*m_anchorNode)
+    m_offsetInAnchor = shouldTraverseChildren<Strategy>(*m_anchorNode)
                            ? 0
                            : Strategy::lastOffsetForEditing(m_anchorNode);
     // Decrement depth initializing with -1 because
     // |m_nodeAfterPositionInAnchor| is null so still unneeded.
     if (m_depthToAnchorNode >= m_offsetsInAnchorNode.size())
-      m_offsetsInAnchorNode.append(kInvalidOffset);
+      m_offsetsInAnchorNode.push_back(kInvalidOffset);
     else
       m_offsetsInAnchorNode[m_depthToAnchorNode] = kInvalidOffset;
     ++m_depthToAnchorNode;
     return;
-  } else {
-    if (m_offsetInAnchor && m_anchorNode->layoutObject()) {
-      // Case #3-a. This is a reverse of increment()::Case#2.
-      // In this case |anchor| is a leaf(E,F,C,G or H) and
-      // |m_offsetInAnchor| is not on the beginning of |anchor|.
-      // Then just decrement |m_offsetInAnchor|.
-      m_offsetInAnchor =
-          previousGraphemeBoundaryOf(m_anchorNode, m_offsetInAnchor);
-      return;
-    } else {
-      // Case #3-b. This is a reverse of increment()::Case#1.
-      // In this case |anchor| is a leaf(E,F,C,G or H) and
-      // |m_offsetInAnchor| is on the beginning of |anchor|.
-      // Let |anchor| is E,
-      // next |anchor| is B and |child| is E.
-      m_nodeAfterPositionInAnchor = m_anchorNode;
-      m_anchorNode = Strategy::parent(*m_anchorNode);
-      if (!m_anchorNode)
-        return;
-      DCHECK_GT(m_depthToAnchorNode, 0u);
-      --m_depthToAnchorNode;
-      if (m_offsetsInAnchorNode[m_depthToAnchorNode] == kInvalidOffset)
-        m_offsetsInAnchorNode[m_depthToAnchorNode] =
-            Strategy::index(*m_nodeAfterPositionInAnchor);
-    }
   }
+  if (m_offsetInAnchor && m_anchorNode->layoutObject()) {
+    // Case #3-a. This is a reverse of increment()::Case#2.
+    // In this case |anchor| is a leaf(E,F,C,G or H) and
+    // |m_offsetInAnchor| is not on the beginning of |anchor|.
+    // Then just decrement |m_offsetInAnchor|.
+    m_offsetInAnchor =
+        previousGraphemeBoundaryOf(m_anchorNode, m_offsetInAnchor);
+    return;
+  }
+  // Case #3-b. This is a reverse of increment()::Case#1.
+  // In this case |anchor| is a leaf(E,F,C,G or H) and
+  // |m_offsetInAnchor| is on the beginning of |anchor|.
+  // Let |anchor| is E,
+  // next |anchor| is B and |child| is E.
+  m_nodeAfterPositionInAnchor = m_anchorNode;
+  m_anchorNode = selectableParentOf<Strategy>(*m_anchorNode);
+  if (!m_anchorNode)
+    return;
+  DCHECK_GT(m_depthToAnchorNode, 0u);
+  --m_depthToAnchorNode;
+  if (m_offsetsInAnchorNode[m_depthToAnchorNode] != kInvalidOffset)
+    return;
+  m_offsetsInAnchorNode[m_depthToAnchorNode] =
+      Strategy::index(*m_nodeAfterPositionInAnchor);
 }
 
 template <typename Strategy>
@@ -346,7 +370,8 @@ bool PositionIteratorAlgorithm<Strategy>::atEndOfNode() const {
          m_offsetInAnchor >= Strategy::lastOffsetForEditing(m_anchorNode);
 }
 
-template class PositionIteratorAlgorithm<EditingStrategy>;
-template class PositionIteratorAlgorithm<EditingInFlatTreeStrategy>;
+template class CORE_TEMPLATE_EXPORT PositionIteratorAlgorithm<EditingStrategy>;
+template class CORE_TEMPLATE_EXPORT
+    PositionIteratorAlgorithm<EditingInFlatTreeStrategy>;
 
 }  // namespace blink

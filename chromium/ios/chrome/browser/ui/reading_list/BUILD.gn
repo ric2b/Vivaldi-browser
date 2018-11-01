@@ -35,8 +35,12 @@ source_set("reading_list") {
     "number_badge_view.mm",
     "offline_page_native_content.h",
     "offline_page_native_content.mm",
+    "reading_list_collection_view_controller.h",
+    "reading_list_collection_view_controller.mm",
     "reading_list_collection_view_item.h",
     "reading_list_collection_view_item.mm",
+    "reading_list_coordinator.h",
+    "reading_list_coordinator.mm",
     "reading_list_empty_collection_background.h",
     "reading_list_empty_collection_background.mm",
     "reading_list_menu_notification_delegate.h",
@@ -48,10 +52,6 @@ source_set("reading_list") {
     "reading_list_toolbar.mm",
     "reading_list_view_controller.h",
     "reading_list_view_controller.mm",
-    "reading_list_view_controller_builder.h",
-    "reading_list_view_controller_builder.mm",
-    "reading_list_view_controller_container.h",
-    "reading_list_view_controller_container.mm",
   ]
   deps = [
     ":resources",
@@ -74,12 +74,14 @@ source_set("reading_list") {
     "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/side_swipe",
     "//ios/chrome/browser/ui/static_content",
+    "//ios/chrome/browser/ui/util",
     "//ios/chrome/common",
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
     "//net",
     "//ui/base",
+    "//ui/strings",
     "//url",
   ]
   public_deps = [
@@ -94,14 +96,17 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "offline_page_native_content_unittest.mm",
-    "reading_list_view_controller_unittest.mm",
+    "reading_list_collection_view_controller_unittest.mm",
+    "reading_list_coordinator_unittest.mm",
   ]
   deps = [
     ":reading_list",
     "//base",
     "//components/favicon/core",
+    "//components/favicon/core/test:test_support",
     "//components/prefs",
     "//components/reading_list/ios",
+    "//components/url_formatter",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/reading_list",
@@ -112,10 +117,12 @@ source_set("unit_tests") {
     "//ios/web:test_support",
     "//testing/gtest",
     "//third_party/ocmock",
+    "//ui/base",
   ]
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "reading_list_egtest.mm",

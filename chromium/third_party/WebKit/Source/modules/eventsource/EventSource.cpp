@@ -39,6 +39,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -70,7 +71,9 @@ inline EventSource::EventSource(ExecutionContext* context,
       m_currentURL(url),
       m_withCredentials(eventSourceInit.withCredentials()),
       m_state(kConnecting),
-      m_connectTimer(this, &EventSource::connectTimerFired),
+      m_connectTimer(TaskRunnerHelper::get(TaskType::RemoteEvent, context),
+                     this,
+                     &EventSource::connectTimerFired),
       m_reconnectDelay(defaultReconnectDelay) {}
 
 EventSource* EventSource::create(ExecutionContext* context,
@@ -117,6 +120,10 @@ EventSource* EventSource::create(ExecutionContext* context,
 EventSource::~EventSource() {
   DCHECK_EQ(kClosed, m_state);
   DCHECK(!m_loader);
+}
+
+void EventSource::dispose() {
+  probe::detachClientRequest(getExecutionContext(), this);
 }
 
 void EventSource::scheduleInitialConnect() {
@@ -172,20 +179,16 @@ void EventSource::connect() {
   resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
   resourceLoaderOptions.securityOrigin = origin;
 
-  InspectorInstrumentation::willSendEventSourceRequest(&executionContext, this);
-  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
-  CHECK(!m_loader);
-  // InspectorInstrumentation::documentThreadableLoaderStartedLoadingForClient
+  probe::willSendEventSourceRequest(&executionContext, this);
+  // probe::documentThreadableLoaderStartedLoadingForClient
   // will be called synchronously.
-  m_loader = ThreadableLoader::create(
-      executionContext, this, options, resourceLoaderOptions,
-      ThreadableLoader::ClientSpec::kEventSource);
+  m_loader = ThreadableLoader::create(executionContext, this, options,
+                                      resourceLoaderOptions);
   m_loader->start(request);
 }
 
 void EventSource::networkRequestEnded() {
-  InspectorInstrumentation::didFinishEventSourceRequest(getExecutionContext(),
-                                                        this);
+  probe::didFinishEventSourceRequest(getExecutionContext(), this);
 
   m_loader = nullptr;
 
@@ -346,12 +349,11 @@ void EventSource::onMessageEvent(const AtomicString& eventType,
                                  const String& data,
                                  const AtomicString& lastEventId) {
   MessageEvent* e = MessageEvent::create();
-  e->initMessageEvent(eventType, false, false,
-                      SerializedScriptValue::serialize(data),
-                      m_eventStreamOrigin, lastEventId, 0, nullptr);
+  e->initMessageEvent(eventType, false, false, data, m_eventStreamOrigin,
+                      lastEventId, 0, nullptr);
 
-  InspectorInstrumentation::willDispatchEventSourceEvent(
-      getExecutionContext(), this, eventType, lastEventId, data);
+  probe::willDispatchEventSourceEvent(getExecutionContext(), this, eventType,
+                                      lastEventId, data);
   dispatchEvent(e);
 }
 
@@ -370,6 +372,7 @@ void EventSource::abortConnectionAttempt() {
 }
 
 void EventSource::contextDestroyed(ExecutionContext*) {
+  probe::detachClientRequest(getExecutionContext(), this);
   close();
 }
 

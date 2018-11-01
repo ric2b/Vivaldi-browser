@@ -136,12 +136,13 @@ class PLATFORM_EXPORT KURL {
 
   String baseAsString() const;
 
-  // Returns true if the current URL's protocol is the same as the null-
-  // terminated ASCII argument. The argument must be lower-case.
-  bool protocolIs(const char*) const;
+  // Returns true if the current URL's protocol is the same as the StringView
+  // argument. The argument must be lower-case.
+  bool protocolIs(const StringView protocol) const;
   bool protocolIsData() const { return protocolIs("data"); }
   // This includes at least about:blank and about:srcdoc.
   bool protocolIsAbout() const { return protocolIs("about"); }
+  bool protocolIsJavaScript() const;
   bool protocolIsInHTTPFamily() const;
   bool isLocalFile() const;
   bool isAboutBlankURL() const;   // Is exactly about:blank.

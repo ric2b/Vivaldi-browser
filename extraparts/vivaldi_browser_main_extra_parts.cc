@@ -2,6 +2,8 @@
 
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
+#include <string>
+
 #include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
 #include "chrome/browser/net/url_info.h"
@@ -12,43 +14,41 @@
 #include "components/security_state/core/switches.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "content/public/common/content_switches.h"
-#include "notes/notesnode.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_loaded_observer.h"
+#include "notes/notesnode.h"
 #include "prefs/vivaldi_pref_names.h"
 
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
-#include "extensions/api/notes/notes_api.h"
 #include "extensions/api/import_data/import_data_api.h"
+#include "extensions/api/notes/notes_api.h"
 #include "extensions/api/runtime/runtime_api.h"
-#include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/settings/settings_api.h"
+#include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/vivaldi_extensions_init.h"
 
-VivaldiBrowserMainExtraParts::VivaldiBrowserMainExtraParts() {
-}
+VivaldiBrowserMainExtraParts::VivaldiBrowserMainExtraParts() {}
 
-VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {
-}
+VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
-  base::CommandLine *command_line = base::CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (vivaldi::IsVivaldiRunning()) {
     // andre@vivaldi.com HACK while not having all the permission dialogs in
     // place.
-    command_line->AppendSwitchNoDup(
-        switches::kAlwaysAuthorizePlugins);
+    vivaldi::CommandLineAppendSwitchNoDup(command_line,
+                                          switches::kAlwaysAuthorizePlugins);
 
-    command_line->AppendSwitchNoDup(
-      translate::switches::kDisableTranslate);
+    vivaldi::CommandLineAppendSwitchNoDup(
+        command_line, translate::switches::kDisableTranslate);
 
     // NOTE(arnar): Can be removed once ResizeObserver is stable.
     // https://www.chromestatus.com/feature/5705346022637568
@@ -65,13 +65,6 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
                                       "ResizeObserver");
     }
 
-    // NOTE(jarle): Enable the HTTP_SHOW_WARNING security level for
-    // the URL field security badge. See VB-23666.
-    if (!command_line->HasSwitch(security_state::switches::kMarkHttpAs)) {
-      command_line->AppendSwitchASCII(
-          security_state::switches::kMarkHttpAs,
-          security_state::switches::kMarkHttpWithPasswordsOrCcWithChip);
-    }
   }
 
 #if defined(OS_MACOSX)
@@ -86,7 +79,7 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 }
 
 void VivaldiBrowserMainExtraParts::
-     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+    EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
   extensions::ImportDataAPI::GetFactoryInstance();
@@ -121,7 +114,8 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
 
   if (profile->GetPrefs()->GetBoolean(vivaldiprefs::kSmoothScrollingEnabled) ==
       false) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchNoDup(
+    vivaldi::CommandLineAppendSwitchNoDup(
+        base::CommandLine::ForCurrentProcess(),
         switches::kDisableSmoothScrolling);
   }
 }

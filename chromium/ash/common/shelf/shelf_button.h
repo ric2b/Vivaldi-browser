@@ -9,7 +9,10 @@
 #include "base/macros.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/views/controls/button/custom_button.h"
-#include "ui/views/controls/image_view.h"
+
+namespace views {
+class ImageView;
+}
 
 namespace ash {
 class InkDropButtonListener;
@@ -91,14 +94,11 @@ class ASH_EXPORT ShelfButton : public views::CustomButton {
   void SetShadowedImage(const gfx::ImageSkia& bitmap);
 
  private:
-  class BarView;
+  class AppStatusIndicatorView;
 
   // Updates the parts of the button to reflect the current |state_| and
   // alignment. This may add or remove views, layout and paint.
   void UpdateState();
-
-  // Updates the status bar (bitmap, orientation, visibility).
-  void UpdateBar();
 
   InkDropButtonListener* listener_;
 
@@ -108,8 +108,9 @@ class ASH_EXPORT ShelfButton : public views::CustomButton {
   // The icon part of a button can be animated independently of the rest.
   views::ImageView* icon_view_;
 
-  // Draws a bar underneath the image to represent the state of the application.
-  BarView* bar_;
+  // Draws an indicator underneath the image to represent the state of the
+  // application.
+  AppStatusIndicatorView* indicator_;
 
   // The current application state, a bitfield of State enum values.
   int state_;

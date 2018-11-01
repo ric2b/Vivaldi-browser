@@ -20,8 +20,8 @@
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
-#include "ui/views/resources/vector_icons/vector_icons.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/vector_icons.h"
 
 namespace views {
 
@@ -142,15 +142,15 @@ void Checkbox::OnPaint(gfx::Canvas* canvas) {
   if (!UseMd() || !HasFocus())
     return;
 
-  SkPaint focus_paint;
-  focus_paint.setAntiAlias(true);
-  focus_paint.setColor(
+  cc::PaintFlags focus_flags;
+  focus_flags.setAntiAlias(true);
+  focus_flags.setColor(
       SkColorSetA(GetNativeTheme()->GetSystemColor(
                       ui::NativeTheme::kColorId_FocusedBorderColor),
                   0x66));
-  focus_paint.setStyle(SkPaint::kStroke_Style);
-  focus_paint.setStrokeWidth(2);
-  PaintFocusRing(canvas, focus_paint);
+  focus_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  focus_flags.setStrokeWidth(2);
+  PaintFocusRing(canvas, focus_flags);
 }
 
 void Checkbox::OnFocus() {
@@ -214,9 +214,10 @@ void Checkbox::SetCustomImage(bool checked,
   UpdateImage();
 }
 
-void Checkbox::PaintFocusRing(gfx::Canvas* canvas, const SkPaint& paint) {
+void Checkbox::PaintFocusRing(gfx::Canvas* canvas,
+                              const cc::PaintFlags& flags) {
   gfx::RectF focus_rect(image()->bounds());
-  canvas->DrawRoundRect(focus_rect, 2.f, paint);
+  canvas->DrawRoundRect(focus_rect, 2.f, flags);
 }
 
 const gfx::VectorIcon& Checkbox::GetVectorIcon() const {

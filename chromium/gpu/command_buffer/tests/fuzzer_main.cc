@@ -29,7 +29,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_context_egl.h"
-#include "ui/gl/gl_context_stub_with_extensions.h"
+#include "ui/gl/gl_context_stub.h"
 #include "ui/gl/gl_image_ref_counted_memory.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_stub_api.h"
@@ -88,7 +88,7 @@ class CommandBufferSetup {
  public:
   CommandBufferSetup()
       : atexit_manager_(),
-        sync_point_manager_(new SyncPointManager(false)),
+        sync_point_manager_(new SyncPointManager()),
         sync_point_order_data_(SyncPointOrderData::Create()),
         mailbox_manager_(new gles2::MailboxManagerImpl),
         share_group_(new gl::GLShareGroup),
@@ -111,18 +111,18 @@ class CommandBufferSetup {
     context_->Initialize(surface_.get(), gl::GLContextAttribs());
 #else
     surface_ = new gl::GLSurfaceStub;
-    context_ = new gl::GLContextStub(share_group_.get());
+    scoped_refptr<gl::GLContextStub> context_stub =
+        new gl::GLContextStub(share_group_.get());
+    context_stub->SetGLVersionString("OpenGL ES 3.1");
+    context_stub->SetExtensionsString(kExtensions);
+    context_stub->SetUseStubApi(true);
+    context_ = context_stub;
     gl::GLSurfaceTestSupport::InitializeOneOffWithMockBindings();
-
-    api_ = base::MakeUnique<gl::GLStubApi>();
-    api_->set_version("OpenGL ES 3.1");
-    api_->set_extensions(kExtensions);
-    gl::SetStubGLApi(api_.get());
 #endif
 
-    sync_point_client_ = sync_point_manager_->CreateSyncPointClient(
-        sync_point_order_data_, CommandBufferNamespace::IN_PROCESS,
-        command_buffer_id_);
+    sync_point_client_ = base::MakeUnique<SyncPointClient>(
+        sync_point_manager_.get(), sync_point_order_data_,
+        CommandBufferNamespace::IN_PROCESS, command_buffer_id_);
 
     translator_cache_ = new gles2::ShaderTranslatorCache(gpu_preferences_);
     completeness_cache_ = new gles2::FramebufferCompletenessCache;
@@ -135,7 +135,8 @@ class CommandBufferSetup {
     scoped_refptr<gles2::ContextGroup> context_group = new gles2::ContextGroup(
         gpu_preferences_, mailbox_manager_.get(), nullptr, translator_cache_,
         completeness_cache_, feature_info, true /* bind_generates_resource */,
-        nullptr /* image_factory */, nullptr /* progress_reporter */);
+        nullptr /* image_factory */, nullptr /* progress_reporter */,
+        GpuFeatureInfo());
     command_buffer_.reset(
         new CommandBufferService(context_group->transfer_buffer_manager()));
     command_buffer_->SetPutOffsetChangeCallback(
@@ -150,8 +151,8 @@ class CommandBufferSetup {
     decoder_->set_engine(executor_.get());
     decoder_->SetFenceSyncReleaseCallback(base::Bind(
         &CommandBufferSetup::OnFenceSyncRelease, base::Unretained(this)));
-    decoder_->SetWaitFenceSyncCallback(base::Bind(
-        &CommandBufferSetup::OnWaitFenceSync, base::Unretained(this)));
+    decoder_->SetWaitSyncTokenCallback(base::Bind(
+        &CommandBufferSetup::OnWaitSyncToken, base::Unretained(this)));
     decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
 
     gles2::ContextCreationAttribHelper attrib_helper;
@@ -240,21 +241,12 @@ class CommandBufferSetup {
     sync_point_client_->ReleaseFenceSync(release);
   }
 
-  bool OnWaitFenceSync(CommandBufferNamespace namespace_id,
-                       CommandBufferId command_buffer_id,
-                       uint64_t release) {
-    CHECK(sync_point_client_);
-    scoped_refptr<gpu::SyncPointClientState> release_state =
-        sync_point_manager_->GetSyncPointClientState(namespace_id,
-                                                     command_buffer_id);
-    if (!release_state)
-      return true;
-
-    if (release_state->IsFenceSyncReleased(release))
-      return true;
-
+  bool OnWaitSyncToken(const SyncToken& sync_token) {
+    CHECK(sync_point_manager_);
+    if (sync_point_manager_->IsSyncTokenReleased(sync_token))
+      return false;
     executor_->SetScheduled(false);
-    return false;
+    return true;
   }
 
   void CreateTransferBuffer(size_t size, int32_t id) {
@@ -290,9 +282,6 @@ class CommandBufferSetup {
 
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
-#if !defined(GPU_FUZZER_USE_ANGLE)
-  std::unique_ptr<gl::GLStubApi> api_;
-#endif
 
   scoped_refptr<gles2::ShaderTranslatorCache> translator_cache_;
   scoped_refptr<gles2::FramebufferCompletenessCache> completeness_cache_;

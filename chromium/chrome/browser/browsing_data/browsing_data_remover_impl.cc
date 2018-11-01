@@ -15,10 +15,8 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "chrome/browser/browsing_data/browsing_data_filter_builder.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_delegate.h"
-#include "chrome/browser/browsing_data/registrable_domain_filter_builder.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/browsing_data/content/storage_partition_http_cache_data_remover.h"
@@ -26,6 +24,7 @@
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
@@ -47,6 +46,7 @@
 using base::UserMetricsAction;
 using content::BrowserContext;
 using content::BrowserThread;
+using content::BrowsingDataFilterBuilder;
 using content::DOMStorageContext;
 
 namespace {
@@ -209,7 +209,7 @@ void BrowsingDataRemoverImpl::Remove(const base::Time& delete_begin,
                                  int remove_mask,
                                  int origin_type_mask) {
   RemoveInternal(delete_begin, delete_end, remove_mask, origin_type_mask,
-                 std::unique_ptr<RegistrableDomainFilterBuilder>(), nullptr);
+                 std::unique_ptr<BrowsingDataFilterBuilder>(), nullptr);
 }
 
 void BrowsingDataRemoverImpl::RemoveAndReply(
@@ -220,7 +220,7 @@ void BrowsingDataRemoverImpl::RemoveAndReply(
     Observer* observer) {
   DCHECK(observer);
   RemoveInternal(delete_begin, delete_end, remove_mask, origin_type_mask,
-                 std::unique_ptr<RegistrableDomainFilterBuilder>(), observer);
+                 std::unique_ptr<BrowsingDataFilterBuilder>(), observer);
 }
 
 void BrowsingDataRemoverImpl::RemoveWithFilter(
@@ -263,8 +263,8 @@ void BrowsingDataRemoverImpl::RemoveInternal(
   // Remove() and RemoveAndReply() pass a null pointer to indicate no filter.
   // No filter is equivalent to one that |IsEmptyBlacklist()|.
   if (!filter_builder) {
-    filter_builder = base::MakeUnique<RegistrableDomainFilterBuilder>(
-        RegistrableDomainFilterBuilder::BLACKLIST);
+    filter_builder = BrowsingDataFilterBuilder::Create(
+        BrowsingDataFilterBuilder::BLACKLIST);
     DCHECK(filter_builder->IsEmptyBlacklist());
   }
 

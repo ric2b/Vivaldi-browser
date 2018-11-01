@@ -54,6 +54,11 @@ template <typename T> inline void IgnoreUnused(T) {}
 // Returns true if Chrome is running at system level.
 bool IsSystemInstall();
 
+// Returns the app GUID with which Chrome is registered with Google Update, or
+// an empty string if this brand does not integrate with Google Update. This is
+// a simple convenience wrapper around InstallDetails.
+const wchar_t* GetAppGuid();
+
 // Returns true if usage stats collecting is enabled for this user for the
 // current executable.
 bool GetCollectStatsConsent();
@@ -123,9 +128,6 @@ void GetExecutableVersionDetails(const std::wstring& exe_path,
                                  std::wstring* channel_name);
 
 // Gets the channel name for the current Chrome process.
-// TODO(ananta)
-// http://crbug.com/604923
-// Unify this with the Browser Distribution code.
 std::wstring GetChromeChannelName();
 
 // Returns the registry path where the browser crash dumps metrics need to be
@@ -178,8 +180,12 @@ std::wstring GetSwitchValueFromCommandLine(const std::wstring& command_line,
 bool RecursiveDirectoryCreate(const std::wstring& full_path);
 
 // Returns the unadorned channel name based on the channel strategy for the
-// install mode.
-std::wstring DetermineChannel(const InstallConstants& mode, bool system_level);
+// install mode. |from_binaries| forces the registry locations corresponding to
+// the now-deprecated multi-install binaries to be read, and is only for use by
+// the installer.
+std::wstring DetermineChannel(const InstallConstants& mode,
+                              bool system_level,
+                              bool from_binaries = false);
 
 // Caches the |ProcessType| of the current process.
 extern ProcessType g_process_type;

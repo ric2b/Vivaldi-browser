@@ -23,7 +23,7 @@
   </svg>
 </iron-iconset-svg>
 
-<dom-module name="oobe-update-md">
+<dom-module id="oobe-update-md">
   <template>
     <link rel="stylesheet" href="oobe_update.css">
     <link rel="stylesheet" href="oobe_dialog_parameters.css">
@@ -31,9 +31,8 @@
       <iron-icon icon="oobe-update:googleg" class="oobe-icon"></iron-icon>
       <div class="header">
         <h1 class="title" i18n-content="checkingForUpdates"></h1>
-        <div class="subtitle" i18n-content="checkingForUpdatesMsg"></div>
         <div class="subtitle" id="checkingForUpdateCancelHint"
-            hidden="[[!cancelAllowed]]" i18n-content="cancelUpdateHint">
+            i18n-content="cancelUpdateHint" hidden="[[!cancelAllowed]]">
         </div>
       </div>
       <div class="footer flex layout vertical">

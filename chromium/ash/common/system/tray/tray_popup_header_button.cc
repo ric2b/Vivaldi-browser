@@ -57,11 +57,10 @@ const char* TrayPopupHeaderButton::GetClassName() const {
 }
 
 gfx::Size TrayPopupHeaderButton::GetPreferredSize() const {
-  int size = GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT);
-  return gfx::Size(size, size);
+  return gfx::Size(kTrayPopupItemMinHeight, kTrayPopupItemMinHeight);
 }
 
-void TrayPopupHeaderButton::StateChanged() {
+void TrayPopupHeaderButton::StateChanged(ButtonState old_state) {
   if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
     set_background(views::Background::CreateSolidBackground(
         kTrayPopupHoverBackgroundColor));

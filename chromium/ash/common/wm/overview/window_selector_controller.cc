@@ -13,7 +13,7 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 
 namespace ash {
 
@@ -73,6 +73,16 @@ bool WindowSelectorController::ToggleOverview() {
 
 bool WindowSelectorController::IsSelecting() const {
   return window_selector_.get() != NULL;
+}
+
+void WindowSelectorController::IncrementSelection(int increment) {
+  DCHECK(IsSelecting());
+  window_selector_->IncrementSelection(increment);
+}
+
+bool WindowSelectorController::AcceptSelection() {
+  DCHECK(IsSelecting());
+  return window_selector_->AcceptSelection();
 }
 
 bool WindowSelectorController::IsRestoringMinimizedWindows() const {

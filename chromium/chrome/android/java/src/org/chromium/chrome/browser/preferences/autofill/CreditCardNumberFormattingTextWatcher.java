@@ -8,6 +8,8 @@ import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 
+import org.chromium.chrome.browser.autofill.PersonalDataManager;
+
 /**
  * Watch a TextView and if a credit card number is entered, it will format the number.
  * Disable formatting when user:
@@ -26,7 +28,7 @@ public class CreditCardNumberFormattingTextWatcher implements TextWatcher {
     /**
      * Whether to format the credit card number. If true, spaces will be inserted
      * automatically between each group of 4 digits in the credit card number as the user types.
-     * This is set to false if the user types a dash or deletes one of the auto-inserted spaces.
+     * This is set to false if the user types a dash or space.
      */
     private boolean mFormattingEnabled = true;
 
@@ -50,13 +52,7 @@ public class CreditCardNumberFormattingTextWatcher implements TextWatcher {
     }
 
     @Override
-    public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-        if (mSelfChange || !mFormattingEnabled) return;
-        // If user deletes non-digit characters, do not format.
-        if (count > 0 && hasDashOrSpace(s, start, count)) {
-            mFormattingEnabled = false;
-        }
-    }
+    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
     @Override
     public void afterTextChanged(Editable s) {
@@ -94,7 +90,19 @@ public class CreditCardNumberFormattingTextWatcher implements TextWatcher {
     }
 
     public static void insertSeparators(Editable s) {
-        final int[] positions = {4, 9, 14 };
+        int[] positions;
+        if (PersonalDataManager.getInstance()
+                    .getBasicCardPaymentType(s.toString(), false)
+                    .equals("amex")) {
+            positions = new int[2];
+            positions[0] = 4;
+            positions[1] = 11;
+        } else {
+            positions = new int[3];
+            positions[0] = 4;
+            positions[1] = 9;
+            positions[2] = 14;
+        }
         for (int i : positions) {
             if (s.length() > i) {
                 s.insert(i, SEPARATOR);

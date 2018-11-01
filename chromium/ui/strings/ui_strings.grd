@@ -413,9 +413,16 @@ need to be translated for each locale.-->
       <message name="IDS_APP_DELETE" desc="The text label of the Delete menu item">
         &amp;Delete
       </message>
-      <message name="IDS_APP_SELECT_ALL" desc="The text label of the Select All menu item">
-        Select &amp;all
-      </message>
+      <if expr="not use_titlecase">
+        <message name="IDS_APP_SELECT_ALL" desc="The text label of the Select All menu item">
+          Select &amp;all
+        </message>
+      </if>
+      <if expr="use_titlecase">
+        <message name="IDS_APP_SELECT_ALL" desc="In Title Case: The text label of the Select All menu item">
+          Select &amp;All
+        </message>
+      </if>
 
       <!-- Generic terms -->
       <message name="IDS_APP_OK" desc="Used for Ok on buttons">
@@ -470,9 +477,6 @@ need to be translated for each locale.-->
       </message>
       <message name="IDS_APP_SPACE_KEY" desc="Space bar key">
         Space
-      </message>
-      <message name="IDS_APP_ALT_KEY" desc="Alt key">
-        Alt
       </message>
       <message name="IDS_APP_F1_KEY" desc="F1 key">
         F1
@@ -573,11 +577,6 @@ need to be translated for each locale.-->
       <message name="IDS_MESSAGE_CENTER_SETTINGS_BUTTON_LABEL" desc="The button label for visiting the appropriate settings page in the footer of the message center.">
         Settings
       </message>
-      <if expr="is_macosx">
-        <message name="IDS_MESSAGE_CENTER_SETTINGS_GO_BACK_BUTTON_TOOLTIP" desc="The tooltip on back button that returns from settings to the notification list.">
-          Go back to notifications
-        </message>
-      </if>
       <message name="IDS_MESSAGE_CENTER_SETTINGS_DIALOG_DESCRIPTION" desc="The label to describe the settings dialog.">
         Allow notifications from the following:
       </message>
@@ -631,12 +630,6 @@ need to be translated for each locale.-->
       </if>
 
       <!-- App list -->
-      <message name="IDS_APP_LIST_HELP" desc="The menu entry to show the app list help UI.">
-        Help
-      </message>
-      <message name="IDS_APP_LIST_OPEN_FEEDBACK" desc="The menu entry to show the feedback UI.">
-        Send feedback
-      </message>
       <message name="IDS_APP_LIST_BACK" desc="The name of the button that goes to the previous screen in the launcher.">
         Back
       </message>
@@ -667,7 +660,7 @@ need to be translated for each locale.-->
         To exit calibration press Esc.
       </message>
       <message name="IDS_DISPLAY_TOUCH_CALIBRATION_HINT_LABEL_TEXT" desc="Title of the hint message to inform the user what the next step is in touch calibration is">
-        Define your touchscreen
+       Calibrate your touchscreen
       </message>
       <message name="IDS_DISPLAY_TOUCH_CALIBRATION_HINT_SUBLABEL_TEXT" desc="Message to inform the user what the next step is in touch calibration is">
         Tap the touch targets on your screen.

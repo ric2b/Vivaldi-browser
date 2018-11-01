@@ -15,14 +15,11 @@
 #include "cc/output/managed_memory_policy.h"
 #include "cc/output/renderer_settings.h"
 #include "cc/scheduler/scheduler_settings.h"
+#include "cc/tiles/tile_manager_settings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace cc {
-
-namespace proto {
-class LayerTreeSettings;
-}  // namespace proto
 
 class CC_EXPORT LayerTreeSettings {
  public:
@@ -32,10 +29,8 @@ class CC_EXPORT LayerTreeSettings {
 
   bool operator==(const LayerTreeSettings& other) const;
 
-  void ToProtobuf(proto::LayerTreeSettings* proto) const;
-  void FromProtobuf(const proto::LayerTreeSettings& proto);
-
   SchedulerSettings ToSchedulerSettings() const;
+  TileManagerSettings ToTileManagerSettings() const;
 
   RendererSettings renderer_settings;
   bool single_thread_proxy_scheduler = true;
@@ -44,7 +39,6 @@ class CC_EXPORT LayerTreeSettings {
   bool enable_latency_recovery = true;
   bool can_use_lcd_text = true;
   bool use_distance_field_text = false;
-  bool gpu_rasterization_enabled = false;
   bool gpu_rasterization_forced = false;
   bool async_worker_context_enabled = false;
   int gpu_rasterization_msaa_sample_count = 0;
@@ -53,13 +47,14 @@ class CC_EXPORT LayerTreeSettings {
 
   enum ScrollbarAnimator {
     NO_ANIMATOR,
-    LINEAR_FADE,
-    THINNING,
+    ANDROID_OVERLAY,
+    AURA_OVERLAY,
   };
   ScrollbarAnimator scrollbar_animator = NO_ANIMATOR;
-  base::TimeDelta scrollbar_fade_delay;
-  base::TimeDelta scrollbar_fade_resize_delay;
-  base::TimeDelta scrollbar_fade_duration;
+  base::TimeDelta scrollbar_show_delay;
+  base::TimeDelta scrollbar_fade_out_delay;
+  base::TimeDelta scrollbar_fade_out_resize_delay;
+  base::TimeDelta scrollbar_fade_out_duration;
   base::TimeDelta scrollbar_thinning_duration;
   SkColor solid_color_scrollbar_color = SK_ColorWHITE;
   bool timeout_and_draw_when_animation_checkerboards = true;
@@ -88,7 +83,11 @@ class CC_EXPORT LayerTreeSettings {
   size_t scheduled_raster_task_limit = 32;
   bool use_occlusion_for_tile_prioritization = false;
   bool verify_clip_tree_calculations = false;
+
+  // TODO(khushalsagar): Enable for all client and remove this flag if possible.
+  // See crbug/com/696864.
   bool image_decode_tasks_enabled = false;
+
   bool use_layer_lists = false;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
   ManagedMemoryPolicy gpu_memory_policy;
@@ -97,14 +96,16 @@ class CC_EXPORT LayerTreeSettings {
   size_t software_decoded_image_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
 
-  // If set to true, the display item list will internally cache a SkPicture for
-  // raster rather than directly using the display items.
-  bool use_cached_picture_raster = true;
   bool enable_color_correct_rendering = false;
 
-  // If set to true, this causes TileManager to verify that all required and NOW
-  // tiles come before lower priority tiles.
-  bool check_tile_priority_inversion = false;
+  // TODO(sunxd): remove this flag when filter demoting and aa of mask layers
+  // are implemented.
+  bool enable_mask_tiling = false;
+
+  // If set to true, the compositor may selectively defer image decodes to the
+  // Image Decode Service and raster tiles without images until the decode is
+  // ready.
+  bool enable_checker_imaging = false;
 
   LayerTreeDebugState initial_debug_state;
 };

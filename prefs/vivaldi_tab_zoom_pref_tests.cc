@@ -7,7 +7,7 @@
 // compiled in components_unit_tests.
 namespace vivaldi {
 
-bool isTabZoomEnabled(content::WebContents *web_contents) {
+bool isTabZoomEnabled(content::WebContents* web_contents) {
   return false;
 }
 

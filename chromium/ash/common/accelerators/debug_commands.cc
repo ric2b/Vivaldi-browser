@@ -92,12 +92,12 @@ gfx::ImageSkia CreateWallpaperImage(SkColor fill, SkColor rect) {
   gfx::Size image_size(1366, 768);
   gfx::Canvas canvas(image_size, 1.0f, true);
   canvas.DrawColor(fill);
-  SkPaint paint;
-  paint.setColor(rect);
-  paint.setStrokeWidth(10);
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setBlendMode(SkBlendMode::kSrcOver);
-  canvas.DrawRoundRect(gfx::Rect(image_size), 100, paint);
+  cc::PaintFlags flags;
+  flags.setColor(rect);
+  flags.setStrokeWidth(10);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setBlendMode(SkBlendMode::kSrcOver);
+  canvas.DrawRoundRect(gfx::Rect(image_size), 100, flags);
   return gfx::ImageSkia(canvas.ExtractImageRep());
 }
 
@@ -127,8 +127,6 @@ void HandleToggleWallpaperMode() {
   }
 }
 
-#if defined(OS_CHROMEOS)
-
 void HandleToggleTouchpad() {
   base::RecordAction(base::UserMetricsAction("Accel_Toggle_Touchpad"));
   ash::WmShell::Get()->delegate()->ToggleTouchpad();
@@ -149,8 +147,6 @@ void HandleToggleTouchView() {
   controller->EnableMaximizeModeWindowManager(
       !controller->IsMaximizeModeWindowManagerEnabled());
 }
-
-#endif  // defined(OS_CHROMEOS)
 
 void HandleTriggerCrash() {
   CHECK(false) << "Intentional crash via debug accelerator.";
@@ -182,7 +178,15 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     return;
 
   switch (action) {
-#if defined(OS_CHROMEOS)
+    case DEBUG_PRINT_LAYER_HIERARCHY:
+      HandlePrintLayerHierarchy();
+      break;
+    case DEBUG_PRINT_VIEW_HIERARCHY:
+      HandlePrintViewHierarchy();
+      break;
+    case DEBUG_PRINT_WINDOW_HIERARCHY:
+      HandlePrintWindowHierarchy();
+      break;
     case DEBUG_SHOW_TOAST:
       WmShell::Get()->toast_manager()->Show(
           ToastData("id", base::ASCIIToUTF16("Toast"), 5000 /* duration_ms */,
@@ -197,18 +201,8 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     case DEBUG_TOGGLE_TOUCH_VIEW:
       HandleToggleTouchView();
       break;
-#endif
     case DEBUG_TOGGLE_WALLPAPER_MODE:
       HandleToggleWallpaperMode();
-      break;
-    case DEBUG_PRINT_LAYER_HIERARCHY:
-      HandlePrintLayerHierarchy();
-      break;
-    case DEBUG_PRINT_VIEW_HIERARCHY:
-      HandlePrintViewHierarchy();
-      break;
-    case DEBUG_PRINT_WINDOW_HIERARCHY:
-      HandlePrintWindowHierarchy();
       break;
     case DEBUG_TRIGGER_CRASH:
       HandleTriggerCrash();

@@ -22,9 +22,9 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/session_types.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync_sessions/synced_session.h"
 #include "components/variations/variations_associated_data.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
@@ -199,8 +199,7 @@ CategoryInfo ForeignSessionsSuggestionsProvider::GetCategoryInfo(
   return CategoryInfo(l10n_util::GetStringUTF16(
                           IDS_NTP_FOREIGN_SESSIONS_SUGGESTIONS_SECTION_HEADER),
                       ContentSuggestionsCardLayout::MINIMAL_CARD,
-                      /*has_more_action=*/false,
-                      /*has_reload_action=*/false,
+                      /*has_fetch_action=*/false,
                       /*has_view_all_action=*/true,
                       /*show_if_empty=*/false,
                       l10n_util::GetStringUTF16(

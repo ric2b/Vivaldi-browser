@@ -16,6 +16,7 @@ extern const char kMousegesturesEnabled[];
 extern const char kPluginsWidevideEnabled[];
 extern const char kRockerGesturesEnabled[];
 extern const char kSmoothScrollingEnabled[];
+extern const char kVivaldiCaptureDirectory[];
 extern const char kVivaldiHomepage[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiNumberOfDaysToKeepVisits[];

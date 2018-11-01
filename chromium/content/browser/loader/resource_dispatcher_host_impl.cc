@@ -53,6 +53,7 @@
 #include "content/browser/loader/navigation_resource_handler.h"
 #include "content/browser/loader/navigation_resource_throttle.h"
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
+#include "content/browser/loader/null_resource_controller.h"
 #include "content/browser/loader/power_save_block_resource_throttle.h"
 #include "content/browser/loader/redirect_to_file_resource_handler.h"
 #include "content/browser/loader/resource_loader.h"
@@ -233,7 +234,7 @@ void AbortRequestBeforeItStarts(
     IPC::Sender* sender,
     const SyncLoadResultCallback& sync_result_handler,
     int request_id,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   if (sync_result_handler) {
     SyncLoadResult result;
     result.error_code = net::ERR_ABORTED;
@@ -1025,7 +1026,7 @@ void ResourceDispatcherHostImpl::OnRequestResourceInternal(
     int request_id,
     const ResourceRequest& request_data,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
@@ -1090,7 +1091,7 @@ void ResourceDispatcherHostImpl::UpdateRequestForTransfer(
     const ResourceRequest& request_data,
     LoaderMap::iterator iter,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   DCHECK(requester_info->IsRenderer());
   int child_id = requester_info->child_id();
   ResourceRequestInfoImpl* info = iter->second->GetRequestInfo();
@@ -1173,7 +1174,7 @@ void ResourceDispatcherHostImpl::CompleteTransfer(
     const ResourceRequest& request_data,
     int route_id,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   DCHECK(requester_info->IsRenderer());
   // Caller should ensure that |request_data| is associated with a transfer.
   DCHECK(request_data.transferred_request_child_id != -1 ||
@@ -1228,7 +1229,7 @@ void ResourceDispatcherHostImpl::BeginRequest(
     const SyncLoadResultCallback& sync_result_handler,  // only valid for sync
     int route_id,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
   int child_id = requester_info->child_id();
 
@@ -1328,7 +1329,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
   }
   ContinuePendingBeginRequest(
       requester_info, request_id, request_data, sync_result_handler, route_id,
-      headers, std::move(mojo_request), std::move(url_loader_client), true, 0);
+      headers, std::move(mojo_request), std::move(url_loader_client),
+      HeaderInterceptorResult::CONTINUE);
 }
 
 void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
@@ -1339,14 +1341,15 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
     int route_id,
     const net::HttpRequestHeaders& headers,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client,
-    bool continue_request,
-    int error_code) {
+    mojom::URLLoaderClientPtr url_loader_client,
+    HeaderInterceptorResult interceptor_result) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
-  if (!continue_request) {
-    if (requester_info->IsRenderer()) {
+  if (interceptor_result != HeaderInterceptorResult::CONTINUE) {
+    if (requester_info->IsRenderer() &&
+        interceptor_result == HeaderInterceptorResult::KILL) {
       // TODO(ananta): Find a way to specify the right error code here. Passing
-      // in a non-content error code is not safe.
+      // in a non-content error code is not safe, but future header interceptors
+      // might say to kill for reasons other than illegal origins.
       bad_message::ReceivedBadMessage(requester_info->filter(),
                                       bad_message::RDH_ILLEGAL_ORIGIN);
     }
@@ -1456,7 +1459,12 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
   bool report_raw_headers = request_data.report_raw_headers;
-  if (report_raw_headers && !policy->CanReadRawCookies(child_id)) {
+  if (report_raw_headers && !policy->CanReadRawCookies(child_id) &&
+      !requester_info->IsNavigationPreload()) {
+    // For navigation preload, the child_id is -1 so CanReadRawCookies would
+    // return false. But |report_raw_headers| of the navigation preload request
+    // was copied from the original request, so this check has already been
+    // carried out.
     // TODO: crbug.com/523063 can we call bad_message::ReceivedBadMessage here?
     VLOG(1) << "Denied unauthorized request for raw headers";
     report_raw_headers = false;
@@ -1533,12 +1541,12 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
 
   // Initialize the service worker handler for the request. We don't use
   // ServiceWorker for synchronous loads to avoid renderer deadlocks.
-  const SkipServiceWorker should_skip_service_worker =
-      is_sync_load ? SkipServiceWorker::ALL : request_data.skip_service_worker;
+  const ServiceWorkerMode service_worker_mode =
+      is_sync_load ? ServiceWorkerMode::NONE : request_data.service_worker_mode;
   ServiceWorkerRequestHandler::InitializeHandler(
       new_request.get(), requester_info->service_worker_context(), blob_context,
       child_id, request_data.service_worker_provider_id,
-      should_skip_service_worker != SkipServiceWorker::NONE,
+      service_worker_mode != ServiceWorkerMode::ALL,
       request_data.fetch_request_mode, request_data.fetch_credentials_mode,
       request_data.fetch_redirect_mode, request_data.resource_type,
       request_data.fetch_request_context_type, request_data.fetch_frame_type,
@@ -1546,12 +1554,11 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
 
   ForeignFetchRequestHandler::InitializeHandler(
       new_request.get(), requester_info->service_worker_context(), blob_context,
-      child_id, request_data.service_worker_provider_id,
-      should_skip_service_worker, request_data.fetch_request_mode,
-      request_data.fetch_credentials_mode, request_data.fetch_redirect_mode,
-      request_data.resource_type, request_data.fetch_request_context_type,
-      request_data.fetch_frame_type, request_data.request_body,
-      request_data.initiated_in_secure_context);
+      child_id, request_data.service_worker_provider_id, service_worker_mode,
+      request_data.fetch_request_mode, request_data.fetch_credentials_mode,
+      request_data.fetch_redirect_mode, request_data.resource_type,
+      request_data.fetch_request_context_type, request_data.fetch_frame_type,
+      request_data.request_body, request_data.initiated_in_secure_context);
 
   // Have the appcache associate its extra info with the request.
   AppCacheInterceptor::SetExtraRequestInfo(
@@ -1578,7 +1585,7 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
     int child_id,
     ResourceContext* resource_context,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   DCHECK(requester_info->IsRenderer() || requester_info->IsNavigationPreload());
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/456331 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
@@ -1602,7 +1609,8 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
     if (mojo_request.is_pending()) {
       handler.reset(new MojoAsyncResourceHandler(request, this,
                                                  std::move(mojo_request),
-                                                 std::move(url_loader_client)));
+                                                 std::move(url_loader_client),
+                                                 request_data.resource_type));
     } else {
       handler.reset(new AsyncResourceHandler(request, this));
     }
@@ -2078,6 +2086,7 @@ void ResourceDispatcherHostImpl::FinishedWithResourcesForRequest(
 
 void ResourceDispatcherHostImpl::BeginNavigationRequest(
     ResourceContext* resource_context,
+    net::URLRequestContext* request_context,
     const NavigationRequestInfo& info,
     std::unique_ptr<NavigationUIData> navigation_ui_data,
     NavigationURLLoaderImplCore* loader,
@@ -2116,9 +2125,6 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
     loader->NotifyRequestFailed(false, net::ERR_ABORTED);
     return;
   }
-
-  const net::URLRequestContext* request_context =
-      resource_context->GetRequestContext();
 
   int load_flags = info.begin_params.load_flags;
   load_flags |= net::LOAD_VERIFY_EV_CERT;
@@ -2280,7 +2286,7 @@ void ResourceDispatcherHostImpl::OnRequestResourceWithMojo(
     int request_id,
     const ResourceRequest& request,
     mojom::URLLoaderAssociatedRequest mojo_request,
-    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+    mojom::URLLoaderClientPtr url_loader_client) {
   OnRequestResourceInternal(requester_info, routing_id, request_id, request,
                             std::move(mojo_request),
                             std::move(url_loader_client));
@@ -2339,12 +2345,14 @@ void ResourceDispatcherHostImpl::BeginRequestInternal(
     // status -- it has no effect beyond this, since the request hasn't started.
     request->CancelWithError(net::ERR_INSUFFICIENT_RESOURCES);
 
-    bool defer = false;
-    handler->OnResponseCompleted(request->status(), &defer);
-    if (defer) {
-      // TODO(darin): The handler is not ready for us to kill the request. Oops!
-      NOTREACHED();
-    }
+    bool was_resumed = false;
+    // TODO(mmenke): Get rid of NullResourceController and do something more
+    // reasonable.
+    handler->OnResponseCompleted(
+        request->status(),
+        base::MakeUnique<NullResourceController>(&was_resumed));
+    // TODO(darin): The handler is not ready for us to kill the request. Oops!
+    DCHECK(was_resumed);
 
     IncrementOutstandingRequestsMemory(-1, *info);
 

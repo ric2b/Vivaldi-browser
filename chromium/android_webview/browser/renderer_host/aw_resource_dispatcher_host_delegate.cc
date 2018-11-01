@@ -128,6 +128,7 @@ class IoThreadClientThrottle : public content::ResourceThrottle {
                              int new_render_frame_id);
   bool MaybeBlockRequest();
   bool ShouldBlockRequest();
+  bool GetSafeBrowsingEnabled();
   int render_process_id() const { return render_process_id_; }
   int render_frame_id() const { return render_frame_id_; }
 
@@ -205,6 +206,13 @@ bool IoThreadClientThrottle::MaybeBlockRequest() {
   return false;
 }
 
+bool IoThreadClientThrottle::GetSafeBrowsingEnabled() {
+  std::unique_ptr<AwContentsIoThreadClient> io_client = GetIoThreadClient();
+  if (!io_client)
+    return false;
+  return io_client->GetSafeBrowsingEnabled();
+}
+
 bool IoThreadClientThrottle::ShouldBlockRequest() {
   std::unique_ptr<AwContentsIoThreadClient> io_client = GetIoThreadClient();
   if (!io_client)
@@ -272,7 +280,12 @@ void AwResourceDispatcherHostDelegate::RequestBeginning(
   const content::ResourceRequestInfo* request_info =
       content::ResourceRequestInfo::ForRequest(request);
 
-  if (AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled()) {
+  std::unique_ptr<IoThreadClientThrottle> ioThreadThrottle =
+      base::MakeUnique<IoThreadClientThrottle>(request_info->GetChildID(),
+                                               request_info->GetRenderFrameID(),
+                                               request);
+
+  if (ioThreadThrottle->GetSafeBrowsingEnabled()) {
     content::ResourceThrottle* throttle =
         AwSafeBrowsingResourceThrottle::MaybeCreate(
             request, resource_type,
@@ -291,8 +304,7 @@ void AwResourceDispatcherHostDelegate::RequestBeginning(
   // is called whether or not requests are blocked via BlockRequestForRoute()
   // however io_client may or may not be ready at the time depending on whether
   // webcontents is created.
-  throttles->push_back(base::MakeUnique<IoThreadClientThrottle>(
-      request_info->GetChildID(), request_info->GetRenderFrameID(), request));
+  throttles->push_back(std::move(ioThreadThrottle));
 
   bool is_main_frame = resource_type == content::RESOURCE_TYPE_MAIN_FRAME;
   if (!is_main_frame)

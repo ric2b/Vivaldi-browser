@@ -20,7 +20,6 @@
 #include "chrome/browser/chromeos/file_manager/file_browser_handlers.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/open_util.h"
-#include "chrome/browser/extensions/api/file_handlers/mime_util.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,6 +35,7 @@
 #include "components/mime_util/mime_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "extensions/browser/api/file_handlers/mime_util.h"
 #include "extensions/browser/entry_info.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
@@ -120,8 +120,8 @@ void KeepOnlyFileManagerInternalTasks(std::vector<FullTaskDescriptor>* tasks) {
   tasks->swap(filtered);
 }
 
-// Returns true if the given task is a handler by built-in apps like Files.app
-// itself or QuickOffice etc. They are used as the initial default app.
+// Returns true if the given task is a handler by built-in apps like the Files
+// app itself or QuickOffice etc. They are used as the initial default app.
 bool IsFallbackFileHandler(const file_tasks::TaskDescriptor& task) {
   if (task.task_type != file_tasks::TASK_TYPE_FILE_BROWSER_HANDLER &&
       task.task_type != file_tasks::TASK_TYPE_FILE_HANDLER)

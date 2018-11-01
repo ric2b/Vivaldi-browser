@@ -42,19 +42,23 @@ void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
 }
 
 void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
-    content::RenderViewHost *rvh, content::WebPreferences *web_prefs) {
+    content::RenderViewHost* rvh,
+    content::WebPreferences* web_prefs) {
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  content::WebContents* web_contents = content::WebContents::FromRenderViewHost(rvh);
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderViewHost(rvh);
   if (web_contents) {
     // web_contents is nullptr on interstitial pages.
-    Profile *profile = Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    PrefService *prefs = profile->GetPrefs();
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    PrefService* prefs = profile->GetPrefs();
 
-    web_prefs->tabs_to_links = prefs->GetBoolean(vivaldiprefs::kVivaldiTabsToLinks);
+    web_prefs->tabs_to_links =
+        prefs->GetBoolean(vivaldiprefs::kVivaldiTabsToLinks);
 
-    extensions::VivaldiAppHelper *vivaldi_app_helper =
+    extensions::VivaldiAppHelper* vivaldi_app_helper =
         extensions::VivaldiAppHelper::FromWebContents(web_contents);
     // Returns nullptr on regular pages, and a valid VivaldiAppHelper
     // for the WebContents used for our UI, so it's safe to use to check

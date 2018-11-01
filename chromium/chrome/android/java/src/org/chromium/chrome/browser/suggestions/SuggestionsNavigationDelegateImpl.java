@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.suggestions;
 import android.app.Activity;
 
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.download.DownloadUtils;
@@ -19,7 +20,6 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageNotificationBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -36,18 +36,20 @@ import org.chromium.ui.mojom.WindowOpenDisposition;
 public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationDelegate {
     private static final String CHROME_CONTENT_SUGGESTIONS_REFERRER =
             "https://www.googleapis.com/auth/chrome-content-suggestions";
+    private static final String NEW_TAB_URL_HELP =
+            "https://support.google.com/chrome/?p=new_tab";
 
     private final Activity mActivity;
     private final Profile mProfile;
 
-    private final Tab mTab;
+    private final NativePageHost mHost;
     private final TabModelSelector mTabModelSelector;
 
-    public SuggestionsNavigationDelegateImpl(
-            Activity activity, Profile profile, Tab currentTab, TabModelSelector tabModelSelector) {
+    public SuggestionsNavigationDelegateImpl(Activity activity, Profile profile,
+            NativePageHost host, TabModelSelector tabModelSelector) {
         mActivity = activity;
         mProfile = profile;
-        mTab = currentTab;
+        mHost = host;
         mTabModelSelector = tabModelSelector;
     }
 
@@ -70,32 +72,31 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
     @Override
     public void navigateToRecentTabs() {
         RecordUserAction.record("MobileNTPSwitchToOpenTabs");
-        mTab.loadUrl(new LoadUrlParams(UrlConstants.RECENT_TABS_URL));
+        mHost.loadUrl(new LoadUrlParams(UrlConstants.RECENT_TABS_URL), /* incognito = */ false);
     }
 
     @Override
     public void navigateToDownloadManager() {
         RecordUserAction.record("MobileNTPSwitchToDownloadManager");
-        DownloadUtils.showDownloadManager(mActivity, mTab);
+        DownloadUtils.showDownloadManager(mActivity, mHost.getActiveTab());
     }
 
     @Override
     public void navigateToHelpPage() {
         NewTabPageUma.recordAction(NewTabPageUma.ACTION_CLICKED_LEARN_MORE);
-        String url = "https://support.google.com/chrome/?p=new_tab";
         // TODO(mastiz): Change this to LINK?
         openUrl(WindowOpenDisposition.CURRENT_TAB,
-                new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK));
+                new LoadUrlParams(NEW_TAB_URL_HELP, PageTransition.AUTO_BOOKMARK));
     }
 
     @Override
     public void openSnippet(int windowOpenDisposition, SnippetArticle article) {
         NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_SNIPPET);
 
-        if (article.mIsAssetDownload) {
+        if (article.isAssetDownload()) {
             assert windowOpenDisposition == WindowOpenDisposition.CURRENT_TAB
                     || windowOpenDisposition == WindowOpenDisposition.NEW_WINDOW
-                    || windowOpenDisposition == WindowOpenDisposition.NEW_FOREGROUND_TAB;
+                    || windowOpenDisposition == WindowOpenDisposition.NEW_BACKGROUND_TAB;
             DownloadUtils.openFile(
                     article.getAssetDownloadFile(), article.getAssetDownloadMimeType(), false);
             return;
@@ -103,26 +104,25 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
 
         if (article.isRecentTab()) {
             assert windowOpenDisposition == WindowOpenDisposition.CURRENT_TAB;
-            // TODO(vitaliii): Add a debug check that the result is true after crbug.com/662924
-            // is resolved.
-            openRecentTabSnippet(article);
+            boolean success = openRecentTabSnippet(article);
+            assert success;
             return;
         }
 
         // TODO(treib): Also track other dispositions. crbug.com/665915
         if (windowOpenDisposition == WindowOpenDisposition.CURRENT_TAB) {
-            NewTabPageUma.monitorContentSuggestionVisit(mTab, article.mCategory);
+            NewTabPageUma.monitorContentSuggestionVisit(mHost.getActiveTab(), article.mCategory);
         }
 
         LoadUrlParams loadUrlParams;
         // We explicitly open an offline page only for offline page downloads. For all other
         // sections the URL is opened and it is up to Offline Pages whether to open its offline
         // page (e.g. when offline).
-        if (article.isDownload() && !article.mIsAssetDownload) {
+        if (article.isDownload() && !article.isAssetDownload()) {
             assert article.getOfflinePageOfflineId() != null;
             assert windowOpenDisposition == WindowOpenDisposition.CURRENT_TAB
                     || windowOpenDisposition == WindowOpenDisposition.NEW_WINDOW
-                    || windowOpenDisposition == WindowOpenDisposition.NEW_FOREGROUND_TAB;
+                    || windowOpenDisposition == WindowOpenDisposition.NEW_BACKGROUND_TAB;
             loadUrlParams = OfflinePageUtils.getLoadUrlParamsForOpeningOfflineVersion(
                     article.mUrl, article.getOfflinePageOfflineId());
             // Extra headers are not read in loadUrl, but verbatim headers are.
@@ -146,13 +146,13 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
     public void openUrl(int windowOpenDisposition, LoadUrlParams loadUrlParams) {
         switch (windowOpenDisposition) {
             case WindowOpenDisposition.CURRENT_TAB:
-                mTab.loadUrl(loadUrlParams);
+                mHost.loadUrl(loadUrlParams, false);
                 break;
-            case WindowOpenDisposition.NEW_FOREGROUND_TAB:
-                openUrlInNewTab(loadUrlParams, false);
+            case WindowOpenDisposition.NEW_BACKGROUND_TAB:
+                openUrlInNewTab(loadUrlParams);
                 break;
             case WindowOpenDisposition.OFF_THE_RECORD:
-                openUrlInNewTab(loadUrlParams, true);
+                mHost.loadUrl(loadUrlParams, true);
                 break;
             case WindowOpenDisposition.NEW_WINDOW:
                 openUrlInNewWindow(loadUrlParams);
@@ -167,7 +167,7 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
 
     private boolean openRecentTabSnippet(SnippetArticle article) {
         TabModel tabModel = mTabModelSelector.getModel(false);
-        int tabId = Integer.parseInt(article.getRecentTabId());
+        int tabId = article.getRecentTabId();
         int tabIndex = TabModelUtils.getTabIndexById(tabModel, tabId);
         if (tabIndex == TabModel.INVALID_TAB_INDEX) return false;
         TabModelUtils.setIndex(tabModel, tabIndex);
@@ -176,12 +176,12 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
 
     private void openUrlInNewWindow(LoadUrlParams loadUrlParams) {
         TabDelegate tabDelegate = new TabDelegate(false);
-        tabDelegate.createTabInOtherWindow(loadUrlParams, mActivity, mTab.getParentId());
+        tabDelegate.createTabInOtherWindow(loadUrlParams, mActivity, mHost.getParentId());
     }
 
-    private void openUrlInNewTab(LoadUrlParams loadUrlParams, boolean incognito) {
-        mTabModelSelector.openNewTab(
-                loadUrlParams, TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, incognito);
+    private void openUrlInNewTab(LoadUrlParams loadUrlParams) {
+        mTabModelSelector.openNewTab(loadUrlParams, TabLaunchType.FROM_LONGPRESS_BACKGROUND,
+                mHost.getActiveTab(), /* incognito = */ false);
     }
 
     private void saveUrlForOffline(String url) {

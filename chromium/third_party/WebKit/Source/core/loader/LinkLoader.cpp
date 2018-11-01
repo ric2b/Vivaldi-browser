@@ -34,9 +34,6 @@
 #include "core/css/MediaList.h"
 #include "core/css/MediaQueryEvaluator.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/CrossOriginAttribute.h"
@@ -45,10 +42,13 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/NetworkHintsInterface.h"
-#include "core/loader/PrerenderHandle.h"
+#include "core/loader/private/PrerenderHandle.h"
 #include "core/loader/resource/LinkFetchResource.h"
 #include "platform/Prerender.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/LinkHeader.h"
 #include "platform/network/NetworkHints.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
@@ -72,10 +72,13 @@ static unsigned prerenderRelTypesFromRelAttribute(
   return result;
 }
 
-LinkLoader::LinkLoader(LinkLoaderClient* client)
+LinkLoader::LinkLoader(LinkLoaderClient* client,
+                       RefPtr<WebTaskRunner> taskRunner)
     : m_client(client),
-      m_linkLoadTimer(this, &LinkLoader::linkLoadTimerFired),
-      m_linkLoadingErrorTimer(this, &LinkLoader::linkLoadingErrorTimerFired) {
+      m_linkLoadTimer(taskRunner, this, &LinkLoader::linkLoadTimerFired),
+      m_linkLoadingErrorTimer(taskRunner,
+                              this,
+                              &LinkLoader::linkLoadingErrorTimerFired) {
   DCHECK(m_client);
 }
 
@@ -144,7 +147,7 @@ static void dnsPrefetchIfNeeded(
         !href.isEmpty()) {
       if (settings->getLogDnsPrefetchAndPreconnect()) {
         document.addConsoleMessage(ConsoleMessage::create(
-            OtherMessageSource, DebugMessageLevel,
+            OtherMessageSource, VerboseMessageLevel,
             String("DNS prefetch triggered for " + href.host())));
       }
       networkHintsInterface.dnsPrefetchHost(href.host());
@@ -167,11 +170,11 @@ static void preconnectIfNeeded(
     Settings* settings = document.settings();
     if (settings && settings->getLogDnsPrefetchAndPreconnect()) {
       document.addConsoleMessage(ConsoleMessage::create(
-          OtherMessageSource, DebugMessageLevel,
+          OtherMessageSource, VerboseMessageLevel,
           String("Preconnect triggered for ") + href.getString()));
       if (crossOrigin != CrossOriginAttributeNotSet) {
         document.addConsoleMessage(ConsoleMessage::create(
-            OtherMessageSource, DebugMessageLevel,
+            OtherMessageSource, VerboseMessageLevel,
             String("Preconnect CORS setting is ") +
                 String((crossOrigin == CrossOriginAttributeAnonymous)
                            ? "anonymous"
@@ -291,9 +294,9 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute,
     }
 
     // Preload only if media matches
-    MediaQuerySet* mediaQueries = MediaQuerySet::create(media);
+    RefPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media);
     MediaQueryEvaluator evaluator(*mediaValues);
-    if (!evaluator.eval(mediaQueries))
+    if (!evaluator.eval(*mediaQueries))
       return nullptr;
   }
   if (caller == LinkCalledFromHeader)
@@ -333,10 +336,9 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute,
   Settings* settings = document.settings();
   if (settings && settings->getLogPreload()) {
     document.addConsoleMessage(ConsoleMessage::create(
-        OtherMessageSource, DebugMessageLevel,
+        OtherMessageSource, VerboseMessageLevel,
         String("Preload triggered for " + href.host() + href.path())));
   }
-  linkRequest.setForPreload(true, monotonicallyIncreasingTime());
   linkRequest.setLinkPreload(true);
   return document.loader()->startPreload(resourceType.value(), linkRequest);
 }

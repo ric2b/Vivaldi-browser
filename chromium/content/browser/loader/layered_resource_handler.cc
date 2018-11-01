@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "content/browser/loader/resource_controller.h"
 
 #include "content/browser/loader/resource_request_info_impl.h"
 
@@ -20,71 +21,69 @@ LayeredResourceHandler::LayeredResourceHandler(
 LayeredResourceHandler::~LayeredResourceHandler() {
 }
 
-void LayeredResourceHandler::SetController(ResourceController* controller) {
-  ResourceHandler::SetController(controller);
-
-  // Pass the controller down to the next handler.  This method is intended to
-  // be overriden by subclasses of LayeredResourceHandler that need to insert a
-  // different ResourceController.
-
-  DCHECK(next_handler_.get());
-  next_handler_->SetController(controller);
+void LayeredResourceHandler::SetDelegate(Delegate* delegate) {
+  ResourceHandler::SetDelegate(delegate);
+  next_handler_->SetDelegate(delegate);
 }
 
-bool LayeredResourceHandler::OnRequestRedirected(
+void LayeredResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
-    bool* defer) {
+    std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
-  return next_handler_->OnRequestRedirected(redirect_info, response, defer);
+  next_handler_->OnRequestRedirected(redirect_info, response,
+                                     std::move(controller));
 }
 
-bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,
-                                               bool* defer) {
+void LayeredResourceHandler::OnResponseStarted(
+    ResourceResponse* response,
+    std::unique_ptr<ResourceController> controller) {
+  //return OnResponseStarted(response, std::move(controller), false, false);
   // Vivaldi specific save info override.
   ResourceRequestInfoImpl* info = GetRequestInfo();
-  return OnResponseStarted(response, defer,
+  return OnResponseStarted(response, std::move(controller),
                            info != nullptr && info->open_when_downloaded(),
                            info != nullptr && info->ask_for_save_target());
 }
 
-bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,
-                                               bool* defer,
-                                               bool open_when_done,
-                                               bool ask_for_target) {
+void LayeredResourceHandler::OnResponseStarted(
+    ResourceResponse* response,
+    std::unique_ptr<ResourceController> controller,
+    bool open_when_done,
+    bool ask_for_target) {
   /*
   DCHECK(next_handler_.get());
-  return next_handler_->OnResponseStarted(response,
-                                          defer,
-                                          open_when_done,
-                                          ask_for_target);
+  next_handler_->OnResponseStarted(response, std::move(controller),
+                                   open_when_done, ask_for_target);
                                           */
-  return OnResponseStarted(response, defer);
+  return OnResponseStarted(response, std::move(controller));
 }
 
-bool LayeredResourceHandler::OnWillStart(const GURL& url,
-                                         bool* defer) {
+void LayeredResourceHandler::OnWillStart(
+    const GURL& url,
+    std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
-  return next_handler_->OnWillStart(url, defer);
+  next_handler_->OnWillStart(url, std::move(controller));
 }
 
 bool LayeredResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                                        int* buf_size,
-                                        int min_size) {
+                                        int* buf_size) {
   DCHECK(next_handler_.get());
-  return next_handler_->OnWillRead(buf, buf_size, min_size);
+  return next_handler_->OnWillRead(buf, buf_size);
 }
 
-bool LayeredResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
+void LayeredResourceHandler::OnReadCompleted(
+    int bytes_read,
+    std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
-  return next_handler_->OnReadCompleted(bytes_read, defer);
+  next_handler_->OnReadCompleted(bytes_read, std::move(controller));
 }
 
 void LayeredResourceHandler::OnResponseCompleted(
     const net::URLRequestStatus& status,
-    bool* defer) {
+    std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
-  next_handler_->OnResponseCompleted(status, defer);
+  next_handler_->OnResponseCompleted(status, std::move(controller));
 }
 
 void LayeredResourceHandler::OnDataDownloaded(int bytes_downloaded) {

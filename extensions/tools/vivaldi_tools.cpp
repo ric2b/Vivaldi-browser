@@ -4,17 +4,14 @@
 
 #include <string>
 
-#include "components/google/core/browser/google_util.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "components/google/core/browser/google_util.h"
 #include "url/gurl.h"
-
-using namespace google_util;
 
 namespace vivaldi {
 
 Browser* FindVivaldiBrowser() {
-  BrowserList* browser_list_impl =
-      BrowserList::GetInstance();
+  BrowserList* browser_list_impl = BrowserList::GetInstance();
   if (browser_list_impl && browser_list_impl->size() > 0)
     return browser_list_impl->get(0);
   return NULL;
@@ -23,12 +20,14 @@ Browser* FindVivaldiBrowser() {
 namespace spoof {
 // True if |url| is a valid whatsapp.<TLD> URL.
 bool IsWhatsappDomainUrl(const GURL& url) {
-  return IsValidURL(url, DISALLOW_NON_STANDARD_PORTS) &&
-      IsValidHostName(url.host_piece(), "whatsapp", ALLOW_SUBDOMAIN);
+  return google_util::IsValidURL(url,
+                                 google_util::DISALLOW_NON_STANDARD_PORTS) &&
+         google_util::IsValidHostName(url.host_piece(), "whatsapp",
+                                      google_util::ALLOW_SUBDOMAIN);
 }
 
 void ForceWhatsappMode(const net::URLRequest* request,
-  net::HttpRequestHeaders* headers) {
+                       net::HttpRequestHeaders* headers) {
   if (IsWhatsappDomainUrl(request->url())) {
     std::string useragent;
     if (headers->GetHeader(net::HttpRequestHeaders::kUserAgent, &useragent)) {
@@ -41,5 +40,5 @@ void ForceWhatsappMode(const net::URLRequest* request,
   }
 }
 
-} // namespace spoof
-} // namespace vivaldi
+}  // namespace spoof
+}  // namespace vivaldi

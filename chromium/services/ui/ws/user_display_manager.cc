@@ -6,10 +6,9 @@
 
 #include <utility>
 
-#include "services/ui/display/screen_manager.h"
-#include "services/ui/ws/display.h"
-#include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/user_display_manager_delegate.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 
 namespace ui {
@@ -26,17 +25,21 @@ std::vector<mojom::WsDisplayPtr> CloneDisplays(
   return result;
 }
 
+int64_t GetInternalDisplayId() {
+  if (!display::Display::HasInternalDisplay())
+    return display::kInvalidDisplayId;
+
+  return display::Display::InternalDisplayId();
+}
+
 }  // namespace
 
-UserDisplayManager::UserDisplayManager(ws::DisplayManager* display_manager,
-                                       UserDisplayManagerDelegate* delegate,
+UserDisplayManager::UserDisplayManager(UserDisplayManagerDelegate* delegate,
                                        const UserId& user_id)
-    : display_manager_(display_manager),
-      delegate_(delegate),
+    : delegate_(delegate),
       user_id_(user_id),
       got_valid_frame_decorations_(
-          delegate->GetFrameDecorationsForUser(user_id, nullptr)),
-      current_cursor_location_(0) {}
+          delegate->GetFrameDecorationsForUser(user_id, nullptr)) {}
 
 UserDisplayManager::~UserDisplayManager() {}
 
@@ -50,7 +53,7 @@ void UserDisplayManager::OnFrameDecorationValuesChanged() {
 
   std::vector<mojom::WsDisplayPtr> displays = GetAllDisplays();
   display_manager_observers_.ForAllPtrs(
-      [this, &displays](mojom::DisplayManagerObserver* observer) {
+      [&displays](mojom::DisplayManagerObserver* observer) {
         observer->OnDisplaysChanged(CloneDisplays(displays));
       });
 }
@@ -60,12 +63,12 @@ void UserDisplayManager::AddDisplayManagerBinding(
   display_manager_bindings_.AddBinding(this, std::move(request));
 }
 
-void UserDisplayManager::OnDisplayUpdate(Display* display) {
+void UserDisplayManager::OnDisplayUpdate(const display::Display& display) {
   if (!got_valid_frame_decorations_)
     return;
 
   std::vector<mojom::WsDisplayPtr> displays(1);
-  displays[0] = GetWsDisplayPtr(*display);
+  displays[0] = ToWsDisplayPtr(display);
 
   display_manager_observers_.ForAllPtrs(
       [&displays](mojom::DisplayManagerObserver* observer) {
@@ -73,13 +76,13 @@ void UserDisplayManager::OnDisplayUpdate(Display* display) {
       });
 }
 
-void UserDisplayManager::OnWillDestroyDisplay(Display* display) {
+void UserDisplayManager::OnWillDestroyDisplay(int64_t display_id) {
   if (!got_valid_frame_decorations_)
     return;
 
   display_manager_observers_.ForAllPtrs(
-      [&display](mojom::DisplayManagerObserver* observer) {
-        observer->OnDisplayRemoved(display->GetId());
+      [display_id](mojom::DisplayManagerObserver* observer) {
+        observer->OnDisplayRemoved(display_id);
       });
 }
 
@@ -91,38 +94,6 @@ void UserDisplayManager::OnPrimaryDisplayChanged(int64_t primary_display_id) {
       [primary_display_id](mojom::DisplayManagerObserver* observer) {
         observer->OnPrimaryDisplayChanged(primary_display_id);
       });
-}
-
-void UserDisplayManager::OnMouseCursorLocationChanged(const gfx::Point& point) {
-  current_cursor_location_ =
-      static_cast<base::subtle::Atomic32>(
-          (point.x() & 0xFFFF) << 16 | (point.y() & 0xFFFF));
-  if (cursor_location_memory()) {
-    base::subtle::NoBarrier_Store(cursor_location_memory(),
-                                  current_cursor_location_);
-  }
-}
-
-mojo::ScopedSharedBufferHandle UserDisplayManager::GetCursorLocationMemory() {
-  if (!cursor_location_handle_.is_valid()) {
-    // Create our shared memory segment to share the cursor state with our
-    // window clients.
-    cursor_location_handle_ =
-        mojo::SharedBufferHandle::Create(sizeof(base::subtle::Atomic32));
-
-    if (!cursor_location_handle_.is_valid())
-      return mojo::ScopedSharedBufferHandle();
-
-    cursor_location_mapping_ =
-        cursor_location_handle_->Map(sizeof(base::subtle::Atomic32));
-    if (!cursor_location_mapping_)
-      return mojo::ScopedSharedBufferHandle();
-    base::subtle::NoBarrier_Store(cursor_location_memory(),
-                                  current_cursor_location_);
-  }
-
-  return cursor_location_handle_->Clone(
-      mojo::SharedBufferHandle::AccessMode::READ_ONLY);
 }
 
 void UserDisplayManager::AddObserver(
@@ -143,35 +114,32 @@ void UserDisplayManager::OnObserverAdded(
   CallOnDisplays(observer);
 }
 
-mojom::WsDisplayPtr UserDisplayManager::GetWsDisplayPtr(
-    const Display& display) {
+mojom::WsDisplayPtr UserDisplayManager::ToWsDisplayPtr(
+    const display::Display& display) {
   mojom::WsDisplayPtr ws_display = mojom::WsDisplay::New();
-  ws_display->display = display.ToDisplay();
+  ws_display->display = display;
   delegate_->GetFrameDecorationsForUser(user_id_,
                                         &ws_display->frame_decoration_values);
   return ws_display;
 }
 
 std::vector<mojom::WsDisplayPtr> UserDisplayManager::GetAllDisplays() {
-  const auto& displays = display_manager_->displays();
-  std::vector<mojom::WsDisplayPtr> display_ptrs;
-  display_ptrs.reserve(displays.size());
+  const auto& displays = display::Screen::GetScreen()->GetAllDisplays();
 
-  // TODO(sky): need ordering!
-  for (Display* display : displays) {
-    display_ptrs.push_back(GetWsDisplayPtr(*display));
-  }
+  std::vector<mojom::WsDisplayPtr> ws_display;
+  ws_display.reserve(displays.size());
 
-  return display_ptrs;
+  for (const auto& display : displays)
+    ws_display.push_back(ToWsDisplayPtr(display));
+
+  return ws_display;
 }
 
 void UserDisplayManager::CallOnDisplays(
     mojom::DisplayManagerObserver* observer) {
-  // TODO(kylechar): Pass internal display id to clients here.
-  observer->OnDisplays(
-      GetAllDisplays(),
-      display::ScreenManager::GetInstance()->GetPrimaryDisplayId(),
-      display::kInvalidDisplayId);
+  observer->OnDisplays(GetAllDisplays(),
+                       display::Screen::GetScreen()->GetPrimaryDisplay().id(),
+                       GetInternalDisplayId());
 }
 
 }  // namespace ws

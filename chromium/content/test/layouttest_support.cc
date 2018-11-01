@@ -16,15 +16,11 @@
 #include "cc/output/copy_output_request.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "cc/test/test_compositor_frame_sink.h"
-#include "components/test_runner/test_common.h"
-#include "components/test_runner/web_frame_test_proxy.h"
-#include "components/test_runner/web_view_test_proxy.h"
-#include "components/test_runner/web_widget_test_proxy.h"
 #include "content/browser/bluetooth/bluetooth_device_chooser_controller.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/child/request_extra_data.h"
 #include "content/common/renderer.mojom.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/screen_info.h"
 #include "content/public/renderer/renderer_gamepad_provider.h"
@@ -40,6 +36,10 @@
 #include "content/renderer/render_widget.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/shell/common/shell_switches.h"
+#include "content/shell/test_runner/test_common.h"
+#include "content/shell/test_runner/web_frame_test_proxy.h"
+#include "content/shell/test_runner/web_view_test_proxy.h"
+#include "content/shell/test_runner/web_widget_test_proxy.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
@@ -459,9 +459,6 @@ int GetLocalSessionHistoryLength(RenderView* render_view) {
 void SyncNavigationState(RenderView* render_view) {
   // TODO(creis): Add support for testing in OOPIF-enabled modes.
   // See https://crbug.com/477150.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
-  static_cast<RenderViewImpl*>(render_view)->SendUpdateState();
 }
 
 void SetFocusAndActivate(RenderView* render_view, bool enable) {
@@ -512,9 +509,8 @@ gfx::ICCProfile GetTestingICCProfile(const std::string& name) {
 
 void SetDeviceColorProfile(
     RenderView* render_view, const gfx::ICCProfile& icc_profile) {
-  static_cast<RenderViewImpl*>(render_view)
-      ->GetWidget()
-      ->SetDeviceColorProfileForTesting(icc_profile.GetData());
+  static_cast<RenderViewImpl*>(render_view)->
+      SetDeviceColorProfileForTesting(icc_profile);
 }
 
 void SetTestBluetoothScanDuration() {
@@ -541,8 +537,8 @@ void DisableAutoResizeMode(RenderView* render_view, const WebSize& new_size) {
 // Returns True if node1 < node2.
 bool HistoryEntryCompareLess(HistoryEntry::HistoryNode* node1,
                              HistoryEntry::HistoryNode* node2) {
-  base::string16 target1 = node1->item().target();
-  base::string16 target2 = node2->item().target();
+  base::string16 target1 = node1->item().target().utf16();
+  base::string16 target2 = node2->item().target().utf16();
   return base::CompareCaseInsensitiveASCII(target1, target2) < 0;
 }
 
@@ -606,6 +602,12 @@ void ForceTextInputStateUpdateForRenderFrame(RenderFrame* frame) {
           static_cast<RenderFrameImpl*>(frame)->GetRenderWidget()) {
     render_widget->ShowVirtualKeyboard();
   }
+}
+
+bool IsNavigationInitiatedByRenderer(const blink::WebURLRequest& request) {
+  RequestExtraData* extra_data = static_cast<RequestExtraData*>(
+      request.getExtraData());
+  return extra_data && extra_data->navigation_initiated_by_renderer();
 }
 
 }  // namespace content

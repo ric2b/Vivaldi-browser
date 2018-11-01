@@ -37,7 +37,6 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/MutationObserverInit.h"
@@ -50,7 +49,6 @@
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/FormData.h"
@@ -71,12 +69,9 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
-#include "platform/PlatformMouseEvent.h"
 #include "platform/PopupMenu.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/text/PlatformLocale.h"
-
-using namespace WTF::Unicode;
 
 namespace blink {
 
@@ -896,9 +891,9 @@ void HTMLSelectElement::scrollToOption(HTMLOptionElement* option) {
   // inserted before executing scrollToOptionTask().
   m_optionToScrollTo = option;
   if (!hasPendingTask)
-    document().postTask(
-        TaskType::UserInteraction, BLINK_FROM_HERE,
-        createSameThreadTask(&HTMLSelectElement::scrollToOptionTask,
+    TaskRunnerHelper::get(TaskType::UserInteraction, &document())
+        ->postTask(BLINK_FROM_HERE,
+                   WTF::bind(&HTMLSelectElement::scrollToOptionTask,
                              wrapPersistent(this)));
 }
 
@@ -1288,8 +1283,8 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event) {
         !isSpatialNavigationEnabled(document().frame()))
       return;
 
-    int ignoreModifiers = PlatformEvent::ShiftKey | PlatformEvent::CtrlKey |
-                          PlatformEvent::AltKey | PlatformMouseEvent::MetaKey;
+    int ignoreModifiers = WebInputEvent::ShiftKey | WebInputEvent::ControlKey |
+                          WebInputEvent::AltKey | WebInputEvent::MetaKey;
     if (keyEvent->modifiers() & ignoreModifiers)
       return;
 
@@ -1680,7 +1675,7 @@ void HTMLSelectElement::defaultEventHandler(Event* event) {
     KeyboardEvent* keyboardEvent = toKeyboardEvent(event);
     if (!keyboardEvent->ctrlKey() && !keyboardEvent->altKey() &&
         !keyboardEvent->metaKey() &&
-        isPrintableChar(keyboardEvent->charCode())) {
+        WTF::Unicode::isPrintableChar(keyboardEvent->charCode())) {
       typeAheadFind(keyboardEvent);
       event->setDefaultHandled();
       return;
@@ -1923,7 +1918,7 @@ void HTMLSelectElement::provisionalSelectionChanged(unsigned listIndex) {
 void HTMLSelectElement::showPopup() {
   if (popupIsVisible())
     return;
-  if (document().frameHost()->chromeClient().hasOpenedPopup())
+  if (document().page()->chromeClient().hasOpenedPopup())
     return;
   if (!layoutObject() || !layoutObject()->isMenuList())
     return;
@@ -1931,7 +1926,7 @@ void HTMLSelectElement::showPopup() {
     return;
 
   if (!m_popup)
-    m_popup = document().frameHost()->chromeClient().openPopupMenu(
+    m_popup = document().page()->chromeClient().openPopupMenu(
         *document().frame(), *this);
   m_popupIsVisible = true;
   observeTreeMutation();
@@ -1947,8 +1942,8 @@ void HTMLSelectElement::hidePopup() {
     m_popup->hide();
 }
 
-void HTMLSelectElement::didRecalcStyle(StyleRecalcChange change) {
-  HTMLFormControlElementWithState::didRecalcStyle(change);
+void HTMLSelectElement::didRecalcStyle() {
+  HTMLFormControlElementWithState::didRecalcStyle();
   if (popupIsVisible())
     m_popup->updateFromElement(PopupMenu::ByStyleChange);
 }

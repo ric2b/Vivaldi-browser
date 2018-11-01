@@ -103,7 +103,7 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/java_exception_reporter.h"
+#include "base/android/java_exception_reporter.h"
 #include "chrome/common/descriptors_android.h"
 #else
 // Diagnostics is only available on non-android platforms.
@@ -919,9 +919,10 @@ void ChromeMainDelegate::PreSandboxStartup() {
 #if defined(OS_ANDROID)
     if (process_type.empty()) {
       breakpad::InitCrashReporter(process_type);
-      chrome::android::InitJavaExceptionReporter();
+      base::android::InitJavaExceptionReporter();
     } else {
       breakpad::InitNonBrowserCrashReporterForAndroid(process_type);
+      base::android::InitJavaExceptionReporterForChildProcess();
     }
 #else  // !defined(OS_ANDROID)
     breakpad::InitCrashReporter(process_type);
@@ -1006,10 +1007,6 @@ void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {
   // Android doesn't use InitChromeLogging, so we close the log file manually.
   logging::CloseLogFile();
 #endif  // !defined(OS_ANDROID)
-
-#if defined(OS_WIN)
-  base::debug::RemoveHandleHooks();
-#endif
 }
 
 #if defined(OS_MACOSX)
@@ -1039,7 +1036,7 @@ bool ChromeMainDelegate::DelaySandboxInitialization(
 }
 #elif defined(OS_POSIX) && !defined(OS_ANDROID)
 void ChromeMainDelegate::ZygoteStarting(
-    ScopedVector<content::ZygoteForkDelegate>* delegates) {
+    std::vector<std::unique_ptr<content::ZygoteForkDelegate>>* delegates) {
 #if defined(OS_CHROMEOS)
     chromeos::ReloadElfTextInHugePages();
 #endif

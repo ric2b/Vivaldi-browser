@@ -34,16 +34,18 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/Path.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/skia/include/core/SkAnnotation.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkData.h"
-#include "third_party/skia/include/core/SkPicture.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkUnPreMultiply.h"
+#include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/effects/SkLumaColorFilter.h"
 #include "third_party/skia/include/effects/SkPictureImageFilter.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -56,13 +58,11 @@ namespace blink {
 
 GraphicsContext::GraphicsContext(PaintController& paintController,
                                  DisabledMode disableContextOrPainting,
-                                 SkMetaData* metaData,
-                                 ColorBehavior colorBehavior)
+                                 SkMetaData* metaData)
     : m_canvas(nullptr),
       m_paintController(paintController),
       m_paintStateStack(),
       m_paintStateIndex(0),
-      m_colorBehavior(colorBehavior),
 #if DCHECK_IS_ON()
       m_layerCount(0),
       m_disableDestructionChecks(false),
@@ -81,18 +81,20 @@ GraphicsContext::GraphicsContext(PaintController& paintController,
   m_paintState = m_paintStateStack.back().get();
 
   if (contextDisabled()) {
-    DEFINE_STATIC_LOCAL(SkCanvas*, nullCanvas, (SkMakeNullCanvas().release()));
-    m_canvas = nullCanvas;
+    DEFINE_STATIC_LOCAL(SkCanvas*, nullSkCanvas,
+                        (SkMakeNullCanvas().release()));
+    DEFINE_STATIC_LOCAL(PaintCanvasPassThrough, nullCanvas, (nullSkCanvas));
+    m_canvas = &nullCanvas;
   }
 }
 
 GraphicsContext::~GraphicsContext() {
 #if DCHECK_IS_ON()
   if (!m_disableDestructionChecks) {
-    ASSERT(!m_paintStateIndex);
-    ASSERT(!m_paintState->saveCount());
-    ASSERT(!m_layerCount);
-    ASSERT(!saveCount());
+    DCHECK(!m_paintStateIndex);
+    DCHECK(!m_paintState->saveCount());
+    DCHECK(!m_layerCount);
+    DCHECK(!saveCount());
   }
 #endif
 }
@@ -103,7 +105,7 @@ void GraphicsContext::save() {
 
   m_paintState->incrementSaveCount();
 
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
   m_canvas->save();
 }
 
@@ -123,7 +125,7 @@ void GraphicsContext::restore() {
     m_paintState = m_paintStateStack[m_paintStateIndex].get();
   }
 
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
   m_canvas->restore();
 }
 
@@ -132,7 +134,7 @@ unsigned GraphicsContext::saveCount() const {
   // Each m_paintStateStack entry implies an additional save op
   // (on top of its own saveCount), except for the first frame.
   unsigned count = m_paintStateIndex;
-  ASSERT(m_paintStateStack.size() > m_paintStateIndex);
+  DCHECK_GE(m_paintStateStack.size(), m_paintStateIndex);
   for (unsigned i = 0; i <= m_paintStateIndex; ++i)
     count += m_paintStateStack[i]->saveCount();
 
@@ -140,20 +142,19 @@ unsigned GraphicsContext::saveCount() const {
 }
 #endif
 
-void GraphicsContext::saveLayer(const SkRect* bounds, const SkPaint* paint) {
+void GraphicsContext::saveLayer(const SkRect* bounds, const PaintFlags* flags) {
   if (contextDisabled())
     return;
 
-  ASSERT(m_canvas);
-
-  m_canvas->saveLayer(bounds, paint);
+  DCHECK(m_canvas);
+  m_canvas->saveLayer(bounds, flags);
 }
 
 void GraphicsContext::restoreLayer() {
   if (contextDisabled())
     return;
 
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->restore();
 }
@@ -161,7 +162,7 @@ void GraphicsContext::restoreLayer() {
 #if DCHECK_IS_ON()
 void GraphicsContext::setInDrawingRecorder(bool val) {
   // Nested drawing recorers are not allowed.
-  ASSERT(!val || !m_inDrawingRecorder);
+  DCHECK(!val || !m_inDrawingRecorder);
   m_inDrawingRecorder = val;
 }
 #endif
@@ -220,7 +221,7 @@ void GraphicsContext::concat(const SkMatrix& matrix) {
   if (contextDisabled())
     return;
 
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->concat(matrix);
 }
@@ -233,17 +234,17 @@ void GraphicsContext::beginLayer(float opacity,
   if (contextDisabled())
     return;
 
-  SkPaint layerPaint;
-  layerPaint.setAlpha(static_cast<unsigned char>(opacity * 255));
-  layerPaint.setBlendMode(xfermode);
-  layerPaint.setColorFilter(WebCoreColorFilterToSkiaColorFilter(colorFilter));
-  layerPaint.setImageFilter(std::move(imageFilter));
+  PaintFlags layerFlags;
+  layerFlags.setAlpha(static_cast<unsigned char>(opacity * 255));
+  layerFlags.setBlendMode(xfermode);
+  layerFlags.setColorFilter(WebCoreColorFilterToSkiaColorFilter(colorFilter));
+  layerFlags.setImageFilter(std::move(imageFilter));
 
   if (bounds) {
     SkRect skBounds = *bounds;
-    saveLayer(&skBounds, &layerPaint);
+    saveLayer(&skBounds, &layerFlags);
   } else {
-    saveLayer(nullptr, &layerPaint);
+    saveLayer(nullptr, &layerFlags);
   }
 
 #if DCHECK_IS_ON()
@@ -267,66 +268,85 @@ void GraphicsContext::beginRecording(const FloatRect& bounds) {
     return;
 
   DCHECK(!m_canvas);
-  m_canvas = m_pictureRecorder.beginRecording(bounds, nullptr);
+  m_canvas = m_paintRecorder.beginRecording(bounds, nullptr);
   if (m_hasMetaData)
-    skia::GetMetaData(*m_canvas) = m_metaData;
+    m_canvas->getMetaData() = m_metaData;
 }
 
 namespace {
 
-sk_sp<SkPicture> createEmptyPicture() {
-  SkPictureRecorder recorder;
+sk_sp<PaintRecord> createEmptyPaintRecord() {
+  PaintRecorder recorder;
   recorder.beginRecording(SkRect::MakeEmpty(), nullptr);
   return recorder.finishRecordingAsPicture();
 }
 
 }  // anonymous namespace
 
-sk_sp<SkPicture> GraphicsContext::endRecording() {
+sk_sp<PaintRecord> GraphicsContext::endRecording() {
   if (contextDisabled()) {
-    // Clients expect endRecording() to always return a non-null picture.
-    // Cache an empty SKP to minimize overhead when disabled.
-    DEFINE_STATIC_LOCAL(sk_sp<SkPicture>, emptyPicture, (createEmptyPicture()));
-    return emptyPicture;
+    // Clients expect endRecording() to always return a non-null paint record.
+    // Cache an empty one to minimize overhead when disabled.
+    DEFINE_STATIC_LOCAL(sk_sp<PaintRecord>, emptyPaintRecord,
+                        (createEmptyPaintRecord()));
+    return emptyPaintRecord;
   }
 
-  sk_sp<SkPicture> picture = m_pictureRecorder.finishRecordingAsPicture();
+  sk_sp<PaintRecord> record = m_paintRecorder.finishRecordingAsPicture();
   m_canvas = nullptr;
-  ASSERT(picture);
-  return picture;
+  DCHECK(record);
+  return record;
 }
 
-void GraphicsContext::drawPicture(const SkPicture* picture) {
-  if (contextDisabled() || !picture || picture->cullRect().isEmpty())
+void GraphicsContext::drawRecord(const PaintRecord* record) {
+  if (contextDisabled() || !record || record->cullRect().isEmpty())
     return;
 
-  ASSERT(m_canvas);
-  m_canvas->drawPicture(picture);
+  DCHECK(m_canvas);
+  m_canvas->drawPicture(record);
 }
 
-void GraphicsContext::compositePicture(sk_sp<SkPicture> picture,
-                                       const FloatRect& dest,
-                                       const FloatRect& src,
-                                       SkBlendMode op) {
-  if (contextDisabled() || !picture)
+void GraphicsContext::compositeRecord(sk_sp<PaintRecord> record,
+                                      const FloatRect& dest,
+                                      const FloatRect& src,
+                                      SkBlendMode op) {
+  if (contextDisabled() || !record)
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
-  SkPaint picturePaint;
-  picturePaint.setBlendMode(op);
+  PaintFlags flags;
+  flags.setBlendMode(op);
   m_canvas->save();
   SkRect sourceBounds = src;
   SkRect skBounds = dest;
-  SkMatrix pictureTransform;
-  pictureTransform.setRectToRect(sourceBounds, skBounds,
-                                 SkMatrix::kFill_ScaleToFit);
-  m_canvas->concat(pictureTransform);
-  picturePaint.setImageFilter(SkPictureImageFilter::MakeForLocalSpace(
-      std::move(picture), sourceBounds,
+  SkMatrix transform;
+  transform.setRectToRect(sourceBounds, skBounds, SkMatrix::kFill_ScaleToFit);
+  m_canvas->concat(transform);
+  flags.setImageFilter(SkPictureImageFilter::MakeForLocalSpace(
+      ToSkPicture(record), sourceBounds,
       static_cast<SkFilterQuality>(imageInterpolationQuality())));
-  m_canvas->saveLayer(&sourceBounds, &picturePaint);
+  m_canvas->saveLayer(&sourceBounds, &flags);
   m_canvas->restore();
   m_canvas->restore();
+}
+
+namespace {
+
+int adjustedFocusRingOffset(int offset) {
+#if OS(MACOSX)
+  return offset + 2;
+#else
+  return 0;
+#endif
+}
+
+}  // anonymous ns
+
+int GraphicsContext::focusRingOutsetExtent(int offset, int width) {
+  // Unlike normal outlines (whole width is outside of the offset), focus
+  // rings are drawn with the center of the path aligned with the offset, so
+  // only half of the width is outside of the offset.
+  return adjustedFocusRingOffset(offset) + (width + 1) / 2;
 }
 
 void GraphicsContext::drawFocusRingPath(const SkPath& path,
@@ -364,12 +384,12 @@ void GraphicsContext::drawFocusRing(const Vector<IntRect>& rects,
     return;
 
   SkRegion focusRingRegion;
-  offset = focusRingOffset(offset);
+  offset = adjustedFocusRingOffset(offset);
   for (unsigned i = 0; i < rectCount; i++) {
     SkIRect r = rects[i];
     if (r.isEmpty())
       continue;
-    r.inset(-offset, -offset);
+    r.outset(offset, offset);
     focusRingRegion.op(r, SkRegion::kUnion_Op);
   }
 
@@ -464,7 +484,7 @@ void GraphicsContext::drawInnerShadow(const FloatRoundedRect& rect,
 void GraphicsContext::drawLine(const IntPoint& point1, const IntPoint& point2) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   StrokeStyle penStyle = getStrokeStyle();
   if (penStyle == NoStroke)
@@ -480,7 +500,7 @@ void GraphicsContext::drawLine(const IntPoint& point1, const IntPoint& point2) {
   // probably worth the speed up of no square root, which also won't be exact.
   FloatSize disp = p2 - p1;
   int length = SkScalarRoundToInt(disp.width() + disp.height());
-  SkPaint paint(immutableState()->strokePaint(length));
+  PaintFlags flags(immutableState()->strokeFlags(length));
 
   if (getStrokeStyle() == DottedStroke || getStrokeStyle() == DashedStroke) {
     // Do a rect fill of our endpoints.  This ensures we always have the
@@ -497,152 +517,145 @@ void GraphicsContext::drawLine(const IntPoint& point1, const IntPoint& point2) {
       r1.offset(0, -width / 2);
       r2.offset(-width, -width / 2);
     }
-    SkPaint fillPaint;
-    fillPaint.setColor(paint.getColor());
-    drawRect(r1, fillPaint);
-    drawRect(r2, fillPaint);
+    PaintFlags fillFlags;
+    fillFlags.setColor(flags.getColor());
+    drawRect(r1, fillFlags);
+    drawRect(r2, fillFlags);
   }
 
   adjustLineToPixelBoundaries(p1, p2, width, penStyle);
-  m_canvas->drawLine(p1.x(), p1.y(), p2.x(), p2.y(), paint);
+  m_canvas->drawLine(p1.x(), p1.y(), p2.x(), p2.y(), flags);
 }
+
+namespace {
+
+#if !OS(MACOSX)
+
+sk_sp<PaintRecord> recordMarker(
+    GraphicsContext::DocumentMarkerLineStyle style) {
+  SkColor color = (style == GraphicsContext::DocumentMarkerGrammarLineStyle)
+      ? SkColorSetRGB(0xC0, 0xC0, 0xC0)
+      : SK_ColorRED;
+
+  // Record the path equivalent to this legacy pattern:
+  //   X o   o X o   o X
+  //     o X o   o X o
+
+  static const float kW = 4;
+  static const float kH = 2;
+
+  // Adjust the phase such that f' == 0 is "pixel"-centered
+  // (for optimal rasterization at native rez).
+  SkPath path;
+  path.moveTo(kW * -3 / 8, kH * 3 / 4);
+  path.cubicTo(kW * -1 / 8, kH * 3 / 4,
+               kW * -1 / 8, kH * 1 / 4,
+               kW *  1 / 8, kH * 1 / 4);
+  path.cubicTo(kW * 3 / 8, kH * 1 / 4,
+               kW * 3 / 8, kH * 3 / 4,
+               kW * 5 / 8, kH * 3 / 4);
+  path.cubicTo(kW * 7 / 8, kH * 3 / 4,
+               kW * 7 / 8, kH * 1 / 4,
+               kW * 9 / 8, kH * 1 / 4);
+
+  PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(color);
+  flags.setStyle(SkPaint::kStroke_Style);
+  flags.setStrokeWidth(kH * 1 / 2);
+
+  PaintRecorder recorder;
+  recorder.beginRecording(kW, kH);
+  recorder.getRecordingCanvas()->drawPath(path, flags);
+
+  return recorder.finishRecordingAsPicture();
+}
+
+#else  // OS(MACOSX)
+
+sk_sp<PaintRecord> recordMarker(
+    GraphicsContext::DocumentMarkerLineStyle style) {
+  SkColor color = (style == GraphicsContext::DocumentMarkerGrammarLineStyle)
+      ? SkColorSetRGB(0x6B, 0x6B, 0x6B)
+      : SkColorSetRGB(0xFB, 0x2D, 0x1D);
+
+  // Match the artwork used by the Mac.
+  static const float kW = 4;
+  static const float kH = 3;
+  static const float kR = 1.5f;
+
+  // top->bottom translucent gradient.
+  const SkColor colors[2] = {
+      SkColorSetARGB(0x48,
+                     SkColorGetR(color),
+                     SkColorGetG(color),
+                     SkColorGetB(color)),
+      color
+  };
+  const SkPoint pts[2] = {
+      SkPoint::Make(0, 0),
+      SkPoint::Make(0, 2 * kR)
+  };
+
+  PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(color);
+  flags.setShader(SkGradientShader::MakeLinear(
+      pts, colors, nullptr, ARRAY_SIZE(colors), SkShader::kClamp_TileMode));
+  PaintRecorder recorder;
+  recorder.beginRecording(kW, kH);
+  recorder.getRecordingCanvas()->drawCircle(kR, kR, kR, flags);
+
+  return recorder.finishRecordingAsPicture();
+}
+
+#endif  // OS(MACOSX)
+
+}  // anonymous ns
 
 void GraphicsContext::drawLineForDocumentMarker(const FloatPoint& pt,
                                                 float width,
-                                                DocumentMarkerLineStyle style) {
+                                                DocumentMarkerLineStyle style,
+                                                float zoom) {
   if (contextDisabled())
     return;
 
-  // Use 2x resources for a device scale factor of 1.5 or above.
-  int deviceScaleFactor = m_deviceScaleFactor > 1.5f ? 2 : 1;
+  DEFINE_STATIC_LOCAL(
+      PaintRecord*, spellingMarker,
+      (recordMarker(DocumentMarkerSpellingLineStyle).release()));
+  DEFINE_STATIC_LOCAL(PaintRecord*, grammarMarker,
+                      (recordMarker(DocumentMarkerGrammarLineStyle).release()));
+  const auto& marker = style == DocumentMarkerSpellingLineStyle
+      ? spellingMarker
+      : grammarMarker;
 
-  // Create the pattern we'll use to draw the underline.
-  int index = style == DocumentMarkerGrammarLineStyle ? 1 : 0;
-  static SkBitmap* misspellBitmap1x[2] = {0, 0};
-  static SkBitmap* misspellBitmap2x[2] = {0, 0};
-  SkBitmap** misspellBitmap =
-      deviceScaleFactor == 2 ? misspellBitmap2x : misspellBitmap1x;
-  if (!misspellBitmap[index]) {
-#if OS(MACOSX)
-    // Match the artwork used by the Mac.
-    const int rowPixels = 4 * deviceScaleFactor;
-    const int colPixels = 3 * deviceScaleFactor;
-    SkBitmap bitmap;
-    if (!bitmap.tryAllocN32Pixels(rowPixels, colPixels))
-      return;
-
-    bitmap.eraseARGB(0, 0, 0, 0);
-    const uint32_t transparentColor = 0x00000000;
-
-    if (deviceScaleFactor == 1) {
-      const uint32_t colors[2][6] = {{0x2a2a0600, 0x57571000, 0xa8a81b00,
-                                      0xbfbf1f00, 0x70701200, 0xe0e02400},
-                                     {0x2a0f0f0f, 0x571e1e1e, 0xa83d3d3d,
-                                      0xbf454545, 0x70282828, 0xe0515151}};
-
-      // Pattern: a b a   a b a
-      //          c d c   c d c
-      //          e f e   e f e
-      for (int x = 0; x < colPixels; ++x) {
-        uint32_t* row = bitmap.getAddr32(0, x);
-        row[0] = colors[index][x * 2];
-        row[1] = colors[index][x * 2 + 1];
-        row[2] = colors[index][x * 2];
-        row[3] = transparentColor;
-      }
-    } else if (deviceScaleFactor == 2) {
-      const uint32_t colors[2][18] = {
-          {0x0a090101, 0x33320806, 0x55540f0a, 0x37360906, 0x6e6c120c,
-           0x6e6c120c, 0x7674140d, 0x8d8b1810, 0x8d8b1810, 0x96941a11,
-           0xb3b01f15, 0xb3b01f15, 0x6d6b130c, 0xd9d62619, 0xd9d62619,
-           0x19180402, 0x7c7a150e, 0xcecb2418},
-          {0x0a020202, 0x33141414, 0x55232323, 0x37161616, 0x6e2e2e2e,
-           0x6e2e2e2e, 0x76313131, 0x8d3a3a3a, 0x8d3a3a3a, 0x963e3e3e,
-           0xb34b4b4b, 0xb34b4b4b, 0x6d2d2d2d, 0xd95b5b5b, 0xd95b5b5b,
-           0x19090909, 0x7c343434, 0xce575757}};
-
-      // Pattern: a b c c b a
-      //          d e f f e d
-      //          g h j j h g
-      //          k l m m l k
-      //          n o p p o n
-      //          q r s s r q
-      for (int x = 0; x < colPixels; ++x) {
-        uint32_t* row = bitmap.getAddr32(0, x);
-        row[0] = colors[index][x * 3];
-        row[1] = colors[index][x * 3 + 1];
-        row[2] = colors[index][x * 3 + 2];
-        row[3] = colors[index][x * 3 + 2];
-        row[4] = colors[index][x * 3 + 1];
-        row[5] = colors[index][x * 3];
-        row[6] = transparentColor;
-        row[7] = transparentColor;
-      }
-    } else
-      ASSERT_NOT_REACHED();
-
-    misspellBitmap[index] = new SkBitmap(bitmap);
-#else
-    // We use a 2-pixel-high misspelling indicator because that seems to be
-    // what WebKit is designed for, and how much room there is in a typical
-    // page for it.
-    const int rowPixels =
-        32 * deviceScaleFactor;  // Must be multiple of 4 for pattern below.
-    const int colPixels = 2 * deviceScaleFactor;
-    SkBitmap bitmap;
-    if (!bitmap.tryAllocN32Pixels(rowPixels, colPixels))
-      return;
-
-    bitmap.eraseARGB(0, 0, 0, 0);
-    if (deviceScaleFactor == 1)
-      draw1xMarker(&bitmap, index);
-    else if (deviceScaleFactor == 2)
-      draw2xMarker(&bitmap, index);
-    else
-      ASSERT_NOT_REACHED();
-
-    misspellBitmap[index] = new SkBitmap(bitmap);
-#endif
-  }
-
-#if OS(MACOSX)
-  SkScalar originX = WebCoreFloatToSkScalar(pt.x()) * deviceScaleFactor;
-  SkScalar originY = WebCoreFloatToSkScalar(pt.y()) * deviceScaleFactor;
-
-  // Make sure to draw only complete dots.
-  int rowPixels = misspellBitmap[index]->width();
-  float widthMod = fmodf(width * deviceScaleFactor, rowPixels);
-  if (rowPixels - widthMod > deviceScaleFactor)
-    width -= widthMod / deviceScaleFactor;
-#else
+  // Position already includes zoom and device scale factor.
   SkScalar originX = WebCoreFloatToSkScalar(pt.x());
+  SkScalar originY = WebCoreFloatToSkScalar(pt.y());
 
+#if OS(MACOSX)
+  // Make sure to draw only complete dots, and finish inside the marked text.
+  width -= fmodf(width, marker->cullRect().width() * zoom);
+#else
   // Offset it vertically by 1 so that there's some space under the text.
-  SkScalar originY = WebCoreFloatToSkScalar(pt.y()) + 1;
-  originX *= deviceScaleFactor;
-  originY *= deviceScaleFactor;
+  originY += 1;
 #endif
 
-  SkMatrix localMatrix;
-  localMatrix.setTranslate(originX, originY);
+  const auto rect = SkRect::MakeWH(width, marker->cullRect().height() * zoom);
+  const auto localMatrix = SkMatrix::MakeScale(zoom, zoom);
 
-  SkPaint paint;
-  paint.setShader(SkShader::MakeBitmapShader(
-      *misspellBitmap[index], SkShader::kRepeat_TileMode,
-      SkShader::kRepeat_TileMode, &localMatrix));
+  PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setShader(WrapSkShader(SkShader::MakePictureShader(
+      sk_ref_sp(marker), SkShader::kRepeat_TileMode, SkShader::kClamp_TileMode,
+      &localMatrix, nullptr)));
 
-  SkRect rect;
-  rect.set(originX, originY,
-           originX + WebCoreFloatToSkScalar(width) * deviceScaleFactor,
-           originY + SkIntToScalar(misspellBitmap[index]->height()));
-
-  if (deviceScaleFactor == 2) {
-    save();
-    scale(0.5, 0.5);
-  }
-  drawRect(rect, paint);
-  if (deviceScaleFactor == 2)
-    restore();
+  // Apply the origin translation as a global transform.  This ensures that the
+  // shader local matrix depends solely on zoom => Skia can reuse the same
+  // cached tile for all markers at a given zoom level.
+  PaintCanvasAutoRestore acr(m_canvas, true);
+  m_canvas->translate(originX, originY);
+  m_canvas->drawRect(rect, flags);
 }
 
 void GraphicsContext::drawLineForText(const FloatPoint& pt, float width) {
@@ -652,7 +665,7 @@ void GraphicsContext::drawLineForText(const FloatPoint& pt, float width) {
   if (width <= 0)
     return;
 
-  SkPaint paint;
+  PaintFlags flags;
   switch (getStrokeStyle()) {
     case NoStroke:
     case SolidStroke:
@@ -665,10 +678,10 @@ void GraphicsContext::drawLineForText(const FloatPoint& pt, float width) {
       r.fTop = WebCoreFloatToSkScalar(floorf(pt.y() + 0.5f));
       r.fRight = r.fLeft + WebCoreFloatToSkScalar(width);
       r.fBottom = r.fTop + SkIntToScalar(thickness);
-      paint = immutableState()->fillPaint();
+      flags = immutableState()->fillFlags();
       // Text lines are drawn using the stroke color.
-      paint.setColor(strokeColor().rgb());
-      drawRect(r, paint);
+      flags.setColor(strokeColor().rgb());
+      drawRect(r, flags);
       return;
     }
     case DottedStroke:
@@ -682,7 +695,7 @@ void GraphicsContext::drawLineForText(const FloatPoint& pt, float width) {
       break;
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
 }
 
 // Draws a filled rectangle with a stroked border.
@@ -690,35 +703,35 @@ void GraphicsContext::drawRect(const IntRect& rect) {
   if (contextDisabled())
     return;
 
-  ASSERT(!rect.isEmpty());
+  DCHECK(!rect.isEmpty());
   if (rect.isEmpty())
     return;
 
   SkRect skRect = rect;
   if (immutableState()->fillColor().alpha())
-    drawRect(skRect, immutableState()->fillPaint());
+    drawRect(skRect, immutableState()->fillFlags());
 
   if (immutableState()->getStrokeData().style() != NoStroke &&
       immutableState()->strokeColor().alpha()) {
     // Stroke a width: 1 inset border
-    SkPaint paint(immutableState()->fillPaint());
-    paint.setColor(strokeColor().rgb());
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(1);
+    PaintFlags flags(immutableState()->fillFlags());
+    flags.setColor(strokeColor().rgb());
+    flags.setStyle(PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(1);
 
     skRect.inset(0.5f, 0.5f);
-    drawRect(skRect, paint);
+    drawRect(skRect, flags);
   }
 }
 
 void GraphicsContext::drawText(const Font& font,
                                const TextRunPaintInfo& runInfo,
                                const FloatPoint& point,
-                               const SkPaint& paint) {
+                               const PaintFlags& flags) {
   if (contextDisabled())
     return;
 
-  if (font.drawText(m_canvas, runInfo, point, m_deviceScaleFactor, paint))
+  if (font.drawText(m_canvas, runInfo, point, m_deviceScaleFactor, flags))
     m_paintController.setTextPainted();
 }
 
@@ -727,17 +740,17 @@ void GraphicsContext::drawTextPasses(const DrawTextFunc& drawText) {
   TextDrawingModeFlags modeFlags = textDrawingMode();
 
   if (modeFlags & TextModeFill) {
-    drawText(immutableState()->fillPaint());
+    drawText(immutableState()->fillFlags());
   }
 
   if ((modeFlags & TextModeStroke) && getStrokeStyle() != NoStroke &&
       strokeThickness() > 0) {
-    SkPaint paintForStroking(immutableState()->strokePaint());
+    PaintFlags strokeFlags(immutableState()->strokeFlags());
     if (modeFlags & TextModeFill) {
-      paintForStroking.setLooper(
-          0);  // shadow was already applied during fill pass
+      // shadow was already applied during fill pass
+      strokeFlags.setLooper(0);
     }
-    drawText(paintForStroking);
+    drawText(strokeFlags);
   }
 }
 
@@ -747,8 +760,8 @@ void GraphicsContext::drawText(const Font& font,
   if (contextDisabled())
     return;
 
-  drawTextPasses([&font, &runInfo, &point, this](const SkPaint& paint) {
-    if (font.drawText(m_canvas, runInfo, point, m_deviceScaleFactor, paint))
+  drawTextPasses([&font, &runInfo, &point, this](const PaintFlags& flags) {
+    if (font.drawText(m_canvas, runInfo, point, m_deviceScaleFactor, flags))
       m_paintController.setTextPainted();
   });
 }
@@ -760,10 +773,11 @@ void GraphicsContext::drawEmphasisMarks(const Font& font,
   if (contextDisabled())
     return;
 
-  drawTextPasses([&font, &runInfo, &mark, &point, this](const SkPaint& paint) {
-    font.drawEmphasisMarks(m_canvas, runInfo, mark, point, m_deviceScaleFactor,
-                           paint);
-  });
+  drawTextPasses(
+      [&font, &runInfo, &mark, &point, this](const PaintFlags& flags) {
+        font.drawEmphasisMarks(m_canvas, runInfo, mark, point,
+                               m_deviceScaleFactor, flags);
+      });
 }
 
 void GraphicsContext::drawBidiText(
@@ -775,9 +789,9 @@ void GraphicsContext::drawBidiText(
     return;
 
   drawTextPasses([&font, &runInfo, &point, customFontNotReadyAction,
-                  this](const SkPaint& paint) {
+                  this](const PaintFlags& flags) {
     if (font.drawBidiText(m_canvas, runInfo, point, customFontNotReadyAction,
-                          m_deviceScaleFactor, paint))
+                          m_deviceScaleFactor, flags))
       m_paintController.setTextPainted();
   });
 }
@@ -806,13 +820,13 @@ void GraphicsContext::drawImage(
 
   const FloatRect src = srcPtr ? *srcPtr : image->rect();
 
-  SkPaint imagePaint = immutableState()->fillPaint();
-  imagePaint.setBlendMode(op);
-  imagePaint.setColor(SK_ColorBLACK);
-  imagePaint.setFilterQuality(computeFilterQuality(image, dest, src));
-  imagePaint.setAntiAlias(shouldAntialias());
-  image->draw(m_canvas, imagePaint, dest, src, shouldRespectImageOrientation,
-              Image::ClampImageToSourceRect, m_colorBehavior);
+  PaintFlags imageFlags = immutableState()->fillFlags();
+  imageFlags.setBlendMode(op);
+  imageFlags.setColor(SK_ColorBLACK);
+  imageFlags.setFilterQuality(computeFilterQuality(image, dest, src));
+  imageFlags.setAntiAlias(shouldAntialias());
+  image->draw(m_canvas, imageFlags, dest, src, shouldRespectImageOrientation,
+              Image::ClampImageToSourceRect);
   m_paintController.setImagePainted();
 }
 
@@ -836,30 +850,30 @@ void GraphicsContext::drawImageRRect(
   if (dest.isEmpty() || visibleSrc.isEmpty())
     return;
 
-  SkPaint imagePaint = immutableState()->fillPaint();
-  imagePaint.setBlendMode(op);
-  imagePaint.setColor(SK_ColorBLACK);
-  imagePaint.setFilterQuality(
+  PaintFlags imageFlags = immutableState()->fillFlags();
+  imageFlags.setBlendMode(op);
+  imageFlags.setColor(SK_ColorBLACK);
+  imageFlags.setFilterQuality(
       computeFilterQuality(image, dest.rect(), srcRect));
-  imagePaint.setAntiAlias(shouldAntialias());
+  imageFlags.setAntiAlias(shouldAntialias());
 
   bool useShader = (visibleSrc == srcRect) &&
                    (respectOrientation == DoNotRespectImageOrientation);
   if (useShader) {
     const SkMatrix localMatrix = SkMatrix::MakeRectToRect(
         visibleSrc, dest.rect(), SkMatrix::kFill_ScaleToFit);
-    useShader = image->applyShader(imagePaint, localMatrix, m_colorBehavior);
+    useShader = image->applyShader(imageFlags, localMatrix);
   }
 
   if (useShader) {
     // Shader-based fast path.
-    m_canvas->drawRRect(dest, imagePaint);
+    m_canvas->drawRRect(dest, imageFlags);
   } else {
     // Clip-based fallback.
-    SkAutoCanvasRestore autoRestore(m_canvas, true);
-    m_canvas->clipRRect(dest, imagePaint.isAntiAlias());
-    image->draw(m_canvas, imagePaint, dest.rect(), srcRect, respectOrientation,
-                Image::ClampImageToSourceRect, m_colorBehavior);
+    PaintCanvasAutoRestore autoRestore(m_canvas, true);
+    m_canvas->clipRRect(dest, imageFlags.isAntiAlias());
+    image->draw(m_canvas, imageFlags, dest.rect(), srcRect, respectOrientation,
+                Image::ClampImageToSourceRect);
   }
 
   m_paintController.setImagePainted();
@@ -925,50 +939,50 @@ void GraphicsContext::drawTiledImage(Image* image,
   m_paintController.setImagePainted();
 }
 
-void GraphicsContext::drawOval(const SkRect& oval, const SkPaint& paint) {
+void GraphicsContext::drawOval(const SkRect& oval, const PaintFlags& flags) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
-  m_canvas->drawOval(oval, paint);
+  m_canvas->drawOval(oval, flags);
 }
 
-void GraphicsContext::drawPath(const SkPath& path, const SkPaint& paint) {
+void GraphicsContext::drawPath(const SkPath& path, const PaintFlags& flags) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
-  m_canvas->drawPath(path, paint);
+  m_canvas->drawPath(path, flags);
 }
 
-void GraphicsContext::drawRect(const SkRect& rect, const SkPaint& paint) {
+void GraphicsContext::drawRect(const SkRect& rect, const PaintFlags& flags) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
-  m_canvas->drawRect(rect, paint);
+  m_canvas->drawRect(rect, flags);
 }
 
-void GraphicsContext::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
+void GraphicsContext::drawRRect(const SkRRect& rrect, const PaintFlags& flags) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
-  m_canvas->drawRRect(rrect, paint);
+  m_canvas->drawRRect(rrect, flags);
 }
 
 void GraphicsContext::fillPath(const Path& pathToFill) {
   if (contextDisabled() || pathToFill.isEmpty())
     return;
 
-  drawPath(pathToFill.getSkPath(), immutableState()->fillPaint());
+  drawPath(pathToFill.getSkPath(), immutableState()->fillFlags());
 }
 
 void GraphicsContext::fillRect(const FloatRect& rect) {
   if (contextDisabled())
     return;
 
-  drawRect(rect, immutableState()->fillPaint());
+  drawRect(rect, immutableState()->fillFlags());
 }
 
 void GraphicsContext::fillRect(const FloatRect& rect,
@@ -977,11 +991,11 @@ void GraphicsContext::fillRect(const FloatRect& rect,
   if (contextDisabled())
     return;
 
-  SkPaint paint = immutableState()->fillPaint();
-  paint.setColor(color.rgb());
-  paint.setBlendMode(xferMode);
+  PaintFlags flags = immutableState()->fillFlags();
+  flags.setColor(color.rgb());
+  flags.setBlendMode(xferMode);
 
-  drawRect(rect, paint);
+  drawRect(rect, flags);
 }
 
 void GraphicsContext::fillRoundedRect(const FloatRoundedRect& rrect,
@@ -995,14 +1009,14 @@ void GraphicsContext::fillRoundedRect(const FloatRoundedRect& rrect,
   }
 
   if (color == fillColor()) {
-    drawRRect(rrect, immutableState()->fillPaint());
+    drawRRect(rrect, immutableState()->fillFlags());
     return;
   }
 
-  SkPaint paint = immutableState()->fillPaint();
-  paint.setColor(color.rgb());
+  PaintFlags flags = immutableState()->fillFlags();
+  flags.setColor(color.rgb());
 
-  drawRRect(rrect, paint);
+  drawRRect(rrect, flags);
 }
 
 namespace {
@@ -1064,15 +1078,15 @@ void GraphicsContext::fillDRRect(const FloatRoundedRect& outer,
                                  const Color& color) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   if (!isSimpleDRRect(outer, inner)) {
     if (color == fillColor()) {
-      m_canvas->drawDRRect(outer, inner, immutableState()->fillPaint());
+      m_canvas->drawDRRect(outer, inner, immutableState()->fillFlags());
     } else {
-      SkPaint paint(immutableState()->fillPaint());
-      paint.setColor(color.rgb());
-      m_canvas->drawDRRect(outer, inner, paint);
+      PaintFlags flags(immutableState()->fillFlags());
+      flags.setColor(color.rgb());
+      m_canvas->drawDRRect(outer, inner, flags);
     }
 
     return;
@@ -1083,36 +1097,36 @@ void GraphicsContext::fillDRRect(const FloatRoundedRect& outer,
   SkRRect strokeRRect = outer;
   strokeRRect.inset(strokeWidth / 2, strokeWidth / 2);
 
-  SkPaint strokePaint(immutableState()->fillPaint());
-  strokePaint.setColor(color.rgb());
-  strokePaint.setStyle(SkPaint::kStroke_Style);
-  strokePaint.setStrokeWidth(strokeWidth);
+  PaintFlags strokeFlags(immutableState()->fillFlags());
+  strokeFlags.setColor(color.rgb());
+  strokeFlags.setStyle(PaintFlags::kStroke_Style);
+  strokeFlags.setStrokeWidth(strokeWidth);
 
-  m_canvas->drawRRect(strokeRRect, strokePaint);
+  m_canvas->drawRRect(strokeRRect, strokeFlags);
 }
 
 void GraphicsContext::fillEllipse(const FloatRect& ellipse) {
   if (contextDisabled())
     return;
 
-  drawOval(ellipse, immutableState()->fillPaint());
+  drawOval(ellipse, immutableState()->fillFlags());
 }
 
 void GraphicsContext::strokePath(const Path& pathToStroke) {
   if (contextDisabled() || pathToStroke.isEmpty())
     return;
 
-  drawPath(pathToStroke.getSkPath(), immutableState()->strokePaint());
+  drawPath(pathToStroke.getSkPath(), immutableState()->strokeFlags());
 }
 
 void GraphicsContext::strokeRect(const FloatRect& rect, float lineWidth) {
   if (contextDisabled())
     return;
 
-  SkPaint paint(immutableState()->strokePaint());
-  paint.setStrokeWidth(WebCoreFloatToSkScalar(lineWidth));
+  PaintFlags flags(immutableState()->strokeFlags());
+  flags.setStrokeWidth(WebCoreFloatToSkScalar(lineWidth));
   // Reset the dash effect to account for the width
-  immutableState()->getStrokeData().setupPaintDashPathEffect(&paint, 0);
+  immutableState()->getStrokeData().setupPaintDashPathEffect(&flags, 0);
   // strokerect has special rules for CSS when the rect is degenerate:
   // if width==0 && height==0, do nothing
   // if width==0 || height==0, then just draw line for the other dimension
@@ -1120,7 +1134,7 @@ void GraphicsContext::strokeRect(const FloatRect& rect, float lineWidth) {
   bool validW = r.width() > 0;
   bool validH = r.height() > 0;
   if (validW && validH) {
-    drawRect(r, paint);
+    drawRect(r, flags);
   } else if (validW || validH) {
     // we are expected to respect the lineJoin, so we can't just call
     // drawLine -- we have to create a path that doubles back on itself.
@@ -1128,7 +1142,7 @@ void GraphicsContext::strokeRect(const FloatRect& rect, float lineWidth) {
     path.moveTo(r.fLeft, r.fTop);
     path.lineTo(r.fRight, r.fBottom);
     path.close();
-    drawPath(path, paint);
+    drawPath(path, flags);
   }
 }
 
@@ -1136,7 +1150,7 @@ void GraphicsContext::strokeEllipse(const FloatRect& ellipse) {
   if (contextDisabled())
     return;
 
-  drawOval(ellipse, immutableState()->strokePaint());
+  drawOval(ellipse, immutableState()->strokeFlags());
 }
 
 void GraphicsContext::clipRoundedRect(const FloatRoundedRect& rrect,
@@ -1177,7 +1191,7 @@ void GraphicsContext::clipRect(const SkRect& rect,
                                SkClipOp op) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->clipRect(rect, op, aa == AntiAliased);
 }
@@ -1187,7 +1201,7 @@ void GraphicsContext::clipPath(const SkPath& path,
                                SkClipOp op) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->clipPath(path, op, aa == AntiAliased);
 }
@@ -1197,7 +1211,7 @@ void GraphicsContext::clipRRect(const SkRRect& rect,
                                 SkClipOp op) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->clipRRect(rect, op, aa == AntiAliased);
 }
@@ -1205,7 +1219,7 @@ void GraphicsContext::clipRRect(const SkRRect& rect,
 void GraphicsContext::rotate(float angleInRadians) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->rotate(
       WebCoreFloatToSkScalar(angleInRadians * (180.0f / 3.14159265f)));
@@ -1214,7 +1228,7 @@ void GraphicsContext::rotate(float angleInRadians) {
 void GraphicsContext::translate(float x, float y) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   if (!x && !y)
     return;
@@ -1225,7 +1239,7 @@ void GraphicsContext::translate(float x, float y) {
 void GraphicsContext::scale(float x, float y) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   m_canvas->scale(WebCoreFloatToSkScalar(x), WebCoreFloatToSkScalar(y));
 }
@@ -1233,7 +1247,7 @@ void GraphicsContext::scale(float x, float y) {
 void GraphicsContext::setURLForRect(const KURL& link, const IntRect& destRect) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   sk_sp<SkData> url(SkData::MakeWithCString(link.getString().utf8().data()));
   SkAnnotateRectWithURL(m_canvas, destRect, url.get());
@@ -1243,7 +1257,7 @@ void GraphicsContext::setURLFragmentForRect(const String& destName,
                                             const IntRect& rect) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   sk_sp<SkData> skDestName(SkData::MakeWithCString(destName.utf8().data()));
   SkAnnotateLinkToDestination(m_canvas, rect, skDestName.get());
@@ -1253,7 +1267,7 @@ void GraphicsContext::setURLDestinationLocation(const String& name,
                                                 const IntPoint& location) {
   if (contextDisabled())
     return;
-  ASSERT(m_canvas);
+  DCHECK(m_canvas);
 
   sk_sp<SkData> skName(SkData::MakeWithCString(name.utf8().data()));
   SkAnnotateNamedDestination(
@@ -1271,9 +1285,9 @@ void GraphicsContext::fillRectWithRoundedHole(
   if (contextDisabled())
     return;
 
-  SkPaint paint(immutableState()->fillPaint());
-  paint.setColor(color.rgb());
-  m_canvas->drawDRRect(SkRRect::MakeRect(rect), roundedHoleRect, paint);
+  PaintFlags flags(immutableState()->fillFlags());
+  flags.setColor(color.rgb());
+  m_canvas->drawDRRect(SkRRect::MakeRect(rect), roundedHoleRect, flags);
 }
 
 void GraphicsContext::adjustLineToPixelBoundaries(FloatPoint& p1,
@@ -1322,102 +1336,11 @@ sk_sp<SkColorFilter> GraphicsContext::WebCoreColorFilterToSkiaColorFilter(
     case ColorFilterNone:
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       break;
   }
 
   return nullptr;
 }
-
-#if !OS(MACOSX)
-void GraphicsContext::draw2xMarker(SkBitmap* bitmap, int index) {
-  const SkPMColor lineColor = lineColors(index);
-  const SkPMColor antiColor1 = antiColors1(index);
-  const SkPMColor antiColor2 = antiColors2(index);
-
-  uint32_t* row1 = bitmap->getAddr32(0, 0);
-  uint32_t* row2 = bitmap->getAddr32(0, 1);
-  uint32_t* row3 = bitmap->getAddr32(0, 2);
-  uint32_t* row4 = bitmap->getAddr32(0, 3);
-
-  // Pattern: X0o   o0X0o   o0
-  //          XX0o o0XXX0o o0X
-  //           o0XXX0o o0XXX0o
-  //            o0X0o   o0X0o
-  const SkPMColor row1Color[] = {lineColor, antiColor1, antiColor2, 0,
-                                 0,         0,          antiColor2, antiColor1};
-  const SkPMColor row2Color[] = {lineColor, lineColor,  antiColor1, antiColor2,
-                                 0,         antiColor2, antiColor1, lineColor};
-  const SkPMColor row3Color[] = {0,         antiColor2, antiColor1, lineColor,
-                                 lineColor, lineColor,  antiColor1, antiColor2};
-  const SkPMColor row4Color[] = {0,         0,          antiColor2, antiColor1,
-                                 lineColor, antiColor1, antiColor2, 0};
-
-  for (int x = 0; x < bitmap->width() + 8; x += 8) {
-    int count = std::min(bitmap->width() - x, 8);
-    if (count > 0) {
-      memcpy(row1 + x, row1Color, count * sizeof(SkPMColor));
-      memcpy(row2 + x, row2Color, count * sizeof(SkPMColor));
-      memcpy(row3 + x, row3Color, count * sizeof(SkPMColor));
-      memcpy(row4 + x, row4Color, count * sizeof(SkPMColor));
-    }
-  }
-}
-
-void GraphicsContext::draw1xMarker(SkBitmap* bitmap, int index) {
-  const uint32_t lineColor = lineColors(index);
-  const uint32_t antiColor = antiColors2(index);
-
-  // Pattern: X o   o X o   o X
-  //            o X o   o X o
-  uint32_t* row1 = bitmap->getAddr32(0, 0);
-  uint32_t* row2 = bitmap->getAddr32(0, 1);
-  for (int x = 0; x < bitmap->width(); x++) {
-    switch (x % 4) {
-      case 0:
-        row1[x] = lineColor;
-        break;
-      case 1:
-        row1[x] = antiColor;
-        row2[x] = antiColor;
-        break;
-      case 2:
-        row2[x] = lineColor;
-        break;
-      case 3:
-        row1[x] = antiColor;
-        row2[x] = antiColor;
-        break;
-    }
-  }
-}
-
-SkPMColor GraphicsContext::lineColors(int index) {
-  static const SkPMColor colors[] = {
-      SkPreMultiplyARGB(0xFF, 0xFF, 0x00, 0x00),  // Opaque red.
-      SkPreMultiplyARGB(0xFF, 0xC0, 0xC0, 0xC0)   // Opaque gray.
-  };
-
-  return colors[index];
-}
-
-SkPMColor GraphicsContext::antiColors1(int index) {
-  static const SkPMColor colors[] = {
-      SkPreMultiplyARGB(0xB0, 0xFF, 0x00, 0x00),  // Semitransparent red.
-      SkPreMultiplyARGB(0xB0, 0xC0, 0xC0, 0xC0)   // Semitransparent gray.
-  };
-
-  return colors[index];
-}
-
-SkPMColor GraphicsContext::antiColors2(int index) {
-  static const SkPMColor colors[] = {
-      SkPreMultiplyARGB(0x60, 0xFF, 0x00, 0x00),  // More transparent red
-      SkPreMultiplyARGB(0x60, 0xC0, 0xC0, 0xC0)   // More transparent gray
-  };
-
-  return colors[index];
-}
-#endif
 
 }  // namespace blink

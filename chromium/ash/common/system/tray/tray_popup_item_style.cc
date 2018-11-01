@@ -14,91 +14,54 @@
 namespace ash {
 namespace {
 
-// The base color used to compute the effective text colors.
-const SkColor kBaseTextColor = SK_ColorBLACK;
-
-// The color used for sub-section header row text and icons.
-const SkColor kProminentButtonColor = gfx::kGoogleBlue500;
-
-// The color for "Connected" status text.
-const SkColor kConnectedTextColor = gfx::kGoogleGreen700;
-
-const int kActiveTextAlpha = 0xDE;
-const int kInactiveTextAlpha = 0x8A;
-const int kDisabledTextAlpha = 0x61;
-
-// The base color used to compute the effective icon colors.
-const SkColor kBaseIconColor = SkColorSetRGB(0x5a, 0x5a, 0x5a);
-
-const int kActiveIconAlpha = 0xFF;
-const int kInactiveIconAlpha = 0x8A;
-const int kDisabledIconAlpha = 0x61;
+const int kInactiveAlpha = 0x8A;
+const int kDisabledAlpha = 0x61;
 
 }  // namespace
 
 // static
-SkColor TrayPopupItemStyle::GetIconColor(const ui::NativeTheme* theme,
-                                         ColorStyle color_style) {
-  // TODO(bruthig|tdanderson): Determine if TrayPopupItemStyle should depend on
-  // a NativeTheme and if so use it here. See http://crbug.com/665891.
+SkColor TrayPopupItemStyle::GetIconColor(ColorStyle color_style) {
   switch (color_style) {
     case ColorStyle::ACTIVE:
-      return SkColorSetA(kBaseIconColor, kActiveIconAlpha);
+      return gfx::kChromeIconGrey;
     case ColorStyle::INACTIVE:
-      return SkColorSetA(kBaseIconColor, kInactiveIconAlpha);
+      return SkColorSetA(gfx::kChromeIconGrey, kInactiveAlpha);
     case ColorStyle::DISABLED:
-      return SkColorSetA(kBaseIconColor, kDisabledIconAlpha);
+      return SkColorSetA(gfx::kChromeIconGrey, kDisabledAlpha);
     case ColorStyle::CONNECTED:
-      // Use a noticeable color to help notice undefined color styles for icons.
-      return SK_ColorMAGENTA;
-    case ColorStyle::SUB_HEADER:
-      return kProminentButtonColor;
+      return gfx::kPlaceholderColor;
   }
   NOTREACHED();
-  // Use a noticeable color to help notice unhandled cases.
-  return SK_ColorMAGENTA;
+  return gfx::kPlaceholderColor;
 }
-
-// static
-SkColor TrayPopupItemStyle::GetIconColor(ColorStyle color_style) {
-  return GetIconColor(nullptr, color_style);
-}
-
-TrayPopupItemStyle::TrayPopupItemStyle(const ui::NativeTheme* theme,
-                                       FontStyle font_style)
-    : theme_(theme),
-      font_style_(font_style),
-      color_style_(font_style_ == FontStyle::SUB_HEADER ? ColorStyle::SUB_HEADER
-                                                        : ColorStyle::ACTIVE) {}
 
 TrayPopupItemStyle::TrayPopupItemStyle(FontStyle font_style)
-    : TrayPopupItemStyle(nullptr, font_style) {}
+    : font_style_(font_style), color_style_(ColorStyle::ACTIVE) {
+  if (font_style_ == FontStyle::SYSTEM_INFO)
+    color_style_ = ColorStyle::INACTIVE;
+}
 
 TrayPopupItemStyle::~TrayPopupItemStyle() {}
 
 SkColor TrayPopupItemStyle::GetTextColor() const {
-  if (font_style_ == FontStyle::SYSTEM_INFO)
-    return SkColorSetA(kBaseTextColor, kInactiveTextAlpha);
+  const SkColor kBaseTextColor = SkColorSetA(SK_ColorBLACK, 0xDE);
 
   switch (color_style_) {
     case ColorStyle::ACTIVE:
-      return SkColorSetA(kBaseTextColor, kActiveTextAlpha);
+      return kBaseTextColor;
     case ColorStyle::INACTIVE:
-      return SkColorSetA(kBaseTextColor, kInactiveTextAlpha);
+      return SkColorSetA(kBaseTextColor, kInactiveAlpha);
     case ColorStyle::DISABLED:
-      return SkColorSetA(kBaseTextColor, kDisabledTextAlpha);
+      return SkColorSetA(kBaseTextColor, kDisabledAlpha);
     case ColorStyle::CONNECTED:
-      return kConnectedTextColor;
-    case ColorStyle::SUB_HEADER:
-      return kProminentButtonColor;
+      return gfx::kGoogleGreen700;
   }
   NOTREACHED();
-  // Use a noticeable color to help notice unhandled cases.
-  return SK_ColorMAGENTA;
+  return gfx::kPlaceholderColor;
 }
 
 SkColor TrayPopupItemStyle::GetIconColor() const {
-  return GetIconColor(theme_, color_style_);
+  return GetIconColor(color_style_);
 }
 
 void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
@@ -117,6 +80,8 @@ void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
     case FontStyle::SUB_HEADER:
       label->SetFontList(base_font_list.Derive(1, gfx::Font::NORMAL,
                                                gfx::Font::Weight::MEDIUM));
+      label->SetEnabledColor(label->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_ProminentButtonColor));
       label->SetAutoColorReadabilityEnabled(false);
       break;
     case FontStyle::DETAILED_VIEW_LABEL:

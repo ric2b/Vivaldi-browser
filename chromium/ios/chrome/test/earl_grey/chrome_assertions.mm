@@ -10,6 +10,10 @@
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/testing/wait_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace chrome_test_util {
 
 void AssertMainTabCount(NSUInteger expected_tab_count) {
@@ -20,8 +24,7 @@ void AssertMainTabCount(NSUInteger expected_tab_count) {
                  ^{
                    return GetMainTabCount() == expected_tab_count;
                  }),
-             [NSString stringWithFormat:@"Did not receive %" PRIuNS " tabs",
-                                        expected_tab_count]);
+             @"Did not receive %" PRIuNS " tabs", expected_tab_count);
 }
 
 void AssertIncognitoTabCount(NSUInteger expected_tab_count) {
@@ -30,11 +33,9 @@ void AssertIncognitoTabCount(NSUInteger expected_tab_count) {
   ConditionBlock condition = ^{
     return GetIncognitoTabCount() == expected_tab_count;
   };
-  GREYAssert(
-      testing::WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout,
-                                           condition),
-      [NSString stringWithFormat:@"Did not receive %" PRIuNS " incognito tabs",
-                                 expected_tab_count]);
+  GREYAssert(testing::WaitUntilConditionOrTimeout(
+                 testing::kWaitForUIElementTimeout, condition),
+             @"Did not receive %" PRIuNS " incognito tabs", expected_tab_count);
 }
 
 }  // namespace chrome_test_util

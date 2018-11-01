@@ -48,15 +48,11 @@ class RasterBufferImpl : public RasterBuffer {
     // RasterBufferProvider::PlaybackToMemory only supports unsigned strides.
     DCHECK_GE(buffer->stride(0), 0);
 
-    sk_sp<SkColorSpace> raster_color_space =
-        raster_source->HasImpliedColorSpace() ? nullptr
-                                              : lock_.sk_color_space();
-
     // TODO(danakj): Implement partial raster with raster_dirty_rect.
     RasterBufferProvider::PlaybackToMemory(
         buffer->memory(0), resource_->format(), resource_->size(),
         buffer->stride(0), raster_source, raster_full_rect, raster_full_rect,
-        scale, raster_color_space, playback_settings);
+        scale, lock_.sk_color_space(), playback_settings);
     buffer->Unmap();
   }
 
@@ -123,6 +119,20 @@ bool ZeroCopyRasterBufferProvider::IsResourceSwizzleRequired(
 bool ZeroCopyRasterBufferProvider::CanPartialRasterIntoProvidedResource()
     const {
   return false;
+}
+
+bool ZeroCopyRasterBufferProvider::IsResourceReadyToDraw(
+    ResourceId resource_id) const {
+  // Zero-copy resources are immediately ready to draw.
+  return true;
+}
+
+uint64_t ZeroCopyRasterBufferProvider::SetReadyToDrawCallback(
+    const ResourceProvider::ResourceIdArray& resource_ids,
+    const base::Closure& callback,
+    uint64_t pending_callback_id) const {
+  // Zero-copy resources are immediately ready to draw.
+  return 0;
 }
 
 void ZeroCopyRasterBufferProvider::Shutdown() {}

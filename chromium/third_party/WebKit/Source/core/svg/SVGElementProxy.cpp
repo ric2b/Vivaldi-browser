@@ -5,11 +5,11 @@
 #include "core/svg/SVGElementProxy.h"
 
 #include "core/dom/IdTargetObserver.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGResourceClient.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
@@ -84,11 +84,11 @@ void SVGElementProxy::addClient(SVGResourceClient* client) {
     return;
   // Ensure sure we have an observer registered for this tree scope.
   auto& scopeObserver =
-      m_observers.add(clientScope, nullptr).storedValue->value;
+      m_observers.insert(clientScope, nullptr).storedValue->value;
   if (!scopeObserver)
     scopeObserver = new IdObserver(*clientScope, *this);
 
-  auto& observer = m_clients.add(client, nullptr).storedValue->value;
+  auto& observer = m_clients.insert(client, nullptr).storedValue->value;
   if (!observer)
     observer = scopeObserver;
 
@@ -127,7 +127,7 @@ void SVGElementProxy::removeClient(SVGResourceClient* client) {
   // Unregister and drop the scope association, then drop the client.
   if (!observer->hasClients()) {
     observer->unregister();
-    m_observers.remove(observer->treeScope());
+    m_observers.erase(observer->treeScope());
   }
   m_clients.remove(entry);
 }
@@ -169,7 +169,7 @@ SVGElement* SVGElementProxy::findElement(TreeScope& treeScope) {
 }
 
 void SVGElementProxy::contentChanged(TreeScope& treeScope) {
-  if (auto* observer = m_observers.get(&treeScope))
+  if (auto* observer = m_observers.at(&treeScope))
     observer->contentChanged();
 }
 
@@ -180,7 +180,7 @@ DEFINE_TRACE(SVGElementProxy) {
 }
 
 void SVGElementProxySet::add(SVGElementProxy& elementProxy) {
-  m_elementProxies.add(&elementProxy);
+  m_elementProxies.insert(&elementProxy);
 }
 
 bool SVGElementProxySet::isEmpty() const {

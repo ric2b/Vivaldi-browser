@@ -43,6 +43,7 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
+#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/browser/renderer_host/resize_lock.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/web_contents/web_contents_view_aura.h"
@@ -52,7 +53,6 @@
 #include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -156,7 +156,8 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
   }
 
   void OnOverscrollModeChange(OverscrollMode old_mode,
-                              OverscrollMode new_mode) override {
+                              OverscrollMode new_mode,
+                              OverscrollSource source) override {
     EXPECT_EQ(current_mode_, old_mode);
     current_mode_ = new_mode;
     delta_x_ = delta_y_ = 0.f;
@@ -269,7 +270,10 @@ class FakeSurfaceObserver : public cc::SurfaceObserver {
 class FakeFrameSubscriber : public RenderWidgetHostViewFrameSubscriber {
  public:
   FakeFrameSubscriber(gfx::Size size, base::Callback<void(bool)> callback)
-      : size_(size), callback_(callback), should_capture_(true) {}
+      : size_(size),
+        callback_(callback),
+        should_capture_(true),
+        source_id_for_copy_request_(base::UnguessableToken::Create()) {}
 
   bool ShouldCaptureFrame(const gfx::Rect& damage_rect,
                           base::TimeTicks present_time,
@@ -283,6 +287,10 @@ class FakeFrameSubscriber : public RenderWidgetHostViewFrameSubscriber {
                                               base::TimeDelta());
     *callback = base::Bind(&FakeFrameSubscriber::CallbackMethod, callback_);
     return true;
+  }
+
+  const base::UnguessableToken& GetSourceIdForCopyRequest() override {
+    return source_id_for_copy_request_;
   }
 
   base::TimeTicks last_present_time() const { return last_present_time_; }
@@ -303,6 +311,7 @@ class FakeFrameSubscriber : public RenderWidgetHostViewFrameSubscriber {
   base::Callback<void(bool)> callback_;
   base::TimeTicks last_present_time_;
   bool should_capture_;
+  base::UnguessableToken source_id_for_copy_request_;
 };
 
 class FakeWindowEventDispatcher : public aura::WindowEventDispatcher {
@@ -410,18 +419,18 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return GetDelegatedFrameHost()->SurfaceIdForTesting();
   }
 
-  const cc::LocalFrameId& GetLocalFrameId() const {
-    return GetDelegatedFrameHost()->LocalFrameIdForTesting();
+  const cc::LocalSurfaceId& GetLocalSurfaceId() const {
+    return GetDelegatedFrameHost()->LocalSurfaceIdForTesting();
   }
 
-  bool HasFrameData() const { return GetLocalFrameId().is_valid(); }
+  bool HasFrameData() const { return GetLocalSurfaceId().is_valid(); }
 
   bool released_front_lock_active() const {
     return GetDelegatedFrameHost()->ReleasedFrontLockActiveForTesting();
   }
 
-  void ReturnResources(const cc::ReturnedResourceArray& resources) {
-    GetDelegatedFrameHost()->ReturnResources(resources);
+  void ReclaimResources(const cc::ReturnedResourceArray& resources) {
+    GetDelegatedFrameHost()->ReclaimResources(resources);
   }
 
   void ResetCompositor() { GetDelegatedFrameHost()->ResetCompositor(); }
@@ -654,7 +663,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
       return;
     }
 
-    InputEventDispatchType dispatch_type = std::get<2>(params);
+    InputEventDispatchType dispatch_type = std::get<3>(params);
     if (dispatch_type == InputEventDispatchType::DISPATCH_TYPE_NON_BLOCKING)
       return;
 
@@ -1566,7 +1575,7 @@ TEST_F(RenderWidgetHostViewAuraTest, PhysicalBackingSizeWithScale) {
   // which sends a ViewMsg_Resize::ID message to the renderer.
   EXPECT_EQ(1u, sink_->message_count());
   EXPECT_EQ(ViewMsg_Resize::ID, sink_->GetMessageAt(0)->type());
-  auto view_delegate = static_cast<MockRenderWidgetHostDelegate*>(
+  auto* view_delegate = static_cast<MockRenderWidgetHostDelegate*>(
       static_cast<RenderWidgetHostImpl*>(view_->GetRenderWidgetHost())
           ->delegate());
   EXPECT_EQ(2.0f, view_delegate->get_last_device_scale_factor());
@@ -1727,45 +1736,6 @@ cc::CompositorFrame MakeDelegatedFrame(float scale_factor,
   return frame;
 }
 
-// If the ui::Compositor has been reset then resources are returned back to the
-// client in response to the swap. This test verifies that the returned
-// resources are indeed reported as being in response to a swap.
-TEST_F(RenderWidgetHostViewAuraTest, ResettingCompositorReturnsResources) {
-  FakeSurfaceObserver manager_observer;
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  cc::SurfaceManager* manager =
-      factory->GetContextFactoryPrivate()->GetSurfaceManager();
-  manager->AddObserver(&manager_observer);
-
-  gfx::Size view_size(100, 100);
-  gfx::Rect view_rect(view_size);
-
-  view_->InitAsChild(nullptr);
-  aura::client::ParentWindowWithContext(
-      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
-      gfx::Rect());
-  view_->SetSize(view_size);
-  view_->Show();
-  sink_->ClearMessages();
-
-  view_->ResetCompositor();
-
-  // Swapping a frame should trigger a swap ACK IPC because we have reset the
-  // compositor.
-  view_->OnSwapCompositorFrame(0,
-                               MakeDelegatedFrame(1.f, view_size, view_rect));
-  EXPECT_EQ(1u, sink_->message_count());
-  {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
-    ViewMsg_ReclaimCompositorResources::Param params;
-    ViewMsg_ReclaimCompositorResources::Read(msg, &params);
-    EXPECT_EQ(0u, std::get<0>(params));  // compositor_frame_sink_id
-    EXPECT_TRUE(std::get<1>(params));    // is_swap_ack
-  }
-  manager->RemoveObserver(&manager_observer);
-}
-
 // This test verifies that returned resources do not require a pending ack.
 TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
   gfx::Size view_size(100, 100);
@@ -1779,12 +1749,12 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
   view_->Show();
   sink_->ClearMessages();
 
-  // Accumulate some returned resources. This should not trigger an IPC.
+  // Accumulate some returned resources. This should trigger an IPC.
   cc::ReturnedResourceArray resources;
   cc::ReturnedResource resource;
   resource.id = 1;
   resources.push_back(resource);
-  view_->ReturnResources(resources);
+  view_->ReclaimResources(resources);
   EXPECT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
@@ -1796,8 +1766,8 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
   }
 }
 
-// This test verifies that when the compositor_frame_sink_id changes, then
-// DelegateFrameHost returns compositor resources without a swap ack.
+// This test verifies that when the compositor_frame_sink_id changes, the old
+// resources are not returned.
 TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   FakeSurfaceObserver manager_observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
@@ -1816,32 +1786,20 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   view_->Show();
   sink_->ClearMessages();
 
-  view_->OnSwapCompositorFrame(0,
-                               MakeDelegatedFrame(1.f, view_size, view_rect));
-
-  // Accumulate some returned resources. This should not trigger an IPC.
-  cc::ReturnedResourceArray resources;
-  cc::ReturnedResource resource;
+  // Submit a frame with resources.
+  cc::CompositorFrame frame = MakeDelegatedFrame(1.f, view_size, view_rect);
+  cc::TransferableResource resource;
   resource.id = 1;
-  resources.push_back(resource);
-  view_->ReturnResources(resources);
+  frame.resource_list.push_back(resource);
+  view_->OnSwapCompositorFrame(0, std::move(frame));
   EXPECT_EQ(0u, sink_->message_count());
 
   // Swap another CompositorFrame but this time from another
-  // compositor_frame_sink_id.
-  // This should trigger a non-ACK ReclaimCompositorResources IPC.
+  // compositor_frame_sink_id. The resources for the previous frame are old and
+  // should not be returned.
   view_->OnSwapCompositorFrame(1,
                                MakeDelegatedFrame(1.f, view_size, view_rect));
-  EXPECT_EQ(1u, sink_->message_count());
-  {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
-    ViewMsg_ReclaimCompositorResources::Param params;
-    ViewMsg_ReclaimCompositorResources::Read(msg, &params);
-    EXPECT_EQ(0u, std::get<0>(params));  // compositor_frame_sink_id
-    EXPECT_FALSE(std::get<1>(params));   // is_swap_ack
-  }
-  sink_->ClearMessages();
+  EXPECT_EQ(0u, sink_->message_count());
 
   // Report that the surface is drawn to trigger an ACK.
   cc::Surface* surface = manager->GetSurfaceForId(view_->surface_id());
@@ -2694,7 +2652,7 @@ class RenderWidgetHostViewAuraCopyRequestTest
         view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
     if (surface_id.is_valid())
       view_->GetDelegatedFrameHost()->WillDrawSurface(
-          surface_id.local_frame_id(), view_rect_);
+          surface_id.local_surface_id(), view_rect_);
     ASSERT_TRUE(view_->last_copy_request_);
   }
 
@@ -4158,8 +4116,8 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   EXPECT_EQ("1 0", delegate.GetMouseButtonCountsAndReset());
 
   // Simulate mouse events, ensure they are forwarded to delegate.
-  mouse_event = ui::MouseEvent(ui::ET_MOUSE_MOVED, gfx::Point(), gfx::Point(),
-                               ui::EventTimeForNow(), 0, 0);
+  mouse_event = ui::MouseEvent(ui::ET_MOUSE_MOVED, gfx::Point(1, 1),
+                               gfx::Point(), ui::EventTimeForNow(), 0, 0);
   view_->OnMouseEvent(&mouse_event);
   EXPECT_EQ("0 1 0", delegate.GetMouseMotionCountsAndReset());
 

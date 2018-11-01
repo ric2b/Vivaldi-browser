@@ -26,6 +26,9 @@
       Jika disetel ke True atau tidak disetel, statistik akan dilaporkan.</translation>
 <translation id="1046484220783400299">Aktifkan fitur platform web usang untuk waktu yang terbatas</translation>
 <translation id="1047128214168693844">Jangan izinkan situs mana pun melacak lokasi fisik pengguna</translation>
+<translation id="1049138910114524876">Mengonfigurasi lokal yang diterapkan pada layar login <ph name="PRODUCT_OS_NAME" />.
+
+      Jika kebijakan ini disetel, layar login akan selalu ditampilkan dalam lokal yang diberikan oleh nilai pertama dari kebijakan ini (kebijakan didefinisikan sebagai daftar untuk kompatibilitas yang diteruskan).  Jika kebijakan ini tidak disetel atau disetel ke daftar kosong, layar login akan ditampilkan dalam lokal sesi pengguna terakhir.  Jika kebijakan ini disetel ke nilai lokal yang tidak valid, layar login akan ditampilkan di lokal alternatif (saat ini, en-US).</translation>
 <translation id="1062011392452772310">Mengaktifkan pengesahan jarak jauh untuk perangkat tersebut</translation>
 <translation id="1090892140761957285">URL untuk memvalidasi token autentikasi klien akses jarak jauh.
 
@@ -270,6 +273,7 @@
       Jika setelan tidak ditetapkan, nilai default akan digunakan.
 
       Jika kebijakan ini tidak disetel, setelan default digunakan untuk semua setelan.</translation>
+<translation id="1960840544413786116">Apakah sertifikat yang dikeluarkan oleh sumber tepercaya setempat yang tidak menyertakan ekstensi subjectAlternativeName diizinkan atau tidak</translation>
 <translation id="1964634611280150550">Mode penyamaran dinonaktifkan</translation>
 <translation id="1964802606569741174">Kebijakan ini tidak memengaruhi aplikasi YouTube Android. Jika Mode Perlindungan di YouTube harus diterapkan, pemasangan aplikasi YouTube Android harus dilarang.</translation>
 <translation id="1969212217917526199">Menggantikan kebijakan pada versi Debug untuk host akses jarak jauh.
@@ -296,7 +300,7 @@
 
           Jika kebijakan ini dibiarkan tidak disetel, keempat skema akan digunakan seluruhnya.</translation>
 <translation id="2067011586099792101">Memblokir akses ke situs di luar paket konten</translation>
-<translation id="2077129598763517140">Gunakan percepatan perangkat keras saat tersedia</translation>
+<translation id="2077129598763517140">Gunakan akselerasi hardware jika tersedia</translation>
 <translation id="2077273864382355561">Penundaan mematikan layar saat menggunakan daya baterai</translation>
 <translation id="209586405398070749">Saluran stabil</translation>
 <translation id="2098658257603918882">Aktifkan laporan data penggunaan dan yang terkait kerusakan</translation>
@@ -324,6 +328,21 @@
       Jika HardwareAccelerationModeEnabled disetel ke False, Disable3DAPI akan diabaikan dan setara dengan Disable3DAPI yang disetel ke True.</translation>
 <translation id="2168397434410358693">Menunda waktu menganggur saat menggunakan daya AC</translation>
 <translation id="2170233653554726857">Aktifkan pengoptimalan WPAD</translation>
+<translation id="2176565653304920879">Saat kebijakan ini disetel, alur deteksi zona waktu otomatis akan menggunakan salah satu cara berikut, tergantung nilai setelan:
+
+      Jika disetel ke TimezoneAutomaticDetectionUsersDecide, pengguna dapat mengontrol deteksi zona waktu otomatis menggunakan kontrol normal di chrome://settings.
+
+      Jika disetel ke TimezoneAutomaticDetectionDisabled, kontrol zona waktu otomatis di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu nonaktif.
+
+      Jika disetel ke TimezoneAutomaticDetectionIPOnly, kontrol zona waktu di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu aktif. Deteksi zona waktu akan menggunakan metode hanya-IP untuk menentukan lokasi.
+
+      Jika disetel ke TimezoneAutomaticDetectionSendWiFiAccessPoints, kontrol zona waktu di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu aktif. Daftar titik akses Wi-Fi yang terlihat akan selalu dikirim ke server API Geolocation untuk deteksi zona waktu yang lebih rinci.
+
+      Jika disetel ke TimezoneAutomaticDetectionSendAllLocationInfo, kontrol zona waktu di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu aktif. Informasi lokasi (seperti titik akses Wi-Fi, Menara Seluler yang dapat dijangkau, GPS) akan dikirim ke server untuk deteksi zona waktu yang lebih rinci.
+
+      Jika kebijakan ini tidak disetel, perilakunya sama dengan saat TimezoneAutomaticDetectionUsersDecide disetel.
+
+      Jika kebijakan SystemTimezone disetel, kebijakan tersebut akan mengganti kebijakan ini. Dalam kasus ini, deteksi zona waktu otomatis akan dinonaktifkan sepenuhnya.</translation>
 <translation id="2178899310296064282">Terapkan setidaknya Mode Terbatas Menengah di YouTube</translation>
 <translation id="2183294522275408937">Setelan ini mengontrol seberapa sering layar kunci akan meminta sandi dimasukkan guna melanjutkan penggunaan buka kunci cepat. Setiap kali masuk ke layar kunci, jika entri sandi terakhir melebihi setelan ini, buka kunci cepat tidak akan tersedia untuk masuk ke layar kunci. Jika pengguna membiarkan layar kunci melewati periode ini, sandi akan diminta lagi nantinya apabila pengguna salah memasukkan kode, atau masuk ke layar kunci lagi, mana saja yang muncul terlebih dahulu.
 
@@ -360,11 +379,12 @@
 
       Jika setelan ini tidak dikonfigurasi, maka pengguna dapat memilih apakah layanan memeriksa ejaan harus digunakan atau tidak.</translation>
 <translation id="2294382669900758280">Pemutaran video di aplikasi Android tidak dipertimbangkan, meski kebijakan ini disetel ke <ph name="TRUE" />.</translation>
+<translation id="2298647742290373702">Mengonfigurasi halaman Tab Baru di <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2299220924812062390">Tentukan daftar plugin yang diaktifkan</translation>
 <translation id="2309390639296060546">Setelan geolokasi default</translation>
 <translation id="2312134445771258233">Memungkinkan Anda mengonfigurasi laman yang dimuat saat permulaan. Isi daftar 'URL yang dibuka saat permulaan' diabaikan kecuali jika Anda memilih 'Buka daftar URL' dalam 'Tindakan saat permulaan'.</translation>
+<translation id="23323722127921515">Menampilkan ikon toolbar Google Cast</translation>
 <translation id="2337466621458842053">Memungkinkan Anda menyetel daftar pola url yang menentukan situs yang diizinkan untuk menampilkan gambar. Jika kebijakan ini dibiarkan tanpa disetel, nilai global default akan digunakan untuk semua situs, baik dari kebijakan 'DefaultImagesSetting', jika disetel, maupun konfigurasi pribadi pengguna.</translation>
-<translation id="2366415278352956652">Mengaktifkan transmisi</translation>
 <translation id="2372547058085956601">Penundaan masuk otomatis sesi publik.
 
       Jika kebijakan |DeviceLocalAccountAutoLoginId| tidak disetel, kebijakan ini tidak akan berpengaruh.
@@ -492,6 +512,7 @@
 
       Jika kebijakan ini disetel ke False, pesan kesalahan akan muncul, bukan permintaan konfigurasi jaringan.</translation>
 <translation id="2498238926436517902">Selalu sembunyikan rak secara otomatis</translation>
+<translation id="2503514368596117142">Mengonfigurasi kebijakan untuk Google Cast, fitur yang memungkinkan pengguna mengirim konten tab, situs, atau desktop dari browser ke sistem suara dan tampilan dari jarak jauh.</translation>
 <translation id="2514328368635166290">Menentukan URL ikon favorit dari penyedia penelusuran default. Kebijakan ini bersifat opsional. Jika tidak disetel, ikon tidak akan ada untuk penyedia penelusuran. Kebijakan ini hanya berlaku jika kebijakan 'DefaultSearchProviderEnabled' diaktifkan.</translation>
 <translation id="2516525961735516234">Menentukan apakah aktivitas video memengaruhi pengelolaan daya.
 
@@ -509,6 +530,9 @@
 <translation id="2529880111512635313">Mengonfigurasi daftar aplikasi dan ekstensi yang dipasang secara paksa</translation>
 <translation id="253135976343875019">Menunda peringatan waktu menganggur saat menggunakan daya AC</translation>
 <translation id="2552966063069741410">Zona Waktu</translation>
+<translation id="2558917182010914102">Jika kebijakan ini disetel ke true atau tidak disetel, Google Cast akan diaktifkan, dan pengguna dapat meluncurkannya dari menu aplikasi, menu konteks halaman, kontrol media di situs web yang kompatibel untuk Cast, dan (jika ditampilkan) ikon toolbar Cast.
+
+          Jika kebijakan disetel ke false, Google Cast akan dinonaktifkan.</translation>
 <translation id="2562339630163277285">Menentukan URL mesin telusur yang digunakan untuk memberikan hasil instan. URL harus berisi string <ph name="SEARCH_TERM_MARKER" />, yang akan diganti pada waktu kueri dengan teks yang telah dimasukkan oleh pengguna sejauh ini.
 
           Kebijakan ini persifat opsional. Jika tidak disetel, tidak ada hasil penelusuran instan yang akan diberikan.
@@ -579,7 +603,7 @@
 <translation id="2801230735743888564">Mengizinkan pengguna memainkan game dinosaur easter egg saat perangkat offline.
 
       Jika kebijakan ini disetel ke False, pengguna tidak dapat memainkan game dinosaur easter egg saat perangkat offline. Jika setelan ini disetel ke True, pengguna dapat memainkan game tersebut. Jika kebijakan ini tidak disetel, pengguna tidak dapat memainkan game dinosaur easter egg pada Chrome OS yang terdaftar, tapi pengguna dapat memainkannya dalam situasi tertentu.</translation>
-<translation id="2805707493867224476">Izinkan semua situs menampilkan munculan</translation>
+<translation id="2805707493867224476">Izinkan semua situs menampilkan pop-up</translation>
 <translation id="2808013382476173118">Memungkinkan penggunaan server STUN saat klien jarak jauh mencoba untuk membuat koneksi ke komputer ini.
 
           Jika setelan ini diaktifkan, klien jarak jauh dapat menemukan dan tersambung ke komputer ini meskipun terpisah oleh firewall.
@@ -899,6 +923,11 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
           Jika setelan ini dibiarkan tidak dikonfigurasi, tidak ada larangan yang diterapkan pada jenis ekstensi/aplikasi yang dapat diterima.</translation>
 <translation id="3780152581321609624">Sertakan port non-standar di SPN Kerberos</translation>
+<translation id="3780319008680229708">Jika kebijakan ini disetel ke true, ikon toolbar Cast akan selalu ditampilkan di toolbar atau menu tambahan, dan pengguna tidak dapat menghapusnya.
+
+          Jika kebijakan ini disetel ke false atau tidak disetel, pengguna dapat memasang pin atau menghapus ikon melalui menu kontekstualnya.
+
+          Jika kebijakan "EnableMediaRouter" disetel ke false, setelan kebijakan ini tidak akan berpengaruh, dan ikon toolbar tidak akan ditampilkan.</translation>
 <translation id="3788662722837364290">Setelan pengelolaan daya saat pengguna sedang menganggur</translation>
 <translation id="3793095274466276777">Mengonfigurasi pemeriksaan browser default di <ph name="PRODUCT_NAME" /> dan mencegah pengguna mengubahnya. Jika Anda mengaktifkan setelan ini, <ph name="PRODUCT_NAME" /> akan selalu memeriksa saat permulaan apakah itu browser default dan mendaftar sendiri secara otomatis jika memungkinkan. Jika setelan ini dinonaktifkan, <ph name="PRODUCT_NAME" /> tidak akan memeriksa apakah itu browser default dan akan menonaktifkan kontrol pengguna untuk setelan opsi ini. Jika setelan ini tidak disetel, <ph name="PRODUCT_NAME" /> akan mengizinkan pengguna mengontrol apakah itu browser default dan apakah pemberitahuan pengguna harus ditampilkan ketika tidak muncul.</translation>
 <translation id="379659290574555063">Memperlakukan perangkat penyimpanan eksternal sebagai hanya baca.</translation>
@@ -991,6 +1020,9 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
           Jika tidak disetel atau disetel ke False, pengguna akan dapat mentransfer file ke Google Drive.</translation>
 <translation id="3915395663995367577">URL untuk proxy file .pac</translation>
+<translation id="3926940573869375969">Mengonfigurasi tata letak keyboard yang diizinkan di layar login <ph name="PRODUCT_OS_NAME" />.
+
+      Jika kebijakan ini disetel ke daftar pengenal metode masukan, metode masukan yang diberikan akan tersedia di layar login. Metode masukan pertama yang diberikan telah dipilih sebelumnya. Walaupun pod pengguna difokuskan pada layar login, metode masukan yang terakhir kali digunakan oleh pengguna akan tersedia, selain dari metode masukan yang diberikan oleh kebijakan ini.  Jika kebijakan ini tidak disetel, metode masukan pada layar login akan diambil dari lokal yang menampilkan layar login.  Pengenal metode masukan akan mengabaikan nilai yang tidak valid.</translation>
 <translation id="3939893074578116847">Kirimkan paket jaringan ke server pengelolaan untuk memantau status online,
       untuk memungkinkan server mendeteksi jika perangkat sedang offline.
 
@@ -1073,6 +1105,17 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
       Jika kebijakan ini disetel ke false. pengguna tidak dapat mengunci layar (mereka hanya dapat keluar dari sesi pengguna). Jika setelan ini disetel ke true atau tidak disetel, pengguna yang diautentikasi dengan sandi dapat mengunci layar.</translation>
 <translation id="4121350739760194865">Mencegah promosi apl muncul di laman tab baru</translation>
+<translation id="4133301551755536858">Mengonfigurasi URL halaman Tab Baru default di <ph name="PRODUCT_NAME" /> dan mencegah pengguna mengubahnya.
+
+          Halaman Tab Baru adalah halaman yang terbuka ketika tab baru dibuat (termasuk halaman yang dibuka di jendela baru).
+
+          Kebijakan ini tidak menentukan halaman yang dibuka saat memulai. Halaman tersebut dikontrol oleh kebijakan RestoreOnStartup, yang bisa jadi untuk membuka halaman Tab Baru.
+
+          NewTabPageLocation dapat disetel ke URL yang Anda tentukan di sini. Hal tersebut juga akan memengaruhi Beranda jika disetel untuk membuka halaman Tab Baru, serta halaman awal jika disetel ke halaman Tab Baru.
+
+          Jika kebijakan tidak disetel atau dibiarkan kosong, halaman tab baru default akan digunakan.
+
+          Kebijakan ini tidak tersedia di Windows yang tidak tergabung dalam domain Active Directory.</translation>
 <translation id="4147054660081653009">Sertifikat klien untuk menyambung ke RemoteAccessHostTokenValidationUrl.
 
           Jika kebijakan ini disetel, host akan menggunakan sertifikat klien dengan CN penerbit yang diberikan untuk mengautentikasi RemoteAccessHostTokenValidationUrl. Setel ke "*" untuk menggunakan sertifikat klien yang tersedia.
@@ -1102,6 +1145,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
           Jika kebijakan ini tidak disetel, nilai default global akan digunakan untuk semua situs dari kebijakan 'DefaultKeygenSetting' jika disetel, atau dari konfigurasi pribadi pengguna.</translation>
 <translation id="4239720644496144453">Cache tidak digunakan untuk aplikasi Android. Jika beberapa pengguna memasang aplikasi Android yang sama, aplikasi akan didownload lagi untuk setiap pengguna.</translation>
 <translation id="4250680216510889253">Tidak</translation>
+<translation id="4261820385751181068">Lokal layar login perangkat</translation>
 <translation id="4272136423200695428">Aktifkan masuk paksa untuk <ph name="PRODUCT_NAME" />.</translation>
 <translation id="427632463972968153">Menentukan parameter yang digunakan saat melakukan penelusuran gambar dengan POST. Berisi pasangan nama/nilai yang dipisahkan koma. Jika nilai adalah parameter template, seperti {imageGambar kecil} contoh di atas, akan diganti dengan data thumbnail gambar nyata.
 
@@ -1150,9 +1194,9 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="4467952432486360968">Cekal cookie pihak ketiga</translation>
 <translation id="4474167089968829729">Aktifkan penyimpanan sandi di pengelola sandi</translation>
 <translation id="4476769083125004742">Jika kebijakan ini disetel ke <ph name="BLOCK_GEOLOCATION_SETTING" />, aplikasi Android tidak dapat mengakses informasi lokasi. Jika Anda menyetel kebijakan ini ke nilai lain atau tidak menyetel kebijakan, pengguna akan dimintai persetujuan ketika aplikasi Android ingin mengakses informasi lokasi.</translation>
-<translation id="447686899376429408">Jika disetel ke true atau tidak disetel, pengguna dapat mentransmisi tab, situs, atau desktop dari browser. Jika disetel ke false, opsi ini akan dinonaktifkan.</translation>
 <translation id="4480694116501920047">Paksakan TelusurAman</translation>
 <translation id="4482640907922304445">Menampilkan tombol Beranda di bilah alat <ph name="PRODUCT_NAME" />. Jika Anda mengaktifkan setelan ini, tombol Beranda akan selalu ditampilkan. Jika Anda menonaktifkan setelan ini, tombol Beranda tidak akan pernah ditampilkan. Jika Anda mengaktifkan atau menonaktifkan setelan ini, pengguna tidak dapat mengubah atau menimpa setelan ini di <ph name="PRODUCT_NAME" />. Membiarkan kebijakan ini tidak disetel akan memungkinkan pengguna memilih apakah akan menampilkan tombol beranda.</translation>
+<translation id="4485425108474077672">Mengonfigurasi URL halaman Tab Baru</translation>
 <translation id="4492287494009043413">Menonaktifkan pengambilan tangkapan layar</translation>
 <translation id="450537894712826981">Mengonfigurasi ukuran cache yang akan digunakan <ph name="PRODUCT_NAME" /> untuk menyimpan file media di disk.
 
@@ -1255,6 +1299,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
           Jika kebijakan ini disetel ke true atau tidak disetel, penguncian layar saat bangun akan diterima demi pengelolaan daya.
 
           Jika kebijakan ini disetel ke false, permintaan penguncian layar saat bangun akan diabaikan.</translation>
+<translation id="4876805738539874299">Versi SSL maksimum diaktifkan</translation>
 <translation id="4882546920824859909">Menetapkan domain yang diizinkan untuk mengakses Google Apps</translation>
 <translation id="4890209226533226410">Menyetel jenis lup yang diaktifkan.
 
@@ -1319,12 +1364,6 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
       Jika kebijakan ini tidak disetel atau disetel ke False, mode pengembang akan tetap tersedia untuk perangkat.</translation>
 <translation id="5208240613060747912">Memungkinkan Anda menyetel daftar pola url yang menentukan situs yang tidak diizinkan untuk menampilkan pemberitahuan. Jika kebijakan ini tidak disetel, nilai default global akan digunakan untuk semua situs, baik dari kebijakan 'DefaultNotificationsSetting', jika disetel, atau konfigurasi pribadi pengguna.</translation>
-<translation id="5209594095390052164">Mengizinkan memilih apakah pembatasan diaktifkan atau tidak.
-      Kebijakan ini berlaku untuk semua pengguna, dan untuk semua antarmuka di perangkat. Setelah disetel,
-      pembatasan akan terus berlanjut hingga kebijakan ini dinonaktifkan.
-
-      Jika disetel ke false, tidak ada pembatasan.
-      Jika disetel ke true, sistem akan dibatasi untuk menerima laju upload dan download (dalam kbit/dtk).</translation>
 <translation id="5219844027738217407">Untuk aplikasi Android, kebijakan ini hanya memengaruhi mikrofon. Jika kebijakan disetel ke true, mikrofon akan dibisukan untuk semua aplikasi Android, tanpa pengecualian.</translation>
 <translation id="5226033722357981948">Menentukan apakah pencari plugin harus dinonaktifkan</translation>
 <translation id="523505283826916779">Setelan aksesibilitas</translation>
@@ -1363,6 +1402,13 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="5378985487213287085">Memungkinkan Anda menyetel apakah situs web diizinkan untuk menampilkan pemberitahuan desktop. Menampilkan pemberitahuan desktop dapat diizinkan secara default, ditolak secara default, atau pengguna dapat ditanya setiap kali sebuah situs web ingin menampilkan pemberitahuan desktop. Jika kebijakan ini tidak disetel, 'AskNotifications' akan digunakan dan pengguna dapat mengubahnya.</translation>
 <translation id="538108065117008131">Izinkan <ph name="PRODUCT_FRAME_NAME" /> menangani jenis konten berikut.</translation>
 <translation id="5388730678841939057">Memilih strategi yang digunakan untuk mengosongkan ruang disk selama pembersihan otomatis (tidak lagi digunakan)</translation>
+<translation id="5392172595902933844">Informasi tentang status Android dikirim kembali ke
+      server.
+
+      Jika kebijakan disetel ke false atau tidak disetel, tidak ada informasi status yang dilaporkan.
+      Jika disetel ke true, informasi status akan dilaporkan.
+
+      Kebijakan ini hanya berlaku jika aplikasi Android diaktifkan.</translation>
 <translation id="5395271912574071439">Mengaktifkan pemberian tirai hosting akses jarak jauh saat sambungan berlangsung.
 
           Jika setelan ini diaktifkan, perangkat keluaran dan masukan fisik hosting akan dinonaktifkan saat sambungan jarak jauh berlangsung.
@@ -1400,13 +1446,6 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
       Saat nilai kebijakan ini disetel dan tidak 0, maka pengguna demo yang saat ini telah masuk akan dikeluarkan secara otomatis setelah waktu tidak aktif selama durasi yang ditentukan telah habis.
 
       Nilai kebijakan sebaiknya ditentukan dalam milidetik.</translation>
-<translation id="5506213378070007377">Informasi tentang status Android dikirim kembali ke
-      server.
-
-      Jika kebijakan ini disetel ke false, tidak ada informasi status yang dilaporkan.
-      Jika disetel ke true atau tidak disetel, informasi status akan dilaporkan.
-
-      Kebijakan ini hanya berlaku jika aplikasi Android diaktifkan.</translation>
 <translation id="5511702823008968136">Aktifkan Bilah Bookmark</translation>
 <translation id="5512418063782665071">URL beranda</translation>
 <translation id="5523812257194833591">Sesi publik untuk masuk secara otomatis setelah penundaan.
@@ -1442,6 +1481,11 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
       Jika Anda menyetel kebijakan ini, pengguna tidak dapat mengubah atau menggantinya.
 
       Jika kebijakan ini dibiarkan tidak disetel, pengguna dapat memilih apakah rak akan bersembunyi otomatis atau tidak.</translation>
+<translation id="557360560705413259">Jika setelan ini diaktifkan, <ph name="PRODUCT_NAME" /> akan menggunakan commonName dari sertifikat server agar cocok dengan hostname apabila sertifikat tidak menyertakan ekstensi subjectAlternativeName, selama berhasil divalidasi dan diamankan ke sertifikat CA yang terinstal secara lokal.
+
+      Perlu diperhatikan bahwa tindakan ini tidak disarankan, karena dapat melewati ekstensi nameConstraints yang membatasi hostname untuk mengotorisasi sertifikat yang diberikan.
+
+      Jika kebijakan ini tidak disetel, atau disetel ke false, sertifikat server yang tidak menyertakan ekstensi subjectAlternativeName yang berisi nama DNS atau alamat IP tidak akan dipercaya.</translation>
 <translation id="557658534286111200">Mengaktifkan atau menonaktifkan pengeditan bookmark</translation>
 <translation id="5586942249556966598">Tidak melakukan apa-apa</translation>
 <translation id="5613179474872285001">Mengonfigurasi nama domain klien yang diperlukan, yang akan diterapkan pada klien akses jarak jauh dan mencegah pengguna untuk mengubahnya.
@@ -1549,6 +1593,12 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
           Jika setelan ini dinonaktifkan atau tidak dikonfigurasi, permintaan autentikasi gnubby tidak akan dilakukan melalui proxy.</translation>
 <translation id="5898486742390981550">Ketika beberapa pengguna masuk, hanya pengguna utama yang dapat menggunakan aplikasi Android.</translation>
+<translation id="5906199912611534122">Mengizinkan pengaktifan atau pe-nonaktifan pembatasan jaringan.
+      Kebijakan ini berlaku untuk semua pengguna, dan untuk semua antarmuka di perangkat. Setelah disetel,
+      pembatasan akan terus berlanjut hingga kebijakan ini dinonaktifkan.
+
+      Jika disetel ke false, tidak akan ada pembatasan.
+      Jika disetel ke true, sistem akan dibatasi untuk mencapai laju upload dan download (dalam kbit/dtk) yang tersedia.</translation>
 <translation id="5921713479449475707">Izinkan download pembaruan otomatis melalui HTTP</translation>
 <translation id="5921888683953999946">Menyetel status default fitur aksesibilitas kursor besar di layar masuk.
 
@@ -1565,6 +1615,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
       Jika Anda menonaktifkan setelan ini atau tidak menyetel suatu nilai, TelusurAman di Google Penelusuran tidak akan diterapkan.</translation>
 <translation id="5937539742111853215">Kebijakan ini hanya mengontrol mode developer <ph name="PRODUCT_OS_NAME" />. Jika ingin mencegah akses ke Opsi Developer Android, Anda perlu menyetel kebijakan <ph name="DEVELOPER_TOOLS_POLICY" />.</translation>
+<translation id="5940306398763671235">Mengaktifkan Google Cast</translation>
 <translation id="5946082169633555022">Saluran beta</translation>
 <translation id="5950205771952201658">Mengingat pemeriksaan pembatalan online kegagalan-lunak tidak memberikan manfaat keamanan yang efektif, pemeriksaan tersebut dinonaktifkan secara default di <ph name="PRODUCT_NAME" /> versi 19 dan yang lebih baru. Dengan menyetel kebijakan ini ke true, perilaku sebelumnya akan dipulihkan dan akan dilakukan pemeriksaan OCSP/CRL online.
 
@@ -1588,6 +1639,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
       Jika kebijakan ini disetel ke True atau tidak disetel, akselerasi perangkat keras akan diaktifkan kecuali fitur GPU tertentu masuk dalam daftar hitam.
 
       Jika kebijakan ini disetel ke False, akselerasi perangkat keras akan dinonaktifkan.</translation>
+<translation id="6070667616071269965">Tata letak keyboard layar login perangkat</translation>
 <translation id="6074963268421707432">Jangan izinkan situs apa pun menampilkan pemberitahuan desktop</translation>
 <translation id="6076099373507468537">Menjelaskan daftar perangkat USB yang diizinkan untuk dilepas dari driver kernelnya, agar dapat langsung digunakan melalui API chrome.usb dalam aplikasi web. Entri berupa pasangan Pengenal Vendor USB dan Pengenal Produk untuk mengidentifikasi perangkat keras tertentu.
 
@@ -1875,6 +1927,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
       Bagaimanapun juga info memori dilaporkan ke laman, terlepas dari nilai opsinya, namun ukuran yang dilaporkan
       dikuantisasi dan tingkat pembaruan dibatasi karena alasan keamanan. Untuk memperoleh data akurat dalam waktu nyata,
       silakan gunakan alat seperti Telemetri.</translation>
+<translation id="6894178810167845842">URL halaman Tab Baru</translation>
 <translation id="6899705656741990703">Mendeteksi setelan proxy secara otomatis</translation>
 <translation id="6903814433019432303">Kebijakan ini aktif dalam mode eceran saja.
 
@@ -1994,6 +2047,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="7132877481099023201">URL yang akan diberi akses ke perangkat perekam video tanpa peringatan</translation>
 <translation id="7167436895080860385">Mengizinkan pengguna menampilkan sandi di Pengelola Sandi (tak lagi digunakan)</translation>
 <translation id="7173856672248996428">Profil singkat</translation>
+<translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="718956142899066210">Jenis sambungan yang diizinkan untuk pembaruan</translation>
 <translation id="7194407337890404814">Nama penyedia penelusuran default</translation>
 <translation id="7195064223823777550">Tentukan tindakan yang akan diambil saat pengguna menutup penutupnya.
@@ -2127,6 +2181,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="7625444193696794922">Menentukan saluran rilis yang harus dikunci oleh perangkat ini.</translation>
 <translation id="7632724434767231364">Nama pustaka GSSAPI</translation>
 <translation id="7635471475589566552">Mengonfigurasi lokal aplikasi di <ph name="PRODUCT_NAME" /> dan mencegah pengguna mengubah lokal tersebut. Jika Anda mengaktifkan setelan ini, <ph name="PRODUCT_NAME" /> akan menggunakan lokal yang ditentukan. Jika lokal terkonfigurasi tidak didukung, 'en-US' akan digunakan. Jika setelan ini dinonaktifkan atau tidak disetel, <ph name="PRODUCT_NAME" /> akan menggunakan lokal terpilih yang ditentukan pengguna (jika dikonfigurasi), lokal sistem, atau lokal pengganti 'en-US'.</translation>
+<translation id="7638300388094655454">Google Cast</translation>
 <translation id="7651739109954974365">Menentukan apakah roaming data harus diaktifkan untuk perangkat. Jika disetel ke true, roaming data akan diizinkan. Jika dibiarkan tanpa konfigurasi atau disetel ke false, roaming data tidak akan tersedia.</translation>
 <translation id="76810863974142048">URL tempat klien akses jarak jauh seharusnya mendapatkan token autentikasinya.
 
@@ -2206,6 +2261,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 
           Untuk opsi lain dan contoh detailnya, buka:
           <ph name="PROXY_HELP_URL" />.</translation>
+<translation id="7781069478569868053">Laman Tab Baru</translation>
 <translation id="7788511847830146438">Per Profil</translation>
 <translation id="7796141075993499320">Memungkinkan Anda menyetel daftar pola url yang menentukan situs yang diizinkan untuk menjalankan plugin. Jika kebijakan ini tidak disetel, nilai default global akan digunakan untuk semua situs, baik dari kebijakan 'DefaultPluginsSetting', jika disetel, atau konfigurasi pribadi pengguna.</translation>
 <translation id="7801886189430766248">Jika kebijakan ini disetel ke true, data aplikasi Android akan diupload ke server Pencadangan Android dan dipulihkan saat pemasangan ulang aplikasi untuk aplikasi yang kompatibel.
@@ -2232,19 +2288,6 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="7842869978353666042">Konfigurasi opsi Google Drive</translation>
 <translation id="7843525027689416831">Tentukan tanda yang harus diterapkan ke <ph name="PRODUCT_NAME" /> saat dimulai. Tanda yang ditentukan hanya diterapkan di layar masuk. Tanda yang disetel melalui kebijakan ini tidak diterapkan ke dalam sesi pengguna.</translation>
 <translation id="7848840259379156480">Memungkinkan Anda mengonfigurasi pengurai HTML default ketika <ph name="PRODUCT_FRAME_NAME" /> terpasang. Setelan defaultnya adalah mengizinkan browser host melakukan penguraian, tetapi Anda dapat mengganti ini secara opsional dan memerintahkan <ph name="PRODUCT_FRAME_NAME" /> agar mengurai laman HTML jika tidak diubah.</translation>
-<translation id="7853178359124471330">Jika kebijakan ini disetel, alur pendeteksian zona waktu otomatis akan menggunakan salah satu cara berikut tergantung nilai setelan:
-
-      Jika disetel ke TimezoneAutomaticDetectionUsersDecide, pengguna dapat mengontrol pendeteksian zona waktu otomatis menggunakan kontrol manual di chrome://settings.
-
-      Jika disetel ke TimezoneAutomaticDetectionDisabled, kontrol zona waktu otomatis di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu nonaktif.
-
-      Jika disetel ke TimezoneAutomaticDetectionIPOnly, kontrol zona waktu di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu aktif. Deteksi zona waktu akan menggunakan metode khusus IP untuk menentukan lokasi.
-
-      Jika disetel ke TimezoneAutomaticDetectionSendWiFiAccessPoints, kontrol zona waktu di chrome://settings akan dinonaktifkan. Deteksi zona waktu otomatis akan selalu aktif. Daftar poin akses Wi-Fi yang terlihat akan selalu dikirim ke server API Geolocation untuk deteksi zona waktu yang lebih merinci.
-
-      Jika kebijakan ini tidak disetel, perilakunya sama dengan saat TimezoneAutomaticDetectionUsersDecide disetel.
-
-      Jika kebijakan SystemTimezone disetel, kebijakan tersebut akan menggantikan kebijakan ini. Dalam kasus ini deteksi zona waktu otomatis akan dinonaktifkan sepenuhnya.</translation>
 <translation id="787125417158068494">Jika disetel ke SyncDisabled atau tidak dikonfigurasi, sertifikat <ph name="PRODUCT_OS_NAME" /> tidak tersedia untuk aplikasi ARC.
 
       Jika disetel ke CopyCaCerts, semua sertifikat CA yang memasang ONC dengan <ph name="WEB_TRUSTED_BIT" /> tersedia untuk aplikasi ARC.</translation>
@@ -2282,6 +2325,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="7937766917976512374">Izinkan atau tolak penangkapan video</translation>
 <translation id="7941975817681987555">Jangan memprediksi tindakan jaringan di sambungan jaringan apa pun</translation>
 <translation id="7953256619080733119">Hosting pengecualian manual pengguna yang dikelola</translation>
+<translation id="7965394584578183156">Selalu kirim poin akses Wi-Fi ke server sembari menentukan zona waktu.</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Kebijakan ini tidak lagi didukung. Mengaktifkan penggunaan STUN dan server relay saat menyambungkan ke klien jarak jauh. Jika setelan ini diaktifkan, maka komputer ini dapat menemukan dan tersambung ke komputer host jarak jauh bahkan jika dipisahkan oleh firewall. Jika setelan ini dinonaktifkan dan sambungan UDP keluar difilter oleh firewall, maka komputer ini hanya dapat tersambung ke komputer host dalam jaringan lokal.</translation>
 <translation id="7986374692540430898">Anda tidak dapat memaksakan aplikasi Android agar menggunakan proxy. Bagian setelan proxy disediakan untuk aplikasi Android, yang dapat dipilih untuk dipatuhi secara sukarela. Lihat kebijakan <ph name="PROXY_MODE_POLICY" /> untuk detail lebih lanjut.</translation>
@@ -2435,6 +2479,7 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
 <translation id="8390049129576938611">Menonaktifkan penampil PDF internal di <ph name="PRODUCT_NAME" />. Bukan memperlakukannya sebagai download dan mengizinkan membuka file PDF menggunakan aplikasi default.
 
       Jika kebijakan ini tidak disetel atau dinonaktifkan, plugin PDF akan digunakan untuk membuka file PDF kecuali pengguna menonaktifkannya.</translation>
+<translation id="8398203849316312944">Selalu kirim sinyal lokasi yang tersedia ke server sembari menentukan zona waktu.</translation>
 <translation id="8402079500086185021">Selalu Buka file PDF secara eksternal</translation>
 <translation id="8412312801707973447">Apakah pemeriksaan OCSP/CRL online dilakukan atau tidak</translation>
 <translation id="8413348101535146315">Memungkinkan proses diakhiri di Pengelola Tugas <ph name="PRODUCT_NAME" />.
@@ -2549,7 +2594,6 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
       Jika kebijakan ini disetel ke false, pengguna dan aplikasi maupun ekstensi tidak dapat memasuki mode layar penuh.
 
       Mode kios di semua platform kecuali <ph name="PRODUCT_OS_NAME" /> tidak akan tersedia saat mode layar penuh dinonaktifkan.</translation>
-<translation id="8795495354632096254">Selalu kirim poin akses Wi-Fi ke server sembari menentukan zona waktu.</translation>
 <translation id="8818173863808665831">Melaporkan lokasi geografis perangkat.
 
       Jika kebijakan tidak disetel, atau disetel ke false, lokasi tidak akan dilaporkan.</translation>
@@ -2673,6 +2717,11 @@ Pengguna dapat memasang item dari URL apa pun yang cocok dengan item dalam dafta
       Jika diaktifkan, tangkapan layar tidak akan dapat dilakukan dengan menggunakan pintasan keyboard atau API ekstensi.
 
       Jika dinonaktifkan atau tidak ditentukan, pengambilan tangkapan layar akan diizinkan.</translation>
+<translation id="9212233969680267790">Peringatan: Kebijakan versi TLS maksimum akan sepenuhnya dihapus dari <ph name="PRODUCT_NAME" /> sekitar versi 66 (sekitar bulan Februari 2018).
+
+      Jika kebijakan ini tidak dikonfigurasi, <ph name="PRODUCT_NAME" /> akan menggunakan versi maksimum default.
+
+      Jika tidak, kebijakan akan disetel ke salah satu nilai berikut: "tls1.2" atau "tls1.3". Jika disetel, <ph name="PRODUCT_NAME" /> tidak akan menggunakan versi SSL/TLS yang lebih besar dari versi yang ditentukan. Nilai yang tidak dikenal akan diabaikan.</translation>
 <translation id="9213347477683611358">Mengonfigurasi gambar wallpaper tingkat perangkat yang ditampilkan di layar login jika belum ada pengguna yang login ke perangkat. Kebijakan ini disetel dengan menetapkan URL tempat perangkat Chrome OS dapat mendownload gambar wallpaper dan potongan kriptografi yang digunakan untuk memverifikasi integritas download. Gambar harus dalam format JPEG dan ukuran filenya tidak boleh melebihi 16MB. URL harus dapat diakses tanpa autentikasi apa pun. Gambar wallpaper akan didownload dan disimpan dalam cache. Gambar ini akan didownload jika URL atau potongan berubah.
 
       Kebijakan ini harus ditetapkan sebagai string yang mengekspresikan URL dan potongan dalam format JSON, misalnya:

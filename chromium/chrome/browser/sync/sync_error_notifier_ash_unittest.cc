@@ -27,7 +27,6 @@
 #include "ui/message_center/notification.h"
 
 #if defined(OS_WIN)
-#include "chrome/browser/ui/ash/ash_util.h"
 #include "ui/aura/test/test_screen.h"
 #include "ui/display/screen.h"
 #endif
@@ -143,7 +142,7 @@ class SyncErrorNotifierTest : public AshTestBase  {
     EXPECT_CALL(*service_, GetAuthError()).WillRepeatedly(
         ReturnRef(auth_error));
 
-    error_controller_->OnStateChanged();
+    error_controller_->OnStateChanged(service_.get());
     EXPECT_EQ(is_error, error_controller_->HasError());
 
     // If there is an error we should see a notification.

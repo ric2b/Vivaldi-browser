@@ -36,8 +36,10 @@
 #include "modules/webaudio/OfflineAudioCompletionEvent.h"
 #include "modules/webaudio/OfflineAudioDestinationNode.h"
 
+#include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/audio/AudioUtilities.h"
+#include "public/platform/Platform.h"
 
 namespace blink {
 
@@ -255,13 +257,15 @@ ScriptPromise OfflineAudioContext::suspendContext(ScriptState* scriptState,
 
   // The specified suspend time is in the past; reject the promise.
   if (frame < currentSampleFrame()) {
+    size_t currentFrameClamped = std::min(currentSampleFrame(), length());
+    double currentTimeClamped =
+        std::min(currentTime(), length() / static_cast<double>(sampleRate()));
     resolver->reject(DOMException::create(
         InvalidStateError,
-        "cannot schedule a suspend at frame " + String::number(frame) + " (" +
-            String::number(when) +
-            " seconds) because it is earlier than the current frame of " +
-            String::number(currentSampleFrame()) + " (" +
-            String::number(currentTime()) + " seconds)"));
+        "suspend(" + String::number(when) + ") failed to suspend at frame " +
+            String::number(frame) + " because it is earlier than the current " +
+            "frame of " + String::number(currentFrameClamped) + " (" +
+            String::number(currentTimeClamped) + " seconds)"));
     return promise;
   }
 
@@ -279,7 +283,7 @@ ScriptPromise OfflineAudioContext::suspendContext(ScriptState* scriptState,
     return promise;
   }
 
-  m_scheduledSuspends.add(frame, resolver);
+  m_scheduledSuspends.insert(frame, resolver);
 
   return promise;
 }
@@ -374,12 +378,17 @@ void OfflineAudioContext::handlePostOfflineRenderTasks() {
 
   // OfflineGraphAutoLocker here locks the audio graph for the same reason
   // above in |handlePreOfflineRenderTasks|.
-  OfflineGraphAutoLocker locker(this);
+  bool didRemove = false;
+  {
+    OfflineGraphAutoLocker locker(this);
 
-  deferredTaskHandler().breakConnections();
-  releaseFinishedSourceNodes();
-  deferredTaskHandler().handleDeferredTasks();
-  deferredTaskHandler().requestToDeleteHandlersOnMainThread();
+    deferredTaskHandler().breakConnections();
+    didRemove = releaseFinishedSourceNodes();
+    deferredTaskHandler().handleDeferredTasks();
+    deferredTaskHandler().requestToDeleteHandlersOnMainThread();
+  }
+
+  removeFinishedSourceNodes(didRemove);
 }
 
 OfflineAudioDestinationHandler& OfflineAudioContext::destinationHandler() {

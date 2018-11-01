@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_info.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_thread_impl.h"
@@ -44,6 +45,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/guest_host.h"
 #include "content/public/browser/guest_mode.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
@@ -353,10 +355,6 @@ void BrowserPluginGuest::InitInternal(
   *renderer_prefs = *owner_web_contents_->GetMutableRendererPrefs();
   renderer_prefs->user_agent_override = guest_user_agent_override;
 
-  // We would like the guest to report changes to frame names so that we can
-  // update the BrowserPlugin's corresponding 'name' attribute.
-  // TODO(fsamuel): Remove this once http://crbug.com/169110 is addressed.
-  renderer_prefs->report_frame_name_changes = true;
   // Navigation is disabled in Chrome Apps. We want to make sure guest-initiated
   // navigations still continue to function inside the app.
   renderer_prefs->browser_handles_all_top_level_requests = false;
@@ -429,14 +427,11 @@ void BrowserPluginGuest::PointerLockPermissionResponse(bool allow) {
 }
 
 void BrowserPluginGuest::SetChildFrameSurface(
-    const cc::SurfaceId& surface_id,
-    const gfx::Size& frame_size,
-    float scale_factor,
+    const cc::SurfaceInfo& surface_info,
     const cc::SurfaceSequence& sequence) {
   has_attached_since_surface_set_ = false;
   SendMessageToEmbedder(base::MakeUnique<BrowserPluginMsg_SetChildFrameSurface>(
-      browser_plugin_instance_id(), surface_id, frame_size, scale_factor,
-      sequence));
+      browser_plugin_instance_id(), surface_info, sequence));
 }
 
 void BrowserPluginGuest::OnSatisfySequence(
@@ -672,11 +667,10 @@ void BrowserPluginGuest::SendTextInputTypeChangedToView(
     guest_rwhv->TextInputStateChanged(*last_text_input_state_);
 }
 
-void BrowserPluginGuest::DidCommitProvisionalLoadForFrame(
-    RenderFrameHost* render_frame_host,
-    const GURL& url,
-    ui::PageTransition transition_type) {
-  RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.DidNavigate"));
+void BrowserPluginGuest::DidFinishNavigation(
+    NavigationHandle* navigation_handle) {
+  if (navigation_handle->HasCommitted())
+    RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.DidNavigate"));
 }
 
 void BrowserPluginGuest::RenderViewReady() {
@@ -891,7 +885,7 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
       break;
     case blink::WebDragStatusLeave:
       embedder->DragLeftGuest(this);
-      widget->DragTargetDragLeave();
+      widget->DragTargetDragLeave(gfx::Point(), gfx::Point());
       ignore_dragged_url_ = true;
       break;
     case blink::WebDragStatusDrop:

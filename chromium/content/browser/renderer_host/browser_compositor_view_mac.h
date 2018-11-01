@@ -50,7 +50,8 @@ class BrowserCompositorMac : public cc::BeginFrameObserver,
       ui::AcceleratedWidgetMacNSView* accelerated_widget_mac_ns_view,
       BrowserCompositorMacClient* client,
       bool render_widget_host_is_hidden,
-      bool ns_view_attached_to_window);
+      bool ns_view_attached_to_window,
+      const cc::FrameSinkId& frame_sink_id);
   ~BrowserCompositorMac() override;
 
   // These will not return nullptr until Destroy is called.
@@ -89,7 +90,7 @@ class BrowserCompositorMac : public cc::BeginFrameObserver,
                                   SkColorType preferred_color_type);
   void CopyFromCompositingSurfaceToVideoFrame(
       const gfx::Rect& src_subrect,
-      const scoped_refptr<media::VideoFrame>& target,
+      scoped_refptr<media::VideoFrame> target,
       const base::Callback<void(const gfx::Rect&, bool)>& callback);
 
   // Indicate that the recyclable compositor should be destroyed, and no future

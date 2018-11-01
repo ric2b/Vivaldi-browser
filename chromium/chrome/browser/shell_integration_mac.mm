@@ -135,17 +135,6 @@ bool IsFirefoxDefaultBrowser() {
   return IsIdentifierDefaultBrowser(@"org.mozilla.firefox");
 }
 
-// Returns true if Opera is the default browser for the current user.
-bool IsOperaDefaultBrowser() {
-  return IsIdentifierDefaultBrowser(@"com.operasoftware.Opera");
-}
-
-// Returns true if Chrome is the default browser for the current user.
-bool IsChromeDefaultBrowser() {
-//todo arnar
-  return false;
-}
-
 // Attempt to determine if this instance of Chrome is the default client
 // application for the given protocol and return the appropriate state.
 DefaultWebClientState IsDefaultProtocolClient(const std::string& protocol) {

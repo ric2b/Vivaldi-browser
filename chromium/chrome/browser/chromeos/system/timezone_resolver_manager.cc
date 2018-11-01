@@ -9,6 +9,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/preferences.h"
+#include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
@@ -54,6 +55,8 @@ ServiceConfiguration GetServiceConfigurationFromAutomaticDetectionPolicy() {
       return SHOULD_START;
     case enterprise_management::SystemTimezoneProto::SEND_WIFI_ACCESS_POINTS:
       return SHOULD_START;
+    case enterprise_management::SystemTimezoneProto::SEND_ALL_LOCATION_INFO:
+      return SHOULD_START;
   }
   // Default for unknown policy value.
   NOTREACHED() << "Unrecognized policy value: " << policy_value;
@@ -97,7 +100,10 @@ ServiceConfiguration GetServiceConfigurationFromUserPrefs(
 ServiceConfiguration GetServiceConfigurationForSigninScreen() {
   if (!g_browser_process->local_state()->GetBoolean(
           prefs::kResolveDeviceTimezoneByGeolocation)) {
-    return SHOULD_START;
+    // CfM devices default to static timezone.
+    bool keyboard_driven_oobe =
+        system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation();
+    return keyboard_driven_oobe ? SHOULD_STOP : SHOULD_START;
   }
 
   // Do not start resolver if we are inside active user session.
@@ -128,6 +134,20 @@ void TimeZoneResolverManager::SetPrimaryUserPrefs(PrefService* pref_service) {
 }
 
 bool TimeZoneResolverManager::ShouldSendWiFiGeolocationData() {
+  int timezone_setting = GetTimezoneManagementSetting();
+  return (
+      (timezone_setting ==
+       enterprise_management::SystemTimezoneProto::SEND_WIFI_ACCESS_POINTS) ||
+      (timezone_setting ==
+       enterprise_management::SystemTimezoneProto::SEND_ALL_LOCATION_INFO));
+}
+
+bool TimeZoneResolverManager::ShouldSendCellularGeolocationData() {
+  return (GetTimezoneManagementSetting() ==
+          enterprise_management::SystemTimezoneProto::SEND_ALL_LOCATION_INFO);
+}
+
+int TimeZoneResolverManager::GetTimezoneManagementSetting() {
   PrefService* local_state = g_browser_process->local_state();
   const bool is_managed = local_state->IsManagedPreference(
       prefs::kSystemTimezoneAutomaticDetectionPolicy);
@@ -140,8 +160,7 @@ bool TimeZoneResolverManager::ShouldSendWiFiGeolocationData() {
   DCHECK(policy_value <= enterprise_management::SystemTimezoneProto::
                              AutomaticTimezoneDetectionType_MAX);
 
-  return policy_value ==
-         enterprise_management::SystemTimezoneProto::SEND_WIFI_ACCESS_POINTS;
+  return policy_value;
 }
 
 void TimeZoneResolverManager::UpdateTimezoneResolver() {

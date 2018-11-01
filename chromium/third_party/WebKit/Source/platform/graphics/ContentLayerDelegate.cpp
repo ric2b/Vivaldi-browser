@@ -29,12 +29,12 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/graphics/paint/PaintRecord.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "public/platform/WebDisplayItemList.h"
 #include "public/platform/WebRect.h"
-#include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -69,9 +69,9 @@ void ContentLayerDelegate::paintContents(
   // We also disable caching when Painting or Construction are disabled. In both
   // cases we would like to compare assuming the full cost of recording, not the
   // cost of re-using cached content.
-  if (paintingControl != WebContentLayerClient::PaintDefaultBehavior &&
-      paintingControl != WebContentLayerClient::PaintDefaultBehaviorForTest &&
-      paintingControl != WebContentLayerClient::SubsequenceCachingDisabled)
+  if (paintingControl == WebContentLayerClient::DisplayListCachingDisabled ||
+      paintingControl == WebContentLayerClient::DisplayListPaintingDisabled ||
+      paintingControl == WebContentLayerClient::DisplayListConstructionDisabled)
     paintController.invalidateAll();
 
   GraphicsContext::DisabledMode disabledMode = GraphicsContext::NothingDisabled;
@@ -89,10 +89,6 @@ void ContentLayerDelegate::paintContents(
   paintController.paintArtifact().appendToWebDisplayItemList(
       webDisplayItemList);
 
-  if (m_graphicsLayer->colorBehavior().isTransformToTargetColorSpace()) {
-    webDisplayItemList->setImpliedColorSpace(gfx::ColorSpace::FromSkColorSpace(
-        m_graphicsLayer->colorBehavior().targetColorSpace()));
-  }
   paintController.setDisplayItemConstructionIsDisabled(false);
   paintController.setSubsequenceCachingIsDisabled(false);
 }

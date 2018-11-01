@@ -1,7 +1,10 @@
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
-#ifndef EXTENSIONS_RUNTIME_RUNTIME_API_H
-#define EXTENSIONS_RUNTIME_RUNTIME_API_H
+#ifndef EXTENSIONS_API_RUNTIME_RUNTIME_API_H_
+#define EXTENSIONS_API_RUNTIME_RUNTIME_API_H_
+
+#include <map>
+#include <string>
 
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
@@ -32,16 +35,15 @@ typedef struct FeatureEntry {
 
 typedef std::map<std::string, FeatureEntryPtr> FeatureEntryMap;
 
-class VivaldiRuntimeFeaturesFactory
-  : public BrowserContextKeyedServiceFactory {
-public:
+class VivaldiRuntimeFeaturesFactory : public BrowserContextKeyedServiceFactory {
+ public:
   static VivaldiRuntimeFeatures* GetForProfile(Profile* profile);
 
   static VivaldiRuntimeFeaturesFactory* GetInstance();
 
   static const bool kServiceRedirectedInIncognito = true;
 
-private:
+ private:
   friend struct base::DefaultSingletonTraits<VivaldiRuntimeFeaturesFactory>;
 
   VivaldiRuntimeFeaturesFactory();
@@ -49,15 +51,15 @@ private:
 
   // BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(
-    content::BrowserContext* context) const override;
+      content::BrowserContext* context) const override;
   bool ServiceIsCreatedWithBrowserContext() const override;
   bool ServiceIsNULLWhileTesting() const override;
   content::BrowserContext* GetBrowserContextToUse(
-    content::BrowserContext* context) const override;
+      content::BrowserContext* context) const override;
 };
 
-class VivaldiRuntimeFeatures: public KeyedService {
-public:
+class VivaldiRuntimeFeatures : public KeyedService {
+ public:
   explicit VivaldiRuntimeFeatures(Profile*);
   VivaldiRuntimeFeatures();
   ~VivaldiRuntimeFeatures() override;
@@ -68,9 +70,9 @@ public:
   FeatureEntry* FindNamedFeature(const std::string& feature_name);
   const FeatureEntryMap& GetAllFeatures();
 
-private:
+ private:
   void LoadRuntimeFeatures();
-  bool GetFlags(FeatureEntryMap& flags);
+  bool GetFlags(FeatureEntryMap* flags);
 
   Profile* profile_;
   scoped_refptr<JsonPrefStore> store_;
@@ -87,7 +89,7 @@ class RuntimePrivateExitFunction : public UIThreadExtensionFunction {
 
   RuntimePrivateExitFunction();
 
- protected:
+ private:
   ~RuntimePrivateExitFunction() override;
   ResponseAction Run() override;
 
@@ -102,7 +104,7 @@ class RuntimePrivateGetAllFeatureFlagsFunction
 
   RuntimePrivateGetAllFeatureFlagsFunction();
 
- protected:
+ private:
   ~RuntimePrivateGetAllFeatureFlagsFunction() override;
 
   bool RunAsync() override;
@@ -111,14 +113,14 @@ class RuntimePrivateGetAllFeatureFlagsFunction
 };
 
 class RuntimePrivateSetFeatureEnabledFunction
-  : public ChromeAsyncExtensionFunction {
+    : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.setFeatureEnabled",
-  RUNTIME_GETALLFEATUREFLAGS)
+                             RUNTIME_GETALLFEATUREFLAGS)
 
   RuntimePrivateSetFeatureEnabledFunction();
 
- protected:
+ private:
   ~RuntimePrivateSetFeatureEnabledFunction() override;
 
   bool RunAsync() override;
@@ -126,6 +128,6 @@ class RuntimePrivateSetFeatureEnabledFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateSetFeatureEnabledFunction);
 };
 
-} // namespace extensions
+}  // namespace extensions
 
-#endif // EXTENSIONS_RUNTIME_RUNTIME_API_H
+#endif  // EXTENSIONS_API_RUNTIME_RUNTIME_API_H_

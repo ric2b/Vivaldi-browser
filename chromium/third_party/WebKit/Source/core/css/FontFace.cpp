@@ -69,8 +69,7 @@ namespace blink {
 static const CSSValue* parseCSSValue(const Document* document,
                                      const String& value,
                                      CSSPropertyID propertyID) {
-  CSSParserContext* context =
-      CSSParserContext::create(*document, UseCounter::getFrom(document));
+  CSSParserContext* context = CSSParserContext::create(*document, document);
   return CSSParser::parseFontFaceDescriptor(propertyID, value, context);
 }
 
@@ -158,12 +157,12 @@ FontFace* FontFace::create(Document* document,
 }
 
 FontFace::FontFace(ExecutionContext* context)
-    : ContextLifecycleObserver(context), m_status(Unloaded) {}
+    : ContextClient(context), m_status(Unloaded) {}
 
 FontFace::FontFace(ExecutionContext* context,
                    const AtomicString& family,
                    const FontFaceDescriptors& descriptors)
-    : ContextLifecycleObserver(context), m_family(family), m_status(Unloaded) {
+    : ContextClient(context), m_family(family), m_status(Unloaded) {
   Document* document = toDocument(context);
   setPropertyFromString(document, descriptors.style(), CSSPropertyFontStyle);
   setPropertyFromString(document, descriptors.weight(), CSSPropertyFontWeight);
@@ -362,7 +361,7 @@ String FontFace::status() const {
     default:
       NOTREACHED();
   }
-  return emptyString();
+  return emptyString;
 }
 
 void FontFace::setLoadStatus(LoadStatusType status) {
@@ -667,7 +666,7 @@ DEFINE_TRACE(FontFace) {
   visitor->trace(m_loadedProperty);
   visitor->trace(m_cssFontFace);
   visitor->trace(m_callbacks);
-  ContextLifecycleObserver::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 bool FontFace::hadBlankText() const {

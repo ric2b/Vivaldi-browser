@@ -39,16 +39,21 @@
 
 namespace blink {
 
-// <index, length>
-typedef std::pair<unsigned, unsigned> SubstringRange;
-PLATFORM_EXPORT bool isValidContentType(const String&);
-
+// ParsedContentType parses the constructor argument as specified in RFC2045
+// and stores the result.
 // FIXME: add support for comments.
 class PLATFORM_EXPORT ParsedContentType final {
   STACK_ALLOCATED();
 
  public:
-  explicit ParsedContentType(const String&);
+  // When |Relaxed| is specified, the parser parses parameter values in a sloppy
+  // manner, i.e., only ';' and '"' are treated as special characters.
+  // See https://chromiumcodereview.appspot.com/23043002.
+  enum class Mode {
+    Normal,
+    Relaxed,
+  };
+  explicit ParsedContentType(const String&, Mode = Mode::Normal);
 
   String mimeType() const { return m_mimeType; }
   String charset() const;
@@ -58,14 +63,15 @@ class PLATFORM_EXPORT ParsedContentType final {
   String parameterValueForName(const String&) const;
   size_t parameterCount() const;
 
+  bool isValid() const { return m_isValid; }
+
  private:
-  template <class ReceiverType>
-  friend bool parseContentType(const String&, ReceiverType&);
-  void setContentType(const SubstringRange&);
-  void setContentTypeParameter(const SubstringRange&, const SubstringRange&);
+  bool parse(const String&);
+
+  const Mode m_mode;
+  bool m_isValid;
 
   typedef HashMap<String, String> KeyValuePairs;
-  String m_contentType;
   KeyValuePairs m_parameters;
   String m_mimeType;
 };

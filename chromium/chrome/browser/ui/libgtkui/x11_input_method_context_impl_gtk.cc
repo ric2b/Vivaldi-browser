@@ -21,7 +21,9 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/x/x11_types.h"
+#include "ui/views/linux_ui/linux_ui.h"
 
 namespace libgtkui {
 
@@ -29,8 +31,8 @@ X11InputMethodContextImplGtk2::X11InputMethodContextImplGtk2(
     ui::LinuxInputMethodContextDelegate* delegate,
     bool is_simple)
     : delegate_(delegate),
-      gtk_context_(NULL),
-      gdk_last_set_client_window_(NULL) {
+      gtk_context_(nullptr),
+      gdk_last_set_client_window_(nullptr) {
   CHECK(delegate_);
 
   ResetXModifierKeycodesCache();
@@ -53,7 +55,7 @@ X11InputMethodContextImplGtk2::X11InputMethodContextImplGtk2(
 X11InputMethodContextImplGtk2::~X11InputMethodContextImplGtk2() {
   if (gtk_context_) {
     g_object_unref(gtk_context_);
-    gtk_context_ = NULL;
+    gtk_context_ = nullptr;
   }
 }
 
@@ -81,9 +83,11 @@ bool X11InputMethodContextImplGtk2::DispatchKeyEvent(
   gint x = 0;
   gint y = 0;
   gdk_window_get_origin(event->key.window, &x, &y);
-  GdkRectangle rect = {last_caret_bounds_.x() - x, last_caret_bounds_.y() - y,
-                       last_caret_bounds_.width(), last_caret_bounds_.height()};
-  gtk_im_context_set_cursor_location(gtk_context_, &rect);
+
+  GdkRectangle gdk_rect = {
+      last_caret_bounds_.x() - x, last_caret_bounds_.y() - y,
+      last_caret_bounds_.width(), last_caret_bounds_.height()};
+  gtk_im_context_set_cursor_location(gtk_context_, &gdk_rect);
 
   const bool handled =
       gtk_im_context_filter_keypress(gtk_context_, &event->key);
@@ -109,7 +113,12 @@ void X11InputMethodContextImplGtk2::SetCursorLocation(const gfx::Rect& rect) {
   // client window, which is unknown at this point.  So we'll call
   // gtk_im_context_set_cursor_location() later in ProcessKeyEvent() where
   // (and only where) we know the client window.
-  last_caret_bounds_ = rect;
+  if (views::LinuxUI::instance()) {
+    last_caret_bounds_ = gfx::ConvertRectToPixel(
+        views::LinuxUI::instance()->GetDeviceScaleFactor(), rect);
+  } else {
+    last_caret_bounds_ = rect;
+  }
 }
 
 // private:
@@ -179,15 +188,15 @@ GdkEvent* X11InputMethodContextImplGtk2::GdkEventFromNativeEvent(
   }
   if (!display) {
     LOG(ERROR) << "Cannot get a GdkDisplay for a key event.";
-    return NULL;
+    return nullptr;
   }
   // Get a keysym and group.
   KeySym keysym = NoSymbol;
   guint8 keyboard_group = 0;
-  XLookupString(&xkey, NULL, 0, &keysym, NULL);
+  XLookupString(&xkey, nullptr, 0, &keysym, nullptr);
   GdkKeymap* keymap = gdk_keymap_get_for_display(display);
-  GdkKeymapKey* keys = NULL;
-  guint* keyvals = NULL;
+  GdkKeymapKey* keys = nullptr;
+  guint* keyvals = nullptr;
   gint n_entries = 0;
   if (keymap && gdk_keymap_get_entries_for_keycode(keymap, xkey.keycode, &keys,
                                                    &keyvals, &n_entries)) {
@@ -199,9 +208,9 @@ GdkEvent* X11InputMethodContextImplGtk2::GdkEventFromNativeEvent(
     }
   }
   g_free(keys);
-  keys = NULL;
+  keys = nullptr;
   g_free(keyvals);
-  keyvals = NULL;
+  keyvals = nullptr;
 // Get a GdkWindow.
 #if GTK_CHECK_VERSION(2, 24, 0)
   GdkWindow* window = gdk_x11_window_lookup_for_display(display, xkey.window);
@@ -218,7 +227,7 @@ GdkEvent* X11InputMethodContextImplGtk2::GdkEventFromNativeEvent(
 #endif
   if (!window) {
     LOG(ERROR) << "Cannot get a GdkWindow for a key event.";
-    return NULL;
+    return nullptr;
   }
 
   // Create a GdkEvent.
@@ -233,7 +242,7 @@ GdkEvent* X11InputMethodContextImplGtk2::GdkEventFromNativeEvent(
   event->key.state = xkey.state;
   event->key.keyval = keysym;
   event->key.length = 0;
-  event->key.string = NULL;
+  event->key.string = nullptr;
   event->key.hardware_keycode = xkey.keycode;
   event->key.group = keyboard_group;
   event->key.is_modifier = IsKeycodeModifierKey(xkey.keycode);
@@ -283,8 +292,8 @@ void X11InputMethodContextImplGtk2::OnPreeditChanged(GtkIMContext* context) {
   if (context != gtk_context_)
     return;
 
-  gchar* str = NULL;
-  PangoAttrList* attrs = NULL;
+  gchar* str = nullptr;
+  PangoAttrList* attrs = nullptr;
   gint cursor_pos = 0;
   gtk_im_context_get_preedit_string(context, &str, &attrs, &cursor_pos);
   ui::CompositionText composition_text;

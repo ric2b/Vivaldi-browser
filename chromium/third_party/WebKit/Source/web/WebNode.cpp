@@ -47,7 +47,7 @@
 #include "core/layout/LayoutPart.h"
 #include "modules/accessibility/AXObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
-#include "platform/Widget.h"
+#include "platform/FrameViewBase.h"
 #include "public/platform/WebString.h"
 #include "public/web/WebAXObject.h"
 #include "public/web/WebDOMEvent.h"
@@ -55,7 +55,7 @@
 #include "public/web/WebElement.h"
 #include "public/web/WebElementCollection.h"
 #include "public/web/WebPluginContainer.h"
-#include "web/FrameLoaderClientImpl.h"
+#include "web/LocalFrameClientImpl.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebPluginContainerImpl.h"
 #include "wtf/PtrUtil.h"
@@ -186,9 +186,9 @@ WebPluginContainer* WebNode::pluginContainerFromNode(const Node* node) {
 
   LayoutObject* object = node->layoutObject();
   if (object && object->isLayoutPart()) {
-    Widget* widget = toLayoutPart(object)->widget();
-    if (widget && widget->isPluginContainer())
-      return toWebPluginContainerImpl(widget);
+    FrameViewBase* frameViewBase = toLayoutPart(object)->widget();
+    if (frameViewBase && frameViewBase->isPluginContainer())
+      return toWebPluginContainerImpl(frameViewBase);
   }
 
   return nullptr;

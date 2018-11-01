@@ -22,8 +22,6 @@
 
 namespace mojo {
 
-class AssociatedGroup;
-
 // A pointer to a local proxy of a remote Interface implementation. Uses a
 // message pipe to communicate with the remote implementation, and automatically
 // closes the pipe and deletes the proxy on destruction. The pointer must be
@@ -40,6 +38,9 @@ class AssociatedGroup;
 template <typename Interface>
 class InterfacePtr {
  public:
+  using InterfaceType = Interface;
+  using PtrInfoType = InterfacePtrInfo<Interface>;
+
   // Constructs an unbound InterfacePtr.
   InterfacePtr() {}
   InterfacePtr(decltype(nullptr)) {}
@@ -133,7 +134,7 @@ class InterfacePtr {
   // Similar to the method above, but also specifies a disconnect reason.
   void ResetWithReason(uint32_t custom_reason, const std::string& description) {
     if (internal_state_.is_bound())
-      internal_state_.SendDisconnectReason(custom_reason, description);
+      internal_state_.CloseWithReason(custom_reason, description);
     reset();
   }
 
@@ -181,14 +182,6 @@ class InterfacePtr {
     internal_state_.Swap(&state);
 
     return state.PassInterface();
-  }
-
-  // Returns the associated group that this object belongs to. Returns null if:
-  //   - this object is not bound; or
-  //   - the interface doesn't have methods to pass associated interface
-  //     pointers or requests.
-  AssociatedGroup* associated_group() {
-    return internal_state_.associated_group();
   }
 
   bool Equals(const InterfacePtr& other) const {

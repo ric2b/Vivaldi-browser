@@ -5,8 +5,8 @@
 // Singly or Multiply-included shared traits file depending on circumstances.
 // This allows the use of IPC serialization macros in more than one IPC message
 // file.
-#ifndef VIVALDI_IMPORTER_PROFILE_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
-#define VIVALDI_IMPORTER_PROFILE_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
+#ifndef IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
+#define IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
 
 #include <string>
 #include <vector>
@@ -41,4 +41,4 @@ IPC_STRUCT_TRAITS_BEGIN(importer::ChromeProfileInfo)
   IPC_STRUCT_TRAITS_MEMBER(profileDisplayName)
 IPC_STRUCT_TRAITS_END()
 
-#endif  // VIVALDI_IMPORTER_PROFILE_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
+#endif  // IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_

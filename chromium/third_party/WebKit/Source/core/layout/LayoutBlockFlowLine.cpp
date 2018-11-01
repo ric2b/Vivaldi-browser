@@ -588,7 +588,7 @@ static inline void setLogicalWidthForTextRun(
         for (HashSet<const SimpleFontData*>::const_iterator it =
                  wordMeasurement.fallbackFonts.begin();
              it != end; ++it)
-          fallbackFonts.add(*it);
+          fallbackFonts.insert(*it);
       }
     }
     wordMeasurementsIndex = i;
@@ -629,9 +629,9 @@ static inline void setLogicalWidthForTextRun(
     ASSERT(run->m_box->isText());
     GlyphOverflowAndFallbackFontsMap::ValueType* it =
         textBoxDataMap
-            .add(toInlineTextBox(run->m_box),
-                 std::make_pair(Vector<const SimpleFontData*>(),
-                                GlyphOverflow()))
+            .insert(toInlineTextBox(run->m_box),
+                    std::make_pair(Vector<const SimpleFontData*>(),
+                                   GlyphOverflow()))
             .storedValue;
     ASSERT(it->value.first.isEmpty());
     copyToVector(fallbackFonts, it->value.first);
@@ -641,9 +641,9 @@ static inline void setLogicalWidthForTextRun(
     ASSERT(run->m_box->isText());
     GlyphOverflowAndFallbackFontsMap::ValueType* it =
         textBoxDataMap
-            .add(toInlineTextBox(run->m_box),
-                 std::make_pair(Vector<const SimpleFontData*>(),
-                                GlyphOverflow()))
+            .insert(toInlineTextBox(run->m_box),
+                    std::make_pair(Vector<const SimpleFontData*>(),
+                                   GlyphOverflow()))
             .storedValue;
     it->value.second = glyphOverflow;
     run->m_box->clearKnownToHaveNoOverflow();
@@ -1675,9 +1675,11 @@ void LayoutBlockFlow::computeInlinePreferredLogicalWidths(
           clearPreviousFloat =
               (prevFloat &&
                ((prevFloat->styleRef().floating() == EFloat::kLeft &&
-                 (childStyle.clear() & ClearLeft)) ||
+                 (childStyle.clear() == EClear::kBoth ||
+                  childStyle.clear() == EClear::kLeft)) ||
                 (prevFloat->styleRef().floating() == EFloat::kRight &&
-                 (childStyle.clear() & ClearRight))));
+                 (childStyle.clear() == EClear::kBoth ||
+                  childStyle.clear() == EClear::kRight))));
           prevFloat = child;
         } else {
           clearPreviousFloat = false;
@@ -2137,7 +2139,7 @@ bool LayoutBlockFlow::lineBoxHasBRWithClearance(RootInlineBox* curr) {
                            ? curr->lastLeafChild()
                            : curr->firstLeafChild();
   return lastBox && lastBox->getLineLayoutItem().isBR() &&
-         lastBox->getLineLayoutItem().style()->clear() != ClearNone;
+         lastBox->getLineLayoutItem().style()->clear() != EClear::kNone;
 }
 
 void LayoutBlockFlow::determineEndPosition(LineLayoutState& layoutState,
@@ -2352,9 +2354,7 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
                                   fullstopCharacter};
   DEFINE_STATIC_LOCAL(AtomicString, fullstopCharacterStr,
                       (fullStopString, fullStopStringLength));
-  DEFINE_STATIC_LOCAL(AtomicString, ellipsisStr,
-                      (&horizontalEllipsisCharacter, 1));
-  AtomicString& selectedEllipsisStr = ellipsisStr;
+  AtomicString selectedEllipsisStr(&horizontalEllipsisCharacter, 1);
 
   const Font& firstLineFont = firstLineStyle()->font();
   // FIXME: We should probably not hard-code the direction here.
@@ -2382,7 +2382,6 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
   if (!ellipsisWidth) {
     ASSERT(font.primaryFont());
     if (font.primaryFont()->glyphForCharacter(horizontalEllipsisCharacter)) {
-      selectedEllipsisStr = ellipsisStr;
       ellipsisWidth =
           font.width(constructTextRun(font, &horizontalEllipsisCharacter, 1,
                                       styleRef(), ellipsisDirection));
@@ -2421,12 +2420,13 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
       LayoutUnit width(indentText == IndentText ? firstLineEllipsisWidth
                                                 : ellipsisWidth);
       LayoutUnit blockEdge = ltr ? blockRightEdge : blockLeftEdge;
-      if (curr->lineCanAccommodateEllipsis(
-              ltr, blockEdge.toInt(), lineBoxEdge.toInt(), width.toInt())) {
-        LayoutUnit totalLogicalWidth = curr->placeEllipsis(
-            selectedEllipsisStr, ltr, blockLeftEdge, blockRightEdge, width);
+      if (curr->lineCanAccommodateEllipsis(ltr, blockEdge, lineBoxEdge,
+                                           width)) {
+        LayoutUnit totalLogicalWidth =
+            curr->placeEllipsis(selectedEllipsisStr, ltr, blockLeftEdge,
+                                blockRightEdge, width, LayoutUnit(), false);
         LayoutUnit logicalLeft;  // We are only interested in the delta from the
-                                 // base position.
+        // base position.
         LayoutUnit availableLogicalWidth = blockRightEdge - blockLeftEdge;
         updateLogicalWidthForAlignment(textAlign, curr, 0, logicalLeft,
                                        totalLogicalWidth, availableLogicalWidth,
@@ -2436,9 +2436,81 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
         else
           curr->moveInInlineDirection(
               logicalLeft - (availableLogicalWidth - totalLogicalWidth));
+      } else {
+        tryPlacingEllipsisOnAtomicInlines(curr, blockRightEdge, blockLeftEdge,
+                                          width, selectedEllipsisStr);
       }
     }
     indentText = DoNotIndentText;
+  }
+}
+
+void LayoutBlockFlow::tryPlacingEllipsisOnAtomicInlines(
+    RootInlineBox* root,
+    LayoutUnit blockRightEdge,
+    LayoutUnit blockLeftEdge,
+    LayoutUnit ellipsisWidth,
+    const AtomicString& selectedEllipsisStr) {
+  bool ltr = style()->isLeftToRightDirection();
+  LayoutUnit logicalLeftOffset = blockLeftEdge;
+
+  // Each atomic inline block (e.g. a <span>) inside a blockflow is managed by
+  // an
+  // InlineBox that allows us to access the lineboxes that live inside the
+  // atomic
+  // inline block.
+  bool foundBox = false;
+  for (InlineBox* box = ltr ? root->firstChild() : root->lastChild(); box;
+       box = ltr ? box->nextOnLine() : box->prevOnLine()) {
+    if (!box->getLineLayoutItem().isAtomicInlineLevel() ||
+        !box->getLineLayoutItem().isLayoutBlockFlow())
+      continue;
+
+    RootInlineBox* firstRootBox =
+        LineLayoutBlockFlow(box->getLineLayoutItem()).firstRootBox();
+    if (!firstRootBox)
+      continue;
+
+    bool placedEllipsis = false;
+    // Move the right edge of the block in so that we can test it against the
+    // width of the root line boxes.  We don't resize or move the linebox to
+    // respect text-align because it is the final one of a sequence on the line.
+    if (ltr) {
+      for (RootInlineBox* curr = firstRootBox; curr;
+           curr = curr->nextRootBox()) {
+        LayoutUnit currLogicalLeft = logicalLeftOffset + curr->logicalLeft();
+        LayoutUnit ellipsisEdge =
+            currLogicalLeft + curr->logicalWidth() + ellipsisWidth;
+        if (ellipsisEdge <= blockRightEdge)
+          continue;
+        curr->placeEllipsis(selectedEllipsisStr, ltr, blockLeftEdge,
+                            blockRightEdge, ellipsisWidth, logicalLeftOffset,
+                            foundBox);
+        placedEllipsis = true;
+      }
+    } else {
+      LayoutUnit maxRootBoxWidth;
+      for (RootInlineBox* curr = firstRootBox; curr;
+           curr = curr->nextRootBox()) {
+        LayoutUnit ellipsisEdge =
+            box->logicalLeft() + curr->logicalLeft() - ellipsisWidth;
+        if (ellipsisEdge >= blockLeftEdge)
+          continue;
+        // Root boxes can vary in width so move our offset out to allow
+        // comparison with the right hand edge of the block.
+        LayoutUnit logicalLeftOffset = box->logicalLeft();
+        maxRootBoxWidth =
+            std::max<LayoutUnit>(curr->logicalWidth(), maxRootBoxWidth);
+        if (logicalLeftOffset < 0)
+          logicalLeftOffset += maxRootBoxWidth - curr->logicalWidth();
+        curr->placeEllipsis(selectedEllipsisStr, ltr, blockLeftEdge,
+                            blockRightEdge, ellipsisWidth,
+                            LayoutUnit(logicalLeftOffset.ceil()), foundBox);
+        placedEllipsis = true;
+      }
+    }
+    foundBox |= placedEllipsis;
+    logicalLeftOffset += box->logicalWidth();
   }
 }
 

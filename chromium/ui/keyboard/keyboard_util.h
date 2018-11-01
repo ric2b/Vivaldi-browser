@@ -112,6 +112,13 @@ KEYBOARD_EXPORT void SetKeyboardShowOverride(KeyboardShowOverride override);
 // virtual keyboard window.
 KEYBOARD_EXPORT bool IsInputViewEnabled();
 
+// Sets whehther the keyboards is in restricted state - state where advanced
+// virtual keyboard features are disabled.
+KEYBOARD_EXPORT void SetKeyboardRestricted(bool restricted);
+
+// Returns whether the keyboard is in restricted state.
+KEYBOARD_EXPORT bool GetKeyboardRestricted();
+
 // Returns true if experimental features are enabled for IME input-views.
 KEYBOARD_EXPORT bool IsExperimentalInputViewEnabled();
 
@@ -124,7 +131,9 @@ KEYBOARD_EXPORT bool IsGestureTypingEnabled();
 // Returns true if gesture editing option is enabled for virtual keyboard.
 KEYBOARD_EXPORT bool IsGestureEditingEnabled();
 
-// Returns true if voice input is enabled for the keyboard.
+// Returns true if voice input is not disabled for the keyboard by the command
+// line switch. It's up to the client to check if there is an input device
+// available.
 KEYBOARD_EXPORT bool IsVoiceInputEnabled();
 
 // Insert |text| into the active TextInputClient if there is one. Returns true

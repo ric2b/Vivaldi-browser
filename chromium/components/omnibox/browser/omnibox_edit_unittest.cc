@@ -85,6 +85,8 @@ class TestingOmniboxView : public OmniboxView {
   bool IsImeComposing() const override { return false; }
   int GetOmniboxTextLength() const override { return 0; }
   void EmphasizeURLComponents() override {}
+  void SetEmphasis(bool emphasize, const gfx::Range& range) override {}
+  void UpdateSchemeStyle(const gfx::Range& range) override {}
 
   const base::string16& inline_autocomplete_text() const {
     return inline_autocomplete_text_;
@@ -215,7 +217,7 @@ TestingOmniboxClient::TestingOmniboxClient()
           base::MakeUnique<AutocompleteController>(
               CreateAutocompleteProviderClient(),
               nullptr,
-              AutocompleteClassifier::kDefaultOmniboxProviders),
+              AutocompleteClassifier::DefaultOmniboxProviders()),
           base::MakeUnique<TestingSchemeClassifier>()) {}
 
 TestingOmniboxClient::~TestingOmniboxClient() {

@@ -22,13 +22,13 @@
 #include "content/browser/frame_host/frame_navigation_entry.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
+#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/page_state_serialization.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
@@ -551,7 +551,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                    std::string(kChromeUIGpuHost));
   EXPECT_TRUE(NavigateToURL(shell(), web_ui_page));
   EXPECT_EQ(BINDINGS_POLICY_WEB_UI,
-      shell()->web_contents()->GetRenderViewHost()->GetEnabledBindings());
+            shell()->web_contents()->GetMainFrame()->GetEnabledBindings());
 
   ShellAddedObserver observer;
   std::string page_url = embedded_test_server()->GetURL(
@@ -578,9 +578,9 @@ class NoNavigationsObserver : public WebContentsObserver {
       : WebContentsObserver(web_contents) {}
 
  private:
-  void DidNavigateAnyFrame(RenderFrameHost* render_frame_host,
-                           const LoadCommittedDetails& details,
-                           const FrameNavigateParams& params) override {
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted())
+      return;
     FAIL() << "No navigations should occur";
   }
 };
@@ -608,36 +608,43 @@ class FrameNavigateParamsCapturer : public WebContentsObserver {
     message_loop_runner_->Run();
   }
 
-  const FrameNavigateParams& params() const {
-    EXPECT_EQ(1U, params_.size());
-    return params_[0];
+  ui::PageTransition transition() {
+    EXPECT_EQ(1U, transitions_.size());
+    return transitions_[0];
   }
 
-  const std::vector<FrameNavigateParams>& all_params() const {
-    return params_;
+  NavigationType navigation_type() {
+    EXPECT_EQ(1U, navigation_types_.size());
+    return navigation_types_[0];
   }
 
-  const LoadCommittedDetails& details() const {
-    EXPECT_EQ(1U, details_.size());
-    return details_[0];
+  bool is_in_page() {
+    EXPECT_EQ(1U, is_in_pages_.size());
+    return is_in_pages_[0];
   }
 
-  const std::vector<LoadCommittedDetails>& all_details() const {
-    return details_;
+  const std::vector<ui::PageTransition>& transitions() { return transitions_; }
+  const std::vector<GURL>& urls() { return urls_; }
+  const std::vector<NavigationType>& navigation_types() {
+    return navigation_types_;
   }
+  const std::vector<bool>& is_in_pages() { return is_in_pages_; }
 
  private:
-  void DidNavigateAnyFrame(RenderFrameHost* render_frame_host,
-                           const LoadCommittedDetails& details,
-                           const FrameNavigateParams& params) override {
-    RenderFrameHostImpl* rfh =
-        static_cast<RenderFrameHostImpl*>(render_frame_host);
-    if (rfh->frame_tree_node()->frame_tree_node_id() != frame_tree_node_id_)
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted())
+      return;
+
+    if (navigation_handle->GetFrameTreeNodeId() != frame_tree_node_id_)
       return;
 
     --navigations_remaining_;
-    params_.push_back(params);
-    details_.push_back(details);
+    transitions_.push_back(navigation_handle->GetPageTransition());
+    urls_.push_back(navigation_handle->GetURL());
+    navigation_types_.push_back(
+        static_cast<NavigationHandleImpl*>(navigation_handle)
+            ->navigation_type());
+    is_in_pages_.push_back(navigation_handle->IsSamePage());
     if (!navigations_remaining_ &&
         (!web_contents()->IsLoading() || !wait_for_load_))
       message_loop_runner_->Quit();
@@ -657,11 +664,10 @@ class FrameNavigateParamsCapturer : public WebContentsObserver {
   // Whether to also wait for the load to complete.
   bool wait_for_load_;
 
-  // The params of the navigations.
-  std::vector<FrameNavigateParams> params_;
-
-  // The details of the navigations.
-  std::vector<LoadCommittedDetails> details_;
+  std::vector<ui::PageTransition> transitions_;
+  std::vector<GURL> urls_;
+  std::vector<NavigationType> navigation_types_;
+  std::vector<bool> is_in_pages_;
 
   // The MessageLoopRunner used to spin the message loop.
   scoped_refptr<MessageLoopRunner> message_loop_runner_;
@@ -714,17 +720,17 @@ class LoadCommittedCapturer : public WebContentsObserver {
     frame_tree_node_id_ = frame_tree_node_id;
   }
 
-  void DidCommitProvisionalLoadForFrame(
-      RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override {
-    DCHECK_NE(0, frame_tree_node_id_);
-    RenderFrameHostImpl* rfh =
-        static_cast<RenderFrameHostImpl*>(render_frame_host);
-    if (rfh->frame_tree_node()->frame_tree_node_id() != frame_tree_node_id_)
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted())
       return;
 
-    transition_type_ = transition_type;
+    DCHECK_NE(0, frame_tree_node_id_);
+    if (navigation_handle->GetRenderFrameHost()->GetFrameTreeNodeId() !=
+            frame_tree_node_id_) {
+      return;
+    }
+
+    transition_type_ = navigation_handle->GetPageTransition();
     if (!web_contents()->IsLoading())
       message_loop_runner_->Quit();
   }
@@ -916,7 +922,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     NavigateFrameToURL(root, error_url);
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
     NavigationEntry* entry = controller.GetLastCommittedEntry();
     EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
     EXPECT_EQ(2, controller.GetEntryCount());
@@ -931,7 +937,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     NavigateFrameToURL(root, error_url);
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
     NavigationEntry* entry = controller.GetLastCommittedEntry();
     EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
     EXPECT_EQ(2, controller.GetEntryCount());
@@ -949,7 +955,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     RendererLocationReplace(shell(), error_url);
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
     NavigationEntry* entry = controller.GetLastCommittedEntry();
     EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
     EXPECT_EQ(3, controller.GetEntryCount());
@@ -967,7 +973,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     RendererLocationReplace(shell(), error_url);
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
     NavigationEntry* entry = controller.GetLastCommittedEntry();
     EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
     EXPECT_EQ(4, controller.GetEntryCount());
@@ -997,9 +1003,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // TODO(avi,creis): Why is this (and quite a few others below) a "link"
     // transition? Lots of these transitions should be cleaned up.
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1009,9 +1015,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   {
@@ -1021,9 +1027,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1035,11 +1041,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1050,11 +1056,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   if (AreAllSitesIsolatedForTesting()) {
@@ -1066,11 +1072,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 }
 
@@ -1095,12 +1101,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoBack();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1109,12 +1115,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoForward();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1123,12 +1129,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, "history.back()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1137,12 +1143,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, "history.forward()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1151,12 +1157,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, "history.go(-1)"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1165,12 +1171,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, "history.go(1)"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1179,9 +1185,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().Reload(ReloadType::NORMAL, false);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_RELOAD));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_RELOAD));
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1190,11 +1196,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, "location.reload()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   {
@@ -1208,11 +1214,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   // Now, various in-page navigations.
@@ -1225,11 +1231,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   // Back and forward across a fragment navigation.
@@ -1247,12 +1253,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoBack();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   {
@@ -1261,11 +1267,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoForward();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_FORWARD_BACK)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   // Back and forward across a pushState-created navigation.
@@ -1281,12 +1287,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoBack();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                   ui::PAGE_TRANSITION_FORWARD_BACK |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   {
@@ -1295,11 +1301,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoForward();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_FORWARD_BACK)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 }
 
@@ -1323,15 +1329,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     NavigateFrameToURL(root, frame_url);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_SAME_PAGE, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_SAME_PAGE, capturer.navigation_type());
   }
 }
 
 // Verify that reloading a page with url anchor scrolls to correct position.
-// Disabled due to flakiness: https://crbug.com/672545.
-IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
-                       DISABLED_ReloadWithUrlAnchor) {
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadWithUrlAnchor) {
   GURL url1(embedded_test_server()->GetURL(
       "/navigation_controller/reload-with-url-anchor.html#d2"));
   EXPECT_TRUE(NavigateToURL(shell(), url1));
@@ -1347,6 +1351,41 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   EXPECT_TRUE(ExecuteScriptAndExtractInt(shell(), script, &value));
   EXPECT_EQ(100, value);
+}
+
+// Verify that reloading a page with url anchor and scroll scrolls to correct
+// position.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       ReloadWithUrlAnchorAndScroll) {
+  GURL url1(embedded_test_server()->GetURL(
+      "/navigation_controller/reload-with-url-anchor.html#d2"));
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+
+  std::string script_scroll_down = "window.scroll(0, 10)";
+  EXPECT_TRUE(ExecuteScript(shell(), script_scroll_down));
+
+  std::string get_div_scroll_top =
+      "domAutomationController.send(document.getElementById('div').scrollTop)";
+  std::string get_window_scroll_y =
+      "domAutomationController.send(window.scrollY)";
+  int div_scroll_top = 0;
+  int window_scroll_y = 0;
+  EXPECT_TRUE(
+      ExecuteScriptAndExtractInt(shell(), get_div_scroll_top, &div_scroll_top));
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(shell(), get_window_scroll_y,
+                                         &window_scroll_y));
+  EXPECT_EQ(100, div_scroll_top);
+  EXPECT_EQ(10, window_scroll_y);
+
+  // Reload.
+  ReloadBlockUntilNavigationsComplete(shell(), 1);
+
+  EXPECT_TRUE(
+      ExecuteScriptAndExtractInt(shell(), get_div_scroll_top, &div_scroll_top));
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(shell(), get_window_scroll_y,
+                                         &window_scroll_y));
+  EXPECT_EQ(100, div_scroll_top);
+  EXPECT_EQ(10, window_scroll_y);
 }
 
 // Verify that empty GURL navigations are not classified as SAME_PAGE.
@@ -1368,8 +1407,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     NavigateFrameToURL(root, GURL());
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
   }
 }
 
@@ -1408,8 +1447,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     NavigateFrameToURL(root->child_at(0), frame_url);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1418,8 +1457,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoBack();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_AUTO_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1428,8 +1467,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoForward();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_AUTO_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1440,8 +1479,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     NavigateFrameToURL(root->child_at(0), frame_url);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1451,8 +1490,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1464,8 +1503,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1488,8 +1527,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -1547,18 +1586,16 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     NavigateFrameToURL(root, frame_url);
     capturer.Wait();
 
-    std::vector<FrameNavigateParams> params = capturer.all_params();
-    std::vector<LoadCommittedDetails> details = capturer.all_details();
-    ASSERT_EQ(2U, params.size());
-    ASSERT_EQ(2U, details.size());
+    ASSERT_EQ(2U, capturer.transitions().size());
+    ASSERT_EQ(2U, capturer.navigation_types().size());
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        params[0].transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, details[0].type);
+        capturer.transitions()[0], ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_types()[0]);
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        params[1].transition,
+        capturer.transitions()[1],
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, details[1].type);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_types()[1]);
   }
 }
 
@@ -1583,9 +1620,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   {
@@ -1595,9 +1632,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   // Second verse, same as the first. (But in a subframe.)
@@ -1622,9 +1659,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   {
@@ -1634,9 +1671,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 }
 
@@ -1919,8 +1956,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "history.pushState({}, 'foo', 'foo')";
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   // 2. Create an iframe.
@@ -2211,8 +2248,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     NavigateFrameToURL(root->child_at(0), frame_url2);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   // We should have created a new NavigationEntry with the same main frame URL.
@@ -2262,8 +2299,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       deleted_observer.WaitUntilDeleted();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   // We should have created a new NavigationEntry with the same main frame URL.
@@ -2298,8 +2335,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       deleted_observer.WaitUntilDeleted();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   // We should have created a new NavigationEntry with the same main frame URL.
@@ -2448,8 +2485,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoBack();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_AUTO_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
   }
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
@@ -2465,8 +2502,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoBack();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_AUTO_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
   }
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
@@ -2482,8 +2519,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoForward();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_AUTO_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
   }
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
@@ -2499,8 +2536,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     shell()->web_contents()->GetController().GoForward();
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_AUTO_SUBFRAME));
-    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.details().type);
+        capturer.transition(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
   }
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
@@ -4056,9 +4093,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     controller.Reload(ReloadType::NORMAL, false);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition, ui::PAGE_TRANSITION_RELOAD));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_FALSE(capturer.details().is_in_page);
+        capturer.transition(), ui::PAGE_TRANSITION_RELOAD));
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_FALSE(capturer.is_in_page());
   }
 
   // 4. Add the iframe again.
@@ -4382,8 +4419,8 @@ void DoReplaceStateWhilePending(Shell* shell,
 
     // The fact that there was a pending entry shouldn't interfere with the
     // classification.
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   ResourceDispatcherHost::Get()->SetDelegate(nullptr);
@@ -4468,8 +4505,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "history.pushState({}, '', 'pushed')";
     EXPECT_TRUE(ExecuteScript(root, script));
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.details().type);
-    EXPECT_TRUE(capturer.details().is_in_page);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(capturer.is_in_page());
   }
 
   // The in-page navigation should not have replaced the previous entry.
@@ -4549,7 +4586,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         "/navigation_controller/simple_page_2.html"));
     NavigateFrameToURL(root->child_at(0), frame_url);
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -4646,7 +4683,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         "/navigation_controller/simple_page_2.html"));
     NavigateFrameToURL(root->child_at(0), frame_url);
     capturer.Wait();
-    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
   }
 
   {
@@ -4702,25 +4739,11 @@ class FailureWatcher : public WebContentsObserver {
     message_loop_runner_->Quit();
   }
 
-  void DidFailProvisionalLoad(
-      RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      int error_code,
-      const base::string16& error_description,
-      bool was_ignored_by_handler) override {
-    RenderFrameHostImpl* rfh =
-        static_cast<RenderFrameHostImpl*>(render_frame_host);
-    if (rfh->frame_tree_node()->frame_tree_node_id() != frame_tree_node_id_)
-      return;
-
-    message_loop_runner_->Quit();
-  }
-
   void DidFinishNavigation(NavigationHandle* handle) override {
-    if (handle->GetFrameTreeNodeId() != frame_tree_node_id_)
+    if (handle->HasCommitted() ||
+        handle->GetFrameTreeNodeId() != frame_tree_node_id_) {
       return;
-    if (handle->HasCommitted())
-      return;
+    }
 
     message_loop_runner_->Quit();
   }
@@ -4815,10 +4838,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
     EXPECT_TRUE(ExecuteScript(shell(), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
-        capturer.params().transition,
+        capturer.transition(),
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
-    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.details().type);
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_PAGE, capturer.navigation_type());
   }
 
   // Modify an entry in the session history and reload the original request.
@@ -4846,9 +4869,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
     capturer.set_wait_for_load(false);
     capturer.set_navigations_remaining(2);
     capturer.Wait();
-    EXPECT_EQ(2U, capturer.all_details().size());
-    EXPECT_EQ(modified_url, capturer.all_params()[0].url);
-    EXPECT_EQ(original_url, capturer.all_params()[1].url);
+    EXPECT_EQ(2U, capturer.urls().size());
+    EXPECT_EQ(modified_url, capturer.urls()[0]);
+    EXPECT_EQ(original_url, capturer.urls()[1]);
     EXPECT_EQ(original_url, shell()->web_contents()->GetLastCommittedURL());
   }
 
@@ -6166,17 +6189,47 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(cross_origin_url, web_contents->GetLastCommittedURL());
   EXPECT_EQ(2, web_contents->GetController().GetLastCommittedEntryIndex());
 
-  // Wait for the back navigation to commit as well.
-  history_commit_observer.Wait();
-  EXPECT_EQ(start_url, web_contents->GetLastCommittedURL());
-  EXPECT_EQ(0, web_contents->GetController().GetLastCommittedEntryIndex());
+  if (IsBrowserSideNavigationEnabled()) {
+    // With browser-side-navigation, the history navigation is dropped.
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+    EXPECT_EQ(2, web_contents->GetController().GetLastCommittedEntryIndex());
+    EXPECT_EQ(3, web_contents->GetController().GetEntryCount());
 
-  // Verify the expected origin through JavaScript. It also has the additional
-  // verification of the process also being still alive.
-  std::string origin;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      web_contents, "domAutomationController.send(document.origin)", &origin));
-  EXPECT_EQ(start_url.GetOrigin().spec(), origin + "/");
+    // Verify the expected origin through JavaScript. It also has the additional
+    // verification of the process also being still alive.
+    std::string origin;
+    EXPECT_TRUE(ExecuteScriptAndExtractString(
+        web_contents, "domAutomationController.send(document.origin)",
+        &origin));
+    EXPECT_EQ(cross_origin_url.GetOrigin().spec(), origin + "/");
+
+    // Navigate back again.
+    web_contents->GetController().GoBack();
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+    EXPECT_EQ(1, web_contents->GetController().GetLastCommittedEntryIndex());
+    EXPECT_EQ(3, web_contents->GetController().GetEntryCount());
+
+    // Verify the expected origin through JavaScript. It also has the additional
+    // verification of the process also being still alive.
+    EXPECT_TRUE(ExecuteScriptAndExtractString(
+        web_contents, "domAutomationController.send(document.origin)",
+        &origin));
+    EXPECT_EQ(same_page_url.GetOrigin().spec(), origin + "/");
+  } else {
+    // Wait for the back navigation to commit as well.
+    history_commit_observer.Wait();
+    EXPECT_EQ(start_url, web_contents->GetLastCommittedURL());
+    EXPECT_EQ(0, web_contents->GetController().GetLastCommittedEntryIndex());
+    EXPECT_EQ(3, web_contents->GetController().GetEntryCount());
+
+    // Verify the expected origin through JavaScript. It also has the additional
+    // verification of the process also being still alive.
+    std::string origin;
+    EXPECT_TRUE(ExecuteScriptAndExtractString(
+        web_contents, "domAutomationController.send(document.origin)",
+        &origin));
+    EXPECT_EQ(start_url.GetOrigin().spec(), origin + "/");
+  }
 }
 
 // Test that verifies that Referer and Origin http headers are correctly sent
@@ -6246,7 +6299,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
 namespace {
 
-// A BrowserMessageFilter that delays the FrameHostMsg_RunJavaScriptMessage IPC
+// A BrowserMessageFilter that delays the FrameHostMsg_RunJavaScriptDialog IPC
 // message until a commit happens on a given WebContents. This allows testing a
 // race condition.
 class AllowDialogIPCOnCommitFilter : public BrowserMessageFilter,
@@ -6265,7 +6318,7 @@ class AllowDialogIPCOnCommitFilter : public BrowserMessageFilter,
   // BrowserMessageFilter:
   bool OnMessageReceived(const IPC::Message& message) override {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    if (message.type() != FrameHostMsg_RunJavaScriptMessage::ID)
+    if (message.type() != FrameHostMsg_RunJavaScriptDialog::ID)
       return false;
 
     // Suspend the message.
@@ -6293,10 +6346,10 @@ class AllowDialogIPCOnCommitFilter : public BrowserMessageFilter,
     void SetCallback(Callback callback) { callback_ = callback; }
 
    private:
-    void DidNavigateAnyFrame(RenderFrameHost* render_frame_host,
-                             const LoadCommittedDetails& details,
-                             const FrameNavigateParams& params) override {
+    void DidFinishNavigation(NavigationHandle* navigation_handle) override {
       DCHECK_CURRENTLY_ON(BrowserThread::UI);
+      if (!navigation_handle->HasCommitted())
+        return;
 
       // Resume the message.
       callback_.Run();
@@ -6715,6 +6768,32 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(handle_observer.has_committed());
   EXPECT_TRUE(handle_observer.was_same_page());
   EXPECT_FALSE(handle_observer.was_renderer_initiated());
+}
+
+// Tests that a 204 response to a browser-initiated navigation does not result
+// in a new NavigationEntry being committed.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       204Navigation) {
+  const GURL kURL = embedded_test_server()->GetURL("/title1.html");
+  const GURL kURL204 = embedded_test_server()->GetURL("/page204.html");
+
+  // Navigate to the initial page.
+  EXPECT_TRUE(NavigateToURL(shell(), kURL));
+
+  const NavigationControllerImpl& controller =
+      static_cast<const NavigationControllerImpl&>(
+          shell()->web_contents()->GetController());
+
+  NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(kURL, entry->GetURL());
+  EXPECT_EQ(1, controller.GetEntryCount());
+
+  // Do a 204 navigation.
+  EXPECT_FALSE(NavigateToURL(shell(), kURL204));
+
+  entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(kURL, entry->GetURL());
+  EXPECT_EQ(1, controller.GetEntryCount());
 }
 
 }  // namespace content

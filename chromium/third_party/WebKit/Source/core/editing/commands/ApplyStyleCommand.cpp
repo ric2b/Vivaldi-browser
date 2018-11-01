@@ -37,6 +37,7 @@
 #include "core/dom/Range.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingStyle.h"
+#include "core/editing/EditingStyleUtilities.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/VisibleUnits.h"
@@ -55,22 +56,6 @@ namespace blink {
 
 using namespace HTMLNames;
 
-static String& styleSpanClassString() {
-  DEFINE_STATIC_LOCAL(String, styleSpanClassString, ((AppleStyleSpanClass)));
-  return styleSpanClassString;
-}
-
-bool isLegacyAppleHTMLSpanElement(const Node* node) {
-  if (!isHTMLSpanElement(node))
-    return false;
-
-  const HTMLSpanElement& span = toHTMLSpanElement(*node);
-  if (span.getAttribute(classAttr) != styleSpanClassString())
-    return false;
-  UseCounter::count(span.document(), UseCounter::EditingAppleStyleSpanClass);
-  return true;
-}
-
 static bool hasNoAttributeOrOnlyStyleAttribute(
     const HTMLElement* element,
     ShouldStyleAttributeBeEmpty shouldStyleAttributeBeEmpty) {
@@ -79,8 +64,6 @@ static bool hasNoAttributeOrOnlyStyleAttribute(
     return true;
 
   unsigned matchedAttributes = 0;
-  if (element->getAttribute(classAttr) == styleSpanClassString())
-    matchedAttributes++;
   if (element->hasAttribute(styleAttr) &&
       (shouldStyleAttributeBeEmpty == AllowNonEmptyStyleAttribute ||
        !element->inlineStyle() || element->inlineStyle()->isEmpty()))
@@ -490,7 +473,7 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(
         copyStyleOrCreateEmpty(element->inlineStyle());
     float currentFontSize = computedFontSize(node);
     float desiredFontSize = max(
-        MinimumFontSize, startingFontSizes.get(node) + style->fontSizeDelta());
+        MinimumFontSize, startingFontSizes.at(node) + style->fontSizeDelta());
     const CSSValue* value =
         inlineStyle->getPropertyCSSValue(CSSPropertyFontSize);
     if (value) {
@@ -656,7 +639,7 @@ static HTMLElement* highestEmbeddingAncestor(Node* startNode,
                                              Node* enclosingNode) {
   for (Node* n = startNode; n && n != enclosingNode; n = n->parentNode()) {
     if (n->isHTMLElement() &&
-        EditingStyle::isEmbedOrIsolate(getIdentifierValue(
+        EditingStyleUtilities::isEmbedOrIsolate(getIdentifierValue(
             CSSComputedStyleDeclaration::create(n), CSSPropertyUnicodeBidi))) {
       return toHTMLElement(n);
     }
@@ -1403,6 +1386,10 @@ void ApplyStyleCommand::removeInlineStyle(EditingStyle* style,
   // FIXME: We should assert that start/end are not in the middle of a text
   // node.
 
+  // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
   Position pushDownStart = mostForwardCaretPosition(start);
   // If the pushDownStart is at the end of a text node, then this node is not
   // fully selected. Move it to the next deep quivalent position to avoid
@@ -1414,6 +1401,11 @@ void ApplyStyleCommand::removeInlineStyle(EditingStyle* style,
       pushDownStart.computeOffsetInContainerNode() ==
           pushDownStartContainer->maxCharacterOffset())
     pushDownStart = nextVisuallyDistinctCandidate(pushDownStart);
+
+  // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
   Position pushDownEnd = mostBackwardCaretPosition(end);
   // If pushDownEnd is at the start of a text node, then this node is not fully
   // selected. Move it to the previous deep equivalent position to avoid

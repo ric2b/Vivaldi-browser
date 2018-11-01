@@ -6,7 +6,6 @@ group("background") {
   testonly = true
   deps = [
     ":lib",
-    ":main",
   ]
 }
 
@@ -17,26 +16,11 @@ source_set("lib") {
   ]
   deps = [
     "//base",
+    "//services/catalog:constants",
     "//services/catalog:lib",
     "//services/service_manager",
     "//services/service_manager/public/cpp:sources",
     "//services/service_manager/runner:init",
-    "//services/service_manager/runner/host:lib",
-    "//services/service_manager/standalone",
-  ]
-}
-
-source_set("main") {
-  sources = [
-    "background_service_manager_main.cc",
-    "background_service_manager_main.h",
-  ]
-  deps = [
-    "//base",
-    "//services/service_manager",
-    "//services/service_manager/public/cpp:sources",
-    "//services/service_manager/runner:init",
-    "//services/service_manager/runner/common",
     "//services/service_manager/runner/host:lib",
     "//services/service_manager/standalone",
   ]

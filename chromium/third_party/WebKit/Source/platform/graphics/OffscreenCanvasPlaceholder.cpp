@@ -49,7 +49,7 @@ OffscreenCanvasPlaceholder* OffscreenCanvasPlaceholder::getPlaceholderById(
 void OffscreenCanvasPlaceholder::registerPlaceholder(unsigned placeholderId) {
   DCHECK(!placeholderRegistry().contains(placeholderId));
   DCHECK(!isPlaceholderRegistered());
-  placeholderRegistry().add(placeholderId, this);
+  placeholderRegistry().insert(placeholderId, this);
   m_placeholderId = placeholderId;
 }
 
@@ -57,7 +57,7 @@ void OffscreenCanvasPlaceholder::unregisterPlaceholder() {
   if (!isPlaceholderRegistered())
     return;
   DCHECK(placeholderRegistry().find(m_placeholderId)->value == this);
-  placeholderRegistry().remove(m_placeholderId);
+  placeholderRegistry().erase(m_placeholderId);
   m_placeholderId = kNoPlaceholderId;
 }
 

@@ -9,7 +9,6 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/frame/UseCounter.h"
 #include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/webusb/USBConnectionEvent.h"
@@ -76,24 +75,16 @@ void USB::dispose() {
 }
 
 ScriptPromise USB::getDevices(ScriptState* scriptState) {
-  ExecutionContext* executionContext = scriptState->getExecutionContext();
-  UseCounter::count(executionContext, UseCounter::UsbGetDevices);
-
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
   if (!m_deviceManager) {
     resolver->reject(DOMException::create(NotSupportedError));
   } else {
-    String errorMessage;
-    if (!executionContext->isSecureContext(errorMessage)) {
-      resolver->reject(DOMException::create(SecurityError, errorMessage));
-    } else {
-      m_deviceManagerRequests.add(resolver);
-      m_deviceManager->GetDevices(
-          nullptr, convertToBaseCallback(WTF::bind(&USB::onGetDevices,
-                                                   wrapPersistent(this),
-                                                   wrapPersistent(resolver))));
-    }
+    m_deviceManagerRequests.insert(resolver);
+    m_deviceManager->GetDevices(
+        nullptr, convertToBaseCallback(WTF::bind(&USB::onGetDevices,
+                                                 wrapPersistent(this),
+                                                 wrapPersistent(resolver))));
   }
   return promise;
 }
@@ -101,7 +92,6 @@ ScriptPromise USB::getDevices(ScriptState* scriptState) {
 ScriptPromise USB::requestDevice(ScriptState* scriptState,
                                  const USBDeviceRequestOptions& options) {
   ExecutionContext* executionContext = scriptState->getExecutionContext();
-  UseCounter::count(executionContext, UseCounter::UsbRequestDevice);
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
@@ -121,10 +111,7 @@ ScriptPromise USB::requestDevice(ScriptState* scriptState,
                                         wrapWeakPersistent(this))));
   }
 
-  String errorMessage;
-  if (!executionContext->isSecureContext(errorMessage)) {
-    resolver->reject(DOMException::create(SecurityError, errorMessage));
-  } else if (!UserGestureIndicator::consumeUserGesture()) {
+  if (!UserGestureIndicator::consumeUserGesture()) {
     resolver->reject(DOMException::create(
         SecurityError,
         "Must be handling a user gesture to show a permission request."));
@@ -135,7 +122,7 @@ ScriptPromise USB::requestDevice(ScriptState* scriptState,
       for (const auto& filter : options.filters())
         filters.push_back(convertDeviceFilter(filter));
     }
-    m_chooserServiceRequests.add(resolver);
+    m_chooserServiceRequests.insert(resolver);
     m_chooserService->GetPermission(
         std::move(filters), convertToBaseCallback(WTF::bind(
                                 &USB::onGetPermission, wrapPersistent(this),
@@ -160,14 +147,14 @@ void USB::contextDestroyed(ExecutionContext*) {
 }
 
 USBDevice* USB::getOrCreateDevice(usb::DeviceInfoPtr deviceInfo) {
-  USBDevice* device = m_deviceCache.get(deviceInfo->guid);
+  USBDevice* device = m_deviceCache.at(deviceInfo->guid);
   if (!device) {
     String guid = deviceInfo->guid;
     usb::DevicePtr pipe;
     m_deviceManager->GetDevice(guid, mojo::MakeRequest(&pipe));
     device = USBDevice::create(std::move(deviceInfo), std::move(pipe),
                                getExecutionContext());
-    m_deviceCache.add(guid, device);
+    m_deviceCache.insert(guid, device);
   }
   return device;
 }
@@ -177,13 +164,13 @@ void USB::onGetDevices(ScriptPromiseResolver* resolver,
   auto requestEntry = m_deviceManagerRequests.find(resolver);
   if (requestEntry == m_deviceManagerRequests.end())
     return;
-  m_deviceManagerRequests.remove(requestEntry);
+  m_deviceManagerRequests.erase(requestEntry);
 
   HeapVector<Member<USBDevice>> devices;
   for (auto& deviceInfo : deviceInfos)
     devices.push_back(getOrCreateDevice(std::move(deviceInfo)));
   resolver->resolve(devices);
-  m_deviceManagerRequests.remove(resolver);
+  m_deviceManagerRequests.erase(resolver);
 }
 
 void USB::onGetPermission(ScriptPromiseResolver* resolver,
@@ -191,7 +178,7 @@ void USB::onGetPermission(ScriptPromiseResolver* resolver,
   auto requestEntry = m_chooserServiceRequests.find(resolver);
   if (requestEntry == m_chooserServiceRequests.end())
     return;
-  m_chooserServiceRequests.remove(requestEntry);
+  m_chooserServiceRequests.erase(requestEntry);
 
   if (!m_deviceManager) {
     resolver->reject(DOMException::create(NotFoundError, kNoServiceError));
@@ -215,20 +202,15 @@ void USB::OnDeviceAdded(usb::DeviceInfoPtr deviceInfo) {
 
 void USB::OnDeviceRemoved(usb::DeviceInfoPtr deviceInfo) {
   String guid = deviceInfo->guid;
-  USBDevice* device = m_deviceCache.get(guid);
+  USBDevice* device = m_deviceCache.at(guid);
   if (!device)
     device = USBDevice::create(std::move(deviceInfo), nullptr,
                                getExecutionContext());
   dispatchEvent(USBConnectionEvent::create(EventTypeNames::disconnect, device));
-  m_deviceCache.remove(guid);
+  m_deviceCache.erase(guid);
 }
 
 void USB::onDeviceManagerConnectionError() {
-  if (!Platform::current()) {
-    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
-    return;
-  }
-
   m_deviceManager.reset();
   for (ScriptPromiseResolver* resolver : m_deviceManagerRequests)
     resolver->reject(DOMException::create(NotFoundError, kNoServiceError));
@@ -236,11 +218,6 @@ void USB::onDeviceManagerConnectionError() {
 }
 
 void USB::onChooserServiceConnectionError() {
-  if (!Platform::current()) {
-    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
-    return;
-  }
-
   m_chooserService.reset();
   for (ScriptPromiseResolver* resolver : m_chooserServiceRequests)
     resolver->reject(DOMException::create(NotFoundError, kNoServiceError));

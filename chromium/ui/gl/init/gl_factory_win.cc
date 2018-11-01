@@ -31,6 +31,7 @@ std::vector<GLImplementation> GetAllowedGLImplementations() {
   impls.push_back(kGLImplementationEGLGLES2);
   impls.push_back(kGLImplementationDesktopGL);
   impls.push_back(kGLImplementationOSMesaGL);
+  impls.push_back(kGLImplementationSwiftShaderGL);
   return impls;
 }
 
@@ -53,6 +54,7 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
     case kGLImplementationOSMesaGL:
       return InitializeGLContext(new GLContextOSMesa(share_group),
                                  compatible_surface, attribs);
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       return InitializeGLContext(new GLContextEGL(share_group),
                                  compatible_surface, attribs);
@@ -61,6 +63,12 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
                                  compatible_surface, attribs);
     case kGLImplementationMockGL:
       return new GLContextStub(share_group);
+    case kGLImplementationStubGL: {
+      scoped_refptr<GLContextStub> stub_context =
+          new GLContextStub(share_group);
+      stub_context->SetUseStubApi(true);
+      return stub_context;
+    }
     default:
       NOTREACHED();
       return nullptr;
@@ -72,25 +80,36 @@ scoped_refptr<GLSurface> CreateViewGLSurface(gfx::AcceleratedWidget window) {
   switch (GetGLImplementation()) {
     case kGLImplementationOSMesaGL:
       return InitializeGLSurface(new GLSurfaceOSMesaWin(window));
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2: {
-      DCHECK(window != gfx::kNullAcceleratedWidget);
-      scoped_refptr<NativeViewGLSurfaceEGL> surface(
-          new NativeViewGLSurfaceEGL(window));
-      std::unique_ptr<gfx::VSyncProvider> sync_provider;
-      sync_provider.reset(new VSyncProviderWin(window));
-      if (!surface->Initialize(std::move(sync_provider)))
-        return nullptr;
-
-      return surface;
+      std::unique_ptr<gfx::VSyncProvider> sync_provider(
+          new VSyncProviderWin(window));
+      return CreateNativeViewGLSurfaceEGL(window, std::move(sync_provider));
     }
     case kGLImplementationDesktopGL:
       return InitializeGLSurface(new NativeViewGLSurfaceWGL(window));
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();
       return nullptr;
   }
+}
+
+scoped_refptr<GLSurface> CreateNativeViewGLSurfaceEGL(
+    gfx::AcceleratedWidget window,
+    std::unique_ptr<gfx::VSyncProvider> sync_provider) {
+  DCHECK_EQ(kGLImplementationEGLGLES2, GetGLImplementation());
+  DCHECK(window != gfx::kNullAcceleratedWidget);
+
+  scoped_refptr<NativeViewGLSurfaceEGL> surface(
+      new NativeViewGLSurfaceEGL(window));
+
+  if (!surface->Initialize(std::move(sync_provider)))
+    return nullptr;
+
+  return surface;
 }
 
 scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
@@ -101,6 +120,7 @@ scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
       format.SetDefaultPixelLayout(GLSurfaceFormat::PIXEL_LAYOUT_RGBA);
       return InitializeGLSurfaceWithFormat(
           new GLSurfaceOSMesa(format, size), format);
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       return InitializeGLSurfaceWithFormat(
           new PbufferGLSurfaceEGL(size), format);
@@ -108,6 +128,7 @@ scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
       return InitializeGLSurfaceWithFormat(
           new PbufferGLSurfaceWGL(size), format);
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();

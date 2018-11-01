@@ -7,56 +7,23 @@ import("//build/config/arm.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
 
-# These should compile on non-android platforms too.
-source_set("anywhere") {
-  sources = [
-    "media_codec_bridge.cc",
-    "media_codec_bridge.h",
-    "media_codec_direction.h",
-    "media_codec_loop.cc",
-    "media_codec_loop.h",
-  ]
-  configs += [
-    "//media:media_config",
-    "//media:media_implementation",
-  ]
-  deps = [
-    "//media:media_features",
-    "//media:shared_memory_support",
-    "//ui/gl",
-    "//url",
-  ]
-}
-
-# These should compile on non-android platforms too.
-source_set("anywhere_unit_tests") {
-  testonly = true
-  sources = [
-    "media_codec_loop_unittest.cc",
-    "mock_media_codec_bridge.cc",
-    "mock_media_codec_bridge.h",
-  ]
-  configs += [
-    "//media:media_config",
-    "//media:media_implementation",
-  ]
-  deps = [
-    ":anywhere",
-    "//media/base:test_support",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-}
-
 if (is_android) {
   import("//build/config/android/rules.gni")
 
+  # APK targets that depend on this, either directly or indirectly, should also
+  # depend on :media_java to get the corresponding Java classes.
   source_set("android") {
     sources = [
       "android_cdm_factory.cc",
       "android_cdm_factory.h",
       "media_client_android.cc",
       "media_client_android.h",
+      "media_codec_bridge.h",
+      "media_codec_bridge_impl.cc",
+      "media_codec_bridge_impl.h",
+      "media_codec_direction.h",
+      "media_codec_loop.cc",
+      "media_codec_loop.h",
       "media_codec_util.cc",
       "media_codec_util.h",
       "media_drm_bridge.cc",
@@ -81,8 +48,6 @@ if (is_android) {
       "media_service_throttler.cc",
       "media_service_throttler.h",
       "media_url_interceptor.h",
-      "sdk_media_codec_bridge.cc",
-      "sdk_media_codec_bridge.h",
       "stream_texture_wrapper.h",
     ]
     configs += [
@@ -97,19 +62,19 @@ if (is_android) {
       "//ui/gl",
       "//url",
     ]
-    public_deps = [
-      ":anywhere",
-    ]
   }
 
   source_set("unit_tests") {
     testonly = true
     sources = [
+      "media_codec_bridge_impl_unittest.cc",
+      "media_codec_loop_unittest.cc",
       "media_codec_util_unittest.cc",
       "media_drm_bridge_unittest.cc",
       "media_player_bridge_unittest.cc",
       "media_service_throttler_unittest.cc",
-      "sdk_media_codec_bridge_unittest.cc",
+      "mock_media_codec_bridge.cc",
+      "mock_media_codec_bridge.h",
     ]
 
     deps = [
@@ -127,6 +92,7 @@ if (is_android) {
     sources = [
       "java/src/org/chromium/media/AudioManagerAndroid.java",
       "java/src/org/chromium/media/AudioRecordInput.java",
+      "java/src/org/chromium/media/CodecProfileLevelList.java",
       "java/src/org/chromium/media/MediaCodecBridge.java",
       "java/src/org/chromium/media/MediaCodecUtil.java",
       "java/src/org/chromium/media/MediaDrmBridge.java",
@@ -137,15 +103,27 @@ if (is_android) {
     jni_package = "media"
   }
 
+  java_cpp_enum("java_enums") {
+    sources = [
+      "media_codec_bridge.h",
+      "media_codec_direction.h",
+    ]
+  }
+
   android_library("media_java") {
     deps = [
       "//base:base_java",
       "//content/public/android:content_java_resources",
+      "//third_party/android_tools:android_support_annotations_java",
     ]
-
+    srcjar_deps = [
+      ":java_enums",
+      "//media/base:java_enums",
+    ]
     java_files = [
       "java/src/org/chromium/media/AudioManagerAndroid.java",
       "java/src/org/chromium/media/AudioRecordInput.java",
+      "java/src/org/chromium/media/CodecProfileLevelList.java",
       "java/src/org/chromium/media/MediaCodecBridge.java",
       "java/src/org/chromium/media/MediaCodecUtil.java",
       "java/src/org/chromium/media/MediaDrmBridge.java",

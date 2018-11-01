@@ -19,7 +19,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "base/threading/worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -524,8 +523,7 @@ void ProfileImplIOData::InitializeInternal(
           lazy_params_->special_storage_policy.get());
   main_context_storage->set_channel_id_service(
       base::MakeUnique<net::ChannelIDService>(
-          new net::DefaultChannelIDStore(channel_id_db.get()),
-          base::WorkerPool::GetTaskRunner(true)));
+          new net::DefaultChannelIDStore(channel_id_db.get())));
 
   main_context->cookie_store()->SetChannelIDServiceID(
       main_context->channel_id_service()->GetUniqueID());
@@ -607,6 +605,10 @@ void ProfileImplIOData::
   cookie_config.cookieable_schemes.push_back(extensions::kExtensionScheme);
   extensions_cookie_store_ = content::CreateCookieStore(cookie_config);
   extensions_context->set_cookie_store(extensions_cookie_store_.get());
+  if (extensions_context->channel_id_service()) {
+    extensions_cookie_store_->SetChannelIDServiceID(
+        extensions_context->channel_id_service()->GetUniqueID());
+  }
 
   std::unique_ptr<net::URLRequestJobFactoryImpl> extensions_job_factory(
       new net::URLRequestJobFactoryImpl());
@@ -676,8 +678,7 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   }
   std::unique_ptr<net::ChannelIDService> channel_id_service(
       new net::ChannelIDService(
-          new net::DefaultChannelIDStore(channel_id_db.get()),
-          base::WorkerPool::GetTaskRunner(true)));
+          new net::DefaultChannelIDStore(channel_id_db.get())));
   cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
 
   // Build a new HttpNetworkSession that uses the new ChannelIDService.
@@ -691,7 +692,7 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   std::unique_ptr<net::HttpNetworkSession> http_network_session(
       new net::HttpNetworkSession(network_params));
   std::unique_ptr<net::HttpCache> app_http_cache =
-      CreateHttpFactory(http_network_session.get(), std::move(app_backend));
+      CreateMainHttpFactory(http_network_session.get(), std::move(app_backend));
 
   // Transfer ownership of the ChannelIDStore and the HttpNetworkSession to the
   // AppRequestContext.
@@ -753,9 +754,9 @@ net::URLRequestContext* ProfileImplIOData::InitializeMediaRequestContext(
           net::MEDIA_CACHE, ChooseCacheBackendType(), cache_path,
           cache_max_size,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE)));
-  std::unique_ptr<net::HttpCache> media_http_cache =
-      CreateHttpFactory(main_request_context_storage()->http_network_session(),
-                        std::move(media_backend));
+  std::unique_ptr<net::HttpCache> media_http_cache = CreateHttpFactory(
+      main_request_context()->http_transaction_factory(),
+      std::move(media_backend));
 
   // Transfer ownership of the cache to MediaRequestContext.
   context->SetHttpTransactionFactory(std::move(media_http_cache));

@@ -17,16 +17,6 @@ namespace blink {
 // WebTouchEvent and WebTouchPoint and merge this into WebPointerEvent.
 class WebPointerProperties {
  public:
-  WebPointerProperties()
-      : id(0),
-        force(std::numeric_limits<float>::quiet_NaN()),
-        tiltX(0),
-        tiltY(0),
-        tangentialPressure(0.0f),
-        twist(0),
-        button(Button::NoButton),
-        pointerType(PointerType::Unknown) {}
-
   enum class Button { NoButton = -1, Left, Middle, Right, X1, X2, Eraser };
 
   enum class Buttons : unsigned {
@@ -47,6 +37,30 @@ class WebPointerProperties {
     Touch,
     LastEntry = Touch  // Must be the last entry in the list
   };
+
+  WebPointerProperties()
+      : id(0),
+        force(std::numeric_limits<float>::quiet_NaN()),
+        tiltX(0),
+        tiltY(0),
+        tangentialPressure(0.0f),
+        twist(0),
+        button(Button::NoButton),
+        pointerType(PointerType::Unknown),
+        movementX(0),
+        movementY(0) {}
+
+  WebPointerProperties(Button buttonParam, PointerType pointerTypeParam)
+      : id(0),
+        force(std::numeric_limits<float>::quiet_NaN()),
+        tiltX(0),
+        tiltY(0),
+        tangentialPressure(0.0f),
+        twist(0),
+        button(buttonParam),
+        pointerType(pointerTypeParam),
+        movementX(0),
+        movementY(0) {}
 
   int id;
 
@@ -70,8 +84,17 @@ class WebPointerProperties {
   // degrees in the range [0,359]. Always 0 if the device does not support it.
   int twist;
 
+  // - For pointerup/down events, the button of pointing device that triggered
+  // the event.
+  // - For other events, the button that was depressed during the move event. If
+  // multiple buttons were depressed, one of the depressed buttons (platform
+  // dependent).
   Button button;
+
   PointerType pointerType;
+
+  int movementX;
+  int movementY;
 };
 
 }  // namespace blink

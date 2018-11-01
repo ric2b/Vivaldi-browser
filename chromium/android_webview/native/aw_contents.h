@@ -23,11 +23,13 @@
 #include "android_webview/browser/render_thread_manager.h"
 #include "android_webview/browser/render_thread_manager_client.h"
 #include "android_webview/browser/renderer_host/aw_render_view_host_ext.h"
+#include "android_webview/native/aw_renderer_priority_manager.h"
 #include "android_webview/native/permission/permission_request_handler_client.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 
 class SkBitmap;
@@ -67,6 +69,7 @@ class AwContents : public FindHelper::Listener,
                    public AwBrowserPermissionRequestDelegate,
                    public AwRenderProcessGoneDelegate,
                    public content::WebContentsObserver,
+                   public content::RenderProcessHostObserver,
                    public AwSafeBrowsingUIManager::UIManagerClient {
  public:
   // Returns the AwContents instance associated with |web_contents|, or NULL.
@@ -213,6 +216,22 @@ class AwContents : public FindHelper::Listener,
       jboolean value,
       const base::android::JavaParamRef<jstring>& origin);
 
+  AwRendererPriorityManager::RendererPriority GetCurrentRendererPriority();
+  jint GetRendererCurrentPriority(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  jint GetRendererRequestedPriority(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  jboolean GetRendererPriorityWaivedWhenNotVisible(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void SetRendererPriorityPolicy(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint rendererRequestedPriority,
+      jboolean waivedhenNotVisible);
+
   // PermissionRequestHandlerClient implementation.
   void OnPermissionRequest(base::android::ScopedJavaLocalRef<jobject> j_request,
                            AwPermissionRequest* request) override;
@@ -288,6 +307,8 @@ class AwContents : public FindHelper::Listener,
   void ClearCache(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& obj,
                   jboolean include_disk_files);
+  void KillRenderProcess(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj);
   void SetPendingWebContentsForPopup(
       std::unique_ptr<content::WebContents> pending);
   jlong ReleasePopupAwContents(JNIEnv* env,
@@ -323,10 +344,6 @@ class AwContents : public FindHelper::Listener,
       const base::android::JavaParamRef<jstring>& frame_id,
       const base::android::JavaParamRef<jstring>& message,
       const base::android::JavaParamRef<jstring>& target_origin,
-      const base::android::JavaParamRef<jintArray>& sent_ports);
-  void CreateMessageChannel(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobjectArray>& ports);
 
   void GrantFileSchemeAccesstoChildProcess(
@@ -343,8 +360,18 @@ class AwContents : public FindHelper::Listener,
   void DidAttachInterstitialPage() override;
   void DidDetachInterstitialPage() override;
 
+  // content::RenderProcessHostObserver overrides
+  void RenderProcessReady(content::RenderProcessHost* host) override;
+
   // AwSafeBrowsingUIManager::UIManagerClient implementation
   bool CanShowInterstitial() override;
+
+  void CallProceedOnInterstitialForTesting(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void CallDontProceedOnInterstitialForTesting(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // AwRenderProcessGoneDelegate overrides
   void OnRenderProcessGone(int child_process_id) override;
@@ -360,6 +387,12 @@ class AwContents : public FindHelper::Listener,
   void SetDipScaleInternal(float dip_scale);
 
   void SetAwGLFunctor(AwGLFunctor* functor);
+
+  AwRendererPriorityManager* GetAwRendererPriorityManager();
+  AwRendererPriorityManager::RendererPriority GetComputedRendererPriority();
+  void UpdateRendererPriority(
+      AwRendererPriorityManager::RendererPriority base_priority);
+  void UpdateRendererPriority();
 
   JavaObjectWeakGlobalRef java_ref_;
   AwGLFunctor* functor_;
@@ -377,11 +410,14 @@ class AwContents : public FindHelper::Listener,
   // GURL is supplied by the content layer as requesting frame.
   // Callback is supplied by the content layer, and is invoked with the result
   // from the permission prompt.
-  typedef std::pair<const GURL, base::Callback<void(bool)> > OriginCallback;
+  typedef std::pair<const GURL, base::Callback<void(bool)>> OriginCallback;
   // The first element in the list is always the currently pending request.
   std::list<OriginCallback> pending_geolocation_prompts_;
 
   GLViewRendererManager::Key renderer_manager_key_;
+
+  AwRendererPriorityManager::RendererPriority renderer_requested_priority_;
+  bool renderer_priority_waived_when_not_visible_;
 
   DISALLOW_COPY_AND_ASSIGN(AwContents);
 };

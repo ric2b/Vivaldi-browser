@@ -5,9 +5,17 @@
 #ifndef CHROMECAST_BROWSER_URL_REQUEST_CONTEXT_FACTORY_H_
 #define CHROMECAST_BROWSER_URL_REQUEST_CONTEXT_FACTORY_H_
 
+#include <memory>
+
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "net/http/http_network_session.h"
+
+class PrefProxyConfigTracker;
+
+namespace base {
+class FilePath;
+}
 
 namespace net {
 class CookieStore;
@@ -59,6 +67,8 @@ class URLRequestContextFactory {
   // after the CastService is created, but before any URL requests are made.
   void InitializeNetworkDelegates();
 
+  void DisableQuic();
+
  private:
   class URLRequestContextGetter;
   class MainURLRequestContextGetter;
@@ -74,6 +84,7 @@ class URLRequestContextFactory {
 
   void PopulateNetworkSessionParams(bool ignore_certificate_errors,
                                     net::HttpNetworkSession::Params* params);
+  void DisableQuicOnBrowserIOThread();
 
   // These are called by the RequestContextGetters to create each
   // RequestContext.
@@ -81,7 +92,7 @@ class URLRequestContextFactory {
   net::URLRequestContext* CreateSystemRequestContext();
   net::URLRequestContext* CreateMediaRequestContext();
   net::URLRequestContext* CreateMainRequestContext(
-      content::BrowserContext* browser_context,
+      const base::FilePath& cookie_path,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors);
 
@@ -120,6 +131,13 @@ class URLRequestContextFactory {
 
   bool media_dependencies_initialized_;
   std::unique_ptr<net::HttpTransactionFactory> media_transaction_factory_;
+
+  std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_impl_;
+
+  // Determines if QUIC is enabled for a URLContextGetter when it is created.
+  // QUIC can be disabled at runtime by calling DisableQuic() above.
+  // Only accessed on content::BrowserThread::IO thread.
+  bool enable_quic_;
 
   net::NetLog* net_log_;
 };

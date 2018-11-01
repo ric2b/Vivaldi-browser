@@ -9,8 +9,10 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.provider.Browser;
+import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
 import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v7.widget.LinearLayoutManager;
@@ -19,7 +21,6 @@ import android.support.v7.widget.RecyclerView.OnScrollListener;
 import android.support.v7.widget.Toolbar.OnMenuItemClickListener;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
@@ -29,16 +30,19 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
+import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.util.IntentUtils;
-import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
+import org.chromium.chrome.browser.widget.selection.SelectableListToolbar.SearchDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 import org.chromium.ui.base.Clipboard;
@@ -50,20 +54,23 @@ import java.util.List;
  * Displays and manages the UI for browsing history.
  */
 public class HistoryManager implements OnMenuItemClickListener, SignInStateObserver,
-        SelectionObserver<HistoryItem> {
+                                       SelectionObserver<HistoryItem>, SearchDelegate,
+                                       SnackbarController {
     private static final int FAVICON_MAX_CACHE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
     private static final int MEGABYTES_TO_BYTES =  1024 * 1024;
     private static final String METRICS_PREFIX = "Android.HistoryPage.";
 
     private static HistoryProvider sProviderForTests;
 
+    private final int mListItemLateralShadowSizePx;
+
     private final Activity mActivity;
+    private final boolean mIsDisplayedInNativePage;
     private final SelectableListLayout<HistoryItem> mSelectableListLayout;
     private final HistoryAdapter mHistoryAdapter;
     private final SelectionDelegate<HistoryItem> mSelectionDelegate;
     private final HistoryManagerToolbar mToolbar;
     private final TextView mEmptyView;
-    private final FadingShadowView mToolbarShadow;
     private final RecyclerView mRecyclerView;
     private LargeIconBridge mLargeIconBridge;
 
@@ -73,43 +80,71 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      * Creates a new HistoryManager.
      * @param activity The Activity associated with the HistoryManager.
      */
-    public HistoryManager(Activity activity) {
+    @SuppressWarnings("unchecked")  // mSelectableListLayout
+    public HistoryManager(Activity activity, @Nullable NativePage nativePage) {
         mActivity = activity;
+        mIsDisplayedInNativePage = nativePage != null;
 
         mSelectionDelegate = new SelectionDelegate<>();
         mSelectionDelegate.addObserver(this);
         mHistoryAdapter = new HistoryAdapter(mSelectionDelegate, this,
                 sProviderForTests != null ? sProviderForTests : new BrowsingHistoryBridge());
 
+        // 1. Create SelectableListLayout.
         mSelectableListLayout =
                 (SelectableListLayout<HistoryItem>) LayoutInflater.from(activity).inflate(
                         R.layout.history_main, null);
+
+        // 2. Initialize RecyclerView.
         mRecyclerView = mSelectableListLayout.initializeRecyclerView(mHistoryAdapter);
 
+        // 3. Initialize toolbar.
         mToolbar = (HistoryManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.history_toolbar, mSelectionDelegate, R.string.menu_history, null,
                 R.id.normal_menu_group, R.id.selection_mode_menu_group,
                 R.color.default_primary_color, false, this);
         mToolbar.setManager(this);
-        mToolbarShadow = (FadingShadowView) mSelectableListLayout.findViewById(R.id.shadow);
-        mToolbarShadow.setVisibility(View.GONE);
+        mToolbar.initializeSearchView(this, R.string.history_manager_search, R.id.search_menu_id);
 
+        // 4. Configure values for HorizontalDisplayStyle.WIDE and HorizontalDisplayStyle.REGULAR.
+        // The list item shadow is part of the drawable nine-patch used as the list item background.
+        // Use the dimensions of the shadow (from the drawable's padding) to calculate the margins
+        // to use in the regular and wide display styles.
+        Rect listItemShadow = new Rect();
+        ApiCompatibilityUtils.getDrawable(
+                mActivity.getResources(), R.drawable.card_middle).getPadding(listItemShadow);
+
+        assert listItemShadow.left == listItemShadow.right;
+        // The list item shadow size is used in HorizontalDisplayStyle.WIDE to visually align other
+        // elements with the edge of the list items.
+        mListItemLateralShadowSizePx = listItemShadow.left;
+
+        mSelectableListLayout.setHasWideDisplayStyle(mListItemLateralShadowSizePx);
+
+        // 5. Initialize empty view.
         mEmptyView = mSelectableListLayout.initializeEmptyView(
                 VectorDrawableCompat.create(
-                        mActivity.getResources(), R.drawable.history_big,
-                        mActivity.getTheme()),
-                R.string.history_manager_empty);
+                        mActivity.getResources(), R.drawable.history_big, mActivity.getTheme()),
+                R.string.history_manager_empty, R.string.history_manager_no_results);
         // TODO(twellington): remove this after unifying bookmarks and downloads UI with history.
         mEmptyView.setTextColor(ApiCompatibilityUtils.getColor(mActivity.getResources(),
                 R.color.google_grey_500));
 
+        // 6. Create large icon bridge.
+        mLargeIconBridge = new LargeIconBridge(Profile.getLastUsedProfile().getOriginalProfile());
+        ActivityManager activityManager = ((ActivityManager) ContextUtils
+                .getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE));
+        int maxSize = Math.min((activityManager.getMemoryClass() / 4) * MEGABYTES_TO_BYTES,
+                FAVICON_MAX_CACHE_SIZE_BYTES);
+        mLargeIconBridge.createCache(maxSize);
+
+        // 7. Initialize the adapter to load items.
         mHistoryAdapter.initialize();
 
+        // 8. Add scroll listener to page in more items when necessary.
         mRecyclerView.addOnScrollListener(new OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                setToolbarShadowVisibility();
-
                 if (!mHistoryAdapter.canLoadMoreItems()) return;
 
                 // Load more items if the scroll position is close to the bottom of the list.
@@ -122,21 +157,24 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
                 }
             }});
 
-        mLargeIconBridge = new LargeIconBridge(Profile.getLastUsedProfile().getOriginalProfile());
-        ActivityManager activityManager = ((ActivityManager) ContextUtils
-                .getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE));
-        int maxSize = Math.min((activityManager.getMemoryClass() / 4) * MEGABYTES_TO_BYTES,
-                FAVICON_MAX_CACHE_SIZE_BYTES);
-        mLargeIconBridge.createCache(maxSize);
-
+        // 9. Listen to changes in sign in state.
         SigninManager.get(mActivity).addSignInStateObserver(this);
 
         recordUserAction("Show");
     }
 
+    /**
+     * @return Whether the history manager UI is displayed in a native page.
+     */
+    public boolean isDisplayedInNativePage() {
+        return mIsDisplayedInNativePage;
+    }
+
     @Override
     public boolean onMenuItemClick(MenuItem item) {
-        if (item.getItemId() == R.id.close_menu_id && !DeviceFormFactor.isTablet(mActivity)) {
+        mToolbar.hideOverflowMenu();
+
+        if (item.getItemId() == R.id.close_menu_id && !isDisplayedInNativePage()) {
             mActivity.finish();
             return true;
         } else if (item.getItemId() == R.id.selection_mode_open_in_new_tab) {
@@ -147,6 +185,10 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             recordUserActionWithOptionalSearch("CopyLink");
             Clipboard clipboard = new Clipboard(mActivity);
             clipboard.setText(mSelectionDelegate.getSelectedItems().get(0).getUrl());
+            mSelectionDelegate.clearSelection();
+            Snackbar snackbar = Snackbar.make(mActivity.getString(R.string.copied), this,
+                    Snackbar.TYPE_NOTIFICATION, Snackbar.UMA_HISTORY_LINK_COPIED);
+            ((SnackbarManageable) mActivity).getSnackbarManager().showSnackbar(snackbar);
             return true;
         } else if (item.getItemId() == R.id.selection_mode_open_in_incognito) {
             openItemsInNewTabs(mSelectionDelegate.getSelectedItems(), true);
@@ -163,9 +205,9 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             mSelectionDelegate.clearSelection();
             return true;
         } else if (item.getItemId() == R.id.search_menu_id) {
+            mHistoryAdapter.removeHeader();
             mToolbar.showSearchView();
-            mToolbarShadow.setVisibility(View.VISIBLE);
-            mSelectableListLayout.setEmptyViewText(R.string.history_manager_no_results);
+            mSelectableListLayout.onStartSearch();
             recordUserAction("Search");
             mIsSearching = true;
             return true;
@@ -252,27 +294,20 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      */
     public void openClearBrowsingDataPreference() {
         recordUserAction("ClearBrowsingData");
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(mActivity,
-                ClearBrowsingDataPreferences.class.getName());
+        Intent intent = PreferencesLauncher.createIntentForClearBrowsingDataPage(mActivity);
         IntentUtils.safeStartActivity(mActivity, intent);
     }
 
-    /**
-     * Called to perform a search.
-     * @param query The text to search for.
-     */
-    public void performSearch(String query) {
+    @Override
+    public void onSearchTextChanged(String query) {
         mHistoryAdapter.search(query);
     }
 
-    /**
-     * Called when a search is ended.
-     */
+    @Override
     public void onEndSearch() {
         mHistoryAdapter.onEndSearch();
-        mSelectableListLayout.setEmptyViewText(R.string.history_manager_empty);
+        mSelectableListLayout.onEndSearch();
         mIsSearching = false;
-        setToolbarShadowVisibility();
     }
 
     /**
@@ -280,6 +315,23 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      */
     public LargeIconBridge getLargeIconBridge() {
         return mLargeIconBridge;
+    }
+
+    /**
+     * @return The SelectableListLayout that displays HistoryItems.
+     */
+    public SelectableListLayout<HistoryItem> getSelectableListLayout() {
+        return mSelectableListLayout;
+    }
+
+    /**
+     * @return The px size of the lateral shadow in the 9-patch used for the list item background.
+     *         This value should be used in the regular horizontal display style to visually align
+     *         elements with the edge of the list items.
+     * @see org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle#REGULAR
+     */
+    public int getListItemLateralShadowSizePx() {
+        return mListItemLateralShadowSizePx;
     }
 
     private void openItemsInNewTabs(List<HistoryItem> items, boolean isIncognito) {
@@ -317,11 +369,6 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     @VisibleForTesting
     HistoryAdapter getAdapterForTests() {
         return mHistoryAdapter;
-    }
-
-    @VisibleForTesting
-    View getToolbarShadowForTests() {
-        return mToolbarShadow;
     }
 
     /**
@@ -364,12 +411,15 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     @Override
     public void onSelectionStateChange(List<HistoryItem> selectedItems) {
         mHistoryAdapter.onSelectionStateChange(mSelectionDelegate.isSelectionEnabled());
-        setToolbarShadowVisibility();
     }
 
-    private void setToolbarShadowVisibility() {
-        boolean showShadow = mRecyclerView.computeVerticalScrollOffset() != 0
-                || mIsSearching || mSelectionDelegate.isSelectionEnabled();
-        mToolbarShadow.setVisibility(showShadow ? View.VISIBLE : View.GONE);
+    @Override
+    public void onAction(Object actionData) {
+        // Handler for the link copied snackbar. Do nothing.
+    }
+
+    @Override
+    public void onDismissNoAction(Object actionData) {
+        // Handler for the link copied snackbar. Do nothing.
     }
 }

@@ -48,12 +48,15 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
   GpuService(const gpu::GPUInfo& gpu_info,
              std::unique_ptr<gpu::GpuWatchdogThread> watchdog,
              gpu::GpuMemoryBufferFactory* memory_buffer_factory,
-             scoped_refptr<base::SingleThreadTaskRunner> io_runner);
+             scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+             const gpu::GpuFeatureInfo& gpu_feature_info);
 
   ~GpuService() override;
 
   void InitializeWithHost(mojom::GpuHostPtr gpu_host,
-                          const gpu::GpuPreferences& preferences);
+                          const gpu::GpuPreferences& preferences,
+                          gpu::SyncPointManager* sync_point_manager = nullptr,
+                          base::WaitableEvent* shutdown_event = nullptr);
   void Bind(mojom::GpuServiceRequest request);
 
   media::MediaGpuChannelManager* media_gpu_channel_manager() {
@@ -64,19 +67,16 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
     return gpu_channel_manager_.get();
   }
 
+  gpu::GpuWatchdogThread* watchdog_thread() { return watchdog_thread_.get(); }
+
+  const gpu::GpuFeatureInfo& gpu_feature_info() const {
+    return gpu_feature_info_;
+  }
+
  private:
   friend class GpuMain;
 
-  gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferFromeHandle(
-      gfx::GpuMemoryBufferHandle buffer_handle,
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      int client_id);
-
-  gpu::SyncPointManager* sync_point_manager() {
-    return owned_sync_point_manager_.get();
-  }
+  gpu::SyncPointManager* sync_point_manager() { return sync_point_manager_; }
 
   gpu::gles2::MailboxManager* mailbox_manager() {
     return gpu_channel_manager_->mailbox_manager();
@@ -122,6 +122,8 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                               int client_id,
                               const gpu::SyncToken& sync_token) override;
+  void GetVideoMemoryUsageStats(
+      const GetVideoMemoryUsageStatsCallback& callback) override;
 
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
 
@@ -137,10 +139,18 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
   // Information about the GPU, such as device and vendor ID.
   gpu::GPUInfo gpu_info_;
 
+  // Information about general chrome feature support for the GPU.
+  gpu::GpuFeatureInfo gpu_feature_info_;
+
   mojom::GpuHostPtr gpu_host_;
-  std::unique_ptr<gpu::SyncPointManager> owned_sync_point_manager_;
   std::unique_ptr<gpu::GpuChannelManager> gpu_channel_manager_;
   std::unique_ptr<media::MediaGpuChannelManager> media_gpu_channel_manager_;
+
+  // On some platforms (e.g. android webview), the SyncPointManager comes from
+  // external sources.
+  std::unique_ptr<gpu::SyncPointManager> owned_sync_point_manager_;
+  gpu::SyncPointManager* sync_point_manager_ = nullptr;
+
   mojo::BindingSet<mojom::GpuService> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuService);

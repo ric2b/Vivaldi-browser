@@ -26,7 +26,7 @@
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_aurax11.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
@@ -66,7 +66,7 @@
 
 #include "ui/views/widget/widget_delegate.h"
 
-DECLARE_WINDOW_PROPERTY_TYPE(views::DesktopWindowTreeHostX11*);
+DECLARE_UI_CLASS_PROPERTY_TYPE(views::DesktopWindowTreeHostX11*);
 
 namespace views {
 
@@ -74,10 +74,10 @@ DesktopWindowTreeHostX11* DesktopWindowTreeHostX11::g_current_capture =
     NULL;
 std::list<XID>* DesktopWindowTreeHostX11::open_windows_ = NULL;
 
-DEFINE_WINDOW_PROPERTY_KEY(
+DEFINE_UI_CLASS_PROPERTY_KEY(
     aura::Window*, kViewsWindowForRootWindow, NULL);
 
-DEFINE_WINDOW_PROPERTY_KEY(
+DEFINE_UI_CLASS_PROPERTY_KEY(
     DesktopWindowTreeHostX11*, kHostForRootWindow, NULL);
 
 namespace {
@@ -208,7 +208,7 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
       has_pointer_(false),
       has_window_focus_(false),
       has_pointer_focus_(false),
-      modal_dialog_xid_(0),
+      modal_dialog_counter_(0),
       close_widget_factory_(this),
       weak_factory_(this) {}
 
@@ -1096,7 +1096,13 @@ void DesktopWindowTreeHostX11::SetOpacity(float opacity) {
   // X server opacity is in terms of 32 bit unsigned int space, and counts from
   // the opposite direction.
   // XChangeProperty() expects "cardinality" to be long.
-  unsigned long cardinality = static_cast<int>(opacity * 255) * 0x1010101;
+
+  // Scale opacity to [0 .. 255] range.
+  unsigned long opacity_8bit =
+      static_cast<unsigned long>(opacity * 255.0f) & 0xFF;
+  // Use opacity value for all channels.
+  const unsigned long channel_multiplier = 0x1010101;
+  unsigned long cardinality = opacity_8bit * channel_multiplier;
 
   if (cardinality == 0xffffffff) {
     XDeleteProperty(xdisplay_, xwindow_,
@@ -1181,6 +1187,10 @@ bool DesktopWindowTreeHostX11::ShouldUpdateWindowTransparency() const {
 }
 
 bool DesktopWindowTreeHostX11::ShouldUseDesktopNativeCursorManager() const {
+  return true;
+}
+
+bool DesktopWindowTreeHostX11::ShouldCreateVisibilityController() const {
   return true;
 }
 
@@ -2354,19 +2364,17 @@ gfx::Rect DesktopWindowTreeHostX11::ToPixelRect(
   return gfx::ToEnclosingRect(rect_in_pixels);
 }
 
-XID DesktopWindowTreeHostX11::GetModalDialog() {
-  return modal_dialog_xid_;
-}
-
 std::unique_ptr<base::Closure>
-    DesktopWindowTreeHostX11::DisableEventListening(XID dialog) {
-  DCHECK(dialog);
-  DCHECK(!modal_dialog_xid_);
-  modal_dialog_xid_ = dialog;
-  // ScopedWindowTargeter is used to temporarily replace the event-targeter
-  // with NullEventTargeter to make |dialog| modal.
-  targeter_for_modal_.reset(new aura::ScopedWindowTargeter(window(),
-      std::unique_ptr<ui::EventTargeter>(new ui::NullEventTargeter)));
+DesktopWindowTreeHostX11::DisableEventListening() {
+  // Allows to open multiple file-pickers. See https://crbug.com/678982
+  modal_dialog_counter_++;
+  if (modal_dialog_counter_ == 1) {
+    // ScopedWindowTargeter is used to temporarily replace the event-targeter
+    // with NullEventTargeter to make |dialog| modal.
+    targeter_for_modal_.reset(new aura::ScopedWindowTargeter(
+        window(),
+        std::unique_ptr<ui::EventTargeter>(new ui::NullEventTargeter)));
+  }
 
   return base::MakeUnique<base::Closure>(base::Bind(
       &DesktopWindowTreeHostX11::EnableEventListening,
@@ -2374,9 +2382,9 @@ std::unique_ptr<base::Closure>
 }
 
 void DesktopWindowTreeHostX11::EnableEventListening() {
-  DCHECK(modal_dialog_xid_);
-  modal_dialog_xid_ = 0;
-  targeter_for_modal_.reset();
+  DCHECK_GT(modal_dialog_counter_, 0UL);
+  if (!--modal_dialog_counter_)
+    targeter_for_modal_.reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

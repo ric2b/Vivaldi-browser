@@ -65,8 +65,12 @@ Polymer({
    * @param {!{target: Element, model: !{item: !LanguageState}}} e
    */
   onSpellCheckChange_: function(e) {
-    this.languageHelper.toggleSpellCheck(e.model.item.language.code,
-                                         e.target.checked);
+    var item = e.model.item;
+    if (!item.language.supportsSpellcheck)
+      return;
+
+    this.languageHelper.toggleSpellCheck(item.language.code,
+                                         !item.spellCheckEnabled);
   },
 
   /** @private */
@@ -92,33 +96,40 @@ Polymer({
   },
 
   /**
+   * Used to determine which "Move" buttons to show for ordering enabled
+   * languages.
+   * @param {number} n
    * @param {!LanguageState} language
-   * @return {boolean} True if |language| is first in the list of enabled
-   *     languages. Used to hide the "Move up" option.
+   * @return {boolean} True if |language| is at the |n|th index in the list of
+   *     enabled languages.
    * @private
    */
-  isFirstLanguage_: function(language) {
-    return language == this.languages.enabled[0];
+  isNthLanguage_: function(n, language) {
+    var compareLanguage = assert(this.languages.enabled[n]);
+    return language.language == compareLanguage.language;
   },
 
   /**
    * @param {!LanguageState} language
-   * @return {boolean} True if |language| is first or second in the list of
-   *     enabled languages. Used to hide the "Move to top" option.
+   * @return {boolean} True if the "Move to top" option for |language| should be
+   *     visible.
    * @private
    */
-  isFirstOrSecondLanguage_: function(language) {
-    return this.languages.enabled.slice(0, 2).includes(language);
+  showMoveUp_: function(language) {
+    // "Move up" is a no-op for the top language, and redundant with
+    // "Move to top" for the 2nd language.
+    return !this.isNthLanguage_(0, language) &&
+           !this.isNthLanguage_(1, language);
   },
 
   /**
    * @param {!LanguageState} language
-   * @return {boolean} True if |language| is last in the list of enabled
-   *     languages. Used to hide the "Move down" option.
+   * @return {boolean} True if the "Move down" option for |language| should be
+   *     visible.
    * @private
    */
-  isLastLanguage_: function(language) {
-    return language == this.languages.enabled.slice(-1)[0];
+  showMoveDown_: function(language) {
+    return !this.isNthLanguage_(this.languages.enabled.length - 1, language);
   },
 
   /**
@@ -343,7 +354,6 @@ Polymer({
   onEditDictionaryTap_: function() {
     assert(!cr.isMac);
     settings.navigateTo(settings.Route.EDIT_DICTIONARY);
-    this.forceRenderList_('settings-edit-dictionary-page');
   },
 
   /**
@@ -446,16 +456,6 @@ Polymer({
           return inputMethod.id == id;
         });
     return inputMethod ? inputMethod.displayName : '';
-  },
-
-  /**
-   * HACK(michaelpg): This is necessary to show the list when navigating to
-   * the sub-page. Remove this function when PolymerElements/neon-animation#60
-   * is fixed.
-   * @param {string} tagName Name of the element containing the <iron-list>.
-   */
-  forceRenderList_: function(tagName) {
-    this.$$(tagName).$$('iron-list').fire('iron-resize');
   },
 
   /**

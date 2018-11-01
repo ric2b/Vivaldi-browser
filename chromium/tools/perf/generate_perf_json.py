@@ -7,7 +7,7 @@
 the src/testing/buildbot directory. Maintaining these files by hand is
 too unwieldy.
 """
-
+import argparse
 import json
 import os
 import sys
@@ -108,6 +108,13 @@ SCRIPT_TESTS = [
 ]
 
 
+def add_builder(waterfall, name, additional_compile_targets=None):
+  waterfall['builders'][name] = added = {}
+  if additional_compile_targets:
+    added['additional_compile_targets'] = additional_compile_targets
+
+  return waterfall
+
 def add_tester(waterfall, name, perf_id, platform, target_bits=64,
               num_host_shards=1, num_device_shards=1, swarming=None,
               use_whitelist=False):
@@ -128,7 +135,7 @@ def add_tester(waterfall, name, perf_id, platform, target_bits=64,
 
 
 def get_fyi_waterfall_config():
-  waterfall = {'builders':[], 'testers': {}}
+  waterfall = {'builders':{}, 'testers': {}}
   waterfall = add_tester(
     waterfall, 'Win 10 Low-End Perf Tests',
     'win-10-low-end', 'win',
@@ -194,7 +201,16 @@ def get_fyi_waterfall_config():
 
 
 def get_waterfall_config():
-  waterfall = {'builders':[], 'testers': {}}
+  waterfall = {'builders':{}, 'testers': {}}
+
+  waterfall = add_builder(
+      waterfall, 'Android Compile', additional_compile_targets=[
+          'microdump_stackwalk'
+      ])
+  waterfall = add_builder(
+      waterfall, 'Android arm64 Compile', additional_compile_targets=[
+          'microdump_stackwalk'
+      ])
 
   # These configurations are taken from chromium_perf.py in
   # build/scripts/slave/recipe_modules/chromium_tests and must be kept in sync
@@ -211,9 +227,6 @@ def get_waterfall_config():
   waterfall = add_tester(
     waterfall, 'Android Nexus7v2 Perf', 'android-nexus7v2',
    'android', target_bits=32, num_device_shards=7, num_host_shards=3)
-  waterfall = add_tester(
-    waterfall, 'Android Nexus9 Perf', 'android-nexus9',
-    'android', num_device_shards=7, num_host_shards=3)
   waterfall = add_tester(
     waterfall, 'Android One Perf', 'android-one',
     'android', target_bits=32, num_device_shards=7, num_host_shards=3)
@@ -251,7 +264,9 @@ def get_waterfall_config():
        'device_ids': [
            'build132-m1', 'build133-m1',
            'build134-m1', 'build135-m1', 'build136-m1'
-          ]
+          ],
+       'perf_tests': [
+         ('media_perftests', 2)]
       }
     ])
   waterfall = add_tester(
@@ -266,7 +281,8 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('load_library_perf_tests', 2),
-         ('performance_browser_tests', 2)]
+         ('performance_browser_tests', 2),
+         ('media_perftests', 3)]
       }
     ])
   waterfall = add_tester(
@@ -282,7 +298,8 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('load_library_perf_tests', 2),
-         ('performance_browser_tests', 2)]
+         ('performance_browser_tests', 2),
+         ('media_perftests', 3)]
       }
     ])
   waterfall = add_tester(
@@ -306,7 +323,7 @@ def get_waterfall_config():
     'chromium-rel-win7-gpu-ati', 'win',
     swarming=[
       {
-       'gpu': '1002:6779',
+       'gpu': '1002:6613',
        'os': 'Windows-2008ServerR2-SP1',
        'device_ids': [
            'build101-m1', 'build102-m1',
@@ -315,7 +332,8 @@ def get_waterfall_config():
        'perf_tests': [
          ('angle_perftests', 2),
          ('load_library_perf_tests', 2),
-         ('performance_browser_tests', 2)]
+         ('performance_browser_tests', 2),
+         ('media_perftests', 3)]
       }
     ])
   waterfall = add_tester(
@@ -328,7 +346,11 @@ def get_waterfall_config():
        'device_ids': [
            'build164-m1', 'build165-m1',
            'build166-m1', 'build167-m1', 'build168-m1'
-          ]
+          ],
+       'perf_tests': [
+         ('angle_perftests', 2),
+         ('load_library_perf_tests', 2),
+         ('performance_browser_tests', 2)]
       }
     ])
   waterfall = add_tester(
@@ -345,7 +367,8 @@ def get_waterfall_config():
        'perf_tests': [
          ('angle_perftests', 2),
          ('load_library_perf_tests', 2),
-         ('performance_browser_tests', 2)]
+         ('performance_browser_tests', 2),
+         ('media_perftests', 3)]
       }
     ])
 
@@ -359,7 +382,9 @@ def get_waterfall_config():
        'device_ids': [
            'build102-b1', 'build103-b1',
            'build104-b1', 'build105-b1', 'build106-b1'
-          ]
+          ],
+       'perf_tests': [
+         ('media_perftests', 3)]
       }
     ])
   waterfall = add_tester(
@@ -701,8 +726,7 @@ def shard_benchmarks(num_shards, all_benchmarks):
 
 def generate_all_tests(waterfall):
   tests = {}
-  for builder in waterfall['builders']:
-    tests[builder] = {}
+
   all_benchmarks = current_benchmarks(False)
   whitelist_benchmarks = current_benchmarks(True)
   # Get benchmark sharding according to common sharding configurations
@@ -749,28 +773,73 @@ def generate_all_tests(waterfall):
             'scripts': sorted(scripts, key=lambda x: x['name'])
           }
 
+  for name, config in waterfall['builders'].iteritems():
+    tests[name] = config
+
   tests['AAAAA1 AUTOGENERATED FILE DO NOT EDIT'] = {}
   tests['AAAAA2 See //tools/perf/generate_perf_json.py to make changes'] = {}
-  filename = '%s.json' % waterfall['name']
+  return tests
 
+
+def get_json_config_file_for_waterfall(waterfall):
+  filename = '%s.json' % waterfall['name']
   buildbot_dir = os.path.join(src_dir(), 'testing', 'buildbot')
-  with open(os.path.join(buildbot_dir, filename), 'w') as fp:
+  return os.path.join(buildbot_dir, filename)
+
+
+def tests_are_up_to_date(waterfall):
+  tests = generate_all_tests(waterfall)
+  tests_data = json.dumps(tests, indent=2, separators=(',', ': '),
+                          sort_keys=True)
+  config_file = get_json_config_file_for_waterfall(waterfall)
+  with open(config_file, 'r') as fp:
+    config_data = fp.read().strip()
+  return tests_data == config_data
+
+
+def update_all_tests(waterfall):
+  tests = generate_all_tests(waterfall)
+  config_file = get_json_config_file_for_waterfall(waterfall)
+  with open(config_file, 'w') as fp:
     json.dump(tests, fp, indent=2, separators=(',', ': '), sort_keys=True)
     fp.write('\n')
+
 
 def src_dir():
   file_path = os.path.abspath(__file__)
   return os.path.dirname(os.path.dirname(os.path.dirname(file_path)))
 
-def main():
+
+def main(args):
+  parser = argparse.ArgumentParser(
+      description=('Generate perf test\' json config. This need to be done '
+                   'anytime you add/remove any existing benchmarks in '
+                   'tools/perf/benchmarks.'))
+  parser.add_argument(
+      '--validate-only', action='store_true', default=False,
+      help=('Validate whether the perf json generated will be the same as the '
+            'existing configs. This does not change the contain of existing '
+            'configs'))
+  options = parser.parse_args(args)
+
   waterfall = get_waterfall_config()
   waterfall['name'] = 'chromium.perf'
   fyi_waterfall = get_fyi_waterfall_config()
   fyi_waterfall['name'] = 'chromium.perf.fyi'
 
-  generate_all_tests(fyi_waterfall)
-  generate_all_tests(waterfall)
+  if options.validate_only:
+    if tests_are_up_to_date(fyi_waterfall) and tests_are_up_to_date(waterfall):
+      print 'All the perf JSON config files are up-to-date. \\o/'
+      return 0
+    else:
+      print ('The perf JSON config files are not up-to-date. Please run %s '
+             'without --validate-only flag to update the perf JSON '
+             'configs.') % sys.argv[0]
+      return 1
+  else:
+    update_all_tests(fyi_waterfall)
+    update_all_tests(waterfall)
   return 0
 
 if __name__ == '__main__':
-  sys.exit(main())
+  sys.exit(main(sys.argv[1:]))
